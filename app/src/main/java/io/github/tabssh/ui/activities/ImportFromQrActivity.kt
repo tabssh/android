@@ -1,7 +1,6 @@
 package io.github.tabssh.ui.activities
 
 import android.Manifest
-import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -17,6 +16,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanIntentResult
 import com.journeyapps.barcodescanner.ScanOptions
@@ -132,7 +132,7 @@ class ImportFromQrActivity : AppCompatActivity() {
             "\n\n($codeAttemptsRemaining attempt${if (codeAttemptsRemaining == 1) "" else "s"} left)"
         } else ""
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Enter pairing code")
             .setMessage("Type the 6-digit code shown by TabSSH on your desktop.$attemptsHint")
             .setView(form.root)
@@ -223,7 +223,7 @@ class ImportFromQrActivity : AppCompatActivity() {
             addView(message)
         }
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(title)
             .setView(container)
             .setPositiveButton("Import") { _, _ -> runImport(payload) }

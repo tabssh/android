@@ -1208,7 +1208,7 @@ class TabTerminalActivity : AppCompatActivity() {
      * http(s)/www. links — unchanged flow: opens in the device's browser.
      */
     private fun showBrowserLinkDialog(url: String) {
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_open_url_title)
             .setMessage(getString(R.string.terminal_open_url_message, url))
             .setPositiveButton(R.string.docker_option_open) { _, _ ->
@@ -1229,7 +1229,7 @@ class TabTerminalActivity : AppCompatActivity() {
     private fun showSshLinkDialog(action: io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Ssh) {
         val display = (action.username?.let { "$it@" } ?: "") + action.host +
             if (action.port != 22) ":${action.port}" else ""
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_ssh_link_title)
             .setMessage(getString(R.string.terminal_ssh_link_message, display))
             .setPositiveButton(R.string.connect_button) { _, _ ->
@@ -1275,7 +1275,7 @@ class TabTerminalActivity : AppCompatActivity() {
     private fun showSftpLinkDialog(action: io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Sftp) {
         val display = (action.username?.let { "$it@" } ?: "") + action.host +
             if (action.port != 22) ":${action.port}" else ""
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_sftp_link_title)
             .setMessage(getString(R.string.terminal_sftp_link_message, display, action.path))
             .setPositiveButton(R.string.connect_button) { _, _ ->
@@ -1329,7 +1329,7 @@ class TabTerminalActivity : AppCompatActivity() {
         } else {
             arrayOf("Copy path")
         }
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_remote_file_title)
             .setMessage(getString(R.string.terminal_remote_file_message, action.path))
             .setItems(items) { _, which ->
@@ -1409,7 +1409,7 @@ class TabTerminalActivity : AppCompatActivity() {
         } else {
             getString(R.string.terminal_open_link_no_handler_message, url, action.scheme)
         }
-        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+        val builder = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_open_link_title)
             .setMessage(message)
             .setNeutralButton(R.string.copy) { _, _ ->
@@ -1503,7 +1503,7 @@ class TabTerminalActivity : AppCompatActivity() {
             }
         }
         
-        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+        val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.terminal_ssh_failed_title, errorInfo.errorType))
             .setView(dialogView)
             .setOnCancelListener { finish() }
@@ -1591,7 +1591,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS,
             monospace = true
         )
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.terminal_cluster_broadcast_title, tabs.size))
             .setView(form.root)
             .setNegativeButton(R.string.cancel, null)
@@ -1605,7 +1605,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 // the host names so a slip ("did I really pick prod?") is
                 // catchable before the keys hit the wire.
                 val hostList = tabs.joinToString("\n") { "• ${it.profile.getDisplayName()}" }
-                androidx.appcompat.app.AlertDialog.Builder(this)
+                com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
                     .setTitle(R.string.terminal_confirm_broadcast_title)
                     .setMessage(
                         "Send to ${tabs.size} session(s)?\n\n" +
@@ -2136,7 +2136,7 @@ class TabTerminalActivity : AppCompatActivity() {
                             val labels = liveTabs.mapIndexed { i, tab ->
                                 "Session ${i + 1}: ${tab.getShortTitle()}"
                             }.toTypedArray()
-                            androidx.appcompat.app.AlertDialog.Builder(this)
+                            com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
                                 .setTitle(getString(R.string.terminal_multiple_sessions_title, profile.name))
                                 .setItems(labels) { _, which -> cont.resumeWith(Result.success(liveTabs[which])) }
                                 .setNegativeButton(R.string.terminal_open_new) { _, _ -> cont.resumeWith(Result.success(null)) }
@@ -2812,7 +2812,7 @@ class TabTerminalActivity : AppCompatActivity() {
     ) {
         if (multiplexerAskDialog?.isShowing == true || multiplexerCreateDialog?.isShowing == true) return
         val labels = req.sessions.map { "Attach: $it" } + "Create new session"
-        multiplexerAskDialog = androidx.appcompat.app.AlertDialog.Builder(this)
+        multiplexerAskDialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.terminal_multiplexer_sessions_title, req.type, tab.profile.host))
             .setItems(labels.toTypedArray()) { _, which ->
                 // setItems auto-dismisses, so drop the reference before the
@@ -2844,7 +2844,7 @@ class TabTerminalActivity : AppCompatActivity() {
             initial = req.defaultSessionName
         )
         input.setSelection(input.text?.length ?: 0)
-        multiplexerCreateDialog = androidx.appcompat.app.AlertDialog.Builder(this)
+        multiplexerCreateDialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.terminal_new_multiplexer_session_title, req.type))
             .setMessage(R.string.terminal_new_multiplexer_session_message)
             .setView(form.root)
@@ -3153,7 +3153,7 @@ class TabTerminalActivity : AppCompatActivity() {
             return
         }
 
-        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+        val builder = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_connection_closed_title)
             .setMessage(getString(R.string.terminal_disconnected_diagnosing, profile.getDisplayName()))
             .setCancelable(false)
@@ -3345,7 +3345,7 @@ class TabTerminalActivity : AppCompatActivity() {
             append(title).append(" disconnected.")
             if (!detail.isNullOrBlank()) append("\n\n").append(detail)
         }
-        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+        val builder = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_connection_closed_title)
             .setMessage(body)
             .setCancelable(false)
@@ -3548,7 +3548,7 @@ class TabTerminalActivity : AppCompatActivity() {
         val labels = others.map { it.profile.getDisplayName() }.toTypedArray()
         val checked = BooleanArray(others.size) { i -> broadcastTargetIds.contains(others[i].tabId) }
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_broadcast_input_title)
             .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
                 val tabId = others[which].tabId
@@ -3595,7 +3595,7 @@ class TabTerminalActivity : AppCompatActivity() {
         val edit = io.github.tabssh.ui.dialogs.DialogFields.addText(
             form, hint = getString(R.string.save_workspace_name_hint)
         )
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(resources.getQuantityString(R.plurals.terminal_save_workspace_title, tabs.size, tabs.size))
             .setView(form.root)
             .setPositiveButton(R.string.save) { _, _ ->
@@ -3641,7 +3641,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     val n = try { org.json.JSONArray(ws.connectionIdsJson).length() } catch (_: Exception) { 0 }
                     "${ws.name} ($n tab${if (n == 1) "" else "s"})"
                 }.toTypedArray()
-                androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
+                com.google.android.material.dialog.MaterialAlertDialogBuilder(this@TabTerminalActivity)
                     .setTitle(R.string.terminal_open_workspace_title)
                     .setItems(labels) { _, which -> openWorkspace(all[which]) }
                     .setNeutralButton(R.string.terminal_delete_workspace_action) { _, _ -> showDeleteWorkspaceDialog(all) }
@@ -3686,7 +3686,7 @@ class TabTerminalActivity : AppCompatActivity() {
 
     private fun showDeleteWorkspaceDialog(all: List<io.github.tabssh.storage.database.entities.Workspace>) {
         val labels = all.map { it.name }.toTypedArray()
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_delete_workspace_title)
             .setItems(labels) { _, which ->
                 val ws = all[which]
@@ -3750,7 +3750,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     return@runOnUiThread
                 }
                 val labels = recent.map { it.getDisplayName() }.toTypedArray()
-                androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
+                com.google.android.material.dialog.MaterialAlertDialogBuilder(this@TabTerminalActivity)
                     .setTitle(R.string.terminal_split_bottom_pane_title)
                     .setItems(labels) { _, which -> openSplitWithProfile(recent[which]) }
                     .setNegativeButton(R.string.cancel, null)
@@ -3990,7 +3990,7 @@ class TabTerminalActivity : AppCompatActivity() {
                         val cmd = info.toClientCommand()
                         val termuxLauncher = io.github.tabssh.protocols.mosh.TermuxMoshLauncher
                         val termuxStatus = termuxLauncher.status(this@TabTerminalActivity)
-                        val builder = androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
+                        val builder = com.google.android.material.dialog.MaterialAlertDialogBuilder(this@TabTerminalActivity)
                             .setTitle(R.string.terminal_mosh_handoff_ready_title)
                         when (termuxStatus) {
                             is io.github.tabssh.protocols.mosh.TermuxMoshLauncher.Status.Ready,
@@ -4608,7 +4608,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 val labels = connections.map { it.getDisplayName() }.toTypedArray()
                 val items = arrayOf(getString(R.string.terminal_add_new_connection)) + labels
 
-                androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
+                com.google.android.material.dialog.MaterialAlertDialogBuilder(this@TabTerminalActivity)
                     .setTitle(R.string.terminal_open_new_tab_title)
                     .setItems(items) { _, which ->
                         if (which == 0) {
@@ -4651,7 +4651,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 }.toTypedArray()
 
                 runOnUiThread {
-                    androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
+                    com.google.android.material.dialog.MaterialAlertDialogBuilder(this@TabTerminalActivity)
                         .setTitle(R.string.terminal_insert_snippet_title)
                         .setItems(snippetNames) { _, which ->
                             val snippet = snippets[which]
@@ -4741,7 +4741,7 @@ class TabTerminalActivity : AppCompatActivity() {
             inputs.add(input)
         }
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_fill_variables_title)
             .setView(form.root)
             .setPositiveButton(R.string.terminal_insert) { _, _ ->
@@ -4777,7 +4777,7 @@ class TabTerminalActivity : AppCompatActivity() {
             getString(R.string.terminal_search_snippets_title)
         )
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_manage_snippets)
             .setItems(options) { _, which ->
                 when (which) {
@@ -4800,7 +4800,7 @@ class TabTerminalActivity : AppCompatActivity() {
         val inputDescription = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.edit_snippet_description)
         val inputCategory = dialogView.findViewById<android.widget.AutoCompleteTextView>(R.id.edit_snippet_category)
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_create_snippet_title)
             .setView(dialogView)
             .setPositiveButton(R.string.docker_create) { _, _ ->
@@ -4841,7 +4841,7 @@ class TabTerminalActivity : AppCompatActivity() {
             val snippetNames = allSnippets.map { "${it.name} - ${it.category}" }.toTypedArray()
 
             runOnUiThread {
-                androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
+                com.google.android.material.dialog.MaterialAlertDialogBuilder(this@TabTerminalActivity)
                     .setTitle(R.string.terminal_all_snippets_title)
                     .setItems(snippetNames) { _, which ->
                         insertSnippet(allSnippets[which])
@@ -4861,7 +4861,7 @@ class TabTerminalActivity : AppCompatActivity() {
             form, hint = getString(R.string.search_snippets_hint)
         )
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_search_snippets_title)
             .setView(form.root)
             .setPositiveButton(R.string.terminal_search) { _, _ ->
@@ -4898,7 +4898,7 @@ class TabTerminalActivity : AppCompatActivity() {
             }
             if (isFinishing || isDestroyed) return@launch
             val snippetNames = results.map { "${it.name} - ${it.category}" }.toTypedArray()
-            androidx.appcompat.app.AlertDialog.Builder(this@TabTerminalActivity)
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(this@TabTerminalActivity)
                 .setTitle(R.string.terminal_search_results_title)
                 .setItems(snippetNames) { _, which ->
                     insertSnippet(results[which])
@@ -4961,7 +4961,7 @@ class TabTerminalActivity : AppCompatActivity() {
             val editText = io.github.tabssh.ui.dialogs.DialogFields.addSecret(
                 form, hint = getString(R.string.password_hint)
             )
-            val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.terminal_auth_required_title)
                 .setView(form.root)
                 .setPositiveButton(R.string.connect_button) { _, _ ->

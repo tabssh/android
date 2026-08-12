@@ -1,5 +1,6 @@
 package io.github.tabssh.docker.transport
 
+import io.github.tabssh.utils.logging.Logger
 import org.json.JSONObject
 
 /**
@@ -65,7 +66,8 @@ object DockerCliParsers {
             .mapNotNull { line ->
                 try {
                     parseLine(JSONObject(line))
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    Logger.w("DockerCliParsers", "parseNdjson: skipped unparsable line (${line.length} chars): ${e.message}")
                     null
                 }
             }
@@ -155,7 +157,8 @@ object DockerCliParsers {
                 apiVersion = server.optString("ApiVersion"),
                 minApiVersion = server.optString("MinAPIVersion").ifEmpty { null }
             )
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Logger.w("DockerCliParsers", "parseCliVersion: unparsable output (${output.length} chars): ${e.message}")
             null
         }
     }
@@ -177,7 +180,8 @@ object DockerCliParsers {
                 memTotalBytes = obj.optLong("MemTotal"),
                 ncpu = obj.optInt("NCPU")
             )
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Logger.w("DockerCliParsers", "parseCliInfo: unparsable output (${output.length} chars): ${e.message}")
             null
         }
     }
@@ -245,7 +249,8 @@ object DockerCliParsers {
                         .filter { it.isNotEmpty() }
                 )
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Logger.w("DockerCliParsers", "parseComposeLs: unparsable output (${trimmed.length} chars): ${e.message}")
             emptyList()
         }
     }
@@ -267,10 +272,14 @@ object DockerCliParsers {
             trimmed.lineSequence()
                 .map { it.trim() }
                 .filter { it.startsWith("{") }
-                .mapNotNull {
+                .mapNotNull { line ->
                     try {
-                        JSONObject(it)
-                    } catch (_: Exception) {
+                        JSONObject(line)
+                    } catch (e: Exception) {
+                        Logger.w(
+                            "DockerCliParsers",
+                            "parseComposePsServices: skipped unparsable line (${line.length} chars): ${e.message}"
+                        )
                         null
                     }
                 }

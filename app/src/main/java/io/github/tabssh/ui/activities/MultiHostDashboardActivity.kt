@@ -19,13 +19,13 @@ import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
@@ -287,7 +287,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             })
             form.addView(sbDisk)
 
-            AlertDialog.Builder(context)
+            MaterialAlertDialogBuilder(context)
                 .setTitle("Monitor: ${profile.getDisplayName()}")
                 .setView(scroll)
                 .setPositiveButton("Save") { _, _ ->
@@ -533,7 +533,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             form, getString(R.string.group_name_hint),
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
         )
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("New group")
             .setView(form.root)
             .setPositiveButton("Create") { _, _ ->
@@ -558,7 +558,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
         )
         et.setSelection(group.name.length)
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Rename group")
             .setView(form.root)
             .setPositiveButton("Rename") { _, _ ->
@@ -582,7 +582,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
         else
             "Delete group \"${group.name}\"?"
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Delete group")
             .setMessage(msg)
             .setPositiveButton("Delete") { _, _ ->
@@ -733,7 +733,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
         })
         form.addView(sbDisk)
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Monitor: all hosts in \"$groupName\"")
             .setMessage("${hostIds.size} host${if (hostIds.size == 1) "" else "s"} will be updated.")
             .setView(scroll)
@@ -811,7 +811,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             val labels  = all.map { it.getDisplayName() }.toTypedArray()
             val checked = BooleanArray(all.size) { i -> all[i].id in inThisGroup }
 
-            AlertDialog.Builder(this@MultiHostDashboardActivity)
+            MaterialAlertDialogBuilder(this@MultiHostDashboardActivity)
                 .setTitle("Add hosts")
                 .setMultiChoiceItems(labels, checked) { _, idx, isChecked ->
                     checked[idx] = isChecked
@@ -898,7 +898,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             add(UNGROUPED_ID)
             dashboardGroups.forEach { add(it.id) }
         }
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Move ${profile.getDisplayName()}")
             .setItems(options.toTypedArray()) { _, idx ->
                 val destGroupId = groupIds[idx]
@@ -1369,7 +1369,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             "Move to group…",
             "Remove from dashboard"
         )
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(profile.getDisplayName())
             .setItems(options) { _, idx ->
                 when (idx) {
@@ -1385,7 +1385,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
     }
 
     private fun confirmRemoveHost(connectionId: String, displayName: String) {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Remove $displayName?")
             .setMessage("This removes it from the dashboard. The connection itself is not deleted.")
             .setPositiveButton("Remove") { _, _ -> removeHostFromDashboard(connectionId) }

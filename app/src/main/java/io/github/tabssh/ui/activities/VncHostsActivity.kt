@@ -10,7 +10,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -20,6 +19,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.databinding.ActivityVncHostsBinding
@@ -183,7 +183,7 @@ class VncHostsActivity : AppCompatActivity() {
      * Delete shows a confirmation dialog before removing the row.
      */
     private fun showHostMenu(host: VncHost) {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(host.name)
             .setItems(arrayOf("Edit", "Delete")) { _, which ->
                 when (which) {
@@ -195,7 +195,7 @@ class VncHostsActivity : AppCompatActivity() {
     }
 
     private fun confirmDelete(host: VncHost) {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Delete '${host.name}'?")
             .setMessage("This removes the VNC host record. Any linked identity is not deleted.")
             .setPositiveButton("Delete") { _, _ ->

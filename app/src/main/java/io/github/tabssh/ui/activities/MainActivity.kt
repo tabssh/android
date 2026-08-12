@@ -13,6 +13,7 @@ import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.navigation.NavigationView
 import com.google.android.material.tabs.TabLayout
@@ -160,7 +161,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 }
                 val confirmExit = app.preferencesManager.getBoolean("confirm_exit", false)
                 if (confirmExit) {
-                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                    MaterialAlertDialogBuilder(this@MainActivity)
                         .setTitle(R.string.app_name)
                         .setMessage("Exit TabSSH?")
                         .setPositiveButton("Exit") { _, _ ->
@@ -193,7 +194,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         val prefs = getSharedPreferences(io.github.tabssh.TabSSHApplication.STARTUP_PREFS, MODE_PRIVATE)
         val error = prefs.getString(io.github.tabssh.TabSSHApplication.KEY_STARTUP_ERROR, null)
         if (!error.isNullOrBlank()) {
-            androidx.appcompat.app.AlertDialog.Builder(this)
+            MaterialAlertDialogBuilder(this)
                 .setTitle("⚠️ Startup Warning")
                 .setMessage("Some components failed to initialize. The app may have reduced functionality.\n\n$error")
                 .setPositiveButton("Copy & Dismiss") { _, _ ->
@@ -306,7 +307,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         https://github.com/tabssh/android
         """.trimIndent()
         
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Help")
             .setMessage(helpText)
             .setPositiveButton("OK", null)
@@ -351,7 +352,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         • Community Contributors
         """.trimIndent()
         
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("About TabSSH")
             .setMessage(aboutText)
             .setPositiveButton("OK", null)
@@ -394,7 +395,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 "Enable it in Settings → Logging → \"Enable Debug Logging\", " +
                 "reproduce the issue, then come back here to copy the logs."
             }
-            androidx.appcompat.app.AlertDialog.Builder(this)
+            MaterialAlertDialogBuilder(this)
                 .setTitle("No Debug Logs Yet")
                 .setMessage(msg)
                 .setPositiveButton("OK", null)
@@ -469,7 +470,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             // Don't even attempt clipboard — large strings have crashed
             // here before (TransactionTooLargeException) and there's no
             // sane way to recover mid-binder-call.
-            androidx.appcompat.app.AlertDialog.Builder(this)
+            MaterialAlertDialogBuilder(this)
                 .setTitle("$title — too large to copy")
                 .setMessage(
                     "Log is ${logsBytes / 1024} KB — too large for the clipboard. " +
@@ -497,7 +498,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         } else {
             "Clipboard write failed — log may be too large. Use \"Paste / Issue\" to upload it directly."
         }
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(if (copied) "$title Copied" else title)
             .setMessage(msg)
             .setPositiveButton("OK", null)
@@ -518,7 +519,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         val file = Logger.getAppLogFile()
         val haveRealLogs = file != null && file.exists() && file.length() > 0
         if (!haveRealLogs) {
-            androidx.appcompat.app.AlertDialog.Builder(this)
+            MaterialAlertDialogBuilder(this)
                 .setTitle("Application Log")
                 .setMessage("No logs recorded yet.\n\nUse the app normally, and logs will be captured automatically.")
                 .setPositiveButton("OK", null)
@@ -612,7 +613,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     private fun showHypervisorSelectionDialog(hypervisors: List<HypervisorProfile>) {
         val names = hypervisors.map { "${it.name} (${it.host})" }.toTypedArray()
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Select Hypervisor")
             .setItems(names) { _, which ->
                 openHypervisorManager(hypervisors[which])
@@ -677,7 +678,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             layoutSaveName.visibility = if (checked) View.VISIBLE else View.GONE
         }
 
-        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setTitle("Quick Connect")
             .setView(view)
             .setPositiveButton("Connect", null) // set below to prevent auto-dismiss on error

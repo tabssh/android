@@ -13,6 +13,7 @@ import android.view.View
 import android.widget.*
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -192,7 +193,7 @@ class ClusterCommandActivity : AppCompatActivity() {
             val snippetNames = snippets.map { it.name }.toTypedArray()
 
             runOnUiThread {
-                androidx.appcompat.app.AlertDialog.Builder(this@ClusterCommandActivity)
+                MaterialAlertDialogBuilder(this@ClusterCommandActivity)
                     .setTitle("Select Snippet")
                     .setItems(snippetNames) { _, which ->
                         val selectedSnippet = snippets[which]

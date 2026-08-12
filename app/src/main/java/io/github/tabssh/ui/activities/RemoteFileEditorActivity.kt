@@ -15,6 +15,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.sftp.SFTPManager
 import io.github.tabssh.utils.logging.Logger
@@ -183,7 +184,7 @@ class RemoteFileEditorActivity : AppCompatActivity() {
     }
 
     private fun promptUnsavedChanges() {
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Unsaved changes")
             .setMessage("Save before closing?")
             .setPositiveButton("Save") { _, _ -> saveFile { finish() } }

@@ -9,10 +9,10 @@ import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 /**
  * Wave 2.6 — VSCode/Termius-style command palette overlay.
@@ -58,7 +58,7 @@ object PaletteDialog {
         root.addView(rv)
 
         var filtered: List<Item> = items
-        val dialog = AlertDialog.Builder(context)
+        val dialog = MaterialAlertDialogBuilder(context)
             .setTitle(title)
             .setView(root)
             .setNegativeButton("Cancel", null)

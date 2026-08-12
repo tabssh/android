@@ -11,7 +11,6 @@ import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -20,6 +19,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.R
@@ -194,7 +194,7 @@ class CloudAccountsActivity : AppCompatActivity() {
             tilToken.helperText = pt.tokenHelp
         }
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Add cloud account")
             .setView(dialogView)
             .setPositiveButton("Save") { _, _ ->
@@ -290,7 +290,7 @@ class CloudAccountsActivity : AppCompatActivity() {
         }
         val labels = candidates.map { "${it.profile.getDisplayName()} (${it.sourceLabel})" }.toTypedArray()
         val checked = BooleanArray(candidates.size) { true }
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("${account.name}: pick to import (${candidates.size})")
             .setMultiChoiceItems(labels, checked) { _, idx, isChecked -> checked[idx] = isChecked }
             .setPositiveButton("Import") { _, _ ->
@@ -389,7 +389,7 @@ class CloudAccountsActivity : AppCompatActivity() {
             }
             runOnUiThread {
                 if (hosts.isEmpty()) {
-                    AlertDialog.Builder(this@CloudAccountsActivity)
+                    MaterialAlertDialogBuilder(this@CloudAccountsActivity)
                         .setTitle(account.name)
                         .setMessage("No hosts imported yet. Use the refresh button to fetch and import hosts.")
                         .setPositiveButton("OK", null)
@@ -397,7 +397,7 @@ class CloudAccountsActivity : AppCompatActivity() {
                     return@runOnUiThread
                 }
                 val labels = hosts.map { "${it.getDisplayName()}  –  ${it.host}:${it.port}" }.toTypedArray()
-                AlertDialog.Builder(this@CloudAccountsActivity)
+                MaterialAlertDialogBuilder(this@CloudAccountsActivity)
                     .setTitle("${account.name} · ${hosts.size} host${if (hosts.size == 1) "" else "s"}")
                     .setItems(labels) { _, idx ->
                         val profile = hosts[idx]
@@ -414,7 +414,7 @@ class CloudAccountsActivity : AppCompatActivity() {
     }
 
     private fun confirmDelete(account: CloudAccount) {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Delete ${account.name}?")
             .setMessage("Removes this cloud account record and its stored token. Imported connections stay.")
             .setPositiveButton("Delete") { _, _ ->

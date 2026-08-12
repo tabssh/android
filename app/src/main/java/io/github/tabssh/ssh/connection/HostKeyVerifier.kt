@@ -1,6 +1,7 @@
 package io.github.tabssh.ssh.connection
 
 import android.content.Context
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.jcraft.jsch.HostKey
 import com.jcraft.jsch.HostKeyRepository
 import com.jcraft.jsch.JSch
@@ -466,7 +467,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
      *
      * Robustness: previously the latch had no timeout and relied on
      * `setOnDismissListener` to release on activity destruction. That's
-     * only true if `AlertDialog.Builder.show()` actually succeeds — if
+     * only true if `MaterialAlertDialogBuilder.show()` actually succeeds — if
      * the activity died between resolution and the runOnUiThread post
      * (or if Builder().show() throws because the activity is in a bad
      * state), the dismiss listener never fires and the JSch thread
@@ -543,7 +544,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                     latch.countDown()
                     return@runOnUiThread
                 }
-                val builder = androidx.appcompat.app.AlertDialog.Builder(effectiveActivity)
+                val builder = MaterialAlertDialogBuilder(effectiveActivity)
                     .setTitle(title)
                     .setMessage(message)
                     .setPositiveButton(positiveLabel) { _, _ ->

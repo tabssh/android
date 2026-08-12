@@ -10,6 +10,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.SwitchPreferenceCompat
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.ui.activities.SyncSettingsActivity
@@ -214,7 +215,7 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
 
         // Clear known hosts functionality
         findPreference<Preference>("clear_known_hosts")?.setOnPreferenceClickListener {
-            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Clear Known Hosts")
                 .setMessage("This will remove all saved host keys and fingerprints. You will need to verify hosts again on next connection.\n\nContinue?")
                 .setPositiveButton("Clear") { _, _ ->
@@ -284,7 +285,7 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
             val enabled = app.preferencesManager.getBoolean(io.github.tabssh.ui.activities.PinLockActivity.PREF_PIN_ENABLED, false)
             val ctx = requireContext()
             val items = if (enabled) arrayOf("Change PIN", "Disable PIN lock") else arrayOf("Set PIN")
-            androidx.appcompat.app.AlertDialog.Builder(ctx)
+            MaterialAlertDialogBuilder(ctx)
                 .setTitle("App lock PIN")
                 .setItems(items) { _, which ->
                     when {
@@ -433,7 +434,7 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
         // first since it's destructive (user could have spent time
         // arranging keys).
         findPreference<Preference>("reset_keyboard_layout")?.setOnPreferenceClickListener {
-            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Reset keyboard layout?")
                 .setMessage("This restores the default 3-row layout (Esc/Tab/Ctl/Alt/Fn/Enter, arrows + Home/End/PgUp/PgDn, common symbols). Your current layout will be discarded.")
                 .setPositiveButton("Reset") { _, _ ->
@@ -720,7 +721,7 @@ class AuditSettingsFragment : PreferenceFragmentCompat() {
         
         // Clear logs button
         findPreference<Preference>("audit_log_clear")?.setOnPreferenceClickListener {
-            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Clear Audit Logs")
                 .setMessage("Delete all audit log entries? This cannot be undone.")
                 .setPositiveButton("Clear") { _, _ ->
@@ -850,7 +851,7 @@ class TaskerSettingsFragment : PreferenceFragmentCompat() {
             - Command: "ls -la" with wait_for_result=true
         """.trimIndent()
         
-        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Tasker Actions")
             .setMessage(message)
             .setPositiveButton("OK", null)
@@ -881,7 +882,7 @@ class TaskerSettingsFragment : PreferenceFragmentCompat() {
             Use these in Tasker with Event → Intent Received
         """.trimIndent()
         
-        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Tasker Events")
             .setMessage(message)
             .setPositiveButton("OK", null)
@@ -1028,7 +1029,7 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                 }
                 scrollView.addView(textView)
 
-                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                MaterialAlertDialogBuilder(requireContext())
                     .setTitle(title)
                     .setView(scrollView)
                     .setPositiveButton("Close", null)
@@ -1061,7 +1062,7 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
 
                 val hostNames = hostLogs.map { it.name }.toTypedArray()
 
-                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                MaterialAlertDialogBuilder(requireContext())
                     .setTitle("Select Host Log")
                     .setItems(hostNames) { _, which ->
                         showHostLogContent(hostLogs[which])
@@ -1091,7 +1092,7 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                 }
                 scrollView.addView(textView)
 
-                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                MaterialAlertDialogBuilder(requireContext())
                     .setTitle(logFile.name)
                     .setView(scrollView)
                     .setPositiveButton("Close", null)
@@ -1147,7 +1148,7 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
     }
     
     private fun clearLogs() {
-        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Clear Logs")
             .setMessage("Are you sure you want to delete all log files? This cannot be undone.")
             .setPositiveButton("Clear") { _, _ ->

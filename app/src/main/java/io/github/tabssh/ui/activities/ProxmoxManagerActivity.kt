@@ -15,6 +15,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.storage.HypervisorPasswordStore
@@ -197,7 +198,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
     // ── VM actions ────────────────────────────────────────────────────────────
 
     private fun confirmHardReset(vm: ProxmoxApiClient.ProxmoxVM, client: ProxmoxApiClient) {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Hard Reset ${vm.name}?")
             .setMessage("This is equivalent to pulling the power cord. Any unsaved data will be lost.")
             .setPositiveButton("Reset") { _, _ -> powerAction(vm, client, "reset") }
@@ -516,7 +517,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
         snapshotRecycler.layoutManager = LinearLayoutManager(this)
         vmNameText.text = "VM: ${vm.name}"
 
-        val dialog = AlertDialog.Builder(this)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setView(dialogView)
             .create()
 
@@ -569,7 +570,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
             monospace = true
         )
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Create Snapshot")
             .setMessage("Enter a name for the snapshot of ${vm.name}")
             .setView(form.root)
@@ -612,7 +613,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
     private fun handleSnapshotAction(vm: ProxmoxApiClient.ProxmoxVM, client: ProxmoxApiClient, snapshot: ProxmoxApiClient.ProxmoxSnapshot, action: String, parentDialog: AlertDialog) {
         when (action) {
             "revert" -> {
-                AlertDialog.Builder(this)
+                MaterialAlertDialogBuilder(this)
                     .setTitle("Revert to Snapshot")
                     .setMessage("Are you sure you want to revert ${vm.name} to snapshot '${snapshot.name}'?\n\nThis will restore the VM to its state when the snapshot was taken.")
                     .setPositiveButton("Revert") { _, _ ->
@@ -635,7 +636,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                     .show()
             }
             "delete" -> {
-                AlertDialog.Builder(this)
+                MaterialAlertDialogBuilder(this)
                     .setTitle("Delete Snapshot")
                     .setMessage("Are you sure you want to delete snapshot '${snapshot.name}'?\n\nThis action cannot be undone.")
                     .setPositiveButton("Delete") { _, _ ->

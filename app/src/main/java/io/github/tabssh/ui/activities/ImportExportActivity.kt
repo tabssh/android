@@ -6,6 +6,7 @@ import android.view.MenuItem
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
@@ -143,7 +144,7 @@ class ImportExportActivity : AppCompatActivity() {
         radioGroup.addView(mergeOption)
         radioGroup.addView(replaceOption)
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.restore_mode_title)
             .setView(radioGroup)
             .setPositiveButton(R.string.restore_mode_continue) { _, _ ->
@@ -205,7 +206,7 @@ class ImportExportActivity : AppCompatActivity() {
             addView(passwordInput)
         }
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.import_export_encrypted_backup_title)
             .setMessage(R.string.import_export_encrypted_backup_message)
             .setView(layout)
@@ -263,7 +264,7 @@ class ImportExportActivity : AppCompatActivity() {
             }
         }
 
-        androidx.appcompat.app.AlertDialog.Builder(this@ImportExportActivity)
+        MaterialAlertDialogBuilder(this@ImportExportActivity)
             .setTitle(R.string.import_export_backup_imported_title)
             .setMessage(message)
             .setPositiveButton(R.string.ok, null)
@@ -332,7 +333,7 @@ class ImportExportActivity : AppCompatActivity() {
                             append(result.warnings.joinToString("\n"))
                         }
                     }
-                    androidx.appcompat.app.AlertDialog.Builder(this@ImportExportActivity)
+                    MaterialAlertDialogBuilder(this@ImportExportActivity)
                         .setTitle(R.string.import_export_bulk_import_title)
                         .setMessage(msg)
                         .setPositiveButton(android.R.string.ok, null)
@@ -368,7 +369,7 @@ class ImportExportActivity : AppCompatActivity() {
                 result.warnings.take(8).joinToString("\n") { getString(R.string.import_export_bulk_warning_line, it) }
         } else ""
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.import_export_bulk_import_format_title, result.format.name))
             .setMessage(getString(R.string.import_export_bulk_found_connections, result.hosts.size, sample, more, warn))
             .setPositiveButton(R.string.conn_edit_import) { _, _ ->
@@ -470,7 +471,7 @@ class ImportExportActivity : AppCompatActivity() {
             }
         }.toSet()
 
-        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.import_export_import_ssh_config_title)
             .setMessage(buildString {
                 append(getString(R.string.import_export_found_hosts, profiles.size))
@@ -647,7 +648,7 @@ class ImportExportActivity : AppCompatActivity() {
             getString(R.string.import_export_option_encrypted)
         )
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.import_export_options_title)
             .setItems(options) { _, which ->
                 when (which) {
@@ -664,7 +665,7 @@ class ImportExportActivity : AppCompatActivity() {
      * to the file, then require explicit confirmation before proceeding.
      */
     private fun showUnencryptedExportWarning(uri: android.net.Uri) {
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.import_export_unencrypted_warning_title)
             .setMessage(R.string.import_export_unencrypted_warning_message)
             .setPositiveButton(R.string.import_export_export_without_encryption) { _, _ ->
@@ -700,7 +701,7 @@ class ImportExportActivity : AppCompatActivity() {
             })
         }
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.import_export_encrypt_backup_title)
             .setMessage(R.string.import_export_encrypt_backup_message)
             .setView(layout)
@@ -774,7 +775,7 @@ class ImportExportActivity : AppCompatActivity() {
                         }
                     }
 
-                    androidx.appcompat.app.AlertDialog.Builder(this@ImportExportActivity)
+                    MaterialAlertDialogBuilder(this@ImportExportActivity)
                         .setTitle(R.string.import_export_export_complete_title)
                         .setMessage(message)
                         .setPositiveButton(R.string.ok, null)

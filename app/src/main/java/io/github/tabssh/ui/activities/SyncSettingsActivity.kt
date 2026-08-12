@@ -13,8 +13,9 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.materialswitch.MaterialSwitch
 import io.github.tabssh.R
 import io.github.tabssh.sync.SAFSyncManager
 import io.github.tabssh.sync.SyncFileStatus
@@ -251,7 +252,7 @@ class SyncSettingsActivity : AppCompatActivity() {
 
         // Advanced
         findViewById<View>(R.id.btn_force_upload).setOnClickListener {
-            AlertDialog.Builder(this)
+            MaterialAlertDialogBuilder(this)
                 .setTitle("Force Upload")
                 .setMessage("Upload local data to the sync file, overwriting remote.\n\nContinue?")
                 .setPositiveButton("Upload") { _, _ -> performSync() }
@@ -259,7 +260,7 @@ class SyncSettingsActivity : AppCompatActivity() {
                 .show()
         }
         findViewById<View>(R.id.btn_force_download).setOnClickListener {
-            AlertDialog.Builder(this)
+            MaterialAlertDialogBuilder(this)
                 .setTitle("⚠️ Force Download")
                 .setMessage("Download remote data and overwrite all local data.\n\nThis cannot be undone. Continue?")
                 .setPositiveButton("Download") { _, _ -> performDownload() }
@@ -267,7 +268,7 @@ class SyncSettingsActivity : AppCompatActivity() {
                 .show()
         }
         findViewById<View>(R.id.btn_clear_config).setOnClickListener {
-            AlertDialog.Builder(this)
+            MaterialAlertDialogBuilder(this)
                 .setTitle("Clear Configuration")
                 .setMessage("Remove sync setup. Your local data is NOT affected.")
                 .setPositiveButton("Clear") { _, _ ->
@@ -356,7 +357,7 @@ class SyncSettingsActivity : AppCompatActivity() {
             add("Open existing sync file")
             if (hasExisting) add("Clear current location")
         }
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Sync Location")
             .setItems(options.toTypedArray()) { _, which ->
                 when (which) {
@@ -380,7 +381,7 @@ class SyncSettingsActivity : AppCompatActivity() {
         val passwordLayout = view.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_password)
         val confirmLayout  = view.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_confirm)
 
-        val dialog = AlertDialog.Builder(this)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setTitle("Encryption Password")
             .setMessage("Same password required on all devices. Min 8 characters.")
             .setView(view)
@@ -425,7 +426,7 @@ class SyncSettingsActivity : AppCompatActivity() {
         // Hide the confirm field — not needed when opening an existing file
         confirmLayout?.visibility = View.GONE
 
-        val dialog = AlertDialog.Builder(this)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setTitle("Enter Sync File Password")
             .setMessage("Enter the encryption password used when this file was created.")
             .setView(view)
@@ -473,7 +474,7 @@ class SyncSettingsActivity : AppCompatActivity() {
     private fun showFrequencyPicker() {
         val current = prefs.getString(PREF_FREQUENCY, "1h") ?: "1h"
         val currentIdx = FREQUENCY_KEYS.indexOf(current).coerceAtLeast(0)
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Sync Frequency")
             .setSingleChoiceItems(FREQUENCY_VALUES, currentIdx) { d, which ->
                 prefs.edit().putString(PREF_FREQUENCY, FREQUENCY_KEYS[which]).apply()

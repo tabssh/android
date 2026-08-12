@@ -8,6 +8,7 @@ import android.view.View
 import android.widget.ArrayAdapter
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.databinding.ActivityConnectionEditBinding
@@ -833,7 +834,7 @@ class ConnectionEditActivity : AppCompatActivity() {
                     onBackPressedDispatcher.onBackPressed()
                     return
                 }
-                androidx.appcompat.app.AlertDialog.Builder(this@ConnectionEditActivity)
+                MaterialAlertDialogBuilder(this@ConnectionEditActivity)
                     .setTitle(R.string.conn_edit_discard_changes_title)
                     .setMessage(R.string.conn_edit_discard_changes_message)
                     .setPositiveButton(R.string.discard) { _, _ ->
@@ -852,7 +853,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             if (!hasUnsavedChanges) {
                 finish()
             } else {
-                androidx.appcompat.app.AlertDialog.Builder(this)
+                MaterialAlertDialogBuilder(this)
                     .setTitle(R.string.conn_edit_discard_changes_title)
                     .setMessage(R.string.conn_edit_discard_changes_message)
                     .setPositiveButton(R.string.discard) { _, _ -> finish() }
@@ -872,7 +873,7 @@ class ConnectionEditActivity : AppCompatActivity() {
 
     private fun showColorTagPicker() {
         val labels = colorTagPresets.map { it.second }.toTypedArray()
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.conn_edit_pick_color_tag_title)
             .setItems(labels) { _, which ->
                 currentColorTag = colorTagPresets[which].first
@@ -1314,7 +1315,7 @@ class ConnectionEditActivity : AppCompatActivity() {
                     app.database.connectionDao().findDuplicate(profile.host, profile.port, profile.username, excludeId)
                 }
                 if (duplicate != null && duplicate.id != existingProfile?.id) {
-                    com.google.android.material.dialog.MaterialAlertDialogBuilder(this@ConnectionEditActivity)
+                    MaterialAlertDialogBuilder(this@ConnectionEditActivity)
                         .setTitle(R.string.conn_edit_duplicate_title)
                         .setMessage(getString(R.string.conn_edit_duplicate_message, profile.username, profile.host, profile.port, duplicate.name))
                         .setPositiveButton(R.string.conn_edit_save_as_new) { _, _ ->
@@ -1819,7 +1820,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             getString(R.string.conn_edit_key_option_generate),
             getString(R.string.conn_edit_key_option_browse)
         )
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.conn_edit_key_management_title)
             .setItems(options) { _, which ->
                 when (which) {
@@ -1852,7 +1853,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             form, hint = getString(R.string.paste_ssh_key_hint),
             minLines = 10, maxLines = 20, monospace = true
         )
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.conn_edit_paste_key_title)
             .setView(form.root)
             .setPositiveButton(R.string.next) { _, _ ->
@@ -1885,7 +1886,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             2 to Pair(KeyType.ECDSA, 256), 3 to Pair(KeyType.ECDSA, 384),
             4 to Pair(KeyType.ED25519, 256)
         )
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.conn_edit_generate_key_title)
             .setMessage(R.string.conn_edit_generate_key_message)
             .setSingleChoiceItems(keyTypes, selectedType) { _, which -> selectedType = which }
@@ -1910,7 +1911,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             initial = "Generated $keyName Key"
         )
         editText.selectAll()
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.conn_edit_name_key_title)
             .setMessage(R.string.conn_edit_name_key_message)
             .setView(form.root)
@@ -1924,7 +1925,7 @@ class ConnectionEditActivity : AppCompatActivity() {
     }
 
     private fun generateKeyPair(keyType: KeyType, keySize: Int, keyName: String) {
-        val progressDialog = androidx.appcompat.app.AlertDialog.Builder(this)
+        val progressDialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.conn_edit_generating_key_title)
             .setMessage(getString(R.string.conn_edit_generating_key_message, keyType.name, keySize))
             .setCancelable(false)
@@ -1956,7 +1957,7 @@ class ConnectionEditActivity : AppCompatActivity() {
     private fun loadAvailableKeys() { setupKeySpinner() }
 
     private fun showKeyGenerationSuccess(message: String, fingerprint: String) {
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.conn_edit_key_generated_title)
             .setMessage(getString(R.string.conn_edit_key_generated_message, message, fingerprint))
             .setPositiveButton(R.string.ok) { _, _ -> loadAvailableKeys() }
@@ -1979,7 +1980,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             return
         }
         val keyNames = availableKeys.map { it.getDisplayName() }.toTypedArray()
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.select_key)
             .setItems(keyNames) { _, which ->
                 selectedKeyIndex = which + 1
@@ -2011,7 +2012,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         val passphraseInput = io.github.tabssh.ui.dialogs.DialogFields.addSecret(
             form, hint = getString(R.string.key_passphrase_hint)
         )
-        android.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.conn_edit_encrypted_key_title)
             .setMessage(R.string.conn_edit_encrypted_key_message)
             .setView(form.root)
@@ -2162,7 +2163,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             form, hint = getString(R.string.key_import_name_hint), initial = suggestion
         )
         edit.setSelection(edit.text?.length ?: 0)
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.conn_edit_name_this_key_title)
             .setMessage(R.string.conn_edit_name_this_key_message)
             .setView(form.root)
@@ -2180,7 +2181,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             form, hint = getString(R.string.group_name_hint),
             initial = if (selectedGroupName == "No Group") "" else selectedGroupName
         )
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.conn_edit_set_group_title)
             .setMessage(R.string.conn_edit_set_group_message)
             .setView(form.root)
@@ -2421,7 +2422,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             initial = pendingKnockSequence, minLines = 1, maxLines = 3, monospace = true
         )
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.conn_edit_port_knock_title)
             .setView(form.root)
             .setPositiveButton(R.string.save) { _, _ ->

@@ -7,12 +7,12 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputEditText
 import io.github.tabssh.R
@@ -152,7 +152,7 @@ class GroupManagementActivity : AppCompatActivity() {
         val colorInput = dialogView.findViewById<TextInputEditText>(R.id.edit_group_color)
         val iconInput = dialogView.findViewById<TextInputEditText>(R.id.edit_group_icon)
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Create Group")
             .setView(dialogView)
             .setPositiveButton("Create") { _, _ ->
@@ -182,7 +182,7 @@ class GroupManagementActivity : AppCompatActivity() {
         colorInput.setText(group.color ?: "")
         iconInput.setText(group.icon ?: "")
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Edit Group")
             .setView(dialogView)
             .setPositiveButton("Save") { _, _ ->
@@ -266,7 +266,7 @@ class GroupManagementActivity : AppCompatActivity() {
                 
                 if (connectionCount > 0) {
                     runOnUiThread {
-                        AlertDialog.Builder(this@GroupManagementActivity)
+                        MaterialAlertDialogBuilder(this@GroupManagementActivity)
                             .setTitle("Delete Group?")
                             .setMessage("This group contains $connectionCount connection(s). Connections will be moved to 'Ungrouped'.")
                             .setPositiveButton("Delete") { _, _ ->

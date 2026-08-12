@@ -179,7 +179,7 @@ class VMwareManagerActivity : AppCompatActivity() {
     // ── VM actions ────────────────────────────────────────────────────────────
 
     private fun confirmStop(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient) {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Stop ${vm.name}?")
             .setMessage("Shutdown Guest asks the guest OS to shut down cleanly (requires VMware Tools). Power Off forcibly cuts power — any unsaved data will be lost.")
             .setPositiveButton("Shutdown Guest") { _, _ -> vmAction(vm, client, "shutdown") }
@@ -189,7 +189,7 @@ class VMwareManagerActivity : AppCompatActivity() {
     }
 
     private fun confirmHardReset(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient) {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Hard Reset ${vm.name}?")
             .setMessage("This is equivalent to pulling the power cord. Any unsaved data will be lost.")
             .setPositiveButton("Reset") { _, _ -> vmAction(vm, client, "reset") }

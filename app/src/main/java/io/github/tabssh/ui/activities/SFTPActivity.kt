@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.databinding.ActivitySftpBinding
@@ -244,7 +245,7 @@ class SFTPActivity : AppCompatActivity() {
                     return@runOnUiThread
                 }
                 val labels = candidates.map { it.getDisplayName() }.toTypedArray()
-                androidx.appcompat.app.AlertDialog.Builder(this@SFTPActivity)
+                MaterialAlertDialogBuilder(this@SFTPActivity)
                     .setTitle("Add SFTP tab")
                     .setItems(labels) { _, which -> openNewSftpTab(candidates[which]) }
                     .setNegativeButton("Cancel", null)
@@ -529,7 +530,7 @@ class SFTPActivity : AppCompatActivity() {
             showToast("No files selected. Long-press files to select them.")
             return
         }
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Upload via SCP")
             .setMessage("SCP is the legacy fallback for servers without SFTP. " +
                 "Default Upload uses SFTP (recommended). Continue with SCP?")
@@ -604,7 +605,7 @@ class SFTPActivity : AppCompatActivity() {
     }
     
     private fun showCreateFolderDialog() {
-        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+        val builder = MaterialAlertDialogBuilder(this)
         val form = DialogFields.form(this)
         val input = DialogFields.addText(form, getString(R.string.sftp_create_folder_hint))
 
@@ -677,7 +678,7 @@ class SFTPActivity : AppCompatActivity() {
             arrayOf("Upload", "Open", "Share", "Delete")
         }
         
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(file.name)
             .setItems(items) { _, which ->
                 if (which < 0 || which >= items.size) return@setItems
@@ -703,7 +704,7 @@ class SFTPActivity : AppCompatActivity() {
             arrayOf("Open", "Open / Edit", "Download", "Rename", "Permissions…", "Properties", "Delete")
         }
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(file.name)
             .setItems(items) { _, which ->
                 if (which < 0 || which >= items.size) return@setItems
@@ -785,7 +786,7 @@ class SFTPActivity : AppCompatActivity() {
             setPadding(0, 24, 0, 0)
         })
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Permissions — ${file.name}")
             .setView(container)
             .setPositiveButton("Apply") { _, _ ->
@@ -1057,7 +1058,7 @@ class SFTPActivity : AppCompatActivity() {
     }
     
     private fun renameRemoteFile(file: RemoteFileInfo) {
-        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+        val builder = MaterialAlertDialogBuilder(this)
         val form = DialogFields.form(this)
         val input = DialogFields.addText(
             form, getString(R.string.sftp_rename_file_hint), initial = file.name
@@ -1097,7 +1098,7 @@ class SFTPActivity : AppCompatActivity() {
     }
     
     private fun deleteRemoteFile(file: RemoteFileInfo) {
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Delete ${file.name}")
             .setMessage("Are you sure you want to delete this ${if (file.isDirectory) "folder" else "file"}?")
             .setPositiveButton("Delete") { _, _ ->
@@ -1127,7 +1128,7 @@ class SFTPActivity : AppCompatActivity() {
     }
     
     private fun deleteLocalFile(file: File) {
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Delete ${file.name}")
             .setMessage("Are you sure you want to delete this ${if (file.isDirectory) "folder" else "file"}?")
             .setPositiveButton("Delete") { _, _ ->
@@ -1174,7 +1175,7 @@ class SFTPActivity : AppCompatActivity() {
             }
         }
         
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Properties")
             .setMessage(message)
             .setPositiveButton("OK", null)

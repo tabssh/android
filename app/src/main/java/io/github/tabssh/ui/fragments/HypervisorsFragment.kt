@@ -164,7 +164,7 @@ class HypervisorsFragment : Fragment() {
         if (!isAdded) return
 
         if (hypervisor.type == HypervisorType.OCI) {
-            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            MaterialAlertDialogBuilder(requireContext())
                 .setTitle("OCI Hypervisor")
                 .setMessage("OCI has moved to Cloud Accounts. Manage your OCI instances from the Cloud Accounts tab.")
                 .setPositiveButton("OK", null)

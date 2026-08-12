@@ -46,13 +46,12 @@ Open decisions / documented limitations from the 4-8 diagnosis:
   README known-limitations, not app-fixable
 - X11 cannot ride mosh's UDP transport (protocol limitation): fix keeps
   the bootstrap SSH session alive to carry X11; documented in README
-- app_theme default is "system" (TabSSHApplication.kt:563) but AI.md
-  PART 7 says "dark mode default" — behavior change, user decision:
-  switch the default to "dark" or amend the spec wording
-- 165 AlertDialog.Builder call sites vs 80 MaterialAlertDialogBuilder
-  (found in item-13 theme sweep) — both render correctly in dark/light;
-  mass conversion deferred as its own future task, not folded into the
-  theme pass
+- app_theme default: RESOLVED 2026-08-12 — AI.md PART 7 is explicit
+  ("dark mode default") and preferences_general.xml already declared
+  defaultValue="dark"; Kotlin fallbacks (TabSSHApplication,
+  PreferenceManager.DEFAULT_APP_THEME) aligned to "dark"
+- AlertDialog→MaterialAlertDialogBuilder conversion: IN PROGRESS
+  2026-08-12 follow-up batch (all ~165 remaining call sites)
 - KeyType.kt:48-51 SecurityLevel color ints are hardcoded but have no
   UI consumer today — if a UI ever renders them, map to status_* colors
   at the render site
@@ -158,8 +157,13 @@ E (infra tab reorder + UI/UX polish, last so it restyles final screens).
 animates the title (`⠐`/`⠂`) ~1/sec, flooding the debug log. Skip logging
 when only the spinner glyph differs from the previous title.
 
-### B. Application/debug logging completeness + sanitization
-Audit done (2026-08-07). Findings to fix, one commit each:
+### B. Application/debug logging completeness + sanitization — DONE
+Audit done (2026-08-07); findings 1–8 verified fixed in code
+2026-08-12 (sanitizer URL/Bearer rules, SocketRelay logging,
+host-log copy sensitive=true all confirmed present). The item-7
+deferral (CliExecTransport/DockerApiParsers/DockerCliParsers/
+RunConfigParser silent catches) is being fixed in the 2026-08-12
+follow-up batch. Original findings:
 1. Console URLs logged whole with live auth tickets — ConsoleWebSocketClient.kt:236 (vncticket), XCPngApiClient.kt:376,431 (session_id), XenOrchestraApiClient console URLs; log scheme+host+path only
 2. Sanitizer missing rules: URL query secrets (vncticket|ticket|session_id|access_token|sig), Authorization Basic/Bearer, JSON-quoted "password"/"token" keys; + LoggerSanitizerTest cases
 3. Logcat path unsanitized — Logger.kt:249,257,267,277,286 write raw to android.util.Log; sanitize in release builds
@@ -280,8 +284,11 @@ inline dialog/toast strings were fully externalized in 28af0eb99ac6
 (69 import_export_* resources; also fixed the bulk-import group
 suffix rendering the literal " [$it]").
 
-### D. Compose stacks: edit existing (incl. outside compose dir) + logs
-Research done. Gaps to implement: (1) stack discovery via
+### D. Compose stacks: edit existing (incl. outside compose dir) + logs — DONE
+Verified implemented in code 2026-08-12: `docker compose ls` discovery
+(DockerModels/ComposeEditorActivity external-stack path), stack-level
+logs (StackLogsActivity + transport composeLogs), run-config logs.
+Original gap list: (1) stack discovery via
 `docker compose ls` — external stacks (outside the compose dir) are
 invisible today (DockerStacksFragment loads Room rows only); show them
 and support edit-in-place at their own config-file path

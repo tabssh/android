@@ -1,5 +1,6 @@
 package io.github.tabssh.docker.transport
 
+import io.github.tabssh.utils.logging.Logger
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.EOFException
@@ -82,7 +83,8 @@ object DockerApiParsers {
                 apiVersion = obj.optString("ApiVersion"),
                 minApiVersion = obj.optString("MinAPIVersion").ifEmpty { null }
             )
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Logger.w("DockerApiParsers", "parseVersion: unparsable /version body (${body.length} chars): ${e.message}")
             null
         }
     }
@@ -185,7 +187,8 @@ object DockerApiParsers {
                 memTotalBytes = obj.optLong("MemTotal"),
                 ncpu = obj.optInt("NCPU")
             )
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Logger.w("DockerApiParsers", "parseInfo: unparsable /info body (${body.length} chars): ${e.message}")
             null
         }
     }
@@ -247,7 +250,8 @@ object DockerApiParsers {
                 totalBytes = detail?.optLong("total") ?: 0,
                 error = error
             )
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Logger.w("DockerApiParsers", "parsePullProgressLine: unparsable line (${trimmed.length} chars): ${e.message}")
             null
         }
     }
@@ -316,7 +320,8 @@ object DockerApiParsers {
                 blockWriteBytes = blockWrite,
                 pids = obj.optJSONObject("pids_stats")?.optInt("current") ?: 0
             )
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Logger.w("DockerApiParsers", "parseApiStats: unparsable stats body (${body.length} chars): ${e.message}")
             null
         }
     }

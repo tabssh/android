@@ -5,6 +5,7 @@ import android.view.LayoutInflater
 import android.widget.RadioGroup
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.sync.models.Conflict
 import io.github.tabssh.sync.models.ConflictResolution
@@ -71,7 +72,7 @@ class ConflictResolutionDialog(
         localValueText.text = "Local: ${formatValue(conflict.localValue)} (${formatTimestamp(conflict.localTimestamp)})"
         remoteValueText.text = "Remote: ${formatValue(conflict.remoteValue)} (${formatTimestamp(conflict.remoteTimestamp)})"
 
-        return AlertDialog.Builder(context)
+        return MaterialAlertDialogBuilder(context)
             .setView(view)
             .setTitle("Resolve Conflict (${currentConflictIndex + 1}/${conflicts.size})")
             .setPositiveButton("Apply") { _, _ ->

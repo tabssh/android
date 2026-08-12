@@ -13,11 +13,11 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlin.math.sqrt
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
@@ -454,7 +454,7 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
      * must still tap Save (the FAB) to persist it.
      */
     private fun confirmResetToDefault() {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Reset to default?")
             .setMessage("Discard the current edits and restore the default keyboard layout. You will still need to tap Save to keep the change.")
             .setPositiveButton("Reset") { _, _ ->

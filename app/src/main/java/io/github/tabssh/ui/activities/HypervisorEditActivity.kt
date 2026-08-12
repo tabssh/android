@@ -8,6 +8,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.textfield.TextInputEditText
 import io.github.tabssh.R
@@ -382,7 +383,7 @@ class HypervisorEditActivity : AppCompatActivity() {
                     "${conn.name ?: conn.getDisplayName()} (${conn.host})"
                 }.toTypedArray()
 
-                androidx.appcompat.app.AlertDialog.Builder(this@HypervisorEditActivity)
+                MaterialAlertDialogBuilder(this@HypervisorEditActivity)
                     .setTitle("Import from Existing Host")
                     .setItems(connectionNames) { _: android.content.DialogInterface, which: Int ->
                         val selectedConnection = connections[which]

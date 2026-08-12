@@ -181,7 +181,7 @@ class PreferenceManager(private val context: Context) {
         const val DEFAULT_THEME = "dracula"
         const val DEFAULT_FONT_FAMILY = "Roboto Mono"
         const val DEFAULT_FONT_SIZE = 14f
-        const val DEFAULT_APP_THEME = "system"
+        const val DEFAULT_APP_THEME = "dark"
     }
     
     fun initialize() {

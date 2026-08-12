@@ -1,5 +1,6 @@
 package io.github.tabssh.crypto.tls
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.utils.logging.Logger
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -155,7 +156,7 @@ object HypervisorCertPromptDialog {
                     latch.countDown()
                     return@runOnUiThread
                 }
-                val builder = androidx.appcompat.app.AlertDialog.Builder(activity)
+                val builder = MaterialAlertDialogBuilder(activity)
                     .setTitle(title)
                     .setMessage(message)
                     .setPositiveButton(positiveLabel) { _, _ ->

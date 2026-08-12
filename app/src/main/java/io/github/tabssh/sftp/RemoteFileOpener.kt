@@ -5,12 +5,12 @@ import android.content.Intent
 import android.net.Uri
 import android.webkit.MimeTypeMap
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.utils.FileOpenPolicy
 import io.github.tabssh.utils.NotificationHelper
 import io.github.tabssh.utils.logging.Logger
@@ -75,7 +75,7 @@ class RemoteFileOpener(
             }
             val limitMb = sizeLimitMbProvider()
             if (FileOpenPolicy.exceedsSizeGate(stat.size, limitMb)) {
-                AlertDialog.Builder(activity)
+                MaterialAlertDialogBuilder(activity)
                     .setTitle("Large file")
                     .setMessage("$displayName is ${formatSize(stat.size)}, over the $limitMb MB open limit. Download anyway?")
                     .setPositiveButton("Download") { _, _ -> downloadAndOpen(sftpManager, remotePath, displayName) }
@@ -186,7 +186,7 @@ class RemoteFileOpener(
     }
 
     private fun promptUploadBack(edit: PendingEdit) {
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("File changed")
             .setMessage("Upload back to ${edit.remotePath}?")
             .setPositiveButton("Upload") { _, _ -> uploadBack(edit) }

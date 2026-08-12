@@ -115,8 +115,11 @@ class CliExecTransport(
                 if (line != null) {
                     try {
                         emit(DockerCliParsers.parseStatsLine(JSONObject(line.trim())))
-                    } catch (_: Exception) {
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
                         // Skip malformed samples; next poll retries.
+                        Logger.w("CliExecTransport", "streamStats: unparsable sample (${line.length} chars): ${e.message}")
                     }
                 }
             }

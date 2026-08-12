@@ -16,6 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.storage.HypervisorPasswordStore
@@ -133,7 +134,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
                 if (msg.startsWith("No credentials found")) {
                     runOnUiThread {
                         progressBar.visibility = View.GONE
-                        AlertDialog.Builder(this@LibvirtManagerActivity)
+                        MaterialAlertDialogBuilder(this@LibvirtManagerActivity)
                             .setTitle("Credentials Missing")
                             .setMessage("$msg\n\nOpen Settings to re-enter the password?")
                             .setPositiveButton("Open Settings") { _, _ ->
@@ -183,7 +184,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
     // ── VM actions ────────────────────────────────────────────────────────────
 
     private fun confirmHardReset(vm: LibvirtVm, client: LibvirtApiClient) {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Hard Reset ${vm.name}?")
             .setMessage("This is equivalent to pulling the power cord. Any unsaved data will be lost.")
             .setPositiveButton("Reset") { _, _ -> powerAction(vm, client, "reset") }
@@ -382,7 +383,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
             messageLines += "Connect via SSH? The connection will tunnel through"
             messageLines += "${hypervisorProfile?.host ?: "the hypervisor"} as a jump host."
 
-            AlertDialog.Builder(this@LibvirtManagerActivity)
+            MaterialAlertDialogBuilder(this@LibvirtManagerActivity)
                 .setTitle("No Console Available")
                 .setMessage(messageLines.joinToString("\n"))
                 .setPositiveButton("SSH Connect") { _, _ ->
@@ -542,7 +543,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
     }
 
     private fun showDomainError(title: String, message: String) {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(title)
             .setMessage(message)
             .setPositiveButton("OK", null)
@@ -567,7 +568,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
         snapshotRecycler.layoutManager = LinearLayoutManager(this)
         vmNameText.text = "VM: ${vm.name}"
 
-        val dialog = AlertDialog.Builder(this)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setView(dialogView)
             .create()
 
@@ -616,7 +617,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
             monospace = true
         )
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Create Snapshot")
             .setMessage("Enter a name for the snapshot of ${vm.name}")
             .setView(form.root)
@@ -659,7 +660,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
     ) {
         when (action) {
             "revert" -> {
-                AlertDialog.Builder(this)
+                MaterialAlertDialogBuilder(this)
                     .setTitle("Revert to Snapshot")
                     .setMessage("Are you sure you want to revert ${vm.name} to snapshot '${snapshot.name}'?\n\nThis will restore the VM to its state when the snapshot was taken.")
                     .setPositiveButton("Revert") { _, _ ->
@@ -680,7 +681,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
                     .show()
             }
             "delete" -> {
-                AlertDialog.Builder(this)
+                MaterialAlertDialogBuilder(this)
                     .setTitle("Delete Snapshot")
                     .setMessage("Are you sure you want to delete snapshot '${snapshot.name}'?\n\nThis action cannot be undone.")
                     .setPositiveButton("Delete") { _, _ ->

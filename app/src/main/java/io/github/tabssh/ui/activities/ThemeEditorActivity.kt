@@ -18,12 +18,12 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.setMargins
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.themes.definitions.BuiltInThemes
 import io.github.tabssh.themes.definitions.ImportThemeResult
@@ -179,7 +179,7 @@ class ThemeEditorActivity : AppCompatActivity() {
     private fun showBasePicker(onPicked: (String) -> Unit) {
         val themes = BuiltInThemes.getAllThemes()
         val labels = themes.map { it.name }.toTypedArray()
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Base theme")
             .setItems(labels) { _, which -> onPicked(themes[which].id) }
             .setNegativeButton("Cancel", null)
@@ -274,7 +274,7 @@ class ThemeEditorActivity : AppCompatActivity() {
                 override fun onStopTrackingTouch(b: android.widget.SeekBar?) {}
             })
         }
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Pick color")
             .setView(layout)
             .setPositiveButton("OK") { _, _ ->

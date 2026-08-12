@@ -10,6 +10,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.TabSSHApplication
@@ -186,7 +187,7 @@ class CloudAccountManagerActivity : AppCompatActivity() {
         val isRunning = inst.status == "running"
         val actionLabel = if (isRunning) "Stop" else "Start"
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("$actionLabel ${inst.name}?")
             .setMessage(if (isRunning) "Stop this instance?" else "Start this instance?")
             .setPositiveButton(actionLabel) { _, _ -> performPowerAction(acct, inst, isRunning) }
@@ -239,7 +240,7 @@ class CloudAccountManagerActivity : AppCompatActivity() {
         val acct = account ?: return
         val label = if (force) "Force Restart" else "Restart"
         val msg = if (force) "Hard power-cycle ${inst.name}?" else "Gracefully reboot ${inst.name}?"
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("$label ${inst.name}?")
             .setMessage(msg)
             .setPositiveButton(label) { _, _ -> performRestartAction(acct, inst, force) }
@@ -468,7 +469,7 @@ class CloudAccountManagerActivity : AppCompatActivity() {
                 ?.let { savedId -> identities.firstOrNull { it.id == savedId } }
             identityDropdown.setText(preselectedIdentity?.getDisplayName() ?: noneLabel, false)
 
-            val dialog = AlertDialog.Builder(ctx)
+            val dialog = MaterialAlertDialogBuilder(ctx)
                 .setTitle("SSH credentials — ${inst.name}")
                 .setView(scroll)
                 .setPositiveButton("Save") { _, _ -> /* overridden */ }

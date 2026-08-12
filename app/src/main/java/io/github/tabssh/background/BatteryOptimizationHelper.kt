@@ -6,7 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
-import androidx.appcompat.app.AlertDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.utils.logging.Logger
 
 /**
@@ -73,7 +73,7 @@ object BatteryOptimizationHelper {
             return
         }
 
-        AlertDialog.Builder(context)
+        MaterialAlertDialogBuilder(context)
             .setTitle("Allow background monitoring")
             .setMessage(
                 "For reliable host alerts when the app is closed, TabSSH needs to be " +
@@ -98,7 +98,7 @@ object BatteryOptimizationHelper {
      */
     fun showManufacturerGuidanceIfNeeded(context: Context) {
         val (label, intent) = manufacturerBatteryIntent(context) ?: return
-        AlertDialog.Builder(context)
+        MaterialAlertDialogBuilder(context)
             .setTitle("One more step")
             .setMessage(
                 "Your device ($label) has additional battery restrictions that can " +

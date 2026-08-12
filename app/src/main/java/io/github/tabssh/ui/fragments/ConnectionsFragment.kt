@@ -23,6 +23,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.switchmaterial.SwitchMaterial
 import io.github.tabssh.R
@@ -149,7 +150,7 @@ class ConnectionsFragment : Fragment() {
     }
     
     private fun showSortDialog() {
-        AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Sort")
             .setItems(arrayOf("Sort connections", "Sort groups")) { _, which ->
                 when (which) {
@@ -165,7 +166,7 @@ class ConnectionsFragment : Fragment() {
         val options = SortOption.values().map { it.displayName }.toTypedArray()
         val currentIndex = currentSortOption.ordinal
 
-        AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Sort Connections")
             .setSingleChoiceItems(options, currentIndex) { dialog, which ->
                 currentSortOption = SortOption.values()[which]
@@ -181,7 +182,7 @@ class ConnectionsFragment : Fragment() {
         val options = GroupSortOption.values().map { it.displayName }.toTypedArray()
         val currentIndex = currentGroupSortOption.ordinal
 
-        AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Sort Groups")
             .setSingleChoiceItems(options, currentIndex) { dialog, which ->
                 currentGroupSortOption = GroupSortOption.values()[which]
@@ -420,7 +421,7 @@ class ConnectionsFragment : Fragment() {
         // the rest of the app talks about starting an SSH session.
         val items = arrayOf("Connect", "Browse Files (SFTP)", "Edit", "Duplicate", "Delete")
 
-        AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle(connection.name)
             .setItems(items) { _, which ->
                 when (which) {
@@ -466,7 +467,7 @@ class ConnectionsFragment : Fragment() {
     }
     
     private fun deleteConnection(connection: ConnectionProfile) {
-        AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Delete Connection")
             .setMessage("Are you sure you want to delete '${connection.name}'?")
             .setPositiveButton("Delete") { _, _ ->
@@ -500,7 +501,7 @@ class ConnectionsFragment : Fragment() {
             "Collapse All Groups"
         )
 
-        AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle(groupHeader.group.name)
             .setItems(items) { _, which ->
                 when (which) {
@@ -526,7 +527,7 @@ class ConnectionsFragment : Fragment() {
             form, hint = getString(R.string.group_rename_hint), initial = group.name
         )
 
-        AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Rename Group")
             .setView(form.root)
             .setPositiveButton("Rename") { _, _ ->
@@ -558,7 +559,7 @@ class ConnectionsFragment : Fragment() {
     }
 
     private fun deleteGroup(group: io.github.tabssh.storage.database.entities.ConnectionGroup) {
-        AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Delete Group")
             .setMessage("Remove group '${group.name}'?\n\nConnections will not be deleted, just ungrouped.")
             .setPositiveButton("Delete") { _, _ ->
@@ -605,7 +606,7 @@ class ConnectionsFragment : Fragment() {
             "Pick connections to delete…"
         )
 
-        AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Bulk edit")
             .setItems(options) { _, which ->
                 when (which) {
@@ -630,7 +631,7 @@ class ConnectionsFragment : Fragment() {
 
         val groupNames = allGroups.map { it.name }.toTypedArray()
 
-        AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Select Group to Edit")
             .setItems(groupNames) { _, which ->
                 val selectedGroup = allGroups[which]
@@ -686,7 +687,7 @@ class ConnectionsFragment : Fragment() {
      * one-by-one so the existing audit / cascade behaviour fires per row.
      */
     private fun confirmAndBulkDelete(selected: List<ConnectionProfile>) {
-        AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Delete ${selected.size} connection(s)?")
             .setMessage("This cannot be undone. Stored passwords for these connections will also be cleared.")
             .setPositiveButton("Delete") { _, _ ->
@@ -921,7 +922,7 @@ class ConnectionsFragment : Fragment() {
             refreshApplySummary()
         }
 
-        dialogRef = AlertDialog.Builder(ctx)
+        dialogRef = MaterialAlertDialogBuilder(ctx)
             .setTitle("Bulk edit")
             .setView(dialogView)
             .setPositiveButton("Apply") { _, _ ->

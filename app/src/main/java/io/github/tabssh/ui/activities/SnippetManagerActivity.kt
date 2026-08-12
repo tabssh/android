@@ -10,13 +10,13 @@ import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputEditText
 import io.github.tabssh.R
@@ -200,7 +200,7 @@ class SnippetManagerActivity : AppCompatActivity() {
             categoryInput.setAdapter(adapter)
         }
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Create Snippet")
             .setView(dialogView)
             .setPositiveButton("Create") { _, _ ->
@@ -246,7 +246,7 @@ class SnippetManagerActivity : AppCompatActivity() {
             categoryInput.setAdapter(adapter)
         }
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Edit Snippet")
             .setView(dialogView)
             .setPositiveButton("Save") { _, _ ->
@@ -329,7 +329,7 @@ class SnippetManagerActivity : AppCompatActivity() {
     }
 
     private fun deleteSnippet(snippet: Snippet) {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Delete Snippet?")
             .setMessage("Are you sure you want to delete '${snippet.name}'?")
             .setPositiveButton("Delete") { _, _ ->

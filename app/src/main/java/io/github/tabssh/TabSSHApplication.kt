@@ -3,6 +3,7 @@ package io.github.tabssh
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import java.security.Security
 import io.github.tabssh.storage.database.TabSSHDatabase
@@ -359,7 +360,7 @@ class TabSSHApplication : Application() {
         val latch = java.util.concurrent.CountDownLatch(1)
         activity.runOnUiThread {
             try {
-                val builder = androidx.appcompat.app.AlertDialog.Builder(activity)
+                val builder = MaterialAlertDialogBuilder(activity)
                     .setTitle(title)
                     .setMessage(message)
                     .setCancelable(false)
@@ -557,10 +558,12 @@ class TabSSHApplication : Application() {
         //   "light"  → MODE_NIGHT_NO
         //   "dark"   → MODE_NIGHT_YES
         //   "system" → MODE_NIGHT_FOLLOW_SYSTEM (Android 10+) or AUTO_BATTERY
+        // Fallback default is "dark" per AI.md PART 7 ("dark mode default"),
+        // matching preferences_general.xml's android:defaultValue.
         try {
             val prefs = androidx.preference.PreferenceManager
                 .getDefaultSharedPreferences(this)
-            val theme = prefs.getString("app_theme", "system") ?: "system"
+            val theme = prefs.getString("app_theme", "dark") ?: "dark"
             val mode = when (theme) {
                 "light"  -> androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO
                 "dark"   -> androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES

@@ -2,8 +2,8 @@ package io.github.tabssh.ui.activities
 
 import android.os.Bundle
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.entities.ConnectionProfile
@@ -63,7 +63,7 @@ class LinkHandlerActivity : AppCompatActivity() {
 
     private fun showSshDialog(action: TerminalLinkClassifier.LinkAction.Ssh) {
         val display = describe(action.username, action.host, action.port)
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Connect via SSH?")
             .setMessage(
                 "$display\n\nTabSSH will open a new session to this host. " +
@@ -77,7 +77,7 @@ class LinkHandlerActivity : AppCompatActivity() {
 
     private fun showSftpDialog(action: TerminalLinkClassifier.LinkAction.Sftp) {
         val display = describe(action.username, action.host, action.port)
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Browse via SFTP?")
             .setMessage(
                 "$display\nRemote path: ${action.path}\n\n" +

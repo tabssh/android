@@ -1,8 +1,8 @@
 package io.github.tabssh.ui.activities
 
 import android.os.Bundle
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
@@ -59,7 +59,7 @@ class ConfirmDisconnectActivity : AppCompatActivity() {
         }
         val displayName = tab.getDisplayTitle()
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Disconnect?")
             .setMessage("Close the SSH session \"$displayName\"?")
             .setPositiveButton("Disconnect") { _, _ ->
