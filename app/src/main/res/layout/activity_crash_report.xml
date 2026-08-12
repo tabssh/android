@@ -47,10 +47,10 @@
             android:id="@+id/text_stacktrace"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#111111"
+            android:background="@color/console_background"
             android:fontFamily="monospace"
             android:padding="12dp"
-            android:textColor="#FF4444"
+            android:textColor="@color/console_error_text"
             android:textIsSelectable="true"
             android:textSize="11sp" />
     </ScrollView>

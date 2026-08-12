@@ -44,7 +44,8 @@ class WhatsNewActivity : AppCompatActivity() {
         val toolbar = Toolbar(this).apply {
             title = "What's New"
             setBackgroundResource(R.color.primary_500)
-            setTitleTextColor(0xFFFFFFFF.toInt())
+            // Toolbar sits on the fixed primary_500 blue, so the title stays white in both modes
+            setTitleTextColor(androidx.core.content.ContextCompat.getColor(this@WhatsNewActivity, R.color.white))
         }
         root.addView(toolbar)
 

@@ -41,4 +41,20 @@
     <color name="keyboard_key_symbol">#FFBA68C8</color>
     <color name="keyboard_key_action">#FFF06292</color>
     <color name="chart_cpu_line">#FF64B5F6</color>
+
+    <!-- Status text — lighter 300-tones for contrast on dark surfaces -->
+    <color name="status_success">#FF81C784</color>
+    <color name="status_warning">#FFFFB74D</color>
+    <color name="status_error">#FFE57373</color>
+    <color name="status_info">#FF64B5F6</color>
+    <color name="status_neutral">#FF9E9E9E</color>
+
+    <!-- Tinted status container backgrounds — dark tints of the day pastels -->
+    <color name="status_success_container">#FF16281D</color>
+    <color name="status_warning_container">#FF2E2113</color>
+    <color name="status_error_container">#FF2E1616</color>
+    <color name="status_info_container">#FF16282A</color>
+
+    <!-- Selected-row tint — lighter base hue so it reads on dark surfaces -->
+    <color name="selection_tint">#2264B5F6</color>
 </resources>

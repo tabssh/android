@@ -16,7 +16,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="#FFF3E0"
+            android:background="@color/status_warning_container"
             android:padding="16dp"
             android:layout_marginBottom="20dp"
             android:elevation="2dp">
@@ -27,7 +27,7 @@
                 android:text="🔐 Server Identity Changed"
                 android:textStyle="bold"
                 android:textSize="20sp"
-                android:textColor="#E65100"
+                android:textColor="@color/status_warning"
                 android:gravity="center"
                 android:paddingBottom="8dp" />
 
@@ -36,7 +36,7 @@
                 android:layout_height="wrap_content"
                 android:text="The SSH server presented a different key than previously stored"
                 android:textSize="13sp"
-                android:textColor="#BF360C"
+                android:textColor="@color/status_warning"
                 android:gravity="center"
                 android:alpha="0.9" />
 
@@ -119,7 +119,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:padding="16dp"
-                android:background="#FFEBEE">
+                android:background="@color/status_error_container">
 
                 <TextView
                     android:layout_width="match_parent"
@@ -127,7 +127,7 @@
                     android:text="📜 Previous Key (Stored)"
                     android:textStyle="bold"
                     android:textSize="14sp"
-                    android:textColor="#C62828"
+                    android:textColor="@color/status_error"
                     android:paddingBottom="8dp" />
 
                 <TextView
@@ -136,7 +136,7 @@
                     android:layout_height="wrap_content"
                     android:textSize="13sp"
                     android:paddingBottom="6dp"
-                    android:textColor="#B71C1C"
+                    android:textColor="@color/status_error"
                     tools:text="🔑 ssh-ed25519" />
 
                 <TextView
@@ -146,9 +146,9 @@
                     android:textSize="11sp"
                     android:fontFamily="monospace"
                     android:textIsSelectable="true"
-                    android:background="#FFFFFF"
+                    android:background="?attr/colorSurface"
                     android:padding="8dp"
-                    android:textColor="#000000"
+                    android:textColor="?android:attr/textColorPrimary"
                     tools:text="SHA256:abc123..." />
 
             </LinearLayout>
@@ -166,7 +166,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:padding="16dp"
-                android:background="#E3F2FD">
+                android:background="@color/status_info_container">
 
                 <TextView
                     android:layout_width="match_parent"
@@ -174,7 +174,7 @@
                     android:text="✨ New Key (From Server)"
                     android:textStyle="bold"
                     android:textSize="14sp"
-                    android:textColor="#1565C0"
+                    android:textColor="@color/status_info"
                     android:paddingBottom="8dp" />
 
                 <TextView
@@ -183,7 +183,7 @@
                     android:layout_height="wrap_content"
                     android:textSize="13sp"
                     android:paddingBottom="6dp"
-                    android:textColor="#0D47A1"
+                    android:textColor="@color/status_info"
                     tools:text="🔑 ssh-ed25519" />
 
                 <TextView
@@ -193,9 +193,9 @@
                     android:textSize="11sp"
                     android:fontFamily="monospace"
                     android:textIsSelectable="true"
-                    android:background="#FFFFFF"
+                    android:background="?attr/colorSurface"
                     android:padding="8dp"
-                    android:textColor="#000000"
+                    android:textColor="?android:attr/textColorPrimary"
                     tools:text="SHA256:xyz789..." />
 
             </LinearLayout>
@@ -243,7 +243,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:padding="16dp"
-                android:background="@android:color/white">
+                android:background="?attr/colorSurface">
 
                 <TextView
                     android:layout_width="match_parent"
@@ -251,7 +251,7 @@
                     android:text="💡 What Should I Do?"
                     android:textStyle="bold"
                     android:textSize="15sp"
-                    android:textColor="#1976D2"
+                    android:textColor="?attr/colorPrimary"
                     android:paddingBottom="12dp" />
 
                 <TextView
@@ -260,7 +260,7 @@
                     android:text="✅ Accept New Key"
                     android:textStyle="bold"
                     android:textSize="13sp"
-                    android:textColor="#2E7D32"
+                    android:textColor="@color/status_success"
                     android:paddingBottom="4dp" />
 
                 <TextView
@@ -278,7 +278,7 @@
                     android:text="⏱️ Accept Once"
                     android:textStyle="bold"
                     android:textSize="13sp"
-                    android:textColor="#F57C00"
+                    android:textColor="@color/status_warning"
                     android:paddingBottom="4dp" />
 
                 <TextView
@@ -296,7 +296,7 @@
                     android:text="🚫 Reject"
                     android:textStyle="bold"
                     android:textSize="13sp"
-                    android:textColor="#C62828"
+                    android:textColor="@color/status_error"
                     android:paddingBottom="4dp" />
 
                 <TextView

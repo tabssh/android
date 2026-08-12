@@ -5,7 +5,52 @@ import io.github.tabssh.hypervisor.console.rfb.RfbClient
 import io.github.tabssh.hypervisor.console.rfb.RfbConstants
 import io.github.tabssh.hypervisor.console.rfb.RfbListener
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+
+/**
+ * Seam for debouncing [VncConsoleChannel.resizeToPixels] sends. Injectable so
+ * JVM tests can substitute a deterministic fake instead of relying on real
+ * elapsed time — see [VncConsoleChannel]'s constructor.
+ */
+internal interface ResizeDebouncer {
+    /** Cancel any pending scheduled [action] and schedule this one instead. */
+    fun schedule(action: () -> Unit)
+
+    /** Cancel any pending action and release resources. Call on [VncConsoleChannel.close]. */
+    fun shutdown()
+}
+
+/**
+ * Default [ResizeDebouncer]: cancels the previously scheduled action (if it
+ * has not yet fired) and reschedules [action] to run after [delayMillis] on a
+ * dedicated single-thread scheduler.
+ */
+internal class ScheduledExecutorResizeDebouncer(
+    private val delayMillis: Long = 80L
+) : ResizeDebouncer {
+    private val executor = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "tabssh-vnc-resize-debounce").also { it.isDaemon = true }
+    }
+
+    @Volatile private var pending: ScheduledFuture<*>? = null
+
+    override fun schedule(action: () -> Unit) {
+        pending?.cancel(false)
+        if (executor.isShutdown) return
+        pending = try {
+            executor.schedule({ action() }, delayMillis, TimeUnit.MILLISECONDS)
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            null
+        }
+    }
+
+    override fun shutdown() {
+        pending?.cancel(false)
+        executor.shutdownNow()
+    }
+}
 
 /**
  * Keyboard + resize bridge between the Android UI and an [RfbClient] running in
@@ -36,7 +81,10 @@ import java.util.concurrent.atomic.AtomicInteger
  * executor so socket writes never happen on the calling thread.  Key ordering
  * is preserved because the executor is strictly FIFO.
  */
-class VncConsoleChannel(private val rfbClient: RfbClient) {
+class VncConsoleChannel internal constructor(
+    private val rfbClient: RfbClient,
+    private val resizeDebouncer: ResizeDebouncer = ScheduledExecutorResizeDebouncer()
+) {
 
     enum class VncModifier(val keysym: Long, internal val bit: Int) {
         CTRL(RfbConstants.KEY_CTRL_L, 1),
@@ -165,6 +213,7 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
      */
     fun close() {
         clearArmedModifiers()
+        resizeDebouncer.shutdown()
         writeExecutor.shutdownNow()
     }
 
@@ -178,15 +227,23 @@ class VncConsoleChannel(private val rfbClient: RfbClient) {
      *
      * Safe to call from any thread including the main thread.
      *
+     * The actual [RfbClient.sendSetDesktopSize] send is debounced via
+     * [resizeDebouncer]: a soft-keyboard show/hide (or any other rapid
+     * sequence of size changes) fires several [w]×[h] pairs in quick
+     * succession, and sending a SetDesktopSize per intermediate size caused a
+     * visible letterbox/flash for each one. Only the last size still pending
+     * after the debounce window is actually sent.
+     *
      * If the server has not yet confirmed ExtendedDesktopSize support,
      * the values are stored in [pendingViewW]/[pendingViewH] and sent once
-     * [wrapListener.onExtendedDesktopSizeReady] fires.
+     * [wrapListener.onExtendedDesktopSizeReady] fires — that send is
+     * deliberately not debounced, it only happens once per session.
      */
     fun resizeToPixels(w: Int, h: Int) {
         if (w <= 0 || h <= 0) return
         pendingViewW = w
         pendingViewH = h
-        io { rfbClient.sendSetDesktopSize(w, h) }
+        resizeDebouncer.schedule { io { rfbClient.sendSetDesktopSize(w, h) } }
     }
 
     /**

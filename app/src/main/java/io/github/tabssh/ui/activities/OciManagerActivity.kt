@@ -544,11 +544,11 @@ class OciManagerActivity : AppCompatActivity() {
         }
 
         private fun stateColor(state: String): Int = when (state.uppercase()) {
-            "RUNNING"              -> 0xFF4CAF50.toInt()
-            "STOPPED"              -> 0xFFF44336.toInt()
-            "STARTING", "REBOOTING" -> 0xFFFF5722.toInt()
-            "STOPPING"             -> 0xFFFF5722.toInt()
-            else                   -> 0xFF9E9E9E.toInt()
+            "RUNNING"              -> androidx.core.content.ContextCompat.getColor(this@OciManagerActivity, R.color.status_success)
+            "STOPPED"              -> androidx.core.content.ContextCompat.getColor(this@OciManagerActivity, R.color.status_error)
+            "STARTING", "REBOOTING" -> androidx.core.content.ContextCompat.getColor(this@OciManagerActivity, R.color.status_warning)
+            "STOPPING"             -> androidx.core.content.ContextCompat.getColor(this@OciManagerActivity, R.color.status_warning)
+            else                   -> androidx.core.content.ContextCompat.getColor(this@OciManagerActivity, R.color.status_neutral)
         }
 
         private fun stateLabel(state: String): String = when (state.uppercase()) {

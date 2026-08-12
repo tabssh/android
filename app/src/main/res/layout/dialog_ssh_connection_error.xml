@@ -127,7 +127,7 @@
             android:textIsSelectable="true"
             android:fontFamily="monospace"
             android:padding="12dp"
-            android:background="#10000000"
+            android:background="?attr/colorSurfaceVariant"
             android:visibility="gone"
             android:layout_marginBottom="16dp" />
 

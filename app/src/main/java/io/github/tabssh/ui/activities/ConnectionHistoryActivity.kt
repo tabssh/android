@@ -49,7 +49,7 @@ class ConnectionHistoryActivity : AppCompatActivity() {
         val toolbar = Toolbar(this).apply {
             title = "Connection History"
             setBackgroundResource(R.color.primary_500)
-            setTitleTextColor(0xFFFFFFFF.toInt())
+            setTitleTextColor(androidx.core.content.ContextCompat.getColor(this@ConnectionHistoryActivity, R.color.white))
         }
         root.addView(toolbar)
 

@@ -51,9 +51,14 @@ class RfbClient(
     private val vncUsername: String? = null,
     /**
      * When true, operate in text-console mode:
-     *  - ClientInit shared-flag = 0 (exclusive access)
-     *  - Advertise only console-friendly encodings (Raw, CopyRect, no Tight/ZRLE)
+     *  - ClientInit shared-flag = 0 (exclusive access) instead of 1 (shared)
      *  - Support ExtendedDesktopSize for client-initiated resize
+     *
+     * The encodings advertised are the same full [PREFERRED_ENCODINGS] list
+     * as GUI mode — consoleMode does not currently restrict which pixel
+     * encodings are negotiated. Whether it should (e.g. to save CPU on a
+     * text-only console) is a deliberately deferred user decision, not a
+     * bug.
      */
     val consoleMode: Boolean = false
 ) {
@@ -1146,11 +1151,15 @@ class RfbClient(
                         // Zero-dimension rectangle. Most pixel encodings carry no payload.
                         // ZRLE and ZLIB always prefix their data with a 4-byte DataLen that
                         // must be consumed even for empty rectangles or subsequent reads desync.
+                        // Tight always prefixes its data with a 1-byte compression-control
+                        // byte (compression type + optional stream-reset flags) for the same
+                        // reason — leaving it unread desyncs the next rect header.
                         when (encoding) {
                             RfbConstants.ENC_ZRLE, RfbConstants.ENC_ZLIB -> {
                                 val dataLen = din.readInt() and 0x7FFFFFFF
                                 if (dataLen > 0) din.skipBytes(dataLen)
                             }
+                            RfbConstants.ENC_TIGHT -> din.readUnsignedByte()
                         }
                         Logger.d(TAG, "Zero-dim rect enc=0x$hexEnc at ($rx,$ry) ${rw}×$rh — skipping")
                     } else {

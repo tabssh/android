@@ -7,28 +7,55 @@ is in progress.
 Source: 2026-08-06 feature-coverage audit of IDEA.md § Business logic against
 the codebase (57 spec features → 53 implemented, 4 partial, 0 missing).
 
-## Open — 2026-08-11 user batch (merged from root TODO.md)
+## Shipped — 2026-08-11 user batch (merged from root TODO.md)
 
-Resolved dependency order: 1–3 first (connection-lifecycle cluster, likely
-shared root cause — app-breaking); 4–7 next (VNC/SPICE console UX, depends
-on stable console sessions); 8–12 (terminal input/UX fixes, independent);
-13 second-to-last (theme pass restyles final screens); 14 last (screenshots
-must show the finished UI).
+Items 1–3 shipped in fceb877 (docker/infra UX rework + tab index +
+cancellation fixes, CI green). Items 4–13 shipped 2026-08-11 in the
+single follow-up batch commit (batches 2–5 below), gated on a green
+combined `make check`; each finding's diff hunk verified present
+before commit. Only item 14 remains open.
 
-Execution batches (strict file ownership — one owner per batch, batches
-sequential wherever file sets share strings.xml / TabTerminalActivity /
-terminal views; agents never edit outside their batch's file set):
-- Batch 1 (in flight): docker/infra UX rework + items 1–3 fixes —
-  single commit per user instruction, gated on combined `make check`
-- Batch 2: items 4–8 (console/VNC/SPICE/mosh files + strings.xml)
-- Batch 3: items 9–12 (terminal input/view files + strings.xml)
-- Batch 4: CancellationException follow-up audit (7 files listed under
-  item 3) — may run parallel to Batch 3 (zero file overlap)
-- Batch 5: item 13 full-app Material/Dark-Light-System pass (designer,
-  runs alone — touches res/ broadly)
-- Batch 6: item 14 README screenshots (device/emulator required)
-One commit per batch after Batch 1; issues found mid-batch get logged
-here immediately, fixed in their owning batch.
+Resolved dependency order: 1–3 first (connection-lifecycle cluster,
+shared root cause — app-breaking); 4–7 next (VNC/SPICE console UX);
+8–12 (terminal input/UX fixes); 13 second-to-last (theme pass restyles
+final screens); 14 last (screenshots must show the finished UI).
+
+Execution batches (strict file ownership, all complete except 6):
+- Batch 1: docker/infra UX rework + items 1–3 — shipped fceb877
+- Batch 2: items 4–8 (console/VNC/SPICE/mosh + strings.xml) — done
+- Batch 3: items 9–12 (terminal input/view files + strings.xml) — done
+- Batch 4: CancellationException follow-up audit (DockerSessionManager,
+  TransportCapabilityDetector, RegistryClient; SocketRelay /
+  UpdateChecker / VncDirectConnector / SpiceLoader intentionally
+  untouched — non-coroutine code) — done
+- Batch 5: item 13 full-app Material/Dark-Light-System pass — done
+- Batch 6: item 14 README screenshots — OPEN, needs device/emulator
+Commit cadence (user instruction 2026-08-11): finish all batches, then
+one combined `make check`, then a single commit at the end. Issues found
+mid-batch get logged here immediately, fixed in their owning batch.
+
+Open decisions / documented limitations from the 4-8 diagnosis:
+- RfbClient console-mode encoding restriction: doc comment claimed
+  console mode restricts to Raw/CopyRect but PREFERRED_ENCODINGS uses
+  the full list for both modes; comment is being fixed to match
+  behavior — whether console mode SHOULD restrict encodings is a user
+  decision, ask before changing negotiation
+- VNC reconnect implemented as manual tap-to-reconnect only; auto-retry
+  with backoff deliberately not added — revisit only on request
+- lastlog under mosh: upstream mosh-server behavior, documented in
+  README known-limitations, not app-fixable
+- X11 cannot ride mosh's UDP transport (protocol limitation): fix keeps
+  the bootstrap SSH session alive to carry X11; documented in README
+- app_theme default is "system" (TabSSHApplication.kt:563) but AI.md
+  PART 7 says "dark mode default" — behavior change, user decision:
+  switch the default to "dark" or amend the spec wording
+- 165 AlertDialog.Builder call sites vs 80 MaterialAlertDialogBuilder
+  (found in item-13 theme sweep) — both render correctly in dark/light;
+  mass conversion deferred as its own future task, not folded into the
+  theme pass
+- KeyType.kt:48-51 SecurityLevel color ints are hardcoded but have no
+  UI consumer today — if a UI ever renders them, map to status_* colors
+  at the render site
 
 1. Fix SSH active connections dying when creating VNC/docker/etc connections
    — root cause (diagnosed 2026-08-11): TabManager dual-index-space bug —
@@ -69,11 +96,34 @@ here immediately, fixed in their owning batch.
 8. Fix mosh X11 forwarding, lastlog
 9. Fix page up/down removing a space — e.g. `{command} ....` becomes
    `{command}....`, `git -C ....` becomes `git C ....` (command corruption)
+   — root cause (2026-08-11): TerminalInputConnection buffers IME
+   composing text; onCreateInputConnection creates a fresh instance
+   (buffer lost), closeConnection() is a no-op, and PGUP/PGDN escape
+   writes bypass the InputConnection without flushing. Fix: flush
+   composing on closeConnection, single long-lived InputConnection,
+   flushPendingComposing() before bar/hardware key escape writes.
 10. Fix PRE key disabling for all connections when it is only per-connection —
     remove "Disable PRE key", rename "OFF (this connection)" to
     "Disable PRE key"
+    — root cause: global pref terminal_prefix_key_enabled sits in the
+    same picker as the per-connection multiplexerOverride="off" row.
+    Fix: drop the global row + pref (KEY_PREFIX_KEY_ENABLED and 4 read
+    sites), rename per-connection row (toggles in place to "Enable PRE
+    key" when off), one-time migration: global-off → set
+    multiplexerOverride="off" on profiles with null override only.
 11. Remove the padding from top/bottom of terminal/VNC on keyboard toggle
+    — root causes: TerminalView pushes grid slack (up to a cell height)
+    above the grid and only recomputes on debounced resize; VncView
+    sends per-animation-frame SetDesktopSize with no debounce, leaving
+    fbWidth/fbHeight stale → letterbox gap. Fix: immediate gridTop
+    recompute (debounce only the SIGWINCH), distribute slack; ~80ms
+    debounce on VNC resizeToPixels honoring the rejects-SetDesktopSize
+    flag.
 12. Add magnify to make selecting text easier
+    — plan: android.widget.Magnifier behind an API 28+ guard (minSdk
+    24 → guarded no-op below), lazily built on TerminalView, show on
+    handle grab + selection ACTION_MOVE, dismiss on up/cancel and
+    exitSelectionMode; magnifier calls behind a small seam for tests.
 13. Ensure entire UI/UX uses Material Design and supports Dark/Light/System
 14. Add screenshots to README.md
 

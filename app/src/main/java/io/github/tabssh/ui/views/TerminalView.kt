@@ -2,6 +2,7 @@ package io.github.tabssh.ui.views
 
 import android.content.Context
 import android.graphics.*
+import android.os.Build
 import android.os.Bundle
 import android.text.TextPaint
 import android.util.AttributeSet
@@ -10,6 +11,7 @@ import android.view.inputmethod.*
 import android.widget.OverScroller
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.annotation.RequiresApi
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import io.github.tabssh.terminal.emulator.TerminalEmulator
 import io.github.tabssh.terminal.emulator.TerminalBuffer
@@ -19,6 +21,37 @@ import io.github.tabssh.terminal.TermuxBridge
 import io.github.tabssh.terminal.TermuxBridgeListener
 import io.github.tabssh.themes.definitions.Theme
 import io.github.tabssh.utils.logging.Logger
+
+/**
+ * Seam wrapping [android.widget.Magnifier] (API 28+) around the
+ * selection-handle drag loupe, so tests can substitute a fake instead of the
+ * real platform widget. The project's minSdk is 24, so every construction
+ * site is guarded by `Build.VERSION.SDK_INT >= Build.VERSION_CODES.P` — see
+ * [TerminalView.getOrCreateSelectionMagnifier].
+ */
+internal interface SelectionMagnifier {
+    fun show(x: Float, y: Float)
+    fun dismiss()
+}
+
+/** Default [SelectionMagnifier], wrapping the real platform widget. */
+@RequiresApi(Build.VERSION_CODES.P)
+internal class PlatformSelectionMagnifier(hostView: View) : SelectionMagnifier {
+    private val magnifier = android.widget.Magnifier(hostView)
+
+    override fun show(x: Float, y: Float) {
+        // Offset above the finger so the loupe isn't hidden by the finger
+        // that's dragging the handle.
+        magnifier.show(x, (y - MAGNIFIER_ABOVE_FINGER_OFFSET_PX).coerceAtLeast(0f))
+    }
+
+    override fun dismiss() {
+        magnifier.dismiss()
+    }
+}
+
+/** Default vertical offset (px) placing the magnifier above the dragging finger. */
+private const val MAGNIFIER_ABOVE_FINGER_OFFSET_PX = 100f
 
 /**
  * Custom terminal view implementing VT100/ANSI terminal emulation
@@ -281,6 +314,21 @@ class TerminalView @JvmOverloads constructor(
     private var selectionFocusRow = 0
     /** -1 = none, 0 = anchor handle being dragged, 1 = focus handle. */
     private var selectionDragHandle = -1
+    /**
+     * Factory for the selection-handle drag loupe, overridable by tests to
+     * substitute a fake [SelectionMagnifier]. Returns null below API 28 —
+     * [android.widget.Magnifier] does not exist on the project's minSdk 24.
+     */
+    internal var magnifierFactory: (View) -> SelectionMagnifier? = { view ->
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PlatformSelectionMagnifier(view) else null
+    }
+    private var selectionMagnifier: SelectionMagnifier? = null
+
+    /** Lazily build (once) and return the drag loupe, or null below API 28. */
+    private fun getOrCreateSelectionMagnifier(): SelectionMagnifier? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
+        return selectionMagnifier ?: magnifierFactory(this).also { selectionMagnifier = it }
+    }
     private val selectionPaint = Paint().apply {
         color = 0x55_4FC3F7.toInt()        // translucent light-blue
         style = Paint.Style.FILL
@@ -803,6 +851,29 @@ class TerminalView @JvmOverloads constructor(
         sendText(sequence)
     }
 
+    // Tracks the most recently handed-out InputConnection. The system calls
+    // onCreateInputConnection() again on every focus/config change (soft
+    // keyboard reattach, IME switch, orientation change); handing back a
+    // brand-new TerminalInputConnection each time used to silently drop any
+    // in-flight composing text (CJK/pinyin, glide typing) the previous
+    // instance was holding. onCreateInputConnection() now transfers that
+    // pending text onto the replacement before dropping the old instance.
+    // flushPendingComposing() covers the remaining race where an escape
+    // sequence (PGUP/PGDN, bar keys) is written directly to the terminal
+    // without going through the InputConnection at all.
+    private var activeInputConnection: TerminalInputConnection? = null
+
+    /**
+     * Flush any composing (not-yet-committed) IME text to the terminal
+     * before an escape sequence bypasses the InputConnection. Without this,
+     * hardware/bar-key writes can race ahead of a pending composition and
+     * the composing text is lost entirely (Issue: PGUP/PGDN removing a
+     * space, corrupting the in-flight command).
+     */
+    fun flushPendingComposing() {
+        activeInputConnection?.flushComposing()
+    }
+
     // --- Sticky modifier state from custom keyboard bar -------------------
     //
     // The custom bar's CTL/ALT buttons toggle a one-shot modifier that the
@@ -1150,21 +1221,32 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
+     * Row count used only for [gridTop]'s visual slack computation — updated
+     * immediately in [onSizeChanged], unlike [terminalRows] which stays at
+     * its old value until the debounced [updateGridSize] (PTY SIGWINCH)
+     * fires. Without this split, a keyboard toggle briefly left [gridTop]
+     * computing slack against the stale row count, which could push up to a
+     * full cell height of padding above the grid until the debounce caught
+     * up — the visible "padding jump" on keyboard show/hide.
+     */
+    private var visualRows: Int = terminalRows
+
+    /**
      * Y origin of the character grid. The view height rarely divides evenly into
-     * whole cell rows; the leftover slack (< one cell) is pushed ABOVE the grid
-     * so the last row sits flush against whatever is below the terminal (custom
-     * keyboard bar / IME) instead of leaving an odd blank band there. Slack is
-     * capped at one cell upward, but deliberately NOT floored at zero: if the
-     * grid transiently overflows the view (rows lag during the resize debounce),
-     * the negative offset shifts the grid up so the BOTTOM row — prompt / status
-     * line, the part the user is looking at — stays visible and the overflow
-     * clips at the top instead.
+     * whole cell rows; the leftover slack (< one cell) is split between the top
+     * of the grid and the bottom (below the last row) instead of stacking the
+     * whole remainder above — halving the maximum visual jump a keyboard
+     * toggle can cause. Slack is capped at one cell upward, but deliberately
+     * NOT floored at zero: if the grid transiently overflows the view (rows
+     * lag during the resize debounce), the negative offset shifts the grid up
+     * so the BOTTOM row — prompt / status line, the part the user is looking
+     * at — stays visible and the overflow clips at the top instead.
      */
     private val gridTop: Float
         get() {
             if (cellHeight <= 0f) return paddingTop.toFloat()
-            val slack = (height - paddingTop - paddingBottom) - terminalRows * cellHeight
-            return paddingTop + slack.coerceAtMost(cellHeight)
+            val slack = (height - paddingTop - paddingBottom) - visualRows * cellHeight
+            return paddingTop + (slack / 2f).coerceAtMost(cellHeight)
         }
 
     /**
@@ -1183,6 +1265,7 @@ class TerminalView @JvmOverloads constructor(
         if (availableWidth <= 0 || availableHeight <= 0) return
         val newCols = (availableWidth / cellWidth).toInt().coerceAtLeast(40)
         val newRows = (availableHeight / cellHeight).toInt().coerceAtLeast(10)
+        visualRows = newRows
         if (newCols == terminalCols && newRows == terminalRows) return
         terminalCols = newCols
         terminalRows = newRows
@@ -1206,6 +1289,17 @@ class TerminalView @JvmOverloads constructor(
         super.onSizeChanged(w, h, oldw, oldh)
 
         if (cellWidth <= 0 || cellHeight <= 0) return
+
+        // Cheap, immediate recompute of the visual row count so gridTop's
+        // slack tracks the new size right away — only updateGridSize()
+        // (PTY resize + SIGWINCH) stays debounced below, to avoid spamming
+        // the remote with resize events during a keyboard show/hide
+        // animation's rapid-fire onSizeChanged calls.
+        val availableHeight = h - paddingTop - paddingBottom
+        if (availableHeight > 0) {
+            visualRows = (availableHeight / cellHeight).toInt().coerceAtLeast(10)
+            invalidate()
+        }
 
         // Cancel any resize that hasn't fired yet; the final settled size wins.
         pendingResize?.let { resizeHandler.removeCallbacks(it) }
@@ -2088,8 +2182,8 @@ class TerminalView @JvmOverloads constructor(
                 sendKeySequence(homeEndSeq('F', 4, isShift, isAlt, isCtrl))
                 return true
             }
-            KeyEvent.KEYCODE_PAGE_UP -> { sendKeySequence(tildeSeq(5, isShift, isAlt, isCtrl)); return true }
-            KeyEvent.KEYCODE_PAGE_DOWN -> { sendKeySequence(tildeSeq(6, isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_PAGE_UP -> { flushPendingComposing(); sendKeySequence(tildeSeq(5, isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_PAGE_DOWN -> { flushPendingComposing(); sendKeySequence(tildeSeq(6, isShift, isAlt, isCtrl)); return true }
             KeyEvent.KEYCODE_INSERT -> { sendKeySequence(tildeSeq(2, isShift, isAlt, isCtrl)); return true }
 
             // Function keys F1-F12 - xterm modifier propagation, matching the
@@ -2246,7 +2340,15 @@ class TerminalView @JvmOverloads constructor(
                                 EditorInfo.IME_FLAG_NO_FULLSCREEN or
                                 EditorInfo.IME_FLAG_NO_EXTRACT_UI
 
-        return TerminalInputConnection(this)
+        // Reuse the existing InputConnection when possible so an in-flight
+        // composition survives a focus/config-triggered recreate; only build
+        // a fresh one on first call, transferring any pending composing text
+        // it happened to be holding (see activeInputConnection).
+        val previous = activeInputConnection
+        val connection = TerminalInputConnection(this)
+        previous?.transferComposingTo(connection)
+        activeInputConnection = connection
+        return connection
     }
 
     override fun onCheckIsTextEditor(): Boolean = true
@@ -2658,6 +2760,7 @@ class TerminalView @JvmOverloads constructor(
         if (!selectionActive) return
         selectionActive = false
         selectionDragHandle = -1
+        selectionMagnifier?.dismiss()
         // Restore focus so typing works immediately after dismissing the
         // selection (e.g. tap-outside-to-cancel, ActionMode dismissed).
         requestFocus()
@@ -2839,6 +2942,7 @@ class TerminalView @JvmOverloads constructor(
                 val handle = hitTestHandle(event.x, event.y)
                 if (handle >= 0) {
                     selectionDragHandle = handle
+                    getOrCreateSelectionMagnifier()?.show(event.x, event.y)
                     return true
                 }
 
@@ -2865,6 +2969,7 @@ class TerminalView @JvmOverloads constructor(
                     val da = dxA * dxA + dyA * dyA
                     val df = dxF * dxF + dyF * dyF
                     selectionDragHandle = if (nearAnchor && da <= df) 0 else 1
+                    getOrCreateSelectionMagnifier()?.show(event.x, event.y)
                     return true
                 }
 
@@ -2902,11 +3007,13 @@ class TerminalView @JvmOverloads constructor(
                     selectionFocusCol = col
                     selectionFocusRow = row
                 }
+                getOrCreateSelectionMagnifier()?.show(event.x, event.y)
                 invalidate()
                 return true
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 selectionDragHandle = -1
+                selectionMagnifier?.dismiss()
                 return true
             }
         }
@@ -3255,12 +3362,9 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
     override fun setComposingRegion(start: Int, end: Int): Boolean = false
 
     override fun finishComposingText(): Boolean {
-        // The IME accepted the composition as final (no commitText). Emit it now,
-        // converting newline to CR for shell submit, then clear.
-        if (composingText.isNotEmpty()) {
-            terminalView.sendText(composingText.replace("\n", "\r"))
-            composingText = ""
-        }
+        // The IME accepted the composition as final (no commitText). Emit it
+        // now, converting newline to CR for shell submit, then clear.
+        flushComposing()
         return true
     }
 
@@ -3323,8 +3427,35 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
 
     override fun requestCursorUpdates(cursorUpdateMode: Int): Boolean = false
 
+    /**
+     * Send any non-empty composing text through the normal terminal write
+     * path and clear it. Called before the connection is torn down and
+     * before any write that bypasses the InputConnection (bar/hardware-key
+     * escape sequences) so composing text is never silently dropped.
+     */
+    fun flushComposing() {
+        if (composingText.isNotEmpty()) {
+            terminalView.sendText(composingText.replace("\n", "\r"))
+            composingText = ""
+        }
+    }
+
+    /**
+     * Move any pending composing text onto a replacement connection created
+     * by a fresh onCreateInputConnection() call, so a focus/config-triggered
+     * recreate does not lose it.
+     */
+    fun transferComposingTo(replacement: TerminalInputConnection) {
+        if (composingText.isNotEmpty()) {
+            replacement.composingText = composingText
+            composingText = ""
+        }
+    }
+
     override fun closeConnection() {
-        // No special cleanup needed for terminal input connection
+        // Composing text has no editable buffer to survive teardown in —
+        // flush it now rather than silently discarding it.
+        flushComposing()
     }
 
     override fun commitContent(inputContentInfo: android.view.inputmethod.InputContentInfo, flags: Int, opts: android.os.Bundle?): Boolean {

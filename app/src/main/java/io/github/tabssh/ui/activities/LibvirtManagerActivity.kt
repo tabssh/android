@@ -831,11 +831,11 @@ class LibvirtManagerActivity : AppCompatActivity() {
         }
 
         private fun stateColor(state: String): Int = when (state) {
-            "running"    -> 0xFF4CAF50.toInt()
-            "shut off"   -> 0xFFF44336.toInt()
-            "paused"     -> 0xFFFF9800.toInt()
-            "restarting" -> 0xFFFF5722.toInt()
-            else         -> 0xFF9E9E9E.toInt()
+            "running"    -> androidx.core.content.ContextCompat.getColor(this@LibvirtManagerActivity, R.color.status_success)
+            "shut off"   -> androidx.core.content.ContextCompat.getColor(this@LibvirtManagerActivity, R.color.status_error)
+            "paused"     -> androidx.core.content.ContextCompat.getColor(this@LibvirtManagerActivity, R.color.status_warning)
+            "restarting" -> androidx.core.content.ContextCompat.getColor(this@LibvirtManagerActivity, R.color.status_warning)
+            else         -> androidx.core.content.ContextCompat.getColor(this@LibvirtManagerActivity, R.color.status_neutral)
         }
 
         private fun stateLabel(state: String): String = when (state) {

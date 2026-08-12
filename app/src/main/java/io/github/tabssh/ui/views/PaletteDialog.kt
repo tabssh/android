@@ -128,11 +128,12 @@ object PaletteDialog {
             }
             val title = TextView(parent.context).apply {
                 textSize = 15f
-                setTextColor(0xFF222222.toInt())
+                // Theme-paired resources so rows stay readable in both day and night modes
+                setTextColor(androidx.core.content.ContextCompat.getColor(parent.context, io.github.tabssh.R.color.on_surface))
             }
             val subtitle = TextView(parent.context).apply {
                 textSize = 12f
-                setTextColor(0xFF666666.toInt())
+                setTextColor(androidx.core.content.ContextCompat.getColor(parent.context, io.github.tabssh.R.color.on_surface_variant))
             }
             container.addView(title)
             container.addView(subtitle)

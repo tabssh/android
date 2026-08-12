@@ -202,7 +202,7 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
                 
                 // Visual selection indicator
                 root.alpha = if (isSelected) 0.7f else 1.0f
-                root.setBackgroundColor(if (isSelected) 0x22_00_7A_FF else 0x00_00_00_00)
+                root.setBackgroundColor(if (isSelected) androidx.core.content.ContextCompat.getColor(root.context, io.github.tabssh.R.color.selection_tint) else android.graphics.Color.TRANSPARENT)
                 
                 iconFile.setImageResource(getLocalFileIcon(file))
                 textFileName.text = file.name
@@ -242,7 +242,7 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
                 
                 // Visual selection indicator
                 root.alpha = if (isSelected) 0.7f else 1.0f
-                root.setBackgroundColor(if (isSelected) 0x22_00_7A_FF else 0x00_00_00_00)
+                root.setBackgroundColor(if (isSelected) androidx.core.content.ContextCompat.getColor(root.context, io.github.tabssh.R.color.selection_tint) else android.graphics.Color.TRANSPARENT)
                 
                 iconFile.setImageResource(getRemoteFileIcon(file))
                 textFileName.text = file.name

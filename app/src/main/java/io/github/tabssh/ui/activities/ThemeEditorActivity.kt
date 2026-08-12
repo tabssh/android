@@ -87,7 +87,8 @@ class ThemeEditorActivity : AppCompatActivity() {
         val toolbar = Toolbar(this).apply {
             title = "Theme Editor"
             setBackgroundResource(io.github.tabssh.R.color.primary_500)
-            setTitleTextColor(0xFFFFFFFF.toInt())
+            // Toolbar sits on the fixed primary_500 blue, so the title stays white in both modes
+            setTitleTextColor(androidx.core.content.ContextCompat.getColor(this@ThemeEditorActivity, io.github.tabssh.R.color.white))
         }
         root.addView(toolbar)
 
@@ -364,7 +365,8 @@ class ThemeEditorActivity : AppCompatActivity() {
 
     private fun makeSwatch(c: Int): GradientDrawable = GradientDrawable().apply {
         setColor(c)
-        setStroke(2, 0xFF888888.toInt())
+        // Mid-gray border reads against both surfaces and any user-picked swatch color
+        setStroke(2, androidx.core.content.ContextCompat.getColor(this@ThemeEditorActivity, io.github.tabssh.R.color.gray_500))
         cornerRadius = 6f
     }
 

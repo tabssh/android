@@ -15,6 +15,7 @@ import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import android.view.inputmethod.InputMethodManager
 import io.github.tabssh.hypervisor.spice.SpiceConstants
 import io.github.tabssh.hypervisor.spice.SpiceKeyMap
 import io.github.tabssh.hypervisor.spice.SpiceListener
@@ -150,11 +151,15 @@ class SpiceView @JvmOverloads constructor(
         override fun onSingleTapUp(e: MotionEvent): Boolean {
             /*
              * Pointer down/up for this tap is already fired by
-             * onTouchEvent's ACTION_DOWN / ACTION_UP branches — do not
-             * toggle the keyboard here, which would show the IME on
-             * every GUI button tap inside the SPICE session. Use the
-             * console toolbar's keyboard button instead.
+             * onTouchEvent's ACTION_DOWN / ACTION_UP branches. Focus +
+             * show the IME here too, for UX parity with TerminalView's
+             * single-tap keyboard behaviour (TerminalView.
+             * onSingleTapConfirmed / toggleKeyboard) — a tap inside the
+             * console should raise the keyboard the same way a tap
+             * inside a terminal does. The console toolbar's keyboard
+             * button remains available to hide it again.
              */
+            requestSoftKeyboard()
             return true
         }
 
@@ -328,6 +333,10 @@ class SpiceView @JvmOverloads constructor(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                // Grab focus immediately so hardware key events and the IME
+                // route to this view without requiring the tap to finish
+                // first (mirrors TerminalView.onTouchEvent's ACTION_DOWN).
+                requestFocus()
                 val (bx, by) = screenToBitmap(event.x, event.y)
                 currentButtonMask = currentButtonMask or SpiceConstants.MASK_LEFT
                 onPointerMove?.invoke(bx, by, currentButtonMask)
@@ -382,6 +391,22 @@ class SpiceView @JvmOverloads constructor(
         val bx = ((sx - originX) / scale).toInt().coerceIn(0, max(0, fbWidth - 1))
         val by = ((sy - originY) / scale).toInt().coerceIn(0, max(0, fbHeight - 1))
         return Pair(bx, by)
+    }
+
+    /**
+     * Focus this view and show the soft keyboard, unless a hardware
+     * keyboard is currently attached (matches TabTerminalActivity's
+     * `hasHardwareKeyboard()` gate so a Bluetooth/USB keyboard user isn't
+     * interrupted by a redundant IME popup on every tap).
+     */
+    private fun requestSoftKeyboard() {
+        val cfg = resources.configuration
+        val hasHardwareKeyboard = cfg.keyboard != android.content.res.Configuration.KEYBOARD_NOKEYS &&
+            cfg.hardKeyboardHidden == android.content.res.Configuration.HARDKEYBOARDHIDDEN_NO
+        if (hasHardwareKeyboard) return
+        requestFocus()
+        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        imm?.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
     }
 
     // ── Keyboard ─────────────────────────────────────────────────────────

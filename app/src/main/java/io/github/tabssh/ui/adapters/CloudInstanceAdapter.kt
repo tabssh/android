@@ -49,11 +49,12 @@ class CloudInstanceAdapter(
         b.textInstanceStatus.text = inst.status.uppercase()
 
         // Status dot color: green=running, red=stopped, amber=transitioning, grey=unknown
+        val ctx = b.root.context
         val dotColor = when (inst.status) {
-            "running" -> 0xFF4CAF50.toInt()
-            "stopped" -> 0xFFF44336.toInt()
-            "starting", "stopping", "rebooting" -> 0xFFFF9800.toInt()
-            else -> 0xFF9E9E9E.toInt()
+            "running" -> androidx.core.content.ContextCompat.getColor(ctx, io.github.tabssh.R.color.status_success)
+            "stopped" -> androidx.core.content.ContextCompat.getColor(ctx, io.github.tabssh.R.color.status_error)
+            "starting", "stopping", "rebooting" -> androidx.core.content.ContextCompat.getColor(ctx, io.github.tabssh.R.color.status_warning)
+            else -> androidx.core.content.ContextCompat.getColor(ctx, io.github.tabssh.R.color.status_neutral)
         }
         b.viewStatusDot.backgroundTintList = ColorStateList.valueOf(dotColor)
 

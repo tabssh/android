@@ -3,6 +3,7 @@ package io.github.tabssh.docker.registry
 import io.github.tabssh.docker.transport.DockerResult
 import io.github.tabssh.storage.database.entities.RegistryCredential
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -153,6 +154,8 @@ open class RegistryClient(
             DockerResult.Error(
                 "Registry ${ref.apiHost} unreachable", e.message
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             DockerResult.Error("Registry check failed for ${ref.canonicalRepository}", e.message)
         }

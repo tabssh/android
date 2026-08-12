@@ -55,10 +55,10 @@ class AuditLogAdapter(private var logs: List<AuditLogSummary>) :
         // Status with color (use command/eventType as status indicator)
         holder.textStatus.text = log.eventType
         holder.textStatus.setTextColor(when {
-            log.eventType.contains("SUCCESS") -> 0xFF4CAF50.toInt() // Green
-            log.eventType.contains("FAILURE") || log.eventType.contains("ERROR") -> 0xFFF44336.toInt() // Red
-            log.eventType.contains("DISCONNECT") -> 0xFFFF9800.toInt() // Orange
-            else -> 0xFF757575.toInt() // Gray
+            log.eventType.contains("SUCCESS") -> androidx.core.content.ContextCompat.getColor(holder.itemView.context, R.color.status_success)
+            log.eventType.contains("FAILURE") || log.eventType.contains("ERROR") -> androidx.core.content.ContextCompat.getColor(holder.itemView.context, R.color.status_error)
+            log.eventType.contains("DISCONNECT") -> androidx.core.content.ContextCompat.getColor(holder.itemView.context, R.color.status_warning)
+            else -> androidx.core.content.ContextCompat.getColor(holder.itemView.context, R.color.status_neutral)
         })
     }
     

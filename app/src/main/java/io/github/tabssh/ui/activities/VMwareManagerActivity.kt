@@ -275,8 +275,8 @@ class VMwareManagerActivity : AppCompatActivity() {
                 startActivity(intent)
                 Logger.i(TAG, "Launching SSH to $ip for ${vm.name}")
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to open SSH console for ${vm.name}", e)
-                showError("Failed to open console: ${e.message}", "Error")
+                Logger.e(TAG, "Failed to open SSH terminal for ${vm.name}", e)
+                showError("Failed to open terminal: ${e.message}", "Error")
             }
         }
     }
@@ -460,10 +460,10 @@ class VMwareManagerActivity : AppCompatActivity() {
         }
 
         private fun stateColor(state: String): Int = when (state.uppercase()) {
-            "POWERED_ON"  -> 0xFF4CAF50.toInt()
-            "POWERED_OFF" -> 0xFFF44336.toInt()
-            "SUSPENDED"   -> 0xFFFF9800.toInt()
-            else          -> 0xFF9E9E9E.toInt()
+            "POWERED_ON"  -> androidx.core.content.ContextCompat.getColor(this@VMwareManagerActivity, R.color.status_success)
+            "POWERED_OFF" -> androidx.core.content.ContextCompat.getColor(this@VMwareManagerActivity, R.color.status_error)
+            "SUSPENDED"   -> androidx.core.content.ContextCompat.getColor(this@VMwareManagerActivity, R.color.status_warning)
+            else          -> androidx.core.content.ContextCompat.getColor(this@VMwareManagerActivity, R.color.status_neutral)
         }
 
         private fun stateLabel(state: String): String = when (state.uppercase()) {

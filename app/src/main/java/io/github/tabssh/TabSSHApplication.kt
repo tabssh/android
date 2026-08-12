@@ -32,6 +32,11 @@ class TabSSHApplication : Application() {
         const val KEY_CRASH_TIME   = "crash_time"
         const val KEY_LAST_LOGGED_COMMIT = "last_logged_commit"
 
+        // One-time migration guard + legacy pref key for the removed global
+        // "Enable PRE Key" toggle — see migrateLegacyPrefixKeyPref().
+        private const val KEY_PRE_KEY_GLOBAL_MIGRATED = "pre_key_global_migrated"
+        private const val LEGACY_KEY_PREFIX_KEY_ENABLED = "terminal_prefix_key_enabled"
+
         // Intent extras used to pass crash data directly to CrashReportActivity.
         // Preferred over SharedPreferences because they are in-process and not
         // subject to disk-write races; SharedPreferences is kept as a fallback.
@@ -260,6 +265,7 @@ class TabSSHApplication : Application() {
             // rows now instead of waiting for each row's next retrieve().
             io.github.tabssh.crypto.storage.HypervisorPasswordStore
                 .sweepLegacyPlaintext(this@TabSSHApplication)
+            migrateLegacyPrefixKeyPref()
             // Re-register periodic sync work on every cold start. WorkManager's
             // DB survives process death but can be wiped by reinstall or system
             // maintenance. Re-registering is idempotent when
@@ -273,6 +279,34 @@ class TabSSHApplication : Application() {
             }
             Logger.i("TabSSHApplication", "Application initialized successfully (background)")
         }
+    }
+
+    /**
+     * One-time migration for the removed global "Enable PRE Key" toggle
+     * (`terminal_prefix_key_enabled`, PreferenceManager). PRE key
+     * enablement is now per-connection only (SSHTab.isPrefixKeyEnabled /
+     * ConnectionProfile.multiplexerOverride == "off"). A user who had
+     * turned the global toggle off expects every connection that never had
+     * its own override set to keep behaving as "off"; connections with an
+     * explicit override (including a pinned multiplexer type) are left
+     * untouched. Guarded by a flag so this runs at most once, and is a
+     * no-op on every later launch — including for users who never had the
+     * legacy pref set (defaulted true, nothing to migrate).
+     */
+    private suspend fun migrateLegacyPrefixKeyPref() {
+        val prefs = getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_PRE_KEY_GLOBAL_MIGRATED, false)) return
+        val legacyPrefs = androidx.preference.PreferenceManager
+            .getDefaultSharedPreferences(this)
+        val legacyEnabled = legacyPrefs.getBoolean(LEGACY_KEY_PREFIX_KEY_ENABLED, true)
+        if (!legacyEnabled) {
+            val migratedCount = database.connectionDao().disablePrefixKeyForProfilesWithNullOverride()
+            Logger.i(
+                "TabSSHApplication",
+                "Migrated legacy global PRE key off-toggle to $migratedCount profile(s)"
+            )
+        }
+        prefs.edit().putBoolean(KEY_PRE_KEY_GLOBAL_MIGRATED, true).apply()
     }
 
     private fun wireGlobalNotifications() {

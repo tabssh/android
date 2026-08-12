@@ -92,8 +92,10 @@ class RemoteFileEditorActivity : AppCompatActivity() {
             title = fileName
             subtitle = remotePath
             setBackgroundResource(io.github.tabssh.R.color.primary_500)
-            setTitleTextColor(0xFFFFFFFF.toInt())
-            setSubtitleTextColor(0xFFCCCCCC.toInt())
+            // Toolbar sits on the fixed primary_500 blue, so title/subtitle stay light in both
+            // modes; primary_100 matches Widget.TabSSH.Toolbar's subtitleTextColor
+            setTitleTextColor(androidx.core.content.ContextCompat.getColor(this@RemoteFileEditorActivity, io.github.tabssh.R.color.white))
+            setSubtitleTextColor(androidx.core.content.ContextCompat.getColor(this@RemoteFileEditorActivity, io.github.tabssh.R.color.primary_100))
         }
         root.addView(toolbar)
 

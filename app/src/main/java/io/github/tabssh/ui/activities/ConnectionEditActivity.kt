@@ -887,7 +887,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         if (currentColorTag != 0) {
             binding.previewColorTag.setBackgroundColor(currentColorTag)
         } else {
-            binding.previewColorTag.setBackgroundColor(0xFFCCCCCC.toInt())
+            binding.previewColorTag.setBackgroundColor(androidx.core.content.ContextCompat.getColor(this, R.color.gray_400))
         }
     }
 

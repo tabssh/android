@@ -561,6 +561,12 @@
     <string name="terminal_new_multiplexer_session_title">New %1$s session</string>
     <string name="terminal_new_multiplexer_session_message">Enter a name for the new session</string>
     <string name="terminal_pre_key_multiplexer_title">PRE key multiplexer</string>
+    <string name="terminal_pre_key_picker_auto">Auto (detect)</string>
+    <string name="terminal_pre_key_picker_tmux">tmux (%1$s)</string>
+    <string name="terminal_pre_key_picker_zellij">zellij (%1$s)</string>
+    <string name="terminal_pre_key_picker_screen">screen (%1$s)</string>
+    <string name="terminal_pre_key_picker_disable">Disable PRE key</string>
+    <string name="terminal_pre_key_picker_enable">Enable PRE key</string>
     <string name="terminal_connection_closed_title">Connection closed</string>
     <string name="terminal_disconnected_diagnosing">%1$s disconnected.\nDiagnosing connection…</string>
     <string name="terminal_disconnected_detail">%1$s disconnected.\n\n%2$s</string>

@@ -3,6 +3,7 @@ package io.github.tabssh.docker.transport
 import io.github.tabssh.storage.database.dao.DockerHostDao
 import io.github.tabssh.storage.database.entities.DockerHost
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.ConnectionPool
@@ -213,6 +214,8 @@ class TransportCapabilityDetector(
         } catch (e: TransportUnavailableException) {
             relay.close()
             DockerResult.TransportUnavailable(e.message.orEmpty(), e.detail)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             relay.close()
             DockerResult.Error("Transport $mode failed", e.message)
@@ -283,6 +286,8 @@ class TransportCapabilityDetector(
             }
         } catch (e: TransportUnavailableException) {
             DockerResult.TransportUnavailable(e.message.orEmpty(), e.detail)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             DockerResult.Error("Socket probe failed", e.message)
         }
@@ -293,6 +298,8 @@ class TransportCapabilityDetector(
         try {
             dao.update(host.copy(transportMode = mode))
             Logger.i(TAG, "persisted transport tier '$mode' for host ${host.id}")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.w(TAG, "failed to persist transport tier: ${e.message}")
         }

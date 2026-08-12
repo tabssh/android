@@ -173,6 +173,13 @@ Cloud          → Cloud Accounts → tap account → view live instances
 
 ---
 
+## ⚠️ Known Limitations
+
+- **`lastlog`/`lastb` under Mosh** — Mosh sessions won't show the usual "last login" banner. That's upstream `mosh-server` behavior (it starts a fresh PTY session detached from the bootstrapping SSH login), not a TabSSH bug.
+- **X11 forwarding on Mosh tabs rides the SSH session, not Mosh's UDP transport** — Mosh only ever carries terminal I/O over UDP; it has no channel of its own for X11. When a Mosh profile has X11 forwarding enabled, TabSSH keeps the bootstrap SSH session open for the life of the tab specifically to carry the `x11-req`/X11 channel, alongside the independent Mosh UDP connection for the terminal itself.
+
+---
+
 ## 🔐 Security
 
 **Report vulnerabilities privately via [GitHub Security Advisories](https://github.com/tabssh/android/security/advisories/new)** — reports are encrypted and not visible publicly until a fix is released. See [SECURITY.md](.github/SECURITY.md) for full scope, SLA, and attribution policy.

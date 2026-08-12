@@ -485,7 +485,7 @@ class ClusterCommandActivity : AppCompatActivity() {
             holder.time.text = "${result.executionTimeMs}ms"
 
             holder.status.setTextColor(
-                if (result.success) 0xFF4CAF50.toInt() else 0xFFF44336.toInt()
+                if (result.success) androidx.core.content.ContextCompat.getColor(holder.status.context, R.color.status_success) else androidx.core.content.ContextCompat.getColor(holder.status.context, R.color.status_error)
             )
 
             // Handle expanded state

@@ -186,8 +186,8 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
     private fun makeEmptyRowHint(dp: Float) = TextView(this).apply {
         text = "Empty row — tap a key below to add"
         textSize = 11f
-        setTextColor(Color.WHITE)
-        alpha = 0.3f
+        setTextColor(androidx.core.content.ContextCompat.getColor(this@KeyboardCustomizationActivity, R.color.on_surface_variant))
+        alpha = 0.6f
         gravity = Gravity.CENTER
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
@@ -538,6 +538,6 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
         KeyboardKey.KeyCategory.FUNCTION -> androidx.core.content.ContextCompat.getColor(this, R.color.keyboard_key_function)
         KeyboardKey.KeyCategory.SYMBOL   -> androidx.core.content.ContextCompat.getColor(this, R.color.keyboard_key_symbol)
         KeyboardKey.KeyCategory.ACTION   -> androidx.core.content.ContextCompat.getColor(this, R.color.keyboard_key_action)
-        else -> Color.WHITE
+        else -> androidx.core.content.ContextCompat.getColor(this, R.color.on_surface)
     }
 }

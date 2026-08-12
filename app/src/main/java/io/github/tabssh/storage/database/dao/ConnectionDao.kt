@@ -118,4 +118,15 @@ interface ConnectionDao {
      */
     @Query("SELECT * FROM connections WHERE oci_instance_id = :ociInstanceId LIMIT 1")
     suspend fun getByOciInstanceId(ociInstanceId: String): ConnectionProfile?
+
+    /**
+     * One-time migration (see TabSSHApplication.migrateLegacyPrefixKeyPref):
+     * the removed global `terminal_prefix_key_enabled = false` pref is
+     * translated into a per-connection "off" override, but only on profiles
+     * that have never had their own override set — an explicit override
+     * (including a pinned multiplexer type) always wins and must not be
+     * touched.
+     */
+    @Query("UPDATE connections SET multiplexer_override = 'off' WHERE multiplexer_override IS NULL")
+    suspend fun disablePrefixKeyForProfilesWithNullOverride(): Int
 }

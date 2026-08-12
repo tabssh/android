@@ -321,11 +321,11 @@ class LogViewerActivity : AppCompatActivity() {
             
             // Color code by level
             val color = when (log.level) {
-                "ERROR" -> 0xFFF44336.toInt() // Red
-                "WARN" -> 0xFFFF9800.toInt() // Orange
-                "INFO" -> 0xFF4CAF50.toInt() // Green
-                "DEBUG" -> 0xFF2196F3.toInt() // Blue
-                else -> 0xFF757575.toInt() // Gray
+                "ERROR" -> androidx.core.content.ContextCompat.getColor(holder.textLevel.context, R.color.status_error)
+                "WARN" -> androidx.core.content.ContextCompat.getColor(holder.textLevel.context, R.color.status_warning)
+                "INFO" -> androidx.core.content.ContextCompat.getColor(holder.textLevel.context, R.color.status_success)
+                "DEBUG" -> androidx.core.content.ContextCompat.getColor(holder.textLevel.context, R.color.status_info)
+                else -> androidx.core.content.ContextCompat.getColor(holder.textLevel.context, R.color.status_neutral)
             }
             holder.textLevel.setTextColor(color)
         }

@@ -11,6 +11,7 @@ import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.DockerHost
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -307,6 +308,8 @@ object DockerSessionManager {
     private suspend fun closeSession(app: TabSSHApplication, session: DockerSession, reason: String) {
         try {
             session.transport.close()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.w(TAG, "transport close failed for host ${session.host.id}: ${e.message}")
         }
@@ -317,6 +320,8 @@ object DockerSessionManager {
             Logger.d(TAG, "closing monitoring SSH connection for host ${session.host.id} ($reason)")
             try {
                 app.sshSessionManager.closeConnection(session.profile.id)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.w(TAG, "monitoring connection close failed for host ${session.host.id}: ${e.message}")
             }

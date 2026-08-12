@@ -66,6 +66,14 @@ class SSHTab(
     @Volatile
     var moshSession: io.github.tabssh.protocols.mosh.MoshNativeClient.Session? = null
 
+    // Mosh only carries terminal I/O over its own UDP transport, never X11.
+    // When the profile requests X11 forwarding on a mosh tab, connectMosh()
+    // retains the bootstrap SSHConnection here (instead of nulling it out)
+    // and keeps an X11-carrier channel open on it for the tab's lifetime;
+    // null for every non-X11 mosh connection and for all non-mosh tabs.
+    @Volatile
+    private var moshX11BootstrapConnection: SSHConnection? = null
+
     // Tab state
     // Default title format: user@host (shows connection info)
     private val _title = MutableStateFlow(generateDefaultTitle())
@@ -153,6 +161,13 @@ class SSHTab(
 
     /** True when a user override (including "off") is pinning the PRE key. */
     val hasMultiplexerOverride: Boolean get() = multiplexerOverride != null
+
+    /**
+     * True unless this connection's PRE key has been explicitly disabled via
+     * the long-press picker's per-connection "off" override. PRE key
+     * enablement is per-connection only — there is no global toggle.
+     */
+    val isPrefixKeyEnabled: Boolean get() = multiplexerOverride != "off"
 
     /**
      * Apply a per-connection PRE-key override chosen in the long-press
@@ -655,6 +670,27 @@ class SSHTab(
             // the TerminalSession is owned by TermuxBridge.
             moshSession = null
 
+            // Mosh carries only terminal I/O over its own UDP transport —
+            // never X11. If the profile wants X11 forwarding, the bootstrap
+            // SSH session is the only channel that can carry it, so it must
+            // be kept alive (with an x11-req-carrying channel open) instead
+            // of being dropped here. When X11 isn't wanted, the bootstrap
+            // session has done its job and is disconnected explicitly so it
+            // isn't orphaned.
+            val bootstrap = connection
+            if (bootstrap != null && bootstrap.wantsX11Forwarding()) {
+                val x11Channel = bootstrap.openX11CarrierChannel()
+                if (x11Channel != null) {
+                    moshX11BootstrapConnection = bootstrap
+                    Logger.i("SSHTab", "Retained mosh bootstrap session for X11 forwarding (${profile.getDisplayName()})")
+                } else {
+                    Logger.w("SSHTab", "X11 carrier channel failed to open; disconnecting mosh bootstrap session")
+                    disconnectBootstrapSession(bootstrap)
+                }
+            } else {
+                bootstrap?.let { disconnectBootstrapSession(it) }
+            }
+
             // Detach from the SSH connection state collector. Keeping it
             // running would mirror the SSH session's CONNECTED state onto
             // _connectionState and immediately override the DISCONNECTED
@@ -682,6 +718,32 @@ class SSHTab(
     }
 
     /**
+     * Disconnect a mosh bootstrap SSHConnection that nothing else
+     * references (either it never carried X11 and its job is done, or its
+     * X11 carrier channel failed to open). Unlike the tab's primary
+     * `connection`, SSHSessionManager never took ownership of this one — it
+     * was created solely for MoshHandoff.bootstrap() — so a full disconnect
+     * here is correct and does not touch the non-mosh teardown path below.
+     *
+     * disconnect() is a suspend fun; dispatched on the process-lifetime
+     * applicationScope (mirrors PortForwardingManager's teardown pattern)
+     * so the disconnect survives connectionScope.cancel() in cleanup().
+     */
+    private fun disconnectBootstrapSession(bootstrap: SSHConnection) {
+        val appScope = (bootstrap.context.applicationContext as? io.github.tabssh.TabSSHApplication)?.applicationScope
+        val block: suspend () -> Unit = {
+            try { bootstrap.disconnect() } catch (e: Exception) {
+                Logger.d("SSHTab", "mosh bootstrap disconnect suppressed: ${e.message}")
+            }
+        }
+        if (appScope != null) {
+            appScope.launch(Dispatchers.IO) { block() }
+        } else {
+            connectionScope.launch { block() }
+        }
+    }
+
+    /**
      * Disconnect this tab
      */
     fun disconnect() {
@@ -699,6 +761,10 @@ class SSHTab(
         connection?.let { c -> ownChannel?.let { c.closeChannel(it) } }
         ownChannel = null
         connection = null
+        // Retained mosh bootstrap session (X11 carrier) — nothing else
+        // references it, so tear it all the way down, not just its channel.
+        moshX11BootstrapConnection?.let { disconnectBootstrapSession(it) }
+        moshX11BootstrapConnection = null
         try { telnetConnection?.disconnect() } catch (e: Exception) {
             Logger.d("SSHTab", "telnetConnection.disconnect suppressed: ${e.message}")
         }

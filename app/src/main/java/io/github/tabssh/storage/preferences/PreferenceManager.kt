@@ -72,7 +72,6 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_CURSOR_BLINK = "terminal_cursor_blink"
         private const val KEY_SCROLLBACK_LINES = "terminal_scrollback"
         private const val KEY_REVERSE_SCROLL = "terminal_reverse_scroll"
-        private const val KEY_PREFIX_KEY_ENABLED = "terminal_prefix_key_enabled"
         private const val KEY_WORD_WRAP = "terminal_word_wrap"
         private const val KEY_COPY_ON_SELECT = "terminal_copy_on_select"
         private const val KEY_BELL_NOTIFICATION = "terminal_bell"
@@ -296,17 +295,6 @@ class PreferenceManager(private val context: Context) {
      */
     fun isReverseScrollDirection(): Boolean = getBoolean(KEY_REVERSE_SCROLL, false)
     fun setReverseScrollDirection(reversed: Boolean) = setBoolean(KEY_REVERSE_SCROLL, reversed)
-
-    /**
-     * Whether the custom-bar PREFIX ("PRE") key is active. Defaults to
-     * enabled; the user can temporarily disable it from Settings > Connection
-     * > Multiplexer, or from the toggle inside the PRE key's long-press
-     * multiplexer picker, without losing their configured multiplexer prefix
-     * strings. Only PREFIX taps are gated by this — long-pressing PREFIX
-     * always opens the picker, even while disabled, so it can be re-enabled.
-     */
-    fun isPrefixKeyEnabled(): Boolean = getBoolean(KEY_PREFIX_KEY_ENABLED, true)
-    fun setPrefixKeyEnabled(enabled: Boolean) = setBoolean(KEY_PREFIX_KEY_ENABLED, enabled)
 
     fun isWordWrap(): Boolean = getBoolean(KEY_WORD_WRAP, true)
     fun setWordWrap(enabled: Boolean) = setBoolean(KEY_WORD_WRAP, enabled)

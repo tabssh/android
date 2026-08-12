@@ -21,9 +21,18 @@ import java.util.UUID
  * both variants uniformly once `TabManager`/`TerminalPagerAdapter` are
  * rewritten to be sealed-type aware (steps 3–4). This step only wires the
  * tab's identity and its handle into the existing
- * [VncBackgroundSessionStore] — RfbClient connect/reconnect wiring is added
- * when entry points are consolidated onto `TabTerminalActivity` (step 6);
- * per AI.md §11.7.2, no new persistence layer is introduced here.
+ * [VncBackgroundSessionStore]; per AI.md §11.7.2, no new persistence layer
+ * is introduced here.
+ *
+ * Reconnect after a non-clean drop is MANUAL only, by design: no
+ * auto-retry/backoff. `TabTerminalActivity.handleConsoleTabDisconnected`
+ * observes [connectionState], and for an ERROR-reason drop shows a dialog
+ * with a tap-to-reconnect action (`TabTerminalActivity.reconnectVncTab`)
+ * that re-dials with this tab's original [vncHost] credentials and swaps
+ * the result onto [rfbClient]. Only persisted-[VncHost] tabs are offered
+ * reconnect — ephemeral hypervisor console tabs have no host row to re-dial
+ * from and get Close/Keep instead, with the last framebuffer frame left on
+ * screen so the user can still read it.
  */
 class VncTab(
     val vncHost: VncHost?,

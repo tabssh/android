@@ -185,7 +185,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             fun label(text: String) = TextView(context).apply {
                 this.text = text
                 textSize = 12f
-                setTextColor(0xFF888888.toInt())
+                setTextColor(ContextCompat.getColor(context, R.color.on_surface_variant))
                 val lp = LinearLayout.LayoutParams(MATCH, WRAP)
                 lp.topMargin = dp(context, 12)
                 layoutParams = lp
@@ -626,7 +626,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
         fun label(text: String) = TextView(this).apply {
             this.text = text
             textSize = 12f
-            setTextColor(0xFF888888.toInt())
+            setTextColor(ContextCompat.getColor(context, R.color.on_surface_variant))
             val lp = LinearLayout.LayoutParams(MATCH, WRAP)
             lp.topMargin = dp(this@MultiHostDashboardActivity, 12)
             layoutParams = lp
@@ -1243,10 +1243,10 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             // Status dot from MonitorSlot state
             val slot = monitorSlots[profile.id]
             val dotColor = when {
-                slot == null || !slot.enabled -> 0xFF888888.toInt()
-                slot.isCurrentlyDown          -> 0xFFFF4444.toInt()
-                slot.lastSeenUp > 0           -> 0xFF44CC44.toInt()
-                else                          -> 0xFF888888.toInt()
+                slot == null || !slot.enabled -> ContextCompat.getColor(b.root.context, R.color.status_neutral)
+                slot.isCurrentlyDown          -> ContextCompat.getColor(b.root.context, R.color.status_error)
+                slot.lastSeenUp > 0           -> ContextCompat.getColor(b.root.context, R.color.status_success)
+                else                          -> ContextCompat.getColor(b.root.context, R.color.status_neutral)
             }
             b.statusDot.backgroundTintList =
                 android.content.res.ColorStateList.valueOf(dotColor)
@@ -1354,7 +1354,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
                 text = "No hosts — tap  New Group  to create a group, then ⊕ to add hosts"
                 gravity = android.view.Gravity.CENTER
                 setPadding(dp(this@MultiHostDashboardActivity, 32))
-                setTextColor(0xFFAAAAAA.toInt())
+                setTextColor(ContextCompat.getColor(context, R.color.on_surface_variant))
                 textSize = 14f
             }
         }

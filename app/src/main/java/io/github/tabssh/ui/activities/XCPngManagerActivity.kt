@@ -812,9 +812,9 @@ class XCPngManagerActivity : AppCompatActivity() {
         override fun getItemCount() = vms.size
 
         private fun stateColor(state: String): Int = when (state.lowercase()) {
-            "running" -> 0xFF4CAF50.toInt()
-            "halted", "stopped" -> 0xFFF44336.toInt()
-            else -> 0xFFFF9800.toInt()
+            "running" -> androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.status_success)
+            "halted", "stopped" -> androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.status_error)
+            else -> androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.status_warning)
         }
 
         private fun stateLabel(state: String): String = when (state.lowercase()) {
@@ -1135,7 +1135,7 @@ class XCPngManagerActivity : AppCompatActivity() {
             holder.name.text = job.name
             holder.mode.text = "Mode: ${job.mode}"
             holder.status.text = if (job.enabled) "● Enabled" else "○ Disabled"
-            holder.status.setTextColor(if (job.enabled) 0xFF4CAF50.toInt() else 0xFFFF9800.toInt())
+            holder.status.setTextColor(if (job.enabled) androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.status_success) else androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.status_warning))
             holder.schedule.text = "Schedule: ${job.schedule ?: "Manual"}"
             holder.vms.text = "VMs: ${job.vms?.size ?: 0}"
             
@@ -1233,19 +1233,19 @@ class XCPngManagerActivity : AppCompatActivity() {
             when (run.status.lowercase()) {
                 "success" -> {
                     holder.status.text = "● Success"
-                    holder.status.setTextColor(0xFF4CAF50.toInt())
+                    holder.status.setTextColor(androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.status_success))
                 }
                 "failure", "error" -> {
                     holder.status.text = "● Failed"
-                    holder.status.setTextColor(0xFFF44336.toInt())
+                    holder.status.setTextColor(androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.status_error))
                 }
                 "running", "in_progress" -> {
                     holder.status.text = "● Running"
-                    holder.status.setTextColor(0xFF2196F3.toInt())
+                    holder.status.setTextColor(androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.status_info))
                 }
                 else -> {
                     holder.status.text = "○ ${run.status}"
-                    holder.status.setTextColor(0xFF9E9E9E.toInt())
+                    holder.status.setTextColor(androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.status_neutral))
                 }
             }
             

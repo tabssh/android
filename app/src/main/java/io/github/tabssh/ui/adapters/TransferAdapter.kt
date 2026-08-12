@@ -61,12 +61,12 @@ class TransferAdapter(
                 
                 // Status color
                 val statusColor = when (transfer.state.value) {
-                    TransferState.ACTIVE -> io.github.tabssh.R.color.info
-                    TransferState.COMPLETED -> io.github.tabssh.R.color.success
-                    TransferState.ERROR -> io.github.tabssh.R.color.error
-                    TransferState.PAUSED -> io.github.tabssh.R.color.warning
-                    TransferState.CANCELLED -> io.github.tabssh.R.color.gray_500
-                    else -> io.github.tabssh.R.color.gray_500
+                    TransferState.ACTIVE -> io.github.tabssh.R.color.status_info
+                    TransferState.COMPLETED -> io.github.tabssh.R.color.status_success
+                    TransferState.ERROR -> io.github.tabssh.R.color.status_error
+                    TransferState.PAUSED -> io.github.tabssh.R.color.status_warning
+                    TransferState.CANCELLED -> io.github.tabssh.R.color.status_neutral
+                    else -> io.github.tabssh.R.color.status_neutral
                 }
                 
                 textTransferStatus.setTextColor(androidx.core.content.ContextCompat.getColor(root.context, statusColor))

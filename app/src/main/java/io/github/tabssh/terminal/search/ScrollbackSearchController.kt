@@ -167,7 +167,9 @@ class ScrollbackSearchController(
 
     private fun updateCaseButtonAppearance() {
         val color = if (caseSensitive) {
-            context.getColor(android.R.color.holo_blue_bright)  // active tint
+            com.google.android.material.color.MaterialColors.getColor(
+                caseButton, com.google.android.material.R.attr.colorPrimary
+            )
         } else {
             // Resolved from theme attribute colorOnSurfaceVariant
             val attrs = context.theme.obtainStyledAttributes(

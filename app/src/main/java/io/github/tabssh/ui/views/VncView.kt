@@ -15,6 +15,7 @@ import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import android.view.inputmethod.InputMethodManager
 import io.github.tabssh.hypervisor.console.rfb.RfbConstants
 import io.github.tabssh.hypervisor.console.rfb.RfbListener
 import io.github.tabssh.utils.logging.Logger
@@ -52,6 +53,35 @@ class VncView @JvmOverloads constructor(
         // hold-to-right-click gesture fires first; only a hold past this point
         // opens the shared session context menu (same menu TerminalView opens).
         private const val CONTEXT_MENU_TIMEOUT_MS = 900L
+
+        /**
+         * Compute the pan offset that keeps the bitmap point ([oldBitmapX],
+         * [oldBitmapY]) — the content under the pinch focal point before the
+         * scale changed — pinned under that same screen-space focal point
+         * ([focusX], [focusY]) at [newScale]. Without this, pinch-zoom
+         * scales around the bitmap centre and the content drifts out from
+         * under the fingers. Clamped to valid pan bounds (same bounds
+         * [onScroll] uses). Pure function — no View state — so the
+         * focal-anchoring math is unit-testable without Robolectric.
+         */
+        internal fun focalPan(
+            viewWidth: Int,
+            viewHeight: Int,
+            fbWidth: Int,
+            fbHeight: Int,
+            focusX: Float,
+            focusY: Float,
+            oldBitmapX: Float,
+            oldBitmapY: Float,
+            newScale: Float
+        ): Pair<Float, Float> {
+            if (newScale <= 0f) return Pair(0f, 0f)
+            val panX = (((viewWidth - fbWidth * newScale) / 2f - focusX) / newScale + oldBitmapX)
+                .coerceIn(0f, max(0f, fbWidth - viewWidth / newScale))
+            val panY = (((viewHeight - fbHeight * newScale) / 2f - focusY) / newScale + oldBitmapY)
+                .coerceIn(0f, max(0f, fbHeight - viewHeight / newScale))
+            return Pair(panX, panY)
+        }
     }
 
     // ── Framebuffer ──────────────────────────────────────────────────────
@@ -113,9 +143,13 @@ class VncView @JvmOverloads constructor(
 
         override fun onSingleTapUp(e: MotionEvent): Boolean {
             // Pointer down/up for this tap is already fired by onTouchEvent
-            // ACTION_DOWN / ACTION_UP — do not toggle the keyboard here, which
-            // would show the IME on every GUI button tap inside the VNC session.
-            // Use the VNC toolbar's keyboard button instead.
+            // ACTION_DOWN / ACTION_UP. Focus + show the IME here too, for UX
+            // parity with TerminalView's single-tap keyboard behaviour
+            // (TerminalView.onSingleTapConfirmed / toggleKeyboard) — a tap
+            // inside the console should raise the keyboard the same way a
+            // tap inside a terminal does. The VNC toolbar's keyboard button
+            // remains available to hide it again.
+            requestSoftKeyboard()
             return true
         }
 
@@ -165,8 +199,20 @@ class VncView @JvmOverloads constructor(
 
     private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(detector: ScaleGestureDetector): Boolean {
+            val oldScale = currentScale()
+            val originX = (width - fbWidth * oldScale) / 2f - panX * oldScale
+            val originY = (height - fbHeight * oldScale) / 2f - panY * oldScale
+            val oldBitmapX = (detector.focusX - originX) / oldScale
+            val oldBitmapY = (detector.focusY - originY) / oldScale
             userScale = (userScale * detector.scaleFactor).coerceIn(MIN_SCALE, MAX_SCALE)
             recomputeFitScale()
+            val (newPanX, newPanY) = focalPan(
+                width, height, fbWidth, fbHeight,
+                detector.focusX, detector.focusY,
+                oldBitmapX, oldBitmapY, currentScale()
+            )
+            panX = newPanX
+            panY = newPanY
             postInvalidate()
             return true
         }
@@ -259,7 +305,10 @@ class VncView @JvmOverloads constructor(
      * dimensions.  [VncConsoleChannel.resizeToPixels] is wired here by
      * [VMConsoleActivity.switchToGraphical] so the VNC server's framebuffer
      * is resized to match the visible pixel area rather than an arbitrary
-     * character-grid size.
+     * character-grid size.  Fired on every raw size change with no debounce
+     * here — [VncConsoleChannel.resizeToPixels] itself debounces the actual
+     * SetDesktopSize send so a rapid burst of size changes (soft-keyboard
+     * show/hide) settles on one request instead of one per intermediate size.
      */
     var onViewSizeReady: ((width: Int, height: Int) -> Unit)? = null
 
@@ -306,6 +355,10 @@ class VncView @JvmOverloads constructor(
         // Track raw drag for click-and-hold (e.g. selection drag in VM)
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                // Grab focus immediately so hardware key events and the IME
+                // route to this view without requiring the tap to finish
+                // first (mirrors TerminalView.onTouchEvent's ACTION_DOWN).
+                requestFocus()
                 pressX = event.x; pressY = event.y; pressTime = System.currentTimeMillis()
                 val (bx, by) = screenToBitmap(event.x, event.y)
                 lastButtonMask = RfbConstants.BTN_LEFT
@@ -363,6 +416,22 @@ class VncView @JvmOverloads constructor(
 
     private fun firePointer(bx: Int, by: Int, mask: Int) {
         onPointerEvent?.invoke(bx, by, mask)
+    }
+
+    /**
+     * Focus this view and show the soft keyboard, unless a hardware
+     * keyboard is currently attached (matches TabTerminalActivity's
+     * `hasHardwareKeyboard()` gate so a Bluetooth/USB keyboard user isn't
+     * interrupted by a redundant IME popup on every tap).
+     */
+    private fun requestSoftKeyboard() {
+        val cfg = resources.configuration
+        val hasHardwareKeyboard = cfg.keyboard != android.content.res.Configuration.KEYBOARD_NOKEYS &&
+            cfg.hardKeyboardHidden == android.content.res.Configuration.HARDKEYBOARDHIDDEN_NO
+        if (hasHardwareKeyboard) return
+        requestFocus()
+        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        imm?.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
     }
 
     // ── Keyboard ──────────────────────────────────────────────────────────

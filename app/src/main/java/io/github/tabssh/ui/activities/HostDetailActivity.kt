@@ -106,7 +106,7 @@ class HostDetailActivity : AppCompatActivity() {
         val toolbar = Toolbar(this).apply {
             title = "Host detail"
             setBackgroundResource(R.color.primary_500)
-            setTitleTextColor(0xFFFFFFFF.toInt())
+            setTitleTextColor(ContextCompat.getColor(this@HostDetailActivity, R.color.white))
         }
         root.addView(toolbar)
         setSupportActionBar(toolbar)
@@ -246,10 +246,10 @@ class HostDetailActivity : AppCompatActivity() {
             tvStatus.setTextColor(ContextCompat.getColor(this, R.color.on_surface_variant))
         } else if (slot.isCurrentlyDown) {
             tvStatus.text = "DOWN — ${slot.consecutiveFailures} consecutive failure(s)"
-            tvStatus.setTextColor(ContextCompat.getColor(this, R.color.error))
+            tvStatus.setTextColor(ContextCompat.getColor(this, R.color.status_error))
         } else {
             tvStatus.text = "UP"
-            tvStatus.setTextColor(ContextCompat.getColor(this, R.color.success))
+            tvStatus.setTextColor(ContextCompat.getColor(this, R.color.status_success))
         }
         tvLastChecked.text = if (slot.lastCheckedAt > 0) dateFmt.format(Date(slot.lastCheckedAt)) else "Never"
         tvLastSeenUp.text  = if (slot.lastSeenUp  > 0) dateFmt.format(Date(slot.lastSeenUp))    else "Unknown"

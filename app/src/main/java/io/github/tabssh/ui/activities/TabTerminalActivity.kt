@@ -2665,6 +2665,10 @@ class TabTerminalActivity : AppCompatActivity() {
                     // Suppress during adapter swap — see isUpdatingAdapter.
                     if (isUpdatingAdapter) return
                     tabManager.switchToTab(position)
+                    // Focus the newly visible page's input view so keyboard
+                    // input (hardware + IME) works immediately after a swipe,
+                    // without requiring an extra tap (console keyboard fix).
+                    viewPager?.post { getActiveInputView()?.requestFocus() }
                     Logger.d("TabTerminalActivity", "Swiped to tab $position")
                 }
             })
@@ -2866,7 +2870,7 @@ class TabTerminalActivity : AppCompatActivity() {
 
     private fun updatePrefixKeyVisual(multiplexerType: String?) {
         // Four distinct visual states:
-        //   0. Disabled (Settings/picker "Enable PRE Key" off) → forced heavy dim,
+        //   0. Disabled (picker's per-connection "Disable PRE key" row) → forced heavy dim,
         //      regardless of armed/mux state — the key stays tappable/long-pressable
         //      (tap logs a no-op, long-press still opens the re-enable picker) but
         //      must *look* inert so a disabled key never appears to be live.
@@ -2875,9 +2879,10 @@ class TabTerminalActivity : AppCompatActivity() {
         //   3. No mux                         → default grey — nothing to send
         // The active=true solid fill is reserved for the armed state only so the user
         // can tell the difference between "mux running" and "about to send prefix".
-        val MUX_GREEN = 0xFF4CAF50.toInt()
+        val MUX_GREEN = androidx.core.content.ContextCompat.getColor(this, R.color.status_success)
+        val activeTab = tabManager.getActiveTab()
         when {
-            !app.preferencesManager.isPrefixKeyEnabled() ->
+            activeTab != null && !activeTab.isPrefixKeyEnabled ->
                 binding.multiRowKeyboard.setKeyState(
                     "PREFIX", active = false, enabled = true, dimmed = true
                 )
@@ -2919,53 +2924,52 @@ class TabTerminalActivity : AppCompatActivity() {
      * (`ConnectionProfile.multiplexerOverride`) so it survives reconnects and
      * app restarts. Precedence: override > live detection > global default.
      * "Auto (detect)" clears the override and hands control back to the
-     * detection loop; "Off (this connection)" dims the PRE key for this
-     * connection only.
+     * detection loop. There is no global on/off toggle — PRE key
+     * enablement is per-connection only: the last row disables the PRE key
+     * for this connection and, once disabled, toggles in place back to
+     * "Enable PRE key" so long-press remains the only way to re-enable it.
      */
     private fun showMultiplexerPickerDialog() {
         val prefs = app.preferencesManager
+        val tab = tabManager.getActiveTab() ?: return
         val tmuxLabel   = prefixToShortLabel(prefs.getMultiplexerPrefix("tmux"))
         val zellijLabel = prefixToShortLabel(prefs.getMultiplexerPrefix("zellij"))
         val screenLabel = prefixToShortLabel(prefs.getMultiplexerPrefix("screen"))
-        val enabled = prefs.isPrefixKeyEnabled()
-        // Order: auto, the three pinned types, per-connection off, then the
-        // global Enable/Disable toggle — the toggle is always the last row so
-        // long-press can re-enable a disabled PRE key without needing a
-        // separate Settings trip.
+        val isEnabled = tab.isPrefixKeyEnabled
         val types = arrayOf(
-            "Auto (detect)",
-            "tmux ($tmuxLabel)",
-            "zellij ($zellijLabel)",
-            "screen ($screenLabel)",
-            "Off (this connection)",
-            if (enabled) "Disable PRE Key" else "Enable PRE Key"
+            getString(R.string.terminal_pre_key_picker_auto),
+            getString(R.string.terminal_pre_key_picker_tmux, tmuxLabel),
+            getString(R.string.terminal_pre_key_picker_zellij, zellijLabel),
+            getString(R.string.terminal_pre_key_picker_screen, screenLabel),
+            if (isEnabled) getString(R.string.terminal_pre_key_picker_disable)
+            else getString(R.string.terminal_pre_key_picker_enable)
         )
-        val keys  = arrayOf("auto", "tmux", "zellij", "screen", "off", "toggle")
+        val keys = arrayOf("auto", "tmux", "zellij", "screen", "toggle_off")
         // setMessage and setItems both occupy the dialog body — using both silently
         // hides the item list. Move the hint into the title so the list renders.
         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_pre_key_multiplexer_title)
             .setItems(types) { _, which ->
-                if (keys[which] == "toggle") {
-                    val newValue = !enabled
-                    prefs.setPrefixKeyEnabled(newValue)
-                    if (!newValue && prefixArmed) {
-                        prefixArmed = false
-                        prefixArmedType = null
-                        getActiveTerminalView()?.let { tv ->
-                            tv.setPendingPrefix(null)
-                            tv.onPrefixConsumed = null
-                        }
-                    }
-                    updatePrefixKeyVisual(tabManager.getActiveTab()?.activeMultiplexerType)
-                    Logger.i("TabTerminalActivity", "PRE key ${if (newValue) "enabled" else "disabled"}")
-                    return@setItems
+                // "auto" means no override — stored as NULL. The last row is
+                // "off" when currently enabled, or back to "auto" (re-enable)
+                // when currently disabled — it never writes a literal "off"
+                // while already off.
+                val override = when (keys[which]) {
+                    "auto" -> null
+                    "toggle_off" -> if (isEnabled) "off" else null
+                    else -> keys[which]
                 }
-                val tab = tabManager.getActiveTab() ?: return@setItems
-                // "auto" means no override — stored as NULL.
-                val override = keys[which].takeIf { it != "auto" }
                 tab.applyMultiplexerOverride(override)
                 persistMultiplexerOverride(tab.profile.id, override)
+                if (keys[which] == "toggle_off" && override == "off" && prefixArmed) {
+                    prefixArmed = false
+                    prefixArmedType = null
+                    getActiveTerminalView()?.let { tv ->
+                        tv.setPendingPrefix(null)
+                        tv.onPrefixConsumed = null
+                    }
+                }
+                updatePrefixKeyVisual(tab.activeMultiplexerType)
                 Logger.i(
                     "TabTerminalActivity",
                     "Multiplexer override set to ${override ?: "auto"} for ${tab.profile.getDisplayName()}"
@@ -3035,6 +3039,10 @@ class TabTerminalActivity : AppCompatActivity() {
         // Recording is tracked per-tab — sync the keyboard's stop-recording
         // key to whatever the newly active tab's actual state is.
         updateRecordingKeyIndicator()
+        // Give the newly active tab's input view focus so hardware key events
+        // and the IME attach to it immediately, without requiring a tap first
+        // (Issue: console keyboard input silently dropped after a tab switch).
+        getActiveInputView()?.requestFocus()
     }
     
     private fun updateTabIcon(tab: SSHTab, state: ConnectionState) {
@@ -4900,12 +4908,27 @@ class TabTerminalActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Close the active tab, whichever kind it is. This is the shared exit
+     * point for every generic close action — the toolbar's close button,
+     * the overflow menu's "Close tab", Ctrl+W, and the command palette.
+     *
+     * [TabManager.closeTab] only fires [TabManagerListener.onTabClosed] for
+     * SSH tabs (the listener is SSH-typed), so calling it directly for a
+     * Vnc/Console tab would remove the tab's data but leave the ViewPager2 /
+     * TabLayout UI stale and skip the "close last tab → finish()" handling.
+     * Route Vnc/Console tabs through [closeConsoleTab], which already does
+     * that UI work for the console reconnect-dialog close path.
+     */
     private fun closeCurrentTab() {
         // lifecycleScope cancels with the activity so teardown work is never orphaned.
         lifecycleScope.launch {
             val activeIndex = tabManager.getActiveTabIndex()
-            if (activeIndex >= 0) {
-                tabManager.closeTab(activeIndex)
+            if (activeIndex < 0) return@launch
+            when (val entry = tabManager.getActiveTabSealed()) {
+                is Tab.Ssh -> tabManager.closeTab(activeIndex)
+                is Tab.Vnc, is Tab.Console -> closeConsoleTab(entry.tabId)
+                null -> Unit
             }
         }
     }
@@ -4994,13 +5017,13 @@ class TabTerminalActivity : AppCompatActivity() {
         // Fullscreen had no visible effect until app restart.
         applyTerminalUiPrefs()
 
-        // Re-sync the PRE key with the "Enable PRE Key" toggle — settable from
-        // Settings > Connection > Multiplexer or from the PRE long-press
-        // picker itself. If the user disabled it while this activity was
-        // backgrounded, drop any stuck [PRE] armed-latch — taps are now
-        // ignored while disabled, so a stale [PRE] label could no longer be
-        // cleared by the user.
-        if (!app.preferencesManager.isPrefixKeyEnabled() && prefixArmed) {
+        // Re-sync the PRE key with this connection's per-connection PRE-key
+        // override — settable from the PRE long-press picker. If the user
+        // disabled it while this activity was backgrounded, drop any stuck
+        // [PRE] armed-latch — taps are now ignored while disabled, so a
+        // stale [PRE] label could no longer be cleared by the user.
+        val resumedTab = tabManager.getActiveTab()
+        if (resumedTab != null && !resumedTab.isPrefixKeyEnabled && prefixArmed) {
             prefixArmed = false
             prefixArmedType = null
             getActiveTerminalView()?.let { tv ->
@@ -5008,7 +5031,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 tv.onPrefixConsumed = null
             }
         }
-        updatePrefixKeyVisual(tabManager.getActiveTab()?.activeMultiplexerType)
+        updatePrefixKeyVisual(resumedTab?.activeMultiplexerType)
 
         // VNC-tab-swipe integration step 6e: reclaim any Tab.Vnc/Tab.Console
         // session parked in VncBackgroundSessionStore by onStop() below, then
@@ -5229,6 +5252,11 @@ class TabTerminalActivity : AppCompatActivity() {
     private fun handleCustomKeyPress(key: io.github.tabssh.ui.keyboard.KeyboardKey) {
         Logger.d("TabTerminalActivity", "Custom key pressed: ${key.label} id=${key.id} sequence=${key.keySequence.map { it.code }}")
 
+        // Flush any composing IME text before this key's escape sequence
+        // writes to the terminal — otherwise a bar-key press can race ahead
+        // of an in-flight composition and silently drop it.
+        getActiveTerminalView()?.flushPendingComposing()
+
         // Console tabs in RFB/SPICE mode have no TerminalView — everything
         // except the bar's own activity-level actions (clipboard menu,
         // terminal menu, keyboard toggle, recording, multiplexer prefix —
@@ -5305,10 +5333,11 @@ class TabTerminalActivity : AppCompatActivity() {
                     } else {
                         showMultiplexerPickerDialog()
                     }
-                } else if (!app.preferencesManager.isPrefixKeyEnabled()) {
-                    // User disabled the PREFIX shortcut (Settings or the
-                    // long-press picker's toggle) — tap is a no-op until
-                    // re-enabled; long-press still works regardless.
+                } else if (tab?.isPrefixKeyEnabled == false) {
+                    // User disabled the PREFIX shortcut for this connection
+                    // (long-press picker's "Disable PRE key" row) — tap is a
+                    // no-op until re-enabled; long-press still works
+                    // regardless.
                     Logger.d("TabTerminalActivity", "PREFIX key: tap ignored (disabled)")
                 } else {
                     // PRE is a shortcut for physically pressing the multiplexer

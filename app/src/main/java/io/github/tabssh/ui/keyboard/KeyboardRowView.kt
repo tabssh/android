@@ -116,9 +116,10 @@ class KeyboardRowView @JvmOverloads constructor(
      *  - [active] = false + [enabled] = true → default styling
      *  - [dimmed] = true → heavily dimmed regardless of the above, but [enabled]
      *    is left untouched by this flag so the button stays clickable — used by
-     *    the PREFIX key when the "Enable PRE Key" setting is off, where the key
-     *    must still receive taps/long-presses (tap logs a no-op, long-press
-     *    still opens the re-enable picker) while *looking* disabled.
+     *    the PREFIX key when this connection's per-connection PRE key override
+     *    is "off", where the key must still receive taps/long-presses (tap logs
+     *    a no-op, long-press still opens the re-enable picker) while *looking*
+     *    disabled.
      * Used by the PREFIX key to reflect live multiplexer detection and armed state.
      */
     fun setKeyState(
@@ -245,7 +246,7 @@ class KeyboardRowView @JvmOverloads constructor(
      * ~200 ms per instance on the emulator's software renderer.
      *
      * Drawing: rounded-rect outline (1 dp stroke, 4 dp corner) + centred label
-     * text.  Pressed state adds a translucent white fill.  Everything is drawn
+     * text.  Pressed state adds a translucent label-tinted fill.  Everything is drawn
      * with pre-allocated Paint objects so onDraw never allocates.
      */
     private class KeyButton(context: Context, label: String) : View(context) {
@@ -256,12 +257,20 @@ class KeyboardRowView @JvmOverloads constructor(
         private val density = context.resources.displayMetrics.density
         private val scaledDensity = context.resources.displayMetrics.scaledDensity
 
-        // Default stroke/text colors — overridden when a highlight or active state is set.
-        private val defaultStrokeColor = 0xFF666666.toInt()
-        private val defaultTextColor   = 0xFFEEEEEE.toInt()
-        // Active (latched) fill colours: Material Green 500 fill, dark green text.
-        private val activeFillColor    = 0xFF4CAF50.toInt()
-        private val activeTextColor    = 0xFF1B5E20.toInt()   // dark green — readable on green fill
+        // Default stroke/text colors — resolved from the theme (single-attr resolution,
+        // not obtainStyledAttributes, so the perf note above still holds) because the
+        // keyboard container behind these keys is ?attr/colorSurfaceVariant and flips
+        // with day/night; overridden when a highlight or active state is set.
+        private val defaultStrokeColor = com.google.android.material.color.MaterialColors
+            .getColor(this, com.google.android.material.R.attr.colorOutline)
+        private val defaultTextColor = com.google.android.material.color.MaterialColors
+            .getColor(this, com.google.android.material.R.attr.colorOnSurface)
+        // Active (latched) fill colours: constant green fill with dark green text in both
+        // modes — the fill covers the key, so the surface colour underneath is irrelevant.
+        private val activeFillColor = androidx.core.content.ContextCompat
+            .getColor(context, io.github.tabssh.R.color.keyboard_key_active_fill)
+        private val activeTextColor = androidx.core.content.ContextCompat
+            .getColor(context, io.github.tabssh.R.color.keyboard_key_active_text)
 
         private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
@@ -279,7 +288,9 @@ class KeyboardRowView @JvmOverloads constructor(
         }
         private val pressPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
-            color = 0x33FFFFFF
+            // Pressed overlay: translucent tint of the label colour so it stays
+            // visible on both the light and dark keyboard surface
+            color = androidx.core.graphics.ColorUtils.setAlphaComponent(defaultTextColor, 0x33)
         }
         private val rectF = RectF()
         private val cornerR = 4f * density
@@ -310,7 +321,7 @@ class KeyboardRowView @JvmOverloads constructor(
          * Used by [KeyboardRowView.setKeyState] for the PREFIX "multiplexer active"
          * visual state when a distinct fill isn't desired (the green outline + text
          * is already distinctive).
-         * Pass 0 to reset to the default grey/white palette.
+         * Pass 0 to reset to the default theme palette.
          */
         fun setHighlight(color: Int) {
             if (isActive) return   // active fill state wins

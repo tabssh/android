@@ -923,6 +923,62 @@ class SSHConnection(
     }
 
     /**
+     * Whether this connection's profile (or the global default) requests
+     * X11 forwarding. Exposed so mosh's bootstrap-session retention
+     * decision (SSHTab.connectMosh) can check without duplicating the
+     * private eligibility computation inside [applyForwardingFlags].
+     */
+    fun wantsX11Forwarding(): Boolean {
+        val prefs = (context.applicationContext as? io.github.tabssh.TabSSHApplication)?.preferencesManager
+        return profile.x11Forwarding || (prefs?.isX11ForwardingDefault() == true)
+    }
+
+    /**
+     * Open a throwaway exec channel purely to carry an `x11-req` channel
+     * request on this session.
+     *
+     * Mosh normally hands off to the native mosh-client's own UDP transport
+     * right after [io.github.tabssh.protocols.mosh.MoshHandoff.bootstrap]
+     * finishes, so this bootstrap session would otherwise be disconnected
+     * immediately — but RFC 4254 §6.3.1 requires an `x11-req` to be sent on
+     * a session channel before the paired shell/exec/subsystem request, and
+     * mosh carries no channel of its own to attach one to. Retaining this
+     * session and opening a minimal exec channel here lets
+     * [applyForwardingFlags] set up the X11 proxy exactly as it would for
+     * an interactive shell; the remote `cat` just blocks on stdin so the
+     * channel — and the X11 forwarding it carries — stays open for the
+     * lifetime of the mosh tab. Caller (SSHTab) owns disconnecting this
+     * SSHConnection when the tab closes.
+     */
+    suspend fun openX11CarrierChannel(): Channel? = withContext(Dispatchers.IO) {
+        val currentSession = session
+        if (currentSession == null || !currentSession.isConnected) {
+            Logger.e("SSHConnection", "Cannot open X11 carrier channel: session not connected")
+            return@withContext null
+        }
+        try {
+            val exec = currentSession.openChannel("exec") as ChannelExec
+            try {
+                exec.setCommand("cat")
+                applyForwardingFlags(currentSession, exec)
+                exec.connect()
+                openChannels.add(exec)
+                Logger.i("SSHConnection", "Opened X11 carrier channel for ${profile.host}")
+                return@withContext exec
+            } catch (e: Exception) {
+                // Same pre-tracking-failure case as openShellChannel — the
+                // channel was allocated on the Session but not yet tracked
+                // in openChannels, so disconnect it directly.
+                try { exec.disconnect() } catch (_: Exception) {}
+                throw e
+            }
+        } catch (e: Exception) {
+            Logger.e("SSHConnection", "Failed to open X11 carrier channel", e)
+            return@withContext null
+        }
+    }
+
+    /**
      * Setup UserInfo for handling host key verification prompts
      * This is required for JSch to work with StrictHostKeyChecking="ask"
      */

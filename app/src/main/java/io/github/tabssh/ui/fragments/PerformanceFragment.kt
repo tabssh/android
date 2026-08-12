@@ -151,7 +151,7 @@ class PerformanceFragment : Fragment() {
                 position = XAxis.XAxisPosition.BOTTOM
                 setDrawGridLines(false)
                 setDrawLabels(false)
-                textColor = Color.GRAY
+                textColor = requireContext().getColor(R.color.on_surface_variant)
             }
             
             // Left Y-axis configuration
@@ -159,8 +159,8 @@ class PerformanceFragment : Fragment() {
                 axisMinimum = 0f
                 axisMaximum = 100f
                 setDrawGridLines(true)
-                gridColor = Color.LTGRAY
-                textColor = Color.GRAY
+                gridColor = requireContext().getColor(R.color.outline)
+                textColor = requireContext().getColor(R.color.on_surface_variant)
             }
             
             // Right Y-axis
@@ -464,9 +464,9 @@ class PerformanceFragment : Fragment() {
         textMemoryPercent.text = "${metrics.memoryUsage.usedPercent.toInt()}%"
         textMemoryDetails.text = "${metrics.memoryUsage.usedMB} MB / ${metrics.memoryUsage.totalMB} MB"
         textMemoryPercent.setTextColor(when {
-            metrics.memoryUsage.usedPercent >= 90 -> requireContext().getColor(android.R.color.holo_red_dark)
-            metrics.memoryUsage.usedPercent >= 75 -> requireContext().getColor(android.R.color.holo_orange_dark)
-            else -> requireContext().getColor(android.R.color.holo_green_dark)
+            metrics.memoryUsage.usedPercent >= 90 -> requireContext().getColor(R.color.status_error)
+            metrics.memoryUsage.usedPercent >= 75 -> requireContext().getColor(R.color.status_warning)
+            else -> requireContext().getColor(R.color.status_success)
         })
         
         // Disk with color coding
@@ -474,9 +474,9 @@ class PerformanceFragment : Fragment() {
         textDiskDetails.text = String.format("%.1f GB / %.1f GB", 
             metrics.diskUsage.usedGB, metrics.diskUsage.totalGB)
         textDiskPercent.setTextColor(when {
-            metrics.diskUsage.usedPercent >= 90 -> requireContext().getColor(android.R.color.holo_red_dark)
-            metrics.diskUsage.usedPercent >= 75 -> requireContext().getColor(android.R.color.holo_orange_dark)
-            else -> requireContext().getColor(android.R.color.holo_green_dark)
+            metrics.diskUsage.usedPercent >= 90 -> requireContext().getColor(R.color.status_error)
+            metrics.diskUsage.usedPercent >= 75 -> requireContext().getColor(R.color.status_warning)
+            else -> requireContext().getColor(R.color.status_success)
         })
         
         // Network
@@ -493,9 +493,9 @@ class PerformanceFragment : Fragment() {
         
         // Color code load1 (warning if > 1.0, critical if > 2.0)
         textLoad1min.setTextColor(when {
-            metrics.loadAverage.load1min >= 2.0 -> requireContext().getColor(android.R.color.holo_red_dark)
-            metrics.loadAverage.load1min >= 1.0 -> requireContext().getColor(android.R.color.holo_orange_dark)
-            else -> requireContext().getColor(android.R.color.holo_green_dark)
+            metrics.loadAverage.load1min >= 2.0 -> requireContext().getColor(R.color.status_error)
+            metrics.loadAverage.load1min >= 1.0 -> requireContext().getColor(R.color.status_warning)
+            else -> requireContext().getColor(R.color.status_success)
         })
         
         // Add to history
