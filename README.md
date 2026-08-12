@@ -6,9 +6,17 @@ enterprise security, hypervisor management, and cloud provider integration.
 [![Platform](https://img.shields.io/badge/Platform-Android-green.svg)](https://developer.android.com)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/tabssh/android/blob/main/LICENSE.md)
 [![Version](https://img.shields.io/github/v/release/tabssh/android?label=Version)](https://github.com/tabssh/android/releases/latest)
-[![Min SDK](https://img.shields.io/badge/Min%20SDK-21-brightgreen.svg)](https://developer.android.com/tools/releases/platforms)
+[![Min SDK](https://img.shields.io/badge/Min%20SDK-24-brightgreen.svg)](https://developer.android.com/tools/releases/platforms)
 [![Build Status](https://github.com/tabssh/android/actions/workflows/ci.yml/badge.svg)](https://github.com/tabssh/android/actions/workflows/ci.yml)
 [![Downloads](https://img.shields.io/github/downloads/tabssh/android/total?label=Downloads)](https://github.com/tabssh/android/releases)
+
+---
+
+## 📸 Screenshots
+
+| Connections | Terminal | Host Key (TOFU) | Navigation | Settings |
+|:---:|:---:|:---:|:---:|:---:|
+| ![Connections list with an active session](metadata/en-US/images/phoneScreenshots/1.png) | ![Live SSH terminal session](metadata/en-US/images/phoneScreenshots/2.png) | ![First-connect host key verification](metadata/en-US/images/phoneScreenshots/3.png) | ![Navigation drawer](metadata/en-US/images/phoneScreenshots/4.png) | ![Settings](metadata/en-US/images/phoneScreenshots/5.png) |
 
 ---
 

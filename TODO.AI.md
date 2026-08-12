@@ -29,7 +29,10 @@ Execution batches (strict file ownership, all complete except 6):
   UpdateChecker / VncDirectConnector / SpiceLoader intentionally
   untouched — non-coroutine code) — done
 - Batch 5: item 13 full-app Material/Dark-Light-System pass — done
-- Batch 6: item 14 README screenshots — OPEN, needs device/emulator
+- Batch 6: item 14 README screenshots — DONE 2026-08-12: the five
+  existing F-Droid screenshots (metadata/en-US/images/
+  phoneScreenshots/1-5.png) referenced from a new README Screenshots
+  section; no new captures needed
 Commit cadence (user instruction 2026-08-11): finish all batches, then
 one combined `make check`, then a single commit at the end. Issues found
 mid-batch get logged here immediately, fixed in their owning batch.
