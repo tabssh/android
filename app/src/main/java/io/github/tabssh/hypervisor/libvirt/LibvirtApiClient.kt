@@ -13,6 +13,7 @@ import io.github.tabssh.ssh.connection.HostKeyAction
 import io.github.tabssh.ssh.connection.HostKeyVerifier
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -311,6 +312,8 @@ class LibvirtApiClient(
             val output = runCommand("virsh domifaddr ${shQuote(domain)} 2>/dev/null")
             // Expected line: "vnet0  52:54:00:xx:xx:xx  ipv4  192.168.1.100/24"
             Regex("""(\d{1,3}(?:\.\d{1,3}){3})""").find(output)?.groupValues?.get(1)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.d(TAG, "getVmIpAddress($domain): ${e.message}")
             null
@@ -420,6 +423,8 @@ class LibvirtApiClient(
         val localPort = try {
             // lport 0 lets JSch pick a free local port and return it
             sess.setPortForwardingL(0, parsed.host, remotePort)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.i(TAG, "getSpiceDisplay($domain): port forward to ${parsed.host}:$remotePort failed: ${e.message} — VNC fallback")
             return@withContext null

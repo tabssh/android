@@ -1,6 +1,7 @@
 package io.github.tabssh.hypervisor.xcpng
 import io.github.tabssh.utils.logging.Logger
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.*
@@ -121,6 +122,8 @@ class XCPngApiClient(
         } catch (e: IOException) {
             Logger.e("XCPngAPI", "Network error during authentication: ${e.message}", e)
             false
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("XCPngAPI", "Authentication error: ${e.message}", e)
             false
@@ -156,6 +159,8 @@ class XCPngApiClient(
             
             Logger.d("XCPngAPI", "Retrieved ${vms.size} VMs")
             vms
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("XCPngAPI", "Failed to get VMs", e)
             emptyList()
@@ -167,6 +172,8 @@ class XCPngApiClient(
             xmlRpcCall(buildXmlRequest("VM.start", listOf(uuid, "false", "false")))
             Logger.i("XCPngAPI", "Started VM $uuid")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("XCPngAPI", "Failed to start VM", e)
             false
@@ -178,6 +185,8 @@ class XCPngApiClient(
             xmlRpcCall(buildXmlRequest("VM.clean_shutdown", listOf(uuid)))
             Logger.i("XCPngAPI", "Shutdown VM $uuid")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("XCPngAPI", "Failed to shutdown VM", e)
             false
@@ -189,6 +198,8 @@ class XCPngApiClient(
             xmlRpcCall(buildXmlRequest("VM.clean_reboot", listOf(uuid)))
             Logger.i("XCPngAPI", "Rebooted VM $uuid")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("XCPngAPI", "Failed to reboot VM", e)
             false
@@ -200,6 +211,8 @@ class XCPngApiClient(
             xmlRpcCall(buildXmlRequest("VM.hard_shutdown", listOf(uuid)))
             Logger.i("XCPngAPI", "Hard shutdown VM $uuid")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("XCPngAPI", "Failed to hard shutdown VM", e)
             false
@@ -215,6 +228,8 @@ class XCPngApiClient(
             xmlRpcCall(buildXmlRequest("VM.hard_reboot", listOf(uuid)))
             Logger.i("XCPngAPI", "Hard reboot VM $uuid")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("XCPngAPI", "Failed to hard reboot VM", e)
             false
@@ -383,6 +398,8 @@ class XCPngApiClient(
                 Logger.i("XCPngAPI", "Using fallback console URL: ${Logger.urlForLogging(fallbackUrl)}")
                 fallbackUrl
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("XCPngAPI", "Failed to get console URL", e)
             null
@@ -436,6 +453,8 @@ class XCPngApiClient(
                 return@withContext ConsoleInfo(url, proto.lowercase())
             }
             null
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.w("XCPngAPI", "getConsoleByProtocol($protocol) failed: ${e.message}")
             null
@@ -450,6 +469,8 @@ class XCPngApiClient(
             val response = xmlRpcCall(buildXmlRequest("VM.get_by_uuid", listOf(uuid)))
             val ref = parseStringResponse(response)
             if (ref.startsWith("OpaqueRef:")) ref else null
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("XCPngAPI", "Failed to get VM ref for UUID $uuid", e)
             null

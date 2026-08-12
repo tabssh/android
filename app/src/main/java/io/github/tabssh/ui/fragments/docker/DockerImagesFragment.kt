@@ -72,7 +72,15 @@ class DockerImagesFragment : DockerPageFragment() {
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.adapter = adapter
 
-        adapter.setOnItemClickListener { image -> showImageMenu(image) }
+        // Tap runs the most common action (inspect) in one touch; the overflow
+        // button and long-press open the full action sheet.
+        adapter.setOnItemClickListener { image ->
+            inspectImage(
+                image.repoTags.firstOrNull() ?: image.id,
+                image.repoTags.firstOrNull() ?: getString(R.string.docker_image_dangling)
+            )
+        }
+        adapter.setOnMoreClickListener { image -> showImageMenu(image) }
         adapter.setOnItemLongClickListener { image -> showImageMenu(image) }
 
         fabAction.setOnClickListener {

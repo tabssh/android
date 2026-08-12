@@ -17,13 +17,14 @@
         android:orientation="horizontal"
         android:padding="@dimen/space_md">
 
-        <!-- Type Icon -->
+        <!-- Type Icon (decorative) -->
         <TextView
             android:id="@+id/text_type_icon"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:gravity="center"
             android:textSize="32sp"
+            android:importantForAccessibility="no"
             android:text="🐳" />
 
         <!-- Info Column -->
@@ -81,16 +82,6 @@
                 android:ellipsize="end" />
 
         </LinearLayout>
-
-        <!-- Status Indicator -->
-        <View
-            android:id="@+id/view_status"
-            android:layout_width="8dp"
-            android:layout_height="8dp"
-            android:layout_gravity="center_vertical"
-            android:layout_marginStart="@dimen/space_sm"
-            android:background="@drawable/status_indicator"
-            android:backgroundTint="?attr/colorOnSurfaceVariant" />
 
         <!-- Overflow: host action sheet (same as long-press) -->
         <ImageButton

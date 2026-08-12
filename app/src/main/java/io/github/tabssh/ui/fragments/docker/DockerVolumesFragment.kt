@@ -68,7 +68,10 @@ class DockerVolumesFragment : DockerPageFragment() {
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.adapter = adapter
 
-        adapter.setOnItemClickListener { volume -> showVolumeMenu(volume) }
+        // Tap runs the most common action (inspect) in one touch; the overflow
+        // button and long-press open the full action sheet.
+        adapter.setOnItemClickListener { volume -> inspectVolume(volume) }
+        adapter.setOnMoreClickListener { volume -> showVolumeMenu(volume) }
         adapter.setOnItemLongClickListener { volume -> showVolumeMenu(volume) }
 
         fabAction.setOnClickListener { showCreateDialog() }

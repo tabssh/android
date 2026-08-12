@@ -1,6 +1,7 @@
 package io.github.tabssh.hypervisor.vmware
 import io.github.tabssh.utils.logging.Logger
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.*
@@ -84,6 +85,8 @@ class VMwareApiClient(
                     false
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("VMwareAPI", "Authentication error", e)
             false
@@ -115,6 +118,8 @@ class VMwareApiClient(
             
             Logger.d("VMwareAPI", "Retrieved ${vms.size} VMs")
             vms
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("VMwareAPI", "Failed to get VMs", e)
             emptyList()
@@ -126,6 +131,8 @@ class VMwareApiClient(
             apiPost("/vcenter/vm/$vmId/power?action=start")
             Logger.i("VMwareAPI", "Started VM $vmId")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("VMwareAPI", "Failed to start VM", e)
             false
@@ -137,6 +144,8 @@ class VMwareApiClient(
             apiPost("/vcenter/vm/$vmId/power?action=stop")
             Logger.i("VMwareAPI", "Stopped VM $vmId")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("VMwareAPI", "Failed to stop VM", e)
             false
@@ -148,6 +157,8 @@ class VMwareApiClient(
             apiPost("/vcenter/vm/$vmId/power?action=reset")
             Logger.i("VMwareAPI", "Reset VM $vmId")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("VMwareAPI", "Failed to reset VM", e)
             false
@@ -309,6 +320,8 @@ class VMwareApiClient(
                     ),
                     cookie
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.w("VMwareAPI", "vim25 Logout failed: ${e.message}")
             }
@@ -342,6 +355,8 @@ class VMwareApiClient(
                 cookie
             )
             parseHostSystemName(resp.body)?.trim()?.takeIf { it.isNotEmpty() }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.w("VMwareAPI", "HostSystem name lookup failed, falling back to $host: ${e.message}")
             null
@@ -401,6 +416,8 @@ class VMwareApiClient(
                 event = parser.next()
             }
             null
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.w("VMwareAPI", "XML parse for <$tag> failed: ${e.message}")
             null
@@ -643,6 +660,8 @@ class VMwareApiClient(
                     ),
                     cookie
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.w("VMwareAPI", "vim25 Logout failed: ${e.message}")
             }
@@ -693,6 +712,8 @@ class VMwareApiClient(
             val parser = java.text.SimpleDateFormat(format, java.util.Locale.US)
             if (cleaned.endsWith("Z")) parser.timeZone = java.util.TimeZone.getTimeZone("UTC")
             parser.parse(cleaned)?.time ?: 0L
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.w("VMwareAPI", "Unparseable xsd:dateTime '$value': ${e.message}")
             0L
@@ -709,6 +730,8 @@ class VMwareApiClient(
             apiGet("/vcenter/datacenter")
             Logger.d("VMwareAPI", "Datacenter endpoint accessible - this is vCenter")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             // Datacenter endpoint not available - this is standalone ESXi
             Logger.d("VMwareAPI", "Datacenter endpoint not available - this is standalone ESXi")

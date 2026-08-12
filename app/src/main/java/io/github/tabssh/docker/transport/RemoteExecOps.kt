@@ -75,6 +75,8 @@ class RemoteExecOps(
             return DockerResult.Success(expanded)
         } catch (e: TransportUnavailableException) {
             return DockerResult.TransportUnavailable(e.message.orEmpty(), e.detail)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             return DockerResult.Error("Failed to expand remote path", e.message)
         }
@@ -180,6 +182,8 @@ class RemoteExecOps(
             DockerResult.TransportUnavailable(DockerTransportMessages.COMPOSE_MISSING)
         } catch (e: TransportUnavailableException) {
             DockerResult.TransportUnavailable(e.message.orEmpty(), e.detail)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             DockerResult.Error("Compose detection failed", e.message)
         }
@@ -240,6 +244,8 @@ class RemoteExecOps(
             DockerResult.Success(DockerCliParsers.parseComposeLs(result.stdout))
         } catch (e: TransportUnavailableException) {
             DockerResult.TransportUnavailable(e.message.orEmpty(), e.detail)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             DockerResult.Error("compose ls failed", e.message)
         }
@@ -367,6 +373,8 @@ class RemoteExecOps(
             block(expanded)
         } catch (e: TransportUnavailableException) {
             DockerResult.TransportUnavailable(e.message.orEmpty(), e.detail)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             DockerResult.Error("Remote operation failed", e.message)
         }

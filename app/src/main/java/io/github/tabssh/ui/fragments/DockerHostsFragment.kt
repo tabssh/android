@@ -13,7 +13,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import io.github.tabssh.R
@@ -39,6 +41,7 @@ class DockerHostsFragment : Fragment() {
 
     private lateinit var app: TabSSHApplication
     private lateinit var toolbar: MaterialToolbar
+    private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyState: LinearLayout
     private lateinit var progressBar: ProgressBar
@@ -69,6 +72,7 @@ class DockerHostsFragment : Fragment() {
 
     private fun setupViews(view: View) {
         toolbar = view.findViewById(R.id.toolbar)
+        swipeRefresh = view.findViewById(R.id.swipe_refresh)
         recyclerView = view.findViewById(R.id.recycler_docker_hosts)
         emptyState = view.findViewById(R.id.empty_state)
         progressBar = view.findViewById(R.id.progress_bar)
@@ -120,6 +124,19 @@ class DockerHostsFragment : Fragment() {
         buttonAddFirst.setOnClickListener {
             openDockerHostEdit(null)
         }
+
+        // Pull-to-refresh mirrors the toolbar refresh action; the centered
+        // progress indicator is the loading feedback, so stop the spinner.
+        swipeRefresh.setColorSchemeColors(
+            MaterialColors.getColor(swipeRefresh, com.google.android.material.R.attr.colorPrimary)
+        )
+        swipeRefresh.setProgressBackgroundColorSchemeColor(
+            MaterialColors.getColor(swipeRefresh, com.google.android.material.R.attr.colorSurface)
+        )
+        swipeRefresh.setOnRefreshListener {
+            swipeRefresh.isRefreshing = false
+            loadDockerHosts()
+        }
     }
 
     private fun loadDockerHosts() {
@@ -139,11 +156,13 @@ class DockerHostsFragment : Fragment() {
 
                     adapter.updateList(list, names)
 
+                    // Toggle the swipe container, not the recycler — the
+                    // wrapper keeps its layout weight even with a GONE child.
                     if (list.isEmpty()) {
-                        recyclerView.visibility = View.GONE
+                        swipeRefresh.visibility = View.GONE
                         emptyState.visibility = View.VISIBLE
                     } else {
-                        recyclerView.visibility = View.VISIBLE
+                        swipeRefresh.visibility = View.VISIBLE
                         emptyState.visibility = View.GONE
                     }
 
@@ -155,7 +174,7 @@ class DockerHostsFragment : Fragment() {
                 progressBar.visibility = View.GONE
                 Toast.makeText(
                     requireContext(),
-                    getString(R.string.docker_error_title) + ": ${e.message}",
+                    getString(R.string.docker_error_detail_fmt, e.message),
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -263,7 +282,7 @@ class DockerHostsFragment : Fragment() {
                         if (!isAdded) return@launch
                         Toast.makeText(
                             requireContext(),
-                            getString(R.string.docker_error_title) + ": ${e.message}",
+                            getString(R.string.docker_error_detail_fmt, e.message),
                             Toast.LENGTH_SHORT
                         ).show()
                     }

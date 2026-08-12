@@ -3,6 +3,7 @@ package io.github.tabssh.ui.adapters
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -19,6 +20,7 @@ abstract class DockerSimpleRowAdapter<T> :
     private var items: List<T> = emptyList()
     private var onItemClickListener: ((T) -> Unit)? = null
     private var onItemLongClickListener: ((T) -> Unit)? = null
+    private var onMoreClickListener: ((T) -> Unit)? = null
 
     /** Stable identity for DiffUtil. */
     protected abstract fun keyOf(item: T): String
@@ -32,6 +34,10 @@ abstract class DockerSimpleRowAdapter<T> :
 
     fun setOnItemLongClickListener(listener: (T) -> Unit) {
         onItemLongClickListener = listener
+    }
+
+    fun setOnMoreClickListener(listener: (T) -> Unit) {
+        onMoreClickListener = listener
     }
 
     fun updateList(newList: List<T>) {
@@ -64,12 +70,22 @@ abstract class DockerSimpleRowAdapter<T> :
         private val textTitle: TextView = itemView.findViewById(R.id.text_title)
         private val textSubtitle: TextView = itemView.findViewById(R.id.text_subtitle)
         private val textDetail: TextView = itemView.findViewById(R.id.text_detail)
+        private val buttonMore: ImageButton = itemView.findViewById(R.id.button_more)
 
         init {
             itemView.setOnClickListener {
                 val position = bindingAdapterPosition
                 if (position != RecyclerView.NO_POSITION) {
                     onItemClickListener?.invoke(items[position])
+                }
+            }
+
+            // Visible affordance for the full action sheet; falls back to the
+            // row-tap handler when no dedicated more-listener is set.
+            buttonMore.setOnClickListener {
+                val position = bindingAdapterPosition
+                if (position != RecyclerView.NO_POSITION) {
+                    (onMoreClickListener ?: onItemClickListener)?.invoke(items[position])
                 }
             }
 

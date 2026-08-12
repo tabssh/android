@@ -53,7 +53,17 @@ object DockerActionSheet {
         var dividerAdded = false
         actions.forEach { action ->
             if (action.destructive && !dividerAdded) {
-                container.addView(MaterialDivider(context))
+                // Vertical breathing room makes the destructive group read as
+                // its own section rather than a hairline between rows.
+                val divider = MaterialDivider(context)
+                val gap = context.resources.getDimensionPixelSize(R.dimen.space_xs)
+                val params = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                params.topMargin = gap
+                params.bottomMargin = gap
+                container.addView(divider, params)
                 dividerAdded = true
             }
             val row = LayoutInflater.from(context)

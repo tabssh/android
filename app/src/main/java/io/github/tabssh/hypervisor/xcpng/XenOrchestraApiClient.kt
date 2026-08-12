@@ -1,6 +1,7 @@
 package io.github.tabssh.hypervisor.xcpng
 
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.*
@@ -230,6 +231,8 @@ class XenOrchestraApiClient(
         } catch (e: IOException) {
             Logger.d(TAG, "Network error with $version: ${e.message}")
             false
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.d(TAG, "Error with $version: ${e.message}")
             false
@@ -391,6 +394,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 emptyList()
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error listing VMs: ${e.message}", e)
             emptyList()
@@ -435,6 +440,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 null
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error getting VM $vmId: ${e.message}", e)
             null
@@ -463,6 +470,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 false
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error starting VM $vmId: ${e.message}", e)
             false
@@ -493,6 +502,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 false
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error stopping VM $vmId: ${e.message}", e)
             false
@@ -521,6 +532,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 false
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error rebooting VM $vmId: ${e.message}", e)
             false
@@ -550,6 +563,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 false
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error resetting VM $vmId: ${e.message}", e)
             false
@@ -578,6 +593,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 false
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error suspending VM $vmId: ${e.message}", e)
             false
@@ -606,6 +623,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 false
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error resuming VM $vmId: ${e.message}", e)
             false
@@ -619,6 +638,8 @@ class XenOrchestraApiClient(
         try {
             val vm = getVM(vmId)
             vm?.mainIpAddress
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error getting VM IP for $vmId: ${e.message}", e)
             null
@@ -695,6 +716,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 emptyList()
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error listing snapshots for VM $vmId: ${e.message}", e)
             emptyList()
@@ -737,6 +760,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 false
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error creating snapshot for VM $vmId: ${e.message}", e)
             false
@@ -765,6 +790,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 false
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error deleting snapshot $snapshotId: ${e.message}", e)
             false
@@ -793,6 +820,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 false
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error reverting to snapshot $snapshotId: ${e.message}", e)
             false
@@ -846,6 +875,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 emptyList()
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error listing backup jobs: ${e.message}", e)
             emptyList()
@@ -884,6 +915,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 null
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error getting backup job $jobId: ${e.message}", e)
             null
@@ -912,6 +945,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 false
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error triggering backup job $jobId: ${e.message}", e)
             false
@@ -961,6 +996,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 emptyList()
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error getting backup runs for job $jobId: ${e.message}", e)
             emptyList()
@@ -1014,6 +1051,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 emptyList()
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error listing pools: ${e.message}", e)
             emptyList()
@@ -1052,6 +1091,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 null
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error getting pool $poolId: ${e.message}", e)
             null
@@ -1111,6 +1152,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 emptyList()
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error listing hosts: ${e.message}", e)
             emptyList()
@@ -1151,6 +1194,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 null
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error getting host $hostId: ${e.message}", e)
             null
@@ -1194,6 +1239,8 @@ class XenOrchestraApiClient(
                 handleApiError(response)
                 null
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Error getting host stats for $hostId: ${e.message}", e)
             null
@@ -1445,6 +1492,8 @@ class XenOrchestraApiClient(
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.d(TAG, "Console API endpoint not available: ${e.message}")
             }
@@ -1453,6 +1502,8 @@ class XenOrchestraApiClient(
             val wsUrl = "wss://$host:$port/api/console/$vmId"
             Logger.i(TAG, "Using constructed console URL: ${Logger.urlForLogging(wsUrl)}")
             wsUrl
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             // API endpoint might not exist, use fallback
             Logger.d(TAG, "Console API not available, using fallback URL")

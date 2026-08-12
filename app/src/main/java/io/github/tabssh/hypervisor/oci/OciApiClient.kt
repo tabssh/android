@@ -1,6 +1,7 @@
 package io.github.tabssh.hypervisor.oci
 
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -132,6 +133,8 @@ class OciApiClient(
                 }
                 ok
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("OciAPI", "validateCredentials transport error", e)
             throw e
@@ -255,6 +258,8 @@ class OciApiClient(
                 return@withContext pub to priv
             }
             null to null
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.w("OciAPI", "getInstancePublicIp failed for $instanceOcid", e)
             null to null

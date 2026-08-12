@@ -7,9 +7,79 @@ is in progress.
 Source: 2026-08-06 feature-coverage audit of IDEA.md § Business logic against
 the codebase (57 spec features → 53 implemented, 4 partial, 0 missing).
 
-## Open
+## Open — 2026-08-11 user batch (merged from root TODO.md)
 
-Nothing open. The 2026-08-07 user batch (items A–E + D2 below) shipped
+Resolved dependency order: 1–3 first (connection-lifecycle cluster, likely
+shared root cause — app-breaking); 4–7 next (VNC/SPICE console UX, depends
+on stable console sessions); 8–12 (terminal input/UX fixes, independent);
+13 second-to-last (theme pass restyles final screens); 14 last (screenshots
+must show the finished UI).
+
+Execution batches (strict file ownership — one owner per batch, batches
+sequential wherever file sets share strings.xml / TabTerminalActivity /
+terminal views; agents never edit outside their batch's file set):
+- Batch 1 (in flight): docker/infra UX rework + items 1–3 fixes —
+  single commit per user instruction, gated on combined `make check`
+- Batch 2: items 4–8 (console/VNC/SPICE/mosh files + strings.xml)
+- Batch 3: items 9–12 (terminal input/view files + strings.xml)
+- Batch 4: CancellationException follow-up audit (7 files listed under
+  item 3) — may run parallel to Batch 3 (zero file overlap)
+- Batch 5: item 13 full-app Material/Dark-Light-System pass (designer,
+  runs alone — touches res/ broadly)
+- Batch 6: item 14 README screenshots (device/emulator required)
+One commit per batch after Batch 1; issues found mid-batch get logged
+here immediately, fixed in their owning batch.
+
+1. Fix SSH active connections dying when creating VNC/docker/etc connections
+   — root cause (diagnosed 2026-08-11): TabManager dual-index-space bug —
+   `closeTab(index)`/`switchToTab(index)` index the unified `tabs` list, but
+   TabTerminalActivity still derives indices from SSH-only `getAllTabs()`
+   (reconnect-dialog paths ~3123-3199), so once a VNC/console tab exists the
+   wrong tab gets closed. Fix: migrate all callers to ID-based
+   `closeTabById`/`switchToTabById` and delete the index-based API.
+   Secondary: SSHSessionManager.createConnection() disconnects pooled
+   connections in CONNECTING/AUTHENTICATING as "stale" — only treat
+   DISCONNECTED/ERROR as stale.
+2. Fix active-connections issues when creating VNC sessions
+   — same TabManager index bug as item 1 (rendering path is spec-compliant);
+   also audit active-session row tap/close handlers to dispatch by tabId
+   never positional index.
+3. Fix "job failed" errors when leaving the tab (docker/hypervisor)
+   — root cause: CancellationException swallowed by generic
+   `catch (e: Exception)` and shown as a user error. ~35 sites:
+   EngineApiTransport (2), RemoteExecOps (4), ProxmoxApiClient (13),
+   ConsoleWebSocketClient (7), HypervisorConsoleManager (9); same-family
+   audit needed in XenOrchestra/VMware/XCPng/Libvirt/Oci clients, RfbClient,
+   ConsoleStrategy. Fix: rethrow-CancellationException guard before each
+   generic catch (CliExecTransport/SshExecRunner already do it right);
+   prefer a shared runCatching-style helper to prevent recurrence.
+   FIXED 2026-08-11 (pending commit): guards added across docker transports
+   + hypervisor clients; helper `utils/coroutines/CancellationSafeCatch.kt`
+   + test. Follow-up audit still owed for generic-catch sites in files not
+   yet reviewed for this pattern: docker/DockerSessionManager.kt,
+   docker/transport/SocketRelay.kt, docker/transport/
+   TransportCapabilityDetector.kt, docker/registry/RegistryClient.kt,
+   docker/registry/UpdateChecker.kt, hypervisor/vnc/VncDirectConnector.kt,
+   hypervisor/spice/SpiceLoader.kt — check each for coroutine-reachable
+   generic catches missing the CancellationException rethrow.
+4. Fix VNC/SPICE keyboard not working
+5. Fix VNC console issues
+6. Add ability to close VNC/SPICE tabs
+7. Fix terminology for vnc (vnc/spice/console) and terminal (ssh/mosh/telnet)
+8. Fix mosh X11 forwarding, lastlog
+9. Fix page up/down removing a space — e.g. `{command} ....` becomes
+   `{command}....`, `git -C ....` becomes `git C ....` (command corruption)
+10. Fix PRE key disabling for all connections when it is only per-connection —
+    remove "Disable PRE key", rename "OFF (this connection)" to
+    "Disable PRE key"
+11. Remove the padding from top/bottom of terminal/VNC on keyboard toggle
+12. Add magnify to make selecting text easier
+13. Ensure entire UI/UX uses Material Design and supports Dark/Light/System
+14. Add screenshots to README.md
+
+## Previous batch status
+
+The 2026-08-07 user batch (items A–E + D2 below) shipped
 across commits 632203855a18 (batch), 2cf1c3dcc31a (designer pass), and
 87220911946e (transport-tier failure logging); its follow-up findings
 shipped 2026-08-08 as 9458ed91ac26 (sync_port_forwards backup pref),

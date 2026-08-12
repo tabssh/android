@@ -26,16 +26,21 @@ import kotlinx.coroutines.launch
  *
  * VNC-tab-swipe integration step 3 (AI.md §11.7.2 / TODO.AI.md): the
  * backing store is now the sealed [Tab] type so a future [VncTab] can live
- * in the same ordered list as [SSHTab]s. This step is deliberately
- * additive — every pre-existing accessor (`getActiveTab()`, `getAllTabs()`,
- * `getTab()`, `tabsFlow`, `TabManagerListener`) keeps its original
- * SSH-only signature and behavior, filtered from the sealed list, so none
- * of TabTerminalActivity/SessionPersistenceManager/ConnectionLauncher/
- * TaskerWorker need to change. New sealed-aware accessors
+ * in the same ordered list as [SSHTab]s. Every pre-existing accessor
+ * (`getActiveTab()`, `getAllTabs()`, `getTab()`, `tabsFlow`,
+ * `TabManagerListener`) keeps its original SSH-only signature and
+ * behavior, filtered from the sealed list. New sealed-aware accessors
  * (`getAllTabsSealed()`, `getActiveTabSealed()`, `allTabsFlow`,
- * `createVncTab()`, `createConsoleTab()`) are added alongside for steps
- * 4-6 to adopt incrementally as VNC/console rendering/gating actually
- * lands.
+ * `createVncTab()`, `createConsoleTab()`) live alongside them.
+ *
+ * IMPORTANT: [getAllTabs] is filtered, so a position in that list is NOT
+ * a valid index into the unified `tabs` list once any VNC/console tab
+ * exists — feeding one into [closeTab]/[switchToTab] closes or switches
+ * to the wrong tab (dual-index-space bug, fixed by routing every
+ * SSH-only-derived caller through [closeTabById]/[switchToTabById]
+ * instead). Only use [closeTab]/[switchToTab] with an index that already
+ * came from the unified list (`getAllTabsSealed()`, `getActiveTabIndex()`,
+ * or a `ViewPager2` position).
  */
 class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int = 10) {
 
@@ -326,7 +331,12 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     }
 
     /**
-     * Close tab by index
+     * Close tab by index in the unified (sealed) list order.
+     *
+     * CAVEAT: `index` must come from the unified list ([getAllTabsSealed],
+     * [getActiveTabIndex], or a `ViewPager2` position) — never from the
+     * SSH-only [getAllTabs]. A tab id derived from `getAllTabs()` must go
+     * through [closeTabById] instead.
      */
     fun closeTab(index: Int) = synchronized(tabsLock) {
         if (index in 0 until tabs.size) {
@@ -388,6 +398,24 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     }
 
     /**
+     * Switch to a tab by its stable [Tab.tabId] (whichever kind it is).
+     * Lookup and switch run atomically under [tabsLock] so a concurrent
+     * createTab/closeTab/moveTab can't shift the index between the find
+     * and the switch — mirrors [closeTabById]. Callers that only ever had
+     * an SSH-only-filtered list (e.g. [getAllTabs]) must resolve the tab
+     * id first and switch through here rather than deriving a positional
+     * index and calling [switchToTab] directly.
+     *
+     * @return true if a tab with that id was found and switched to.
+     */
+    fun switchToTabById(tabId: String): Boolean = synchronized(tabsLock) {
+        val index = tabs.indexOfFirst { it.tabId == tabId }
+        if (index < 0) return false
+        switchToTab(index)
+        true
+    }
+
+    /**
      * Get active tab. SSH-only — returns `null` if the active tab is a VNC
      * tab. See [getActiveTabSealed] for the VNC-aware equivalent.
      */
@@ -403,14 +431,13 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     /**
      * Get all tabs. SSH-only, in unified-list order.
      *
-     * CAVEAT: once VNC tabs are actually created (step 6), the index of a
-     * tab in this filtered list no longer matches its index in the
-     * unified `ViewPager2`/`tabs` order — callers that derive a
+     * CAVEAT: now that VNC/console tabs are actually created, the index of
+     * a tab in this filtered list no longer matches its index in the
+     * unified `ViewPager2`/`tabs` order. Never derive a
      * `ViewPager2`/`switchToTab`/`getTab`/`closeTab` index from
-     * `getAllTabs().indexOfFirst { ... }` must migrate to
-     * [getAllTabsSealed] first. Harmless today: `createVncTab` has no
-     * caller yet, so `tabs` only ever contains `Tab.Ssh` entries and the
-     * two index spaces are identical.
+     * `getAllTabs().indexOfFirst { ... }` — resolve the tab id and use
+     * [switchToTabById]/[closeTabById], or switch to [getAllTabsSealed]
+     * first if a unified-list index is genuinely needed.
      */
     fun getAllTabs(): List<SSHTab> = sshTabs()
 

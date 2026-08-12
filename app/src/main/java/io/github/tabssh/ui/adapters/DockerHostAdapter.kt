@@ -1,5 +1,6 @@
 package io.github.tabssh.ui.adapters
 
+import android.text.format.DateUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -9,9 +10,6 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
 import io.github.tabssh.storage.database.entities.DockerHost
-import java.text.SimpleDateFormat
-import java.util.*
-import java.util.concurrent.TimeUnit
 
 /**
  * Docker host list rows for DockerHostsFragment (PLAN.AI.md step 19).
@@ -117,37 +115,18 @@ class DockerHostAdapter(
                 ?: host.socketPath
 
             if (host.lastConnected > 0) {
-                val relativeTime = getRelativeTime(host.lastConnected)
+                // Localized relative time ("5 minutes ago") from the platform
+                // formatter — replaces hand-built English-only strings.
+                val relativeTime = DateUtils.getRelativeTimeSpanString(
+                    host.lastConnected,
+                    System.currentTimeMillis(),
+                    DateUtils.MINUTE_IN_MILLIS
+                )
                 textLastConnected.text =
                     itemView.context.getString(R.string.docker_last_used_fmt, relativeTime)
             } else {
                 textLastConnected.text =
                     itemView.context.getString(R.string.docker_never_connected)
-            }
-        }
-
-        private fun getRelativeTime(timestamp: Long): String {
-            val now = System.currentTimeMillis()
-            val diff = now - timestamp
-
-            return when {
-                diff < TimeUnit.MINUTES.toMillis(1) -> "just now"
-                diff < TimeUnit.HOURS.toMillis(1) -> {
-                    val minutes = TimeUnit.MILLISECONDS.toMinutes(diff)
-                    "$minutes ${if (minutes == 1L) "minute" else "minutes"} ago"
-                }
-                diff < TimeUnit.DAYS.toMillis(1) -> {
-                    val hours = TimeUnit.MILLISECONDS.toHours(diff)
-                    "$hours ${if (hours == 1L) "hour" else "hours"} ago"
-                }
-                diff < TimeUnit.DAYS.toMillis(7) -> {
-                    val days = TimeUnit.MILLISECONDS.toDays(diff)
-                    "$days ${if (days == 1L) "day" else "days"} ago"
-                }
-                else -> {
-                    val formatter = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
-                    formatter.format(Date(timestamp))
-                }
             }
         }
     }

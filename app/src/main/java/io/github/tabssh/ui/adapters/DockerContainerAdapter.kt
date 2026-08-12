@@ -152,24 +152,38 @@ class DockerContainerAdapter(
             // Primary lifecycle button follows state; exec only exists while running.
             val running = container.state == "running"
             val paused = container.state == "paused"
-            when {
+            val primaryLabel = when {
                 running -> {
                     buttonPrimary.setImageResource(R.drawable.ic_stop)
-                    buttonPrimary.contentDescription =
-                        context.getString(R.string.docker_action_stop)
+                    context.getString(R.string.docker_action_stop)
                 }
                 paused -> {
                     buttonPrimary.setImageResource(R.drawable.ic_play)
-                    buttonPrimary.contentDescription =
-                        context.getString(R.string.docker_action_unpause)
+                    context.getString(R.string.docker_action_unpause)
                 }
                 else -> {
                     buttonPrimary.setImageResource(R.drawable.ic_play)
-                    buttonPrimary.contentDescription =
-                        context.getString(R.string.docker_action_start)
+                    context.getString(R.string.docker_action_start)
                 }
             }
             buttonTerminal.visibility = if (running) View.VISIBLE else View.GONE
+
+            // TalkBack: scope every action button to its container so rows do
+            // not all announce identical "Stop" / "Logs" / "More actions".
+            buttonPrimary.contentDescription =
+                context.getString(R.string.docker_row_action_desc_fmt, primaryLabel, name)
+            buttonLogs.contentDescription = context.getString(
+                R.string.docker_row_action_desc_fmt,
+                context.getString(R.string.docker_action_logs), name
+            )
+            buttonTerminal.contentDescription = context.getString(
+                R.string.docker_row_action_desc_fmt,
+                context.getString(R.string.docker_action_terminal), name
+            )
+            buttonMore.contentDescription = context.getString(
+                R.string.docker_row_action_desc_fmt,
+                context.getString(R.string.docker_more_actions_desc), name
+            )
 
             textUpdateBadge.visibility =
                 if (name in pendingUpdateNames) View.VISIBLE else View.GONE

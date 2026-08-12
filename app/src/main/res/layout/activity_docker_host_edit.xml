@@ -45,6 +45,15 @@
 
             </com.google.android.material.textfield.TextInputLayout>
 
+            <!-- Section: Connection -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_lg"
+                android:text="@string/docker_host_section_connection"
+                android:textAppearance="?attr/textAppearanceTitleSmall"
+                android:textColor="?attr/colorPrimary" />
+
             <!-- Endpoint mode: saved SSH connection vs custom endpoint -->
             <RadioGroup
                 android:id="@+id/radio_mode"
@@ -246,6 +255,33 @@
 
             </LinearLayout>
 
+            <!-- Test Transport: sits with the connection fields it verifies -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_test_transport"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_md"
+                android:text="@string/docker_test_transport"
+                style="@style/Widget.TabSSH.Button.Outlined" />
+
+            <!-- Test Progress -->
+            <ProgressBar
+                android:id="@+id/progress_test"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_sm"
+                android:visibility="gone" />
+
+            <!-- Section: Docker settings -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_lg"
+                android:text="@string/docker_host_section_docker"
+                android:textAppearance="?attr/textAppearanceTitleSmall"
+                android:textColor="?attr/colorPrimary" />
+
             <!-- Socket Path -->
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
@@ -316,6 +352,15 @@
 
             </com.google.android.material.textfield.TextInputLayout>
 
+            <!-- Section: Image update checks -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_lg"
+                android:text="@string/docker_host_section_updates"
+                android:textAppearance="?attr/textAppearanceTitleSmall"
+                android:textColor="?attr/colorPrimary" />
+
             <!-- Update Checks: per-host override of the twice-daily default -->
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/switch_update_check"
@@ -360,24 +405,6 @@
                     android:gravity="top" />
 
             </com.google.android.material.textfield.TextInputLayout>
-
-            <!-- Test Transport -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/button_test_transport"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_lg"
-                android:text="@string/docker_test_transport"
-                style="@style/Widget.TabSSH.Button.Outlined" />
-
-            <!-- Test Progress -->
-            <ProgressBar
-                android:id="@+id/progress_test"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
-                android:layout_marginTop="@dimen/space_sm"
-                android:visibility="gone" />
 
         </LinearLayout>
 

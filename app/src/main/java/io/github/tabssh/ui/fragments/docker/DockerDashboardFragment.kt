@@ -109,9 +109,21 @@ class DockerDashboardFragment : DockerPageFragment() {
         cardDisk.visibility = View.VISIBLE
         containerDiskRows.removeAllViews()
         val ctx = requireContext()
+        // Match the XML data rows: 13sp, theme onSurface, space_xs between rows.
+        val rowColor = com.google.android.material.color.MaterialColors.getColor(
+            containerDiskRows, com.google.android.material.R.attr.colorOnSurface
+        )
+        val rowSpacing = resources.getDimensionPixelSize(R.dimen.space_xs)
         disk.rows.forEach { row ->
             val text = TextView(ctx)
             text.textSize = 13f
+            text.setTextColor(rowColor)
+            val params = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            params.topMargin = rowSpacing
+            text.layoutParams = params
             text.text = getString(
                 R.string.docker_dashboard_disk_row_fmt,
                 row.type,

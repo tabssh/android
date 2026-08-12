@@ -20,15 +20,22 @@
             android:elevation="4dp"
             app:title="@string/docker_tab_title" />
 
-        <!-- Docker Host List -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/recycler_docker_hosts"
+        <!-- Docker Host List with pull-to-refresh -->
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/swipe_refresh"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1"
-            android:clipToPadding="false"
-            android:padding="@dimen/space_md"
-            android:scrollbars="vertical" />
+            android:layout_weight="1">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recycler_docker_hosts"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:padding="@dimen/space_md"
+                android:scrollbars="vertical" />
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
         <!-- Empty State -->
         <LinearLayout
@@ -46,6 +53,7 @@
                 android:layout_height="wrap_content"
                 android:text="🐳"
                 android:textSize="64sp"
+                android:importantForAccessibility="no"
                 android:paddingBottom="@dimen/space_md" />
 
             <TextView

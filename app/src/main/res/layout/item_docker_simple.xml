@@ -14,38 +14,61 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="@dimen/space_md">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="@dimen/space_md"
+        android:paddingEnd="@dimen/space_sm"
+        android:paddingTop="@dimen/space_md"
+        android:paddingBottom="@dimen/space_md">
 
-        <TextView
-            android:id="@+id/text_title"
-            android:layout_width="match_parent"
+        <LinearLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="?attr/colorOnSurface"
-            android:maxLines="1"
-            android:ellipsize="middle" />
+            android:layout_weight="1"
+            android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/text_subtitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textSize="13sp"
-            android:textColor="?attr/colorOnSurfaceVariant"
-            android:maxLines="1"
-            android:ellipsize="end" />
+            <TextView
+                android:id="@+id/text_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="?attr/colorOnSurface"
+                android:maxLines="1"
+                android:ellipsize="middle" />
 
-        <TextView
-            android:id="@+id/text_detail"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textSize="12sp"
-            android:textColor="?attr/colorOnSurfaceVariant"
-            android:maxLines="2"
-            android:ellipsize="end" />
+            <TextView
+                android:id="@+id/text_subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/text_detail"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textSize="12sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+        </LinearLayout>
+
+        <!-- Overflow: opens the full action sheet (row tap runs inspect directly) -->
+        <ImageButton
+            android:id="@+id/button_more"
+            android:layout_width="@dimen/min_touch_target"
+            android:layout_height="@dimen/min_touch_target"
+            android:layout_marginStart="@dimen/space_sm"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/docker_more_actions_desc"
+            android:src="@drawable/ic_more_vert"
+            app:tint="?attr/colorOnSurfaceVariant" />
 
     </LinearLayout>
 

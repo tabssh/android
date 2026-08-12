@@ -154,6 +154,8 @@ class EngineApiTransport(
             DockerResult.TransportUnavailable(e.message.orEmpty(), e.detail)
         } catch (e: java.io.IOException) {
             DockerResult.TransportUnavailable(context, e.message)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             DockerResult.Error(context, e.message)
         }
@@ -376,6 +378,8 @@ class EngineApiTransport(
             DockerResult.TransportUnavailable(e.message.orEmpty(), e.detail)
         } catch (e: java.io.IOException) {
             DockerResult.TransportUnavailable("Failed to read engine version", e.message)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             DockerResult.Error("Failed to read engine version", e.message)
         }

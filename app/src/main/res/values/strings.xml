@@ -372,6 +372,9 @@
     <string name="docker_last_used_fmt">Last used: %1$s</string>
     <string name="docker_host_edit_title_add">Add Docker Host</string>
     <string name="docker_host_edit_title_edit">Edit Docker Host</string>
+    <string name="docker_host_section_connection">Connection</string>
+    <string name="docker_host_section_docker">Docker settings</string>
+    <string name="docker_host_section_updates">Image update checks</string>
     <string name="docker_host_name_hint">Name (optional)</string>
     <string name="docker_host_name_helper">Defaults to the connection name</string>
     <string name="docker_host_connection_hint">SSH connection</string>
@@ -415,6 +418,7 @@
     <string name="docker_manager_tab_networks">Networks</string>
     <string name="docker_manager_tab_stacks">Stacks</string>
     <string name="docker_menu_registry_credentials">Registry credentials</string>
+    <string name="docker_menu_prune_group">Free up space</string>
     <string name="docker_menu_prune_images">Prune unused images</string>
     <string name="docker_menu_prune_volumes">Prune unused volumes</string>
     <string name="docker_menu_prune_networks">Prune unused networks</string>
@@ -689,6 +693,8 @@
     <string name="docker_policy_none">None</string>
     <string name="docker_policy_saved">Policy saved</string>
     <string name="docker_error_title">Docker error</string>
+    <string name="docker_error_detail_fmt">Docker error: %1$s</string>
+    <string name="docker_row_action_desc_fmt">%1$s: %2$s</string>
     <string name="docker_permission_title">Permission denied</string>
     <string name="docker_msg_socket_permission">Permission denied on the Docker socket. On the host, add your SSH user to the docker group (sudo usermod -aG docker &lt;user&gt;), then log out and back in — or connect as a user that is already in the docker group. Afterwards use \"Retest transport\" on this host.</string>
     <string name="docker_msg_streamlocal_denied">The SSH server refused the unix-socket forward. Ensure sshd_config has BOTH AllowTcpForwarding yes AND AllowStreamLocalForwarding yes (AllowTcpForwarding no silently blocks socket forwards too), then restart sshd and use \"Retest transport\".</string>

@@ -2,6 +2,7 @@ package io.github.tabssh.hypervisor.proxmox
 import io.github.tabssh.hypervisor.spice.SpiceConnectionParams
 import io.github.tabssh.utils.logging.Logger
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.*
@@ -103,6 +104,8 @@ class ProxmoxApiClient(
                     false
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Authentication error", e)
             false
@@ -130,6 +133,8 @@ class ProxmoxApiClient(
             
             Logger.d("ProxmoxAPI", "Retrieved ${nodes.size} nodes")
             nodes
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to get nodes", e)
             emptyList()
@@ -160,6 +165,8 @@ class ProxmoxApiClient(
             
             Logger.d("ProxmoxAPI", "Retrieved ${vms.size} VMs")
             vms
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to get VMs", e)
             emptyList()
@@ -172,6 +179,8 @@ class ProxmoxApiClient(
             apiPost(endpoint)
             Logger.i("ProxmoxAPI", "Started VM $vmid")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to start VM", e)
             false
@@ -184,6 +193,8 @@ class ProxmoxApiClient(
             apiPost(endpoint)
             Logger.i("ProxmoxAPI", "Stopped VM $vmid")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to stop VM", e)
             false
@@ -196,6 +207,8 @@ class ProxmoxApiClient(
             apiPost(endpoint)
             Logger.i("ProxmoxAPI", "Shutdown VM $vmid")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to shutdown VM", e)
             false
@@ -243,11 +256,15 @@ class ProxmoxApiClient(
                             }
                         }
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Logger.d("ProxmoxAPI", "Guest agent not available for VM $vmid: ${e.message}")
                 }
             }
             null
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.d("ProxmoxAPI", "Failed to get IP for VM $vmid", e)
             null
@@ -260,6 +277,8 @@ class ProxmoxApiClient(
             apiPost(endpoint)
             Logger.i("ProxmoxAPI", "Rebooted VM $vmid")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to reboot VM", e)
             false
@@ -276,6 +295,8 @@ class ProxmoxApiClient(
             apiPost(endpoint)
             Logger.i("ProxmoxAPI", "Reset VM $vmid (hard reset)")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to reset VM", e)
             false
@@ -315,6 +336,8 @@ class ProxmoxApiClient(
 
             Logger.d("ProxmoxAPI", "Retrieved ${snapshots.size} snapshots for VM $vmid")
             snapshots
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to list snapshots", e)
             emptyList()
@@ -330,6 +353,8 @@ class ProxmoxApiClient(
             apiPost(endpoint, mapOf("snapname" to name))
             Logger.i("ProxmoxAPI", "Created snapshot '$name' for VM $vmid")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to create snapshot", e)
             false
@@ -347,6 +372,8 @@ class ProxmoxApiClient(
             apiPost(endpoint)
             Logger.i("ProxmoxAPI", "Rolled back VM $vmid to snapshot '$name'")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to rollback snapshot", e)
             false
@@ -364,6 +391,8 @@ class ProxmoxApiClient(
             apiDelete(endpoint)
             Logger.i("ProxmoxAPI", "Deleted snapshot '$name' for VM $vmid")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to delete snapshot", e)
             false
@@ -451,6 +480,8 @@ class ProxmoxApiClient(
                     ?: "termproxy: serial interface not defined"
                 throw IOException(errMsg)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to get termproxy", e)
             throw e
@@ -506,6 +537,8 @@ class ProxmoxApiClient(
                 Logger.e("ProxmoxAPI", "No data in vncproxy response")
                 null
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to get vncproxy", e)
             null
@@ -658,6 +691,8 @@ class ProxmoxApiClient(
                 title = title,
                 proxy = proxy,
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Failed to get spiceproxy", e)
             null

@@ -8,6 +8,7 @@ import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.hypervisor.xcpng.XenOrchestraApiClient
 import io.github.tabssh.terminal.TermuxBridge
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -201,6 +202,8 @@ class HypervisorConsoleManager {
         val chain = ConsoleStrategyChain(strategies) { listener?.onStrategyAttempt(it) }
         val resolved = try {
             chain.resolve()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "All Proxmox console strategies exhausted for $vmName (vmid=$vmid)", e)
             // Final exception is whichever the last-tried strategy raised.
@@ -356,6 +359,8 @@ class HypervisorConsoleManager {
                     hypervisorType = HypervisorType.PROXMOX
                 )
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to connect Proxmox console", e)
             listener?.onError(e.message ?: "Connection failed")
@@ -405,6 +410,8 @@ class HypervisorConsoleManager {
             ), onAttempt = { listener?.onStrategyAttempt(it) })
             val consoleInfo = try {
                 xcpChain.resolve()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "All XCP-ng console strategies exhausted for $vmName", e)
                 listener?.onError(e.message?.ifBlank { null } ?: "Failed to get console URL from XCP-ng")
@@ -487,6 +494,8 @@ class HypervisorConsoleManager {
                     hypervisorType = HypervisorType.XCPNG
                 )
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to connect XCP-ng console", e)
             listener?.onError(e.message ?: "Connection failed")
@@ -525,6 +534,8 @@ class HypervisorConsoleManager {
             ), onAttempt = { listener?.onStrategyAttempt(it) })
             val consoleUrl = try {
                 xoChain.resolve()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "All Xen Orchestra console strategies exhausted for $vmName", e)
                 listener?.onError("Failed to get console URL from Xen Orchestra")
@@ -603,6 +614,8 @@ class HypervisorConsoleManager {
                 hypervisorType = HypervisorType.XEN_ORCHESTRA,
                 rfbClient = rfbClient
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to connect XO console", e)
             listener?.onError(e.message ?: "Connection failed")
@@ -635,6 +648,8 @@ class HypervisorConsoleManager {
         Logger.i(TAG, "VNC fallback: requesting vncproxy ticket for $vmName")
         val vnc = try {
             client.getVNCProxy(node, vmid, type)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "VNC fallback: getVNCProxy threw", e)
             null
@@ -749,6 +764,8 @@ class HypervisorConsoleManager {
         Logger.i(TAG, "reconnectGraphicalWithoutResize: requesting fresh vncproxy ticket for $vmName")
         val vnc = try {
             withContext(Dispatchers.IO) { client.getVNCProxy(node, vmid, type) }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "reconnectGraphicalWithoutResize: getVNCProxy threw", e)
             listener?.onError("Reconnect failed — could not obtain a new VNC ticket from Proxmox.")

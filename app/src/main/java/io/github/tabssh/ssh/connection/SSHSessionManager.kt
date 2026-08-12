@@ -70,27 +70,44 @@ class SSHSessionManager(private val context: Context) {
         // is actually alive — after a remote-side EOF the state field can lag
         // behind, leaving us with a "CONNECTED" wrapper around a dead session.
         connectionPool[profile.id]?.let { existingConnection ->
-            val stateOk = existingConnection.connectionState.value == ConnectionState.CONNECTED
+            val state = existingConnection.connectionState.value
+            val stateOk = state == ConnectionState.CONNECTED
             val sessionOk = existingConnection.isConnected()
-            if (stateOk && sessionOk) {
-                Logger.d("SSHSessionManager", "Reusing existing connection for ${profile.id}")
-                activeConnections[profile.id] = existingConnection
-                updateConnectionStates()
-                return existingConnection
-            } else {
-                Logger.d("SSHSessionManager", "Discarding stale pool entry (stateOk=$stateOk, sessionOk=$sessionOk)")
-                // Tear the stale wrapper down before dropping the references.
-                // disconnect() cancels its NetworkAwareReconnector and closes
-                // any lingering channels; without this the evicted connection's
-                // reconnect loop keeps running detached, racing the fresh
-                // connection created just below for the same profile.
-                try {
-                    existingConnection.disconnect()
-                } catch (e: Exception) {
-                    Logger.w("SSHSessionManager", "Failed to disconnect stale pool entry", e)
+            when {
+                stateOk && sessionOk -> {
+                    Logger.d("SSHSessionManager", "Reusing existing connection for ${profile.id}")
+                    activeConnections[profile.id] = existingConnection
+                    updateConnectionStates()
+                    return existingConnection
                 }
-                connectionPool.remove(profile.id)
-                activeConnections.remove(profile.id)
+                state == ConnectionState.CONNECTING || state == ConnectionState.AUTHENTICATING -> {
+                    // Mid-handshake — isConnected() is false by definition until
+                    // CONNECTED, so it can't be used to decide staleness here.
+                    // Tearing this down (the bug this branch fixes) kills a live
+                    // SSH session that just hasn't finished authenticating yet,
+                    // e.g. while a VNC/docker tab's createConnection races in
+                    // for the same profile. Reuse the same in-flight connection
+                    // object; the caller awaits its connectionState like normal.
+                    Logger.d("SSHSessionManager", "Reusing in-flight connection for ${profile.id} (state=$state)")
+                    activeConnections[profile.id] = existingConnection
+                    updateConnectionStates()
+                    return existingConnection
+                }
+                else -> {
+                    Logger.d("SSHSessionManager", "Discarding stale pool entry (state=$state, sessionOk=$sessionOk)")
+                    // Tear the stale wrapper down before dropping the references.
+                    // disconnect() cancels its NetworkAwareReconnector and closes
+                    // any lingering channels; without this the evicted connection's
+                    // reconnect loop keeps running detached, racing the fresh
+                    // connection created just below for the same profile.
+                    try {
+                        existingConnection.disconnect()
+                    } catch (e: Exception) {
+                        Logger.w("SSHSessionManager", "Failed to disconnect stale pool entry", e)
+                    }
+                    connectionPool.remove(profile.id)
+                    activeConnections.remove(profile.id)
+                }
             }
         }
         

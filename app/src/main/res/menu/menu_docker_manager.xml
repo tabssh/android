@@ -18,19 +18,29 @@
         android:title="@string/docker_menu_registry_credentials"
         app:showAsAction="never" />
 
+    <!-- Destructive prunes live in their own submenu: options menus render no
+         dividers, so a named group is the only real visual separation -->
     <item
-        android:id="@+id/action_prune_images"
-        android:title="@string/docker_menu_prune_images"
-        app:showAsAction="never" />
+        android:id="@+id/menu_prune_group"
+        android:title="@string/docker_menu_prune_group"
+        app:showAsAction="never">
 
-    <item
-        android:id="@+id/action_prune_volumes"
-        android:title="@string/docker_menu_prune_volumes"
-        app:showAsAction="never" />
+        <menu>
 
-    <item
-        android:id="@+id/action_prune_networks"
-        android:title="@string/docker_menu_prune_networks"
-        app:showAsAction="never" />
+            <item
+                android:id="@+id/action_prune_images"
+                android:title="@string/docker_menu_prune_images" />
+
+            <item
+                android:id="@+id/action_prune_volumes"
+                android:title="@string/docker_menu_prune_volumes" />
+
+            <item
+                android:id="@+id/action_prune_networks"
+                android:title="@string/docker_menu_prune_networks" />
+
+        </menu>
+
+    </item>
 
 </menu>

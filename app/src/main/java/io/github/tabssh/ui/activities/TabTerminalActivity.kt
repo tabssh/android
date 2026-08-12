@@ -757,14 +757,17 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
 
                 rowHolder.row.setOnClickListener {
-                    // Resolve the live index by tabId — tabs may have been closed
-                    // or reordered while the sheet was open, so the snapshot position
-                    // could point to the wrong tab in the live list.
-                    val liveIdx = tabManager.getAllTabs()
-                        .indexOfFirst { it.tabId == tab.tabId }
-                    if (liveIdx >= 0) {
-                        tabManager.setActiveTab(liveIdx)
-                        switchToTab(liveIdx)
+                    // Switch by tabId — tabs may have been closed or reordered
+                    // while the sheet was open, so the snapshot position could
+                    // point to the wrong tab in the live list. tabId also
+                    // avoids the SSH-only/unified dual-index-space bug: this
+                    // row's `tabs` snapshot came from getAllTabs() (SSH-only),
+                    // which is not a valid unified-list index once VNC/console
+                    // tabs exist.
+                    if (tabManager.switchToTabById(tab.tabId)) {
+                        val liveIdx = tabManager.getAllTabsSealed()
+                            .indexOfFirst { it.tabId == tab.tabId }
+                        if (liveIdx >= 0) switchToTab(liveIdx)
                     }
                     bottomSheet.dismiss()
                 }
@@ -2061,11 +2064,13 @@ class TabTerminalActivity : AppCompatActivity() {
                             it.profile.id == profile.id && it.isConnected()
                         }
                         if (existing != null) {
-                            val idx = tabManager.getAllTabs().indexOf(existing)
-                            Logger.i("TabTerminalActivity", "Surfacing live tab idx=$idx for ${profile.name}")
-                            if (idx >= 0) {
-                                tabManager.setActiveTab(idx)
-                                switchToTab(idx)
+                            // Switch by tabId, not a position from the SSH-only
+                            // getAllTabs() — that position is not a valid index
+                            // into the unified list once VNC/console tabs exist.
+                            Logger.i("TabTerminalActivity", "Surfacing live tab ${existing.tabId} for ${profile.name}")
+                            if (tabManager.switchToTabById(existing.tabId)) {
+                                val idx = tabManager.getAllTabsSealed().indexOfFirst { it.tabId == existing.tabId }
+                                if (idx >= 0) switchToTab(idx)
                             }
                         } else {
                             Logger.w(
@@ -2105,12 +2110,14 @@ class TabTerminalActivity : AppCompatActivity() {
                         "Reattaching: ${liveTabs.size} live tab(s) for ${profile.getDisplayName()}"
                     )
                     if (liveTabs.size == 1) {
-                        // Single live tab — surface it directly.
-                        val idx = tabManager.getAllTabs().indexOf(liveTabs[0])
+                        // Single live tab — surface it directly by tabId, not
+                        // a position from the SSH-only getAllTabs() (not a
+                        // valid unified-list index once VNC/console tabs exist).
+                        val liveTabId = liveTabs[0].tabId
                         runOnUiThread {
-                            if (idx >= 0) {
-                                tabManager.setActiveTab(idx)
-                                switchToTab(idx)
+                            if (tabManager.switchToTabById(liveTabId)) {
+                                val idx = tabManager.getAllTabsSealed().indexOfFirst { it.tabId == liveTabId }
+                                if (idx >= 0) switchToTab(idx)
                             }
                             if (!isRecreated) {
                                 android.widget.Toast.makeText(
@@ -2138,11 +2145,14 @@ class TabTerminalActivity : AppCompatActivity() {
                         }
                     }
                     if (chosen != null) {
-                        val idx = tabManager.getAllTabs().indexOf(chosen)
+                        // Surface the chosen tab by id — see the single-live-tab
+                        // branch above for why an index from getAllTabs() can't
+                        // be used here.
+                        val chosenTabId = chosen.tabId
                         runOnUiThread {
-                            if (idx >= 0) {
-                                tabManager.setActiveTab(idx)
-                                switchToTab(idx)
+                            if (tabManager.switchToTabById(chosenTabId)) {
+                                val idx = tabManager.getAllTabsSealed().indexOfFirst { it.tabId == chosenTabId }
+                                if (idx >= 0) switchToTab(idx)
                             }
                         }
                         return
@@ -2336,9 +2346,12 @@ class TabTerminalActivity : AppCompatActivity() {
                         // Auto-switch to the newly connected tab so the user lands
                         // on it immediately. createTab() already advanced the
                         // TabManager's activeTabIndex; we just need to reflect that
-                        // in the UI. Use indexOf(tab) rather than getActiveTabIndex()
-                        // in case another tab was added concurrently.
-                        val newIdx = tabManager.getAllTabs().indexOf(tab)
+                        // in the UI. Resolve the tab's position in the unified list
+                        // by tabId rather than getActiveTabIndex() (in case another
+                        // tab was added concurrently) or getAllTabs().indexOf(tab)
+                        // (SSH-only list — not a valid unified-list index once
+                        // VNC/console tabs exist).
+                        val newIdx = tabManager.getAllTabsSealed().indexOfFirst { it.tabId == tab.tabId }
                         runOnUiThread {
                             if (newIdx >= 0) switchToTab(newIdx)
                         }
@@ -3071,14 +3084,10 @@ class TabTerminalActivity : AppCompatActivity() {
                             "Tab ${tab.tabId} disconnected (exit=$exitStatus)")
                         runOnUiThread {
                             if (exitStatus == 0) {
-                                val idx = tabManager.getAllTabs()
-                                    .indexOfFirst { it.tabId == tab.tabId }
-                                if (idx >= 0) {
-                                    // closeTab fires onTabClosed which calls finish()
-                                    // when tab count reaches 0 — don't call finish()
-                                    // here too or we get a double-finish race.
-                                    tabManager.closeTab(idx)
-                                }
+                                // closeTabById fires onTabClosed which calls finish()
+                                // when tab count reaches 0 — don't call finish()
+                                // here too or we get a double-finish race.
+                                tabManager.closeTabById(tab.tabId)
                             } else {
                                 showReconnectDialog(tab)
                             }
@@ -3120,8 +3129,7 @@ class TabTerminalActivity : AppCompatActivity() {
             Logger.i("TabTerminalActivity",
                 "Mosh failed fast for tab $tabId — silently falling back to SSH (UDP likely blocked)")
             isReconnecting = true
-            val idx = tabManager.getAllTabs().indexOfFirst { it.tabId == tabId }
-            if (idx >= 0) tabManager.closeTab(idx)
+            tabManager.closeTabById(tabId)
             lifecycleScope.launch {
                 try {
                     connectToProfile(profile.copy(moshMode = "off"), forceNew = true)
@@ -3151,8 +3159,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 // coroutine's finally{} so a failed reconnect still lets
                 // the activity finish if no tabs remain.
                 isReconnecting = true
-                val idx = tabManager.getAllTabs().indexOfFirst { it.tabId == tabId }
-                if (idx >= 0) tabManager.closeTab(idx)
+                tabManager.closeTabById(tabId)
                 lifecycleScope.launch {
                     try {
                         // forceNew=true: old tab was just closed; always open a fresh session.
@@ -3171,9 +3178,7 @@ class TabTerminalActivity : AppCompatActivity() {
             }
             .setNegativeButton(R.string.terminal_close_tab) { _, _ ->
                 Logger.i("TabTerminalActivity", "User chose CLOSE for tab $tabId")
-                val idx = tabManager.getAllTabs().indexOfFirst { it.tabId == tabId }
-                if (idx >= 0) {
-                    tabManager.closeTab(idx)
+                if (tabManager.closeTabById(tabId) != null) {
                     if (tabManager.getTabCount() == 0) finish()
                 }
             }
@@ -3184,8 +3189,7 @@ class TabTerminalActivity : AppCompatActivity() {
             builder.setNeutralButton(R.string.terminal_try_ssh_instead) { _, _ ->
                 Logger.i("TabTerminalActivity", "User chose SSH FALLBACK for mosh tab $tabId")
                 isReconnecting = true
-                val idx = tabManager.getAllTabs().indexOfFirst { it.tabId == tabId }
-                if (idx >= 0) tabManager.closeTab(idx)
+                tabManager.closeTabById(tabId)
                 lifecycleScope.launch {
                     try {
                         connectToProfile(profile.copy(moshMode = "off"), forceNew = true)
@@ -4368,12 +4372,15 @@ class TabTerminalActivity : AppCompatActivity() {
      */
     private fun showQuickSwitcher() {
         val items = mutableListOf<io.github.tabssh.ui.views.PaletteDialog.Item>()
-        // Open tabs
+        // Open tabs. Displayed number is this SSH-only list's 1-based
+        // position, but the switch itself is by tabId — switchToTabNumber()
+        // indexes the unified list, which is not the same position once
+        // VNC/console tabs exist.
         tabManager.getAllTabs().forEachIndexed { index, tab ->
             items += io.github.tabssh.ui.views.PaletteDialog.Item(
                 "Tab ${index + 1}: ${tab.profile.getDisplayName()}",
                 "Open · ${tab.connectionState.value}"
-            ) { tabManager.switchToTabNumber(index + 1) }
+            ) { tabManager.switchToTabById(tab.tabId) }
         }
         // Recent connections (top 20 most-used)
         lifecycleScope.launch {

@@ -68,7 +68,10 @@ class DockerNetworksFragment : DockerPageFragment() {
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.adapter = adapter
 
-        adapter.setOnItemClickListener { network -> showNetworkMenu(network) }
+        // Tap runs the most common action (inspect) in one touch; the overflow
+        // button and long-press open the full action sheet.
+        adapter.setOnItemClickListener { network -> inspectNetwork(network) }
+        adapter.setOnMoreClickListener { network -> showNetworkMenu(network) }
         adapter.setOnItemLongClickListener { network -> showNetworkMenu(network) }
 
         fabAction.setOnClickListener { showCreateDialog() }

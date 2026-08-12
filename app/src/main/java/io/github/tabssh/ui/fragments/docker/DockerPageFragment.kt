@@ -4,6 +4,9 @@ import android.os.Bundle
 import android.view.View
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import com.google.android.material.color.MaterialColors
+import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.docker.DockerSessionManager
 import io.github.tabssh.ui.activities.DockerHostManagerActivity
@@ -32,6 +35,22 @@ abstract class DockerPageFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        // Pull-to-refresh on list destinations (fragment_docker_list.xml) —
+        // same reload path as the toolbar refresh action; the fragments show
+        // their own progress indicator, so the spinner stops immediately.
+        view.findViewById<SwipeRefreshLayout>(R.id.swipe_refresh)?.let { swipe ->
+            swipe.setColorSchemeColors(
+                MaterialColors.getColor(swipe, com.google.android.material.R.attr.colorPrimary)
+            )
+            swipe.setProgressBackgroundColorSchemeColor(
+                MaterialColors.getColor(swipe, com.google.android.material.R.attr.colorSurface)
+            )
+            swipe.setOnRefreshListener {
+                swipe.isRefreshing = false
+                session?.let { onSessionReady(it) }
+            }
+        }
 
         // viewLifecycleOwner: both collects drive view updates, so they must
         // die with the view tree (HypervisorsFragment pattern).
