@@ -80,6 +80,16 @@ class LinkHandlerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // The launching intent is handled exactly once. On a recreation (rotation,
+        // process death restore) the same intent is redelivered, which would parse
+        // the descriptor a second time, re-show the confirmation dialog, and — for
+        // a `.vv` carrying delete-this-file — re-run the deletion.
+        if (savedInstanceState != null) {
+            Logger.d(TAG, "Recreated after the link was already handled — finishing")
+            finish()
+            return
+        }
+
         val data = intent?.data
         val scheme = data?.scheme?.lowercase()
 
@@ -114,7 +124,9 @@ class LinkHandlerActivity : AppCompatActivity() {
                 // wasn't registered for, but a malformed ssh(s)://../sftp://
                 // authority (e.g. "ssh://" alone) falls back to Browser — reject
                 // rather than silently doing nothing.
-                Logger.w(TAG, "Unhandled or malformed link: $rawUrl")
+                // A malformed link can still carry userinfo (ssh://user:secret@…),
+                // so redact before logging it.
+                Logger.w(TAG, "Unhandled or malformed link: ${Logger.urlForLogging(rawUrl)}")
                 Toast.makeText(this, "Could not parse this link", Toast.LENGTH_SHORT).show()
                 finish()
             }

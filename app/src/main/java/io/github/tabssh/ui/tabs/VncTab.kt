@@ -157,6 +157,11 @@ class VncTab(
     fun cleanup() {
         Logger.d("VncTab", "Cleaning up VNC tab ${getDisplayTitle()}")
         rfbClient?.let { client ->
+            // Detach before stopping: both callbacks reference the VncView and
+            // through it this tab's activity, and the reader thread can still
+            // deliver a disconnect while stop() unwinds.
+            client.listener = null
+            client.onSessionEnded = null
             try { client.stop() } catch (e: Exception) {
                 Logger.d("VncTab", "rfbClient.stop() suppressed: ${e.message}")
             }

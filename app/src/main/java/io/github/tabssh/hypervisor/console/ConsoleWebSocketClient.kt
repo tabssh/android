@@ -29,6 +29,19 @@ class ConsoleWebSocketClient(
 ) {
     companion object {
         private const val TAG = "ConsoleWebSocket"
+
+        /**
+         * Build a Proxmox termproxy data frame (`0:LENGTH:MSG`) for [data].
+         *
+         * LENGTH must be the byte count of MSG as OkHttp puts it on the wire,
+         * which is its UTF-8 encoding — so [data] is decoded as UTF-8 and the
+         * length taken from the re-encoded form rather than from [data] itself.
+         */
+        internal fun proxmoxDataFrame(data: ByteArray): String {
+            val msg = String(data, Charsets.UTF_8)
+            val wireBytes = msg.toByteArray(Charsets.UTF_8).size
+            return "0:$wireBytes:$msg"
+        }
         // OkHttp pings happen at the WS protocol layer; Proxmox's termproxy
         // doesn't see them, so its idle-inactivity timer (~10 s) still fires.
         // We keep WS pings frequent for transport health AND emit an
@@ -72,7 +85,10 @@ class ConsoleWebSocketClient(
     }
 
     // WebSocket connection
-    private var webSocket: WebSocket? = null
+    // @Volatile: assigned on the caller's connect() thread and on the disconnect
+    // path, read from OkHttp's callback thread, the keepalive thread and the
+    // outbound pump thread.
+    @Volatile private var webSocket: WebSocket? = null
     private val client: OkHttpClient
 
     // Byte pipes bridging the WebSocket to InputStream/OutputStream.
@@ -80,8 +96,11 @@ class ConsoleWebSocketClient(
     // and throw "Write end dead" once it exits, and OkHttp delivers frames on a
     // recycled pool thread. See ByteStreamPipe.
     // inbound: server frames → RfbClient/terminal. outbound: app → WebSocket.
-    private var inboundPipe: ByteStreamPipe? = null
-    private var outboundPipe: ByteStreamPipe? = null
+    // @Volatile: created on the connect() thread, written to from OkHttp's
+    // callback thread and the outbound pump thread, nulled on disconnect. A
+    // stale non-null read here writes into a closed pipe or NPEs the pump.
+    @Volatile private var inboundPipe: ByteStreamPipe? = null
+    @Volatile private var outboundPipe: ByteStreamPipe? = null
 
     // Connection state.
     // @Volatile: read from the keepalive Thread's loop and written from
@@ -91,9 +110,11 @@ class ConsoleWebSocketClient(
     @Volatile private var isConnected = false
     private var connectionListener: ConsoleConnectionListener? = null
 
-    // Terminal size for resize messages
-    private var terminalCols: Int = 80
-    private var terminalRows: Int = 24
+    // Terminal size for resize messages.
+    // @Volatile: written from the UI thread via sendResize() and read by the
+    // keepalive thread, which resends the most recent geometry.
+    @Volatile private var terminalCols: Int = 80
+    @Volatile private var terminalRows: Int = 24
 
     // App-layer keepalive thread (Issue #52). Proxmox's termproxy closes
     // idle WebSockets after ~10 s; OkHttp's protocol-layer pings don't
@@ -265,7 +286,10 @@ class ConsoleWebSocketClient(
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
-                    Logger.d(TAG, "Received text: ${text.length} chars: '${text.take(100)}'")
+                    // Length only: an inbound frame is terminal content and can carry
+                    // whatever the remote shell echoes back, including a password prompt
+                    // echo or a printed token. Never log the payload itself.
+                    Logger.d(TAG, "Received text frame (${text.length} chars)")
                     try {
                         val actualData = when (protocol) {
                             ConsoleProtocol.PROXMOX_TERM -> {
@@ -274,7 +298,7 @@ class ConsoleWebSocketClient(
                                     val parts = text.split(":", limit = 3)
                                     if (parts.size == 3) {
                                         val msg = parts[2]
-                                        Logger.d(TAG, "Proxmox data message: length=${parts[1]}, data='${msg.take(50)}'")
+                                        Logger.d(TAG, "Proxmox data message: declared length=${parts[1]}, payload=${msg.length} chars")
                                         // Proxmox sends "unable to find serial interface" as
                                         // a data frame when the VM has no serial port
                                         // configured. Treat it as a fatal error rather than
@@ -315,7 +339,7 @@ class ConsoleWebSocketClient(
                                 // must never enter the RFB byte stream — writing it to
                                 // the pipe would corrupt the RFB handshake and produce
                                 // a permanently black screen.
-                                Logger.d(TAG, "$protocol: ignoring text frame (RFB is binary-only): '${text.take(80)}'")
+                                Logger.d(TAG, "$protocol: ignoring text frame, RFB is binary-only (${text.length} chars)")
                                 return@onMessage
                             }
                             else -> text // Raw text for other protocols
@@ -399,6 +423,13 @@ class ConsoleWebSocketClient(
             return true
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to connect", e)
+            // The pipes were allocated at the top of connect(); on this path the
+            // caller only sees `false` and never gets a handle to close them, so
+            // their buffers would sit around for the life of the process.
+            try { inboundPipe?.close() } catch (_: Exception) {}
+            try { outboundPipe?.close() } catch (_: Exception) {}
+            inboundPipe = null
+            outboundPipe = null
             connectionListener?.onError(e)
             return false
         }
@@ -472,15 +503,17 @@ class ConsoleWebSocketClient(
     private fun sendToWebSocket(data: ByteArray) {
         when (protocol) {
             ConsoleProtocol.PROXMOX_TERM -> {
-                // Proxmox termproxy format: "0:LENGTH:MSG"
-                // LENGTH is byte length, MSG is the actual bytes as string
-                val msg = String(data, Charsets.ISO_8859_1) // Use ISO_8859_1 to preserve binary data
-                val packet = "0:${data.size}:$msg"
-                val bytesCodes = data.map { it.toInt() and 0xFF }
-                Logger.d(TAG, "Proxmox format: sending ${data.size} bytes: $bytesCodes")
-                Logger.d(TAG, "Proxmox packet: '$packet' (${packet.length} chars)")
+                // Proxmox termproxy format: "0:LENGTH:MSG", LENGTH being the byte
+                // count of MSG as it appears on the wire. OkHttp encodes a text
+                // frame as UTF-8, so MSG has to be decoded as UTF-8 too and the
+                // length taken from the re-encoded form: decoding as ISO-8859-1
+                // turned every byte >= 0x80 into a two-byte UTF-8 sequence, so the
+                // declared length under-counted the frame and termproxy silently
+                // truncated or desynchronised on any non-ASCII input.
+                val packet = proxmoxDataFrame(data)
+                Logger.d(TAG, "Proxmox format: sending ${data.size} input bytes")
                 val sent = attemptSend(packet, "user-input")
-                Logger.d(TAG, "WebSocket send result: $sent")
+                Logger.d(TAG, "WebSocket send accepted=$sent")
             }
             else -> {
                 // Other protocols: send raw bytes

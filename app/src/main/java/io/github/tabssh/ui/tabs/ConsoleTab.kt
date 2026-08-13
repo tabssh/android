@@ -57,7 +57,18 @@ data class ConsoleConnectParams(
     val vmType: String? = null,
     val realm: String? = null,
     val vmRef: String? = null
-)
+) {
+    /**
+     * The compiler-generated `toString()` prints every property, so any log
+     * line, crash report or debugger dump that touched this object exposed the
+     * hypervisor password in clear text. Mask it with the project's "xxxxx"
+     * convention and keep the rest for diagnostics.
+     */
+    override fun toString(): String =
+        "ConsoleConnectParams(type=$type, host=$host, port=$port, username=$username, " +
+            "password=xxxxx, verifySsl=$verifySsl, pinnedCertSha256=${if (pinnedCertSha256 == null) "null" else "set"}, " +
+            "vmId=$vmId, vmName=$vmName, vmNode=$vmNode, vmType=$vmType, realm=$realm, vmRef=$vmRef)"
+}
 
 /**
  * Represents a single hypervisor-console tab (Proxmox/XCP-ng/Xen
@@ -244,6 +255,11 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
             Logger.d("ConsoleTab", "consoleManager.disconnect() suppressed: ${e.message}")
         }
         try {
+            // Same ordering the SPICE branch below uses: detach the callbacks
+            // before stopping, so a disconnect notification racing stop() cannot
+            // reach the VncView of a tab that is already being torn down.
+            rfbClient?.listener = null
+            rfbClient?.onSessionEnded = null
             rfbClient?.stop()
         } catch (e: Exception) {
             Logger.d("ConsoleTab", "rfbClient.stop() suppressed: ${e.message}")

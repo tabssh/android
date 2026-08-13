@@ -27,9 +27,40 @@ class XCPngApiClient(
     private val pinnedCertSha256: String? = null
 ) {
 
+    internal companion object {
+        /**
+         * Cap on a single XML-RPC response body. XAPI answers are a few KiB;
+         * anything past 8 MiB is a broken or hostile endpoint.
+         */
+        const val MAX_RESPONSE_BYTES = 8L * 1024 * 1024
+
+        /**
+         * Ensure an XAPI console URL carries the authenticated `session_id`.
+         *
+         * `console.get_location` returns a bare `https://host/console?ref=…`
+         * with no credential; XAPI answers that with 401 unless the session is
+         * supplied, so every console opened from a server-provided location
+         * failed. Returns [url] untouched when it already carries a session or
+         * when there is no session to add.
+         */
+        internal fun consoleUrlWithSession(url: String, sessionId: String?): String {
+            if (sessionId.isNullOrBlank()) return url
+            if (url.contains("session_id=")) return url
+            val separator = if (url.contains('?')) "&" else "?"
+            return "$url${separator}session_id=$sessionId"
+        }
+    }
+
+    /** Instance-side shorthand for [consoleUrlWithSession] using the live session. */
+    private fun withSessionId(url: String): String = consoleUrlWithSession(url, sessionId)
+
     private val baseUrl = "https://$host:$port"
     private val client: OkHttpClient
-    private var sessionId: String? = null
+
+    // @Volatile: written by login() on whichever IO thread authenticated and
+    // read by every later call, including console-URL construction running on
+    // a different dispatcher thread.
+    @Volatile private var sessionId: String? = null
 
     private val capturedPin = io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.CapturedPin()
     fun getCapturedCertSha256(): String? = capturedPin.sha256
@@ -101,7 +132,9 @@ class XCPngApiClient(
                 val start = response.indexOf("<value>") + 7
                 val end = response.indexOf("</value>", start)
                 sessionId = response.substring(start, end)
-                Logger.i("XCPngAPI", "Authentication successful, session: ${sessionId?.take(20)}...")
+                // The session ref IS the credential for every later XAPI call —
+                // never log any part of it.
+                Logger.i("XCPngAPI", "Authentication successful, session: xxxxx")
                 true
             } else if (response.contains("Fault") || response.contains("fault")) {
                 // Parse error message
@@ -285,7 +318,18 @@ class XCPngApiClient(
 
         try {
             return client.newCall(request).execute().use { response ->
-                val responseBody = response.body?.string()
+                // Bounded read: a hostile or broken endpoint can answer an
+                // XML-RPC POST with an endless body, and string() would buffer
+                // all of it into the heap before we ever look at it.
+                val responseBody = response.body?.source()?.let { source ->
+                    source.request(MAX_RESPONSE_BYTES + 1L)
+                    val truncated = source.buffer.size > MAX_RESPONSE_BYTES
+                    if (truncated) {
+                        Logger.w("XCPngAPI", "XML-RPC response exceeded ${MAX_RESPONSE_BYTES} bytes — rejecting")
+                        throw IOException("XML-RPC response too large")
+                    }
+                    source.readByteString().utf8()
+                }
                 if (response.isSuccessful && responseBody != null) {
                     responseBody
                 } else {
@@ -380,9 +424,9 @@ class XCPngApiClient(
             if (location.isNotEmpty()) {
                 // The location might be HTTP, convert to WebSocket if needed
                 val wsUrl = if (location.startsWith("http://")) {
-                    location.replace("http://", "ws://")
+                    withSessionId(location.replace("http://", "ws://"))
                 } else if (location.startsWith("https://")) {
-                    location.replace("https://", "wss://")
+                    withSessionId(location.replace("https://", "wss://"))
                 } else {
                     // Assume it's already a proper URL, construct WebSocket URL
                     "wss://$host/console?ref=$consoleRef&session_id=$sessionId"
@@ -442,9 +486,9 @@ class XCPngApiClient(
                     xmlRpcCall(buildXmlRequest("console.get_location", listOf(ref)))
                 )
                 val url = when {
-                    location.startsWith("http://")  -> location.replace("http://",  "ws://")
-                    location.startsWith("https://") -> location.replace("https://", "wss://")
-                    location.isNotEmpty()           -> location
+                    location.startsWith("http://")  -> withSessionId(location.replace("http://",  "ws://"))
+                    location.startsWith("https://") -> withSessionId(location.replace("https://", "wss://"))
+                    location.isNotEmpty()           -> withSessionId(location)
                     else                            -> "wss://$host/console?ref=$ref&session_id=$sessionId"
                 }
                 // Log scheme+host+path only — the query string carries the

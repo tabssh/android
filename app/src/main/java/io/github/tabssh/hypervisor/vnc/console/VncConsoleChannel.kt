@@ -208,11 +208,15 @@ class VncConsoleChannel internal constructor(
 
     /**
      * Shut down the writer executor.  Call when the VNC session ends to
-     * release the background thread.  Any sends queued before this call will
-     * still be delivered; sends after this call are silently dropped.
+     * release the background thread.  This uses `shutdownNow()`, so anything
+     * still queued is discarded and sends after this call are silently dropped.
      */
     fun close() {
         clearArmedModifiers()
+        // The callback is set by the view that owns the modifier keybar; holding
+        // it past close() keeps that view (and its Activity) reachable from a
+        // channel the session no longer uses.
+        onArmedModsConsumed = null
         resizeDebouncer.shutdown()
         writeExecutor.shutdownNow()
     }

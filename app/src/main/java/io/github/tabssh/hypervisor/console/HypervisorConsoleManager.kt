@@ -53,7 +53,13 @@ class HypervisorConsoleManager {
 
     private var webSocketClient: ConsoleWebSocketClient? = null
     private var termuxBridge: TermuxBridge? = null
-    private var consoleListener: ConsoleEventListener? = null
+
+    // Guards the serial-console → vncproxy fallback. Proxmox can emit the
+    // "unable to find serial interface" frame more than once (and the API-level
+    // failure path can fire alongside it), which would otherwise start two
+    // concurrent VNC reconnects, each overwriting webSocketClient and orphaning
+    // the other's transport.
+    @Volatile private var vncFallbackStarted = false
 
     /**
      * The active [RfbClient] when a graphical console is running, or null for
@@ -164,8 +170,6 @@ class HypervisorConsoleManager {
         displayPort: Int = 0,
         listener: ConsoleEventListener? = null
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
-        consoleListener = listener
-
         // Phase 1: obtain a console ticket via an ordered strategy chain.
         // termproxy first — text consoles are the mobile-friendly default;
         // spiceproxy second — richest graphical protocol, but only for qemu
@@ -307,6 +311,11 @@ class HypervisorConsoleManager {
                 }
 
                 override fun onSerialConsoleUnavailable() {
+                    if (vncFallbackStarted) {
+                        Logger.d(TAG, "Serial-unavailable frame repeated — VNC fallback already running")
+                        return
+                    }
+                    vncFallbackStarted = true
                     Logger.i(TAG, "Proxmox serial console unavailable via WebSocket frame — retrying with vncproxy")
                     // Disconnect the termproxy WebSocket and retry with vncproxy.
                     // This is the second fallback path; the first (API-level exception)
@@ -383,8 +392,6 @@ class HypervisorConsoleManager {
         displayPort: Int = 0,
         listener: ConsoleEventListener? = null
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
-        consoleListener = listener
-
         try {
             Logger.i(TAG, "Connecting to XCP-ng console: $vmName")
 
@@ -518,8 +525,6 @@ class HypervisorConsoleManager {
         displayPort: Int = 0,
         listener: ConsoleEventListener? = null
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
-        consoleListener = listener
-
         try {
             Logger.i(TAG, "Connecting to Xen Orchestra console: $vmName")
 
@@ -544,7 +549,8 @@ class HypervisorConsoleManager {
                 return@withContext null
             }
 
-            Logger.d(TAG, "Got XO console URL: $consoleUrl")
+            // XO hands back a URL carrying the session token in its query string.
+            Logger.d(TAG, "Got XO console URL: ${Logger.urlForLogging(consoleUrl)}")
 
             // Create WebSocket client with XO protocol (raw bytes).
             // `verifySsl` + `pinnedCertSha256` from the caller; previously
@@ -727,6 +733,11 @@ class HypervisorConsoleManager {
             throw e
         } catch (e: Exception) {
             Logger.e(TAG, "VNC fallback: connect failed for $vmName", e)
+            // The open gate can fail after `webSocketClient = ws`, which leaves a
+            // live OkHttp WebSocket (and its pipes and keepalive thread) attached
+            // with nobody to close it — the session is already reported as failed.
+            try { webSocketClient?.disconnect() } catch (_: Exception) {}
+            webSocketClient = null
             listener?.onError(e.message ?: "VNC fallback failed to connect for $vmName")
         }
     }
@@ -843,6 +854,10 @@ class HypervisorConsoleManager {
             throw e
         } catch (e: Exception) {
             Logger.e(TAG, "reconnectGraphicalWithoutResize: connect failed for $vmName", e)
+            // Same leak as the VNC fallback path: a failure after the assignment
+            // above leaves a connected WebSocket nobody owns.
+            try { webSocketClient?.disconnect() } catch (_: Exception) {}
+            webSocketClient = null
             val msg = e.message?.takeIf { it.isNotBlank() }
                 ?: e.cause?.message?.takeIf { it.isNotBlank() }
                 ?: "Reconnect failed — WebSocket could not connect to Proxmox."
@@ -881,6 +896,9 @@ class HypervisorConsoleManager {
         termuxBridge = null
         webSocketClient = null
         proxmoxVncFallbackClient = null
+        // Rearm the fallback so the next connect() on this manager can still
+        // switch to vncproxy when its serial console is missing too.
+        vncFallbackStarted = false
     }
 
     /**

@@ -37,23 +37,42 @@ class XenOrchestraApiClient(
     private val capturedPin = io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.CapturedPin()
     fun getCapturedCertSha256(): String? = capturedPin.sha256
 
-    // Authentication state
-    private var authToken: String? = null
-    private var userId: String? = null
-    private var tokenExpiresAt: Long? = null
+    // Authentication state.
+    // @Volatile: written by the authenticate/refresh coroutines and read by
+    // every request builder, which can run on a different IO thread.
+    @Volatile private var authToken: String? = null
+    @Volatile private var userId: String? = null
+    @Volatile private var tokenExpiresAt: Long? = null
 
     // OAuth2 state (if supported by XO)
-    private var refreshToken: String? = null
+    @Volatile private var refreshToken: String? = null
 
     // API version (auto-detected)
-    private var apiPrefix: String = "/rest/v0"
-    private var detectedApiVersion: String? = null
+    @Volatile private var apiPrefix: String = "/rest/v0"
+    @Volatile private var detectedApiVersion: String? = null
 
     companion object {
         private const val TAG = "XenOrchestraAPI"
 
         // API versions to try in order (newest first)
         private val API_VERSIONS = listOf("/rest/v6", "/rest/v5", "/rest/v0")
+
+        /**
+         * Accept a console URL handed back by the XO REST API only when it is a
+         * WebSocket URL pointing at the host the user configured.
+         *
+         * The console URL is dialled with the XO auth token attached, so a
+         * compromised or merely misconfigured XO answering `wss://attacker/…`
+         * would hand that token straight to a third party. Cross-host redirection
+         * has no legitimate use here: XO always proxies consoles itself.
+         */
+        internal fun isAcceptableConsoleUrl(url: String, expectedHost: String): Boolean {
+            val parsed = try { java.net.URI(url) } catch (_: Exception) { return false }
+            val scheme = parsed.scheme?.lowercase() ?: return false
+            if (scheme != "ws" && scheme != "wss") return false
+            val urlHost = parsed.host ?: return false
+            return urlHost.equals(expectedHost, ignoreCase = true)
+        }
     }
     
     /**
@@ -210,7 +229,9 @@ class XenOrchestraApiClient(
                         if (token.isNotEmpty()) {
                             authToken = token
                             detectedApiVersion = version
-                            Logger.i(TAG, "Authentication successful with $version, token: ${token.take(20)}...")
+                            // The token authenticates every later REST call and the
+                            // console WebSocket — no prefix of it belongs in a log.
+                            Logger.i(TAG, "Authentication successful with $version, token: xxxxx")
                             true
                         } else {
                             // Log response length/status only — the body may
@@ -318,7 +339,9 @@ class XenOrchestraApiClient(
             }
         } catch (e: Exception) {
             Logger.e(TAG, "Error parsing API error: ${e.message}")
-            Logger.e(TAG, "Raw error body: $errorBody")
+            // Length only: an XO error body can echo the request, including the
+            // Authorization header value or a console ticket.
+            Logger.e(TAG, "Unparseable error body (${errorBody?.length ?: 0} chars)")
         }
     }
     
@@ -1476,20 +1499,23 @@ class XenOrchestraApiClient(
             // Try REST API first to get console details
             try {
                 val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/vms/$vmId/console")
-                val response = executeRequest(request)
+                // use{}: on the non-success branch the body was never consumed or
+                // closed, so the connection stayed checked out of the pool.
+                val consoleUrl = executeRequest(request).use { response ->
+                    if (!response.isSuccessful) null
+                    else response.body?.string()?.let { JSONObject(it).optString("url") }
+                }
 
-                if (response.isSuccessful) {
-                    val body = response.body?.string()
-                    if (body != null) {
-                        val json = JSONObject(body)
-                        val consoleUrl = json.optString("url")
-
-                        if (consoleUrl.isNotEmpty()) {
-                            // Log scheme+host+path only — the query string
-                            // carries a live console session credential.
-                            Logger.i(TAG, "Got console URL from API: ${Logger.urlForLogging(consoleUrl)}")
-                            return@withContext consoleUrl
-                        }
+                if (!consoleUrl.isNullOrEmpty()) {
+                    if (!isAcceptableConsoleUrl(consoleUrl, host)) {
+                        // Falling through to the constructed URL keeps the token
+                        // pointed at the host the user actually configured.
+                        Logger.w(TAG, "Ignoring off-host or non-WebSocket console URL from XO: ${Logger.urlForLogging(consoleUrl)}")
+                    } else {
+                        // Log scheme+host+path only — the query string
+                        // carries a live console session credential.
+                        Logger.i(TAG, "Got console URL from API: ${Logger.urlForLogging(consoleUrl)}")
+                        return@withContext consoleUrl
                     }
                 }
             } catch (e: CancellationException) {

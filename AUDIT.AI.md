@@ -650,3 +650,140 @@ failures, 10 skipped.
   anything it depends on. It is a timing-dependent test and should be made
   deterministic; recorded here because this session was instructed not to
   edit `TODO.AI.md`.
+
+---
+
+# Console Transport & UI Audit (2026-08-13)
+
+Scope: the remaining graphical/console stack after the VNC (2026-08-11) and
+SPICE (2026-08-13) audits — `hypervisor/console/ConsoleWebSocketClient.kt`,
+`HypervisorConsoleManager.kt`, `ConsoleStrategy.kt`,
+`ConsoleDisconnectReason.kt`, `hypervisor/vnc/console/VncConsoleChannel.kt`,
+`hypervisor/vnc/VncBackgroundSessionStore.kt`,
+`hypervisor/vnc/VncDirectConnector.kt` (connectWss path),
+`ui/tabs/ConsoleTab.kt`, `ui/tabs/VncTab.kt`,
+`hypervisor/xcpng/XCPngApiClient.kt`, `hypervisor/xcpng/XenOrchestraApiClient.kt`,
+`ui/activities/VncHostsActivity.kt`, `VncHostEditActivity.kt`, and an
+adversarial re-check of `ui/activities/LinkHandlerActivity.kt`.
+Findings already fixed by the two earlier audits were not re-reported.
+
+## Pass 1: Security
+
+- [x] ConsoleWebSocketClient: every inbound text frame was logged with up to
+  100 characters of payload (`Received text: … '<payload>'`), plus 50 chars of
+  each Proxmox data frame and 80 chars of every ignored RFB text frame. Console
+  payload is terminal content and can echo prompts, tokens and pasted secrets —
+  FIXED, all three now log lengths only.
+- [x] ConsoleWebSocketClient: the outbound path logged the fully assembled
+  termproxy packet and a decimal dump of every user-input byte, i.e. every
+  keystroke including typed passwords — FIXED, logs the byte count only.
+- [x] HypervisorConsoleManager: `Got XO console URL: $consoleUrl` printed the
+  Xen Orchestra console URL with its session credential in the query string —
+  FIXED, redacted through `Logger.urlForLogging`.
+- [x] XCPngApiClient: logged the first 20 characters of the XAPI session ref on
+  every successful login; that ref *is* the credential for all later calls —
+  FIXED, logs `session: xxxxx`.
+- [x] XenOrchestraApiClient: logged the first 20 characters of the live auth
+  token after authenticating — FIXED, logs `token: xxxxx`.
+- [x] XenOrchestraApiClient: `handleApiError` dumped the entire raw server error
+  body when JSON parsing failed; XO error bodies can echo the request including
+  the Authorization header — FIXED, logs the body length only.
+- [x] XenOrchestraApiClient: the console URL returned by
+  `GET /rest/vN/vms/{id}/console` was used verbatim and is then dialled with the
+  XO auth token attached, so a compromised or misconfigured XO could point it at
+  an arbitrary host and harvest the token — FIXED, new
+  `isAcceptableConsoleUrl()` requires `ws`/`wss` on the configured host, and a
+  rejected URL falls through to the locally constructed one.
+- [x] ConsoleTab: `ConsoleConnectParams` is a data class holding the hypervisor
+  password, so its generated `toString()` exposed the password to any log line,
+  crash report or debugger dump that touched it — FIXED, explicit `toString()`
+  masking the password as `xxxxx` and reducing the pin to `set`/`null`.
+- [x] LinkHandlerActivity: a malformed link was logged raw, and a malformed
+  `ssh://user:secret@host` still carries userinfo — FIXED, redacted through
+  `Logger.urlForLogging`.
+- [x] XCPngApiClient: `xmlRpcCall` read the whole response body with
+  `body.string()`, so a hostile or broken endpoint could force an unbounded heap
+  allocation — FIXED, bounded at 8 MiB and rejected past that.
+
+## Pass 2: Code Quality
+
+- [x] HypervisorConsoleManager: `consoleListener` was assigned in three connect
+  paths and never read — dead state, FIXED by removing the field and its writes.
+- [x] ConsoleWebSocketClient: `connect()`'s catch block returned `false` without
+  closing the two `ByteStreamPipe`s allocated at the top of the method; the
+  caller has no handle to them, so their buffers leaked on every failed connect —
+  FIXED.
+- [x] HypervisorConsoleManager: `retryProxmoxWithVnc` and
+  `reconnectGraphicalWithoutResize` assign `webSocketClient = ws` and then await
+  the open gate; a failure after that assignment left a live WebSocket, its pipes
+  and its keepalive thread with no owner — FIXED, both catch blocks tear the
+  transport down.
+- [x] VncConsoleChannel: `close()` left `onArmedModsConsumed` set, keeping the
+  modifier-keybar view (and its Activity) reachable from a dead channel — FIXED,
+  the callback is cleared; the KDoc also claimed queued sends still deliver,
+  which `shutdownNow()` contradicts — corrected.
+
+## Pass 3: Logic and Correctness
+
+- [x] ConsoleWebSocketClient: the termproxy frame `0:LENGTH:MSG` decoded input as
+  ISO-8859-1 while OkHttp encodes the text frame as UTF-8, so LENGTH under-counted
+  the bytes actually sent for any input byte >= 0x80 and termproxy truncated or
+  desynchronised on non-ASCII input — FIXED via `proxmoxDataFrame()`, which
+  decodes UTF-8 and takes the length from the re-encoded payload.
+- [x] XCPngApiClient: console URLs derived from `console.get_location` were
+  converted `http(s)` -> `ws(s)` and used as-is with no `session_id`; XAPI answers
+  those with 401, so every console opened from a server-provided location failed
+  while only the hand-constructed fallback worked — FIXED, `consoleUrlWithSession()`
+  appends the session when the URL does not already carry one.
+- [x] HypervisorConsoleManager: `onSerialConsoleUnavailable()` had no single-flight
+  guard, so a repeated "unable to find serial interface" frame started a second
+  concurrent VNC reconnect that overwrote `webSocketClient` and orphaned the
+  first transport — FIXED with a `@Volatile` latch, rearmed in `disconnect()`.
+- [x] ConsoleWebSocketClient: `webSocket`, `inboundPipe`, `outboundPipe`,
+  `terminalCols` and `terminalRows` were plain `var`s written from the connect
+  thread and read from OkHttp's callback thread, the keepalive thread and the
+  outbound pump — FIXED, all `@Volatile`.
+- [x] XCPngApiClient / XenOrchestraApiClient: `sessionId` and the XO auth state
+  (`authToken`, `userId`, `tokenExpiresAt`, `refreshToken`, `apiPrefix`,
+  `detectedApiVersion`) were non-volatile across dispatcher threads — FIXED.
+- [x] XenOrchestraApiClient: `getConsoleWebSocketUrl` never closed the response on
+  the non-success branch, holding a pooled connection — FIXED with `use {}`.
+- [x] ConsoleTab / VncTab: `cleanup()` called `rfbClient.stop()` without first
+  detaching `listener` and `onSessionEnded`, so a disconnect callback racing the
+  teardown could reach a view that is already gone (the SPICE branch already did
+  this correctly) — FIXED in both tabs.
+- [x] LinkHandlerActivity: `onCreate` reprocessed the launch intent after a
+  recreation, re-showing the confirmation dialog and re-running the
+  `delete-this-file` deletion for a `.vv` — FIXED, a non-null `savedInstanceState`
+  finishes the activity.
+
+## Pass 4/5/6: verified sound (no change)
+
+- `ConsoleStrategy.kt` / `ConsoleStrategyChain`: rethrows `CancellationException`
+  before the generic catch, stays silent until the chain is exhausted.
+- `ConsoleDisconnectReason.kt`: CLEAN/ERROR close policy consistent with callers.
+- `VncBackgroundSessionStore.kt`: `ConcurrentHashMap`, idempotent teardown,
+  bounded `sweepIdle`.
+- `VncDirectConnector.connectWss`: closes the WebSocket on `!ok` and on either
+  null stream, forwards the listener, no raw-socket TLS.
+- `VncConsoleChannel` CSI parsing: substring bounds checked, no off-by-one.
+- `VncHostsActivity` / `VncHostEditActivity`: passwords only ever move between
+  the Keystore and the connector, port/display ranges validated, Keystore secret
+  and tombstone written on delete in both delete paths.
+- `LinkHandlerActivity.readBounded` (bounded `.vv` read) and `deleteQuietly`:
+  deletion only ever targets the URI the caller handed us and whose content
+  already parsed as a `virt-viewer` descriptor, so it is not an arbitrary-path
+  delete primitive.
+
+## Tests added
+
+- `app/src/test/java/io/github/tabssh/hypervisor/console/ProxmoxDataFrameTest.kt`
+  — declared length equals the UTF-8 bytes on the wire for ASCII and multibyte
+  input, the ISO-8859-1 undercount regression, empty input.
+- `app/src/test/java/io/github/tabssh/hypervisor/xcpng/XapiConsoleUrlTest.kt`
+  — `session_id` appended with `?`/`&`, never duplicated, no-op without a
+  session; XO console-URL host/scheme validation including off-host,
+  suffix-lookalike host, non-WebSocket scheme and garbage input.
+- `app/src/test/java/io/github/tabssh/ui/tabs/ConsoleConnectParamsTest.kt`
+  — password and certificate pin masked in `toString()`, diagnostics retained,
+  `equals` unaffected.
