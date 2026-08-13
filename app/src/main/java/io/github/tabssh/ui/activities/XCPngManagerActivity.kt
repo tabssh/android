@@ -597,6 +597,8 @@ class XCPngManagerActivity : AppCompatActivity() {
                 )
                 val consoleLabel = if (isXenOrchestra) "Xen Orchestra" else "XCP-ng"
                 Logger.i("XCPngManager", "Opened $consoleLabel console tab for VM: ${vm.name} (uuid=${vm.uuid})")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("XCPngManager", "Console connection error for ${vm.name}", e)
                 progressBar.visibility = View.GONE

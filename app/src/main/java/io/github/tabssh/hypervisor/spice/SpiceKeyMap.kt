@@ -12,10 +12,11 @@ import android.view.KeyEvent
  * left-shift press/release when needed.
  *
  * This is deliberately not exhaustive — it covers the keys a mobile
- * user is likely to send from a hardware or software keyboard. Media
- * keys, keypad-specific codes, and locale-specific extras (yen,
- * dead-key composers) are absent; a follow-up can extend the table as
- * feedback arrives from real hardware use.
+ * user is likely to send from a hardware or software keyboard, plus the
+ * numeric keypad and the system keys (PrintScreen, ScrollLock, NumLock,
+ * Pause, Menu) a guest OS expects. Media keys and locale-specific extras
+ * (yen, dead-key composers) are absent; a follow-up can extend the table
+ * as feedback arrives from real hardware use.
  */
 object SpiceKeyMap {
 
@@ -72,8 +73,40 @@ object SpiceKeyMap {
             KeyEvent.KEYCODE_F10 -> return Translation(SpiceConstants.SC_F10)
             KeyEvent.KEYCODE_F11 -> return Translation(SpiceConstants.SC_F11)
             KeyEvent.KEYCODE_F12 -> return Translation(SpiceConstants.SC_F12)
+            KeyEvent.KEYCODE_SYSRQ -> return Translation(SpiceConstants.SC_PRINT_SCREEN)
+            KeyEvent.KEYCODE_SCROLL_LOCK -> return Translation(SpiceConstants.SC_SCROLL_LOCK)
+            KeyEvent.KEYCODE_NUM_LOCK -> return Translation(SpiceConstants.SC_NUMLOCK)
+            KeyEvent.KEYCODE_BREAK -> return Translation(SpiceConstants.SC_PAUSE)
+            KeyEvent.KEYCODE_MENU -> return Translation(SpiceConstants.SC_MENU)
+            KeyEvent.KEYCODE_NUMPAD_0 -> return Translation(SpiceConstants.SC_NUMPAD_0)
+            KeyEvent.KEYCODE_NUMPAD_1 -> return Translation(SpiceConstants.SC_NUMPAD_1)
+            KeyEvent.KEYCODE_NUMPAD_2 -> return Translation(SpiceConstants.SC_NUMPAD_2)
+            KeyEvent.KEYCODE_NUMPAD_3 -> return Translation(SpiceConstants.SC_NUMPAD_3)
+            KeyEvent.KEYCODE_NUMPAD_4 -> return Translation(SpiceConstants.SC_NUMPAD_4)
+            KeyEvent.KEYCODE_NUMPAD_5 -> return Translation(SpiceConstants.SC_NUMPAD_5)
+            KeyEvent.KEYCODE_NUMPAD_6 -> return Translation(SpiceConstants.SC_NUMPAD_6)
+            KeyEvent.KEYCODE_NUMPAD_7 -> return Translation(SpiceConstants.SC_NUMPAD_7)
+            KeyEvent.KEYCODE_NUMPAD_8 -> return Translation(SpiceConstants.SC_NUMPAD_8)
+            KeyEvent.KEYCODE_NUMPAD_9 -> return Translation(SpiceConstants.SC_NUMPAD_9)
+            KeyEvent.KEYCODE_NUMPAD_DOT -> return Translation(SpiceConstants.SC_NUMPAD_DOT)
+            KeyEvent.KEYCODE_NUMPAD_ADD -> return Translation(SpiceConstants.SC_NUMPAD_ADD)
+            KeyEvent.KEYCODE_NUMPAD_SUBTRACT -> return Translation(SpiceConstants.SC_NUMPAD_SUBTRACT)
+            KeyEvent.KEYCODE_NUMPAD_MULTIPLY -> return Translation(SpiceConstants.SC_NUMPAD_MULTIPLY)
+            KeyEvent.KEYCODE_NUMPAD_DIVIDE -> return Translation(SpiceConstants.SC_NUMPAD_DIVIDE)
+            KeyEvent.KEYCODE_NUMPAD_ENTER -> return Translation(SpiceConstants.SC_NUMPAD_ENTER)
         }
-        val ch = event.unicodeChar
+        /*
+         * unicodeChar returns 0 whenever Ctrl or Alt is held, so relying on
+         * it alone silently dropped every chord (Ctrl+C, Alt+F4, Ctrl+Alt+
+         * Del from the on-screen bar). Ask for the character the key would
+         * have produced with the modifiers stripped, and fall back to the
+         * plain unicodeChar only when that yields nothing.
+         */
+        val bare = event.getUnicodeChar(
+            event.metaState and (KeyEvent.META_SHIFT_ON or KeyEvent.META_SHIFT_LEFT_ON or
+                KeyEvent.META_SHIFT_RIGHT_ON)
+        )
+        val ch = if (bare > 0) bare else event.unicodeChar
         if (ch <= 0) return null
         return translateChar(ch.toChar())
     }

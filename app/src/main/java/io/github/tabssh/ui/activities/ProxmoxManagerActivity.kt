@@ -356,6 +356,11 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                     }
                 )
                 Logger.i(TAG, "Opened console tab for ${vm.name} (vmid=${vm.vmid})")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Cancellation is not a connection failure — swallowing it here
+                // left the progress spinner and an error toast behind when the
+                // activity scope was cancelled mid-connect.
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Console connection error for ${vm.name}", e)
                 hideProgress()

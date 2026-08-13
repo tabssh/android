@@ -249,6 +249,13 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
             Logger.d("ConsoleTab", "rfbClient.stop() suppressed: ${e.message}")
         }
         try {
+            // Drop the listener and the session-end hook BEFORE stopping: both
+            // reference the SpiceView (and through it this tab's activity), and
+            // the native worker can still deliver a disconnect callback while
+            // stop() is unwinding. Clearing first makes that callback a no-op
+            // instead of a late edit on a torn-down view.
+            spiceClient?.listener = null
+            spiceClient?.onSessionEnded = null
             spiceClient?.stop()
         } catch (e: Exception) {
             Logger.d("ConsoleTab", "spiceClient.stop() suppressed: ${e.message}")

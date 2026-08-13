@@ -816,4 +816,23 @@
     <string name="import_export_backup_export_failed">Backup export failed: %1$s</string>
     <string name="import_export_export_failed_title">Export Failed</string>
     <string name="import_export_export_failed_message">Failed to export backup:\n%1$s</string>
+
+    <!-- virt-viewer .vv files and spice:// links -->
+    <string name="virt_viewer_spice_dialog_title">Open SPICE console?</string>
+    <string name="virt_viewer_vnc_dialog_title">Open VNC console?</string>
+    <string name="virt_viewer_dialog_message">%1$s\n\nTabSSH will open a console session to this display server. Nothing is saved — the connection details are used once and discarded.</string>
+    <string name="virt_viewer_connect">Connect</string>
+    <string name="virt_viewer_cancel">Cancel</string>
+    <string name="virt_viewer_invalid_link">Could not parse this connection: %1$s</string>
+    <string name="virt_viewer_unreadable_file">Could not read this connection file</string>
+    <string name="virt_viewer_connect_failed">Connection failed: %1$s</string>
+    <string name="virt_viewer_max_tabs">Maximum tabs reached</string>
+    <string name="virt_viewer_encrypted_label">encrypted (TLS)</string>
+    <string name="virt_viewer_plain_label">unencrypted</string>
+    <string name="virt_viewer_usbredir_unsupported">USB redirection was requested but is not supported.</string>
+    <string name="virt_viewer_vnc_tls_only">This VNC connection offers only a TLS port, which TabSSH cannot open directly.</string>
+    <string name="virt_viewer_password_title">Password required</string>
+    <string name="virt_viewer_password_message">%1$s requires a password. It is used for this session only and is never saved.</string>
+    <string name="virt_viewer_password_hint">Password</string>
+    <string name="virt_viewer_password_required">A password is required for this connection</string>
 </resources>

@@ -45,6 +45,10 @@ Open decisions / documented limitations from the 4-8 diagnosis:
   (2026-08-11)" (~30 protocol/security/lifecycle fixes + 23 JVM tests)
 - `VncDirectConnector.connectWss` has zero callers (dead public API) —
   user decision: delete or keep for future WSS console targets
+- `TerminalViewComposingFlushTest.kt:90` is flaky: one ComparisonFailure
+  then a clean pass with no code change (seen 2026-08-13 during the
+  SPICE-audit gate run) — needs a deterministic-ordering fix, not a
+  retry loop
 - SPEC.md §3 vs Makefile: RESOLVED 2026-08-12 — `make check` now runs
   `testDebugUnitTest` per SPEC.md ("unit tests run as part of make
   check"); pre-existing test-source compile break (UpdateCheckerTest

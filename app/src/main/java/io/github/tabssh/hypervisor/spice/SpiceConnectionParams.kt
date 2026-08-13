@@ -66,6 +66,18 @@ data class SpiceConnectionParams(
             tlsVerify == other.tlsVerify
     }
 
+    /**
+     * Redacted rendering. The compiler-generated data-class `toString`
+     * would print the SPICE ticket verbatim, and this object reaches
+     * `Logger.d`/exception messages on several paths — so the password is
+     * replaced with a fixed marker and the CA cert reduced to its length.
+     */
+    override fun toString(): String =
+        "SpiceConnectionParams(host=$host, port=$port, tlsPort=$tlsPort, " +
+            "password=${if (password.isEmpty()) "<none>" else "xxxxx"}, " +
+            "caCert=${caCert?.let { "${it.size} bytes" } ?: "null"}, " +
+            "hostSubject=$hostSubject, tlsVerify=$tlsVerify)"
+
     override fun hashCode(): Int {
         var result = host.hashCode()
         result = 31 * result + port

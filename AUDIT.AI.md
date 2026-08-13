@@ -459,3 +459,194 @@ hostile. All findings below are fixed in the working tree, uncommitted.
   button support, 24 bpp rendering, libvirt VNC password support). AI.md
   PART 0 requires a `CHANGELOG.md` entry in the same commit — the committing
   session must add it; this audit was instructed not to commit.
+
+---
+
+# SPICE Stack Audit (2026-08-13)
+
+Scope: the whole SPICE stack — `hypervisor/spice/` (`SpiceClient`,
+`SpiceConnectionParams`, `SpiceConstants`, `SpiceKeyMap`, `SpiceListener`,
+`SpiceLoader`), `ui/views/SpiceView.kt`, the SPICE paths in
+`ui/tabs/ConsoleTab.kt` and `ui/keyboard/ConsoleKeyMapper.kt`, the SPICE
+integration in `HypervisorConsoleManager`, `ConsoleStrategy`,
+`ProxmoxApiClient` (spiceproxy), `LibvirtApiClient` (domdisplay) and the
+three manager activities, plus the Kotlin side of the JNI contract with
+`libtabssh_native.so`. Reference: the SPICE protocol documents and
+spice-gtk / virt-viewer behaviour. The SPICE server is a trust boundary
+(IDEA.md § Trust boundaries), so every wire-derived value is hostile. All
+findings below are fixed in the working tree, uncommitted.
+
+## Pass 1: JNI contract and lifecycle
+
+- [x] `app/proguard-rules.pro`: none of the eight `onNative*` callbacks the
+  native library resolves by literal name and signature through
+  `GetMethodID` were kept. R8 renames them in any minified build, so every
+  release/F-Droid APK would have had a SPICE client that connects and then
+  receives nothing — no framebuffer, no cursor, no disconnect. Debug builds
+  hid it completely. — FIXED: explicit `-keepclassmembers` block for all
+  eight signatures (proguard-rules.pro:140).
+- [x] `SpiceClient`: the native handle was a plain `Long` mutated from the
+  UI thread, the native callback thread and `stop()`. A disconnect racing an
+  input event could pass a freed handle to JNI (use-after-free), and two
+  `stop()` calls could double-free it. — FIXED: `AtomicLong` handle
+  (SpiceClient.kt:65) plus a `ReentrantReadWriteLock` (:74); ownership is
+  taken with `getAndSet(0L)` so exactly one caller can ever destroy
+  (`destroyOwned`, :167), and every native call goes through `withHandle`
+  (:182) under the read lock.
+- [x] `ConsoleTab.cleanup()` (:239) stopped the client without detaching it,
+  so a late native callback could still reach a listener bound to a view
+  hierarchy that had already been torn down. — FIXED: `listener` and
+  `onSessionEnded` are cleared before `stop()`.
+
+## Pass 2: Hostile-server validation
+
+- [x] `SpiceClient`: surface and framebuffer-update callbacks trusted the
+  server's dimensions and the array length together. A hostile or buggy
+  server could report a surface whose pixel count overflowed `Int`, or a
+  rect larger than the array backing it, producing an out-of-bounds copy in
+  the view. — FIXED: `SpiceConstants.MAX_DIMENSION` = 16384 (:114), a
+  `MAX_PIXELS` product computed in `Long` (SpiceClient.kt:50) and a single
+  `isValidSurface()` gate (:255) applied to all four inbound paths
+  (:266, :278, :289, :301). Invalid updates are dropped, not clamped.
+- [x] `SpiceView`: rect updates were blitted without checking that
+  `x + w`/`y + h` stayed inside the current surface, and the framebuffer
+  dimensions were read unsynchronised from the draw thread while the
+  callback thread reallocated them. — FIXED: `@Volatile` dimensions (:83),
+  a single `allocateSurface()` (:329) and `synchronized(fbLock)` around
+  every read and write of the surface (:270, :337, :395, :671).
+
+## Pass 3: Secret handling
+
+- [x] `SpiceConnectionParams`: the compiler-generated data-class `toString`
+  printed the SPICE ticket verbatim, and the params object reaches several
+  log sites. — FIXED: redacting `toString()` (:75).
+- [x] `ProxmoxApiClient.SPICEProxyResult`: same problem — the ticket
+  returned by `/spiceproxy` was printable. — FIXED: hand-written
+  `toString()` (:639) with the password masked, plus `equals` that does not
+  leak by field ordering (:625).
+- [x] `LibvirtApiClient`: the `virsh domdisplay` result was logged in full,
+  so a `spice://…?password=…` URI put the ticket in logcat. — FIXED: the
+  log line now carries host and port only.
+
+## Pass 4: Input completeness
+
+- [x] `SpiceKeyMap`: 22 keycodes had no PC scancode (function keys past F10,
+  the numeric keypad, `Insert`, `Delete`, `Home`, `End`, `PageUp`,
+  `PageDown`, the navigation cluster), so those keys silently did nothing on
+  a SPICE console. — FIXED: full scancode table in `SpiceConstants`, plus a
+  modifier-aware fallback that recovers the unmodified base key when a
+  modified press has no direct mapping.
+- [x] `SpiceView`: pointer events reported a hardcoded left button and there
+  was no `onGenericMotionEvent`, so right-click, middle-click and the scroll
+  wheel were unreachable from a mouse or trackpad. — FIXED: real button
+  state from `MotionEvent.buttonState`, and `onGenericMotionEvent` (:461)
+  translates `ACTION_SCROLL` into button 4/5 press-release pairs the way
+  spice-gtk does.
+- [x] `SpiceView`: the focal-pan clamp was asymmetric (the same bug the VNC
+  audit found in `VncView`), so panning left or up snapped back. — FIXED:
+  symmetric `±(fb - view/scale)/2` bounds.
+
+## Pass 5: Coroutines and integration
+
+- [x] `ProxmoxManagerActivity` (:359), `LibvirtManagerActivity`,
+  `XCPngManagerActivity`, `ProxmoxApiClient.getSPICEProxy`: console launches
+  caught `Exception` generically, swallowing `CancellationException` and
+  leaving a cancelled scope running to completion. — FIXED:
+  `CancellationException` is rethrown before every generic catch.
+- [x] `LibvirtApiClient`: the host and port parsed out of `domdisplay` were
+  passed to the client without validation. — FIXED: port range-checked
+  1..65535 and the host rejected if it carries whitespace, control
+  characters or separators, before it is dialled.
+
+## Pass 6: virt-viewer `.vv`, `spice://`, `vnc://` (feature work)
+
+Implemented in a new `hypervisor/viewer/` package, deliberately free of
+Android framework types (`android.net.Uri`'s unit-test stubs throw) so all
+three parsers are exercised by plain JVM tests.
+
+- `VirtViewerConnection.kt` — shared descriptor for all three sources, with
+  a redacting `toString()` and `toSpiceParams()`.
+- `VirtViewerFile.kt` — `.vv` INI parser (`[virt-viewer]`: `type`, `host`,
+  `port`, `tls-port`, `password`, `ca`, `host-subject`, `proxy`, `title`,
+  `delete-this-file`, `fullscreen`, `enable-usbredir`, `release-cursor`,
+  `secure-attention`, `toggle-fullscreen`; unknown keys ignored, last value
+  wins). Bounded at 256 KiB / 4096 lines / 4 KiB per value / 64 KiB CA.
+- `UriParsing.kt` — shared, hostile-input-hardened URI helpers. Percent
+  decoding happens *before* validation, so an encoded control character or
+  separator cannot slip past as literal `%00` text.
+- `SpiceUri.kt` — `spice://` and `spice+tls://`, including the
+  `?tls-port=` form virt-manager emits; userinfo rejected.
+- `VncUri.kt` — `vnc://[user[:password]@]host[:port]` per RFC 7869 plus the
+  TigerVNC/RealVNC userinfo convention, default port 5900, `?password=` /
+  `?username=` fallback. Userinfo is split at the **last** `@` so an encoded
+  `@` in a user name cannot move the host boundary.
+- `VncAuthProbe.kt` — a `vnc://` link carries no saved host to pull a
+  password from, and `RfbClient` only discovers that one is needed inside
+  the tab, after the launcher has finished. The probe runs the version
+  handshake, reads the offered security types and closes — it never selects
+  a type and never authenticates — so the launcher can prompt before the
+  tab exists. It mirrors `RfbClient`'s own preference order (VeNCrypt,
+  None, then VNC auth), and returns "no password" on any failure so the
+  real connect surfaces the error.
+- `LinkHandlerActivity` — dispatches the new schemes and `.vv` files, always
+  through a `MaterialAlertDialogBuilder` confirmation showing host, port and
+  whether the link is encrypted; never auto-connects. `.vv`
+  `delete-this-file=1` is honoured, and every deletion failure is swallowed
+  at debug level. `.vv type=vnc` and `vnc://` converge on one
+  `launchVncTab()` helper.
+- `AndroidManifest.xml` — VIEW filters for `spice`, `spice+tls`, `vnc`,
+  `application/x-virt-viewer`, and a `content`/`file` + `.vv` pathPattern
+  fallback. Custom schemes are exempt from App Links verification; no new
+  permissions.
+
+Secrets: a ticket or password from a `.vv` file or a URI is used once,
+in-memory, and never persisted — the console tab gets
+`ConsoleConnectParams(password = "")` and the VNC path a transient
+`VncHost` with `keepAliveInBackground = false`. It is never written to the
+Keystore store the saved VNC hosts use, and never logged.
+
+## Tests added
+
+- `VirtViewerFileTest` — 30 tests: full and minimal descriptors, TLS-only,
+  CA unescaping, unknown keys/sections/comments, case-insensitivity,
+  repeated keys, boolean spellings, every malformed rejection, hostile
+  bounds (oversized document/value/line-count/host, ports 0/-1/65536/
+  999999999999), redacting `toString`, `toSpiceParams`, `parseOrNull`,
+  `looksLikeVirtViewerFile`.
+- `SpiceUriTest` — 22 tests: both schemes, case-insensitive scheme,
+  `tls-port`/`port` parameters, percent-decoded parameters, ignored path and
+  fragment, IPv6 literals, userinfo rejection, malformed IPv6, oversized URI
+  and host, `%00` in the host, redaction.
+- `VncUriTest` — 36 tests: default and explicit port, userinfo with and
+  without a password, password-only userinfo, `?password=`/`?username=`,
+  userinfo precedence, `?port=` override, percent-encoded userinfo, the
+  last-`@` host boundary, IPv6 literals, and the hostile set (bad ports,
+  missing host, oversized host/username/password, encoded control character
+  and separator in the host, malformed IPv6), plus redaction and the
+  guarantee that a parse error never quotes the password.
+- `VncAuthProbeTest` — 12 tests: VNC-auth-only, None present, VeNCrypt
+  present, the RFB 3.7 / high-minor-3.8 / unknown-minor-3.3 version
+  replies, the RFB 3.3 U32 path (None and VNC auth), zero type count,
+  non-RFB greeting, unparseable minor version, and the assertion that the
+  probe writes exactly the 12-byte version reply and nothing else.
+
+Full gate result: `make check` BUILD SUCCESSFUL, 466 unit tests, 0
+failures, 10 skipped.
+
+## Notes for the user
+
+- This audit was instructed not to commit and not to touch `CHANGELOG.md`.
+  The `.vv` / `spice://` / `vnc://` support and the SPICE input additions
+  are user-visible, so AI.md PART 0 requires a `CHANGELOG.md` entry in the
+  same commit — the committing session must add it.
+- The `proguard-rules.pro` finding is the one to note: SPICE was
+  non-functional in every minified build and no debug testing could have
+  revealed it.
+- Flaky test, pre-existing and outside this audit's scope:
+  `TerminalViewComposingFlushTest > flushPendingComposing sends composing
+  text before an escape write races ahead` failed with a
+  `ComparisonFailure` at `TerminalViewComposingFlushTest.kt:90` on one
+  `make check` run and passed on the next with no change to the file or
+  anything it depends on. It is a timing-dependent test and should be made
+  deterministic; recorded here because this session was instructed not to
+  edit `TODO.AI.md`.

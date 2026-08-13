@@ -281,7 +281,9 @@
             android:label="Stack Logs"
             android:parentActivityName=".ui.activities.DockerHostManagerActivity" />
 
-        <!-- System-wide ssh:// and sftp:// link handler — see
+        <!-- System-wide ssh://, sftp://, spice://, spice+tls:// and vnc://
+             link
+             handler, plus virt-viewer .vv connection files — see
              LinkHandlerActivity for the security rationale (untrusted-input
              parsing, never auto-connect, transient profile only).
              Transparent/no-history: it only ever shows one confirmation
@@ -307,6 +309,52 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="sftp" />
+            </intent-filter>
+            <!-- virt-viewer SPICE URIs. "spice+tls" is a literal scheme
+                 string, matched verbatim by the resolver like any other
+                 custom scheme. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="spice" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="spice+tls" />
+            </intent-filter>
+            <!-- RFC 7869 vnc:// URIs. Routed to the same direct-TCP RFB
+                 path a .vv file with type=vnc uses. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="vnc" />
+            </intent-filter>
+            <!-- virt-viewer .vv connection files opened from a browser
+                 download, a file manager, or a mail attachment. The typed
+                 MIME filter is the correct match; hypervisor web UIs and
+                 file managers that send a generic type are caught by the
+                 extension fallback below. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:mimeType="application/x-virt-viewer" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.vv" />
+                <data android:pathPattern=".*\\..*\\.vv" />
+                <data android:pathPattern=".*\\..*\\..*\\.vv" />
             </intent-filter>
         </activity>
 

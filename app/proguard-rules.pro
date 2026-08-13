@@ -131,3 +131,27 @@
 # (actual package: `io.github.tabssh.*`). Those rules have always been
 # matching nothing — leaving them out rather than fixing them in place
 # because the kotlinx.serialization rules above are what actually fix sync.
+
+# ── SPICE native bridge (libtabssh_native.so) ────────────────────────────
+# The default `-keepclasseswithmembernames class * { native <methods>; }`
+# rule from proguard-android-optimize.txt covers the Kotlin -> C direction
+# (SpiceClient.nativeXxx / SpiceLoader.nativeIsSpiceAvailable), but NOT the
+# C -> Kotlin direction: spice/cpp/spice_client_glib.c resolves the eight
+# `onNative*` callbacks by literal name+signature through GetMethodID. R8
+# sees no Kotlin caller for them, so without this rule it strips or renames
+# every one and the whole SPICE stack dies at handshake time in every
+# minified (release / F-Droid) build.
+-keep class io.github.tabssh.hypervisor.spice.SpiceClient {
+    void onNativeConnected(int, int, java.lang.String, int[]);
+    void onNativeFramebufferUpdate(int, int, int, int, int[]);
+    void onNativeDesktopResize(int, int, int[]);
+    void onNativeCursorUpdate(int, int, int, int, int[], byte[]);
+    void onNativeAgentConnected();
+    void onNativeClipboardText(java.lang.String);
+    void onNativeError(java.lang.String);
+    void onNativeDisconnected(java.lang.String);
+}
+# nativeStartSession passes `this` back to C, which stores a global ref and
+# calls the methods above on it — the class itself must keep its name too.
+-keep class io.github.tabssh.hypervisor.spice.SpiceClient
+-keep class io.github.tabssh.hypervisor.spice.SpiceLoader { *; }

@@ -11,6 +11,16 @@ import java.io.IOException
 import java.security.cert.X509Certificate
 import javax.net.ssl.*
 
+/*
+ * Upper bounds on the hypervisor-supplied SPICE descriptor fields. The
+ * hypervisor is a trust boundary (see IDEA.md § Trust boundaries), so
+ * nothing unbounded from its JSON is handed to the native SPICE bridge.
+ * A PVE cluster CA chain is a few kilobytes; 64 KiB is a generous ceiling.
+ */
+private const val MAX_SPICE_HOST_LEN = 255
+private const val MAX_SPICE_SUBJECT_LEN = 1024
+private const val MAX_SPICE_CA_LEN = 65536
+
 /**
  * Proxmox VE API Client
  */
@@ -621,6 +631,17 @@ class ProxmoxApiClient(
                 title == other.title && proxy == other.proxy
         }
 
+        /**
+         * Redacted rendering. The compiler-generated data-class `toString`
+         * would print the per-session SPICE ticket verbatim, and this object
+         * is passed through error paths that log their arguments.
+         */
+        override fun toString(): String =
+            "SPICEProxyResult(host=$host, port=$port, tlsPort=$tlsPort, " +
+                "password=${if (password.isEmpty()) "<none>" else "xxxxx"}, " +
+                "caCert=${caCert?.let { "${it.size} bytes" } ?: "null"}, " +
+                "hostSubject=$hostSubject, title=$title, proxy=$proxy)"
+
         override fun hashCode(): Int {
             var r = host.hashCode()
             r = 31 * r + port
@@ -644,9 +665,16 @@ class ProxmoxApiClient(
      * client's [host] value, which is the address the user configured for
      * this hypervisor connection.
      *
-     * Returns null on any failure (network, auth, VM configured without
-     * SPICE display). Error text is logged and swallowed to mirror the
-     * shape of [getVNCProxy] — the caller decides how to fall back.
+     * Returns null only for a 200 response whose `data` object is missing,
+     * empty, or not a usable SPICE descriptor (VM configured without a SPICE
+     * display, out-of-range ports, oversized fields). Transport, auth and
+     * permission failures propagate as exceptions — same contract as
+     * [getVNCProxy], so the console strategy chain can tell the user what
+     * actually went wrong instead of seeing every failure as "no SPICE".
+     *
+     * Every field below is hypervisor-supplied and therefore untrusted: the
+     * ports are range-checked and the CA PEM and host-subject are size-bounded
+     * before anything reaches the JNI layer.
      */
     suspend fun getSPICEProxy(node: String, vmid: Int): SPICEProxyResult? = withContext(Dispatchers.IO) {
         try {
@@ -659,12 +687,18 @@ class ProxmoxApiClient(
                 Logger.e("ProxmoxAPI", "No data in spiceproxy response — VM $vmid likely not configured for SPICE")
                 return@withContext null
             }
-            val respHost = data.optString("host").takeIf { it.isNotBlank() } ?: run {
-                Logger.e("ProxmoxAPI", "spiceproxy response missing host")
+            val respHost = data.optString("host")
+                .takeIf { it.isNotBlank() && it.length <= MAX_SPICE_HOST_LEN } ?: run {
+                Logger.e("ProxmoxAPI", "spiceproxy response missing or oversized host")
                 return@withContext null
             }
             val plainPort = data.optString("port").toIntOrNull() ?: 0
             val tlsPort = data.optString("tls-port").toIntOrNull() ?: 0
+            if (plainPort !in 0..65535 || tlsPort !in 0..65535) {
+                Logger.e("ProxmoxAPI",
+                    "spiceproxy response has out-of-range ports (plain=$plainPort, tls=$tlsPort)")
+                return@withContext null
+            }
             if (plainPort == 0 && tlsPort == 0) {
                 Logger.e("ProxmoxAPI", "spiceproxy response has neither port nor tls-port")
                 return@withContext null
@@ -680,9 +714,15 @@ class ProxmoxApiClient(
              * terminate the key. Un-escape before handing to libspice so
              * the PEM decoder can find the BEGIN/END lines.
              */
-            val caPem = data.optString("ca").takeIf { it.isNotBlank() }?.replace("\\n", "\n")
+            val caRaw = data.optString("ca")
+            if (caRaw.length > MAX_SPICE_CA_LEN) {
+                Logger.e("ProxmoxAPI", "spiceproxy CA cert is ${caRaw.length} chars — refusing")
+                return@withContext null
+            }
+            val caPem = caRaw.takeIf { it.isNotBlank() }?.replace("\\n", "\n")
             val caCert = caPem?.toByteArray(Charsets.US_ASCII)
-            val hostSubject = data.optString("host-subject").takeIf { it.isNotBlank() }
+            val hostSubject = data.optString("host-subject")
+                .takeIf { it.isNotBlank() && it.length <= MAX_SPICE_SUBJECT_LEN }
             val title = data.optString("title").takeIf { it.isNotBlank() }
             val proxy = data.optString("proxy").takeIf { it.isNotBlank() }
             Logger.i("ProxmoxAPI",
@@ -700,8 +740,11 @@ class ProxmoxApiClient(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            // Same reasoning as getVNCProxy: a 403 (no VM.Console permission),
+            // a TLS failure and a socket timeout must not all look like
+            // "this VM has no SPICE display" to the strategy chain.
             Logger.e("ProxmoxAPI", "Failed to get spiceproxy", e)
-            null
+            throw e
         }
     }
 

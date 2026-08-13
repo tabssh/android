@@ -41,6 +41,14 @@ class LibvirtApiClient(
         private const val TAG = "LibvirtApiClient"
         private const val CONNECT_TIMEOUT_MS = 15_000
         private const val EXEC_TIMEOUT_MS = 10_000
+
+        /**
+         * Longest listen address accepted from a `virsh domdisplay` URI. The
+         * hypervisor is a trust boundary, so the value that becomes an SSH
+         * port-forward target is length-bounded (a hostname cannot legally
+         * exceed 255 octets).
+         */
+        private const val MAX_SPICE_HOST_LEN = 255
     }
 
     private var session: Session? = null
@@ -472,7 +480,14 @@ class LibvirtApiClient(
         val output = runCommand("virsh domdisplay --include-password ${shQuote(domain)} 2>/dev/null")
             .lines().firstOrNull { it.isNotBlank() }?.trim() ?: ""
         if (!output.startsWith("spice://")) {
-            Logger.i(TAG, "getSpiceDisplay($domain): no SPICE display (domdisplay='$output') — VNC fallback")
+            // Never log the URI itself. --include-password embeds the display
+            // ticket as userinfo, so for a VNC-only domain this line is
+            // literally `vnc://:<password>@host:port` — logging it wrote the
+            // guest console password to logcat in plaintext. Only the scheme
+            // is diagnostic, and it is the only part reproduced here.
+            val scheme = output.substringBefore("://", missingDelimiterValue = "")
+            Logger.i(TAG, "getSpiceDisplay($domain): no SPICE display " +
+                "(domdisplay scheme='${scheme.ifBlank { "none" }}') — VNC fallback")
             return@withContext null
         }
         val parsed = parseSpiceUri(output)
@@ -562,6 +577,12 @@ class LibvirtApiClient(
             if (kv.size == 2 && kv[0] == "tls-port") tlsPort = kv[1].toIntOrNull() ?: 0
         }
         if (port == 0 && tlsPort == 0) return null
+        // The URI comes from the remote hypervisor, so the ports are untrusted:
+        // an out-of-range value would reach setPortForwardingL and, via
+        // SpiceConnectionParams' require(), throw out of the fallback path
+        // instead of quietly declining SPICE.
+        if (port !in 0..65535 || tlsPort !in 0..65535) return null
+        if (host.length > MAX_SPICE_HOST_LEN) return null
         return ParsedSpiceUri(password, host, port, tlsPort)
     }
 

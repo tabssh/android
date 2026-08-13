@@ -75,7 +75,15 @@ class SpiceView @JvmOverloads constructor(
 
     private val fbLock = Any()
     private var bitmap: Bitmap? = null
+
+    // Written by the native SPICE worker under fbLock, read without the lock
+    // by the gesture, layout and coordinate-mapping code on the main thread.
+    // @Volatile is what makes those unlocked reads see a whole, current value
+    // instead of a torn pair after a desktop resize.
+    @Volatile
     private var fbWidth = 0
+
+    @Volatile
     private var fbHeight = 0
 
     // ── Viewport transform ───────────────────────────────────────────────
@@ -139,6 +147,13 @@ class SpiceView @JvmOverloads constructor(
     /** Bitmask of buttons currently held. Mirrors SPICE's `state` byte. */
     private var currentButtonMask = 0
 
+    /**
+     * SPICE button ID of the press currently in progress. Remembered at
+     * ACTION_DOWN so the matching release reports the same button — a
+     * hardware mouse's right/middle press must not be released as a left.
+     */
+    private var pressedButton = SpiceConstants.BTN_LEFT
+
     private val contextMenuHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var contextMenuRunnable: Runnable? = null
     private var contextMenuDownX = 0f
@@ -191,16 +206,29 @@ class SpiceView @JvmOverloads constructor(
         ): Boolean {
             if (e2.pointerCount > 1) return false
             if (userScale > 1.05f) {
-                /* Pan the viewport rather than emit scroll events. */
-                panX = (panX + distX / currentScale()).coerceIn(
-                    0f, max(0f, fbWidth - width / currentScale()))
-                panY = (panY + distY / currentScale()).coerceIn(
-                    0f, max(0f, fbHeight - height / currentScale()))
+                /*
+                 * Pan the viewport rather than emit scroll events.
+                 * onDraw and screenToBitmap both place the bitmap with a
+                 * CENTRED origin, so pan 0 is the centre of the image and the
+                 * legal range is symmetric about it. The old top-left bounds
+                 * (0 .. fbWidth - viewport) let the user pan a full half-
+                 * viewport past the right/bottom edge and made the left/top
+                 * half unreachable.
+                 */
+                val extX = max(0f, (fbWidth - width / currentScale()) / 2f)
+                val extY = max(0f, (fbHeight - height / currentScale()) / 2f)
+                panX = (panX + distX / currentScale()).coerceIn(-extX, extX)
+                panY = (panY + distY / currentScale()).coerceIn(-extY, extY)
                 postInvalidate()
             } else {
                 val steps = (distY / 40f).toInt().coerceIn(-SCROLL_STEPS, SCROLL_STEPS)
+                val (bx, by) = screenToBitmap(e2.x, e2.y)
                 val button = if (steps < 0) SpiceConstants.BTN_UP else SpiceConstants.BTN_DOWN
                 repeat(abs(steps)) {
+                    // Position the pointer first: SPICE routes a wheel click to
+                    // whatever is under the last reported position, so without
+                    // this the scroll lands wherever the pointer was left.
+                    onPointerMove?.invoke(bx, by, currentButtonMask)
                     onPointerButton?.invoke(button, currentButtonMask, true)
                     onPointerButton?.invoke(button, currentButtonMask, false)
                 }
@@ -230,15 +258,7 @@ class SpiceView @JvmOverloads constructor(
     fun asSpiceListener(): SpiceListener = object : SpiceListener {
         override fun onConnected(width: Int, height: Int, name: String, framebuffer: IntArray) {
             Logger.i(TAG, "SPICE connected: ${width}x$height '$name'")
-            synchronized(fbLock) {
-                bitmap?.recycle()
-                bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                fbWidth = width
-                fbHeight = height
-                if (framebuffer.size >= width * height) {
-                    bitmap?.setPixels(framebuffer, 0, width, 0, 0, width, height)
-                }
-            }
+            if (!allocateSurface(width, height, framebuffer)) return
             post {
                 recomputeFitScale()
                 requestLayout()
@@ -248,22 +268,28 @@ class SpiceView @JvmOverloads constructor(
 
         override fun onFramebufferUpdate(x: Int, y: Int, w: Int, h: Int, framebuffer: IntArray) {
             synchronized(fbLock) {
-                bitmap?.setPixels(framebuffer, y * fbWidth + x, fbWidth, x, y, w, h)
+                val bmp = bitmap ?: return
+                // setPixels throws rather than clipping, and an uncaught throw
+                // on the native worker thread takes the whole session (and,
+                // from JNI, potentially the process) down. The rect is
+                // server-supplied, so validate it against the surface we
+                // actually allocated and drop the single update on mismatch.
+                val fits = w > 0 && h > 0 && x >= 0 && y >= 0 &&
+                    bmp.width == fbWidth && bmp.height == fbHeight &&
+                    x + w <= fbWidth && y + h <= fbHeight &&
+                    framebuffer.size >= (y + h - 1) * fbWidth + x + w
+                if (!fits) {
+                    Logger.w(TAG, "Dropping update ($x,$y) ${w}x$h — does not fit ${fbWidth}x$fbHeight")
+                    return
+                }
+                bmp.setPixels(framebuffer, y * fbWidth + x, fbWidth, x, y, w, h)
             }
             postInvalidate()
         }
 
         override fun onDesktopResize(width: Int, height: Int, framebuffer: IntArray) {
             Logger.i(TAG, "SPICE desktop resize: ${width}x$height")
-            synchronized(fbLock) {
-                bitmap?.recycle()
-                bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                fbWidth = width
-                fbHeight = height
-                if (framebuffer.size >= width * height) {
-                    bitmap?.setPixels(framebuffer, 0, width, 0, 0, width, height)
-                }
-            }
+            if (!allocateSurface(width, height, framebuffer)) return
             post {
                 recomputeFitScale()
                 requestLayout()
@@ -289,12 +315,55 @@ class SpiceView @JvmOverloads constructor(
         }
     }
 
+    /**
+     * (Re)allocate the framebuffer bitmap for a server-announced geometry
+     * and paint [framebuffer] into it when it carries real pixels.
+     *
+     * Returns false — leaving the current surface untouched — when the
+     * geometry is not usable. The SPICE server is a trust boundary: an
+     * out-of-range or overflowing width/height would otherwise reach
+     * `Bitmap.createBitmap` as an OOM or a negative allocation, and
+     * `width * height` in Int silently wraps for large values, so the
+     * bound is checked in Long.
+     */
+    private fun allocateSurface(width: Int, height: Int, framebuffer: IntArray): Boolean {
+        val pixels = width.toLong() * height.toLong()
+        if (width <= 0 || height <= 0 ||
+            width > SpiceConstants.MAX_DIMENSION || height > SpiceConstants.MAX_DIMENSION
+        ) {
+            Logger.w(TAG, "Rejecting SPICE geometry ${width}x$height — out of range")
+            return false
+        }
+        synchronized(fbLock) {
+            val dimsMatch = bitmap != null && fbWidth == width && fbHeight == height
+            // Reuse the existing bitmap on an unchanged geometry so the last
+            // decoded frame stays on screen across a reconnect instead of
+            // flashing black until the first full update paints.
+            if (!dimsMatch) {
+                bitmap?.recycle()
+                bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                fbWidth = width
+                fbHeight = height
+            }
+            // A fresh connect passes an all-zero framebuffer (real pixels
+            // arrive later via onFramebufferUpdate); painting it would blank
+            // a retained frame for nothing.
+            if (framebuffer.size.toLong() >= pixels && framebuffer.any { it != 0 }) {
+                bitmap?.setPixels(framebuffer, 0, width, 0, 0, width, height)
+            }
+        }
+        return true
+    }
+
     // ── View-size callback ───────────────────────────────────────────────
 
     /**
      * Fired on the main thread whenever the view is measured with
-     * non-zero dimensions. The activity uses this to send a SPICE
-     * agent monitors-config message so the guest resizes to match.
+     * non-zero dimensions.
+     *
+     * Purely informational for now: the native bridge exposes no
+     * monitors-config entry point, so nothing here resizes the guest. The
+     * host may use it to report or record the viewport size.
      */
     var onViewSizeReady: ((width: Int, height: Int) -> Unit)? = null
 
@@ -316,13 +385,21 @@ class SpiceView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val bmp = synchronized(fbLock) { bitmap } ?: return
         val scale = currentScale()
-        val originX = (width - fbWidth * scale) / 2f - panX * scale
-        val originY = (height - fbHeight * scale) / 2f - panY * scale
-        drawMatrix.setScale(scale, scale)
-        drawMatrix.postTranslate(originX, originY)
-        canvas.drawBitmap(bmp, drawMatrix, bitmapPaint)
+        // The whole draw runs under fbLock. The native SPICE worker recycles
+        // and replaces this bitmap (onConnected / onDesktopResize) and writes
+        // into it (onFramebufferUpdate) under the same lock; releasing the
+        // lock after merely reading the reference let the worker recycle the
+        // bitmap between that read and drawBitmap ("trying to use a recycled
+        // bitmap") and let a concurrent setPixels tear the frame.
+        synchronized(fbLock) {
+            val bmp = bitmap ?: return
+            val originX = (width - fbWidth * scale) / 2f - panX * scale
+            val originY = (height - fbHeight * scale) / 2f - panY * scale
+            drawMatrix.setScale(scale, scale)
+            drawMatrix.postTranslate(originX, originY)
+            canvas.drawBitmap(bmp, drawMatrix, bitmapPaint)
+        }
     }
 
     // ── Touch ────────────────────────────────────────────────────────────
@@ -338,9 +415,15 @@ class SpiceView @JvmOverloads constructor(
                 // first (mirrors TerminalView.onTouchEvent's ACTION_DOWN).
                 requestFocus()
                 val (bx, by) = screenToBitmap(event.x, event.y)
-                currentButtonMask = currentButtonMask or SpiceConstants.MASK_LEFT
+                // A real mouse reports which physical button went down, so its
+                // right/middle clicks reach the guest as right/middle instead
+                // of being flattened to a left click. A finger reports no
+                // button state at all, which stays a left click.
+                val button = pressedMouseButton(event)
+                pressedButton = button
+                currentButtonMask = currentButtonMask or maskFor(button)
                 onPointerMove?.invoke(bx, by, currentButtonMask)
-                onPointerButton?.invoke(SpiceConstants.BTN_LEFT, currentButtonMask, true)
+                onPointerButton?.invoke(button, currentButtonMask, true)
                 armContextMenuTimer(event.x, event.y)
             }
             MotionEvent.ACTION_MOVE -> {
@@ -358,13 +441,81 @@ class SpiceView @JvmOverloads constructor(
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 val (bx, by) = screenToBitmap(event.x, event.y)
-                currentButtonMask = currentButtonMask and SpiceConstants.MASK_LEFT.inv()
-                onPointerButton?.invoke(SpiceConstants.BTN_LEFT, currentButtonMask, false)
+                val button = pressedButton
+                pressedButton = SpiceConstants.BTN_LEFT
+                currentButtonMask = currentButtonMask and maskFor(button).inv()
+                onPointerButton?.invoke(button, currentButtonMask, false)
                 onPointerMove?.invoke(bx, by, currentButtonMask)
                 cancelContextMenuTimer()
             }
         }
         return true
+    }
+
+    /**
+     * Handle events from a real pointing device (USB/Bluetooth mouse,
+     * DeX/ChromeOS trackpad). Android delivers wheel scrolls and hover moves
+     * here, never through [onTouchEvent], so without this the wheel did
+     * nothing and the guest cursor did not follow the mouse.
+     */
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_SCROLL -> {
+                val (bx, by) = screenToBitmap(event.x, event.y)
+                val vs = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
+                // SPICE has no scroll amount: each wheel notch is a press and
+                // release of button 4 (up) or 5 (down). There is no horizontal
+                // wheel button in the SPICE mouse enum, so AXIS_HSCROLL has
+                // nothing to map onto and is deliberately ignored.
+                if (vs != 0f) {
+                    val button = if (vs > 0f) SpiceConstants.BTN_UP else SpiceConstants.BTN_DOWN
+                    val notches = kotlin.math.ceil(abs(vs).toDouble()).toInt()
+                        .coerceIn(1, SCROLL_STEPS)
+                    repeat(notches) {
+                        onPointerMove?.invoke(bx, by, currentButtonMask)
+                        onPointerButton?.invoke(button, currentButtonMask, true)
+                        onPointerButton?.invoke(button, currentButtonMask, false)
+                    }
+                }
+                return true
+            }
+            MotionEvent.ACTION_HOVER_MOVE, MotionEvent.ACTION_HOVER_ENTER -> {
+                val (bx, by) = screenToBitmap(event.x, event.y)
+                onPointerMove?.invoke(bx, by, mouseButtonMask(event))
+                return true
+            }
+        }
+        return super.onGenericMotionEvent(event)
+    }
+
+    /** Translate Android's mouse button state into a SPICE state mask. */
+    private fun mouseButtonMask(event: MotionEvent): Int {
+        var mask = 0
+        val state = event.buttonState
+        if (state and MotionEvent.BUTTON_PRIMARY != 0) mask = mask or SpiceConstants.MASK_LEFT
+        if (state and MotionEvent.BUTTON_TERTIARY != 0) mask = mask or SpiceConstants.MASK_MIDDLE
+        if (state and MotionEvent.BUTTON_SECONDARY != 0) mask = mask or SpiceConstants.MASK_RIGHT
+        return mask
+    }
+
+    /**
+     * SPICE button ID for the button that went down in [event]. Falls back
+     * to the left button for touch events, which report no button state.
+     */
+    private fun pressedMouseButton(event: MotionEvent): Int {
+        val state = event.buttonState
+        return when {
+            state and MotionEvent.BUTTON_SECONDARY != 0 -> SpiceConstants.BTN_RIGHT
+            state and MotionEvent.BUTTON_TERTIARY != 0 -> SpiceConstants.BTN_MIDDLE
+            else -> SpiceConstants.BTN_LEFT
+        }
+    }
+
+    /** State-mask bit corresponding to a SPICE button ID. */
+    private fun maskFor(button: Int): Int = when (button) {
+        SpiceConstants.BTN_MIDDLE -> SpiceConstants.MASK_MIDDLE
+        SpiceConstants.BTN_RIGHT -> SpiceConstants.MASK_RIGHT
+        else -> SpiceConstants.MASK_LEFT
     }
 
     private fun armContextMenuTimer(x: Float, y: Float) {

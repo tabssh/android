@@ -253,6 +253,10 @@ class LibvirtManagerActivity : AppCompatActivity() {
                 val spiceDisplay = withContext(Dispatchers.IO) {
                     try {
                         client.getSpiceDisplay(vm.name)
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        // A cancelled scope must not be reported as "no SPICE"
+                        // and fall through to the VNC probe on a dead scope.
+                        throw e
                     } catch (e: Exception) {
                         Logger.i(TAG, "SPICE probe failed for ${vm.name}: ${e.message} — VNC fallback")
                         null
@@ -302,6 +306,8 @@ class LibvirtManagerActivity : AppCompatActivity() {
                 } else {
                     showDomainError("Console Error", e.message ?: "VNC error")
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to open VNC channel for ${vm.name}", e)
                 hideProgress()

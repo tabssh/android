@@ -73,4 +73,43 @@ object SpiceConstants {
     const val SC_DOWN = 0xE050
     const val SC_LEFT = 0xE04B
     const val SC_RIGHT = 0xE04D
+    const val SC_NUMPAD_DIVIDE = 0xE035
+    const val SC_NUMPAD_ENTER = 0xE01C
+    const val SC_MENU = 0xE05D
+    const val SC_PRINT_SCREEN = 0xE037
+
+    /* Numpad and lock keys (non-extended Set 1 make codes). */
+    const val SC_NUMLOCK = 0x45
+    const val SC_SCROLL_LOCK = 0x46
+    const val SC_NUMPAD_MULTIPLY = 0x37
+    const val SC_NUMPAD_SUBTRACT = 0x4A
+    const val SC_NUMPAD_ADD = 0x4E
+    const val SC_NUMPAD_DOT = 0x53
+    const val SC_NUMPAD_0 = 0x52
+    const val SC_NUMPAD_1 = 0x4F
+    const val SC_NUMPAD_2 = 0x50
+    const val SC_NUMPAD_3 = 0x51
+    const val SC_NUMPAD_4 = 0x4B
+    const val SC_NUMPAD_5 = 0x4C
+    const val SC_NUMPAD_6 = 0x4D
+    const val SC_NUMPAD_7 = 0x47
+    const val SC_NUMPAD_8 = 0x48
+    const val SC_NUMPAD_9 = 0x49
+
+    /*
+     * Pause/Break has no single make code — it is the 8-byte sequence
+     * E1 1D 45 E1 9D C5. libspice takes the 0xE1-prefixed form, so the
+     * same folding convention as the 0xE0 codes is used here.
+     */
+    const val SC_PAUSE = 0xE11D
+
+    /**
+     * Upper bound on any server-declared framebuffer edge, in pixels.
+     * The SPICE server is a trust boundary: a hostile or buggy server can
+     * announce arbitrary display geometry, and an unbounded value would be
+     * turned straight into a `Bitmap.createBitmap` allocation. 16384 is the
+     * largest edge any real guest display uses and keeps the worst-case
+     * ARGB_8888 allocation bounded.
+     */
+    const val MAX_DIMENSION = 16384
 }

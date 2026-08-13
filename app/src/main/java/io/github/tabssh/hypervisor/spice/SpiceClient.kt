@@ -3,6 +3,10 @@ package io.github.tabssh.hypervisor.spice
 import io.github.tabssh.hypervisor.console.ConsoleDisconnectReason
 import io.github.tabssh.utils.logging.Logger
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
+import kotlin.concurrent.write
 
 /**
  * High-level SPICE session facade.
@@ -36,17 +40,38 @@ class SpiceClient(
 ) {
     companion object {
         private const val TAG = "SpiceClient"
+
+        /**
+         * Largest pixel count accepted from a native framebuffer callback.
+         * Guards the `width * height` products below against a hostile
+         * server-declared geometry overflowing Int before it is used as an
+         * array bound.
+         */
+        private const val MAX_PIXELS = SpiceConstants.MAX_DIMENSION.toLong() *
+            SpiceConstants.MAX_DIMENSION.toLong()
     }
 
     /**
      * Opaque C-side pointer to the `tabssh_spice_session` struct, or
-     * `0L` when no session is currently allocated. Written only from
-     * within the [running] transition so start/stop are strictly
-     * ordered; read from JNI callback paths that hold their own
-     * global reference to this Kotlin object.
+     * `0L` when no session is currently allocated.
+     *
+     * Atomic rather than `@Volatile`: [stop], [onNativeError] and
+     * [onNativeDisconnected] can all run concurrently (UI thread vs. the
+     * native glib worker), and a plain read-then-zero lets two of them
+     * observe the same non-zero handle and call `nativeDestroySession`
+     * twice on it. `getAndSet(0L)` makes exactly one caller the owner of
+     * the teardown.
      */
-    @Volatile
-    private var nativeHandle: Long = 0L
+    private val nativeHandle = AtomicLong(0L)
+
+    /**
+     * Guards the handle against use-after-free across the JNI boundary.
+     * Input senders take the read lock (many concurrent senders are fine);
+     * whoever wins the [nativeHandle] exchange takes the write lock before
+     * destroying, so no `nativeSendXxx` can still be inside C code holding
+     * a handle that is about to be freed.
+     */
+    private val handleLock = ReentrantReadWriteLock()
 
     private val running = AtomicBoolean(false)
 
@@ -98,20 +123,18 @@ class SpiceClient(
             listener?.onError("Failed to allocate SPICE session")
             return false
         }
-        nativeHandle = handle
+        nativeHandle.set(handle)
         val started = try {
             nativeStartSession(handle, this)
         } catch (t: Throwable) {
             Logger.e(TAG, "nativeStartSession threw", t)
-            nativeHandle = 0L
-            try { nativeDestroySession(handle) } catch (_: Throwable) {}
+            destroyOwned(nativeHandle.getAndSet(0L))
             running.set(false)
             listener?.onError("Failed to start SPICE session: ${t.message}")
             return false
         }
         if (!started) {
-            nativeHandle = 0L
-            try { nativeDestroySession(handle) } catch (_: Throwable) {}
+            destroyOwned(nativeHandle.getAndSet(0L))
             running.set(false)
             listener?.onError("SPICE session refused to start")
             return false
@@ -127,16 +150,43 @@ class SpiceClient(
      */
     fun stop() {
         if (!running.compareAndSet(true, false)) return
-        val handle = nativeHandle
-        nativeHandle = 0L
+        val handle = nativeHandle.getAndSet(0L)
         if (handle == 0L) return
         try { nativeStopSession(handle) } catch (t: Throwable) {
             Logger.w(TAG, "nativeStopSession threw", t)
         }
-        try { nativeDestroySession(handle) } catch (t: Throwable) {
-            Logger.w(TAG, "nativeDestroySession threw", t)
-        }
+        destroyOwned(handle)
         Logger.i(TAG, "SPICE session stopped")
+    }
+
+    /**
+     * Free a handle this caller exclusively claimed from [nativeHandle].
+     * Takes the write lock so any in-flight `nativeSendXxx` on another
+     * thread has left C code before the session struct goes away.
+     */
+    private fun destroyOwned(handle: Long) {
+        if (handle == 0L) return
+        handleLock.write {
+            try { nativeDestroySession(handle) } catch (t: Throwable) {
+                Logger.w(TAG, "nativeDestroySession threw", t)
+            }
+        }
+    }
+
+    /**
+     * Run [block] with a live handle held stable for its duration, or do
+     * nothing when the session is already torn down. Every input path goes
+     * through here so no scancode or pointer event can reach a freed
+     * session struct.
+     */
+    private inline fun withHandle(what: String, block: (Long) -> Unit) {
+        handleLock.read {
+            val handle = nativeHandle.get()
+            if (handle == 0L) return
+            try { block(handle) } catch (t: Throwable) {
+                Logger.w(TAG, "$what threw", t)
+            }
+        }
     }
 
     /**
@@ -145,10 +195,8 @@ class SpiceClient(
      * `spice_inputs_channel_key_press` / `_key_release` API.
      */
     fun sendKeyEvent(scancode: Int, down: Boolean) {
-        val handle = nativeHandle
-        if (handle == 0L) return
-        try { nativeSendKeyEvent(handle, scancode, down) } catch (t: Throwable) {
-            Logger.w(TAG, "nativeSendKeyEvent threw", t)
+        withHandle("nativeSendKeyEvent") { handle ->
+            nativeSendKeyEvent(handle, scancode, down)
         }
     }
 
@@ -159,10 +207,8 @@ class SpiceClient(
      * scroll-down). Matches the SPICE `motion` message convention.
      */
     fun sendPointerMove(x: Int, y: Int, buttonMask: Int) {
-        val handle = nativeHandle
-        if (handle == 0L) return
-        try { nativeSendPointerMove(handle, x, y, buttonMask) } catch (t: Throwable) {
-            Logger.w(TAG, "nativeSendPointerMove threw", t)
+        withHandle("nativeSendPointerMove") { handle ->
+            nativeSendPointerMove(handle, x, y, buttonMask)
         }
     }
 
@@ -174,10 +220,8 @@ class SpiceClient(
      * press, false for release.
      */
     fun sendPointerButton(button: Int, buttonState: Int, down: Boolean) {
-        val handle = nativeHandle
-        if (handle == 0L) return
-        try { nativeSendPointerButton(handle, button, buttonState, down) } catch (t: Throwable) {
-            Logger.w(TAG, "nativeSendPointerButton threw", t)
+        withHandle("nativeSendPointerButton") { handle ->
+            nativeSendPointerButton(handle, button, buttonState, down)
         }
     }
 
@@ -188,10 +232,8 @@ class SpiceClient(
      * [SpiceListener.onAgentConnected] themselves.
      */
     fun sendClipboardText(text: String) {
-        val handle = nativeHandle
-        if (handle == 0L) return
-        try { nativeSendClipboardText(handle, text) } catch (t: Throwable) {
-            Logger.w(TAG, "nativeSendClipboardText threw", t)
+        withHandle("nativeSendClipboardText") { handle ->
+            nativeSendClipboardText(handle, text)
         }
     }
 
@@ -199,22 +241,56 @@ class SpiceClient(
     // outside this file's translation unit can spoof them, and
     // annotated @JvmName to keep the mangled name stable across
     // Kotlin compiler upgrades — the C side hardcodes these names.
+    //
+    // Everything arriving here is wire-derived and therefore hostile:
+    // the geometry and the payload length both come from the SPICE
+    // server. Each callback validates its own arguments and drops the
+    // event rather than forwarding a self-inconsistent update that would
+    // blow up inside Bitmap.setPixels on the UI thread.
+
+    /**
+     * True when [width] x [height] is a plausible display geometry and
+     * [framebuffer] is large enough to actually hold it.
+     */
+    private fun isValidSurface(width: Int, height: Int, framebuffer: IntArray): Boolean {
+        if (width <= 0 || height <= 0) return false
+        if (width > SpiceConstants.MAX_DIMENSION || height > SpiceConstants.MAX_DIMENSION) return false
+        val pixels = width.toLong() * height.toLong()
+        if (pixels > MAX_PIXELS) return false
+        return framebuffer.size.toLong() >= pixels
+    }
 
     @Suppress("unused")
     @JvmName("onNativeConnected")
     internal fun onNativeConnected(width: Int, height: Int, name: String, framebuffer: IntArray) {
+        if (!isValidSurface(width, height, framebuffer)) {
+            Logger.w(TAG, "onNativeConnected: rejecting bad geometry ${width}x$height " +
+                "(framebuffer=${framebuffer.size})")
+            listener?.onError("SPICE server announced an invalid display size")
+            return
+        }
         listener?.onConnected(width, height, name, framebuffer)
     }
 
     @Suppress("unused")
     @JvmName("onNativeFramebufferUpdate")
     internal fun onNativeFramebufferUpdate(x: Int, y: Int, w: Int, h: Int, framebuffer: IntArray) {
+        if (x < 0 || y < 0 || !isValidSurface(w, h, framebuffer)) {
+            Logger.w(TAG, "onNativeFramebufferUpdate: dropping bad rect ${w}x$h@$x,$y " +
+                "(framebuffer=${framebuffer.size})")
+            return
+        }
         listener?.onFramebufferUpdate(x, y, w, h, framebuffer)
     }
 
     @Suppress("unused")
     @JvmName("onNativeDesktopResize")
     internal fun onNativeDesktopResize(width: Int, height: Int, framebuffer: IntArray) {
+        if (!isValidSurface(width, height, framebuffer)) {
+            Logger.w(TAG, "onNativeDesktopResize: dropping bad geometry ${width}x$height " +
+                "(framebuffer=${framebuffer.size})")
+            return
+        }
         listener?.onDesktopResize(width, height, framebuffer)
     }
 
@@ -222,6 +298,14 @@ class SpiceClient(
     @JvmName("onNativeCursorUpdate")
     internal fun onNativeCursorUpdate(hotX: Int, hotY: Int, w: Int, h: Int,
                                        pixels: IntArray, mask: ByteArray) {
+        if (!isValidSurface(w, h, pixels)) {
+            Logger.w(TAG, "onNativeCursorUpdate: dropping bad cursor ${w}x$h (pixels=${pixels.size})")
+            return
+        }
+        if (hotX < 0 || hotY < 0 || hotX >= w || hotY >= h) {
+            Logger.w(TAG, "onNativeCursorUpdate: dropping out-of-range hotspot $hotX,$hotY in ${w}x$h")
+            return
+        }
         listener?.onCursorUpdate(hotX, hotY, w, h, pixels, mask)
     }
 
@@ -240,17 +324,17 @@ class SpiceClient(
     @Suppress("unused")
     @JvmName("onNativeError")
     internal fun onNativeError(message: String) {
-        // A native error is terminal; drop the handle so subsequent
-        // calls are no-ops even before the caller notices.
-        val handle = nativeHandle
-        nativeHandle = 0L
+        // A native error is terminal; claim the handle so subsequent
+        // calls are no-ops even before the caller notices. getAndSet is
+        // what makes this safe against a concurrent stop() — only one of
+        // the two ever sees a non-zero handle, so the session is
+        // destroyed exactly once.
+        val handle = nativeHandle.getAndSet(0L)
         // CAS instead of set: true→false means the session died on its own,
         // false means stop() already claimed the shutdown (user-initiated).
         val wasRunning = running.compareAndSet(true, false)
         listener?.onError(message)
-        if (handle != 0L) {
-            try { nativeDestroySession(handle) } catch (_: Throwable) {}
-        }
+        destroyOwned(handle)
         if (wasRunning) {
             onSessionEnded?.invoke(ConsoleDisconnectReason.ERROR, message)
         }
@@ -259,16 +343,13 @@ class SpiceClient(
     @Suppress("unused")
     @JvmName("onNativeDisconnected")
     internal fun onNativeDisconnected(reason: String) {
-        val handle = nativeHandle
-        nativeHandle = 0L
+        val handle = nativeHandle.getAndSet(0L)
         // CAS instead of set: only a still-running session reports CLEAN —
         // the disconnect triggered by stop()'s own nativeStopSession is
         // user-initiated and must not reach the close-policy gate.
         val wasRunning = running.compareAndSet(true, false)
         listener?.onDisconnected(reason)
-        if (handle != 0L) {
-            try { nativeDestroySession(handle) } catch (_: Throwable) {}
-        }
+        destroyOwned(handle)
         if (wasRunning) {
             onSessionEnded?.invoke(ConsoleDisconnectReason.CLEAN, reason)
         }
