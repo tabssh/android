@@ -66,7 +66,8 @@ data class ConsoleConnectParams(
      */
     override fun toString(): String =
         "ConsoleConnectParams(type=$type, host=$host, port=$port, username=$username, " +
-            "password=xxxxx, verifySsl=$verifySsl, pinnedCertSha256=${if (pinnedCertSha256 == null) "null" else "set"}, " +
+            "password=${if (password.isEmpty()) "<none>" else "xxxxx"}, verifySsl=$verifySsl, " +
+            "pinnedCertSha256=${if (pinnedCertSha256 == null) "null" else "set"}, " +
             "vmId=$vmId, vmName=$vmName, vmNode=$vmNode, vmType=$vmType, realm=$realm, vmRef=$vmRef)"
 }
 
