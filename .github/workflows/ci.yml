@@ -115,8 +115,13 @@ jobs:
         echo "🔒 Running security validation..."
 
         # Check for actual hardcoded secrets (more specific)
+        # Exclusions: '"xxxxx"' = the credential-masking convention used by
+        # redacting toString() overrides (SpiceConnectionParams,
+        # VirtViewerConnection, ProxmoxApiClient) — the mask literal, not a
+        # secret; '\["password"\]' = map-key lookups of parsed user input
+        # (.vv/URI parsers), not literals.
         echo "Checking for hardcoded secrets..."
-        if grep -raE 'password.*=.*"[^"]{6,}"' app/src/main/java/ | grep -v "// " | grep -v "test-password" | grep -v "getString" | grep -v "optString" | grep -v "text.toString()" | grep -v "fun set.*Password" | grep -v "= setString" | grep -v '\.summary = "' | grep -v 'Password set' | grep -v 'passwordIcon' | grep -v 'hasPassword' | grep -v '\.hint = "' | grep -v "Logger.kt" | grep -v "Regex(" | grep -v "JsonObject\|JsonArray\|jsonObject\|jsonArray\|Map<String" | grep -v "encryptedLabel" | grep -v '\.error = "'; then
+        if grep -raE 'password.*=.*"[^"]{6,}"' app/src/main/java/ | grep -v "// " | grep -v "test-password" | grep -v "getString" | grep -v "optString" | grep -v "text.toString()" | grep -v "fun set.*Password" | grep -v "= setString" | grep -v '\.summary = "' | grep -v 'Password set' | grep -v 'passwordIcon' | grep -v 'hasPassword' | grep -v '\.hint = "' | grep -v "Logger.kt" | grep -v "Regex(" | grep -v "JsonObject\|JsonArray\|jsonObject\|jsonArray\|Map<String" | grep -v "encryptedLabel" | grep -v '\.error = "' | grep -v '"xxxxx"' | grep -v '\["password"\]'; then
           echo "❌ Actual hardcoded passwords found"
           exit 1
         else
