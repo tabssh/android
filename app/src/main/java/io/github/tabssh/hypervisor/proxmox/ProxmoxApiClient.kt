@@ -540,8 +540,14 @@ class ProxmoxApiClient(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            // Do NOT collapse to null here. Swallowing the exception made a 403
+            // (no VM.Console permission), a 501 (no VNC device), a TLS failure
+            // and a socket timeout all indistinguishable from "server returned
+            // no data", so the console strategy chain could not tell the user
+            // what actually went wrong. null is now reserved for a 200 response
+            // with an empty `data` object.
             Logger.e("ProxmoxAPI", "Failed to get vncproxy", e)
-            null
+            throw e
         }
     }
 

@@ -1,6 +1,7 @@
 package io.github.tabssh.docker.registry
 
 import io.github.tabssh.docker.transport.ComposeInvocation
+import io.github.tabssh.docker.transport.ComposeLsEntry
 import io.github.tabssh.docker.transport.ContainerAction
 import io.github.tabssh.docker.transport.DockerContainerStats
 import io.github.tabssh.docker.transport.DockerContainerSummary
@@ -243,6 +244,8 @@ private class FakePolicyDao(
     override suspend fun getEnabledList(): List<ContainerAutoUpdatePolicy> =
         listOf(stored).filter { it.enabled }
 
+    override suspend fun getAllList(): List<ContainerAutoUpdatePolicy> = listOf(stored)
+
     override suspend fun getById(id: Long): ContainerAutoUpdatePolicy? =
         stored.takeIf { it.id == id }
 
@@ -323,6 +326,19 @@ private open class FakeTransport : DockerTransport {
     override suspend fun composePull(stackDir: String): DockerResult<String> = unsupported()
     override suspend fun composeRestart(stackDir: String): DockerResult<String> = unsupported()
     override suspend fun composePs(stackDir: String): DockerResult<String> = unsupported()
+    override fun composeLogs(stackDir: String, service: String?, tail: Int): Flow<String> = emptyFlow()
+    override suspend fun composeLs(): DockerResult<List<ComposeLsEntry>> = unsupported()
+    override suspend fun composeUpByProject(name: String, configFile: String): DockerResult<String> = unsupported()
+    override suspend fun composeDownByProject(name: String, configFile: String): DockerResult<String> = unsupported()
+    override suspend fun composePullByProject(name: String, configFile: String): DockerResult<String> = unsupported()
+    override suspend fun composeRestartByProject(name: String, configFile: String): DockerResult<String> = unsupported()
+    override suspend fun composePsByProject(name: String, configFile: String): DockerResult<String> = unsupported()
+    override fun composeLogsByProject(
+        name: String,
+        configFile: String,
+        service: String?,
+        tail: Int
+    ): Flow<String> = emptyFlow()
     override suspend fun detectComposeInvocation(): DockerResult<ComposeInvocation> = unsupported()
     override suspend fun readRemoteFile(path: String): DockerResult<String> = unsupported()
     override suspend fun writeRemoteFile(path: String, content: String): DockerResult<Unit> = unsupported()

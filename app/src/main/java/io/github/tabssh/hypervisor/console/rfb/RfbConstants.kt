@@ -299,4 +299,8 @@ object RfbConstants {
     const val BTN_RIGHT: Int = 4
     const val BTN_SCROLL_UP: Int = 8
     const val BTN_SCROLL_DOWN: Int = 16
+    // X11 buttons 6 and 7 — horizontal wheel tilt, sent by mice with a
+    // tilt wheel or a trackpad's two-finger horizontal scroll.
+    const val BTN_SCROLL_LEFT: Int = 32
+    const val BTN_SCROLL_RIGHT: Int = 64
 }

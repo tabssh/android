@@ -203,6 +203,11 @@ class VncHostsActivity : AppCompatActivity() {
                     try {
                         withContext(Dispatchers.IO) {
                             app.database.vncHostDao().deleteById(host.id)
+                            // Drop the Keystore secret with the record. Leaving it
+                            // behind orphans the ciphertext forever, and a host
+                            // later re-imported under the same id would silently
+                            // inherit the dead password.
+                            app.securePasswordManager.clearPassword("vnc_host_${host.id}")
                             // H6 — record the deletion so it propagates and is not resurrected.
                             TombstoneRecorder.record(app, TombstoneRecorder.VNC_HOST, host.id)
                         }

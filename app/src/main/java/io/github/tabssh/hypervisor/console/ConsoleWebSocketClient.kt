@@ -5,13 +5,7 @@ import okhttp3.*
 import okio.ByteString
 import java.io.InputStream
 import java.io.OutputStream
-import java.io.PipedInputStream
-import java.io.PipedOutputStream
-import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 /**
  * WebSocket client for hypervisor VM console connections.
@@ -81,11 +75,13 @@ class ConsoleWebSocketClient(
     private var webSocket: WebSocket? = null
     private val client: OkHttpClient
 
-    // Piped streams for bridging WebSocket to InputStream/OutputStream
-    private var inputPipeOut: PipedOutputStream? = null
-    private var inputPipeIn: PipedInputStream? = null
-    private var outputPipeIn: PipedInputStream? = null
-    private var outputPipeOut: PipedOutputStream? = null
+    // Byte pipes bridging the WebSocket to InputStream/OutputStream.
+    // Deliberately NOT java.io.Piped*Stream: those bind to the writing thread
+    // and throw "Write end dead" once it exits, and OkHttp delivers frames on a
+    // recycled pool thread. See ByteStreamPipe.
+    // inbound: server frames → RfbClient/terminal. outbound: app → WebSocket.
+    private var inboundPipe: ByteStreamPipe? = null
+    private var outboundPipe: ByteStreamPipe? = null
 
     // Connection state.
     // @Volatile: read from the keepalive Thread's loop and written from
@@ -211,11 +207,9 @@ class ConsoleWebSocketClient(
         sendFailureFired = false
 
         try {
-            // Create piped streams for bidirectional communication
-            inputPipeOut = PipedOutputStream()
-            inputPipeIn = PipedInputStream(inputPipeOut, 65536) // 64KB buffer
-            outputPipeOut = PipedOutputStream()
-            outputPipeIn = PipedInputStream(outputPipeOut, 65536)
+            // Create the byte pipes for bidirectional communication
+            inboundPipe = ByteStreamPipe()
+            outboundPipe = ByteStreamPipe()
 
             // Build request with headers
             val requestBuilder = Request.Builder().url(url)
@@ -328,8 +322,7 @@ class ConsoleWebSocketClient(
                         }
 
                         val bytesWritten = actualData.toByteArray(Charsets.UTF_8)
-                        inputPipeOut?.write(bytesWritten)
-                        inputPipeOut?.flush()
+                        inboundPipe?.sink?.write(bytesWritten)
                         Logger.d(TAG, "Wrote ${bytesWritten.size} bytes to terminal")
                     } catch (e: Exception) {
                         Logger.e(TAG, "Error writing to input pipe", e)
@@ -360,8 +353,7 @@ class ConsoleWebSocketClient(
                         // PROXMOX_VNC: binary frames are raw RFB protocol bytes.
                         // They flow through the pipe to RfbClient unchanged;
                         // RfbClient owns the protocol handshake and decode loop.
-                        inputPipeOut?.write(bytes.toByteArray())
-                        inputPipeOut?.flush()
+                        inboundPipe?.sink?.write(bytes.toByteArray())
                     } catch (e: Exception) {
                         Logger.e(TAG, "Error writing binary to input pipe", e)
                     }
@@ -454,7 +446,7 @@ class ConsoleWebSocketClient(
             val buffer = ByteArray(4096)
             try {
                 while (isConnected) {
-                    val bytesRead = outputPipeIn?.read(buffer) ?: -1
+                    val bytesRead = outboundPipe?.source?.read(buffer) ?: -1
                     if (bytesRead > 0) {
                         val data = buffer.copyOf(bytesRead)
                         sendToWebSocket(data)
@@ -501,12 +493,12 @@ class ConsoleWebSocketClient(
     /**
      * Get InputStream for reading console output (from VM)
      */
-    fun getInputStream(): InputStream? = inputPipeIn
+    fun getInputStream(): InputStream? = inboundPipe?.source
 
     /**
      * Get OutputStream for writing console input (to VM)
      */
-    fun getOutputStream(): OutputStream? = outputPipeOut
+    fun getOutputStream(): OutputStream? = outboundPipe?.sink
 
     /**
      * Send text directly to console
@@ -560,17 +552,13 @@ class ConsoleWebSocketClient(
 
     private fun cleanup() {
         try {
-            inputPipeOut?.close()
-            inputPipeIn?.close()
-            outputPipeOut?.close()
-            outputPipeIn?.close()
+            inboundPipe?.close()
+            outboundPipe?.close()
         } catch (e: Exception) {
             Logger.w(TAG, "Error closing pipes", e)
         }
-        inputPipeOut = null
-        inputPipeIn = null
-        outputPipeOut = null
-        outputPipeIn = null
+        inboundPipe = null
+        outboundPipe = null
         webSocket = null
     }
 }

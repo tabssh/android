@@ -80,6 +80,18 @@ class VncTab(
             }
         }
 
+    /**
+     * Optional transport teardown hook, mirroring `ConsoleTab.onCleanup`.
+     *
+     * [RfbClient] owns only the streams it was handed — it cannot close the
+     * thing that produced them. Anything that wraps the RFB stream in a
+     * separate resource (a JSch `direct-tcpip` channel on the libvirt path, an
+     * SSH port forward) sets this so [cleanup] releases it. Invoked exactly
+     * once, after the client is stopped, and cleared afterwards.
+     */
+    @Volatile
+    var onCleanup: (() -> Unit)? = null
+
     // Why the last NON-user-initiated session end happened; null until the
     // first such end and after each successful (re)connect. Read by
     // TabTerminalActivity's close-policy gate: CLEAN → auto-close, ERROR →
@@ -151,6 +163,12 @@ class VncTab(
         }
         rfbClient = null
         VncBackgroundSessionStore.discard(storeKey)
+        try {
+            onCleanup?.invoke()
+        } catch (e: Exception) {
+            Logger.d("VncTab", "onCleanup hook suppressed: ${e.message}")
+        }
+        onCleanup = null
         _connectionState.value = ConnectionState.DISCONNECTED
     }
 

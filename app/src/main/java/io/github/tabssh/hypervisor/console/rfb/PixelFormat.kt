@@ -56,35 +56,63 @@ data class PixelFormat(
                 ((buf[offset + 1].toLong() and 0xFF) shl 8) or
                 (buf[offset].toLong() and 0xFF)
             }
-            else -> 0L // 3bpp unusual; treat as 0
+            // 24bpp is legal RFB (RFC 6143 §7.4 only requires 8/16/32 be
+            // supported, it does not forbid 24). Returning 0 here painted every
+            // pixel of such a server black.
+            3 -> if (bigEndianFlag != 0) {
+                ((buf[offset].toLong() and 0xFF) shl 16) or
+                ((buf[offset + 1].toLong() and 0xFF) shl 8) or
+                (buf[offset + 2].toLong() and 0xFF)
+            } else {
+                ((buf[offset + 2].toLong() and 0xFF) shl 16) or
+                ((buf[offset + 1].toLong() and 0xFF) shl 8) or
+                (buf[offset].toLong() and 0xFF)
+            }
+            else -> 0L
         }
         val r = ((raw ushr redShift) and redMax.toLong()).toInt()
         val g = ((raw ushr greenShift) and greenMax.toLong()).toInt()
         val b = ((raw ushr blueShift) and blueMax.toLong()).toInt()
         // Scale channel if server uses fewer than 8 bits (e.g. redMax=31 → 5-bit).
-        val rs = if (redMax == 255) r else (r * 255 + redMax / 2) / redMax
-        val gs = if (greenMax == 255) g else (g * 255 + greenMax / 2) / greenMax
-        val bs = if (blueMax == 255) b else (b * 255 + blueMax / 2) / blueMax
+        // A zero max is only possible from a malformed ServerInit; scaling it
+        // would divide by zero, so treat the channel as absent instead.
+        val rs = scaleChannel(r, redMax)
+        val gs = scaleChannel(g, greenMax)
+        val bs = scaleChannel(b, blueMax)
         return (0xFF shl 24) or (rs shl 16) or (gs shl 8) or bs
+    }
+
+    /** Scale a [value] whose full-scale is [max] up to 8 bits. */
+    private fun scaleChannel(value: Int, max: Int): Int = when {
+        max == 255 -> value
+        max <= 0 -> 0
+        else -> (value * 255 + max / 2) / max
     }
 
     /**
      * Read a CPixel from [buf] at [offset] and return an ARGB_8888 int.
-     * For a CPixel the missing byte is the high byte (always 0 in our
-     * preferred format where depth=24 and redShift≤16).
+     *
+     * A 3-byte CPixel omits the pixel's most significant byte, which carries
+     * no colour information when depth ≤ 24. Which wire position that byte
+     * occupies depends on the server's byte order: last for little-endian,
+     * first for big-endian. Assuming little-endian unconditionally shifted
+     * every channel by 8 bits on a big-endian server.
      */
     fun cpixelToArgb(buf: ByteArray, offset: Int = 0): Int {
-        return if (cpixelBytes == 3) {
-            // Reconstruct a 4-byte little-endian pixel: high byte = 0
-            val tmp = ByteArray(4)
+        if (cpixelBytes != 3) return toArgb(buf, offset)
+        val tmp = ByteArray(4)
+        if (bigEndianFlag != 0) {
+            tmp[0] = 0
+            tmp[1] = buf[offset]
+            tmp[2] = buf[offset + 1]
+            tmp[3] = buf[offset + 2]
+        } else {
             tmp[0] = buf[offset]
             tmp[1] = buf[offset + 1]
             tmp[2] = buf[offset + 2]
             tmp[3] = 0
-            toArgb(tmp, 0)
-        } else {
-            toArgb(buf, offset)
         }
+        return toArgb(tmp, 0)
     }
 
     companion object {

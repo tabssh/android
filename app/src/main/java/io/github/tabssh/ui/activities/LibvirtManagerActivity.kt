@@ -262,11 +262,13 @@ class LibvirtManagerActivity : AppCompatActivity() {
                     openSpiceTab(vm, client, spiceDisplay)
                     return@launch
                 }
-                val (ins, out) = withContext(Dispatchers.IO) { client.openVncChannel(vm.name) }
+                val vncChannel = withContext(Dispatchers.IO) { client.openVncChannel(vm.name) }
                 val rfbClient = io.github.tabssh.hypervisor.console.rfb.RfbClient(
-                    inputStream = ins,
-                    outputStream = out,
-                    vncPassword = null,
+                    inputStream = vncChannel.input,
+                    outputStream = vncChannel.output,
+                    // Domains with <graphics type='vnc' passwd='…'/> fail VNC-Auth
+                    // without this; null stays null for unauthenticated displays.
+                    vncPassword = vncChannel.password,
                     consoleMode = true
                 )
                 rfbClient.canRequestResize = false
@@ -276,10 +278,15 @@ class LibvirtManagerActivity : AppCompatActivity() {
                     try { rfbClient.stop() } catch (e: Exception) {
                         Logger.d(TAG, "rfbClient.stop() suppressed after max-tabs reject: ${e.message}")
                     }
+                    vncChannel.close()
                     Toast.makeText(this@LibvirtManagerActivity, "Maximum tabs reached", Toast.LENGTH_SHORT).show()
                     return@launch
                 }
                 tab.rfbClient = rfbClient
+                // Stopping the RfbClient closes only the streams it was handed —
+                // the JSch channel behind them stays connected until told
+                // otherwise, leaking a channel and its pump threads per tab.
+                tab.onCleanup = { vncChannel.close() }
                 tab.setConnectionState(io.github.tabssh.ssh.connection.ConnectionState.CONNECTED)
                 startActivity(
                     Intent(this@LibvirtManagerActivity, TabTerminalActivity::class.java).apply {

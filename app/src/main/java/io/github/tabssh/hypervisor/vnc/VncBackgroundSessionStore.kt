@@ -39,6 +39,14 @@ object VncBackgroundSessionStore {
      * @property vmName Display name, for the keep-alive notification.
      * @property rfbClient The live, paused RFB client (socket + reader thread).
      * @property socket The underlying TCP socket, closed on final teardown.
+     *   Null whenever the RFB stream is not a plain [Socket] this object owns —
+     *   a WebSocket console, an SSH `direct-tcpip` channel — in which case
+     *   [transportTeardown] is what actually releases the transport.
+     * @property transportTeardown Closes whatever carries the RFB stream when
+     *   [socket] cannot. Without it, sweeping an idle WSS console stopped the
+     *   RFB reader but left the OkHttp WebSocket, its TLS socket, and its
+     *   threads running for the life of the process. Must be idempotent: a tab
+     *   closing while parked runs both its own cleanup and this hook.
      * @property disableResize Whether the client had client-initiated resize
      *   suppressed, so a re-attach restores the same state.
      * @property parkedAtMillis Wall-clock time the session was parked, used by
@@ -50,7 +58,8 @@ object VncBackgroundSessionStore {
         val rfbClient: RfbClient,
         val socket: Socket?,
         val disableResize: Boolean,
-        val parkedAtMillis: Long
+        val parkedAtMillis: Long,
+        val transportTeardown: (() -> Unit)? = null
     )
 
     /**
@@ -123,6 +132,9 @@ object VncBackgroundSessionStore {
     private fun discardInternal(session: ParkedSession) {
         try { session.rfbClient.stop() } catch (_: Exception) {}
         try { session.socket?.close() } catch (_: Exception) {}
+        try { session.transportTeardown?.invoke() } catch (e: Exception) {
+            Logger.d(TAG, "transportTeardown for ${session.key} suppressed: ${e.message}")
+        }
         Logger.d(TAG, "Discarded VNC session ${session.key}")
     }
 }

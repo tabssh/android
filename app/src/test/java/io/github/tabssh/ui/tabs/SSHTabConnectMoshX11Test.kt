@@ -52,9 +52,21 @@ class SSHTabConnectMoshX11Test {
         username = "user"
     )
 
+    // Mockito's Java any() returns null; passing it straight to a non-null
+    // Kotlin parameter trips the caller-side platform-type null check before
+    // Mockito ever sees the call. Registering the matcher and returning an
+    // unchecked-cast null (generic T, so no runtime cast check) is the same
+    // trick mockito-kotlin uses.
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> anyNonNull(): T {
+        any<T>()
+        return null as T
+    }
+
     private fun mockedTermuxBridge(): TermuxBridge {
         val bridge = mock(TermuxBridge::class.java)
-        `when`(bridge.connectMoshClient(any(), anyString(), anyInt(), anyString())).thenReturn(true)
+        `when`(bridge.connectMoshClient(anyNonNull(), anyString(), anyInt(), anyString()))
+            .thenReturn(true)
         return bridge
     }
 
@@ -77,7 +89,7 @@ class SSHTabConnectMoshX11Test {
     }
 
     @Test
-    fun `never opens an X11 carrier channel when the profile does not want X11 forwarding`() = runBlocking {
+    fun `never opens an X11 carrier channel when the profile does not want X11 forwarding`() = runBlocking<Unit> {
         val bootstrap = mock(SSHConnection::class.java)
         `when`(bootstrap.wantsX11Forwarding()).thenReturn(false)
         // Not retained, so connectMosh disconnects it via

@@ -38,11 +38,17 @@ one combined `make check`, then a single commit at the end. Issues found
 mid-batch get logged here immediately, fixed in their owning batch.
 
 Open decisions / documented limitations from the 4-8 diagnosis:
-- RfbClient console-mode encoding restriction: doc comment claimed
-  console mode restricts to Raw/CopyRect but PREFERRED_ENCODINGS uses
-  the full list for both modes; comment is being fixed to match
-  behavior — whether console mode SHOULD restrict encodings is a user
-  decision, ask before changing negotiation
+- RfbClient console-mode encoding restriction: RESOLVED 2026-08-12 —
+  user chose to keep the full encoding list for both modes; the full
+  VNC implementation correctness/completeness audit is COMPLETE —
+  findings and fixes tracked in AUDIT.AI.md § "VNC Stack Audit
+  (2026-08-11)" (~30 protocol/security/lifecycle fixes + 23 JVM tests)
+- `VncDirectConnector.connectWss` has zero callers (dead public API) —
+  user decision: delete or keep for future WSS console targets
+- SPEC.md §3 vs Makefile: RESOLVED 2026-08-12 — `make check` now runs
+  `testDebugUnitTest` per SPEC.md ("unit tests run as part of make
+  check"); pre-existing test-source compile break (UpdateCheckerTest
+  fakes missing newer DockerTransport/PolicyDao members) fixed
 - VNC reconnect implemented as manual tap-to-reconnect only; auto-retry
   with backoff deliberately not added — revisit only on request
 - lastlog under mosh: upstream mosh-server behavior, documented in
@@ -53,8 +59,8 @@ Open decisions / documented limitations from the 4-8 diagnosis:
   ("dark mode default") and preferences_general.xml already declared
   defaultValue="dark"; Kotlin fallbacks (TabSSHApplication,
   PreferenceManager.DEFAULT_APP_THEME) aligned to "dark"
-- AlertDialog→MaterialAlertDialogBuilder conversion: IN PROGRESS
-  2026-08-12 follow-up batch (all ~165 remaining call sites)
+- AlertDialog→MaterialAlertDialogBuilder conversion: DONE 2026-08-12
+  (commit 03e89e69044b — 138 sites across 36 files, zero remaining)
 - KeyType.kt:48-51 SecurityLevel color ints are hardcoded but have no
   UI consumer today — if a UI ever renders them, map to status_* colors
   at the render site

@@ -2,7 +2,6 @@ package io.github.tabssh.ui.views
 
 import org.junit.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /**
  * Regression test for [VncView.focalPan] — the pinch-zoom focal-point math.
@@ -62,7 +61,10 @@ class VncViewFocalPanTest {
     }
 
     @Test
-    fun `pan is clamped to non-negative bounds`() {
+    fun `anchoring the top-left corner lands exactly on the lower pan bound`() {
+        // Bitmap point (0,0) under screen (0,0) at 2x needs the most
+        // negative legal pan: exactly -(fb - view/scale)/2 on each axis
+        // (the rendering origin is centred, so pan 0 is the centre).
         val (panX, panY) = invoke(
             viewWidth = 800, viewHeight = 600,
             fbWidth = 1000, fbHeight = 1000,
@@ -70,12 +72,20 @@ class VncViewFocalPanTest {
             oldBitmapX = 0f, oldBitmapY = 0f,
             newScale = 2.0f
         )
-        assertTrue(panX >= 0f)
-        assertTrue(panY >= 0f)
+        assertEquals(-(1000f - 800f / 2.0f) / 2f, panX, 0.01f)
+        assertEquals(-(1000f - 600f / 2.0f) / 2f, panY, 0.01f)
+        // And with that pan applied, bitmap (0,0) really is at screen (0,0).
+        val originX = (800f - 1000f * 2.0f) / 2f - panX * 2.0f
+        val originY = (600f - 1000f * 2.0f) / 2f - panY * 2.0f
+        assertEquals(0f, (0f - originX) / 2.0f, 0.01f)
+        assertEquals(0f, (0f - originY) / 2.0f, 0.01f)
     }
 
     @Test
-    fun `pan is clamped to the maximum scroll extent`() {
+    fun `pan is clamped to the symmetric scroll extent`() {
+        // An impossible anchor (right edge pinned far off-screen right)
+        // needs a pan far below the lower bound — it must clamp to the
+        // symmetric extent, not run away.
         val (panX, panY) = invoke(
             viewWidth = 800, viewHeight = 600,
             fbWidth = 1000, fbHeight = 1000,
@@ -83,10 +93,10 @@ class VncViewFocalPanTest {
             oldBitmapX = 1000f, oldBitmapY = 1000f,
             newScale = 2.0f
         )
-        val maxPanX = 1000f - 800f / 2.0f
-        val maxPanY = 1000f - 600f / 2.0f
-        assertEquals(maxPanX, panX, 0.01f)
-        assertEquals(maxPanY, panY, 0.01f)
+        val extentX = (1000f - 800f / 2.0f) / 2f
+        val extentY = (1000f - 600f / 2.0f) / 2f
+        assertEquals(-extentX, panX, 0.01f)
+        assertEquals(-extentY, panY, 0.01f)
     }
 
     @Test

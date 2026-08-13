@@ -83,6 +83,27 @@ class RfbClient(
         private const val KEEPALIVE_MS = 2_000L
 
         /**
+         * Upper bound on every length-prefixed blob the server can make us
+         * allocate: failure-reason strings, the desktop name, ServerCutText,
+         * and cursor bitmaps.  The server is untrusted (IDEA.md § Trust
+         * boundaries) and each of these is a plain U32/U16 off the wire, so
+         * without a cap a single hostile field is an out-of-memory kill.
+         * 16 MB is far above any legitimate value.
+         */
+        private const val MAX_BLOB_BYTES = 16 * 1024 * 1024
+
+        /** Cap for U32-prefixed failure-reason strings during the handshake. */
+        private const val MAX_REASON_LEN = 64 * 1024
+
+        /**
+         * Largest framebuffer we will allocate, in pixels.  Dimensions arrive as
+         * U16 pairs, so a hostile 65535×65535 resize would overflow Int and
+         * produce a negative allocation size.  64 megapixels covers any real
+         * display (8K is 33 Mpx).
+         */
+        private const val MAX_FB_PIXELS = 64 * 1024 * 1024
+
+        /**
          * Encodings advertised to the server, in preference order.
          *
          * Both GUI and console-mode connections use this list.  The only
@@ -236,9 +257,13 @@ class RfbClient(
      */
     private val lastUpdateTimeMs = AtomicLong(0L)
 
-    // Framebuffer state (mutated only on reader thread; shared to listener via callbacks)
-    private var fbWidth = 0
-    private var fbHeight = 0
+    // Framebuffer state (mutated only on reader thread; shared to listener via callbacks).
+    // The dimensions are also read from the UI thread by sendPointerEvent, the
+    // width/height properties and the re-attach path, so they must be volatile
+    // for those readers to see a desktop resize at all.
+    @Volatile private var fbWidth = 0
+
+    @Volatile private var fbHeight = 0
     private var framebuffer = IntArray(0)
     private var desktopName = ""
 
@@ -398,15 +423,26 @@ class RfbClient(
         din.readFully(serverVersion)
         val verStr = String(serverVersion, Charsets.US_ASCII).trim()
         Logger.i(TAG, "Server RFB version: $verStr")
+        if (!verStr.startsWith("RFB ")) throw java.io.IOException(
+            "Not an RFB server: greeting was \"$verStr\""
+        )
 
         // Parse the server's minor version to handle protocol differences:
         //   3.3 — server sends U32 security type (no client choice)
         //   3.7 — client chooses; no SecurityResult after None auth
         //   3.8 — client chooses; SecurityResult after all auth types
-        // Negotiate the minimum of server's version and 3.8 so legacy servers
-        // see a familiar response while modern servers get full 3.8 features.
-        val serverMinorRaw = verStr.substringAfterLast(".").trimStart('0').toIntOrNull() ?: 8
-        negotiatedMinor = serverMinorRaw.coerceIn(3, 8)
+        // RFC 6143 §7.1.1: a client must never request a version higher than
+        // the server offered, and any version other than 3.3/3.7/3.8 "should be
+        // interpreted as 3.3 since they do not implement the different
+        // handshake in 3.7 or 3.8".  Clamping (the old coerceIn(3,8)) mapped a
+        // 3.4/3.5/3.6 server onto the 3.7+ security-type-list handshake, which
+        // desyncs the stream on the very first security byte.
+        val serverMinorRaw = verStr.substringAfterLast(".").trimStart('0').toIntOrNull() ?: 3
+        negotiatedMinor = when {
+            serverMinorRaw >= 8 -> 8
+            serverMinorRaw == 7 -> 7
+            else -> 3
+        }
 
         val response = "RFB 003.%03d\n".format(negotiatedMinor)
         synchronized(outLock) {
@@ -429,10 +465,7 @@ class RfbClient(
         // RFB 3.7+ : server sends U8 count + list of available types.
         val numTypes = din.readUnsignedByte()
         if (numTypes == 0) {
-            val reasonLen = din.readInt()
-            val reason = ByteArray(reasonLen)
-            din.readFully(reason)
-            throw Exception("Server rejected connection: ${String(reason)}")
+            throw Exception("Server rejected connection: ${readReasonString()}")
         }
         val types = ByteArray(numTypes)
         din.readFully(types)
@@ -466,31 +499,85 @@ class RfbClient(
                 synchronized(outLock) { dout.write(response); dout.flush() }
             }
 
-            RfbConstants.SECURITY_VENCRYPT -> {
-                authenticateVeNCrypt()
-                // VeNCrypt security result is 1 byte (0=OK), not 4 bytes.
-                val result = din.readUnsignedByte()
-                if (result != 0) throw Exception("VeNCrypt authentication failed")
-                Logger.d(TAG, "VeNCrypt authentication OK")
-                return // VeNCrypt has its own result; skip the block below
-            }
+            // VeNCrypt owns its own version/sub-type acknowledgements, but the
+            // sub-type's authentication still ends with the standard U32
+            // SecurityResult (rfbproto §VeNCrypt: "both sides can continue with
+            // the SecurityResult message").  Reading a single byte here left
+            // three bytes of the result word in the stream, so ServerInit was
+            // parsed from the wrong offset on every VeNCrypt connection.
+            RfbConstants.SECURITY_VENCRYPT -> authenticateVeNCrypt()
         }
 
-        // SecurityResult (U32): 0 = OK, anything else = failure with reason string.
+        // SecurityResult (U32): 0 = OK, anything else = failure.
         // RFB 3.8: always present (including after None auth).
         // RFB 3.7: only present for auth types other than None.
         val expectSecurityResult = negotiatedMinor >= 8 || chosen != RfbConstants.SECURITY_NONE
         if (expectSecurityResult) {
             val result = din.readInt()
             if (result != 0) {
-                val reasonLen = din.readInt()
-                val reason = ByteArray(reasonLen); din.readFully(reason)
-                throw Exception("Authentication failed: ${String(reason)}")
+                // RFC 6143 §7.1.3 / Appendix A: the failure reason string is a
+                // 3.8-only addition.  A 3.3/3.7 server just closes the socket
+                // after the failure word, so reading a reason there blocks
+                // until the read times out instead of reporting the failure.
+                val detail = if (negotiatedMinor >= 8) readReasonString() else "server closed connection"
+                throw Exception("Authentication failed: $detail")
             }
             Logger.d(TAG, "Authentication OK")
         } else {
             Logger.d(TAG, "Authentication OK (RFB 3.7 None — no SecurityResult)")
         }
+    }
+
+    /**
+     * Read a U32-length-prefixed failure reason string.
+     *
+     * The length is server-supplied and untrusted (IDEA.md § Trust boundaries),
+     * so it is bounded before allocating — an unbounded U32 here is a trivial
+     * out-of-memory vector on a connection that has not authenticated yet.
+     */
+    private fun readReasonString(): String {
+        val len = din.readInt()
+        if (len <= 0 || len > MAX_REASON_LEN) return "(no reason given)"
+        val buf = ByteArray(len)
+        din.readFully(buf)
+        return String(buf, Charsets.UTF_8)
+    }
+
+    /**
+     * Skip exactly [n] bytes, or throw.
+     *
+     * [DataInputStream.skipBytes] is allowed to skip fewer bytes than asked
+     * (it never blocks past what is buffered), and its return value was being
+     * discarded everywhere — a short skip silently desyncs the whole session.
+     */
+    private fun skipFully(n: Int) {
+        if (n <= 0) return
+        var left = n
+        while (left > 0) {
+            val skipped = din.skipBytes(left)
+            if (skipped > 0) {
+                left -= skipped
+                continue
+            }
+            // skipBytes() returned 0: fall back to a blocking read so we make
+            // progress instead of spinning, and surface a real EOF.
+            if (din.read() < 0) throw java.io.EOFException(
+                "Stream ended while skipping $n bytes ($left remaining)"
+            )
+            left--
+        }
+    }
+
+    /**
+     * Allocate a framebuffer for [w]×[h], rejecting server-supplied dimensions
+     * that would overflow or exhaust memory.
+     */
+    private fun allocFramebuffer(w: Int, h: Int): IntArray {
+        val px = w.toLong() * h.toLong()
+        if (w <= 0 || h <= 0 || px > MAX_FB_PIXELS) throw java.io.IOException(
+            "Refusing framebuffer size ${w}×$h ($px pixels) — exceeds the $MAX_FB_PIXELS-pixel limit"
+        )
+        return IntArray(px.toInt())
     }
 
     /**
@@ -558,9 +645,13 @@ class RfbClient(
         // Client sends back 0x00 0x02 (the only version we support)
         synchronized(outLock) { dout.writeByte(0); dout.writeByte(2); dout.flush() }
 
-        // Server sends OK byte (1=accepted, 0=rejected)
+        // Post-version acknowledgement. rfbproto: "server sends one byte
+        // response which indicates if everything is OK. Non-zero value means
+        // failure ... Zero value means success" — the inverse of the
+        // post-sub-type byte below, and the inverse of what this used to test,
+        // which rejected every conforming VeNCrypt server.
         val versionOk = din.readUnsignedByte()
-        if (versionOk != 1) throw Exception("Server rejected VeNCrypt version")
+        if (versionOk != 0) throw Exception("Server rejected VeNCrypt version 0.2 (ack=$versionOk)")
 
         // Server sends sub-type count (u8) then list of u32 sub-types
         val subTypeCount = din.readUnsignedByte()
@@ -583,9 +674,14 @@ class RfbClient(
         // Send chosen sub-type as u32
         synchronized(outLock) { dout.writeInt(chosen); dout.flush() }
 
-        // Server sends accepted byte (1=yes)
+        // Post-sub-type acknowledgement, sent only for the TLS and X509
+        // sub-types — which is every sub-type in preferenceOrder above.
+        // rfbproto reads "non-one value means failure", but TigerVNC's
+        // CSecurityTLS::processMsg treats only 0 as failure; follow TigerVNC,
+        // the reference VeNCrypt implementation, so a server that answers with
+        // some other non-zero value still connects.
         val accepted = din.readUnsignedByte()
-        if (accepted != 1) throw Exception("Server rejected VeNCrypt sub-type $chosen")
+        if (accepted == 0) throw Exception("Server rejected VeNCrypt sub-type $chosen")
 
         // Upgrade to TLS
         val sslSocket = upgradeTls()
@@ -719,7 +815,12 @@ class RfbClient(
         val serverFmt = PixelFormat.readFrom(din)
         Logger.i(TAG, "Server framebuffer: ${fbWidth}×$fbHeight bpp=${serverFmt.bitsPerPixel}/depth=${serverFmt.depth}")
 
+        // ServerInit's name-length is a U32 straight off the wire; without a cap
+        // a hostile server allocates up to 2 GB before we have decoded a pixel.
         val nameLen = din.readInt()
+        if (nameLen < 0 || nameLen > MAX_BLOB_BYTES) throw java.io.IOException(
+            "ServerInit desktop-name length $nameLen out of range"
+        )
         val nameBytes = ByteArray(nameLen); din.readFully(nameBytes)
         val name = String(nameBytes, Charsets.UTF_8)
         desktopName = name
@@ -741,7 +842,7 @@ class RfbClient(
             canRequestResize = false
         }
 
-        framebuffer = IntArray(fbWidth * fbHeight)
+        framebuffer = allocFramebuffer(fbWidth, fbHeight)
         pixelFormat = PixelFormat.PREFERRED
         decoder = RfbDecoder(pixelFormat)
 
@@ -980,7 +1081,7 @@ class RfbClient(
     private fun handleFramebufferUpdate() {
         // Reset the keepalive timer: the server is alive and responding.
         lastUpdateTimeMs.set(System.currentTimeMillis())
-        din.skipBytes(1) // padding
+        skipFully(1) // padding
         val numRects = din.readUnsignedShort()
         Logger.d(TAG, "FBU: numRects=${if (numRects == 0xFFFF) "unlimited(0xFFFF)" else "$numRects"}")
 
@@ -996,10 +1097,14 @@ class RfbClient(
             when (encoding) {
                 RfbConstants.ENC_LAST_RECT -> break // no data; update is complete
                 RfbConstants.ENC_DESKTOP_SIZE -> {
-                    // Server-side resize: rx/ry hold the new dimensions
-                    Logger.i(TAG, "DesktopSize pseudo-rect: ${rx}×$ry (was ${fbWidth}×$fbHeight)")
-                    fbWidth = rx; fbHeight = ry
-                    framebuffer = IntArray(fbWidth * fbHeight)
+                    // Server-side resize. rfbproto: the new framebuffer size is
+                    // carried in the pseudo-rectangle's WIDTH and HEIGHT fields;
+                    // x/y are unused. Reading rx/ry instead resized the
+                    // framebuffer to the rect origin — normally 0×0, which then
+                    // failed every later rect bounds check.
+                    Logger.i(TAG, "DesktopSize pseudo-rect: ${rw}×$rh (was ${fbWidth}×$fbHeight)")
+                    fbWidth = rw; fbHeight = rh
+                    framebuffer = allocFramebuffer(fbWidth, fbHeight)
                     listener?.onDesktopResize(fbWidth, fbHeight, framebuffer)
                     sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
                 }
@@ -1018,8 +1123,8 @@ class RfbClient(
                     // The old U16 read accidentally consumed 2 bytes (num+1 padding byte),
                     // misreading the screen count and leaving the stream mis-aligned.
                     val numScreens = din.readUnsignedByte()
-                    din.skipBytes(3)               // 3 bytes padding (total 4 incl. numScreens)
-                    din.skipBytes(numScreens * 16) // screen descriptors: U32 id + U16 x + U16 y + U16 w + U16 h + U32 flags
+                    skipFully(3)               // 3 bytes padding (total 4 incl. numScreens)
+                    skipFully(numScreens * 16) // screen descriptors: U32 id + U16 x + U16 y + U16 w + U16 h + U32 flags
                     if (ry == 0) {
                         pendingResizeRejection = false
                         if (rw > 0 && rh > 0) {
@@ -1034,7 +1139,7 @@ class RfbClient(
                                 // skip the non-incremental FBUR — the incremental request at
                                 // the bottom of handleFramebufferUpdate() drives the next frame,
                                 // avoiding the feedback loop that produced ~50 EDS per second.
-                                framebuffer = IntArray(fbWidth * fbHeight)
+                                framebuffer = allocFramebuffer(fbWidth, fbHeight)
                                 listener?.onDesktopResize(fbWidth, fbHeight, framebuffer)
                                 sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
                             }
@@ -1069,10 +1174,10 @@ class RfbClient(
                     // Legacy X11 XCursor: 6-byte color header + two 1-bit masks.
                     // Obsolete format; consume the data but do not render.
                     if (rw > 0 && rh > 0) {
-                        din.skipBytes(6) // primary + secondary colors (2×RGB)
+                        skipFully(6) // primary + secondary colors (2×RGB)
                         val maskBytes = ((rw + 7) / 8) * rh
-                        din.skipBytes(maskBytes) // AND mask
-                        din.skipBytes(maskBytes) // XOR mask
+                        skipFully(maskBytes) // AND mask
+                        skipFully(maskBytes) // XOR mask
                     }
                     Logger.d(TAG, "XCursor ${rw}×$rh (not rendered)")
                 }
@@ -1143,25 +1248,21 @@ class RfbClient(
                     // Calling the decoder on an unrecognised encoding with fake
                     // dimensions (e.g. 16384×8192) would compute a 512 MB skip
                     // that blocks the reader thread forever.
-                    if (encoding in RfbDecoder.PIXEL_ENCODINGS && rw > 0 && rh > 0) {
+                    if (encoding in RfbDecoder.PIXEL_ENCODINGS) {
+                        // Zero-area rectangles are legal and are NOT special-cased:
+                        // every reference client (TigerVNC TightDecoder, noVNC
+                        // tight.js) parses the encoding's payload in full
+                        // regardless of the rect area — Tight's control byte and
+                        // Fill's TPIXEL, ZRLE/ZLIB's U32 length and its
+                        // compressed bytes — so hand the rect to the decoder
+                        // unconditionally. Hand-rolling a partial drain here
+                        // (control byte only, no Fill pixel) desynced the stream
+                        // on any server that sent a zero-area Fill rect.
                         Logger.d(TAG, "Decoding rect enc=0x$hexEnc at ($rx,$ry) ${rw}×$rh")
-                        decoder.decodeRect(din, framebuffer, fbWidth, rx, ry, rw, rh, encoding)
-                        listener?.onFramebufferUpdate(rx, ry, rw, rh, framebuffer)
-                    } else if (encoding in RfbDecoder.PIXEL_ENCODINGS) {
-                        // Zero-dimension rectangle. Most pixel encodings carry no payload.
-                        // ZRLE and ZLIB always prefix their data with a 4-byte DataLen that
-                        // must be consumed even for empty rectangles or subsequent reads desync.
-                        // Tight always prefixes its data with a 1-byte compression-control
-                        // byte (compression type + optional stream-reset flags) for the same
-                        // reason — leaving it unread desyncs the next rect header.
-                        when (encoding) {
-                            RfbConstants.ENC_ZRLE, RfbConstants.ENC_ZLIB -> {
-                                val dataLen = din.readInt() and 0x7FFFFFFF
-                                if (dataLen > 0) din.skipBytes(dataLen)
-                            }
-                            RfbConstants.ENC_TIGHT -> din.readUnsignedByte()
+                        decoder.decodeRect(din, framebuffer, fbWidth, fbHeight, rx, ry, rw, rh, encoding)
+                        if (rw > 0 && rh > 0) {
+                            listener?.onFramebufferUpdate(rx, ry, rw, rh, framebuffer)
                         }
-                        Logger.d(TAG, "Zero-dim rect enc=0x$hexEnc at ($rx,$ry) ${rw}×$rh — skipping")
                     } else {
                         // Unknown vendor / pseudo-encoding — assume zero payload.
                         Logger.d(TAG, "Unknown/vendor encoding 0x$hexEnc at ($rx,$ry) ${rw}×$rh — zero payload, skipping")
@@ -1187,6 +1288,9 @@ class RfbClient(
     }
 
     private fun handleCursor(hotX: Int, hotY: Int, w: Int, h: Int) {
+        // Cursor dimensions are U16s off the wire: 65535×65535×4 overflows Int
+        // and produces a negative (or absurd) allocation size.
+        checkCursorSize(w, h, "Cursor")
         val pixBytes = w * h * pixelFormat.bytesPerPixel
         val maskBytes = ((w + 7) / 8) * h
         val pixBuf = ByteArray(pixBytes)
@@ -1205,19 +1309,34 @@ class RfbClient(
         listener?.onCursorUpdate(hotX, hotY, w, h, pixels, maskBuf)
     }
 
+    /**
+     * Reject a cursor whose dimensions would overflow or exhaust memory.
+     * A real cursor is at most a few hundred pixels on a side.
+     */
+    private fun checkCursorSize(w: Int, h: Int, what: String) {
+        val bytes = w.toLong() * h.toLong() * 4L
+        if (w < 0 || h < 0 || bytes > MAX_BLOB_BYTES) throw java.io.IOException(
+            "$what pseudo-rect ${w}×$h is out of range — refusing to allocate"
+        )
+    }
+
     private fun skipColourMap() {
-        din.skipBytes(1) // padding
-        din.skipBytes(2) // first colour
+        skipFully(1) // padding
+        skipFully(2) // first colour
         val numColors = din.readUnsignedShort()
-        din.skipBytes(numColors * 6) // 3 × u16 per colour
+        skipFully(numColors * 6) // 3 × u16 per colour
     }
 
     private fun handleServerCutText() {
-        din.skipBytes(3) // padding
+        skipFully(3) // padding
         val len = din.readInt()
         when {
             len > 0 -> {
-                // Standard clipboard text (ISO 8859-1)
+                // Standard clipboard text (ISO 8859-1). The length is a U32 off
+                // the wire, so cap it before allocating.
+                if (len > MAX_BLOB_BYTES) throw java.io.IOException(
+                    "ServerCutText length $len exceeds the $MAX_BLOB_BYTES-byte limit"
+                )
                 val bytes = ByteArray(len); din.readFully(bytes)
                 listener?.onClipboardText(String(bytes, Charsets.ISO_8859_1))
             }
@@ -1230,9 +1349,9 @@ class RfbClient(
                 if (extLen >= 4) {
                     val flags = din.readInt()
                     Logger.d(TAG, "ExtendedClipboard flags=0x${flags.toString(16).uppercase()} extLen=$extLen")
-                    if (extLen > 4) din.skipBytes(extLen - 4)
+                    if (extLen > 4) skipFully(extLen - 4)
                 } else {
-                    din.skipBytes(extLen)
+                    skipFully(extLen)
                 }
             }
             // len == 0: empty cut-text; nothing to do
@@ -1268,16 +1387,16 @@ class RfbClient(
                         /* stream end — no extra payload */
                     }
                     RfbConstants.QEMU_AUDIO_BEGIN -> {
-                        din.skipBytes(1) // U8: sample format
-                        din.skipBytes(1) // U8: number of channels
-                        din.skipBytes(4) // U32: frequency (Hz)
+                        skipFully(1) // U8: sample format
+                        skipFully(1) // U8: number of channels
+                        skipFully(4) // U32: frequency (Hz)
                     }
                     RfbConstants.QEMU_AUDIO_DATA -> {
                         val len = din.readInt()
                         if (len < 0 || len > 1_048_576) throw java.io.IOException(
                             "QEMU audio payload too large: $len bytes"
                         )
-                        if (len > 0) din.skipBytes(len)
+                        if (len > 0) skipFully(len)
                     }
                     else -> {
                         // Unknown audio op — payload size is unknowable, stream is desynced.
@@ -1317,7 +1436,7 @@ class RfbClient(
      * as a valid acknowledgement and keeps the update queue blocked forever.
      */
     private fun handleServerFence() {
-        din.skipBytes(3) // padding
+        skipFully(3) // padding
         val flags = din.readInt()
         val len = din.readUnsignedByte()
         val data = if (len > 0) ByteArray(len).also { din.readFully(it) } else ByteArray(0)
@@ -1377,6 +1496,7 @@ class RfbClient(
      */
     private fun handleCursorWithAlpha(hotX: Int, hotY: Int, w: Int, h: Int) {
         if (w <= 0 || h <= 0) return
+        checkCursorSize(w, h, "CursorWithAlpha")
         val count = w * h
         val buf = ByteArray(count * 4)
         din.readFully(buf)
@@ -1414,13 +1534,13 @@ class RfbClient(
      *   U8 padding · U16 width · U16 height
      */
     private fun handleUltraVncResize() {
-        din.skipBytes(1) // padding
+        skipFully(1) // padding
         val w = din.readUnsignedShort()
         val h = din.readUnsignedShort()
         if (w > 0 && h > 0) {
             Logger.i(TAG, "UltraVNC ResizeFrameBuffer: ${w}×$h")
             fbWidth = w; fbHeight = h
-            framebuffer = IntArray(fbWidth * fbHeight)
+            framebuffer = allocFramebuffer(fbWidth, fbHeight)
             listener?.onDesktopResize(fbWidth, fbHeight, framebuffer)
             sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
         }
@@ -1448,7 +1568,7 @@ class RfbClient(
      * We log and discard — power-control responses do not affect the display.
      */
     private fun handleXvp() {
-        din.skipBytes(1) // padding
+        skipFully(1) // padding
         val version = din.readUnsignedByte()
         val code    = din.readUnsignedByte()
         Logger.d(TAG, "xvp message: version=$version code=$code (power control, not handled)")
@@ -1471,7 +1591,7 @@ class RfbClient(
         val b0 = din.readUnsignedByte()
         val b1 = din.readUnsignedByte()
         val payloadLen = if (bigEndian) (b0 shl 8) or b1 else (b1 shl 8) or b0
-        if (payloadLen > 0) din.skipBytes(payloadLen)
+        if (payloadLen > 0) skipFully(payloadLen)
         Logger.d(TAG, "gii message: subtype=0x${(header and 0x7F).toString(16)} len=$payloadLen (not handled)")
     }
 
@@ -1511,7 +1631,12 @@ class RfbClient(
 
     /** Send ClientCutText so clipboard paste works from device → VM. */
     fun sendClipboardText(text: String) {
-        val bytes = text.toByteArray(Charsets.ISO_8859_1)
+        // RFC 6143 §7.5.6: the text is Latin-1 and an end of line is a single
+        // LF; a CR is not allowed. Android clipboard content copied from a
+        // Windows source carries CRLF, which the VM would paste as a stray
+        // control character on every line.
+        val bytes = text.replace("\r\n", "\n").replace('\r', '\n')
+            .toByteArray(Charsets.ISO_8859_1)
         synchronized(outLock) {
             dout.writeByte(RfbConstants.C2S_CLIENT_CUT_TEXT)
             dout.write(ByteArray(3))                      // padding

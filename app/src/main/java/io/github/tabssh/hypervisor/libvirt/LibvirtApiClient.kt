@@ -327,24 +327,89 @@ class LibvirtApiClient(
      */
     suspend fun getVncDisplay(domain: String): Int = withContext(Dispatchers.IO) {
         requireValidDomain(domain)
-        val output = runCommand("virsh vncdisplay ${shQuote(domain)}").trim()
-        // Expected formats: ":1", "localhost:1", "127.0.0.1:1"
-        val match = Regex("(?:.*:)(\\d+)").find(output)
+        val output = runCommand("virsh vncdisplay ${shQuote(domain)} 2>/dev/null").trim()
+        if (isVirshError(output)) {
+            throw LibvirtException("virsh vncdisplay failed for domain '$domain': $output")
+        }
+        // Expected formats: ":1", "localhost:1", "127.0.0.1:1". Anchored so a
+        // stray banner or warning line cannot be mined for a bogus number: the
+        // whole (single) line must be an optional host followed by ":<digits>".
+        val match = output.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .firstNotNullOfOrNull { Regex("""^[A-Za-z0-9._\-\[\]:]*:(\d+)$""").find(it) }
             ?: throw LibvirtException("VNC not configured for domain '$domain' — enable display in VM XML")
         match.groupValues[1].toIntOrNull()
             ?: throw LibvirtException("Could not parse VNC display number from: $output")
     }
 
     /**
-     * Opens a JSch `direct-tcpip` channel to the VNC port for [domain] and
-     * returns its input and output streams.
+     * Returns the VNC password configured on [domain]
+     * (`<graphics type='vnc' passwd='…'/>`), or null when the display needs no
+     * authentication.
      *
-     * The [Session] is kept alive; call [disconnect] when the console is done.
+     * `virsh domdisplay --include-password` renders it as URI userinfo —
+     * `vnc://:secret@host:5901` — which avoids parsing the whole domain XML.
+     * Without this, every password-protected libvirt display failed the RFB
+     * VNC-Auth challenge with "server requires a password but none was set".
+     *
+     * Never logged: the value is a live credential.
      */
-    suspend fun openVncChannel(domain: String): Pair<InputStream, OutputStream> =
+    suspend fun getVncPassword(domain: String): String? = withContext(Dispatchers.IO) {
+        requireValidDomain(domain)
+        val line = runCommand("virsh domdisplay --include-password ${shQuote(domain)} 2>/dev/null")
+            .lines().firstOrNull { it.trim().startsWith("vnc://") }?.trim()
+            ?: return@withContext null
+        // userinfo lives between "vnc://" and the last '@' before the host part.
+        val rest = line.removePrefix("vnc://")
+        val at = rest.lastIndexOf('@')
+        if (at <= 0) return@withContext null
+        val userinfo = rest.substring(0, at)
+        // libvirt emits an empty user with the password after ':'.
+        val raw = userinfo.substringAfter(':', "")
+        if (raw.isEmpty()) return@withContext null
+        try {
+            java.net.URLDecoder.decode(raw, "UTF-8")
+        } catch (e: IllegalArgumentException) {
+            // Not percent-encoded (older libvirt) — take the literal bytes.
+            Logger.d(TAG, "domdisplay VNC userinfo is not percent-encoded: ${e.message}")
+            raw
+        }
+    }
+
+    /**
+     * A live `direct-tcpip` forward to a domain's VNC port.
+     *
+     * [channel] is returned alongside the streams so the caller can close the
+     * forward when the console tab goes away. Returning only the streams leaked
+     * one JSch channel (and its two pump threads) per libvirt VNC tab, because
+     * closing an [InputStream] obtained from a [ChannelDirectTCPIP] does not
+     * disconnect the channel.
+     */
+    data class VncChannel(
+        val channel: ChannelDirectTCPIP,
+        val input: InputStream,
+        val output: OutputStream,
+        val password: String?
+    ) {
+        /** Close the forward. Safe to call more than once. */
+        fun close() {
+            try { channel.disconnect() } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * Opens a JSch `direct-tcpip` channel to the VNC port for [domain] and
+     * returns it together with its input and output streams.
+     *
+     * The [Session] is kept alive; call [VncChannel.close] when the console
+     * tab closes, and [disconnect] when the whole client is done.
+     */
+    suspend fun openVncChannel(domain: String): VncChannel =
         withContext(Dispatchers.IO) {
             val displayNumber = getVncDisplay(domain)
             val vncPort = 5900 + displayNumber
+            val vncPassword = getVncPassword(domain)
             Logger.d(TAG, "Opening direct-tcpip channel to 127.0.0.1:$vncPort for domain '$domain'")
 
             val sess = session ?: throw LibvirtException("SSH session not established; call connect() first")
@@ -360,7 +425,7 @@ class LibvirtApiClient(
                 val ins = ch.inputStream
                 val out = ch.outputStream
                 ch.connect(CONNECT_TIMEOUT_MS)
-                Pair(ins, out)
+                VncChannel(ch, ins, out, vncPassword)
             } catch (e: Throwable) {
                 // connect() can throw on timeout / network failure; the channel
                 // is still attached to the Session and must be explicitly

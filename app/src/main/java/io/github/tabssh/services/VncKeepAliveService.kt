@@ -59,7 +59,7 @@ class VncKeepAliveService : Service() {
             }
             if (VncBackgroundSessionStore.isEmpty) {
                 Logger.d(TAG, "No parked VNC sessions remain after sweep — stopping")
-                stopSelf()
+                stopForegroundAndSelf()
                 return
             }
             sweepHandler.postDelayed(this, IDLE_SWEEP_INTERVAL_MS)
@@ -106,9 +106,15 @@ class VncKeepAliveService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Logger.d(TAG, "onStartCommand: ${intent?.action}")
 
+        // Callers use startForegroundService(), which requires startForeground()
+        // within ~5 s of the start request even on the paths that immediately
+        // stop again — returning early without it throws
+        // ForegroundServiceDidNotStartInTimeException on API 26+.
+        startForeground(NOTIFICATION_ID, buildNotification())
+
         when (intent?.action) {
             ACTION_STOP_SERVICE -> {
-                stopSelf()
+                stopForegroundAndSelf()
                 return START_NOT_STICKY
             }
         }
@@ -117,11 +123,10 @@ class VncKeepAliveService : Service() {
         // was reclaimed before this start request was processed.
         if (VncBackgroundSessionStore.isEmpty) {
             Logger.d(TAG, "No parked VNC sessions — stopping")
-            stopSelf()
+            stopForegroundAndSelf()
             return START_NOT_STICKY
         }
 
-        startForeground(NOTIFICATION_ID, buildNotification())
         acquireWakeLock()
         acquireWifiLock()
         // Re-arm the sweep loop rather than stacking a second one: removeCallbacks
@@ -143,6 +148,16 @@ class VncKeepAliveService : Service() {
         sweepHandler.removeCallbacks(idleSweepRunnable)
         releaseWakeLock()
         releaseWifiLock()
+    }
+
+    /**
+     * Drop the foreground notification and stop. Every stop path goes through
+     * here so the notification never outlives the service.
+     */
+    private fun stopForegroundAndSelf() {
+        // STOP_FOREGROUND_REMOVE is API 24; minSdk is 24, so no fallback needed.
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private fun buildNotification(): Notification {

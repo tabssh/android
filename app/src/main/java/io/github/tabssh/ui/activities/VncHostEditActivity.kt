@@ -40,6 +40,9 @@ class VncHostEditActivity : AppCompatActivity() {
         /** String — UUID of the VncHost to edit. Omit (or pass null) to create a new one. */
         const val EXTRA_VNC_HOST_ID = "vnc_host_id"
 
+        /** Highest X display number that keeps `5900 + display` a valid TCP port. */
+        private const val MAX_DISPLAY_NUMBER = 65535 - 5900
+
         private val SECURITY_TYPE_LABELS = listOf(
             "Auto" to "auto",
             "None" to "none",
@@ -222,6 +225,18 @@ class VncHostEditActivity : AppCompatActivity() {
         val useDisplay = switchUseDisplay.isChecked
         val displayNumber = if (useDisplay) editDisplay.text?.toString()?.toIntOrNull() else null
         val port = if (!useDisplay) (editPort.text?.toString()?.toIntOrNull() ?: 5900) else 5900
+        // VncHost.effectivePort is 5900 + displayNumber, so both fields have to
+        // land inside the TCP port range. Silently accepting 0, -1 or 99999
+        // only surfaced later as an opaque socket-connect failure.
+        if (useDisplay) {
+            if (displayNumber == null || displayNumber !in 0..MAX_DISPLAY_NUMBER) {
+                editDisplay.error = "Display must be 0–$MAX_DISPLAY_NUMBER"
+                return
+            }
+        } else if (port !in 1..65535) {
+            editPort.error = "Port must be 1–65535"
+            return
+        }
 
         val secLabel = dropdownSecurity.text?.toString() ?: SECURITY_TYPE_LABELS[0].first
         val secType = SECURITY_TYPE_LABELS.firstOrNull { it.first == secLabel }?.second ?: "auto"
@@ -293,6 +308,9 @@ class VncHostEditActivity : AppCompatActivity() {
             try {
                 withContext(Dispatchers.IO) {
                     app.database.vncHostDao().deleteById(hostId)
+                    // Drop the Keystore secret with the record — see the same
+                    // deletion path in VncHostsActivity.
+                    app.securePasswordManager.clearPassword("vnc_host_$hostId")
                     // H6 — record the deletion so it propagates and is not resurrected.
                     TombstoneRecorder.record(app, TombstoneRecorder.VNC_HOST, hostId)
                 }

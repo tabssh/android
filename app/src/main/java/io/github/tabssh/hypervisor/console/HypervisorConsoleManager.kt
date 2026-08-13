@@ -646,17 +646,20 @@ class HypervisorConsoleManager {
         val displayPort = proxmoxVncFallbackDisplayPort
 
         Logger.i(TAG, "VNC fallback: requesting vncproxy ticket for $vmName")
+        var vncFailure: String? = null
         val vnc = try {
             client.getVNCProxy(node, vmid, type)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Logger.e(TAG, "VNC fallback: getVNCProxy threw", e)
+            vncFailure = e.message
             null
         }
         if (vnc == null) {
             Logger.e(TAG, "VNC fallback: vncproxy returned null for $vmName")
             listener?.onError(
+                (vncFailure?.let { "VNC fallback failed: $it\n\n" } ?: "") +
                 "This VM has no serial console and the VNC fallback also failed.\n\n" +
                 "To enable serial console: open the VM in Proxmox → Hardware → " +
                 "Add → Serial Port → set to 'socket', then restart the VM."

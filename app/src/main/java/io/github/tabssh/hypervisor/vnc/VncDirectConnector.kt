@@ -99,6 +99,7 @@ object VncDirectConnector {
         displayHost: String = "",
         displayPort: Int = 0,
         consoleMode: Boolean = false,
+        listener: io.github.tabssh.hypervisor.console.ConsoleConnectionListener? = null,
         @Suppress("UNUSED_PARAMETER") context: Context
     ): Pair<RfbClient, ConsoleWebSocketClient> = withContext(Dispatchers.IO) {
         Logger.d(TAG, "Connecting RFB-over-WSS to $displayHost:$displayPort consoleMode=$consoleMode")
@@ -109,7 +110,11 @@ object VncDirectConnector {
             displayHost = displayHost,
             displayPort = displayPort
         )
-        val ok = ws.connect(url = url, headers = headers, listener = null)
+        // Without a listener OkHttp's onFailure/onClosed are discarded: a TLS
+        // failure or a server-side close reaches the RFB side only as EOF, which
+        // ConsoleDisconnectClassifier reads as a clean, user-initiated
+        // disconnect. Forward the caller's listener so the real cause survives.
+        val ok = ws.connect(url = url, headers = headers, listener = listener)
         if (!ok) {
             throw IllegalStateException("ConsoleWebSocketClient.connect returned false for $displayHost:$displayPort")
         }

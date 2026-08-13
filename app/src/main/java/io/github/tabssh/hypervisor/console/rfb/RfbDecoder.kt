@@ -69,17 +69,28 @@ class RfbDecoder(private val fmt: PixelFormat) {
     // Tight: four independent streams (0..3), reset on demand via cc byte.
 
     private val zrleInflater = Inflater()
-    private var zrleBuf = ByteArray(ZRLE_BUF)
 
     private val zlibInflater = Inflater()
 
     private val tightInflaters = Array(4) { Inflater() }
 
+    // Framebuffer bounds of the rectangle currently being decoded.  Every
+    // sub-rectangle coordinate inside RRE / CoRRE / Hextile comes straight off
+    // the wire and is therefore untrusted (IDEA.md § Trust boundaries), so the
+    // shared fill helpers clip against these instead of trusting the server.
+    private var clipW = 0
+    private var clipH = 0
+
     /**
      * Decode one rectangle from [din] into [fb].
      *
+     * The rectangle geometry is server-supplied and therefore untrusted: it is
+     * validated against the framebuffer dimensions before any decoder runs, so
+     * no decoder below can write outside [fb].
+     *
      * @param fb      full-framebuffer ARGB_8888 pixel array (row-major)
      * @param fbW     full framebuffer width
+     * @param fbH     full framebuffer height
      * @param x y w h rectangle coordinates
      * @param encoding encoding type integer
      */
@@ -87,9 +98,13 @@ class RfbDecoder(private val fmt: PixelFormat) {
         din: DataInputStream,
         fb: IntArray,
         fbW: Int,
+        fbH: Int,
         x: Int, y: Int, w: Int, h: Int,
         encoding: Int
     ) {
+        validateRect(fb, fbW, fbH, x, y, w, h)
+        clipW = fbW
+        clipH = fbH
         when (encoding) {
             RfbConstants.ENC_RAW       -> decodeRaw(din, fb, fbW, x, y, w, h)
             RfbConstants.ENC_COPY_RECT -> decodeCopyRect(din, fb, fbW, x, y, w, h)
@@ -112,6 +127,26 @@ class RfbDecoder(private val fmt: PixelFormat) {
                 )
             }
         }
+    }
+
+    /**
+     * Reject a rectangle whose geometry does not fit inside the framebuffer.
+     *
+     * RFB 3.8 (RFC 6143 §7.6.1) requires every rectangle to lie within the
+     * framebuffer; a server that violates that is malicious or broken.  Because
+     * the rect payload length depends on the encoding, there is no safe way to
+     * skip it — the only correct action is to terminate the session, which the
+     * [java.io.IOException] thrown here does.
+     */
+    private fun validateRect(fb: IntArray, fbW: Int, fbH: Int, x: Int, y: Int, w: Int, h: Int) {
+        val fits = fbW > 0 && fbH > 0 &&
+            fb.size >= fbW.toLong() * fbH.toLong() &&
+            x >= 0 && y >= 0 && w >= 0 && h >= 0 &&
+            x.toLong() + w.toLong() <= fbW.toLong() &&
+            y.toLong() + h.toLong() <= fbH.toLong()
+        if (!fits) throw java.io.IOException(
+            "Rect ($x,$y) ${w}×$h does not fit framebuffer ${fbW}×$fbH (fb=${fb.size} px) — refusing to decode"
+        )
     }
 
     // ── Raw ─────────────────────────────────────────────────────────────────
@@ -138,6 +173,14 @@ class RfbDecoder(private val fmt: PixelFormat) {
     ) {
         val srcX = din.readUnsignedShort()
         val srcY = din.readUnsignedShort()
+        // The source rectangle is server-supplied: a src that runs off the
+        // framebuffer would read (and, with the destination clamp, write) out
+        // of bounds.  The 4-byte payload has already been consumed, so the
+        // stream stays in sync and dropping the blit is safe.
+        if (srcX + w > clipW || srcY + h > clipH) {
+            Logger.w(TAG, "CopyRect source ($srcX,$srcY) ${w}×$h outside framebuffer ${clipW}×$clipH — ignored")
+            return
+        }
         // Copy row by row; handle overlap by choosing direction
         if (srcY < y || (srcY == y && srcX < x)) {
             for (row in h - 1 downTo 0) {
@@ -160,7 +203,7 @@ class RfbDecoder(private val fmt: PixelFormat) {
         din: DataInputStream, fb: IntArray, fbW: Int,
         x: Int, y: Int, w: Int, h: Int
     ) {
-        val numSubRects = din.readInt()
+        val numSubRects = checkedSubRectCount(din.readInt(), "RRE")
         val bgBuf = ByteArray(fmt.bytesPerPixel)
         din.readFully(bgBuf)
         val bg = fmt.toArgb(bgBuf)
@@ -188,7 +231,7 @@ class RfbDecoder(private val fmt: PixelFormat) {
         din: DataInputStream, fb: IntArray, fbW: Int,
         x: Int, y: Int, w: Int, h: Int
     ) {
-        val numSubRects = din.readInt()
+        val numSubRects = checkedSubRectCount(din.readInt(), "CoRRE")
         val bgBuf = ByteArray(fmt.bytesPerPixel)
         din.readFully(bgBuf)
         fillRect(fb, fbW, x, y, w, h, fmt.toArgb(bgBuf))
@@ -245,9 +288,13 @@ class RfbDecoder(private val fmt: PixelFormat) {
                         val wh = din.readUnsignedByte()
                         val sx = tx + (xy shr 4)
                         val sy = ty + (xy and 0x0F)
-                        val sw = (wh shr 4) + 1
-                        val sh = (wh and 0x0F) + 1
-                        fillRect(fb, fbW, sx, sy, sw, sh, fg)
+                        // RFC 6143 §7.7.4 confines every Hextile sub-rectangle
+                        // to its own tile; a server that encodes one running
+                        // past the tile edge would otherwise paint over the
+                        // neighbouring tile (or off the framebuffer entirely).
+                        val sw = minOf((wh shr 4) + 1, tx + tileW - sx)
+                        val sh = minOf((wh and 0x0F) + 1, ty + tileH - sy)
+                        if (sw > 0 && sh > 0) fillRect(fb, fbW, sx, sy, sw, sh, fg)
                     }
                 }
                 tx += tileW
@@ -503,22 +550,43 @@ class RfbDecoder(private val fmt: PixelFormat) {
             RfbConstants.TIGHT_JPEG, RfbConstants.TIGHT_PNG -> {
                 // Entire rect as JPEG or PNG image data
                 val dataLen = readCompactLen(din)
+                if (dataLen < 0 || dataLen > MAX_RECT_BYTES) throw java.io.IOException(
+                    "Tight JPEG/PNG length $dataLen out of range at $x,$y ${w}×$h"
+                )
                 val imageData = ByteArray(dataLen)
                 din.readFully(imageData)
                 val bmp = BitmapFactory.decodeByteArray(imageData, 0, dataLen)
-                if (bmp != null) {
+                if (bmp == null) {
+                    Logger.w(TAG, "Tight JPEG/PNG decode failed for rect $x,$y ${w}×$h")
+                } else if (bmp.width < w || bmp.height < h) {
+                    // A hostile or corrupt server can embed an image smaller
+                    // than the rectangle it claims to cover; getPixels would
+                    // throw IllegalArgumentException and kill the reader thread
+                    // with an opaque error.  The payload has been fully
+                    // consumed, so dropping the rect keeps the stream in sync.
+                    Logger.w(TAG, "Tight image ${bmp.width}×${bmp.height} smaller than rect ${w}×$h — dropped")
+                    bmp.recycle()
+                } else {
                     val pixels = IntArray(w * h)
                     bmp.getPixels(pixels, 0, w, 0, 0, w, h)
                     bmp.recycle()
                     for (row in 0 until h) {
                         pixels.copyInto(fb, (y + row) * fbW + x, row * w, row * w + w)
                     }
-                } else {
-                    Logger.w(TAG, "Tight JPEG/PNG decode failed for rect $x,$y ${w}×$h")
                 }
             }
 
             else -> {
+                // Only compTypes 0x0..0x7 are BasicCompression; 0x8/0x9/0xA are
+                // handled above and 0xB..0xF are undefined in every Tight
+                // variant.  Treating an undefined compType as BasicCompression
+                // reads a wrong-length payload and desyncs the zlib stream for
+                // the rest of the session, so fail fast instead.
+                if (compType > 0x07) throw java.io.IOException(
+                    "Reserved Tight compression type 0x${compType.toString(16)} at $x,$y ${w}×$h" +
+                    " — stream state unknown, terminating"
+                )
+
                 // BasicCompression: stream index = compType & 3
                 val streamIdx = compType and 0x3
 
@@ -587,7 +655,12 @@ class RfbDecoder(private val fmt: PixelFormat) {
                                 for (row in 0 until h) {
                                     val base = (y + row) * fbW + x
                                     for (col in 0 until w) {
-                                        fb[base + col] = palette[data[di++].toInt() and 0xFF]
+                                        // Palette indices come off the wire; an
+                                        // index past the negotiated palette is
+                                        // undefined per the Tight spec and would
+                                        // throw ArrayIndexOutOfBounds here.
+                                        val pidx = data[di++].toInt() and 0xFF
+                                        if (pidx < numColors) fb[base + col] = palette[pidx]
                                     }
                                 }
                             }
@@ -663,7 +736,12 @@ class RfbDecoder(private val fmt: PixelFormat) {
                                 for (row in 0 until h) {
                                     val base = (y + row) * fbW + x
                                     for (col in 0 until w) {
-                                        fb[base + col] = palette[data[di++].toInt() and 0xFF]
+                                        // Palette indices come off the wire; an
+                                        // index past the negotiated palette is
+                                        // undefined per the Tight spec and would
+                                        // throw ArrayIndexOutOfBounds here.
+                                        val pidx = data[di++].toInt() and 0xFF
+                                        if (pidx < numColors) fb[base + col] = palette[pidx]
                                     }
                                 }
                             }
@@ -700,10 +778,36 @@ class RfbDecoder(private val fmt: PixelFormat) {
         return size.toInt()
     }
 
+    /**
+     * Validate an RRE / CoRRE sub-rectangle count.
+     *
+     * The count is a signed U32 straight off the wire.  A negative value makes
+     * `repeat()` a no-op, silently leaving the whole sub-rectangle payload in
+     * the stream and desyncing every later read, so it must terminate the
+     * session rather than be ignored.
+     */
+    private fun checkedSubRectCount(n: Int, what: String): Int {
+        if (n < 0) throw java.io.IOException(
+            "$what sub-rectangle count $n is negative — stream state unknown, terminating"
+        )
+        return n
+    }
+
+    /**
+     * Fill a rectangle, clipping to the framebuffer bounds recorded by
+     * [decodeRect].  Sub-rectangle geometry inside RRE / CoRRE / Hextile is
+     * server-supplied, so clipping here is what keeps an out-of-range
+     * sub-rectangle from writing outside [fb].
+     */
     private fun fillRect(fb: IntArray, fbW: Int, x: Int, y: Int, w: Int, h: Int, color: Int) {
-        for (row in 0 until h) {
-            val base = (y + row) * fbW + x
-            fb.fill(color, base, base + w)
+        val x0 = maxOf(x, 0)
+        val y0 = maxOf(y, 0)
+        val x1 = minOf(x.toLong() + w, clipW.toLong()).toInt()
+        val y1 = minOf(y.toLong() + h, clipH.toLong()).toInt()
+        if (x0 >= x1 || y0 >= y1) return
+        for (row in y0 until y1) {
+            val base = row * fbW + x0
+            fb.fill(color, base, base + (x1 - x0))
         }
     }
 
@@ -722,7 +826,11 @@ class RfbDecoder(private val fmt: PixelFormat) {
             val row = off / tileW
             val col = off % tileW
             if (row >= tileH) break
-            fb[(tileY + row) * fbW + (tileX + col)] = argb
+            // Clip for the same reason as fillRect: the run length that drove
+            // this call was decoded from server-supplied RLE data.
+            if (tileY + row < clipH && tileX + col < clipW) {
+                fb[(tileY + row) * fbW + (tileX + col)] = argb
+            }
             off++
         }
     }
@@ -832,10 +940,18 @@ class RfbDecoder(private val fmt: PixelFormat) {
      */
     @Throws(java.util.zip.DataFormatException::class)
     private fun inflateAll(inflater: Inflater): ByteArray {
-        var outBuf = ByteArray(maxOf(zrleBuf.size, 4096))
+        var outBuf = ByteArray(ZRLE_BUF)
         var totalOut = 0
         while (true) {
-            if (totalOut >= outBuf.size) outBuf = outBuf.copyOf(outBuf.size * 2)
+            if (totalOut >= outBuf.size) {
+                // A hostile server can send a small compressed payload that
+                // inflates without bound (zlib bomb).  Cap the output at the
+                // same MAX_RECT_BYTES ceiling every other allocation uses.
+                if (outBuf.size.toLong() * 2 > MAX_RECT_BYTES) throw java.io.IOException(
+                    "ZRLE inflate output exceeds ${MAX_RECT_BYTES}-byte safety limit"
+                )
+                outBuf = outBuf.copyOf(outBuf.size * 2)
+            }
             val n = inflater.inflate(outBuf, totalOut, outBuf.size - totalOut)
             totalOut += n
             // Break only when no output was produced AND all input is consumed or

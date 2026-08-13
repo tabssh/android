@@ -59,9 +59,9 @@ fetch-spice: ## Fetch SPICE native libs (libtabssh_native.so) from latest GH rel
 fetch-fonts: ## Fetch Nerd Fonts (skip-if-present, --force to refresh)
 	@scripts/fetch-fonts.sh
 
-check: _ensure-image ## Check for errors (KSP + compile, mirrors GH build)
+check: _ensure-image ## Check for errors (KSP + compile + JVM unit tests, per SPEC.md)
 	@mkdir -p $(GRADLE_CACHE)
-	@$(DOCKER_RUN) $(BUILD_IMAGE) ./gradlew kspDebugKotlin compileDebugKotlin \
+	@$(DOCKER_RUN) $(BUILD_IMAGE) ./gradlew kspDebugKotlin compileDebugKotlin testDebugUnitTest \
 		--no-daemon --build-cache \
 		&& echo -e "$(GREEN)✅ No errors$(NC)" \
 		|| { echo -e "$(YELLOW)❌ Errors found$(NC)"; exit 1; }

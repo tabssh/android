@@ -8,6 +8,7 @@ import android.graphics.Paint
 import android.text.InputType
 import android.util.AttributeSet
 import android.view.GestureDetector
+import android.view.KeyCharacterMap
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
@@ -76,10 +77,17 @@ class VncView @JvmOverloads constructor(
             newScale: Float
         ): Pair<Float, Float> {
             if (newScale <= 0f) return Pair(0f, 0f)
+            // Rendering origin is centred ((view - fb*scale)/2 - pan*scale),
+            // so the valid pan range is symmetric around 0 — half the
+            // off-screen extent in each direction. An asymmetric [0, extent]
+            // clamp here would make the top/left edge unreachable and let
+            // the view scroll past the bottom/right edge.
+            val extentX = max(0f, (fbWidth - viewWidth / newScale) / 2f)
+            val extentY = max(0f, (fbHeight - viewHeight / newScale) / 2f)
             val panX = (((viewWidth - fbWidth * newScale) / 2f - focusX) / newScale + oldBitmapX)
-                .coerceIn(0f, max(0f, fbWidth - viewWidth / newScale))
+                .coerceIn(-extentX, extentX)
             val panY = (((viewHeight - fbHeight * newScale) / 2f - focusY) / newScale + oldBitmapY)
-                .coerceIn(0f, max(0f, fbHeight - viewHeight / newScale))
+                .coerceIn(-extentY, extentY)
             return Pair(panX, panY)
         }
     }
@@ -88,7 +96,14 @@ class VncView @JvmOverloads constructor(
 
     private val fbLock = Any()
     private var bitmap: Bitmap? = null
+    // Written by the RFB reader thread under [fbLock] but read unlocked on the
+    // main thread by the gesture and layout code. @Volatile is what makes those
+    // reads see the new geometry after a desktop resize instead of a stale or
+    // torn value.
+    @Volatile
     private var fbWidth = 0
+
+    @Volatile
     private var fbHeight = 0
 
     // ── Viewport transform ───────────────────────────────────────────────
@@ -178,10 +193,12 @@ class VncView @JvmOverloads constructor(
             if (e2.pointerCount > 1) return false // handled by ScaleGestureDetector
             if (userScale > 1.05f) {
                 // Pan the viewport
-                panX = (panX + distX / currentScale()).coerceIn(
-                    0f, max(0f, fbWidth - width / currentScale()))
-                panY = (panY + distY / currentScale()).coerceIn(
-                    0f, max(0f, fbHeight - height / currentScale()))
+                // Same symmetric bounds as focalPan — the rendering origin
+                // is centred, so pan 0 is the centre, not the top-left.
+                val extX = max(0f, (fbWidth - width / currentScale()) / 2f)
+                val extY = max(0f, (fbHeight - height / currentScale()) / 2f)
+                panX = (panX + distX / currentScale()).coerceIn(-extX, extX)
+                panY = (panY + distY / currentScale()).coerceIn(-extY, extY)
                 postInvalidate()
             } else {
                 // Send scroll wheel events to the VM
@@ -259,7 +276,19 @@ class VncView @JvmOverloads constructor(
 
         override fun onFramebufferUpdate(x: Int, y: Int, w: Int, h: Int, framebuffer: IntArray) {
             synchronized(fbLock) {
-                bitmap?.setPixels(framebuffer, y * fbWidth + x, fbWidth, x, y, w, h)
+                val bmp = bitmap ?: return
+                // setPixels throws rather than clipping, and an uncaught throw
+                // here kills the RFB reader thread and drops the session. Drop
+                // the single rect instead if the geometry does not line up.
+                val fits = w > 0 && h > 0 && x >= 0 && y >= 0 &&
+                    bmp.width == fbWidth && bmp.height == fbHeight &&
+                    x + w <= fbWidth && y + h <= fbHeight &&
+                    framebuffer.size >= (y + h - 1) * fbWidth + x + w
+                if (!fits) {
+                    Logger.w(TAG, "Dropping update ($x,$y) ${w}×$h — does not fit ${fbWidth}×$fbHeight")
+                    return
+                }
+                bmp.setPixels(framebuffer, y * fbWidth + x, fbWidth, x, y, w, h)
             }
             postInvalidate()
         }
@@ -334,16 +363,24 @@ class VncView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val bmp = synchronized(fbLock) { bitmap } ?: return
         val scale = currentScale()
+        // The whole draw runs under fbLock. The RFB reader thread recycles and
+        // replaces this bitmap (onConnected / onDesktopResize) and writes into
+        // it (onFramebufferUpdate) under the same lock; releasing the lock after
+        // merely reading the reference let the reader recycle the bitmap between
+        // that read and drawBitmap, crashing with "Canvas: trying to use a
+        // recycled bitmap", and let a concurrent setPixels tear the frame.
+        // fbWidth/fbHeight are written under the lock too, so they are read here.
+        synchronized(fbLock) {
+            val bmp = bitmap ?: return
+            // Bitmap origin in screen space (centred + panned)
+            val originX = (width - fbWidth * scale) / 2f - panX * scale
+            val originY = (height - fbHeight * scale) / 2f - panY * scale
 
-        // Bitmap origin in screen space (centred + panned)
-        val originX = (width - fbWidth * scale) / 2f - panX * scale
-        val originY = (height - fbHeight * scale) / 2f - panY * scale
-
-        drawMatrix.setScale(scale, scale)
-        drawMatrix.postTranslate(originX, originY)
-        canvas.drawBitmap(bmp, drawMatrix, bitmapPaint)
+            drawMatrix.setScale(scale, scale)
+            drawMatrix.postTranslate(originX, originY)
+            canvas.drawBitmap(bmp, drawMatrix, bitmapPaint)
+        }
     }
 
     // ── Touch ─────────────────────────────────────────────────────────────
@@ -361,7 +398,12 @@ class VncView @JvmOverloads constructor(
                 requestFocus()
                 pressX = event.x; pressY = event.y; pressTime = System.currentTimeMillis()
                 val (bx, by) = screenToBitmap(event.x, event.y)
-                lastButtonMask = RfbConstants.BTN_LEFT
+                // A real mouse reports which physical button went down, so its
+                // right/middle clicks reach the VM as right/middle instead of
+                // being flattened to a left click. A finger reports no button
+                // state at all, which stays a left click.
+                val mouseMask = mouseButtonMask(event)
+                lastButtonMask = if (mouseMask != 0) mouseMask else RfbConstants.BTN_LEFT
                 firePointer(bx, by, lastButtonMask)
                 armContextMenuTimer(event.x, event.y)
             }
@@ -386,6 +428,64 @@ class VncView @JvmOverloads constructor(
             }
         }
         return true
+    }
+
+    /**
+     * Handle events from a real pointing device (USB/Bluetooth mouse,
+     * DeX/ChromeOS trackpad). Android delivers wheel scrolls and hover moves
+     * here, never through [onTouchEvent], so without this the wheel did
+     * nothing and the remote cursor did not follow the mouse.
+     */
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_SCROLL -> {
+                val (bx, by) = screenToBitmap(event.x, event.y)
+                val vs = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
+                val hs = event.getAxisValue(MotionEvent.AXIS_HSCROLL)
+                // RFB has no scroll amount: each wheel notch is one press and
+                // release of buttons 4/5 (vertical) or 6/7 (horizontal).
+                if (vs != 0f) {
+                    clickButton(bx, by,
+                        if (vs > 0f) RfbConstants.BTN_SCROLL_UP else RfbConstants.BTN_SCROLL_DOWN,
+                        wheelNotches(vs))
+                }
+                if (hs != 0f) {
+                    clickButton(bx, by,
+                        if (hs > 0f) RfbConstants.BTN_SCROLL_RIGHT else RfbConstants.BTN_SCROLL_LEFT,
+                        wheelNotches(hs))
+                }
+                return true
+            }
+            MotionEvent.ACTION_HOVER_MOVE, MotionEvent.ACTION_HOVER_ENTER -> {
+                val (bx, by) = screenToBitmap(event.x, event.y)
+                firePointer(bx, by, mouseButtonMask(event))
+                return true
+            }
+        }
+        return super.onGenericMotionEvent(event)
+    }
+
+    /** Number of discrete wheel notches represented by a scroll axis value. */
+    private fun wheelNotches(axisValue: Float): Int =
+        kotlin.math.ceil(kotlin.math.abs(axisValue).toDouble()).toInt()
+            .coerceIn(1, SCROLL_STEPS)
+
+    /** Press and release [button] [times] times at the given framebuffer point. */
+    private fun clickButton(bx: Int, by: Int, button: Int, times: Int) {
+        repeat(times) {
+            firePointer(bx, by, button)
+            firePointer(bx, by, 0)
+        }
+    }
+
+    /** Translate Android's mouse button state into an RFB button mask. */
+    private fun mouseButtonMask(event: MotionEvent): Int {
+        var mask = 0
+        val state = event.buttonState
+        if (state and MotionEvent.BUTTON_PRIMARY != 0) mask = mask or RfbConstants.BTN_LEFT
+        if (state and MotionEvent.BUTTON_TERTIARY != 0) mask = mask or RfbConstants.BTN_MIDDLE
+        if (state and MotionEvent.BUTTON_SECONDARY != 0) mask = mask or RfbConstants.BTN_RIGHT
+        return mask
     }
 
     private fun armContextMenuTimer(x: Float, y: Float) {
@@ -457,7 +557,18 @@ class VncView @JvmOverloads constructor(
 
     /** Send a Unicode character as a key press + release. */
     fun sendChar(ch: Char) {
-        val keysym = ch.code.toLong()
+        sendCodePoint(ch.code)
+    }
+
+    /**
+     * Send a Unicode code point as a key press + release.
+     *
+     * Takes a code point rather than a [Char] so characters outside the BMP
+     * (emoji, supplementary planes) can be sent as one keysym instead of two
+     * meaningless surrogate halves.
+     */
+    fun sendCodePoint(cp: Int) {
+        val keysym = codePointToKeysym(cp)
         onKeyEvent?.invoke(keysym, true)
         onKeyEvent?.invoke(keysym, false)
     }
@@ -499,12 +610,32 @@ class VncView @JvmOverloads constructor(
             KeyEvent.KEYCODE_META_LEFT   -> RfbConstants.KEY_SUPER_L
             KeyEvent.KEYCODE_META_RIGHT  -> RfbConstants.KEY_SUPER_R
             else -> {
-                // Printable characters: use Unicode code point as keysym
-                val ch = event.unicodeChar
-                if (ch > 0) ch.toLong() else null
+                // Printable characters. getUnicodeChar() returns 0 when a
+                // modifier suppresses the character (Ctrl+C reports 0), so fall
+                // back to the unmodified character the same way
+                // VncConsoleChannel does — otherwise every Ctrl/Alt chord was
+                // dropped before it reached the server. Dead keys set
+                // COMBINING_ACCENT (bit 31), making the value negative; mask it
+                // off and send the base accent character.
+                val direct = event.unicodeChar
+                val raw = if (direct != 0) direct else event.getUnicodeChar(0)
+                val cp = if (raw < 0) raw and KeyCharacterMap.COMBINING_ACCENT_MASK else raw
+                if (cp > 0) codePointToKeysym(cp) else null
             }
         }
     }
+
+    /**
+     * Map a Unicode code point to an X11 keysym.
+     *
+     * Latin-1 code points are their own keysyms; everything above U+00FF uses
+     * the X11 Unicode convention `0x01000000 | codepoint`. Sending the bare
+     * code point (the previous behaviour) collides with the X11 function-key
+     * and keypad ranges, so non-Latin-1 keystrokes arrived at the server as
+     * unrelated keys.
+     */
+    private fun codePointToKeysym(cp: Int): Long =
+        if (cp <= 0xFF) cp.toLong() else 0x01000000L or cp.toLong()
 
     // ── Accessibility ─────────────────────────────────────────────────────
 

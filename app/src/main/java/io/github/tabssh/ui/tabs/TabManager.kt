@@ -242,14 +242,30 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
                 is Tab.Vnc -> {
                     val tab = entry.vncTab
                     val keepAlive = tab.vncHost?.keepAliveInBackground ?: true
-                    if (keepAlive && parkOne(tab.storeKey, tab.getDisplayTitle(), tab.rfbClient, tab.connectionState.value)) {
+                    if (keepAlive && parkOne(
+                            tab.storeKey, tab.getDisplayTitle(), tab.rfbClient, tab.connectionState.value,
+                            // The tab object outlives the park, so capturing it is safe;
+                            // the hook is what closes an SSH channel or port forward
+                            // behind an RFB stream the store has no Socket for.
+                            transportTeardown = { tab.onCleanup?.invoke() }
+                        )
+                    ) {
                         parkedAny = true
                     }
                 }
                 is Tab.Console -> {
                     val tab = entry.consoleTab
                     if (tab.isGraphicalMode.value &&
-                        parkOne(tab.storeKey, tab.getDisplayTitle(), tab.rfbClient, tab.connectionState.value)
+                        parkOne(
+                            tab.storeKey, tab.getDisplayTitle(), tab.rfbClient, tab.connectionState.value,
+                            // A graphical console tab's RFB stream is carried by the
+                            // manager's WebSocket, not a Socket — only disconnect()
+                            // releases it.
+                            transportTeardown = {
+                                tab.consoleManager?.disconnect()
+                                tab.onCleanup?.invoke()
+                            }
+                        )
                     ) {
                         parkedAny = true
                     }
@@ -263,7 +279,13 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
         return parkedAny
     }
 
-    private fun parkOne(storeKey: String, displayName: String, rfbClient: RfbClient?, state: ConnectionState): Boolean {
+    private fun parkOne(
+        storeKey: String,
+        displayName: String,
+        rfbClient: RfbClient?,
+        state: ConnectionState,
+        transportTeardown: (() -> Unit)? = null
+    ): Boolean {
         if (rfbClient == null || state != ConnectionState.CONNECTED) return false
         rfbClient.pause()
         VncBackgroundSessionStore.park(
@@ -273,7 +295,8 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
                 rfbClient = rfbClient,
                 socket = null,
                 disableResize = false,
-                parkedAtMillis = System.currentTimeMillis()
+                parkedAtMillis = System.currentTimeMillis(),
+                transportTeardown = transportTeardown
             )
         )
         parkedKeys.add(storeKey)
