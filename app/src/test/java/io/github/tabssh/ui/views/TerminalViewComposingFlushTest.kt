@@ -3,7 +3,6 @@ package io.github.tabssh.ui.views
 import android.app.Application
 import android.view.inputmethod.EditorInfo
 import androidx.test.core.app.ApplicationProvider
-import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -35,8 +34,12 @@ class TerminalViewComposingFlushTest {
         emulatorField.isAccessible = true
         val emulator = emulatorField.get(view) as io.github.tabssh.terminal.emulator.TerminalEmulator
 
+        // Attach only the output stream. connect() with an empty input
+        // stream starts a Dispatchers.IO read loop that hits EOF instantly
+        // and closes/nulls the output stream in its finally block — racing
+        // the test's own sendText() and making assertions flaky.
         val out = ByteArrayOutputStream()
-        emulator.connect(ByteArrayInputStream(ByteArray(0)), out)
+        emulator.attachOutputStream(out)
         return Pair(view, out)
     }
 
