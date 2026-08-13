@@ -4,11 +4,13 @@ import io.github.tabssh.hypervisor.console.rfb.RfbClient
 import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
 import io.github.tabssh.hypervisor.spice.SpiceConnectionParams
 import io.github.tabssh.hypervisor.spice.SpiceLoader
+import io.github.tabssh.hypervisor.vnc.VncDirectConnector
 import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.hypervisor.xcpng.XenOrchestraApiClient
 import io.github.tabssh.terminal.TermuxBridge
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -668,44 +670,13 @@ class HypervisorConsoleManager {
         }
 
         Logger.d(TAG, "VNC fallback: got vncproxy ticket for $vmName — connecting")
-        val vncClient = ConsoleWebSocketClient(
-            verifySsl = verifySsl,
-            protocol = ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC,
-            pinnedCertSha256 = pinnedCert,
-            displayHost = displayHost,
-            displayPort = displayPort
-        )
-        webSocketClient = vncClient
-
+        // Gate that completes when the WebSocket actually opens (or fails):
+        // the UI must only switch to graphical mode once the transport is up.
+        val opened = CompletableDeferred<Unit>()
         val headers = mapOf("Cookie" to "PVEAuthCookie=${vnc.authCookie}")
-        val connected = vncClient.connect(vnc.websocketUrl, headers, object : ConsoleConnectionListener {
+        val wsListener = object : ConsoleConnectionListener {
             override fun onConnected() {
-                Logger.i(TAG, "VNC fallback connected for $vmName")
-                val input = vncClient.getInputStream() ?: run {
-                    listener?.onError("VNC fallback: could not get streams")
-                    return
-                }
-                val output = vncClient.getOutputStream() ?: run {
-                    listener?.onError("VNC fallback: could not get streams")
-                    return
-                }
-                // vnc.termproxyTicket is the vncproxy ticket — used as the
-                // VNC Auth password in the RFB handshake (security type 2).
-                // consoleMode=false: shared access (ClientInit shared=1) for graphical VNC.
-                val rfbClient = RfbClient(input, output,
-                    vncPassword = vnc.termproxyTicket,
-                    consoleMode = false)
-                activeRfbClient = rfbClient
-                val graphical = ConsoleConnection.Graphical(
-                    vmName = vmName,
-                    hypervisorType = HypervisorType.PROXMOX,
-                    rfbClient = rfbClient
-                )
-                // Notify the UI to show the serial-unavailable banner before
-                // switching to VNC console mode.
-                listener?.onSerialConsoleUnavailable()
-                listener?.onConnected(vmName)
-                listener?.onSwitchToGraphical(graphical)
+                opened.complete(Unit)
             }
 
             override fun onDisconnected(reason: String) {
@@ -715,13 +686,48 @@ class HypervisorConsoleManager {
 
             override fun onError(error: Throwable) {
                 Logger.e(TAG, "VNC fallback WebSocket error: ${error.message}")
-                listener?.onError(error.message ?: "VNC connection failed")
+                // Before open: fail the gate so the awaiting coroutine reports it.
+                // After open: forward to the UI listener as a live-session error.
+                if (!opened.completeExceptionally(error)) {
+                    listener?.onError(error.message ?: "VNC connection failed")
+                }
             }
-        })
-
-        if (!connected) {
-            Logger.e(TAG, "VNC fallback: WebSocket connect returned false for $vmName")
-            listener?.onError("VNC fallback failed to connect for $vmName")
+        }
+        try {
+            // vnc.termproxyTicket is the vncproxy ticket — used as the
+            // VNC Auth password in the RFB handshake (security type 2).
+            // consoleMode=false: shared access (ClientInit shared=1) for graphical VNC.
+            val (rfbClient, ws) = VncDirectConnector.connectWss(
+                url = vnc.websocketUrl,
+                password = vnc.termproxyTicket,
+                headers = headers,
+                verifySsl = verifySsl,
+                pinnedCertSha256 = pinnedCert,
+                displayHost = displayHost,
+                displayPort = displayPort,
+                consoleMode = false,
+                protocol = ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC,
+                listener = wsListener
+            )
+            webSocketClient = ws
+            opened.await()
+            Logger.i(TAG, "VNC fallback connected for $vmName")
+            activeRfbClient = rfbClient
+            val graphical = ConsoleConnection.Graphical(
+                vmName = vmName,
+                hypervisorType = HypervisorType.PROXMOX,
+                rfbClient = rfbClient
+            )
+            // Notify the UI to show the serial-unavailable banner before
+            // switching to VNC console mode.
+            listener?.onSerialConsoleUnavailable()
+            listener?.onConnected(vmName)
+            listener?.onSwitchToGraphical(graphical)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Logger.e(TAG, "VNC fallback: connect failed for $vmName", e)
+            listener?.onError(e.message ?: "VNC fallback failed to connect for $vmName")
         }
     }
 
@@ -780,44 +786,13 @@ class HypervisorConsoleManager {
             return
         }
 
-        val vncWsClient = ConsoleWebSocketClient(
-            verifySsl       = verifySsl,
-            protocol        = ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC,
-            pinnedCertSha256 = pinnedCert,
-            displayHost     = displayHost,
-            displayPort     = displayPort
-        )
-        webSocketClient = vncWsClient
-
+        // Gate that completes when the WebSocket actually opens (or fails):
+        // the UI must only re-enter graphical mode once the transport is up.
+        val opened = CompletableDeferred<Unit>()
         val headers = mapOf("Cookie" to "PVEAuthCookie=${vnc.authCookie}")
-        val connected = vncWsClient.connect(vnc.websocketUrl, headers, object : ConsoleConnectionListener {
+        val wsListener = object : ConsoleConnectionListener {
             override fun onConnected() {
-                Logger.i(TAG, "reconnectGraphicalWithoutResize: WebSocket connected for $vmName")
-                val input = vncWsClient.getInputStream() ?: run {
-                    listener?.onError("Reconnect: could not get input stream")
-                    return
-                }
-                val output = vncWsClient.getOutputStream() ?: run {
-                    listener?.onError("Reconnect: could not get output stream")
-                    return
-                }
-                val rfbClient = RfbClient(
-                    inputStream  = input,
-                    outputStream = output,
-                    vncPassword  = vnc.termproxyTicket,
-                    consoleMode  = false
-                )
-                // Server rejected resize on the previous connection — suppress
-                // SetDesktopSize entirely so this reconnect stays stable.
-                rfbClient.canRequestResize = false
-                activeRfbClient = rfbClient
-                val graphical = ConsoleConnection.Graphical(
-                    vmName         = vmName,
-                    hypervisorType = HypervisorType.PROXMOX,
-                    rfbClient      = rfbClient
-                )
-                listener?.onConnected(vmName)
-                listener?.onSwitchToGraphical(graphical)
+                opened.complete(Unit)
             }
 
             override fun onDisconnected(reason: String) {
@@ -827,16 +802,51 @@ class HypervisorConsoleManager {
 
             override fun onError(error: Throwable) {
                 Logger.e(TAG, "reconnectGraphicalWithoutResize: WebSocket error", error)
-                val msg = error.message?.takeIf { it.isNotBlank() }
-                    ?: error.cause?.message?.takeIf { it.isNotBlank() }
-                    ?: "Reconnect failed (${error.javaClass.simpleName})"
-                listener?.onError(msg)
+                // Before open: fail the gate so the awaiting coroutine reports it.
+                // After open: forward to the UI listener as a live-session error.
+                if (!opened.completeExceptionally(error)) {
+                    val msg = error.message?.takeIf { it.isNotBlank() }
+                        ?: error.cause?.message?.takeIf { it.isNotBlank() }
+                        ?: "Reconnect failed (${error.javaClass.simpleName})"
+                    listener?.onError(msg)
+                }
             }
-        })
-
-        if (!connected) {
-            Logger.e(TAG, "reconnectGraphicalWithoutResize: WebSocket connect returned false for $vmName")
-            listener?.onError("Reconnect failed — WebSocket could not connect to Proxmox.")
+        }
+        try {
+            val (rfbClient, ws) = VncDirectConnector.connectWss(
+                url = vnc.websocketUrl,
+                password = vnc.termproxyTicket,
+                headers = headers,
+                verifySsl = verifySsl,
+                pinnedCertSha256 = pinnedCert,
+                displayHost = displayHost,
+                displayPort = displayPort,
+                consoleMode = false,
+                protocol = ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC,
+                listener = wsListener
+            )
+            webSocketClient = ws
+            opened.await()
+            Logger.i(TAG, "reconnectGraphicalWithoutResize: WebSocket connected for $vmName")
+            // Server rejected resize on the previous connection — suppress
+            // SetDesktopSize entirely so this reconnect stays stable.
+            rfbClient.canRequestResize = false
+            activeRfbClient = rfbClient
+            val graphical = ConsoleConnection.Graphical(
+                vmName         = vmName,
+                hypervisorType = HypervisorType.PROXMOX,
+                rfbClient      = rfbClient
+            )
+            listener?.onConnected(vmName)
+            listener?.onSwitchToGraphical(graphical)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Logger.e(TAG, "reconnectGraphicalWithoutResize: connect failed for $vmName", e)
+            val msg = e.message?.takeIf { it.isNotBlank() }
+                ?: e.cause?.message?.takeIf { it.isNotBlank() }
+                ?: "Reconnect failed — WebSocket could not connect to Proxmox."
+            listener?.onError(msg)
         }
     }
 

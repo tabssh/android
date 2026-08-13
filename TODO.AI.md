@@ -43,8 +43,16 @@ Open decisions / documented limitations from the 4-8 diagnosis:
   VNC implementation correctness/completeness audit is COMPLETE —
   findings and fixes tracked in AUDIT.AI.md § "VNC Stack Audit
   (2026-08-11)" (~30 protocol/security/lifecycle fixes + 23 JVM tests)
-- `VncDirectConnector.connectWss` has zero callers (dead public API) —
-  user decision: delete or keep for future WSS console targets
+- `VncDirectConnector.connectWss`: RESOLVED 2026-08-13 — user chose
+  "fix": the Proxmox RFB-over-WSS paths (VNC fallback + resize
+  reconnect in HypervisorConsoleManager) now call connectWss instead
+  of duplicating its WS+RfbClient wiring inline; connectWss gained a
+  protocol param and disconnects the WS on a failed connect
+- TERMINOLOGY (user-defined, applies to all future requests): "VNC"
+  means the whole graphical console stack — RFB/VNC protocol, SPICE,
+  .vv/spice://vnc:// handling, viewer/vnc/spice packages, Vnc/Spice
+  views and tabs — i.e. everything graphical (non ssh/telnet/mosh/x11).
+  "Fix VNC" scopes to all of it, not just the RFB protocol code
 - `TerminalViewComposingFlushTest.kt:90` flakiness: RESOLVED 2026-08-13 —
   root cause was the test fixture's `connect()` with an empty input
   stream: the Dispatchers.IO read loop hit EOF instantly and its

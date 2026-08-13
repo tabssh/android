@@ -99,13 +99,13 @@ object VncDirectConnector {
         displayHost: String = "",
         displayPort: Int = 0,
         consoleMode: Boolean = false,
-        listener: io.github.tabssh.hypervisor.console.ConsoleConnectionListener? = null,
-        @Suppress("UNUSED_PARAMETER") context: Context
+        protocol: ConsoleWebSocketClient.ConsoleProtocol = ConsoleWebSocketClient.ConsoleProtocol.RFB_WSS,
+        listener: io.github.tabssh.hypervisor.console.ConsoleConnectionListener? = null
     ): Pair<RfbClient, ConsoleWebSocketClient> = withContext(Dispatchers.IO) {
         Logger.d(TAG, "Connecting RFB-over-WSS to $displayHost:$displayPort consoleMode=$consoleMode")
         val ws = ConsoleWebSocketClient(
             verifySsl = verifySsl,
-            protocol = ConsoleWebSocketClient.ConsoleProtocol.RFB_WSS,
+            protocol = protocol,
             pinnedCertSha256 = pinnedCertSha256,
             displayHost = displayHost,
             displayPort = displayPort
@@ -116,6 +116,7 @@ object VncDirectConnector {
         // disconnect. Forward the caller's listener so the real cause survives.
         val ok = ws.connect(url = url, headers = headers, listener = listener)
         if (!ok) {
+            ws.disconnect()
             throw IllegalStateException("ConsoleWebSocketClient.connect returned false for $displayHost:$displayPort")
         }
         // ConsoleWebSocketClient creates the piped streams synchronously inside
