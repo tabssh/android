@@ -4,50 +4,6 @@ Task tracking (AI-owned). Items are ordered by priority, highest first.
 Complete each item fully before removing; never clear an item while its work
 is in progress.
 
-Source: 2026-08-06 feature-coverage audit of IDEA.md § Business logic against
-the codebase (57 spec features → 53 implemented, 4 partial, 0 missing).
-
-## In progress — 2026-08-14 new-AI.md implementation (uncommitted in tree)
-
-The user replaced AI.md with a new 1030-line template (commit
-2f4785acf539); the 17-finding audit below was superseded by a full
-implementation pass. All items below are FIXED in the working tree,
-pending the final green `make check` + commit sequence:
-
-1–2. Dockerfile.build justification comment added; build-toolchain.yml
-   sanctioned via IDEA.md ## Toolchain `build_image` (PART 4 escape
-   hatch, casjaysdev/android:latest doesn't exist yet).
-3. Dockerfile.dev + docker-compose.dev.yml deleted (unreferenced);
-   test-sshd kept as the sanctioned test-service image, now isolated.
-4–8. Makefile rewritten to the PART 4 pattern: GRADLE_USER_HOME=
-   /workspace/.gradle, --memory/--cpus (6g after a 4g OOM kill),
-   no --network=host, random container names, `release` target →
-   ./releases/, `check` runs compile+lint+unit tests, `test` = check
-   + UI tests only when a device is reachable.
-9. SPEC.md override section sanctions the adb helper targets (user
-   approved 2026-08-11).
-10. security.yml added (TruffleHog, every push/PR, SHA-pinned).
-11. renovate.json added (gradle grouped, actions pinDigests).
-12. Gradle cache step (hashFiles key) added to ci.yml + channel
-    workflows.
-13. ci.yml now runs compile + lintDebug + testDebugUnitTest.
-14–15. dev-builds.yml deleted, replaced by development.yml per PART
-    12/13: daily cron + push to main, `devel` variant (release config,
-    NOT debuggable, DEVEL/DEBUG_LOG BuildConfig flags), canonical
-    asset flow (version.txt, source archive, SBOM, aggregate
-    sha256/sha512 last, provenance attestation), rolling `development`
-    prerelease. beta.yml added; release.yml reworked to the same
-    canonical flow. DEBUG_MODE renamed DEBUG_LOG repo-wide.
-16. start-test-sshd.sh: --rm, isolated tabssh-test-net, stop/teardown
-    branch.
-17. Suppressions rewritten with real false-positive reasons; JSch purl
-    corrected to com.github.mwiede/jsch.
-Also: CycloneDX SBOM plugin added; BUILD_EPOCH BuildConfig field
-   (SOURCE_DATE_EPOCH-aware); MissingTranslation lint downgraded to
-   warning (778 pre-existing translation-coverage gaps, base-locale
-   fallback at runtime); SparklineView Paint-alpha lint misfire fixed
-   via ColorUtils.setAlphaComponent.
-
 ## Open — 2026-08-14 Play Protect false positive (user action required)
 
 1. Google Play Protect flags dev-build APKs as "Harmful app blocked —
