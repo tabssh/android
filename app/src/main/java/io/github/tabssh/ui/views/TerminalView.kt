@@ -1527,8 +1527,14 @@ class TerminalView @JvmOverloads constructor(
             var bgCol = 0
             while (bgCol < cols && bgCharIdx < charsUsed) {
                 val style = try { terminalRow.getStyle(bgCol) } catch (_: Exception) { 0L }
-                val bg = com.termux.terminal.TextStyle.decodeBackColor(style)
-                if (bg != com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND) {
+                // INVERSE (SGR 7) swaps fg/bg: the cell's background becomes
+                // the foreground colour, and it must be drawn even when the
+                // cell uses the default colours.
+                val inverse = (com.termux.terminal.TextStyle.decodeEffect(style) and
+                    com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_INVERSE) != 0
+                val bg = if (inverse) com.termux.terminal.TextStyle.decodeForeColor(style)
+                         else com.termux.terminal.TextStyle.decodeBackColor(style)
+                if (inverse || bg != com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND) {
                     val bx = startX + bgCol * cellWidth
                     backgroundPaint.color = termuxColorToAndroid(bg)
                     canvas.drawRect(bx, rowTop, bx + cellWidth, rowBottom, backgroundPaint)
@@ -1560,16 +1566,10 @@ class TerminalView @JvmOverloads constructor(
 
             fun flushRun() {
                 if (runBuf.isEmpty()) return
-                val fg  = com.termux.terminal.TextStyle.decodeForeColor(runStyle)
-                val eff = com.termux.terminal.TextStyle.decodeEffect(runStyle)
-                textPaint.color          = termuxColorToAndroid(fg)
-                textPaint.isFakeBoldText = (eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_BOLD) != 0
-                textPaint.textSkewX      = if ((eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0) -0.25f else 0f
-                textPaint.isUnderlineText= (eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
-                canvas.drawText(runBuf, 0, runBuf.length, startX + runStartCol * cellWidth, y, textPaint)
-                textPaint.isFakeBoldText = false
-                textPaint.textSkewX      = 0f
-                textPaint.isUnderlineText= false
+                if (configureGlyphPaint(runStyle)) {
+                    canvas.drawText(runBuf, 0, runBuf.length, startX + runStartCol * cellWidth, y, textPaint)
+                }
+                resetGlyphPaint()
                 runBuf.clear()
             }
 
@@ -1606,18 +1606,20 @@ class TerminalView @JvmOverloads constructor(
                     } else if (lastWideCol >= 0) {
                         // Base glyph was double-width and already drawn solo —
                         // draw the mark at that glyph's origin so it overlays.
-                        val fg = com.termux.terminal.TextStyle.decodeForeColor(style)
-                        textPaint.color = termuxColorToAndroid(fg)
-                        val count = Character.toChars(codePoint, wideCharBuf, 0)
-                        canvas.drawText(wideCharBuf, 0, count, startX + lastWideCol * cellWidth, y, textPaint)
+                        if (configureGlyphPaint(style)) {
+                            val count = Character.toChars(codePoint, wideCharBuf, 0)
+                            canvas.drawText(wideCharBuf, 0, count, startX + lastWideCol * cellWidth, y, textPaint)
+                        }
+                        resetGlyphPaint()
                     }
                     // No base glyph at all (row starts with a lone mark):
                     // nothing sensible to compose onto — drop it.
                 } else if (isVisible) {
                     // Style differs or double-width char → flush current run first.
-                    val sameStyle = runBuf.isNotEmpty() &&
-                        com.termux.terminal.TextStyle.decodeForeColor(style) == com.termux.terminal.TextStyle.decodeForeColor(runStyle) &&
-                        com.termux.terminal.TextStyle.decodeEffect(style)    == com.termux.terminal.TextStyle.decodeEffect(runStyle)
+                    // Full style equality: with INVERSE the glyph colour comes
+                    // from the BACKGROUND field, so fg+effect equality alone
+                    // would merge inverse runs of different backgrounds.
+                    val sameStyle = runBuf.isNotEmpty() && style == runStyle
                     val isWide = charWidth > 1
                     if (!sameStyle || isWide) flushRun()
 
@@ -1625,17 +1627,11 @@ class TerminalView @JvmOverloads constructor(
                         lastWideCol = col
                         // Double-width glyph: draw solo using wideCharBuf so it
                         // does not alias the charBuf used for run accumulation.
-                        val fg  = com.termux.terminal.TextStyle.decodeForeColor(style)
-                        val eff = com.termux.terminal.TextStyle.decodeEffect(style)
-                        textPaint.color          = termuxColorToAndroid(fg)
-                        textPaint.isFakeBoldText = (eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_BOLD) != 0
-                        textPaint.textSkewX      = if ((eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0) -0.25f else 0f
-                        textPaint.isUnderlineText= (eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
-                        val wideCount = Character.toChars(codePoint, wideCharBuf, 0)
-                        canvas.drawText(wideCharBuf, 0, wideCount, startX + col * cellWidth, y, textPaint)
-                        textPaint.isFakeBoldText = false
-                        textPaint.textSkewX      = 0f
-                        textPaint.isUnderlineText= false
+                        if (configureGlyphPaint(style)) {
+                            val wideCount = Character.toChars(codePoint, wideCharBuf, 0)
+                            canvas.drawText(wideCharBuf, 0, wideCount, startX + col * cellWidth, y, textPaint)
+                        }
+                        resetGlyphPaint()
                         // A wide glyph always ends any pending run. runStyle must
                         // be reset here so the NEXT character's sameStyle check
                         // compares against its own style, not the pre-flush style.
@@ -1764,6 +1760,50 @@ class TerminalView @JvmOverloads constructor(
      * `defaultColors[negative]` → ArrayIndexOutOfBoundsException. Android's
      * Color int is ARGB, so the encoded value is a valid Color as-is.
      */
+    /**
+     * Configure [textPaint] colour + effects for a cell/run style and report
+     * whether the glyphs should be drawn at all.
+     *
+     * Honors BOLD, ITALIC, UNDERLINE, STRIKETHROUGH (SGR 9), DIM (SGR 2,
+     * channel brightness dropped to 2/3), INVERSE (SGR 7, glyph drawn in the
+     * cell's background colour — the background pass paints the foreground
+     * colour behind it), and INVISIBLE (SGR 8 → returns false, skip drawing).
+     * BLINK is deliberately not implemented (a static render has no frame
+     * clock; blinking text is also an accessibility hazard).
+     *
+     * Callers must call [resetGlyphPaint] after drawing so run-local effects
+     * never leak into the next draw call.
+     */
+    private fun configureGlyphPaint(style: Long): Boolean {
+        val eff = com.termux.terminal.TextStyle.decodeEffect(style)
+        if ((eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE) != 0) return false
+        val inverse = (eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_INVERSE) != 0
+        val colorIdx = if (inverse) com.termux.terminal.TextStyle.decodeBackColor(style)
+                       else com.termux.terminal.TextStyle.decodeForeColor(style)
+        var color = termuxColorToAndroid(colorIdx)
+        if ((eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_DIM) != 0) {
+            color = Color.rgb(
+                Color.red(color) * 2 / 3,
+                Color.green(color) * 2 / 3,
+                Color.blue(color) * 2 / 3
+            )
+        }
+        textPaint.color            = color
+        textPaint.isFakeBoldText   = (eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_BOLD) != 0
+        textPaint.textSkewX        = if ((eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0) -0.25f else 0f
+        textPaint.isUnderlineText  = (eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
+        textPaint.isStrikeThruText = (eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_STRIKETHROUGH) != 0
+        return true
+    }
+
+    /** Undo the per-run effects set by [configureGlyphPaint]. */
+    private fun resetGlyphPaint() {
+        textPaint.isFakeBoldText   = false
+        textPaint.textSkewX        = 0f
+        textPaint.isUnderlineText  = false
+        textPaint.isStrikeThruText = false
+    }
+
     private fun termuxColorToAndroid(colorIndex: Int): Int {
         return when {
             // Theme-driven defaults. `currentTheme` is set by `applyTheme()`;
