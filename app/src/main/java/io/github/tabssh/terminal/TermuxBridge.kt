@@ -43,6 +43,35 @@ class TermuxBridge(
     companion object {
         private const val TAG = "TermuxBridge"
         private const val READ_BUFFER_SIZE = 8192
+
+        // Shared empty array for the pendingUtf8 hold-back buffer.
+        private val EMPTY_BYTES = ByteArray(0)
+
+        /**
+         * Number of bytes at the end of [buf] (within [len]) that form the
+         * start of an incomplete UTF-8 multi-byte sequence, or 0 when the
+         * buffer ends on a complete boundary (or on bytes that are invalid
+         * anyway — those are passed through so the decoder's replacement
+         * behavior stays unchanged). Internal for unit testing.
+         */
+        internal fun utf8IncompleteTrailingBytes(buf: ByteArray, len: Int): Int {
+            if (len == 0) return 0
+            // Walk back over at most 3 continuation bytes (0b10xxxxxx) to
+            // find the lead byte of the trailing sequence.
+            var i = len - 1
+            var back = 0
+            while (i >= 0 && back < 3 && (buf[i].toInt() and 0xC0) == 0x80) { i--; back++ }
+            if (i < 0) return 0
+            val lead = buf[i].toInt() and 0xFF
+            val seqLen = when {
+                lead >= 0xF0 -> 4
+                lead >= 0xE0 -> 3
+                lead >= 0xC0 -> 2
+                else -> return 0
+            }
+            val have = len - i
+            return if (have < seqLen) have else 0
+        }
         private const val PASTE_CHUNK_SIZE = 4096
 
         // Hard cap on tracked OSC 8 hyperlink spans. A long-running session that
@@ -441,6 +470,12 @@ class TermuxBridge(
         return result
     }
 
+    // Trailing bytes of an incomplete UTF-8 sequence held back from the
+    // previous append — prepended to the next chunk by appendWithOsc8Tracking
+    // so a multi-byte character split across two SSH reads is never decoded
+    // as U+FFFD. Only touched from the read loop, no synchronization needed.
+    private var pendingUtf8: ByteArray = EMPTY_BYTES
+
     /**
      * Feed data to the emulator with OSC 8 interception.
      *
@@ -450,7 +485,30 @@ class TermuxBridge(
      * When rows scroll off the top during the append, all stored link row
      * indices are adjusted downward to stay aligned with screen coordinates.
      */
-    private fun appendWithOsc8Tracking(em: TerminalEmulator, data: ByteArray, length: Int) {
+    private fun appendWithOsc8Tracking(em: TerminalEmulator, rawData: ByteArray, rawLength: Int) {
+        // Re-assemble UTF-8 sequences across chunk boundaries. The ESC path
+        // below decodes the chunk with String(bytes, UTF_8); a multi-byte
+        // character split across two SSH reads would decode its halves as
+        // U+FFFD, and the re-encoded replacement bytes would be fed to the
+        // emulator — permanently corrupting the cell (visible as "??" tofu
+        // in TUIs). Hold back a trailing incomplete sequence and prepend it
+        // to the next chunk. Applied to every path (the no-ESC fast path
+        // tolerates splits — em.append decodes statefully — but held-back
+        // bytes from an ESC chunk must always be re-prepended first).
+        var data = rawData
+        var length = rawLength
+        if (pendingUtf8.isNotEmpty()) {
+            data = pendingUtf8 + rawData.copyOf(rawLength)
+            length = data.size
+            pendingUtf8 = EMPTY_BYTES
+        }
+        val hold = utf8IncompleteTrailingBytes(data, length)
+        if (hold > 0) {
+            pendingUtf8 = data.copyOfRange(length - hold, length)
+            length -= hold
+        }
+        if (length == 0) return
+
         // Fast path: every sequence intercepted below — OSC 8 anchors and the
         // bracketed-paste mode toggles — begins with ESC (0x1B). If the buffer
         // holds no ESC byte, the UTF-8 decode, the regex scan, and both
@@ -464,7 +522,6 @@ class TermuxBridge(
             if ((data[i].toInt() and 0xFF) == 0x1B) { hasEsc = true; break }
         }
         if (!hasEsc) {
-            if (length == 0) return
             val prevTranscript = em.screen?.activeTranscriptRows ?: 0
             em.append(data, length)
             val scrolled = (em.screen?.activeTranscriptRows ?: 0) - prevTranscript
