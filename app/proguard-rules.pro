@@ -155,3 +155,11 @@
 # calls the methods above on it — the class itself must keep its name too.
 -keep class io.github.tabssh.hypervisor.spice.SpiceClient
 -keep class io.github.tabssh.hypervisor.spice.SpiceLoader { *; }
+
+# snakeyaml's optional JavaBean introspection (MethodProperty and friends)
+# references java.beans.*, which does not exist on Android. TabSSH only
+# dumps plain LinkedHashMap documents (RunConfigWriter) and composes nodes
+# for validation (ComposeEditorActivity) — never bean-binding to custom
+# classes — so those introspection paths are unreachable at runtime and
+# the missing classes are safe to ignore in every minified variant.
+-dontwarn java.beans.**

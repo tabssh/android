@@ -230,3 +230,13 @@ jobs:
         echo "   - Complete F-Droid submission package"
         echo ""
         echo "🚀 Ready for production deployment!"
+
+    # Gradle creates .gradle/configuration-cache and daemon dirs mode 700.
+    # This job runs as root inside the toolchain container, so those dirs
+    # end up root-owned on the host runner — the host-side post-step
+    # hashFiles() walk for the Gradle cache key then fails with EACCES
+    # ("Fail to hash files") and marks the job failed even when every
+    # build step passed. Make the tree world-readable before post steps.
+    - name: Fix workspace permissions for host post-steps
+      if: always()
+      run: chmod -R a+rX "$GITHUB_WORKSPACE"
