@@ -13,30 +13,40 @@ import java.util.concurrent.ConcurrentHashMap
 class TerminalManager(private val context: Context) {
     
     private val terminals = ConcurrentHashMap<String, TerminalEmulator>()
-    private val managerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    
+    // Recreated on every initialize() so a cleanup() -> initialize() cycle
+    // gets a fresh, uncancelled scope for the maintenance loop.
+    private var managerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
     // Settings
     private var defaultRows = 24
     private var defaultCols = 80
     private var maxScrollback = 10000
     private var defaultTerminalType = "xterm-256color"
     private var defaultEncoding = "UTF-8"
-    
+
+    @Volatile
     private var isInitialized = false
-    
+
     fun initialize() {
-        if (isInitialized) return
-        
-        Logger.d("TerminalManager", "Initializing terminal manager")
-        
-        // Load settings from preferences
-        loadSettings()
-        
-        // Start maintenance task
-        startMaintenance()
-        
-        isInitialized = true
-        Logger.i("TerminalManager", "Terminal manager initialized")
+        synchronized(this) {
+            if (isInitialized) return
+
+            Logger.d("TerminalManager", "Initializing terminal manager")
+
+            // Recreate the scope in case a prior cleanup() cancelled it
+            if (!managerScope.isActive) {
+                managerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+            }
+
+            // Load settings from preferences
+            loadSettings()
+
+            // Start maintenance task
+            startMaintenance()
+
+            isInitialized = true
+            Logger.i("TerminalManager", "Terminal manager initialized")
+        }
     }
     
     private fun loadSettings() {
@@ -267,20 +277,25 @@ class TerminalManager(private val context: Context) {
      * Cleanup all terminals and resources
      */
     fun cleanup() {
-        Logger.d("TerminalManager", "Cleaning up terminal manager")
-        
-        // Cleanup all terminals
-        terminals.values.forEach { terminal ->
-            try {
-                terminal.cleanup()
-            } catch (e: Exception) {
-                Logger.e("TerminalManager", "Error cleaning up terminal", e)
+        synchronized(this) {
+            Logger.d("TerminalManager", "Cleaning up terminal manager")
+
+            // Cleanup all terminals
+            terminals.values.forEach { terminal ->
+                try {
+                    terminal.cleanup()
+                } catch (e: Exception) {
+                    Logger.e("TerminalManager", "Error cleaning up terminal", e)
+                }
             }
+
+            terminals.clear()
+            managerScope.cancel()
+
+            // Reset the latch so a later initialize() restarts the maintenance loop
+            isInitialized = false
+
+            Logger.i("TerminalManager", "Terminal manager cleanup complete")
         }
-        
-        terminals.clear()
-        managerScope.cancel()
-        
-        Logger.i("TerminalManager", "Terminal manager cleanup complete")
     }
 }

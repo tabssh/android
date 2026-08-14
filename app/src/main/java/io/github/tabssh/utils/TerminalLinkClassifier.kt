@@ -29,20 +29,51 @@ object TerminalLinkClassifier {
 
         /** http/https/www. — unchanged "opens in your browser" flow. */
         data class Browser(val url: String) : LinkAction()
+
+        /**
+         * A remote-supplied scheme that isn't on the allowlist (e.g. an
+         * intent:, file:-with-authority-stripped-elsewhere, javascript:, or
+         * content: OSC 8 hyperlink). Not a link — no dialog, no Intent is
+         * ever built from it.
+         */
+        data class NotALink(val url: String) : LinkAction()
     }
 
-    private val schemeRe = Regex("^([a-zA-Z][a-zA-Z0-9+.-]*)://")
+    // Matches the RFC 3986 scheme prefix of any URI, with or without "//" —
+    // a "://"-only pattern would miss no-authority schemes like javascript:
+    // or mailto:, letting them slip past the allowlist check below as "no
+    // scheme detected".
+    private val schemeRe = Regex("^([a-zA-Z][a-zA-Z0-9+.-]*):")
+
+    // Schemes a remote OSC 8 hyperlink is allowed to drive an action for.
+    // Anything not covered by an explicit case below (intent:, javascript:,
+    // content:, tel:, market:, …) is untrusted-remote-controlled input and
+    // must never reach Intent.ACTION_VIEW — see LinkAction.NotALink.
+    private val allowedSchemes = setOf(
+        "http", "https", "ssh", "sftp", "file", "git", "ftp", "ftps", "svn", "telnet", "vnc", "spice"
+    )
 
     /** Classifies [url] (as detected by TerminalView.urlPattern) into a [LinkAction]. */
     fun classify(url: String): LinkAction {
         val scheme = schemeRe.find(url)?.groupValues?.get(1)?.lowercase()
+        if (scheme != null && scheme !in allowedSchemes) {
+            // '.' is legal in a scheme per RFC 3986, so an OSC 8 href like
+            // "example.com:8080/path" matches with "example.com" as its
+            // "scheme". No real-world scheme contains a dot — when there is
+            // no "://" following, this is host:port text, and it keeps the
+            // pre-allowlist Browser behavior. A dotted scheme WITH "://"
+            // stays rejected like any other non-allowlisted scheme.
+            val isHostPortText = scheme.contains('.') &&
+                !url.regionMatches(scheme.length, "://", 0, 3, ignoreCase = true)
+            return if (isHostPortText) LinkAction.Browser(url) else LinkAction.NotALink(url)
+        }
         return when (scheme) {
             "ssh" -> parseSsh(url)?.let { (username, host, port) -> LinkAction.Ssh(url, username, host, port) }
                 ?: LinkAction.Browser(url)
             "sftp" -> parseSftp(url)?.let { (username, host, port, path) -> LinkAction.Sftp(url, username, host, port, path) }
                 ?: LinkAction.Browser(url)
             "file" -> LinkAction.RemoteFile(url, extractFilePath(url))
-            "git", "ftp", "ftps", "svn" -> LinkAction.ExternalScheme(url, scheme)
+            "git", "ftp", "ftps", "svn", "telnet", "vnc", "spice" -> LinkAction.ExternalScheme(url, scheme)
             else -> LinkAction.Browser(url)
         }
     }

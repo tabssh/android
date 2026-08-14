@@ -15,6 +15,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.charset.Charset
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.TimeUnit
 
 /**
  * VT100/ANSI Terminal Emulator
@@ -56,6 +60,69 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
     private var readJob: Job? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    // Single-threaded executor that serialises every write to the SSH
+    // output stream (sendText/pasteText). Callers post work here instead of
+    // writing directly so that key escapes (page up/down, function keys,
+    // bar shortcuts) queued from the UI thread can never interleave with an
+    // in-flight composing-text send — ordering is strictly FIFO. This also
+    // keeps the network write itself off the calling (UI) thread.
+    // Recreated on every connect() since an ExecutorService cannot be
+    // restarted once shut down. @Volatile: reassigned from connect()
+    // (background dispatcher) while postWrite() reads it from the UI
+    // thread — same convention as lastActivityTime above.
+    @Volatile
+    private var writeExecutor: ExecutorService = newWriteExecutor()
+
+    private fun newWriteExecutor(): ExecutorService =
+        Executors.newSingleThreadExecutor { r ->
+            Thread(r, "tabssh-terminal-writer").also { it.isDaemon = true }
+        }
+
+    /**
+     * Post a write task to the serialised writer thread.
+     *
+     * Silently drops the task if the executor has already been shut down —
+     * this happens when [disconnect]/[cleanup] runs while a send is still in
+     * flight from the UI thread. The session is over; dropping is correct
+     * and avoids a [RejectedExecutionException] crash.
+     */
+    private fun postWrite(block: () -> Unit) {
+        if (writeExecutor.isShutdown) return
+        try {
+            writeExecutor.execute(block)
+        } catch (_: RejectedExecutionException) {
+            // Race between isShutdown check and execute() — session is ending; drop safely.
+        }
+    }
+
+    /**
+     * Shut down [executor], letting any already-queued writes finish in
+     * order before the thread dies. Falls back to a hard
+     * [ExecutorService.shutdownNow] if draining takes too long, so
+     * disconnect/cleanup never blocks indefinitely.
+     *
+     * Takes the executor explicitly rather than reading the [writeExecutor]
+     * field: the read loop's `finally` block calls this asynchronously after
+     * [readJob] is cancelled, and by then [connect] may already have
+     * reassigned [writeExecutor] to a fresh instance for a new connection —
+     * reading the field at that point would shut down the wrong executor.
+     *
+     * Blocks the caller up to 2s draining queued writes — callers
+     * (disconnect/cleanup) must stay on background dispatchers, never
+     * Dispatchers.Main.
+     */
+    private fun shutdownWriteExecutor(executor: ExecutorService) {
+        executor.shutdown()
+        try {
+            if (!executor.awaitTermination(2, TimeUnit.SECONDS)) {
+                executor.shutdownNow()
+            }
+        } catch (e: InterruptedException) {
+            executor.shutdownNow()
+            Thread.currentThread().interrupt()
+        }
+    }
+
     /**
      * Process input data from SSH connection
      * Uses ANSIParser for full ANSI/VT100 escape sequence handling
@@ -72,10 +139,30 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
     fun getLastActivityTime(): Long = lastActivityTime
 
     /**
+     * Block until every write queued so far on the writer executor has
+     * drained (or [timeoutMs] elapses).
+     *
+     * Test-support only — production callers must never block the calling
+     * (UI) thread on the network write completing, which is exactly what
+     * moving writes to [writeExecutor] was meant to avoid. It exists so JVM
+     * tests can assert against a fake [OutputStream] deterministically
+     * instead of sleeping.
+     */
+    fun awaitPendingWrites(timeoutMs: Long = 2_000) {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        postWrite { latch.countDown() }
+        latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+    }
+
+    /**
      * Send text to terminal (sends to SSH output stream)
      */
     fun sendText(text: String) {
-        outputStream?.let { stream ->
+        val stream = outputStream ?: run {
+            Logger.w("TerminalEmulator", "Cannot send text - output stream not connected")
+            return
+        }
+        postWrite {
             try {
                 lastActivityTime = System.currentTimeMillis()
                 val bytes = text.toByteArray(currentCharset)
@@ -87,8 +174,6 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
                 Logger.e("TerminalEmulator", "Error sending text to SSH", e)
                 listeners.forEach { it.onTerminalError(e) }
             }
-        } ?: run {
-            Logger.w("TerminalEmulator", "Cannot send text - output stream not connected")
         }
     }
 
@@ -105,24 +190,26 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
         }
         val normalized = text.replace("\r\n", "\r").replace('\n', '\r')
         val bracketed = buffer.isBracketedPasteModeActive()
-        try {
-            if (bracketed) stream.write("$BRACKETED_PASTE_START".toByteArray(currentCharset))
-            var offset = 0
-            while (offset < normalized.length) {
-                val end = minOf(offset + PASTE_CHUNK_SIZE, normalized.length)
-                val bytes = normalized.substring(offset, end).toByteArray(currentCharset)
-                stream.write(bytes)
-                stream.flush()
-                offset = end
+        postWrite {
+            try {
+                if (bracketed) stream.write("$BRACKETED_PASTE_START".toByteArray(currentCharset))
+                var offset = 0
+                while (offset < normalized.length) {
+                    val end = minOf(offset + PASTE_CHUNK_SIZE, normalized.length)
+                    val bytes = normalized.substring(offset, end).toByteArray(currentCharset)
+                    stream.write(bytes)
+                    stream.flush()
+                    offset = end
+                }
+                if (bracketed) {
+                    stream.write("$BRACKETED_PASTE_END".toByteArray(currentCharset))
+                    stream.flush()
+                }
+                Logger.d("TerminalEmulator", "Pasted ${normalized.length} chars (bracketed=$bracketed)")
+            } catch (e: Exception) {
+                Logger.e("TerminalEmulator", "Error pasting text", e)
+                listeners.forEach { it.onTerminalError(e) }
             }
-            if (bracketed) {
-                stream.write("$BRACKETED_PASTE_END".toByteArray(currentCharset))
-                stream.flush()
-            }
-            Logger.d("TerminalEmulator", "Pasted ${normalized.length} chars (bracketed=$bracketed)")
-        } catch (e: Exception) {
-            Logger.e("TerminalEmulator", "Error pasting text", e)
-            listeners.forEach { it.onTerminalError(e) }
         }
     }
 
@@ -212,6 +299,14 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
         // Tear down any existing connection before wiring new streams
         disconnect()
 
+        // disconnect() shuts down the previous writer executor; an
+        // ExecutorService cannot be restarted, so a fresh one is needed here.
+        // Captured into a local so the coroutine's finally block below shuts
+        // down exactly this connection's executor, even if a later
+        // connect() call reassigns the writeExecutor field first.
+        writeExecutor = newWriteExecutor()
+        val activeWriteExecutor = writeExecutor
+
         this.inputStream = inputStream
         this.outputStream = outputStream
         _isActive.value = true
@@ -266,6 +361,7 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
                 }
 
                 closeStreams()
+                shutdownWriteExecutor(activeWriteExecutor)
                 this@TerminalEmulator.readJob = null
                 Logger.d("TerminalEmulator", "SSH read loop terminated")
             }
@@ -300,6 +396,7 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
         readJob = null
 
         closeStreams()
+        shutdownWriteExecutor(writeExecutor)
 
         // Notify listeners
         if (wasConnected) {

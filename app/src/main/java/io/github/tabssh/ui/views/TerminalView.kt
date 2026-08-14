@@ -298,6 +298,17 @@ class TerminalView @JvmOverloads constructor(
     private val thumbEdgeMarginPx by lazy { 4f * resources.displayMetrics.density }
     /** Right-edge grab strip width (24dp) — generous horizontal slop. */
     private val thumbTouchStripPx by lazy { 24f * resources.displayMetrics.density }
+    /**
+     * Horizontal gutter reserved for the scrollbar when sizing the grid:
+     * track width (4dp) + its edge margin (4dp) + the same 4dp again as a
+     * gap between the last text column and the track. Without this reserve
+     * the grid uses the full view width and the always-visible track is
+     * drawn ON TOP of the rightmost column, hiding the last character of
+     * every full-width line (the "text hidden at the right edge" bug).
+     */
+    private val scrollbarReservePx by lazy {
+        (thumbWidthPx + thumbEdgeMarginPx * 2).toInt()
+    }
     /** Extra vertical grab slop above/below the thumb (12dp). */
     private val thumbTouchPadPx by lazy { 12f * resources.displayMetrics.density }
     /** Movement threshold for the vertical-vs-horizontal drag decision. */
@@ -430,7 +441,7 @@ class TerminalView @JvmOverloads constructor(
         val rows = termuxBridge?.getRows() ?: return
         // Place the match at the vertical centre of the visible area.
         val targetScrollRows = (rows / 2 - extRow).coerceAtLeast(0)
-        scrollYf = (targetScrollRows * cellHeight).toFloat().coerceIn(0f, maxScrollYPx().toFloat())
+        scrollYf = (targetScrollRows * cellHeight).coerceIn(0f, maxScrollYPx().toFloat())
         invalidate()
     }
 
@@ -1283,7 +1294,9 @@ class TerminalView @JvmOverloads constructor(
      */
     private fun updateGridSize() {
         if (cellWidth <= 0f || cellHeight <= 0f) return
-        val availableWidth = width - paddingLeft - paddingRight
+        // The scrollbar gutter comes out of the usable width so the last
+        // column never renders under the always-visible track.
+        val availableWidth = width - paddingLeft - paddingRight - scrollbarReservePx
         val availableHeight = height - paddingTop - paddingBottom
         if (availableWidth <= 0 || availableHeight <= 0) return
         val newCols = (availableWidth / cellWidth).toInt().coerceAtLeast(40)
@@ -1299,7 +1312,7 @@ class TerminalView @JvmOverloads constructor(
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val desiredWidth = (terminalCols * cellWidth + paddingLeft + paddingRight).toInt()
+        val desiredWidth = (terminalCols * cellWidth + paddingLeft + paddingRight + scrollbarReservePx).toInt()
         val desiredHeight = (terminalRows * cellHeight + paddingTop + paddingBottom).toInt()
 
         val measuredWidth = resolveSize(desiredWidth, widthMeasureSpec)

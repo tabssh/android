@@ -18,6 +18,21 @@ class TerminalRenderer(
     private val cellBgPaint = Paint()
     private val glyphPaint = Paint()
 
+    // Bold variant of the CURRENT terminal typeface, cached per base face.
+    // Typeface.DEFAULT_BOLD is proportional Roboto — bold glyphs rendered
+    // with it are wider than the monospace cell and overdraw (hide) the
+    // neighbouring character.
+    private var boldBaseTypeface: Typeface? = null
+    private var boldTypeface: Typeface? = null
+
+    private fun boldFor(base: Typeface?): Typeface {
+        if (base !== boldBaseTypeface || boldTypeface == null) {
+            boldBaseTypeface = base
+            boldTypeface = Typeface.create(base ?: Typeface.MONOSPACE, Typeface.BOLD)
+        }
+        return boldTypeface!!
+    }
+
     private val defaultColors = intArrayOf(
         Color.BLACK, Color.RED, Color.GREEN, Color.YELLOW,
         Color.BLUE, Color.MAGENTA, Color.CYAN, Color.WHITE,
@@ -94,7 +109,7 @@ class TerminalRenderer(
                     glyphPaint.color = fgInt
                     // Reset formatting every cell — the scratch paint carries
                     // state from the previous glyph otherwise.
-                    glyphPaint.typeface = if (char.bold) Typeface.DEFAULT_BOLD else textPaint.typeface
+                    glyphPaint.typeface = if (char.bold) boldFor(textPaint.typeface) else textPaint.typeface
                     glyphPaint.isUnderlineText = char.underline
 
                     canvas.drawText(char.char.toString(), x, y + cellHeight * 0.8f, glyphPaint)

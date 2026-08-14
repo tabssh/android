@@ -111,6 +111,13 @@ class ProxmoxManagerActivity : AppCompatActivity() {
      */
     private var snapshotDialog: AlertDialog? = null
 
+    // Console managers whose ConsoleEventListener is an anonymous object
+    // holding this Activity (runOnUiThread, progress dialog). The tab — and
+    // therefore the manager — outlives this screen, so onDestroy() must
+    // detach the listener or the destroyed Activity is retained for the
+    // life of the console connection.
+    private val spawnedConsoleManagers = mutableListOf<HypervisorConsoleManager>()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_proxmox_manager)
@@ -158,6 +165,10 @@ class ProxmoxManagerActivity : AppCompatActivity() {
         }
         snapshotDialog?.dismiss()
         snapshotDialog = null
+        // Listeners are anonymous objects holding this Activity; the console
+        // connections (owned by their tabs) outlive this screen.
+        spawnedConsoleManagers.forEach { it.detachListener() }
+        spawnedConsoleManagers.clear()
         super.onDestroy()
     }
 
@@ -441,6 +452,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 }
                 consoleTab = tab
                 tab.consoleManager = manager
+                spawnedConsoleManagers.add(manager)
 
                 when (connection) {
                     is HypervisorConsoleManager.ConsoleConnection.Text -> {

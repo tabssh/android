@@ -1216,6 +1216,11 @@ class TabTerminalActivity : AppCompatActivity() {
                 showExternalSchemeDialog(action)
             is io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Browser ->
                 showBrowserLinkDialog(action.url)
+            is io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.NotALink ->
+                // Non-allowlisted remote-supplied scheme (intent:, javascript:,
+                // content:, …) — reject outright: no dialog, no Intent. Redact
+                // before logging; the URL may carry userinfo.
+                Logger.w("TabTerminalActivity", "Rejected non-allowlisted link scheme: ${Logger.urlForLogging(action.url)}")
         }
     }
 

@@ -415,10 +415,7 @@ class SessionPersistenceManager(
                 // This would restore terminal buffer content
                 // Implementation depends on terminal buffer restoration capability
             }
-            
-            // Restore cursor position
-            // tab.terminal.getBuffer().setCursorPosition(session.cursorRow, session.cursorCol)
-            
+
             Logger.d("SessionPersistenceManager", "Restored terminal state for tab: ${session.title}")
             
         } catch (e: Exception) {

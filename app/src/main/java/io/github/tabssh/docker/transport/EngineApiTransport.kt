@@ -64,6 +64,9 @@ class EngineApiTransport(
         .readTimeout(READ_TIMEOUT_S, TimeUnit.SECONDS)
         .writeTimeout(READ_TIMEOUT_S, TimeUnit.SECONDS)
         .connectionPool(ConnectionPool(0, 1, TimeUnit.SECONDS))
+        // Authenticates every connection to relay.localPort against the
+        // relay's per-session token preamble (SocketRelay.authenticateClient).
+        .socketFactory(RelayTokenSocketFactory(relay.token))
         .addInterceptor { chain ->
             chain.proceed(
                 chain.request().newBuilder().header("Connection", "close").build()

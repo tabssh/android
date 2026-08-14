@@ -11,6 +11,7 @@ import io.github.tabssh.storage.database.entities.RegistryCredential
 import io.github.tabssh.storage.database.entities.SingleContainerConfig
 import io.github.tabssh.storage.database.entities.SyncTombstone
 import io.github.tabssh.sync.metadata.SyncMetadataManager
+import io.github.tabssh.utils.coroutines.catchExceptCancellation
 import io.github.tabssh.utils.logging.Logger
 
 /**
@@ -113,7 +114,9 @@ object TombstoneRecorder {
      * throws; the diff-at-collect backstop is the safety net if this is lost.
      */
     suspend fun record(context: Context, entityType: String, entityKey: String) {
-        runCatching {
+        catchExceptCancellation(onError = { e ->
+            Logger.w("TombstoneRecorder", "Failed to record tombstone for $entityType: ${e.message}")
+        }) {
             val app = context.applicationContext
             val deviceId = SyncMetadataManager(app).getDeviceId()
             TabSSHDatabase.getDatabase(app).syncTombstoneDao().record(
@@ -124,8 +127,6 @@ object TombstoneRecorder {
                     deviceId = deviceId
                 )
             )
-        }.onFailure { e ->
-            Logger.w("TombstoneRecorder", "Failed to record tombstone for $entityType: ${e.message}")
         }
     }
 }

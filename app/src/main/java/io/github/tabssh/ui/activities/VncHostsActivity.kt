@@ -172,7 +172,7 @@ class VncHostsActivity : AppCompatActivity() {
                         Logger.d(TAG, "rfbClient.stop() suppressed after max-tabs reject: ${e.message}")
                     }
                     if (!isAlive) return@launch
-                    Toast.makeText(this@VncHostsActivity, "Maximum tabs reached", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@VncHostsActivity, getString(R.string.virt_viewer_max_tabs), Toast.LENGTH_SHORT).show()
                     return@launch
                 }
                 tab.rfbClient = rfbClient
@@ -193,7 +193,7 @@ class VncHostsActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to connect to VNC host '${host.name}'", e)
                 if (!isAlive) return@launch
-                Toast.makeText(this@VncHostsActivity, "Connection failed: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@VncHostsActivity, getString(R.string.virt_viewer_connect_failed, e.message), Toast.LENGTH_LONG).show()
             } finally {
                 connecting = false
             }
@@ -209,7 +209,7 @@ class VncHostsActivity : AppCompatActivity() {
     private fun showHostMenu(host: VncHost) {
         MaterialAlertDialogBuilder(this)
             .setTitle(host.name)
-            .setItems(arrayOf("Edit", "Delete")) { _, which ->
+            .setItems(arrayOf(getString(R.string.edit), getString(R.string.delete))) { _, which ->
                 when (which) {
                     0 -> launchEditHost(host)
                     1 -> confirmDelete(host)
@@ -220,9 +220,9 @@ class VncHostsActivity : AppCompatActivity() {
 
     private fun confirmDelete(host: VncHost) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Delete '${host.name}'?")
-            .setMessage("This removes the VNC host record. Any linked identity is not deleted.")
-            .setPositiveButton("Delete") { _, _ ->
+            .setTitle(getString(R.string.vnc_host_delete_title, host.name))
+            .setMessage(getString(R.string.vnc_host_delete_message))
+            .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 lifecycleScope.launch {
                     try {
                         withContext(Dispatchers.IO) {
@@ -241,11 +241,11 @@ class VncHostsActivity : AppCompatActivity() {
                     } catch (e: Exception) {
                         Logger.e(TAG, "Failed to delete VNC host", e)
                         if (!isAlive) return@launch
-                        Toast.makeText(this@VncHostsActivity, "Delete failed: ${e.message}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@VncHostsActivity, getString(R.string.vnc_host_delete_failed_fmt, e.message), Toast.LENGTH_LONG).show()
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -271,7 +271,7 @@ class VncHostsActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val host = getItem(position)
             holder.textName.text = host.name
-            holder.textDetail.text = "${host.host}:${host.effectivePort}"
+            holder.textDetail.text = getString(R.string.hypervisor_endpoint_fmt, host.host, host.effectivePort)
             holder.btnConnect.setOnClickListener { onConnect(host) }
             holder.itemView.setOnLongClickListener {
                 onLongPress(host)

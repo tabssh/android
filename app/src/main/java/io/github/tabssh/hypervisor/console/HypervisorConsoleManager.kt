@@ -70,6 +70,17 @@ class HypervisorConsoleManager {
      */
     private var activeRfbClient: RfbClient? = null
 
+    /**
+     * The [ConsoleEventListener] for the in-progress/live console session
+     * (typically an Activity or its ViewModel). Every long-lived WebSocket
+     * callback object below reads this field live instead of closing over the
+     * `listener` parameter directly, so [detachListener] actually stops event
+     * delivery — and releases the reference to the caller — instead of the
+     * callback silently keeping a stale reference alive for as long as the
+     * WebSocket (or a pending async fallback/reconnect) is running.
+     */
+    private var activeListener: ConsoleEventListener? = null
+
     // Stored for VNC fallback when termproxy WebSocket reports a serial error
     // after a successful API call (the API-level fallback is in connectProxmoxConsole
     // phase 1; this covers the rare case where the API succeeds but the WS frame fails).
@@ -170,6 +181,7 @@ class HypervisorConsoleManager {
         displayPort: Int = 0,
         listener: ConsoleEventListener? = null
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
+        activeListener = listener
         // Phase 1: obtain a console ticket via an ordered strategy chain.
         // termproxy first — text consoles are the mobile-friendly default;
         // spiceproxy second — richest graphical protocol, but only for qemu
@@ -290,12 +302,12 @@ class HypervisorConsoleManager {
                     if (protocol == ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM) {
                         wsClient.sendResize(80, 24)
                     }
-                    listener?.onConnected(vmName)
+                    activeListener?.onConnected(vmName)
                 }
 
                 override fun onDisconnected(reason: String) {
                     Logger.i(TAG, "Proxmox console disconnected: $reason")
-                    listener?.onDisconnected(reason)
+                    activeListener?.onDisconnected(reason)
                 }
 
                 override fun onError(error: Throwable) {
@@ -307,7 +319,7 @@ class HypervisorConsoleManager {
                     val msg = error.message?.takeIf { it.isNotBlank() }
                         ?: error.cause?.message?.takeIf { it.isNotBlank() }
                         ?: "Connection failed (${error.javaClass.simpleName})"
-                    listener?.onError(msg)
+                    activeListener?.onError(msg)
                 }
 
                 override fun onSerialConsoleUnavailable() {
@@ -322,7 +334,7 @@ class HypervisorConsoleManager {
                     // is already handled in Phase 1 above.
                     wsClient.disconnect()
                     scope.launch {
-                        retryProxmoxWithVnc(listener)
+                        retryProxmoxWithVnc()
                     }
                 }
             })
@@ -392,6 +404,7 @@ class HypervisorConsoleManager {
         displayPort: Int = 0,
         listener: ConsoleEventListener? = null
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
+        activeListener = listener
         try {
             Logger.i(TAG, "Connecting to XCP-ng console: $vmName")
 
@@ -451,17 +464,17 @@ class HypervisorConsoleManager {
             val connected = xcpClient.connect(consoleUrl, emptyMap(), object : ConsoleConnectionListener {
                 override fun onConnected() {
                     Logger.i(TAG, "XCP-ng console connected")
-                    listener?.onConnected(vmName)
+                    activeListener?.onConnected(vmName)
                 }
 
                 override fun onDisconnected(reason: String) {
                     Logger.i(TAG, "XCP-ng console disconnected: $reason")
-                    listener?.onDisconnected(reason)
+                    activeListener?.onDisconnected(reason)
                 }
 
                 override fun onError(error: Throwable) {
                     Logger.e(TAG, "XCP-ng console WebSocket error: ${error.message}")
-                    listener?.onError(error.message ?: "Unknown error")
+                    activeListener?.onError(error.message ?: "Unknown error")
                 }
             })
 
@@ -525,6 +538,7 @@ class HypervisorConsoleManager {
         displayPort: Int = 0,
         listener: ConsoleEventListener? = null
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
+        activeListener = listener
         try {
             Logger.i(TAG, "Connecting to Xen Orchestra console: $vmName")
 
@@ -576,17 +590,17 @@ class HypervisorConsoleManager {
             val connected = xoClient.connect(consoleUrl, headers, object : ConsoleConnectionListener {
                 override fun onConnected() {
                     Logger.i(TAG, "Xen Orchestra console connected")
-                    listener?.onConnected(vmName)
+                    activeListener?.onConnected(vmName)
                 }
 
                 override fun onDisconnected(reason: String) {
                     Logger.i(TAG, "Xen Orchestra console disconnected: $reason")
-                    listener?.onDisconnected(reason)
+                    activeListener?.onDisconnected(reason)
                 }
 
                 override fun onError(error: Throwable) {
                     Logger.e(TAG, "Xen Orchestra console WebSocket error: ${error.message}")
-                    listener?.onError(error.message ?: "Unknown error")
+                    activeListener?.onError(error.message ?: "Unknown error")
                 }
             })
 
@@ -638,10 +652,10 @@ class HypervisorConsoleManager {
      * but then sent "unable to find serial interface" as a data frame. We get
      * a vncproxy ticket and re-wire the terminal bridge to the new WebSocket.
      */
-    private suspend fun retryProxmoxWithVnc(listener: ConsoleEventListener?) {
+    private suspend fun retryProxmoxWithVnc() {
         val client = proxmoxVncFallbackClient ?: run {
             Logger.e(TAG, "VNC fallback: no stored Proxmox client — cannot retry")
-            listener?.onError("Serial console unavailable and VNC fallback state was lost. Please reconnect.")
+            activeListener?.onError("Serial console unavailable and VNC fallback state was lost. Please reconnect.")
             return
         }
         val node = proxmoxVncFallbackNode
@@ -666,7 +680,7 @@ class HypervisorConsoleManager {
         }
         if (vnc == null) {
             Logger.e(TAG, "VNC fallback: vncproxy returned null for $vmName")
-            listener?.onError(
+            activeListener?.onError(
                 (vncFailure?.let { "VNC fallback failed: $it\n\n" } ?: "") +
                 "This VM has no serial console and the VNC fallback also failed.\n\n" +
                 "To enable serial console: open the VM in Proxmox → Hardware → " +
@@ -687,7 +701,7 @@ class HypervisorConsoleManager {
 
             override fun onDisconnected(reason: String) {
                 Logger.i(TAG, "VNC fallback disconnected: $reason")
-                listener?.onDisconnected(reason)
+                activeListener?.onDisconnected(reason)
             }
 
             override fun onError(error: Throwable) {
@@ -695,7 +709,7 @@ class HypervisorConsoleManager {
                 // Before open: fail the gate so the awaiting coroutine reports it.
                 // After open: forward to the UI listener as a live-session error.
                 if (!opened.completeExceptionally(error)) {
-                    listener?.onError(error.message ?: "VNC connection failed")
+                    activeListener?.onError(error.message ?: "VNC connection failed")
                 }
             }
         }
@@ -726,9 +740,9 @@ class HypervisorConsoleManager {
             )
             // Notify the UI to show the serial-unavailable banner before
             // switching to VNC console mode.
-            listener?.onSerialConsoleUnavailable()
-            listener?.onConnected(vmName)
-            listener?.onSwitchToGraphical(graphical)
+            activeListener?.onSerialConsoleUnavailable()
+            activeListener?.onConnected(vmName)
+            activeListener?.onSwitchToGraphical(graphical)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -738,7 +752,7 @@ class HypervisorConsoleManager {
             // with nobody to close it — the session is already reported as failed.
             try { webSocketClient?.disconnect() } catch (_: Exception) {}
             webSocketClient = null
-            listener?.onError(e.message ?: "VNC fallback failed to connect for $vmName")
+            activeListener?.onError(e.message ?: "VNC fallback failed to connect for $vmName")
         }
     }
 
@@ -760,9 +774,10 @@ class HypervisorConsoleManager {
      * listener receives an error in that case.
      */
     suspend fun reconnectGraphicalWithoutResize(listener: ConsoleEventListener?) {
+        activeListener = listener
         val client = proxmoxVncFallbackClient ?: run {
             Logger.e(TAG, "reconnectGraphicalWithoutResize: no stored Proxmox client")
-            listener?.onError("Cannot reconnect — session state was lost. Please reconnect manually.")
+            activeListener?.onError("Cannot reconnect — session state was lost. Please reconnect manually.")
             return
         }
         val node        = proxmoxVncFallbackNode
@@ -788,12 +803,12 @@ class HypervisorConsoleManager {
             throw e
         } catch (e: Exception) {
             Logger.e(TAG, "reconnectGraphicalWithoutResize: getVNCProxy threw", e)
-            listener?.onError("Reconnect failed — could not obtain a new VNC ticket from Proxmox.")
+            activeListener?.onError("Reconnect failed — could not obtain a new VNC ticket from Proxmox.")
             return
         }
         if (vnc == null) {
             Logger.e(TAG, "reconnectGraphicalWithoutResize: vncproxy returned null for $vmName")
-            listener?.onError("Reconnect failed — Proxmox did not return a VNC ticket.")
+            activeListener?.onError("Reconnect failed — Proxmox did not return a VNC ticket.")
             return
         }
 
@@ -808,7 +823,7 @@ class HypervisorConsoleManager {
 
             override fun onDisconnected(reason: String) {
                 Logger.i(TAG, "reconnectGraphicalWithoutResize: disconnected ($reason)")
-                listener?.onDisconnected(reason)
+                activeListener?.onDisconnected(reason)
             }
 
             override fun onError(error: Throwable) {
@@ -819,7 +834,7 @@ class HypervisorConsoleManager {
                     val msg = error.message?.takeIf { it.isNotBlank() }
                         ?: error.cause?.message?.takeIf { it.isNotBlank() }
                         ?: "Reconnect failed (${error.javaClass.simpleName})"
-                    listener?.onError(msg)
+                    activeListener?.onError(msg)
                 }
             }
         }
@@ -848,8 +863,8 @@ class HypervisorConsoleManager {
                 hypervisorType = HypervisorType.PROXMOX,
                 rfbClient      = rfbClient
             )
-            listener?.onConnected(vmName)
-            listener?.onSwitchToGraphical(graphical)
+            activeListener?.onConnected(vmName)
+            activeListener?.onSwitchToGraphical(graphical)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -861,7 +876,7 @@ class HypervisorConsoleManager {
             val msg = e.message?.takeIf { it.isNotBlank() }
                 ?: e.cause?.message?.takeIf { it.isNotBlank() }
                 ?: "Reconnect failed — WebSocket could not connect to Proxmox."
-            listener?.onError(msg)
+            activeListener?.onError(msg)
         }
     }
 
@@ -879,6 +894,23 @@ class HypervisorConsoleManager {
      * Get WebSocket client for sending control messages (resize, etc.)
      */
     fun getWebSocketClient(): ConsoleWebSocketClient? = webSocketClient
+
+    /**
+     * Detach the currently registered [ConsoleEventListener] without tearing
+     * down the console connection itself.
+     *
+     * Callers (XCPngManagerActivity, ProxmoxManagerActivity) MUST invoke this
+     * from `onDestroy()`. This manager's WebSocket callback objects live for
+     * as long as the underlying transport (or a pending async fallback/
+     * reconnect such as [retryProxmoxWithVnc] or [reconnectGraphicalWithoutResize])
+     * is running — independent of the Activity's own lifecycle — so without an
+     * explicit detach, [activeListener] (typically the Activity itself, or a
+     * lambda/anonymous object capturing it) is kept reachable, and the
+     * Activity leaks for as long as that session lasts.
+     */
+    fun detachListener() {
+        activeListener = null
+    }
 
     /**
      * Disconnect console
@@ -899,6 +931,7 @@ class HypervisorConsoleManager {
         // Rearm the fallback so the next connect() on this manager can still
         // switch to vncproxy when its serial console is missing too.
         vncFallbackStarted = false
+        activeListener = null
     }
 
     /**

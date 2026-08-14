@@ -71,6 +71,14 @@ class XCPngManagerActivity : AppCompatActivity() {
     private val vms = mutableListOf<XCPngApiClient.XenVM>()
     private var currentClient: XCPngApiClient? = null
     private var currentXoClient: XenOrchestraApiClient? = null
+
+    // Console managers whose ConsoleEventListener is an anonymous object
+    // holding this Activity (runOnUiThread, progress views). The tab — and
+    // therefore the manager — outlives this screen, so onDestroy() must
+    // detach the listener or the destroyed Activity is retained for the
+    // life of the console connection.
+    private val spawnedConsoleManagers =
+        mutableListOf<io.github.tabssh.hypervisor.console.HypervisorConsoleManager>()
     private var isXenOrchestra: Boolean = false
     private lateinit var vmAdapter: VMAdapter
 
@@ -96,7 +104,7 @@ class XCPngManagerActivity : AppCompatActivity() {
     private fun setupToolbar() {
         setSupportActionBar(findViewById(R.id.toolbar))
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = "XCP-ng Manager"
+        supportActionBar?.title = getString(R.string.xcpng_manager_title)
     }
 
     private fun setupViews() {
@@ -147,7 +155,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                 hypervisors.addAll(servers)
 
                 if (hypervisors.isEmpty()) {
-                    statusText.text = "No XCP-ng servers configured"
+                    statusText.text = getString(R.string.xcpng_no_servers)
                     statusText.visibility = View.VISIBLE
                 } else {
                     statusText.visibility = View.GONE
@@ -163,7 +171,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                 throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to load XCP-ng hypervisor list", e)
-                statusText.text = "Could not load server list"
+                statusText.text = getString(R.string.xcpng_error_load_servers)
                 statusText.visibility = View.VISIBLE
             }
         }
@@ -175,7 +183,7 @@ class XCPngManagerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 progressBar.visibility = View.VISIBLE
-                statusText.text = "Connecting to ${profile.name}..."
+                statusText.text = getString(R.string.xcpng_connecting_fmt, profile.name)
                 statusText.visibility = View.VISIBLE
 
                 // The account name identifies the operator; Logger only redacts the
@@ -198,8 +206,8 @@ class XCPngManagerActivity : AppCompatActivity() {
                         app.database.hypervisorDao().updateApiTypeOverride(profile.id, detectedOverride)
                     }
 
-                    val modeText = if (detectedXO) "Xen Orchestra" else "XCP-ng Direct"
-                    statusText.text = "Connected to ${profile.name} ($modeText)"
+                    val modeText = if (detectedXO) getString(R.string.xcpng_mode_xen_orchestra) else getString(R.string.xcpng_mode_direct)
+                    statusText.text = getString(R.string.xcpng_connected_fmt, profile.name, modeText)
                     app.database.hypervisorDao().updateLastConnected(profile.id, System.currentTimeMillis())
 
                     // Show XO-specific buttons
@@ -218,8 +226,8 @@ class XCPngManagerActivity : AppCompatActivity() {
                         setupWebSocket()
                     }
                 } else {
-                    statusText.text = "Authentication failed - check credentials"
-                    showError("Failed to authenticate. Tried both Xen Orchestra and XCP-ng APIs.\n\nCheck:\n• Username/password\n• Host/port (${profile.host}:${profile.port})\n• Network connectivity\n• SSL certificate (verify SSL: ${profile.verifySsl})", "Connection Error")
+                    statusText.text = getString(R.string.xcpng_auth_failed)
+                    showError(getString(R.string.xcpng_auth_failed_details_fmt, profile.host, profile.port, profile.verifySsl.toString()), getString(R.string.xcpng_connection_error_title))
                     progressBar.visibility = View.GONE
                 }
 
@@ -227,27 +235,27 @@ class XCPngManagerActivity : AppCompatActivity() {
                 throw e
             } catch (e: java.net.UnknownHostException) {
                 Logger.e(TAG, "Unknown host: ${profile.host}", e)
-                statusText.text = "Error: Host not found (${profile.host})"
-                showError("Cannot resolve hostname: ${profile.host}", "Error")
+                statusText.text = getString(R.string.xcpng_error_host_not_found_fmt, profile.host)
+                showError(getString(R.string.xcpng_cannot_resolve_fmt, profile.host), getString(R.string.hypervisor_error_title))
                 progressBar.visibility = View.GONE
             } catch (e: java.net.ConnectException) {
                 Logger.e(TAG, "Connection refused", e)
-                statusText.text = "Error: Connection refused"
-                val apiType = if (profile.apiTypeOverride == "centralized") "Xen Orchestra" else "XCP-ng"
-                Toast.makeText(this@XCPngManagerActivity, "Connection refused. Check:\n• Port ${profile.port} is correct\n• $apiType API is accessible\n• Firewall allows connection", Toast.LENGTH_LONG).show()
+                statusText.text = getString(R.string.xcpng_error_connection_refused)
+                val apiType = if (profile.apiTypeOverride == "centralized") getString(R.string.xcpng_mode_xen_orchestra) else getString(R.string.xcpng_label_xcpng)
+                Toast.makeText(this@XCPngManagerActivity, getString(R.string.xcpng_connection_refused_details_fmt, profile.port, apiType), Toast.LENGTH_LONG).show()
                 progressBar.visibility = View.GONE
             } catch (e: javax.net.ssl.SSLHandshakeException) {
                 Logger.e(TAG, "SSL handshake failed", e)
-                statusText.text = "Error: SSL certificate issue"
-                showError("SSL certificate verification failed. Try disabling 'Verify SSL' in hypervisor settings.", "Error")
+                statusText.text = getString(R.string.xcpng_error_ssl)
+                showError(getString(R.string.xcpng_ssl_error_message), getString(R.string.hypervisor_error_title))
                 progressBar.visibility = View.GONE
             } catch (e: Exception) {
                 Logger.e(TAG, "Connection failed", e)
                 // The exception text can carry a whole server error body; clamp it
                 // before it reaches the status line or the dialog.
                 val reason = safeText(e.message)
-                statusText.text = "Connection error: $reason"
-                showError("Connection failed: xcpng ${profile.name}: $reason", "Error")
+                statusText.text = getString(R.string.xcpng_connection_error_fmt, reason)
+                showError(getString(R.string.xcpng_connect_failed_fmt, profile.name, reason), getString(R.string.hypervisor_error_title))
                 progressBar.visibility = View.GONE
             } finally {
                 connectInFlight = false
@@ -297,7 +305,7 @@ class XCPngManagerActivity : AppCompatActivity() {
     private suspend fun tryXenOrchestra(profile: HypervisorProfile): Boolean? {
         return try {
             Logger.d(TAG, "Trying Xen Orchestra REST API...")
-            statusText.text = "Trying Xen Orchestra API..."
+            statusText.text = getString(R.string.xcpng_trying_xo)
 
             val creds = io.github.tabssh.crypto.storage.HypervisorPasswordStore
                 .resolveCredentials(this, profile)
@@ -335,7 +343,7 @@ class XCPngManagerActivity : AppCompatActivity() {
     private suspend fun tryXCPngDirect(profile: HypervisorProfile): Boolean? {
         return try {
             Logger.d(TAG, "Trying XCP-ng XML-RPC API...")
-            statusText.text = "Trying XCP-ng Direct API..."
+            statusText.text = getString(R.string.xcpng_trying_direct)
 
             val creds = io.github.tabssh.crypto.storage.HypervisorPasswordStore
                 .resolveCredentials(this, profile)
@@ -374,7 +382,7 @@ class XCPngManagerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 progressBar.visibility = View.VISIBLE
-                statusText.text = "Loading VMs..."
+                statusText.text = getString(R.string.xcpng_loading_vms)
 
                 val vmList = if (isXenOrchestra) {
                     // Get VMs from Xen Orchestra REST API
@@ -390,14 +398,14 @@ class XCPngManagerActivity : AppCompatActivity() {
                     areItemsTheSame = { a, b -> a.uuid == b.uuid }
                 )
 
-                statusText.text = "Found ${vms.size} VMs"
+                statusText.text = getString(R.string.xcpng_found_vms_fmt, vms.size)
                 progressBar.visibility = View.GONE
 
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to load VMs", e)
-                statusText.text = "Error loading VMs"
+                statusText.text = getString(R.string.xcpng_error_loading_vms)
                 progressBar.visibility = View.GONE
             }
         }
@@ -424,16 +432,16 @@ class XCPngManagerActivity : AppCompatActivity() {
         val vmLabel = safeText(vm.name, 64)
         // Confirm before destructive hard-power operations
         if (action == "stop" || action == "reset") {
-            val label = if (action == "stop") "Force Stop" else "Hard Reset"
+            val label = if (action == "stop") getString(R.string.xcpng_action_force_stop) else getString(R.string.xcpng_action_hard_reset)
             val msg = if (action == "stop")
-                "Force-stopping $vmLabel is equivalent to cutting power. Unsaved data will be lost."
+                getString(R.string.xcpng_force_stop_message_fmt, vmLabel)
             else
-                "Hard-resetting $vmLabel is equivalent to cutting then restoring power. Unsaved data will be lost."
+                getString(R.string.xcpng_hard_reset_message_fmt, vmLabel)
             MaterialAlertDialogBuilder(this)
-                .setTitle("$label $vmLabel?")
+                .setTitle(getString(R.string.xcpng_confirm_action_title_fmt, label, vmLabel))
                 .setMessage(msg)
                 .setPositiveButton(label) { _, _ -> doVMAction(vm, action) }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(getString(R.string.cancel), null)
                 .show()
             return
         }
@@ -486,12 +494,12 @@ class XCPngManagerActivity : AppCompatActivity() {
                 }
                 
                 if (success) {
-                    Toast.makeText(this@XCPngManagerActivity, "VM $action successful", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@XCPngManagerActivity, getString(R.string.xcpng_vm_action_successful_fmt, action), Toast.LENGTH_SHORT).show()
                     kotlinx.coroutines.delay(2000)
                     refreshVMs()
                 } else {
                     progressBar.visibility = View.GONE
-                    Toast.makeText(this@XCPngManagerActivity, "$action failed for $vmLabel", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@XCPngManagerActivity, getString(R.string.xcpng_action_failed_for_fmt, action, vmLabel), Toast.LENGTH_SHORT).show()
                 }
 
             } catch (e: CancellationException) {
@@ -499,7 +507,7 @@ class XCPngManagerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e(TAG, "VM action failed", e)
                 progressBar.visibility = View.GONE
-                Toast.makeText(this@XCPngManagerActivity, "$action failed: ${safeText(e.message)}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@XCPngManagerActivity, getString(R.string.xcpng_action_failed_fmt, action, safeText(e.message)), Toast.LENGTH_SHORT).show()
             } finally {
                 vmActionInFlight = false
             }
@@ -520,7 +528,7 @@ class XCPngManagerActivity : AppCompatActivity() {
         // Get current hypervisor profile for credentials
         val position = serverSpinner.selectedItemPosition
         if (position < 0 || position >= hypervisors.size) {
-            Toast.makeText(this, "No hypervisor selected", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.xcpng_no_hypervisor_selected), Toast.LENGTH_SHORT).show()
             return
         }
         val profile = hypervisors[position]
@@ -532,7 +540,7 @@ class XCPngManagerActivity : AppCompatActivity() {
         // was the on-disk DB column.
         lifecycleScope.launch {
             progressBar.visibility = View.VISIBLE
-            statusText.text = "Connecting to $vmLabel…"
+            statusText.text = getString(R.string.xcpng_connecting_to_vm_fmt, vmLabel)
             statusText.visibility = View.VISIBLE
 
             val creds = io.github.tabssh.crypto.storage.HypervisorPasswordStore
@@ -560,8 +568,11 @@ class XCPngManagerActivity : AppCompatActivity() {
                     // One spinner; its text updates as the chain falls through (PLAN 14)
                     runOnUiThread {
                         if (isFinishing || isDestroyed) return@runOnUiThread
-                        statusText.text = "Connecting to $vmLabel " +
-                            "(${io.github.tabssh.hypervisor.console.HypervisorConsoleManager.strategyLabel(strategyName)})…"
+                        statusText.text = getString(
+                            R.string.xcpng_connecting_strategy_fmt,
+                            vmLabel,
+                            io.github.tabssh.hypervisor.console.HypervisorConsoleManager.strategyLabel(strategyName)
+                        )
                     }
                 }
                 override fun onSwitchToGraphical(
@@ -576,7 +587,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                     val xoClient = currentXoClient
                     if (xoClient == null) {
                         progressBar.visibility = View.GONE
-                        showError("Not connected to Xen Orchestra")
+                        showError(getString(R.string.xcpng_not_connected_xo))
                         return@launch
                     }
                     manager.connectXenOrchestraConsole(
@@ -593,7 +604,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                     val xcpClient = currentClient
                     if (xcpClient == null) {
                         progressBar.visibility = View.GONE
-                        showError("Not connected to XCP-ng")
+                        showError(getString(R.string.xcpng_not_connected_direct))
                         return@launch
                     }
                     manager.connectXCPngConsole(
@@ -636,11 +647,12 @@ class XCPngManagerActivity : AppCompatActivity() {
                     manager.disconnect()
                     progressBar.visibility = View.GONE
                     statusText.visibility = View.GONE
-                    Toast.makeText(this@XCPngManagerActivity, "Maximum tabs reached", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@XCPngManagerActivity, getString(R.string.virt_viewer_max_tabs), Toast.LENGTH_SHORT).show()
                     return@launch
                 }
                 consoleTab = tab
                 tab.consoleManager = manager
+                spawnedConsoleManagers.add(manager)
 
                 when (connection) {
                     is io.github.tabssh.hypervisor.console.HypervisorConsoleManager.ConsoleConnection.Text -> {
@@ -684,7 +696,7 @@ class XCPngManagerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e(TAG, "Console connection error for $vmLabel", e)
                 progressBar.visibility = View.GONE
-                showError("Connection failed: vm $vmLabel: ${safeText(e.message)}")
+                showError(getString(R.string.xcpng_console_connect_failed_fmt, vmLabel, safeText(e.message)))
             }
         }
     }
@@ -697,14 +709,14 @@ class XCPngManagerActivity : AppCompatActivity() {
         val vmLabel = safeText(vm.name, 64)
         val ip = vm.ipAddress
         if (ip.isNullOrBlank()) {
-            Toast.makeText(this, "No IP address available for $vmLabel", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.xcpng_no_ip_fmt, vmLabel), Toast.LENGTH_SHORT).show()
             return
         }
         // The address is reported by the guest agent, so it is server-controlled:
         // reject anything that is not a plain host/IP before it is persisted.
         if (!BulkImportParser.isValidHostValue(ip)) {
             Logger.w(TAG, "Rejecting malformed guest address for $vmLabel")
-            Toast.makeText(this, "Invalid IP address reported for $vmLabel", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.xcpng_invalid_ip_fmt, vmLabel), Toast.LENGTH_SHORT).show()
             return
         }
         lifecycleScope.launch {
@@ -748,7 +760,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                 if (!isFinishing && !isDestroyed) {
                     Toast.makeText(
                         this@XCPngManagerActivity,
-                        "Failed to open SSH: ${safeText(e.message)}",
+                        getString(R.string.hypervisor_ssh_open_failed_fmt, safeText(e.message)),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -782,9 +794,9 @@ class XCPngManagerActivity : AppCompatActivity() {
         apiTypeDropdown?.setText(apiTypes[0], false) // Default to auto-detect
         
         MaterialAlertDialogBuilder(this)
-            .setTitle("Add XCP-ng / Xen Orchestra Server")
+            .setTitle(getString(R.string.xcpng_add_server_title))
             .setView(dialogView)
-            .setPositiveButton("Add") { _, _ ->
+            .setPositiveButton(getString(R.string.xcpng_add_button)) { _, _ ->
                 // Get API type override from dropdown
                 val apiTypeEntries = resources.getStringArray(R.array.api_type_entries)
                 val apiTypeValues = resources.getStringArray(R.array.api_type_values)
@@ -797,15 +809,15 @@ class XCPngManagerActivity : AppCompatActivity() {
                 val serverHost = hostInput.text.toString().trim()
                 val rawPort = portInput.text.toString().trim().toIntOrNull()
                 if (serverName.isEmpty()) {
-                    Toast.makeText(this, "Name is required", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.xcpng_name_required), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 if (!BulkImportParser.isValidHostValue(serverHost)) {
-                    Toast.makeText(this, "Enter a valid host name or IP address", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.xcpng_invalid_host), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 if (rawPort == null || rawPort !in 1..65535) {
-                    Toast.makeText(this, "Port must be between 1 and 65535", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.xcpng_invalid_port), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 val profile = HypervisorProfile(
@@ -832,7 +844,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                             if (!isFinishing && !isDestroyed) {
                                 Toast.makeText(
                                     this@XCPngManagerActivity,
-                                    "Server saved but the password could not be stored",
+                                    getString(R.string.xcpng_password_store_failed),
                                     Toast.LENGTH_LONG
                                 ).show()
                             }
@@ -845,14 +857,14 @@ class XCPngManagerActivity : AppCompatActivity() {
                         if (!isFinishing && !isDestroyed) {
                             Toast.makeText(
                                 this@XCPngManagerActivity,
-                                "Failed to save server: ${safeText(e.message)}",
+                                getString(R.string.xcpng_save_server_failed_fmt, safeText(e.message)),
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -896,7 +908,7 @@ class XCPngManagerActivity : AppCompatActivity() {
 
             holder.name.text = safeText(vm.name, 64)
             holder.state.text = stateLabel(vm.powerState)
-            holder.info.text = "CPUs: ${vm.vcpus}  ·  RAM: ${vm.memory / 1024 / 1024}MB"
+            holder.info.text = getString(R.string.xcpng_vm_info_fmt, vm.vcpus, vm.memory / 1024 / 1024)
             holder.ip.visibility = View.GONE
 
             holder.state.setTextColor(stateColor(vm.powerState))
@@ -958,10 +970,10 @@ class XCPngManagerActivity : AppCompatActivity() {
         }
 
         private fun stateLabel(state: String): String = when (state.lowercase()) {
-            "running" -> "Running"
-            "halted", "stopped" -> "Stopped"
-            "paused" -> "Paused"
-            "suspended" -> "Suspended"
+            "running" -> getString(R.string.vm_state_running)
+            "halted", "stopped" -> getString(R.string.vm_state_stopped)
+            "paused" -> getString(R.string.vm_state_paused)
+            "suspended" -> getString(R.string.vm_state_suspended)
             else -> state.replaceFirstChar { it.uppercase() }
         }
     }
@@ -984,7 +996,7 @@ class XCPngManagerActivity : AppCompatActivity() {
         
         recyclerView.layoutManager = LinearLayoutManager(this)
         val vmLabel = safeText(vm.name, 64)
-        vmNameText.text = "VM: $vmLabel"
+        vmNameText.text = getString(R.string.hypervisor_vm_label_fmt, vmLabel)
         
         val dialog = MaterialAlertDialogBuilder(this)
             .setView(dialogView)
@@ -1012,7 +1024,7 @@ class XCPngManagerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to load snapshots", e)
                 progressBar.visibility = View.GONE
-                emptyStateText.text = "Error loading snapshots"
+                emptyStateText.text = getString(R.string.hypervisor_error_loading_snapshots)
                 emptyStateText.visibility = View.VISIBLE
             }
         }
@@ -1041,34 +1053,34 @@ class XCPngManagerActivity : AppCompatActivity() {
         )
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("Create Snapshot")
-            .setMessage("Enter a name for the snapshot of ${safeText(vm.name, 64)}")
+            .setTitle(getString(R.string.hypervisor_create_snapshot_title))
+            .setMessage(getString(R.string.hypervisor_snapshot_name_prompt_fmt, safeText(vm.name, 64)))
             .setView(form.root)
-            .setPositiveButton("Create") { _, _ ->
+            .setPositiveButton(getString(R.string.docker_create)) { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isEmpty()) {
-                    Toast.makeText(this, "Snapshot name is required", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.xcpng_snapshot_name_required), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 lifecycleScope.launch {
                     try {
                         val success = currentXoClient?.createSnapshot(vm.uuid, name) ?: false
                         if (success) {
-                            Toast.makeText(this@XCPngManagerActivity, "Snapshot created", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@XCPngManagerActivity, getString(R.string.hypervisor_snapshot_created), Toast.LENGTH_SHORT).show()
                             parentDialog.dismiss()
                             showSnapshotDialog(vm) // Refresh
                         } else {
-                            showError("Failed to create snapshot", "Error")
+                            showError(getString(R.string.xcpng_error_create_snapshot), getString(R.string.hypervisor_error_title))
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         Logger.e(TAG, "Snapshot creation error", e)
-                        showError("Error: ${safeText(e.message)}", "Error")
+                        showError(getString(R.string.hypervisor_error_prefix_fmt, safeText(e.message)), getString(R.string.hypervisor_error_title))
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
     
@@ -1083,53 +1095,53 @@ class XCPngManagerActivity : AppCompatActivity() {
         when (action) {
             "revert" -> {
                 MaterialAlertDialogBuilder(this)
-                    .setTitle("Revert to Snapshot")
-                    .setMessage("Are you sure you want to revert $vmLabel to snapshot '$snapLabel'?\n\nThis will restore the VM to its state when the snapshot was taken.")
-                    .setPositiveButton("Revert") { _, _ ->
+                    .setTitle(getString(R.string.hypervisor_revert_snapshot_title))
+                    .setMessage(getString(R.string.hypervisor_revert_snapshot_message_fmt, vmLabel, snapLabel))
+                    .setPositiveButton(getString(R.string.hypervisor_revert_button)) { _, _ ->
                         lifecycleScope.launch {
                             try {
                                 val success = currentXoClient?.revertSnapshot(vm.uuid, snapshot.id) ?: false
                                 if (success) {
-                                    Toast.makeText(this@XCPngManagerActivity, "VM reverted to snapshot", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(this@XCPngManagerActivity, getString(R.string.hypervisor_vm_reverted), Toast.LENGTH_SHORT).show()
                                     parentDialog.dismiss()
                                 } else {
-                                    showError("Failed to revert", "Error")
+                                    showError(getString(R.string.xcpng_error_revert), getString(R.string.hypervisor_error_title))
                                 }
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
                                 Logger.e(TAG, "Revert error", e)
-                                showError("Error: ${safeText(e.message)}", "Error")
+                                showError(getString(R.string.hypervisor_error_prefix_fmt, safeText(e.message)), getString(R.string.hypervisor_error_title))
                             }
                         }
                     }
-                    .setNegativeButton("Cancel", null)
+                    .setNegativeButton(getString(R.string.cancel), null)
                     .show()
             }
             "delete" -> {
                 MaterialAlertDialogBuilder(this)
-                    .setTitle("Delete Snapshot")
-                    .setMessage("Are you sure you want to delete snapshot '$snapLabel'?\n\nThis action cannot be undone.")
-                    .setPositiveButton("Delete") { _, _ ->
+                    .setTitle(getString(R.string.hypervisor_delete_snapshot_title))
+                    .setMessage(getString(R.string.hypervisor_delete_snapshot_message_fmt, snapLabel))
+                    .setPositiveButton(getString(R.string.delete)) { _, _ ->
                         lifecycleScope.launch {
                             try {
                                 val success = currentXoClient?.deleteSnapshot(vm.uuid, snapshot.id) ?: false
                                 if (success) {
-                                    Toast.makeText(this@XCPngManagerActivity, "Snapshot deleted", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(this@XCPngManagerActivity, getString(R.string.hypervisor_snapshot_deleted), Toast.LENGTH_SHORT).show()
                                     parentDialog.dismiss()
                                     showSnapshotDialog(vm) // Refresh
                                 } else {
-                                    showError("Failed to delete snapshot", "Error")
+                                    showError(getString(R.string.xcpng_error_delete_snapshot), getString(R.string.hypervisor_error_title))
                                 }
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
                                 Logger.e(TAG, "Snapshot delete error", e)
-                                showError("Error: ${safeText(e.message)}", "Error")
+                                showError(getString(R.string.hypervisor_error_prefix_fmt, safeText(e.message)), getString(R.string.hypervisor_error_title))
                             }
                         }
                     }
-                    .setNegativeButton("Cancel", null)
+                    .setNegativeButton(getString(R.string.cancel), null)
                     .show()
             }
         }
@@ -1160,7 +1172,10 @@ class XCPngManagerActivity : AppCompatActivity() {
             val snapshot = snapshots[position]
             
             holder.name.text = safeText(snapshot.name_label, 64)
-            holder.time.text = "Created: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(snapshot.snapshot_time))}"
+            holder.time.text = getString(
+                R.string.xcpng_snapshot_created_fmt,
+                java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(snapshot.snapshot_time))
+            )
             
             holder.revertButton.setOnClickListener { onAction(snapshot, "revert") }
             holder.deleteButton.setOnClickListener { onAction(snapshot, "delete") }
@@ -1212,7 +1227,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                 } catch (e: Exception) {
                     Logger.e(TAG, "Failed to load backup jobs", e)
                     progressBar.visibility = View.GONE
-                    emptyStateText.text = "Error loading backup jobs"
+                    emptyStateText.text = getString(R.string.xcpng_error_loading_backup_jobs)
                     emptyStateText.visibility = View.VISIBLE
                 }
             }
@@ -1238,26 +1253,26 @@ class XCPngManagerActivity : AppCompatActivity() {
         when (action) {
             "trigger" -> {
                 MaterialAlertDialogBuilder(this)
-                    .setTitle("Trigger Backup")
-                    .setMessage("Are you sure you want to trigger backup job '${safeText(job.name, 64)}' now?\n\nThis will start a manual backup run.")
-                    .setPositiveButton("Trigger") { _, _ ->
+                    .setTitle(getString(R.string.xcpng_trigger_backup_title))
+                    .setMessage(getString(R.string.xcpng_trigger_backup_message_fmt, safeText(job.name, 64)))
+                    .setPositiveButton(getString(R.string.xcpng_trigger_button)) { _, _ ->
                         lifecycleScope.launch {
                             try {
                                 val success = currentXoClient?.triggerBackup(job.id) ?: false
                                 if (success) {
-                                    Toast.makeText(this@XCPngManagerActivity, "Backup triggered", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(this@XCPngManagerActivity, getString(R.string.xcpng_backup_triggered), Toast.LENGTH_SHORT).show()
                                 } else {
-                                    showError("Failed to trigger backup", "Error")
+                                    showError(getString(R.string.xcpng_error_trigger_backup), getString(R.string.hypervisor_error_title))
                                 }
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
                                 Logger.e(TAG, "Trigger backup error", e)
-                                showError("Error: ${safeText(e.message)}", "Error")
+                                showError(getString(R.string.hypervisor_error_prefix_fmt, safeText(e.message)), getString(R.string.hypervisor_error_title))
                             }
                         }
                     }
-                    .setNegativeButton("Cancel", null)
+                    .setNegativeButton(getString(R.string.cancel), null)
                     .show()
             }
             "view_runs" -> {
@@ -1294,11 +1309,11 @@ class XCPngManagerActivity : AppCompatActivity() {
             val job = jobs[position]
             
             holder.name.text = safeText(job.name, 64)
-            holder.mode.text = "Mode: ${safeText(job.mode, 32)}"
-            holder.status.text = if (job.enabled) "● Enabled" else "○ Disabled"
+            holder.mode.text = getString(R.string.xcpng_job_mode_fmt, safeText(job.mode, 32))
+            holder.status.text = if (job.enabled) getString(R.string.xcpng_job_enabled) else getString(R.string.xcpng_job_disabled)
             holder.status.setTextColor(if (job.enabled) androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.status_success) else androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.status_warning))
-            holder.schedule.text = "Schedule: ${job.schedule?.let { safeText(it, 48) } ?: "Manual"}"
-            holder.vms.text = "VMs: ${job.vms?.size ?: 0}"
+            holder.schedule.text = getString(R.string.xcpng_job_schedule_fmt, job.schedule?.let { safeText(it, 48) } ?: getString(R.string.xcpng_schedule_manual))
+            holder.vms.text = getString(R.string.xcpng_job_vms_fmt, job.vms?.size ?: 0)
             
             holder.triggerButton.setOnClickListener { onAction(job, "trigger") }
             holder.viewRunsButton.setOnClickListener { onAction(job, "view_runs") }
@@ -1324,7 +1339,7 @@ class XCPngManagerActivity : AppCompatActivity() {
         val closeButton = dialogView.findViewById<Button>(R.id.close_button)
         
         recyclerView.layoutManager = LinearLayoutManager(this)
-        jobNameText.text = "Backup Job: ${safeText(job.name, 64)}"
+        jobNameText.text = getString(R.string.xcpng_backup_job_label_fmt, safeText(job.name, 64))
         
         val dialog = MaterialAlertDialogBuilder(this)
             .setView(dialogView)
@@ -1350,7 +1365,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                 } catch (e: Exception) {
                     Logger.e(TAG, "Failed to load backup runs", e)
                     progressBar.visibility = View.GONE
-                    emptyStateText.text = "Error loading backup runs"
+                    emptyStateText.text = getString(R.string.xcpng_error_loading_backup_runs)
                     emptyStateText.visibility = View.VISIBLE
                 }
             }
@@ -1395,19 +1410,19 @@ class XCPngManagerActivity : AppCompatActivity() {
             // Status with color
             when (run.status.lowercase()) {
                 "success" -> {
-                    holder.status.text = "● Success"
+                    holder.status.text = getString(R.string.xcpng_run_status_success)
                     holder.status.setTextColor(androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.status_success))
                 }
                 "failure", "error" -> {
-                    holder.status.text = "● Failed"
+                    holder.status.text = getString(R.string.xcpng_run_status_failed)
                     holder.status.setTextColor(androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.status_error))
                 }
                 "running", "in_progress" -> {
-                    holder.status.text = "● Running"
+                    holder.status.text = getString(R.string.xcpng_run_status_running)
                     holder.status.setTextColor(androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.status_info))
                 }
                 else -> {
-                    holder.status.text = "○ ${safeText(run.status, 32)}"
+                    holder.status.text = getString(R.string.xcpng_run_status_other_fmt, safeText(run.status, 32))
                     holder.status.setTextColor(androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.status_neutral))
                 }
             }
@@ -1422,14 +1437,14 @@ class XCPngManagerActivity : AppCompatActivity() {
                 val durationSec = durationMs / 1000
                 val minutes = durationSec / 60
                 val seconds = durationSec % 60
-                holder.duration.text = "Duration: ${minutes}m ${seconds}s"
+                holder.duration.text = getString(R.string.xcpng_duration_fmt, minutes, seconds)
             } else {
-                holder.duration.text = "Duration: In progress..."
+                holder.duration.text = getString(R.string.xcpng_duration_in_progress)
             }
-            
+
             // Result
             // The result string is an unbounded server-side message, so cap it before display.
-            holder.result.text = "Result: ${run.result?.let { safeText(it, 200) } ?: "No details available"}"
+            holder.result.text = getString(R.string.xcpng_result_fmt, run.result?.let { safeText(it, 200) } ?: getString(R.string.xcpng_no_details))
         }
         
         override fun getItemCount() = runs.size
@@ -1463,7 +1478,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                     }
 
                     Toast.makeText(this@XCPngManagerActivity,
-                        "VM state changed: $state",
+                        getString(R.string.xcpng_vm_state_changed_fmt, state),
                         Toast.LENGTH_SHORT).show()
                 }
             }
@@ -1473,7 +1488,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     Logger.d(TAG, "VM created")
                     Toast.makeText(this@XCPngManagerActivity,
-                        "New VM created",
+                        getString(R.string.xcpng_vm_created),
                         Toast.LENGTH_SHORT).show()
                     refreshVMs()
                 }
@@ -1492,7 +1507,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                     }
 
                     Toast.makeText(this@XCPngManagerActivity,
-                        "VM deleted",
+                        getString(R.string.xcpng_vm_deleted),
                         Toast.LENGTH_SHORT).show()
                 }
             }
@@ -1502,7 +1517,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     Logger.d(TAG, "Snapshot created")
                     Toast.makeText(this@XCPngManagerActivity,
-                        "Snapshot created",
+                        getString(R.string.hypervisor_snapshot_created),
                         Toast.LENGTH_SHORT).show()
                 }
             }
@@ -1512,7 +1527,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     Logger.d(TAG, "Snapshot deleted")
                     Toast.makeText(this@XCPngManagerActivity,
-                        "Snapshot deleted",
+                        getString(R.string.hypervisor_snapshot_deleted),
                         Toast.LENGTH_SHORT).show()
                 }
             }
@@ -1521,7 +1536,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     Logger.d(TAG, "Backup completed: success=$success")
-                    val message = if (success) "Backup completed successfully" else "Backup failed"
+                    val message = if (success) getString(R.string.xcpng_backup_completed_success) else getString(R.string.xcpng_backup_failed)
                     Toast.makeText(this@XCPngManagerActivity, message, Toast.LENGTH_LONG).show()
                 }
             }
@@ -1557,7 +1572,7 @@ class XCPngManagerActivity : AppCompatActivity() {
             try {
                 val xoClient = currentXoClient
                 if (xoClient == null) {
-                    Toast.makeText(this@XCPngManagerActivity, "Not connected to Xen Orchestra", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@XCPngManagerActivity, getString(R.string.xcpng_not_connected_xo), Toast.LENGTH_SHORT).show()
                     return@launch
                 }
 
@@ -1567,30 +1582,30 @@ class XCPngManagerActivity : AppCompatActivity() {
 
                 // Build infrastructure tree
                 val message = buildString {
-                    appendLine("Infrastructure Overview:")
+                    appendLine(getString(R.string.xcpng_infra_header))
                     appendLine()
-                    appendLine("📦 Pools: ${pools.size}")
+                    appendLine(getString(R.string.xcpng_infra_pools_fmt, pools.size))
                     pools.forEach { pool ->
-                        appendLine("  • ${safeText(pool.name_label, 64)}")
-                        appendLine("    UUID: ${safeText(pool.uuid, 64)}")
+                        appendLine(getString(R.string.xcpng_infra_pool_name_fmt, safeText(pool.name_label, 64)))
+                        appendLine(getString(R.string.xcpng_infra_pool_uuid_fmt, safeText(pool.uuid, 64)))
                     }
                     appendLine()
-                    appendLine("🖥️ Hosts: ${hosts.size}")
+                    appendLine(getString(R.string.xcpng_infra_hosts_fmt, hosts.size))
                     hosts.forEach { host ->
-                        val status = if (host.enabled) "✅ Enabled" else "⏸️ Disabled"
-                        appendLine("  • ${safeText(host.name_label, 64)} ($status)")
-                        appendLine("    ${safeText(host.hostname, 64)}")
+                        val status = if (host.enabled) getString(R.string.xcpng_infra_host_status_enabled) else getString(R.string.xcpng_infra_host_status_disabled)
+                        appendLine(getString(R.string.xcpng_infra_host_name_fmt, safeText(host.name_label, 64), status))
+                        appendLine(getString(R.string.xcpng_infra_host_hostname_fmt, safeText(host.hostname, 64)))
                         val memGB = host.memory_total / (1024 * 1024 * 1024)
                         val memFreeGB = host.memory_free / (1024 * 1024 * 1024)
-                        appendLine("    Memory: ${memFreeGB}GB free / ${memGB}GB total")
+                        appendLine(getString(R.string.xcpng_infra_host_memory_fmt, memFreeGB, memGB))
                     }
                 }
 
                 if (isFinishing || isDestroyed) return@launch
                 MaterialAlertDialogBuilder(this@XCPngManagerActivity)
-                    .setTitle("Xen Orchestra Infrastructure")
+                    .setTitle(getString(R.string.xcpng_infra_title))
                     .setMessage(message)
-                    .setPositiveButton("OK", null)
+                    .setPositiveButton(getString(R.string.ok), null)
                     .show()
 
             } catch (e: CancellationException) {
@@ -1600,7 +1615,7 @@ class XCPngManagerActivity : AppCompatActivity() {
                 if (!isFinishing && !isDestroyed) {
                     Toast.makeText(
                         this@XCPngManagerActivity,
-                        "Error: ${safeText(e.message)}",
+                        getString(R.string.hypervisor_error_prefix_fmt, safeText(e.message)),
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -1619,6 +1634,10 @@ class XCPngManagerActivity : AppCompatActivity() {
         // connection through this destroyed activity.
         currentXoClient = null
         currentClient = null
+        // Listeners are anonymous objects holding this Activity; the console
+        // connections (owned by their tabs) outlive this screen.
+        spawnedConsoleManagers.forEach { it.detachListener() }
+        spawnedConsoleManagers.clear()
         super.onDestroy()
     }
 }

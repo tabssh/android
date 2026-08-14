@@ -190,7 +190,7 @@ class TransportCapabilityDetector(
             } else {
                 relay.openDialStdio()
             }
-            when (val probe = probeApiVersion(port)) {
+            when (val probe = probeApiVersion(port, relay.token)) {
                 is DockerResult.Success -> {
                     Logger.i(TAG, "$mode verified (engine ${probe.value.version}, api ${probe.value.apiVersion})")
                     DockerResult.Success(
@@ -225,12 +225,20 @@ class TransportCapabilityDetector(
         }
     }
 
-    /** Unversioned GET /version through a relay port. */
-    private suspend fun probeApiVersion(port: Int): DockerResult<DockerVersionInfo> =
+    /**
+     * Unversioned GET /version through a relay port, authenticated with
+     * [token] — [probeClient] is shared across every host's probes, so the
+     * per-relay token socket factory is applied per call via [newBuilder],
+     * not baked into the shared client.
+     */
+    private suspend fun probeApiVersion(port: Int, token: ByteArray): DockerResult<DockerVersionInfo> =
         withContext(Dispatchers.IO) {
             try {
                 val request = Request.Builder().url("http://127.0.0.1:$port/version").get().build()
-                probeClient.newCall(request).execute().use { response ->
+                val tokenClient = probeClient.newBuilder()
+                    .socketFactory(RelayTokenSocketFactory(token))
+                    .build()
+                tokenClient.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
                         DockerResult.Error("GET /version failed", "HTTP ${response.code}")
                     } else {

@@ -101,6 +101,9 @@ class TelnetConnection(
     private val termType: String = "xterm-256color"
 
     suspend fun connect(timeoutMs: Int = 15_000): Boolean = withContext(Dispatchers.IO) {
+        // A prior connect()/disconnect() cycle latches this permanently; reset
+        // it here so the pump loop below actually runs on reconnect.
+        stopped = false
         val s = Socket()
         try {
             s.connect(InetSocketAddress(host, port), timeoutMs)

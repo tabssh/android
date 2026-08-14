@@ -60,6 +60,54 @@ class TerminalLinkClassifierTest {
     }
 
     @Test
+    fun `classify routes telnet vnc and spice to ExternalScheme`() {
+        for (scheme in listOf("telnet", "vnc", "spice")) {
+            val action = TerminalLinkClassifier.classify("$scheme://example.com")
+            assertTrue("$scheme should classify as ExternalScheme", action is TerminalLinkClassifier.LinkAction.ExternalScheme)
+            assertEquals(scheme, (action as TerminalLinkClassifier.LinkAction.ExternalScheme).scheme)
+        }
+    }
+
+    @Test
+    fun `classify rejects dangerous schemes as NotALink`() {
+        for (url in listOf(
+            "intent://example.com#Intent;scheme=http;package=com.evil.app;end",
+            "javascript:alert(document.cookie)",
+            "content://com.evil.provider/secret"
+        )) {
+            val action = TerminalLinkClassifier.classify(url)
+            assertTrue("$url should classify as NotALink", action is TerminalLinkClassifier.LinkAction.NotALink)
+        }
+    }
+
+    @Test
+    fun `classify keeps host-port text as Browser not NotALink`() {
+        // An OSC 8 href like "example.com:8080/path" matches the RFC 3986
+        // scheme grammar with "example.com" as the "scheme" — it must keep
+        // the pre-allowlist Browser behavior, not be silently rejected.
+        for (url in listOf("example.com:8080/path", "my.host.local:443")) {
+            val action = TerminalLinkClassifier.classify(url)
+            assertTrue("$url should classify as Browser", action is TerminalLinkClassifier.LinkAction.Browser)
+        }
+    }
+
+    @Test
+    fun `classify rejects dotted scheme with authority as NotALink`() {
+        // A dotted scheme WITH "://" is not host:port text — it stays
+        // rejected like any other non-allowlisted scheme.
+        val action = TerminalLinkClassifier.classify("evil.scheme://payload")
+        assertTrue(action is TerminalLinkClassifier.LinkAction.NotALink)
+    }
+
+    @Test
+    fun `classify keeps mailto out of the allowlist`() {
+        // mailto: isn't explicitly handled anywhere in TerminalLinkClassifier,
+        // so a remote hyperlink using it must not fall through to Browser.
+        val action = TerminalLinkClassifier.classify("mailto:someone@example.com")
+        assertTrue(action is TerminalLinkClassifier.LinkAction.NotALink)
+    }
+
+    @Test
     fun `parseSsh handles user host and port`() {
         val (user, host, port) = TerminalLinkClassifier.parseSsh("ssh://deploy@10.0.0.5:2200")!!
         assertEquals("deploy", user)

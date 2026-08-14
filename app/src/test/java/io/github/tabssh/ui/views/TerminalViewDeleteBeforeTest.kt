@@ -25,7 +25,7 @@ import kotlin.test.assertTrue
 @Config(application = Application::class)
 class TerminalViewDeleteBeforeTest {
 
-    private fun newConnectedView(): Pair<TerminalView, ByteArrayOutputStream> {
+    private fun newConnectedView(): Triple<TerminalView, ByteArrayOutputStream, io.github.tabssh.terminal.emulator.TerminalEmulator> {
         val context = ApplicationProvider.getApplicationContext<Application>()
         val view = TerminalView(context)
         view.initialize(24, 80)
@@ -39,7 +39,7 @@ class TerminalViewDeleteBeforeTest {
         // that hits EOF and closes the stream out from under the assertions.
         val out = ByteArrayOutputStream()
         emulator.attachOutputStream(out)
-        return Pair(view, out)
+        return Triple(view, out, emulator)
     }
 
     private fun createInputConnection(view: TerminalView): android.view.inputmethod.InputConnection {
@@ -49,34 +49,39 @@ class TerminalViewDeleteBeforeTest {
 
     @Test
     fun `deletion consumes composing text before reaching the wire`() {
-        val (view, out) = newConnectedView()
+        val (view, out, emulator) = newConnectedView()
         val ic = createInputConnection(view)
 
         ic.setComposingText("abc", 1)
         ic.deleteSurroundingText(2, 0)
         ic.finishComposingText()
 
+        // Writes go through the emulator's serialized writer thread — drain
+        // the queue before asserting on the fake stream.
+        emulator.awaitPendingWrites()
         assertEquals("a", out.toString("UTF-8"))
     }
 
     @Test
     fun `deletion past the composition sends DEL for the remainder only`() {
-        val (view, out) = newConnectedView()
+        val (view, out, emulator) = newConnectedView()
         val ic = createInputConnection(view)
 
         ic.setComposingText("ab", 1)
         ic.deleteSurroundingText(5, 0)
 
+        emulator.awaitPendingWrites()
         assertEquals("\u007F\u007F\u007F", out.toString("UTF-8"))
     }
 
     @Test
     fun `an oversized deletion request is bounded`() {
-        val (view, out) = newConnectedView()
+        val (view, out, emulator) = newConnectedView()
         val ic = createInputConnection(view)
 
         ic.deleteSurroundingText(Int.MAX_VALUE, 0)
 
+        emulator.awaitPendingWrites()
         val sent = out.toString("UTF-8")
         assertEquals(1024, sent.length)
         assertTrue(sent.all { it == '\u007F' })
@@ -84,22 +89,24 @@ class TerminalViewDeleteBeforeTest {
 
     @Test
     fun `a negative or zero deletion request sends nothing`() {
-        val (view, out) = newConnectedView()
+        val (view, out, emulator) = newConnectedView()
         val ic = createInputConnection(view)
 
         ic.deleteSurroundingText(0, 0)
         ic.deleteSurroundingText(-5, 3)
 
+        emulator.awaitPendingWrites()
         assertEquals("", out.toString("UTF-8"))
     }
 
     @Test
     fun `code point deletion is bounded the same way`() {
-        val (view, out) = newConnectedView()
+        val (view, out, emulator) = newConnectedView()
         val ic = createInputConnection(view)
 
         ic.deleteSurroundingTextInCodePoints(Int.MAX_VALUE, 0)
 
+        emulator.awaitPendingWrites()
         assertEquals(1024, out.toString("UTF-8").length)
     }
 }

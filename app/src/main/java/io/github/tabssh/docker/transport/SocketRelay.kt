@@ -14,9 +14,14 @@ import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.SocketAddress
+import java.security.MessageDigest
+import java.security.SecureRandom
 import java.util.Collections
+import javax.net.SocketFactory
 
 /**
  * Bridges TCP on 127.0.0.1 (for OkHttp) to the remote Docker unix socket.
@@ -33,6 +38,16 @@ import java.util.Collections
  * uses for `DOCKER_HOST=ssh://` contexts) and pipes the client socket to the
  * channel's stdin/stdout. No remote listener process, no PID tracking — the
  * exec channel dies with its connection.
+ *
+ * The relay listens on loopback, but loopback is shared by every app on the
+ * device — so every accepted connection must first prove it is the intended
+ * caller. [token] is a fresh [SecureRandom] value generated per relay
+ * instance; a client must send it as a fixed-length preamble before any
+ * relayed bytes ([authenticateClient]). Mismatch or a stalled/short preamble
+ * drops the connection immediately, before the (expensive) remote channel is
+ * even opened. [RelayTokenSocketFactory] is the dial-side counterpart —
+ * consumers construct their OkHttpClient with it so the token is written as
+ * the connection's first bytes automatically.
  */
 class SocketRelay(
     private val host: DockerHost,
@@ -44,6 +59,16 @@ class SocketRelay(
         private const val CHANNEL_CONNECT_TIMEOUT_MS = 15_000
         private const val PIPE_BUFFER_SIZE = 32 * 1024
         private const val DEFAULT_SOCKET_PATH = "/var/run/docker.sock"
+
+        /** Per-session auth token length — SecureRandom, ≥32 bytes (AI.md PART 6). */
+        private const val TOKEN_LENGTH_BYTES = 32
+
+        /**
+         * Bound on how long the accept path waits for a client to finish
+         * sending its token preamble, so a stalled or hostile local
+         * connection can't tie up a relay coroutine indefinitely.
+         */
+        private const val PREAMBLE_READ_TIMEOUT_MS = 3_000
 
         /**
          * Build the `docker system dial-stdio` invocation for [dockerBin] and
@@ -88,6 +113,13 @@ class SocketRelay(
     @Volatile
     var localPort: Int? = null
         private set
+
+    /**
+     * Per-session preamble token every client must send first. Never log
+     * this value — it is the relay's only local authentication (AI.md PART
+     * 6: "Logger sanitizes... never log raw tokens").
+     */
+    val token: ByteArray = ByteArray(TOKEN_LENGTH_BYTES).also { SecureRandom().nextBytes(it) }
 
     // ── Tier a: direct-streamlocal ──────────────────────────────────────────
 
@@ -269,13 +301,47 @@ class SocketRelay(
         }
     }
 
+    /**
+     * Read and verify the fixed-length token preamble. A short read
+     * timeout is set for the duration of this check only — reset before
+     * the caller proceeds to the (potentially long-lived) relayed pipe.
+     * [MessageDigest.isEqual] gives constant-time comparison (AI.md PART
+     * 6: "Constant-time comparison for any secret verification").
+     */
+    internal fun authenticateClient(client: Socket): Boolean {
+        return try {
+            client.soTimeout = PREAMBLE_READ_TIMEOUT_MS
+            val received = ByteArray(token.size)
+            val input = client.getInputStream()
+            var offset = 0
+            while (offset < received.size) {
+                val n = input.read(received, offset, received.size - offset)
+                if (n < 0) return false
+                offset += n
+            }
+            client.soTimeout = 0
+            MessageDigest.isEqual(received, token)
+        } catch (e: Exception) {
+            Logger.d(TAG, "relay preamble check failed: ${e.message}")
+            false
+        }
+    }
+
     /** Pipe one accepted TCP connection over a fresh channel from [opener]. */
     private fun relayConnection(client: Socket, opener: () -> OpenedChannel) {
+        client.tcpNoDelay = true
+        if (!authenticateClient(client)) {
+            Logger.w(TAG, "relay connection dropped: token preamble missing or invalid")
+            try {
+                client.close()
+            } catch (_: Exception) {
+            }
+            return
+        }
         val handle = RelayHandle(client)
         activeRelays.add(handle)
         var conn: OpenedChannel? = null
         try {
-            client.tcpNoDelay = true
             val opened = opener()
             conn = opened
             handle.channel = opened.channel
@@ -339,5 +405,51 @@ class SocketRelay(
         localPort = null
         dialStdioCommand = null
         Logger.d(TAG, "relay closed")
+    }
+}
+
+/**
+ * Dial-side counterpart of [SocketRelay]'s token preamble check. Every
+ * [Socket] this factory produces writes [token] as the connection's first
+ * bytes the moment [Socket.connect] succeeds — before the caller (e.g.
+ * OkHttp) gets the socket back and writes anything else. Build an
+ * OkHttpClient with `.socketFactory(RelayTokenSocketFactory(relay.token))`
+ * to authenticate every request the client makes against that relay.
+ *
+ * OkHttp connects direct (non-proxied) sockets via the no-arg [createSocket]
+ * followed by an explicit [Socket.connect] call, so only that path is
+ * exercised in practice; the host/port overloads below replicate the same
+ * unconnected-then-connect sequence so the factory is correct for any other
+ * caller too.
+ */
+class RelayTokenSocketFactory(private val token: ByteArray) : SocketFactory() {
+
+    override fun createSocket(): Socket = TokenPrefixingSocket(token)
+
+    override fun createSocket(host: String, port: Int): Socket =
+        TokenPrefixingSocket(token).apply { connect(InetSocketAddress(host, port)) }
+
+    override fun createSocket(host: String, port: Int, localHost: InetAddress, localPort: Int): Socket =
+        TokenPrefixingSocket(token).apply {
+            bind(InetSocketAddress(localHost, localPort))
+            connect(InetSocketAddress(host, port))
+        }
+
+    override fun createSocket(host: InetAddress, port: Int): Socket =
+        TokenPrefixingSocket(token).apply { connect(InetSocketAddress(host, port)) }
+
+    override fun createSocket(address: InetAddress, port: Int, localAddress: InetAddress, localPort: Int): Socket =
+        TokenPrefixingSocket(token).apply {
+            bind(InetSocketAddress(localAddress, localPort))
+            connect(InetSocketAddress(address, port))
+        }
+
+    /** A [Socket] that writes [token] immediately after [connect] succeeds. */
+    private class TokenPrefixingSocket(private val token: ByteArray) : Socket() {
+        override fun connect(endpoint: SocketAddress, timeout: Int) {
+            super.connect(endpoint, timeout)
+            getOutputStream().write(token)
+            getOutputStream().flush()
+        }
     }
 }

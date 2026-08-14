@@ -89,7 +89,7 @@ class OciManagerActivity : AppCompatActivity() {
 
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = "OCI"
+        supportActionBar?.title = getString(R.string.oci_manager_title)
 
         adapter = InstanceAdapter(instances)
         recyclerView.layoutManager = LinearLayoutManager(this)
@@ -99,7 +99,7 @@ class OciManagerActivity : AppCompatActivity() {
 
         val hypervisorId = intent.getLongExtra(EXTRA_HYPERVISOR_ID, -1L)
         if (hypervisorId == -1L) {
-            showError("No hypervisor ID provided")
+            showError(getString(R.string.hypervisor_error_no_id))
             return
         }
         connectAndRefresh(hypervisorId)
@@ -121,12 +121,12 @@ class OciManagerActivity : AppCompatActivity() {
 
     private fun connectAndRefresh(hypervisorId: Long) {
         lifecycleScope.launch {
-            showProgress("Loading credentials…")
+            showProgress(getString(R.string.oci_loading_credentials))
             val profile = withContext(Dispatchers.IO) {
                 app.database.hypervisorDao().getById(hypervisorId)
             }
             if (profile == null) {
-                showError("Hypervisor profile not found (id=$hypervisorId)")
+                showError(getString(R.string.hypervisor_error_not_found_fmt, hypervisorId))
                 return@launch
             }
             currentProfile = profile
@@ -158,7 +158,7 @@ class OciManagerActivity : AppCompatActivity() {
                     }
                 }
                 if (pem.isNullOrBlank()) {
-                    showError("Private key not found — edit this OCI identity to add one")
+                    showError(getString(R.string.oci_error_no_private_key))
                     return@launch
                 }
                 val passphrase = withContext(Dispatchers.IO) {
@@ -173,7 +173,7 @@ class OciManagerActivity : AppCompatActivity() {
                 if (tenancy.isNullOrBlank() || user.isNullOrBlank() ||
                     region.isNullOrBlank() || fingerprint.isNullOrBlank()
                 ) {
-                    showError("Profile is missing OCI fields — re-run onboarding")
+                    showError(getString(R.string.oci_error_missing_fields))
                     return@launch
                 }
 
@@ -190,10 +190,10 @@ class OciManagerActivity : AppCompatActivity() {
                     pinnedCertSha256 = profile.pinnedCertSha256
                 )
 
-                showProgress("Validating with OCI…")
+                showProgress(getString(R.string.oci_validating))
                 val ok = client.validateCredentials()
                 if (!ok) {
-                    showError("OCI rejected the credentials")
+                    showError(getString(R.string.oci_error_rejected))
                     return@launch
                 }
 
@@ -214,7 +214,7 @@ class OciManagerActivity : AppCompatActivity() {
                 // e.message can carry an OCI-supplied error body — sanitize it
                 // before it reaches the status line.
                 showError(
-                    "Connection failed: oci ${profile.name}: ${DockerText.display(e.message)}"
+                    getString(R.string.oci_connect_failed_fmt, profile.name, DockerText.display(e.message))
                 )
             }
         }
@@ -222,7 +222,7 @@ class OciManagerActivity : AppCompatActivity() {
 
     private fun refreshInstances() {
         val client = currentClient ?: run {
-            Toast.makeText(this, "Not connected — please wait", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.hypervisor_not_connected_wait), Toast.LENGTH_SHORT).show()
             return
         }
         if (refreshing) return
@@ -230,7 +230,7 @@ class OciManagerActivity : AppCompatActivity() {
         val compartment = profile.ociCompartmentOcid?.takeIf { it.isNotBlank() }
             ?: profile.ociTenancyOcid
             ?: run {
-                showError("Compartment OCID not configured")
+                showError(getString(R.string.oci_error_no_compartment))
                 return
             }
         refreshing = true
@@ -244,7 +244,7 @@ class OciManagerActivity : AppCompatActivity() {
     }
 
     private suspend fun loadInstances(client: OciApiClient, compartment: String) {
-        showProgress("Loading instances…")
+        showProgress(getString(R.string.oci_loading_instances))
         try {
             val raw = client.listInstances(compartment)
             // Walk VNICs for IPs on running instances (one extra HTTP call per instance).
@@ -270,7 +270,7 @@ class OciManagerActivity : AppCompatActivity() {
             hideProgress()
             if (instances.isEmpty()) {
                 statusText.visibility = View.VISIBLE
-                statusText.text = "No instances found"
+                statusText.text = getString(R.string.oci_no_instances)
             }
             // Persist the iaas-endpoint TLS pin that was captured during listInstances().
             // OCI uses a separate leaf cert for iaas.* vs identity.*; without this call
@@ -280,7 +280,7 @@ class OciManagerActivity : AppCompatActivity() {
             throw e
         } catch (e: Exception) {
             Logger.e(TAG, "loadInstances failed", e)
-            showError("Could not load instances: ${DockerText.display(e.message)}")
+            showError(getString(R.string.oci_error_load_instances_fmt, DockerText.display(e.message)))
         }
     }
 
@@ -317,12 +317,12 @@ class OciManagerActivity : AppCompatActivity() {
         }
         val name = DockerText.display(inst.displayName)
         MaterialAlertDialogBuilder(this)
-            .setTitle("${action.wireValue}?")
-            .setMessage("Send ${action.wireValue} to $name? Running workloads are interrupted.")
+            .setTitle(getString(R.string.oci_confirm_action_title_fmt, action.wireValue))
+            .setMessage(getString(R.string.oci_confirm_action_message_fmt, action.wireValue, name))
             .setPositiveButton(action.wireValue) { _, _ ->
                 instanceAction(inst, client, action)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -333,14 +333,14 @@ class OciManagerActivity : AppCompatActivity() {
         // and a toast — sanitize before it reaches either.
         val name = DockerText.display(inst.displayName)
         lifecycleScope.launch {
-            showProgress("${action.wireValue} → $name…")
+            showProgress(getString(R.string.oci_action_progress_fmt, action.wireValue, name))
             try {
                 val ok = client.instanceAction(inst.id, action)
                 if (!isAlive) return@launch
                 if (ok) {
                     Toast.makeText(
                         this@OciManagerActivity,
-                        "${action.wireValue} sent to $name",
+                        getString(R.string.oci_action_sent_fmt, action.wireValue, name),
                         Toast.LENGTH_SHORT
                     ).show()
                     delay(2000)
@@ -350,13 +350,13 @@ class OciManagerActivity : AppCompatActivity() {
                     loadInstances(client, compartment)
                 } else {
                     hideProgress()
-                    showError("${action.wireValue} failed for $name")
+                    showError(getString(R.string.oci_action_failed_for_fmt, action.wireValue, name))
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Action ${action.wireValue} failed", e)
-                showError("Action failed: ${DockerText.display(e.message)}")
+                showError(getString(R.string.oci_error_action_failed_fmt, DockerText.display(e.message)))
             } finally {
                 actionInFlight = false
             }
@@ -372,14 +372,14 @@ class OciManagerActivity : AppCompatActivity() {
     private fun handleSshConnect(inst: OciInstance) {
         val publicIp = inst.publicIp?.trim()
         if (publicIp.isNullOrBlank()) {
-            Toast.makeText(this, "Instance has no public IP address", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.oci_error_no_public_ip), Toast.LENGTH_SHORT).show()
             return
         }
         // The address comes back from the VNIC API and becomes the host of a
         // saved connection profile — reject anything that is not a bare
         // host literal before it reaches the SSH layer.
         if (!isValidHostLiteral(publicIp)) {
-            Toast.makeText(this, "Instance reported an unusable address", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.oci_error_unusable_address), Toast.LENGTH_SHORT).show()
             return
         }
         lifecycleScope.launch {
@@ -425,7 +425,7 @@ class OciManagerActivity : AppCompatActivity() {
         val keySpinner = view.findViewById<Spinner>(R.id.oci_ssh_key_spinner)
         val noKeysHint = view.findViewById<TextView>(R.id.oci_ssh_no_keys_hint)
 
-        instanceLabel.text = "SSH to $publicIp"
+        instanceLabel.text = getString(R.string.oci_ssh_to_fmt, publicIp)
         usernameField.setText(existing?.username ?: "opc")
         portField.setText((existing?.port ?: 22).toString())
 
@@ -473,9 +473,9 @@ class OciManagerActivity : AppCompatActivity() {
         }
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("SSH: $instanceName")
+            .setTitle(getString(R.string.oci_ssh_dialog_title_fmt, instanceName))
             .setView(view)
-            .setPositiveButton("Connect") { _, _ ->
+            .setPositiveButton(getString(R.string.virt_viewer_connect)) { _, _ ->
                 val username = usernameField.text.toString().trim().ifBlank { "opc" }
                 val port = portField.text.toString().toIntOrNull()?.coerceIn(1, 65535) ?: 22
                 val authType = authOptions[authSpinner.selectedItemPosition]
@@ -516,7 +516,7 @@ class OciManagerActivity : AppCompatActivity() {
                     startActivity(intent)
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -541,7 +541,7 @@ class OciManagerActivity : AppCompatActivity() {
         runOnUiThread {
             progressBar.visibility = View.GONE
             statusText.visibility = View.VISIBLE
-            statusText.text = "Error: $message"
+            statusText.text = getString(R.string.hypervisor_error_prefix_fmt, message)
         }
     }
 
@@ -585,13 +585,13 @@ class OciManagerActivity : AppCompatActivity() {
             holder.state.text = DockerText.display(stateLabel(inst.lifecycleState))
             holder.state.setTextColor(stateColor(inst.lifecycleState))
             holder.statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(stateColor(inst.lifecycleState))
-            holder.info.text = DockerText.display("${inst.shape}  ·  ${inst.availabilityDomain}")
+            holder.info.text = DockerText.display(getString(R.string.oci_instance_info_fmt, inst.shape, inst.availabilityDomain))
 
             val ipParts = mutableListOf<String>()
-            inst.publicIp?.let { ipParts += "Public: ${DockerText.display(it)}" }
-            inst.privateIp?.let { ipParts += "Private: ${DockerText.display(it)}" }
+            inst.publicIp?.let { ipParts += getString(R.string.oci_ip_public_fmt, DockerText.display(it)) }
+            inst.privateIp?.let { ipParts += getString(R.string.oci_ip_private_fmt, DockerText.display(it)) }
             if (ipParts.isNotEmpty()) {
-                holder.ip.text = ipParts.joinToString("  ·  ")
+                holder.ip.text = ipParts.joinToString(getString(R.string.oci_list_separator))
                 holder.ip.visibility = View.VISIBLE
             } else {
                 holder.ip.visibility = View.GONE
@@ -643,11 +643,11 @@ class OciManagerActivity : AppCompatActivity() {
         }
 
         private fun stateLabel(state: String): String = when (state.uppercase()) {
-            "RUNNING"   -> "Running"
-            "STOPPED"   -> "Stopped"
-            "STARTING"  -> "Restarting"
-            "STOPPING"  -> "Stopping"
-            "REBOOTING" -> "Restarting"
+            "RUNNING"   -> getString(R.string.vm_state_running)
+            "STOPPED"   -> getString(R.string.vm_state_stopped)
+            "STARTING"  -> getString(R.string.vm_state_restarting)
+            "STOPPING"  -> getString(R.string.vm_state_stopping)
+            "REBOOTING" -> getString(R.string.vm_state_restarting)
             else        -> state.split("_").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
         }
     }

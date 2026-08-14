@@ -25,7 +25,7 @@ import kotlin.test.assertEquals
 @Config(application = Application::class)
 class TerminalViewComposingFlushTest {
 
-    private fun newConnectedView(): Pair<TerminalView, ByteArrayOutputStream> {
+    private fun newConnectedView(): Triple<TerminalView, ByteArrayOutputStream, io.github.tabssh.terminal.emulator.TerminalEmulator> {
         val context = ApplicationProvider.getApplicationContext<Application>()
         val view = TerminalView(context)
         view.initialize(24, 80)
@@ -40,7 +40,7 @@ class TerminalViewComposingFlushTest {
         // the test's own sendText() and making assertions flaky.
         val out = ByteArrayOutputStream()
         emulator.attachOutputStream(out)
-        return Pair(view, out)
+        return Triple(view, out, emulator)
     }
 
     private fun createInputConnection(view: TerminalView): android.view.inputmethod.InputConnection {
@@ -50,22 +50,26 @@ class TerminalViewComposingFlushTest {
 
     @Test
     fun `closeConnection flushes pending composing text exactly once`() {
-        val (view, out) = newConnectedView()
+        val (view, out, emulator) = newConnectedView()
         val ic = createInputConnection(view)
 
         ic.setComposingText("foo", 1)
         ic.closeConnection()
+        // Writes are serialised on TerminalEmulator's writer executor; drain
+        // it instead of asserting immediately so the test stays deterministic.
+        emulator.awaitPendingWrites()
 
         assertEquals("foo", out.toString("UTF-8"))
 
         // A second close (or any further flush) must not resend it.
         ic.closeConnection()
+        emulator.awaitPendingWrites()
         assertEquals("foo", out.toString("UTF-8"))
     }
 
     @Test
     fun `composing text survives onCreateInputConnection replacement`() {
-        val (view, out) = newConnectedView()
+        val (view, out, emulator) = newConnectedView()
         val ic1 = createInputConnection(view)
 
         ic1.setComposingText("foo", 1)
@@ -74,13 +78,14 @@ class TerminalViewComposingFlushTest {
         // focus/config change before the IME finalised the composition.
         val ic2 = createInputConnection(view)
         ic2.closeConnection()
+        emulator.awaitPendingWrites()
 
         assertEquals("foo", out.toString("UTF-8"))
     }
 
     @Test
     fun `flushPendingComposing sends composing text before an escape write races ahead`() {
-        val (view, out) = newConnectedView()
+        val (view, out, emulator) = newConnectedView()
         val ic = createInputConnection(view)
 
         ic.setComposingText("git -C ", 1)
@@ -89,6 +94,10 @@ class TerminalViewComposingFlushTest {
         // bar/hardware-key escape sequence is written directly.
         view.flushPendingComposing()
         view.sendKeySequence("[5~")
+        // Both writes were queued from this thread in that order; the writer
+        // executor is FIFO, so draining it once guarantees both landed on
+        // the fake stream in order.
+        emulator.awaitPendingWrites()
 
         assertEquals("git -C [5~", out.toString("UTF-8"))
     }

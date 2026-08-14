@@ -152,7 +152,23 @@ data class HypervisorProfile(
      */
     @ColumnInfo(name = "ssh_identity_id")
     val sshIdentityId: String? = null
-)
+) {
+    /**
+     * Redacted rendering. The compiler-generated data-class `toString`
+     * would print `password` verbatim, and this entity reaches
+     * `Logger.d`/exception messages on several paths — so the password is
+     * replaced with a fixed marker while every other field is preserved.
+     */
+    override fun toString(): String =
+        "HypervisorProfile(id=$id, name=$name, type=$type, host=$host, port=$port, " +
+            "username=$username, password=${if (password.isEmpty()) "<none>" else "xxxxx"}, " +
+            "realm=$realm, verifySsl=$verifySsl, pinnedCertSha256=$pinnedCertSha256, " +
+            "apiTypeOverride=$apiTypeOverride, linkedConnectionId=$linkedConnectionId, " +
+            "accountId=$accountId, notes=$notes, lastConnected=$lastConnected, " +
+            "createdAt=$createdAt, authType=$authType, ociTenancyOcid=$ociTenancyOcid, " +
+            "ociUserOcid=$ociUserOcid, ociRegion=$ociRegion, ociFingerprint=$ociFingerprint, " +
+            "ociCompartmentOcid=$ociCompartmentOcid, sshIdentityId=$sshIdentityId)"
+}
 
 @Serializable
 enum class HypervisorType {

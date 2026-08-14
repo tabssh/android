@@ -9,29 +9,35 @@ the codebase (57 spec features → 53 implemented, 4 partial, 0 missing).
 
 ## Open — 2026-08-13 docker/hypervisor audit follow-ups (needs user call)
 
-1. docker/transport/SocketRelay.kt — loopback relay accepts any local
-   connection unauthenticated; design decision needed (per-session token vs
-   accept-once) before hardening. Flagged by docker engine/transport audit.
-2. hypervisor/oci/OciApiClient.kt — `validateCredentials` now rethrows on a
-   malformed stored user OCID (surfaces as an onboarding error instead of a
-   silent 404). Confirm this is the wanted UX or switch to returning `false`.
-3. hypervisor/vmware/VMwareApiClient.kt — `apiGet`/`apiPost` return type
-   changed to `String` (private, callers updated in-file); `/api` vs `/rest`
-   envelope unwrap changed — watch these two spots in the combined gate.
-4. sync/tombstone/TombstoneRecorder.kt — `record()` uses
-   `runCatching {}.onFailure {}`, swallowing `CancellationException`; a
-   cancelled delete (DockerHostsFragment.deleteDockerHost) can silently
-   half-complete. Rethrow cancellation.
-5. storage/database/entities/HypervisorProfile.kt — data class with
-   `val password` and no redacting `toString()`; any interpolated log or
-   exception prints the password. Add `toString()` masking as `xxxxx`.
-6. hypervisor/console/HypervisorConsoleManager.kt — retains the Activity via
-   `ConsoleEventListener` with no detach path (leak, systemic across XCPng
-   and Proxmox managers). Needs a detach/clear-listener lifecycle hook.
-7. ~90 remaining hardcoded English strings in XCPngManagerActivity,
-   LibvirtManagerActivity, OciManagerActivity, VncHostsActivity (AI.md
-   PART 7) — mechanical i18n sweep deferred to avoid colliding with the
-   in-flight audit batch.
+1. RESOLVED 2026-08-14 — user chose per-session token: SocketRelay now
+   generates a 32-byte SecureRandom token per instance; every accepted
+   connection must send it as a fixed-length preamble (constant-time
+   compare, 3s read timeout) before the SSH channel opens. Dial side via
+   RelayTokenSocketFactory on EngineApiTransport + probeApiVersion.
+   Tests: SocketRelayAuthTest.kt.
+2. RESOLVED 2026-08-14 — user chose to keep the rethrow:
+   OciApiClient.validateCredentials surfaces a malformed stored user OCID
+   as an onboarding error (not a silent `false`). No code change needed.
+3. RESOLVED 2026-08-14 — VMwareApiClient `apiGet`/`apiPost` String return
+   + `/api` vs `/rest` envelope unwrap verified through two green combined
+   gates (make check) and green CI on cb33df1712a2; nothing to watch.
+4. RESOLVED 2026-08-14 — TombstoneRecorder.record() now uses the shared
+   catchExceptCancellation helper; CancellationException propagates.
+5. RESOLVED 2026-08-14 — HypervisorProfile has a redacting toString()
+   (password → `xxxxx`/`<none>`; only secret field on the entity — OCI
+   key/passphrase live in Keystore). Test: HypervisorProfileToStringTest.
+6. RESOLVED 2026-08-14 — HypervisorConsoleManager holds a live
+   `activeListener` read by all long-lived WS callbacks; `detachListener()`
+   added and wired into ProxmoxManagerActivity + XCPngManagerActivity
+   onDestroy() via tracked spawnedConsoleManagers lists; also cleared in
+   disconnect().
+7. RESOLVED 2026-08-14 — i18n sweep complete across XCPngManagerActivity,
+   LibvirtManagerActivity, OciManagerActivity, VncHostsActivity (~160
+   strings through strings.xml). Intentional leftovers documented: wire-state
+   / action-keyword `when()` literals, connection-profile display-name
+   prefixes, and SystemGroupHelper group args ("VM Hosts", "Cloud
+   Instances" in OciManagerActivity/CloudAccountsActivity) — one-time
+   database display values, not UI chrome; kept per the same rationale.
 
 ## Shipped — 2026-08-11 user batch (merged from root TODO.md)
 
@@ -107,25 +113,31 @@ Open decisions / documented limitations from the 4-8 diagnosis:
 
 Open follow-ups from the SSH/Mosh/Telnet stack audit (2026-08-13,
 details in AUDIT.AI.md § "SSH/Mosh/Telnet Stack Audit"):
-- TerminalEmulator.sendText() writes to the SSH OutputStream on the
-  calling (UI) thread — correct fix is a serialized single-thread
-  writer executor; deliberate design change, do not bolt on. Until
-  then TerminalViewComposingFlushTest's escape-race test is inherently
-  timing-sensitive
-- TerminalManager.cleanup() cancels `managerScope` (a val) and never
-  resets `isInitialized`, so a later initialize() runs with no
-  maintenance loop — latent (cleanup/createTerminal have no callers)
-- TerminalLinkClassifier falls through to LinkAction.Browser(url) for
-  any scheme a remote OSC 8 hyperlink supplies (intent:, file:, …) —
-  add a scheme allowlist (http/https/ssh/telnet/vnc/spice)
-- TelnetConnection.stopped latches permanently — fine today (fresh
-  instance per connection) but the class advertises reuse; either
-  document single-use or reset in connect()
+- RESOLVED 2026-08-14 (user: "do it now") — TerminalEmulator has a
+  serialized single-thread writer executor (`tabssh-terminal-writer`):
+  sendText/pasteText share one FIFO queue; executor recreated per
+  connect(), local-captured for the read-loop's shutdown to avoid
+  cross-connection races. Tests: TerminalEmulatorWriteOrderingTest,
+  TerminalViewComposingFlushTest via awaitPendingWrites().
+- RESOLVED 2026-08-14 — TerminalManager: managerScope recreated when
+  inactive, isInitialized reset in cleanup(), both methods synchronized.
+- RESOLVED 2026-08-14 — TerminalLinkClassifier scheme allowlist added
+  (http/https/ssh/sftp/file/git/ftp/ftps/svn/telnet/vnc/spice); scheme
+  regex widened to catch no-authority schemes (javascript:, mailto:);
+  non-allowlisted → LinkAction.NotALink, rejected with a redacted log in
+  TabTerminalActivity and LinkHandlerActivity.
+- RESOLVED 2026-08-14 — TelnetConnection.connect() resets `stopped`.
 - TerminalView.getHandler() can be null when the InputConnection is
   used while detached — current paths avoid it; future handler-based
   IME work must not assume non-null
-- SessionPersistenceManager.kt:420 commented-out code (AI.md PART 0
-  violation) — remove
+- TerminalEmulator: pre-existing race (flagged by 2026-08-14 review,
+  not a regression) — a rapid connect() while the previous readJob is
+  still unwinding lets the old loop's finally-block closeStreams()
+  null out the NEW connection's inputStream/outputStream (fire-and-
+  forget readJob?.cancel() pattern predates the writer-executor work);
+  fix would be joining/awaiting the old readJob in connect()
+- RESOLVED 2026-08-14 — SessionPersistenceManager commented-out
+  cursor-restore line removed.
 
 1. Fix SSH active connections dying when creating VNC/docker/etc connections
    — root cause (diagnosed 2026-08-11): TabManager dual-index-space bug —
@@ -152,13 +164,21 @@ details in AUDIT.AI.md § "SSH/Mosh/Telnet Stack Audit"):
    prefer a shared runCatching-style helper to prevent recurrence.
    FIXED 2026-08-11 (pending commit): guards added across docker transports
    + hypervisor clients; helper `utils/coroutines/CancellationSafeCatch.kt`
-   + test. Follow-up audit still owed for generic-catch sites in files not
-   yet reviewed for this pattern: docker/DockerSessionManager.kt,
+   + test.
+   FOLLOW-UP AUDIT DONE 2026-08-14: reviewed docker/DockerSessionManager.kt,
    docker/transport/SocketRelay.kt, docker/transport/
    TransportCapabilityDetector.kt, docker/registry/RegistryClient.kt,
    docker/registry/UpdateChecker.kt, hypervisor/vnc/VncDirectConnector.kt,
-   hypervisor/spice/SpiceLoader.kt — check each for coroutine-reachable
-   generic catches missing the CancellationException rethrow.
+   hypervisor/spice/SpiceLoader.kt. No further guards needed: every
+   coroutine-reachable generic catch already has the explicit
+   CancellationException rethrow (DockerSessionManager, TransportCapability
+   Detector, RegistryClient); the remaining generic catches wrap only
+   synchronous/blocking calls with no suspend function inside the try body
+   (SocketRelay's thread-based accept/pipe loops, VncDirectConnector's
+   Socket.connect + RfbClient ctor which already unconditionally rethrow
+   after cleanup, SpiceLoader's System.loadLibrary/JNI call, UpdateChecker's
+   JSONObject/JSONArray parse in normalizeInspect) — none of those can
+   surface a swallowed CancellationException.
 4. Fix VNC/SPICE keyboard not working
 5. Fix VNC console issues
 6. Add ability to close VNC/SPICE tabs
