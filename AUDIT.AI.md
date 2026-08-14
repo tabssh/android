@@ -931,3 +931,71 @@ were fixed in this pass unless listed under "Logged, not fixed".
   known characteristic, acceptable with the cached pool.
 - `SessionPersistenceManager.kt:420` commented-out code (PART 0
   violation) — outside this audit's file scope.
+
+---
+
+# Docker/Hypervisor Stack Audit (2026-08-13)
+
+Seven parallel agents with strict non-overlapping file ownership,
+same six-pass method as the earlier stack audits (security, quality,
+logic, hostile-input, coroutines/cancellation, integration). All
+fixes applied directly in the tree; findings needing a user decision
+are logged in TODO.AI.md § "Open — 2026-08-13 docker/hypervisor
+audit follow-ups".
+
+## Areas covered
+
+1. Docker engine/transport — `docker/transport/` (EngineApiTransport,
+   SocketRelay, SshExecRunner, DockerApiParsers,
+   TransportCapabilityDetector) + `docker/registry/` (RegistryClient,
+   UpdateChecker, UpdateApplier, ImageRef) + RunConfigTranslator:
+   stream-parser hardening, registry auth flow, image-ref
+   normalization, cancellation correctness.
+2. Hypervisor API clients — Proxmox, VMware, Libvirt, OCI:
+   response-envelope handling, shell-argument safety (libvirt over
+   SSH), credential validation paths, error surfacing.
+3. Docker/hypervisor UI fragments — `ui/fragments/docker/*` +
+   DockerHostsFragment/HypervisorsFragment: display-text
+   sanitization, empty/error states, i18n extraction to strings.xml.
+4. XCPng + Libvirt manager UI — safe-text rendering of
+   server-controlled names/labels, input validation.
+5. Hypervisor/Proxmox/VMware manager UI — sanitization of VM
+   names/log output, guest-address parsing.
+6. Docker editors/dialogs — ComposeEditorActivity, config editors,
+   Docker dialogs: input validation, credential masking in UI.
+7. Manager/detail activities — DockerHostManagerActivity,
+   ContainerDetailActivity, StackLogsActivity, DockerHostEditActivity,
+   HypervisorEditActivity: host/port validation, log sanitization.
+
+New shared helpers extracted: `ui/utils/DockerNames.kt` (name/ref
+validation) and `ui/utils/DockerText.kt` (control-char/ANSI
+sanitization for server-controlled text).
+
+## Tests added
+
+- `docker/transport/DockerApiStreamParsersTest.kt`
+- `docker/registry/ImageRefTest.kt` (expanded),
+  `RegistryClientAuthTest.kt` (expanded),
+  `runconfig/RunConfigTranslatorTest.kt` (expanded)
+- `hypervisor/libvirt/LibvirtShellSafetyTest.kt`
+- `hypervisor/oci/OciApiHelpersTest.kt`
+- `hypervisor/proxmox/ProxmoxApiHelpersTest.kt`
+- `hypervisor/vmware/VMwareApiHelpersTest.kt`
+- `ui/activities/` — DockerHostEditValidationTest,
+  HypervisorEditHostValidationTest, LibvirtSafeTextTest,
+  ProxmoxManagerSanitizeTest, StackLogsSanitizeTest,
+  VMwareManagerGuestAddressTest, XCPngSafeTextTest
+- `ui/dialogs/DockerDialogInputValidationTest.kt`
+- `ui/utils/DockerNamesValidationTest.kt`,
+  `DockerTextSanitizerTest.kt`
+
+## Logged, not fixed (tracked in TODO.AI.md)
+
+- SocketRelay unauthenticated loopback relay (design decision).
+- OciApiClient.validateCredentials rethrow-vs-false UX call.
+- VMwareApiClient `/api` vs `/rest` envelope unwrap — watch in gate.
+- TombstoneRecorder.record() swallows CancellationException.
+- HypervisorProfile.toString() prints the password field.
+- HypervisorConsoleManager retains the Activity (no detach path).
+- ~90 hardcoded English strings across XCPng/Libvirt/OCI/VncHosts
+  manager activities (PART 7 i18n sweep deferred).

@@ -69,7 +69,22 @@ class TerminalViewSelectionMagnifierTest {
         move.recycle()
 
         assertEquals(1, fake.showCalls.size)
-        assertEquals(55f to 60f, fake.showCalls[0])
+        // X tracks the finger; Y is locked to the vertical center of the
+        // dragged row (gridTop + (row + 0.5) * cellHeight) — magnifying the
+        // raw touch point showed the boundary above the selected line.
+        // Compute the expectation from the view's real metrics so the test
+        // holds regardless of Robolectric's font-metric behavior.
+        val cellHeightField = TerminalView::class.java
+            .getDeclaredField("cellHeight").apply { isAccessible = true }
+        val gridTopMethod = TerminalView::class.java
+            .getDeclaredMethod("getGridTop").apply { isAccessible = true }
+        val focusRowField = TerminalView::class.java
+            .getDeclaredField("selectionFocusRow").apply { isAccessible = true }
+        val cellHeight = cellHeightField.getFloat(view)
+        val gridTop = gridTopMethod.invoke(view) as Float
+        val focusRow = focusRowField.getInt(view)
+        val expectedY = gridTop + (focusRow + 0.5f) * cellHeight
+        assertEquals(55f to expectedY, fake.showCalls[0])
         assertEquals(0, fake.dismissCallCount)
 
         val up = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_UP, 55f, 60f, 0)

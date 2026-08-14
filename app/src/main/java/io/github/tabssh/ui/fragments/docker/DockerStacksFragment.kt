@@ -47,6 +47,10 @@ class DockerStacksFragment : DockerPageFragment() {
     private var trackedStacks: List<ComposeStack> = emptyList()
     private var externalEntries: List<ComposeLsEntry> = emptyList()
 
+    // Reentrancy guard: compose up/down/restart are long-running and the sheet
+    // rows stay tappable, so a double tap would issue the command twice.
+    private var composeActionInFlight = false
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -127,13 +131,17 @@ class DockerStacksFragment : DockerPageFragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             progressBar.visibility = View.VISIBLE
             val dao = app.database.composeStackDao()
+            // Resources are resolved through the application context: the loop
+            // suspends on every compose ps, and Fragment.getResources() throws
+            // IllegalStateException once the fragment has detached mid-loop.
+            val res = app.resources
             for (stack in dao.getStacksForHostList(manager.hostId)) {
                 val output = session.transport.composePs(stack.remotePath).valueOrNull()?.trim()
                 if (output != null) {
                     val services = output.lines().drop(1).count { it.isNotBlank() }
                     dao.updateLastKnownStatus(
                         stack.id,
-                        resources.getQuantityString(
+                        res.getQuantityString(
                             R.plurals.docker_stack_running_services, services, services
                         ),
                         System.currentTimeMillis()
@@ -263,24 +271,30 @@ class DockerStacksFragment : DockerPageFragment() {
         item: StackListItem,
         action: suspend () -> DockerResult<String>
     ) {
+        if (composeActionInFlight) return
+        composeActionInFlight = true
         progressBar.visibility = View.VISIBLE
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = action()
-            if (!isAdded) return@launch
-            progressBar.visibility = View.GONE
-            when (result) {
-                is DockerResult.Success -> {
-                    DockerInspectDialog.show(
-                        requireContext(),
-                        getString(R.string.docker_stack_action_output_title, item.name),
-                        result.value.ifBlank { getString(R.string.docker_action_success) }
-                    )
-                    session?.let {
-                        refreshStatuses(it)
-                        discoverExternalStacks(it)
+            try {
+                val result = action()
+                if (!isAdded) return@launch
+                when (result) {
+                    is DockerResult.Success -> {
+                        DockerInspectDialog.show(
+                            requireContext(),
+                            getString(R.string.docker_stack_action_output_title, item.name),
+                            result.value.ifBlank { getString(R.string.docker_action_success) }
+                        )
+                        session?.let {
+                            refreshStatuses(it)
+                            discoverExternalStacks(it)
+                        }
                     }
+                    else -> DockerErrorPresenter.present(requireContext(), result)
                 }
-                else -> DockerErrorPresenter.present(requireContext(), result)
+            } finally {
+                composeActionInFlight = false
+                if (isAdded) progressBar.visibility = View.GONE
             }
         }
     }

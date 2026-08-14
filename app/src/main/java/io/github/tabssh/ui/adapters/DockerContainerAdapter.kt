@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.color.MaterialColors
 import io.github.tabssh.R
+import io.github.tabssh.ui.utils.DockerText
 import io.github.tabssh.docker.transport.DockerContainerSummary
 
 /**
@@ -126,15 +127,18 @@ class DockerContainerAdapter(
             val context = itemView.context
             val name = container.names.firstOrNull()?.removePrefix("/")
                 ?: container.id.take(12)
-            textName.text = name
-            textImage.text = container.image
-            textStatus.text = container.status
+            // Name, image, status and ports all originate on the remote daemon
+            // — strip control/bidi characters and cap them so a crafted label
+            // cannot reorder the row or blow up the layout pass.
+            textName.text = DockerText.display(name)
+            textImage.text = DockerText.display(container.image)
+            textStatus.text = DockerText.display(container.status)
 
             if (container.ports.isBlank()) {
                 textPorts.visibility = View.GONE
             } else {
                 textPorts.visibility = View.VISIBLE
-                textPorts.text = container.ports
+                textPorts.text = DockerText.display(container.ports)
             }
 
             // Status dot: semantic color resources — green running, amber

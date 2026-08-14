@@ -44,14 +44,20 @@ class HypervisorAccountAdapter(
         holder.name.text = account.name
         // OCI accounts authenticate via API key, not a username+password pair.
         // Show the region instead so the card is informative; username is always blank.
+        val context = holder.itemView.context
         holder.username.text = if (account.authType == "oci_api_key") {
-            "Region: ${account.ociRegion ?: "—"}"
+            context.getString(
+                R.string.hypervisor_account_region_fmt,
+                account.ociRegion?.takeIf { it.isNotBlank() }
+                    ?: context.getString(R.string.hypervisor_account_region_unset)
+            )
         } else {
-            "Username: ${account.username}"
+            context.getString(R.string.hypervisor_account_username_fmt, account.username)
         }
         if (!account.realm.isNullOrBlank()) {
             holder.realm.visibility = View.VISIBLE
-            holder.realm.text = "realm: ${account.realm}"
+            holder.realm.text =
+                context.getString(R.string.hypervisor_account_realm_fmt, account.realm)
         } else {
             holder.realm.visibility = View.GONE
         }

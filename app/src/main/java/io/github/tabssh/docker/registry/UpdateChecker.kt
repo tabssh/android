@@ -152,7 +152,22 @@ class UpdateChecker(
         val runningDigest = resolveRunningDigest(inspect, ref, transport)
 
         // 3 — the digest the registry currently serves.
-        val credential = policy.registryCredentialId?.let { credentialDao.getById(it) }
+        // The image reference comes from the remote host's inspect output, so
+        // it decides which registry is contacted. A credential is therefore
+        // only usable when it was stored for that same registry — otherwise a
+        // compromised or misconfigured host could redirect one registry's
+        // credential to another by rewriting Config.Image.
+        val stored = policy.registryCredentialId?.let { credentialDao.getById(it) }
+        val credential = stored?.takeIf {
+            ImageRef.normalizeRegistryHost(it.registryHost) == ref.registryHost
+        }
+        if (stored != null && credential == null) {
+            Logger.w(
+                TAG,
+                "policy ${policy.id}: credential for ${stored.registryHost} not used for " +
+                    "${ref.registryHost}; checking anonymously"
+            )
+        }
         val secret = credential?.takeIf { it.authType != "anonymous" }
             ?.let { secretProvider(it.id) }
         val registryDigest =

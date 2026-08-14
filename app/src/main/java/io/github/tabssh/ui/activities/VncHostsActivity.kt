@@ -44,6 +44,15 @@ class VncHostsActivity : AppCompatActivity() {
     private lateinit var app: TabSSHApplication
     private lateinit var adapter: VncHostAdapter
 
+    // Connecting suspends through the whole RFB handshake while the Connect
+    // button stays tappable — a double tap would open two sockets and burn two
+    // tab slots for one host.
+    private var connecting = false
+
+    /** False once the activity is tearing down — toasts must not be shown then. */
+    private val isAlive: Boolean
+        get() = !isFinishing && !isDestroyed
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         app = application as TabSSHApplication
@@ -119,35 +128,41 @@ class VncHostsActivity : AppCompatActivity() {
      * already attached when the page binds.
      */
     private fun openVncConsole(host: VncHost) {
+        if (connecting) return
+        connecting = true
         lifecycleScope.launch {
-            val (password, username) = withContext(Dispatchers.IO) {
-                val identityId = host.identityId
-                // Per-host password override always takes priority.
-                val hostPw = try {
-                    app.securePasswordManager.retrievePassword("vnc_host_${host.id}")
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Could not retrieve VNC host password: ${e.message}")
-                    null
-                }
-                if (hostPw != null) {
-                    val identityUsername = if (identityId != null) {
-                        app.database.vncIdentityDao().getById(identityId)?.username
-                    } else null
-                    Pair(hostPw, identityUsername)
-                } else if (identityId != null) {
-                    val identity = app.database.vncIdentityDao().getById(identityId)
-                    val pw = try {
-                        app.securePasswordManager.retrievePassword("vnc_identity_$identityId")
+            try {
+                val (password, username) = withContext(Dispatchers.IO) {
+                    val identityId = host.identityId
+                    // Per-host password override always takes priority.
+                    val hostPw = try {
+                        app.securePasswordManager.retrievePassword("vnc_host_${host.id}")
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
                     } catch (e: Exception) {
-                        Logger.w(TAG, "Could not retrieve VNC identity password: ${e.message}")
+                        Logger.w(TAG, "Could not retrieve VNC host password: ${e.message}")
                         null
                     }
-                    Pair(pw, identity?.username)
-                } else {
-                    Pair(null, null)
+                    if (hostPw != null) {
+                        val identityUsername = if (identityId != null) {
+                            app.database.vncIdentityDao().getById(identityId)?.username
+                        } else null
+                        Pair(hostPw, identityUsername)
+                    } else if (identityId != null) {
+                        val identity = app.database.vncIdentityDao().getById(identityId)
+                        val pw = try {
+                            app.securePasswordManager.retrievePassword("vnc_identity_$identityId")
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Logger.w(TAG, "Could not retrieve VNC identity password: ${e.message}")
+                            null
+                        }
+                        Pair(pw, identity?.username)
+                    } else {
+                        Pair(null, null)
+                    }
                 }
-            }
-            try {
                 val (rfbClient, _) = withContext(Dispatchers.IO) {
                     io.github.tabssh.hypervisor.vnc.VncDirectConnector.connect(host, password, username, this@VncHostsActivity)
                 }
@@ -156,6 +171,7 @@ class VncHostsActivity : AppCompatActivity() {
                     try { rfbClient.stop() } catch (e: Exception) {
                         Logger.d(TAG, "rfbClient.stop() suppressed after max-tabs reject: ${e.message}")
                     }
+                    if (!isAlive) return@launch
                     Toast.makeText(this@VncHostsActivity, "Maximum tabs reached", Toast.LENGTH_SHORT).show()
                     return@launch
                 }
@@ -164,14 +180,22 @@ class VncHostsActivity : AppCompatActivity() {
                 withContext(Dispatchers.IO) {
                     app.database.vncHostDao().updateLastConnected(host.id, System.currentTimeMillis())
                 }
+                if (!isAlive) return@launch
                 startActivity(
                     Intent(this@VncHostsActivity, TabTerminalActivity::class.java).apply {
                         putExtra(TabTerminalActivity.EXTRA_TAB_ID, tab.tabId)
                     }
                 )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Leaving the screen mid-handshake cancels this scope; the
+                // generic handler below would report it as a failed connection.
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to connect to VNC host '${host.name}'", e)
+                if (!isAlive) return@launch
                 Toast.makeText(this@VncHostsActivity, "Connection failed: ${e.message}", Toast.LENGTH_LONG).show()
+            } finally {
+                connecting = false
             }
         }
     }
@@ -212,8 +236,11 @@ class VncHostsActivity : AppCompatActivity() {
                             TombstoneRecorder.record(app, TombstoneRecorder.VNC_HOST, host.id)
                         }
                         Logger.d(TAG, "Deleted VNC host: ${host.name}")
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.e(TAG, "Failed to delete VNC host", e)
+                        if (!isAlive) return@launch
                         Toast.makeText(this@VncHostsActivity, "Delete failed: ${e.message}", Toast.LENGTH_LONG).show()
                     }
                 }

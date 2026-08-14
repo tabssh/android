@@ -27,9 +27,14 @@ import io.github.tabssh.ui.activities.VMwareManagerActivity
 import io.github.tabssh.ui.activities.XCPngManagerActivity
 import io.github.tabssh.ui.adapters.HypervisorAdapter
 import io.github.tabssh.storage.database.entities.HypervisorType
+import io.github.tabssh.ui.utils.DockerText
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/** Reachability probe budget for a single hypervisor endpoint. */
+private const val PROBE_TIMEOUT_MS = 5_000
 
 /**
  * Fragment for Hypervisor Management (Phase 3)
@@ -47,6 +52,7 @@ class HypervisorsFragment : Fragment() {
     
     private lateinit var adapter: HypervisorAdapter
     private val hypervisors = mutableListOf<HypervisorProfile>()
+    private var probeInFlight = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -146,6 +152,8 @@ class HypervisorsFragment : Fragment() {
 
                     progressBar.visibility = View.GONE
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 // Check if fragment is still attached before showing toast
                 if (!isAdded) return@launch
@@ -153,7 +161,9 @@ class HypervisorsFragment : Fragment() {
                 progressBar.visibility = View.GONE
                 Toast.makeText(
                     requireContext(),
-                    "Failed to load hypervisors: ${e.message}",
+                    getString(
+                        R.string.hypervisor_load_failed_fmt, DockerText.display(e.message)
+                    ),
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -165,9 +175,9 @@ class HypervisorsFragment : Fragment() {
 
         if (hypervisor.type == HypervisorType.OCI) {
             MaterialAlertDialogBuilder(requireContext())
-                .setTitle("OCI Hypervisor")
-                .setMessage("OCI has moved to Cloud Accounts. Manage your OCI instances from the Cloud Accounts tab.")
-                .setPositiveButton("OK", null)
+                .setTitle(R.string.hypervisor_oci_moved_title)
+                .setMessage(R.string.hypervisor_oci_moved_message)
+                .setPositiveButton(R.string.ok, null)
                 .show()
             return
         }
@@ -195,7 +205,12 @@ class HypervisorsFragment : Fragment() {
     private fun showHypervisorMenu(hypervisor: HypervisorProfile) {
         if (!isAdded) return
 
-        val options = arrayOf("Open", "Edit", "Delete", "Refresh Status")
+        val options = arrayOf(
+            getString(R.string.hypervisor_menu_open),
+            getString(R.string.edit),
+            getString(R.string.delete),
+            getString(R.string.hypervisor_menu_refresh_status)
+        )
 
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(hypervisor.name)
@@ -218,9 +233,9 @@ class HypervisorsFragment : Fragment() {
         if (!isAdded) return
 
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Delete Hypervisor")
-            .setMessage("Are you sure you want to delete '${hypervisor.name}'?")
-            .setPositiveButton("Delete") { _, _ ->
+            .setTitle(R.string.hypervisor_delete_title)
+            .setMessage(getString(R.string.hypervisor_delete_message, hypervisor.name))
+            .setPositiveButton(R.string.delete) { _, _ ->
                 // viewLifecycleOwner: scope must end at onDestroyView so the
                 // toast/UI updates below can't fire against a dead view tree.
                 viewLifecycleOwner.lifecycleScope.launch {
@@ -248,25 +263,36 @@ class HypervisorsFragment : Fragment() {
                         if (!isAdded) return@launch
                         Toast.makeText(
                             requireContext(),
-                            "Deleted ${hypervisor.name}",
+                            getString(R.string.hypervisor_deleted_fmt, hypervisor.name),
                             Toast.LENGTH_SHORT
                         ).show()
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         if (!isAdded) return@launch
+                        // A Keystore/cipher failure message can echo the value
+                        // it was handed — sanitize and cap before display.
                         Toast.makeText(
                             requireContext(),
-                            "Failed to delete: ${e.message}",
+                            getString(
+                                R.string.hypervisor_delete_failed_fmt,
+                                DockerText.display(e.message)
+                            ),
                             Toast.LENGTH_SHORT
                         ).show()
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
     private fun refreshHypervisorStatus(hypervisor: HypervisorProfile) {
         if (!isAdded) return
+        // The probe holds a socket for up to five seconds; repeat taps would
+        // stack one connect attempt per tap against the same host.
+        if (probeInFlight) return
+        probeInFlight = true
         // Capture ctx on the main thread before the IO switch — requireContext()
         // is unsafe to call from a background dispatcher once the fragment has
         // been detached, and the LibvirtApiClient ctor takes a Context.
@@ -274,42 +300,59 @@ class HypervisorsFragment : Fragment() {
         // viewLifecycleOwner: scope ends at onDestroyView so the toast below
         // cannot fire against a dead view tree.
         viewLifecycleOwner.lifecycleScope.launch {
-            val reachable = withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val reachable = probeReachable(ctx, hypervisor)
+                if (!isAdded) return@launch
+                val msg = if (reachable) {
+                    getString(R.string.hypervisor_reachable_fmt, hypervisor.name)
+                } else {
+                    getString(R.string.hypervisor_unreachable_fmt, hypervisor.name)
+                }
+                Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+            } finally {
+                probeInFlight = false
+            }
+        }
+    }
+
+    /** Single connect attempt against [hypervisor]; false on any reachability failure. */
+    private suspend fun probeReachable(
+        ctx: android.content.Context,
+        hypervisor: HypervisorProfile
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            if (hypervisor.type == HypervisorType.LIBVIRT) {
+                // SSH-based — attempt connect/disconnect using LibvirtApiClient
+                val client = io.github.tabssh.hypervisor.libvirt.LibvirtApiClient(
+                    ctx, hypervisor
+                )
+                client.connect()
+                client.disconnect()
+            } else {
+                // REST/WebSocket hypervisors — TCP reachability probe on the API port.
+                // Wrap in try/finally so the fd is released even if connect() throws
+                // (timeout / unreachable / refused) — otherwise the Socket leaks until
+                // the GC finalizer runs.
+                val socket = java.net.Socket()
                 try {
-                    if (hypervisor.type == io.github.tabssh.storage.database.entities.HypervisorType.LIBVIRT) {
-                        // SSH-based — attempt connect/disconnect using LibvirtApiClient
-                        val client = io.github.tabssh.hypervisor.libvirt.LibvirtApiClient(
-                            ctx, hypervisor
-                        )
-                        client.connect()
-                        client.disconnect()
-                    } else {
-                        // REST/WebSocket hypervisors — TCP reachability probe on the API port.
-                        // Wrap in try/finally so the fd is released even if connect() throws
-                        // (timeout / unreachable / refused) — otherwise the Socket leaks until
-                        // the GC finalizer runs.
-                        val socket = java.net.Socket()
-                        try {
-                            socket.connect(
-                                java.net.InetSocketAddress(hypervisor.host, hypervisor.port),
-                                5_000
-                            )
-                        } finally {
-                            try { socket.close() } catch (_: Exception) {}
-                        }
-                    }
-                    true
-                } catch (e: Exception) {
-                    io.github.tabssh.utils.logging.Logger.d(
-                        "HypervisorsFragment", "Connectivity check failed for ${hypervisor.name}: ${e.message}"
+                    socket.connect(
+                        java.net.InetSocketAddress(hypervisor.host, hypervisor.port),
+                        PROBE_TIMEOUT_MS
                     )
-                    false
+                } finally {
+                    try { socket.close() } catch (_: Exception) {}
                 }
             }
-            if (!isAdded) return@launch
-            val msg = if (reachable) "✓ ${hypervisor.name} is reachable"
-                      else "✗ ${hypervisor.name} not reachable"
-            Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+            true
+        } catch (e: CancellationException) {
+            // Never report a cancelled scope as "not reachable".
+            throw e
+        } catch (e: Exception) {
+            io.github.tabssh.utils.logging.Logger.d(
+                "HypervisorsFragment",
+                "Connectivity check failed for ${hypervisor.name}: ${DockerText.display(e.message)}"
+            )
+            false
         }
     }
 

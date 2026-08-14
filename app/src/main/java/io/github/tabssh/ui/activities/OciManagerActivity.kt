@@ -30,9 +30,9 @@ import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.StoredKey
+import io.github.tabssh.ui.utils.DockerText
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
-import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -64,6 +64,16 @@ class OciManagerActivity : AppCompatActivity() {
     private var currentClient: OciApiClient? = null
     private var currentProfile: HypervisorProfile? = null
     private lateinit var adapter: InstanceAdapter
+
+    // The refresh button and every per-row action button stay tappable while
+    // their HTTP call is in flight; without these a double tap issues the
+    // instance action twice against the same OCID.
+    private var refreshing = false
+    private var actionInFlight = false
+
+    /** False once the activity is tearing down — dialogs must not be shown then. */
+    private val isAlive: Boolean
+        get() = !isFinishing && !isDestroyed
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -128,6 +138,7 @@ class OciManagerActivity : AppCompatActivity() {
                 val account = if (accountId != null) {
                     withContext(Dispatchers.IO) {
                         try { app.database.hypervisorAccountDao().getById(accountId) }
+                        catch (e: kotlinx.coroutines.CancellationException) { throw e }
                         catch (e: Exception) {
                             Logger.w(TAG, "account load failed: ${e.message}"); null
                         }
@@ -196,9 +207,15 @@ class OciManagerActivity : AppCompatActivity() {
 
                 currentClient = client
                 refreshInstances()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Connect failed", e)
-                showError("Connection failed: oci ${profile.name}: ${e.message}")
+                // e.message can carry an OCI-supplied error body — sanitize it
+                // before it reaches the status line.
+                showError(
+                    "Connection failed: oci ${profile.name}: ${DockerText.display(e.message)}"
+                )
             }
         }
     }
@@ -208,6 +225,7 @@ class OciManagerActivity : AppCompatActivity() {
             Toast.makeText(this, "Not connected — please wait", Toast.LENGTH_SHORT).show()
             return
         }
+        if (refreshing) return
         val profile = currentProfile ?: return
         val compartment = profile.ociCompartmentOcid?.takeIf { it.isNotBlank() }
             ?: profile.ociTenancyOcid
@@ -215,7 +233,14 @@ class OciManagerActivity : AppCompatActivity() {
                 showError("Compartment OCID not configured")
                 return
             }
-        lifecycleScope.launch { loadInstances(client, compartment) }
+        refreshing = true
+        lifecycleScope.launch {
+            try {
+                loadInstances(client, compartment)
+            } finally {
+                refreshing = false
+            }
+        }
     }
 
     private suspend fun loadInstances(client: OciApiClient, compartment: String) {
@@ -227,6 +252,8 @@ class OciManagerActivity : AppCompatActivity() {
                 if (inst.lifecycleState.equals("RUNNING", ignoreCase = true)) {
                     val (pub, priv) = try {
                         client.getInstancePublicIp(inst.id, compartment)
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.d(TAG, "VNIC walk failed for ${inst.id}: ${e.message}")
                         null to null
@@ -234,6 +261,7 @@ class OciManagerActivity : AppCompatActivity() {
                     inst.copy(publicIp = pub, privateIp = priv)
                 } else inst
             }
+            if (!isAlive) return
             adapter.replaceAllWithDiff(
                 items = instances,
                 newItems = withIps,
@@ -248,9 +276,11 @@ class OciManagerActivity : AppCompatActivity() {
             // OCI uses a separate leaf cert for iaas.* vs identity.*; without this call
             // the user would see a TOFU prompt every time the instance list loads.
             persistCapturedPins(client)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "loadInstances failed", e)
-            showError("Could not load instances: ${e.message}")
+            showError("Could not load instances: ${DockerText.display(e.message)}")
         }
     }
 
@@ -271,15 +301,46 @@ class OciManagerActivity : AppCompatActivity() {
 
     // ── Instance actions ──────────────────────────────────────────────────────
 
+    /**
+     * Confirm before any action that interrupts a running instance. START is
+     * additive and runs straight through; STOP/SOFTSTOP/RESET/SOFTRESET take
+     * the workload down and are gated behind an explicit prompt.
+     */
+    private fun confirmInstanceAction(
+        inst: OciInstance,
+        client: OciApiClient,
+        action: OciInstanceAction
+    ) {
+        if (action == OciInstanceAction.START) {
+            instanceAction(inst, client, action)
+            return
+        }
+        val name = DockerText.display(inst.displayName)
+        MaterialAlertDialogBuilder(this)
+            .setTitle("${action.wireValue}?")
+            .setMessage("Send ${action.wireValue} to $name? Running workloads are interrupted.")
+            .setPositiveButton(action.wireValue) { _, _ ->
+                instanceAction(inst, client, action)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun instanceAction(inst: OciInstance, client: OciApiClient, action: OciInstanceAction) {
+        if (actionInFlight) return
+        actionInFlight = true
+        // displayName is tenancy-supplied and is echoed into the status line
+        // and a toast — sanitize before it reaches either.
+        val name = DockerText.display(inst.displayName)
         lifecycleScope.launch {
-            showProgress("${action.wireValue} → ${inst.displayName}…")
+            showProgress("${action.wireValue} → $name…")
             try {
                 val ok = client.instanceAction(inst.id, action)
+                if (!isAlive) return@launch
                 if (ok) {
                     Toast.makeText(
                         this@OciManagerActivity,
-                        "${action.wireValue} sent to ${inst.displayName}",
+                        "${action.wireValue} sent to $name",
                         Toast.LENGTH_SHORT
                     ).show()
                     delay(2000)
@@ -289,11 +350,15 @@ class OciManagerActivity : AppCompatActivity() {
                     loadInstances(client, compartment)
                 } else {
                     hideProgress()
-                    showError("${action.wireValue} failed for ${inst.displayName}")
+                    showError("${action.wireValue} failed for $name")
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Action ${action.wireValue} failed", e)
-                showError("Action failed: ${e.message}")
+                showError("Action failed: ${DockerText.display(e.message)}")
+            } finally {
+                actionInFlight = false
             }
         }
     }
@@ -305,9 +370,16 @@ class OciManagerActivity : AppCompatActivity() {
      * taps on the same instance.
      */
     private fun handleSshConnect(inst: OciInstance) {
-        val publicIp = inst.publicIp
+        val publicIp = inst.publicIp?.trim()
         if (publicIp.isNullOrBlank()) {
             Toast.makeText(this, "Instance has no public IP address", Toast.LENGTH_SHORT).show()
+            return
+        }
+        // The address comes back from the VNIC API and becomes the host of a
+        // saved connection profile — reject anything that is not a bare
+        // host literal before it reaches the SSH layer.
+        if (!isValidHostLiteral(publicIp)) {
+            Toast.makeText(this, "Instance reported an unusable address", Toast.LENGTH_SHORT).show()
             return
         }
         lifecycleScope.launch {
@@ -317,7 +389,20 @@ class OciManagerActivity : AppCompatActivity() {
             val storedKeys = withContext(Dispatchers.IO) {
                 app.database.keyDao().getAllKeysList()
             }
+            if (!isAlive) return@launch
             showSshConfigDialog(inst, publicIp, existing, storedKeys)
+        }
+    }
+
+    /**
+     * True when [host] is a plausible IPv4/IPv6/hostname literal: no spaces,
+     * no control characters, no scheme or path separators, and within the
+     * DNS name length limit.
+     */
+    private fun isValidHostLiteral(host: String): Boolean {
+        if (host.isEmpty() || host.length > 255) return false
+        return host.all { ch ->
+            ch.isLetterOrDigit() || ch == '.' || ch == ':' || ch == '-' || ch == '_'
         }
     }
 
@@ -328,6 +413,9 @@ class OciManagerActivity : AppCompatActivity() {
         storedKeys: List<StoredKey>
     ) {
         val view = layoutInflater.inflate(R.layout.dialog_oci_ssh_config, null)
+        // Tenancy-supplied name — rendered in the dialog title and stored as
+        // the profile name, so sanitize it once here.
+        val instanceName = DockerText.display(inst.displayName)
 
         val instanceLabel = view.findViewById<TextView>(R.id.oci_ssh_instance_label)
         val usernameField = view.findViewById<TextInputEditText>(R.id.oci_ssh_username)
@@ -385,7 +473,7 @@ class OciManagerActivity : AppCompatActivity() {
         }
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("SSH: ${inst.displayName}")
+            .setTitle("SSH: $instanceName")
             .setView(view)
             .setPositiveButton("Connect") { _, _ ->
                 val username = usernameField.text.toString().trim().ifBlank { "opc" }
@@ -396,12 +484,12 @@ class OciManagerActivity : AppCompatActivity() {
                 } else null
 
                 val profile = (existing ?: ConnectionProfile(
-                    name = "OCI: ${inst.displayName}",
+                    name = "OCI: $instanceName",
                     host = publicIp,
                     username = username,
                     ociInstanceId = inst.id
                 )).copy(
-                    name = "OCI: ${inst.displayName}",
+                    name = "OCI: $instanceName",
                     host = publicIp,
                     port = port,
                     username = username,
@@ -422,7 +510,8 @@ class OciManagerActivity : AppCompatActivity() {
                             profile.copy(groupId = cloudGroupId)
                         )
                     }
-                    Logger.i(TAG, "Launching SSH to $username@$publicIp (auth=${authType.name}, key=$keyId) for ${inst.displayName}")
+                    Logger.i(TAG, "Launching SSH to $username@$publicIp (auth=${authType.name}, key=$keyId) for $instanceName")
+                    if (!isAlive) return@launch
                     val intent = TabTerminalActivity.createIntent(this@OciManagerActivity, profile, autoConnect = true)
                     startActivity(intent)
                 }
@@ -490,15 +579,17 @@ class OciManagerActivity : AppCompatActivity() {
             val inst = items[position]
             val client = currentClient ?: return
 
-            holder.name.text = inst.displayName
-            holder.state.text = stateLabel(inst.lifecycleState)
+            // Display name, shape, AD, IPs and lifecycle state all come straight
+            // from the tenancy API — sanitize before they reach a row widget.
+            holder.name.text = DockerText.display(inst.displayName)
+            holder.state.text = DockerText.display(stateLabel(inst.lifecycleState))
             holder.state.setTextColor(stateColor(inst.lifecycleState))
             holder.statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(stateColor(inst.lifecycleState))
-            holder.info.text = "${inst.shape}  ·  ${inst.availabilityDomain}"
+            holder.info.text = DockerText.display("${inst.shape}  ·  ${inst.availabilityDomain}")
 
             val ipParts = mutableListOf<String>()
-            inst.publicIp?.let { ipParts += "Public: $it" }
-            inst.privateIp?.let { ipParts += "Private: $it" }
+            inst.publicIp?.let { ipParts += "Public: ${DockerText.display(it)}" }
+            inst.privateIp?.let { ipParts += "Private: ${DockerText.display(it)}" }
             if (ipParts.isNotEmpty()) {
                 holder.ip.text = ipParts.joinToString("  ·  ")
                 holder.ip.visibility = View.VISIBLE
@@ -538,9 +629,9 @@ class OciManagerActivity : AppCompatActivity() {
             holder.rowSecondary.visibility = if (holder.btnReboot.visibility == View.VISIBLE || holder.btnReset.visibility == View.VISIBLE) View.VISIBLE else View.GONE
 
             holder.btnSsh.setOnClickListener { handleSshConnect(inst) }
-            holder.btnStart.setOnClickListener { instanceAction(inst, client, OciInstanceAction.START) }
-            holder.btnStop.setOnClickListener { instanceAction(inst, client, OciInstanceAction.SOFTSTOP) }
-            holder.btnReboot.setOnClickListener { instanceAction(inst, client, OciInstanceAction.SOFTRESET) }
+            holder.btnStart.setOnClickListener { confirmInstanceAction(inst, client, OciInstanceAction.START) }
+            holder.btnStop.setOnClickListener { confirmInstanceAction(inst, client, OciInstanceAction.SOFTSTOP) }
+            holder.btnReboot.setOnClickListener { confirmInstanceAction(inst, client, OciInstanceAction.SOFTRESET) }
         }
 
         private fun stateColor(state: String): Int = when (state.uppercase()) {

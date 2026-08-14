@@ -37,10 +37,52 @@ class LibvirtApiClient(
     private val context: Context,
     private val profile: HypervisorProfile
 ) {
-    private companion object {
+    internal companion object {
         private const val TAG = "LibvirtApiClient"
         private const val CONNECT_TIMEOUT_MS = 15_000
         private const val EXEC_TIMEOUT_MS = 10_000
+
+        /**
+         * Ceiling on the stdout we buffer from one `virsh` invocation. The
+         * hypervisor is a trust boundary: a compromised or broken host can
+         * answer any command with an endless stream, and the exec loop would
+         * otherwise grow the buffer until the process dies. Real `virsh`
+         * output is kilobytes.
+         */
+        private const val MAX_COMMAND_OUTPUT_BYTES = 1 * 1024 * 1024
+
+        /** Longest virsh diagnostic reproduced in a user-facing message. */
+        internal const val MAX_ERROR_TEXT_LEN = 200
+
+        /**
+         * POSIX single-quote-escape [value] for safe interpolation into a shell
+         * command string. Wraps the value in single quotes and renders any embedded
+         * single quote as the `'\''` sequence, so no shell metacharacter in [value]
+         * can break out of the argument. This is the injection barrier for domain
+         * names, which may originate from imported profiles or the remote host —
+         * e.g. a VM named `x; rm -rf ~` is passed as one literal argument.
+         */
+        internal fun shQuote(value: String): String =
+            "'" + value.replace("'", "'\\''") + "'"
+
+        /**
+         * Reduce virsh output to something safe to put in an exception message
+         * that reaches a dialog and the log. The text comes from the remote
+         * host, so control characters (including the newlines that would let it
+         * forge extra log records) become spaces and the result is bounded.
+         */
+        internal fun sanitizeVirshText(text: String): String {
+            val cleaned = buildString(text.length) {
+                for (ch in text) {
+                    append(if (ch.isISOControl()) ' ' else ch)
+                }
+            }.replace(Regex("\\s+"), " ").trim()
+            return if (cleaned.length <= MAX_ERROR_TEXT_LEN) {
+                cleaned
+            } else {
+                cleaned.take(MAX_ERROR_TEXT_LEN) + "…"
+            }
+        }
 
         /**
          * Longest listen address accepted from a `virsh domdisplay` URI. The
@@ -51,6 +93,10 @@ class LibvirtApiClient(
         private const val MAX_SPICE_HOST_LEN = 255
     }
 
+    // Assigned by connect() on an IO thread, then read (and cleared) from other
+    // IO dispatcher threads and from disconnect()/stopSpiceForward() on whatever
+    // thread the caller uses — the write must be visible to all of them.
+    @Volatile
     private var session: Session? = null
 
     // ── Connection ────────────────────────────────────────────────────────────
@@ -135,17 +181,6 @@ class LibvirtApiClient(
     }
 
     // ── Shell-safety helpers ───────────────────────────────────────────────────
-
-    /**
-     * POSIX single-quote-escape [value] for safe interpolation into a shell
-     * command string. Wraps the value in single quotes and renders any embedded
-     * single quote as the `'\''` sequence, so no shell metacharacter in [value]
-     * can break out of the argument. This is the injection barrier for domain
-     * names, which may originate from imported profiles or the remote host —
-     * e.g. a VM named `x; rm -rf ~` is passed as one literal argument.
-     */
-    private fun shQuote(value: String): String =
-        "'" + value.replace("'", "'\\''") + "'"
 
     /**
      * True when [output] carries a virsh diagnostic. virsh always emits errors
@@ -242,14 +277,14 @@ class LibvirtApiClient(
     suspend fun startDomain(domain: String) = withContext(Dispatchers.IO) {
         requireValidDomain(domain)
         val output = runCommand("virsh start ${shQuote(domain)} 2>&1").trim()
-        if (!output.contains("started") && !output.contains("Domain '$domain' started")) {
+        if (!output.contains("started")) {
             // virsh exit code is not surfaced via JSch exec channel exit status
             // reliably on all distros; check stdout instead.
             if (isVirshError(output)) {
-                throw LibvirtException("virsh start failed: $output")
+                throw LibvirtException("virsh start failed: ${sanitizeVirshText(output)}")
             }
         }
-        Logger.i(TAG, "startDomain($domain): $output")
+        Logger.i(TAG, "startDomain($domain): ${sanitizeVirshText(output)}")
     }
 
     /**
@@ -261,9 +296,9 @@ class LibvirtApiClient(
         requireValidDomain(domain)
         val output = runCommand("virsh destroy ${shQuote(domain)} 2>&1").trim()
         if (isVirshError(output)) {
-            throw LibvirtException("virsh destroy failed: $output")
+            throw LibvirtException("virsh destroy failed: ${sanitizeVirshText(output)}")
         }
-        Logger.i(TAG, "destroyDomain($domain): $output")
+        Logger.i(TAG, "destroyDomain($domain): ${sanitizeVirshText(output)}")
     }
 
     /**
@@ -275,9 +310,9 @@ class LibvirtApiClient(
         requireValidDomain(domain)
         val output = runCommand("virsh shutdown ${shQuote(domain)} 2>&1").trim()
         if (isVirshError(output)) {
-            throw LibvirtException("virsh shutdown failed: $output")
+            throw LibvirtException("virsh shutdown failed: ${sanitizeVirshText(output)}")
         }
-        Logger.i(TAG, "shutdownDomain($domain): $output")
+        Logger.i(TAG, "shutdownDomain($domain): ${sanitizeVirshText(output)}")
     }
 
     /**
@@ -287,9 +322,9 @@ class LibvirtApiClient(
         requireValidDomain(domain)
         val output = runCommand("virsh reboot ${shQuote(domain)} 2>&1").trim()
         if (isVirshError(output)) {
-            throw LibvirtException("virsh reboot failed: $output")
+            throw LibvirtException("virsh reboot failed: ${sanitizeVirshText(output)}")
         }
-        Logger.i(TAG, "rebootDomain($domain): $output")
+        Logger.i(TAG, "rebootDomain($domain): ${sanitizeVirshText(output)}")
     }
 
     /**
@@ -300,9 +335,9 @@ class LibvirtApiClient(
         requireValidDomain(domain)
         val output = runCommand("virsh reset ${shQuote(domain)} 2>&1").trim()
         if (isVirshError(output)) {
-            throw LibvirtException("virsh reset failed: $output")
+            throw LibvirtException("virsh reset failed: ${sanitizeVirshText(output)}")
         }
-        Logger.i(TAG, "resetDomain($domain): $output")
+        Logger.i(TAG, "resetDomain($domain): ${sanitizeVirshText(output)}")
     }
 
     /**
@@ -337,7 +372,7 @@ class LibvirtApiClient(
         requireValidDomain(domain)
         val output = runCommand("virsh vncdisplay ${shQuote(domain)} 2>/dev/null").trim()
         if (isVirshError(output)) {
-            throw LibvirtException("virsh vncdisplay failed for domain '$domain': $output")
+            throw LibvirtException("virsh vncdisplay failed for domain '$domain': ${sanitizeVirshText(output)}")
         }
         // Expected formats: ":1", "localhost:1", "127.0.0.1:1". Anchored so a
         // stray banner or warning line cannot be mined for a bogus number: the
@@ -348,7 +383,7 @@ class LibvirtApiClient(
             .firstNotNullOfOrNull { Regex("""^[A-Za-z0-9._\-\[\]:]*:(\d+)$""").find(it) }
             ?: throw LibvirtException("VNC not configured for domain '$domain' — enable display in VM XML")
         match.groupValues[1].toIntOrNull()
-            ?: throw LibvirtException("Could not parse VNC display number from: $output")
+            ?: throw LibvirtException("Could not parse VNC display number from: ${sanitizeVirshText(output)}")
     }
 
     /**
@@ -609,7 +644,7 @@ class LibvirtApiClient(
         requireValidDomain(domain)
         val output = runCommand("virsh snapshot-list ${shQuote(domain)} 2>&1")
         if (isVirshError(output)) {
-            throw LibvirtException("virsh snapshot-list failed: ${output.trim()}")
+            throw LibvirtException("virsh snapshot-list failed: ${sanitizeVirshText(output)}")
         }
         val result = mutableListOf<LibvirtSnapshot>()
         // Skip header lines (dashes separator and column header)
@@ -645,9 +680,9 @@ class LibvirtApiClient(
         requireValidSnapshotName(name)
         val output = runCommand("virsh snapshot-create-as ${shQuote(domain)} --name ${shQuote(name)} 2>&1").trim()
         if (isVirshError(output)) {
-            throw LibvirtException("virsh snapshot-create-as failed: $output")
+            throw LibvirtException("virsh snapshot-create-as failed: ${sanitizeVirshText(output)}")
         }
-        Logger.i(TAG, "createSnapshot($domain, $name): $output")
+        Logger.i(TAG, "createSnapshot($domain, $name): ${sanitizeVirshText(output)}")
     }
 
     /**
@@ -660,9 +695,9 @@ class LibvirtApiClient(
         requireValidSnapshotName(name)
         val output = runCommand("virsh snapshot-revert ${shQuote(domain)} --snapshotname ${shQuote(name)} 2>&1").trim()
         if (isVirshError(output)) {
-            throw LibvirtException("virsh snapshot-revert failed: $output")
+            throw LibvirtException("virsh snapshot-revert failed: ${sanitizeVirshText(output)}")
         }
-        Logger.i(TAG, "revertSnapshot($domain, $name): $output")
+        Logger.i(TAG, "revertSnapshot($domain, $name): ${sanitizeVirshText(output)}")
     }
 
     /**
@@ -675,9 +710,9 @@ class LibvirtApiClient(
         requireValidSnapshotName(name)
         val output = runCommand("virsh snapshot-delete ${shQuote(domain)} --snapshotname ${shQuote(name)} 2>&1").trim()
         if (isVirshError(output)) {
-            throw LibvirtException("virsh snapshot-delete failed: $output")
+            throw LibvirtException("virsh snapshot-delete failed: ${sanitizeVirshText(output)}")
         }
-        Logger.i(TAG, "deleteSnapshot($domain, $name): $output")
+        Logger.i(TAG, "deleteSnapshot($domain, $name): ${sanitizeVirshText(output)}")
     }
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -710,27 +745,46 @@ class LibvirtApiClient(
             val output = ch.inputStream
             ch.connect(CONNECT_TIMEOUT_MS)
 
-            val sb = StringBuilder()
+            // Bytes are collected raw and decoded once at the end: a chunk
+            // boundary can split a multi-byte UTF-8 sequence, and per-chunk
+            // decoding would turn that into replacement characters.
+            val collected = java.io.ByteArrayOutputStream()
             val buf = ByteArray(4096)
             val deadline = System.currentTimeMillis() + EXEC_TIMEOUT_MS
+            var truncated = false
             while (!ch.isClosed && System.currentTimeMillis() < deadline) {
                 val available = output.available()
                 if (available > 0) {
                     val n = output.read(buf, 0, minOf(available, buf.size))
-                    if (n > 0) sb.append(String(buf, 0, n, Charsets.UTF_8))
+                    if (n > 0) {
+                        if (collected.size() + n > MAX_COMMAND_OUTPUT_BYTES) {
+                            truncated = true
+                            break
+                        }
+                        collected.write(buf, 0, n)
+                    }
                 } else {
                     // delay() honours coroutine cancellation; Thread.sleep() does not.
                     delay(50)
                 }
             }
-            // Drain any remaining bytes
-            var n = output.read(buf)
-            while (n > 0) {
-                sb.append(String(buf, 0, n, Charsets.UTF_8))
-                n = output.read(buf)
+            // Drain what the channel has already buffered. Only available()
+            // bytes are consumed: a blocking read here would let a host that
+            // never closes the channel hold the IO thread past EXEC_TIMEOUT_MS.
+            while (!truncated && output.available() > 0) {
+                val n = output.read(buf, 0, minOf(output.available(), buf.size))
+                if (n <= 0) break
+                if (collected.size() + n > MAX_COMMAND_OUTPUT_BYTES) {
+                    truncated = true
+                    break
+                }
+                collected.write(buf, 0, n)
+            }
+            if (truncated) {
+                Logger.w(TAG, "runCommand output exceeded $MAX_COMMAND_OUTPUT_BYTES bytes — truncated")
             }
             Logger.d(TAG, "runCommand('$command') exit=${ch.exitStatus}")
-            sb.toString()
+            collected.toString(Charsets.UTF_8.name())
         } finally {
             ch?.disconnect()
         }

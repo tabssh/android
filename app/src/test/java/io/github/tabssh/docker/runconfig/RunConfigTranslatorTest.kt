@@ -58,6 +58,7 @@ class RunConfigTranslatorTest {
                 "--device", "/dev/fuse",
                 "--tmpfs", "/run:rw,size=64m",
                 "--read-only", "--pids-limit", "100",
+                "--",
                 "nginx:1.27",
                 "nginx", "-g", "daemon off;"
             ),
@@ -66,9 +67,9 @@ class RunConfigTranslatorTest {
     }
 
     @Test
-    fun `minimal config argv is run -d image`() {
+    fun `minimal config argv is run -d -- image`() {
         assertEquals(
-            listOf("run", "-d", "alpine"),
+            listOf("run", "-d", "--", "alpine"),
             RunConfigTranslator.toRunArgv(RunConfig(image = "alpine"))
         )
     }
@@ -90,7 +91,7 @@ class RunConfigTranslatorTest {
                 "-e", "MOTD=it's \"quoted\" & spaced",
                 "-e", "SCRIPT=a; rm -rf /; echo b",
                 "-e", "EQ=x=y=z",
-                "alpine"
+                "--", "alpine"
             ),
             argv
         )
@@ -175,10 +176,11 @@ class RunConfigTranslatorTest {
         val argv = RunConfigTranslator.toRunArgv(config)
         assertEquals("run", argv[0])
         assertEquals("-d", argv[1])
-        // Image sits right before the command tokens.
+        // The end-of-options marker sits right before the image reference,
+        // which in turn sits right before the command tokens.
         assertEquals(
-            listOf("nginx:1.27", "nginx", "-g", "daemon off;"),
-            argv.takeLast(4)
+            listOf("--", "nginx:1.27", "nginx", "-g", "daemon off;"),
+            argv.takeLast(5)
         )
         assertTrue(argv.containsAll(listOf("--name", "web", "--restart", "on-failure:3")))
     }

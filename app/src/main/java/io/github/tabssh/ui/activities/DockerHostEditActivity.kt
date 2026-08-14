@@ -28,8 +28,10 @@ import io.github.tabssh.storage.database.entities.DockerHost
 import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.ui.dialogs.DockerErrorPresenter
+import io.github.tabssh.ui.utils.DockerText
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.showError
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -47,6 +49,25 @@ class DockerHostEditActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_HOST_ID = "docker_host_id"
         private const val TAG = "DockerHostEditActivity"
+
+        /**
+         * A host address must be a bare hostname/IP — no whitespace, no control
+         * characters, and no scheme/path separators that would silently change
+         * which endpoint the SSH layer dials.
+         */
+        internal fun isValidHostAddress(value: String): Boolean =
+            value.isNotEmpty() && value.length <= 255 &&
+                value.none { it.isWhitespace() || it.code < 0x20 || it.code == 0x7F } &&
+                !value.contains('/') && !value.contains('\\') && !value.contains('@')
+
+        /**
+         * Remote paths are interpolated into shell commands (shell-quoted, so
+         * this is defense in depth) and into stored config: require absolute,
+         * single-line, control-character-free values.
+         */
+        internal fun isValidRemotePath(value: String): Boolean =
+            value.startsWith("/") && value.length <= 4096 &&
+                value.none { it.code < 0x20 || it.code == 0x7F }
     }
 
     private lateinit var app: TabSSHApplication
@@ -83,6 +104,13 @@ class DockerHostEditActivity : AppCompatActivity() {
     private var keys: List<StoredKey> = emptyList()
     private var identities: List<Identity> = emptyList()
     private var existingHost: DockerHost? = null
+
+    /** Guards the save path — a double tap would otherwise insert the host twice. */
+    private var saving = false
+
+    /** False once the activity can no longer host a dialog or touch its views. */
+    private fun isAlive(): Boolean = !isFinishing && !isDestroyed
+
     private val hostId: Long? by lazy {
         intent.getLongExtra(EXTRA_HOST_ID, -1L).takeIf { it != -1L }
     }
@@ -263,12 +291,16 @@ class DockerHostEditActivity : AppCompatActivity() {
 
         val endpoint: DockerHost = if (isCustomMode()) {
             val hostAddr = editCustomHost.text?.toString()?.trim().orEmpty()
-            if (hostAddr.isEmpty()) {
+            if (!isValidHostAddress(hostAddr)) {
                 showError(getString(R.string.docker_host_error_custom_host))
                 return null
             }
             val username = editCustomUsername.text?.toString()?.trim().orEmpty()
-            if (username.isEmpty()) {
+            // A username with whitespace or controls would break the SSH auth
+            // request; reject it here rather than failing opaquely on connect.
+            if (username.isEmpty() ||
+                username.any { it.isWhitespace() || it.code < 0x20 || it.code == 0x7F }
+            ) {
                 showError(getString(R.string.docker_host_error_custom_username))
                 return null
             }
@@ -315,14 +347,35 @@ class DockerHostEditActivity : AppCompatActivity() {
             )
         }
 
+        val socketPath = editSocketPath.text?.toString()?.trim()
+            ?.takeIf { it.isNotEmpty() } ?: entityDefaults.socketPath
+        val composeBase = editComposeBase.text?.toString()?.trim()
+            ?.takeIf { it.isNotEmpty() } ?: entityDefaults.composeBasePath
+        val runBase = editRunBase.text?.toString()?.trim()
+            ?.takeIf { it.isNotEmpty() } ?: entityDefaults.runConfigBasePath
+        // These three are interpolated into remote shell commands and into
+        // stored config — reject anything that is not a plain absolute path.
+        if (!isValidRemotePath(socketPath) || !isValidRemotePath(composeBase) ||
+            !isValidRemotePath(runBase)
+        ) {
+            showError(getString(R.string.docker_host_error_path))
+            return null
+        }
+        val cliPath = editCliPath.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+        // The CLI path may be a bare command name ("docker"), so only reject
+        // whitespace and control characters rather than requiring an absolute path.
+        if (cliPath != null &&
+            cliPath.any { it.isWhitespace() || it.code < 0x20 || it.code == 0x7F }
+        ) {
+            showError(getString(R.string.docker_host_error_path))
+            return null
+        }
+
         return endpoint.copy(
-            socketPath = editSocketPath.text?.toString()?.trim()
-                ?.takeIf { it.isNotEmpty() } ?: entityDefaults.socketPath,
-            composeBasePath = editComposeBase.text?.toString()?.trim()
-                ?.takeIf { it.isNotEmpty() } ?: entityDefaults.composeBasePath,
-            runConfigBasePath = editRunBase.text?.toString()?.trim()
-                ?.takeIf { it.isNotEmpty() } ?: entityDefaults.runConfigBasePath,
-            dockerCliPath = editCliPath.text?.toString()?.trim()?.takeIf { it.isNotEmpty() },
+            socketPath = socketPath,
+            composeBasePath = composeBase,
+            runConfigBasePath = runBase,
+            dockerCliPath = cliPath,
             updateCheckEnabled = switchUpdateCheck.isChecked,
             updateCheckIntervalHours = editUpdateInterval.text?.toString()?.trim()
                 ?.toIntOrNull()?.takeIf { it > 0 },
@@ -331,8 +384,13 @@ class DockerHostEditActivity : AppCompatActivity() {
     }
 
     private fun saveHost() {
+        // Without this the second tap inserts a duplicate row: the DAO insert
+        // lives behind a suspension point, so isEnabled alone is not enough.
+        if (saving) return
         val host = hostFromForm() ?: return
         val password = editCustomPassword.text?.toString().orEmpty()
+        saving = true
+        buttonSave.isEnabled = false
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) {
@@ -356,15 +414,26 @@ class DockerHostEditActivity : AppCompatActivity() {
                     // acquire uses the edited endpoint.
                     DockerSessionManager.release(app, savedId)
                 }
+                if (!isAlive()) return@launch
                 Toast.makeText(
                     this@DockerHostEditActivity,
                     getString(R.string.docker_host_saved),
                     Toast.LENGTH_SHORT
                 ).show()
                 finish()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to save docker host", e)
-                showError(e.message ?: getString(R.string.docker_error_title))
+                if (!isAlive()) return@launch
+                showError(
+                    DockerText.display(e.message).ifEmpty {
+                        getString(R.string.docker_error_title)
+                    }
+                )
+            } finally {
+                saving = false
+                if (isAlive()) buttonSave.isEnabled = true
             }
         }
     }
@@ -383,48 +452,23 @@ class DockerHostEditActivity : AppCompatActivity() {
         Toast.makeText(this, R.string.docker_testing_transport, Toast.LENGTH_SHORT).show()
 
         lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                val profile = if (host.usesCustomEndpoint()) {
-                    // The probe needs the typed password in the Keystore (the
-                    // SSH layer reads it by profile id). For a not-yet-saved
-                    // host (id 0) the temporary alias is cleared right after.
-                    if (host.customAuthType == "password" && password.isNotEmpty()) {
-                        DockerHostPasswordStore.store(
-                            this@DockerHostEditActivity, host.id, password
-                        )
+            val result = try {
+                withContext(Dispatchers.IO) {
+                    probeTransport(host, password)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // connectForMonitoring / Keystore access throw on a dead network
+                // or a locked keystore — report instead of crashing the editor.
+                Logger.e(TAG, "Transport probe failed", e)
+                DockerResult.Error(
+                    DockerText.display(e.message).ifEmpty {
+                        getString(R.string.docker_error_title)
                     }
-                    DockerSessionManager.resolveCustomProfile(app, host)
-                } else {
-                    connections.getOrNull(spinnerConnection.selectedItemPosition)
-                }
-                if (profile == null) {
-                    return@withContext DockerResult.Error(
-                        getString(R.string.docker_host_error_connection)
-                    )
-                }
-                // connectForMonitoring: a connection test is plumbing, not a user
-                // session — it must not show up as an active SSH session.
-                val ssh = app.sshSessionManager.getConnection(profile.id)
-                    ?.takeIf { it.isConnected() }
-                    ?: app.sshSessionManager.connectForMonitoring(profile)
-                val detected = if (ssh == null) {
-                    DockerResult.TransportUnavailable(
-                        getString(R.string.docker_msg_ssh_unavailable),
-                        profile.name
-                    )
-                } else {
-                    val runner = SshExecRunner { ssh.jschSession() }
-                    val detector = TransportCapabilityDetector(app.database.dockerHostDao())
-                    val probe = detector.detect(host, runner, force = true)
-                    // The probe transport is single-use — close its relay.
-                    probe.valueOrNull()?.transport?.close()
-                    probe
-                }
-                if (host.usesCustomEndpoint() && existingHost == null) {
-                    DockerHostPasswordStore.clear(this@DockerHostEditActivity, host.id)
-                }
-                detected
+                )
             }
+            if (!isAlive()) return@launch
             buttonTestTransport.isEnabled = true
             progressTest.visibility = View.GONE
             when (result) {
@@ -434,6 +478,60 @@ class DockerHostEditActivity : AppCompatActivity() {
                     .setPositiveButton(R.string.ok, null)
                     .show()
                 else -> DockerErrorPresenter.present(this@DockerHostEditActivity, result)
+            }
+        }
+    }
+
+    /**
+     * The blocking half of [testTransport]: resolve a profile, connect, run the
+     * three-tier detection, and always drop a temporary Keystore alias stored
+     * for a not-yet-saved host — even when the probe throws.
+     */
+    private suspend fun probeTransport(
+        host: DockerHost,
+        password: String
+    ): DockerResult<TransportCapabilityDetector.DetectedTransport> {
+        var storedTemporaryPassword = false
+        try {
+            val profile = if (host.usesCustomEndpoint()) {
+                // The probe needs the typed password in the Keystore (the
+                // SSH layer reads it by profile id). For a not-yet-saved
+                // host (id 0) the temporary alias is cleared right after.
+                if (host.customAuthType == "password" && password.isNotEmpty()) {
+                    DockerHostPasswordStore.store(
+                        this@DockerHostEditActivity, host.id, password
+                    )
+                    storedTemporaryPassword = existingHost == null
+                }
+                DockerSessionManager.resolveCustomProfile(app, host)
+            } else {
+                connections.getOrNull(spinnerConnection.selectedItemPosition)
+            }
+            if (profile == null) {
+                return DockerResult.Error(getString(R.string.docker_host_error_connection))
+            }
+            // connectForMonitoring: a connection test is plumbing, not a user
+            // session — it must not show up as an active SSH session.
+            val ssh = app.sshSessionManager.getConnection(profile.id)
+                ?.takeIf { it.isConnected() }
+                ?: app.sshSessionManager.connectForMonitoring(profile)
+            if (ssh == null) {
+                return DockerResult.TransportUnavailable(
+                    getString(R.string.docker_msg_ssh_unavailable),
+                    profile.name
+                )
+            }
+            val runner = SshExecRunner { ssh.jschSession() }
+            val detector = TransportCapabilityDetector(app.database.dockerHostDao())
+            val probe = detector.detect(host, runner, force = true)
+            // The probe transport is single-use — close its relay.
+            probe.valueOrNull()?.transport?.close()
+            return probe
+        } finally {
+            // A throw between store() and here would otherwise leave the typed
+            // password in the Keystore under an unsaved host's id.
+            if (storedTemporaryPassword) {
+                DockerHostPasswordStore.clear(this@DockerHostEditActivity, host.id)
             }
         }
     }

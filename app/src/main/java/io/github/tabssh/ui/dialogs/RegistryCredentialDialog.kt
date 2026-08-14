@@ -16,7 +16,10 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.storage.RegistryCredentialStore
 import io.github.tabssh.storage.database.entities.RegistryCredential
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Registry credential manager (PLAN.AI.md step 30): list, add, edit, and
@@ -38,10 +41,33 @@ object RegistryCredentialDialog {
         R.string.docker_registry_auth_anonymous
     )
 
+    /**
+     * True when [host] is a bare registry host, optionally with a `:port`
+     * suffix: ASCII label characters only, no scheme, no path, no credentials,
+     * no whitespace, and a port in range when present.
+     */
+    internal fun isPlausibleRegistryHost(host: String): Boolean {
+        if (host.isEmpty() || host.length > 255) return false
+        val colonCount = host.count { it == ':' }
+        if (colonCount > 1) return false
+        val name = host.substringBefore(':')
+        if (colonCount == 1) {
+            val port = host.substringAfter(':').toIntOrNull() ?: return false
+            if (port !in 1..65535) return false
+        }
+        if (name.isEmpty() || name.startsWith('.') || name.endsWith('.')) return false
+        return name.all { ch ->
+            ch in 'a'..'z' || ch in 'A'..'Z' || ch in '0'..'9' || ch == '.' || ch == '-'
+        }
+    }
+
     /** Show the credential list for [app]'s database. */
     fun show(activity: AppCompatActivity, app: TabSSHApplication) {
         activity.lifecycleScope.launch {
             val credentials = app.database.registryCredentialDao().getAllList()
+            // The DAO read suspends — the activity can be gone by the time it
+            // returns, and inflating/showing against a dead window throws.
+            if (activity.isFinishing || activity.isDestroyed) return@launch
             val view = LayoutInflater.from(activity)
                 .inflate(R.layout.dialog_registry_credential_list, null)
             val list = view.findViewById<ListView>(R.id.list_credentials)
@@ -177,6 +203,14 @@ object RegistryCredentialDialog {
                     tilHost.error = activity.getString(R.string.docker_registry_error_host)
                     return@setOnClickListener
                 }
+                // The host is later concatenated into an https:// URL for the
+                // registry manifest probe — reject anything that is not a bare
+                // host[:port] before it can smuggle in a scheme, path or query.
+                if (!isPlausibleRegistryHost(host)) {
+                    tilHost.error =
+                        activity.getString(R.string.docker_registry_error_host_format)
+                    return@setOnClickListener
+                }
                 tilHost.error = null
                 dialog.dismiss()
                 save(
@@ -197,27 +231,49 @@ object RegistryCredentialDialog {
         secret: String,
         authType: String
     ) {
+        // Captured before any suspension — the Keystore write must not hold a
+        // reference to an activity that may already be destroyed.
+        val appContext = activity.applicationContext
         activity.lifecycleScope.launch {
-            val dao = app.database.registryCredentialDao()
-            val id = if (existing == null) {
-                dao.insert(
-                    RegistryCredential(
-                        registryHost = host, username = username, authType = authType
+            try {
+                val dao = app.database.registryCredentialDao()
+                val id = if (existing == null) {
+                    dao.insert(
+                        RegistryCredential(
+                            registryHost = host, username = username, authType = authType
+                        )
                     )
-                )
-            } else {
-                dao.update(
-                    existing.copy(
-                        registryHost = host, username = username, authType = authType
+                } else {
+                    dao.update(
+                        existing.copy(
+                            registryHost = host, username = username, authType = authType
+                        )
                     )
-                )
-                existing.id
+                    existing.id
+                }
+                // Secret goes to the Keystore-backed store only; blank keeps the
+                // old one. Anonymous auth stores nothing and drops any prior
+                // secret so switching the type actually revokes it.
+                if (authType == "anonymous") {
+                    withContext(Dispatchers.IO) {
+                        RegistryCredentialStore.clear(appContext, id)
+                    }
+                } else if (secret.isNotEmpty()) {
+                    RegistryCredentialStore.store(appContext, id, secret)
+                }
+                if (activity.isFinishing || activity.isDestroyed) return@launch
+                Toast.makeText(activity, R.string.docker_registry_saved, Toast.LENGTH_SHORT)
+                    .show()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (activity.isFinishing || activity.isDestroyed) return@launch
+                // Never surface the exception text — a Keystore/cipher failure
+                // message can echo the value it was handed.
+                Toast.makeText(
+                    activity, R.string.docker_registry_save_failed, Toast.LENGTH_SHORT
+                ).show()
             }
-            // Secret goes to the Keystore-backed store only; blank keeps the old one.
-            if (secret.isNotEmpty()) {
-                RegistryCredentialStore.store(activity, id, secret)
-            }
-            Toast.makeText(activity, R.string.docker_registry_saved, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -234,15 +290,33 @@ object RegistryCredentialDialog {
                 )
             )
             .setPositiveButton(R.string.delete) { _, _ ->
+                // Captured on the main thread before the IO switch below.
+                val appContext = activity.applicationContext
                 activity.lifecycleScope.launch {
-                    RegistryCredentialStore.clear(activity, credential.id)
-                    app.database.containerAutoUpdatePolicyDao()
-                        .clearRegistryCredentialId(credential.id)
-                    app.database.registryCredentialDao().delete(credential)
-                    io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
-                        activity.applicationContext,
-                        io.github.tabssh.sync.tombstone.TombstoneRecorder.REGISTRY_CREDENTIAL,
-                        io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(credential))
+                    try {
+                        // clear() does Keystore work and TombstoneRecorder does
+                        // file/DB IO; neither switches dispatcher on its own, so
+                        // both must run off the main thread (PART 0 rule 7).
+                        withContext(Dispatchers.IO) {
+                            RegistryCredentialStore.clear(appContext, credential.id)
+                        }
+                        app.database.containerAutoUpdatePolicyDao()
+                            .clearRegistryCredentialId(credential.id)
+                        app.database.registryCredentialDao().delete(credential)
+                        withContext(Dispatchers.IO) {
+                            io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
+                                appContext,
+                                io.github.tabssh.sync.tombstone.TombstoneRecorder.REGISTRY_CREDENTIAL,
+                                io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(credential))
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        if (activity.isFinishing || activity.isDestroyed) return@launch
+                        Toast.makeText(
+                            activity, R.string.docker_registry_delete_failed, Toast.LENGTH_SHORT
+                        ).show()
+                    }
                 }
             }
             .setNegativeButton(R.string.cancel, null)

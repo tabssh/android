@@ -1,5 +1,6 @@
 package io.github.tabssh.ui.adapters
 
+import android.text.format.DateUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -9,9 +10,6 @@ import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
-import java.text.SimpleDateFormat
-import java.util.*
-import java.util.concurrent.TimeUnit
 
 class HypervisorAdapter(
     private var hypervisors: List<HypervisorProfile> = emptyList()
@@ -82,67 +80,50 @@ class HypervisorAdapter(
         }
 
         fun bind(hypervisor: HypervisorProfile) {
-            // Set type icon
-            textTypeIcon.text = when (hypervisor.type) {
-                HypervisorType.PROXMOX -> "🌐"
-                HypervisorType.XCPNG -> "☁️"
-                HypervisorType.VMWARE -> "📦"
-                HypervisorType.OCI -> "🔶"
-                HypervisorType.LIBVIRT -> "🖥️"
-            }
+            val context = itemView.context
+            textTypeIcon.text = context.getString(
+                when (hypervisor.type) {
+                    HypervisorType.PROXMOX -> R.string.hypervisor_icon_proxmox
+                    HypervisorType.XCPNG -> R.string.hypervisor_icon_xcpng
+                    HypervisorType.VMWARE -> R.string.hypervisor_icon_vmware
+                    HypervisorType.OCI -> R.string.hypervisor_icon_oci
+                    HypervisorType.LIBVIRT -> R.string.hypervisor_icon_libvirt
+                }
+            )
 
-            // Set name
             textName.text = hypervisor.name
 
-            // Set type badge
-            textType.text = when (hypervisor.type) {
-                HypervisorType.PROXMOX -> "Proxmox"
-                HypervisorType.XCPNG -> "XCP-ng"
-                HypervisorType.VMWARE -> "VMware"
-                HypervisorType.OCI -> "OCI (→ Cloud Accounts)"
-                HypervisorType.LIBVIRT -> "QEMU/libvirt"
-            }
+            textType.text = context.getString(
+                when (hypervisor.type) {
+                    HypervisorType.PROXMOX -> R.string.hypervisor_type_proxmox
+                    HypervisorType.XCPNG -> R.string.hypervisor_type_xcpng
+                    HypervisorType.VMWARE -> R.string.hypervisor_type_vmware
+                    HypervisorType.OCI -> R.string.hypervisor_type_oci
+                    HypervisorType.LIBVIRT -> R.string.hypervisor_type_libvirt
+                }
+            )
 
-            // Set host and port
-            textHost.text = "${hypervisor.host}:${hypervisor.port}"
+            textHost.text = context.getString(
+                R.string.hypervisor_endpoint_fmt, hypervisor.host, hypervisor.port
+            )
 
-            // Set last connected
+            textLastConnected.visibility = View.VISIBLE
             if (hypervisor.lastConnected > 0) {
-                val relativeTime = getRelativeTime(hypervisor.lastConnected)
-                textLastConnected.text = "Last used: $relativeTime"
-                textLastConnected.visibility = View.VISIBLE
+                // Localized relative time from the platform formatter, matching
+                // DockerHostAdapter — replaces hand-built English-only strings.
+                val relativeTime = DateUtils.getRelativeTimeSpanString(
+                    hypervisor.lastConnected,
+                    System.currentTimeMillis(),
+                    DateUtils.MINUTE_IN_MILLIS
+                )
+                textLastConnected.text =
+                    context.getString(R.string.docker_last_used_fmt, relativeTime)
             } else {
-                textLastConnected.text = "Never connected"
-                textLastConnected.visibility = View.VISIBLE
+                textLastConnected.text = context.getString(R.string.docker_never_connected)
             }
 
             // Status indicator (not connected for now)
             viewStatus.setBackgroundResource(R.drawable.status_indicator)
-        }
-
-        private fun getRelativeTime(timestamp: Long): String {
-            val now = System.currentTimeMillis()
-            val diff = now - timestamp
-
-            return when {
-                diff < TimeUnit.MINUTES.toMillis(1) -> "just now"
-                diff < TimeUnit.HOURS.toMillis(1) -> {
-                    val minutes = TimeUnit.MILLISECONDS.toMinutes(diff)
-                    "$minutes ${if (minutes == 1L) "minute" else "minutes"} ago"
-                }
-                diff < TimeUnit.DAYS.toMillis(1) -> {
-                    val hours = TimeUnit.MILLISECONDS.toHours(diff)
-                    "$hours ${if (hours == 1L) "hour" else "hours"} ago"
-                }
-                diff < TimeUnit.DAYS.toMillis(7) -> {
-                    val days = TimeUnit.MILLISECONDS.toDays(diff)
-                    "$days ${if (days == 1L) "day" else "days"} ago"
-                }
-                else -> {
-                    val formatter = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
-                    formatter.format(Date(timestamp))
-                }
-            }
         }
     }
 }

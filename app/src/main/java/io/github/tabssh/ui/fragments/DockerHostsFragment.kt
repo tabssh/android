@@ -26,6 +26,8 @@ import io.github.tabssh.ui.activities.DockerHostEditActivity
 import io.github.tabssh.ui.activities.DockerHostManagerActivity
 import io.github.tabssh.ui.adapters.DockerHostAdapter
 import io.github.tabssh.ui.dialogs.DockerActionSheet
+import io.github.tabssh.ui.utils.DockerText
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -49,6 +51,9 @@ class DockerHostsFragment : Fragment() {
     private lateinit var buttonAddFirst: Button
 
     private lateinit var adapter: DockerHostAdapter
+
+    /** Guards against overlapping forced transport re-tests from repeat taps. */
+    private var testInFlight = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -168,13 +173,15 @@ class DockerHostsFragment : Fragment() {
 
                     progressBar.visibility = View.GONE
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 if (!isAdded) return@launch
 
                 progressBar.visibility = View.GONE
                 Toast.makeText(
                     requireContext(),
-                    getString(R.string.docker_error_detail_fmt, e.message),
+                    getString(R.string.docker_error_detail_fmt, DockerText.display(e.message)),
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -278,11 +285,17 @@ class DockerHostsFragment : Fragment() {
                             getString(R.string.docker_host_deleted),
                             Toast.LENGTH_SHORT
                         ).show()
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         if (!isAdded) return@launch
+                        // A Keystore/cipher failure message can echo the value
+                        // it was handed — sanitize and cap before display.
                         Toast.makeText(
                             requireContext(),
-                            getString(R.string.docker_error_detail_fmt, e.message),
+                            getString(
+                                R.string.docker_error_detail_fmt, DockerText.display(e.message)
+                            ),
                             Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -294,21 +307,30 @@ class DockerHostsFragment : Fragment() {
 
     private fun retestTransport(host: DockerHost) {
         if (!isAdded) return
+        // acquire(force = true) tears down and redials the session: repeated
+        // taps would stack full SSH handshakes against the same host and race
+        // each other's teardown.
+        if (testInFlight) return
+        testInFlight = true
 
         progressBar.visibility = View.VISIBLE
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = DockerSessionManager.acquire(app, host.id, force = true)
-            if (!isAdded) return@launch
-            progressBar.visibility = View.GONE
-            when (result) {
-                is io.github.tabssh.docker.transport.DockerResult.Success ->
-                    Toast.makeText(
-                        requireContext(),
-                        getString(R.string.docker_transport_ok, result.value.mode),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                else -> io.github.tabssh.ui.dialogs.DockerErrorPresenter
-                    .present(requireContext(), result)
+            try {
+                val result = DockerSessionManager.acquire(app, host.id, force = true)
+                if (!isAdded) return@launch
+                progressBar.visibility = View.GONE
+                when (result) {
+                    is io.github.tabssh.docker.transport.DockerResult.Success ->
+                        Toast.makeText(
+                            requireContext(),
+                            getString(R.string.docker_transport_ok, result.value.mode),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    else -> io.github.tabssh.ui.dialogs.DockerErrorPresenter
+                        .present(requireContext(), result)
+                }
+            } finally {
+                testInFlight = false
             }
         }
     }

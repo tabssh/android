@@ -401,6 +401,98 @@ object NotificationHelper {
     }
 
     /**
+     * Build the persistent per-tab status notification for one graphical
+     * (VNC or hypervisor-console) tab — the VNC counterpart of
+     * [buildTabStatusNotification]. Graphical tabs have no
+     * ConnectionProfile, so identity comes from the tab's display title
+     * and a protocol label ("vnc" or "spice").
+     *
+     * Same channel ([CHANNEL_SSH_SILENT] — "Active Sessions"), group,
+     * id scheme, tap-to-navigate, Disconnect action (via
+     * [ConfirmDisconnectActivity], which resolves graphical tabs too),
+     * and timeout safety nets as the SSH variant, so the shade treats
+     * every live session uniformly.
+     */
+    fun buildGraphicalTabStatusNotification(
+        context: Context,
+        tabId: String,
+        displayTitle: String,
+        protocolLabel: String,
+        state: io.github.tabssh.ssh.connection.ConnectionState
+    ): Notification {
+        val (contentTitle, contentText) = when (state) {
+            io.github.tabssh.ssh.connection.ConnectionState.CONNECTED ->
+                displayTitle to protocolLabel
+            io.github.tabssh.ssh.connection.ConnectionState.CONNECTING ->
+                displayTitle to "Connecting…"
+            io.github.tabssh.ssh.connection.ConnectionState.ERROR ->
+                displayTitle to "Connection error"
+            io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED ->
+                displayTitle to "Disconnected"
+            else ->
+                displayTitle to protocolLabel
+        }
+
+        val tapTarget = Intent(context, io.github.tabssh.ui.activities.TabTerminalActivity::class.java)
+            .apply {
+                putExtra(io.github.tabssh.ui.activities.TabTerminalActivity.EXTRA_TAB_ID, tabId)
+                putExtra(io.github.tabssh.ui.activities.TabTerminalActivity.EXTRA_AUTO_CONNECT, false)
+                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            tabId.hashCode(),
+            tapTarget,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val icon = when (state) {
+            io.github.tabssh.ssh.connection.ConnectionState.CONNECTED -> R.drawable.ic_connected
+            io.github.tabssh.ssh.connection.ConnectionState.ERROR -> R.drawable.ic_error
+            io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED -> R.drawable.ic_disconnect
+            else -> R.drawable.ic_notification
+        }
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_SSH_SILENT)
+            .setContentTitle(contentTitle)
+            .setContentText(contentText)
+            .setSmallIcon(icon)
+            .setContentIntent(pendingIntent)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setShowWhen(false)
+            .setGroup(GROUP_SSH_SESSIONS)
+            .setOngoing(state == io.github.tabssh.ssh.connection.ConnectionState.CONNECTED ||
+                        state == io.github.tabssh.ssh.connection.ConnectionState.CONNECTING)
+
+        if (state == io.github.tabssh.ssh.connection.ConnectionState.CONNECTED) {
+            builder.addAction(
+                NotificationCompat.Action.Builder(
+                    R.drawable.ic_disconnect,
+                    "Disconnect",
+                    buildDisconnectPendingIntent(context, tabId)
+                ).build()
+            )
+        }
+
+        if (state == io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED) {
+            builder.setTimeoutAfter(30_000L)
+            builder.setAutoCancel(true)
+        }
+
+        // Same OOM-kill safety net as the SSH variant — the service
+        // heartbeat re-posts every 30s, resetting this clock.
+        if (state == io.github.tabssh.ssh.connection.ConnectionState.CONNECTED ||
+            state == io.github.tabssh.ssh.connection.ConnectionState.CONNECTING) {
+            builder.setTimeoutAfter(20 * 60 * 1000L)
+        }
+
+        return builder.build()
+    }
+
+    /**
      * Build the PendingIntent for the "Disconnect" notification action.
      * Launches [ConfirmDisconnectActivity] — a transparent dialog — so the
      * user confirms before the tab's connection is torn down. Tab-scoped:
@@ -459,9 +551,11 @@ object NotificationHelper {
             context, 0, tapIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        // "active session(s)" — the count now includes graphical (VNC/
+        // console) sessions, not only SSH ones.
         val summary = NotificationCompat.Builder(context, CHANNEL_SSH_SILENT)
             .setContentTitle("TabSSH")
-            .setContentText("$connectedCount active SSH $sessionWord")
+            .setContentText("$connectedCount active $sessionWord")
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pi)
             .setGroup(GROUP_SSH_SESSIONS)

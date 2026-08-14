@@ -42,6 +42,9 @@ class TransportCapabilityDetector(
     internal companion object {
         private const val TAG = "TransportCapabilityDetector"
         private const val PROBE_TIMEOUT_S = 10L
+
+        /** Cap on the probe's `GET /version` body (the real one is under 1 KiB). */
+        private const val MAX_VERSION_BODY_BYTES = 256L * 1024
         private const val MODE_AUTO = "auto"
         private const val MODE_API_STREAMLOCAL = "api_streamlocal"
         private const val MODE_API_STDIO = "api_stdio"
@@ -231,7 +234,11 @@ class TransportCapabilityDetector(
                     if (!response.isSuccessful) {
                         DockerResult.Error("GET /version failed", "HTTP ${response.code}")
                     } else {
-                        DockerApiParsers.parseVersion(response.body?.string().orEmpty())
+                        // Bounded: whatever answers on the relay port decides
+                        // this body's size, and /version is a small object.
+                        DockerApiParsers.parseVersion(
+                            response.peekBody(MAX_VERSION_BODY_BYTES).string()
+                        )
                             ?.let { DockerResult.Success(it) }
                             ?: DockerResult.Error("GET /version returned an unparsable body")
                     }

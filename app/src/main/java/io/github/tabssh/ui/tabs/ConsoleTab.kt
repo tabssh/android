@@ -164,6 +164,14 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
     private val _displayMode = MutableStateFlow(ConsoleDisplayMode.TEXT)
     val displayMode: StateFlow<ConsoleDisplayMode> = _displayMode.asStateFlow()
 
+    // Bumped on every markGraphical/markSpice so a bound ViewHolder rebinds
+    // even when the mode value is unchanged — MutableStateFlow dedupes equal
+    // values, so a second markGraphical with a NEW client while already in
+    // RFB mode would otherwise never re-emit and the fresh client's input
+    // and render callbacks would never get wired.
+    private val _graphicalAttachSeq = MutableStateFlow(0)
+    val graphicalAttachSeq: StateFlow<Int> = _graphicalAttachSeq.asStateFlow()
+
     // Tab position and ordering — same role as SSHTab.tabIndex/VncTab.tabIndex.
     var tabIndex: Int = 0
         internal set
@@ -186,6 +194,7 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
         lastDisconnectReason = null
         lastDisconnectMessage = null
         client.onSessionEnded = ::recordSessionEnd
+        _graphicalAttachSeq.value = _graphicalAttachSeq.value + 1
         _displayMode.value = ConsoleDisplayMode.RFB
         _isGraphicalMode.value = true
         Logger.d("ConsoleTab", "Console tab ${getDisplayTitle()} switched to graphical mode")
@@ -204,6 +213,7 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
         lastDisconnectReason = null
         lastDisconnectMessage = null
         client.onSessionEnded = ::recordSessionEnd
+        _graphicalAttachSeq.value = _graphicalAttachSeq.value + 1
         _displayMode.value = ConsoleDisplayMode.SPICE
         _isGraphicalMode.value = true
         Logger.d("ConsoleTab", "Console tab ${getDisplayTitle()} switched to SPICE mode")

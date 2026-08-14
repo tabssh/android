@@ -386,8 +386,32 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
             publishTabs()
             if (entry is Tab.Ssh) {
                 notifyTabClosed(entry.sshTab, index)
+            } else {
+                // Vnc/Console closes never reach the SSH-typed onTabClosed;
+                // fire the sealed-aware callback so the activity can rebuild
+                // the pager and the session service can drop the tab's
+                // notification — regardless of which component initiated the
+                // close (toolbar, palette, or the notification-shade action).
+                notifyGraphicalTabClosed(entry, index)
             }
         }
+    }
+
+    /**
+     * Close ANY tab (SSH, VNC, or console) by its stable [Tab.tabId].
+     * Sealed-aware counterpart of [closeTabById] — used by the
+     * notification-shade Disconnect action, which must be able to end
+     * graphical sessions too. Lookup and close run atomically under
+     * [tabsLock], mirroring [closeTabById].
+     *
+     * @return the closed [Tab], or null if no tab with that id exists.
+     */
+    fun closeTabByIdSealed(tabId: String): Tab? = synchronized(tabsLock) {
+        val index = tabs.indexOfFirst { it.tabId == tabId }
+        if (index < 0) return null
+        val entry = tabs[index]
+        closeTab(index)
+        entry
     }
 
     /**
@@ -399,13 +423,8 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
      * @return the closed [SSHTab], or null if no tab with that id exists
      *   (already closed — e.g. a stale notification action).
      */
-    fun closeTabById(tabId: String): SSHTab? = synchronized(tabsLock) {
-        val index = tabs.indexOfFirst { it.tabId == tabId }
-        if (index < 0) return null
-        val tab = (tabs[index] as? Tab.Ssh)?.sshTab
-        closeTab(index)
-        tab
-    }
+    fun closeTabById(tabId: String): SSHTab? =
+        (closeTabByIdSealed(tabId) as? Tab.Ssh)?.sshTab
 
     /**
      * Switch to tab by index
@@ -532,6 +551,10 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
 
     private fun notifyTabClosed(tab: SSHTab, index: Int) {
         listeners.forEach { it.onTabClosed(tab, index) }
+    }
+
+    private fun notifyGraphicalTabClosed(tab: Tab, index: Int) {
+        listeners.forEach { it.onGraphicalTabClosed(tab, index) }
     }
 
     private fun notifyActiveTabChanged(index: Int) {
@@ -733,6 +756,10 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
 interface TabManagerListener {
     fun onTabCreated(tab: SSHTab) {}
     fun onTabClosed(tab: SSHTab, index: Int) {}
+    // Sealed-aware close callback for Vnc/Console tabs — the SSH-typed
+    // onTabClosed can never carry them. Fired with the unified-list index
+    // the tab occupied, matching onTabClosed's contract.
+    fun onGraphicalTabClosed(tab: Tab, index: Int) {}
     fun onActiveTabChanged(index: Int) {}
     fun onTabConnectionStateChanged(tab: SSHTab, state: io.github.tabssh.ssh.connection.ConnectionState) {}
 }

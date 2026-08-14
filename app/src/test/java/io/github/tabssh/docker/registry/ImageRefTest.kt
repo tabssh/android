@@ -2,7 +2,10 @@ package io.github.tabssh.docker.registry
 
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Image reference parsing against the docker/distribution grammar subset the
@@ -85,5 +88,63 @@ class ImageRefTest {
         assertNull(ImageRef.parse("ghcr.io/"))
         // Empty tag.
         assertNull(ImageRef.parse("nginx:"))
+    }
+
+    @Test
+    fun `path traversal in the repository is rejected`() {
+        // Every one of these would otherwise be interpolated straight into
+        // /v2/{name}/manifests/… and escape the repository namespace.
+        assertNull(ImageRef.parse("../../etc/passwd"))
+        assertNull(ImageRef.parse("ghcr.io/../../v2/_catalog"))
+        assertNull(ImageRef.parse("ghcr.io/team/../other/app"))
+        assertNull(ImageRef.parse("ghcr.io/team//app"))
+        assertNull(ImageRef.parse("ghcr.io/team/app extra"))
+    }
+
+    @Test
+    fun `references that would be read as docker run flags are rejected`() {
+        assertNull(ImageRef.parse("-v/etc:/etc"))
+        assertNull(ImageRef.parse("--privileged"))
+        assertNull(ImageRef.parse("ghcr.io/-evil/app"))
+        assertNull(ImageRef.parse("nginx:-flag"))
+    }
+
+    @Test
+    fun `malformed digests are rejected`() {
+        // Right prefix, wrong length.
+        assertNull(ImageRef.parse("nginx@sha256:abc"))
+        // Right length, non-hex characters.
+        assertNull(ImageRef.parse("nginx@sha256:" + "z".repeat(64)))
+        // Uppercase hex is not the canonical form docker emits.
+        assertNull(ImageRef.parse("nginx@sha256:" + "A".repeat(64)))
+        assertNotNull(ImageRef.parse("nginx@sha256:" + "a".repeat(64)))
+    }
+
+    @Test
+    fun `malformed registry hosts are rejected`() {
+        assertNull(ImageRef.parse("regis try.local:5000/app"))
+        assertNull(ImageRef.parse("registry.local:99999999/app"))
+        assertNull(ImageRef.parse("-registry.local/app"))
+    }
+
+    @Test
+    fun `over-long references are rejected`() {
+        assertNull(ImageRef.parse("a".repeat(600)))
+    }
+
+    @Test
+    fun `digest validation matches the parser`() {
+        assertTrue(ImageRef.isValidDigest("sha256:" + "0".repeat(64)))
+        assertFalse(ImageRef.isValidDigest("sha256:" + "0".repeat(63)))
+        assertFalse(ImageRef.isValidDigest("md5:" + "0".repeat(64)))
+        assertFalse(ImageRef.isValidDigest(""))
+    }
+
+    @Test
+    fun `registry host normalization collapses hub aliases`() {
+        assertEquals("docker.io", ImageRef.normalizeRegistryHost("index.docker.io"))
+        assertEquals("docker.io", ImageRef.normalizeRegistryHost("Registry-1.Docker.IO"))
+        assertEquals("docker.io", ImageRef.normalizeRegistryHost(" docker.io/ "))
+        assertEquals("ghcr.io", ImageRef.normalizeRegistryHost("GHCR.io"))
     }
 }

@@ -8,11 +8,14 @@
         android:icon="@drawable/ic_add"
         app:showAsAction="ifRoom" />
 
+    <!-- always: this is the only on-screen way to end a VNC/SPICE session
+         (graphical tabs have no in-terminal `exit`), so it must never
+         collapse into the overflow menu on narrow toolbars. -->
     <item
         android:id="@+id/action_close_tab"
         android:title="Close Tab"
         android:icon="@drawable/ic_close"
-        app:showAsAction="ifRoom" />
+        app:showAsAction="always" />
 
     <item
         android:id="@+id/action_settings"

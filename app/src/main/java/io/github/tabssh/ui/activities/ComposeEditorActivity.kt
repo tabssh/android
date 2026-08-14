@@ -24,6 +24,7 @@ import io.github.tabssh.docker.transport.DockerResult
 import io.github.tabssh.storage.database.entities.ComposeStack
 import io.github.tabssh.ui.dialogs.DockerErrorPresenter
 import io.github.tabssh.ui.dialogs.DockerInspectDialog
+import io.github.tabssh.ui.utils.DockerText
 import kotlinx.coroutines.launch
 import org.yaml.snakeyaml.Yaml
 import org.yaml.snakeyaml.nodes.MappingNode
@@ -75,6 +76,12 @@ class ComposeEditorActivity : AppCompatActivity() {
     private var externalName: String? = null
     private val isExternal: Boolean get() = externalConfigFile != null
 
+    /** Guards the compose lifecycle menu — repeated taps must not stack up/down runs. */
+    private var actionRunning = false
+
+    /** False once the activity can no longer host a dialog or touch its views. */
+    private fun isAlive(): Boolean = !isFinishing && !isDestroyed
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Pasted compose files and .env content routinely hold secrets.
@@ -112,7 +119,8 @@ class ComposeEditorActivity : AppCompatActivity() {
             // No sibling .env path is known for an arbitrary discovered
             // config file, and the project's own name is not renameable here.
             layoutEnv.visibility = View.GONE
-            editName.setText(externalName)
+            // The project name comes from `docker compose ls` — sanitize before display.
+            editName.setText(DockerText.display(externalName))
             editName.isEnabled = false
         }
 
@@ -126,7 +134,10 @@ class ComposeEditorActivity : AppCompatActivity() {
     private fun acquireSession() {
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch {
-            when (val result = DockerSessionManager.acquire(app, hostId)) {
+            val result = DockerSessionManager.acquire(app, hostId)
+            // acquire() suspends — the activity may be gone by the time it returns.
+            if (!isAlive()) return@launch
+            when (result) {
                 is DockerResult.Success -> {
                     session = result.value
                     when {
@@ -148,6 +159,7 @@ class ComposeEditorActivity : AppCompatActivity() {
         val current = session ?: return
         lifecycleScope.launch {
             val loaded = app.database.composeStackDao().getById(stackId)
+            if (!isAlive()) return@launch
             if (loaded == null) {
                 finish()
                 return@launch
@@ -157,6 +169,7 @@ class ComposeEditorActivity : AppCompatActivity() {
             // The name keys the remote directory — immutable once created.
             editName.isEnabled = false
             val compose = current.transport.readRemoteFile("${loaded.remotePath}/compose.yaml")
+            if (!isAlive()) return@launch
             if (compose !is DockerResult.Success) {
                 progressBar.visibility = View.GONE
                 DockerErrorPresenter.present(this@ComposeEditorActivity, compose)
@@ -167,6 +180,7 @@ class ComposeEditorActivity : AppCompatActivity() {
             // .env is legitimately optional — a missing/unreadable file just
             // means the stack has none; only compose.yaml failure is fatal.
             val env = current.transport.readRemoteFile("${loaded.remotePath}/.env")
+            if (!isAlive()) return@launch
             env.valueOrNull()?.let { editEnv.setText(it) }
             progressBar.visibility = View.GONE
             invalidateOptionsMenu()
@@ -179,6 +193,7 @@ class ComposeEditorActivity : AppCompatActivity() {
         val path = externalConfigFile ?: return
         lifecycleScope.launch {
             val compose = current.transport.readRemoteFile(path)
+            if (!isAlive()) return@launch
             if (compose !is DockerResult.Success) {
                 progressBar.visibility = View.GONE
                 DockerErrorPresenter.present(this@ComposeEditorActivity, compose)
@@ -207,7 +222,7 @@ class ComposeEditorActivity : AppCompatActivity() {
         }
         val node = try {
             Yaml().compose(StringReader(text))
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             Toast.makeText(this, R.string.docker_stack_error_yaml, Toast.LENGTH_SHORT).show()
             return false
         }
@@ -247,6 +262,7 @@ class ComposeEditorActivity : AppCompatActivity() {
                     ?: "$base/$name"
             }
             val written = current.transport.writeRemoteFile("$remotePath/compose.yaml", compose)
+            if (!isAlive()) return@launch
             if (written !is DockerResult.Success) {
                 progressBar.visibility = View.GONE
                 buttonSave.isEnabled = true
@@ -255,6 +271,7 @@ class ComposeEditorActivity : AppCompatActivity() {
             }
             if (env.isNotBlank()) {
                 val envWritten = current.transport.writeRemoteFile("$remotePath/.env", env)
+                if (!isAlive()) return@launch
                 if (envWritten !is DockerResult.Success) {
                     progressBar.visibility = View.GONE
                     buttonSave.isEnabled = true
@@ -270,6 +287,7 @@ class ComposeEditorActivity : AppCompatActivity() {
             } else {
                 dao.update(existing.copy(updatedAt = System.currentTimeMillis()))
             }
+            if (!isAlive()) return@launch
             progressBar.visibility = View.GONE
             buttonSave.isEnabled = true
             Toast.makeText(
@@ -293,6 +311,7 @@ class ComposeEditorActivity : AppCompatActivity() {
         buttonSave.isEnabled = false
         lifecycleScope.launch {
             val written = current.transport.writeRemoteFile(path, compose)
+            if (!isAlive()) return@launch
             progressBar.visibility = View.GONE
             buttonSave.isEnabled = true
             if (written !is DockerResult.Success) {
@@ -374,24 +393,40 @@ class ComposeEditorActivity : AppCompatActivity() {
 
     private fun runComposeAction(action: suspend () -> DockerResult<String>): Boolean {
         val name = stack?.name ?: externalName ?: return true
+        // compose up/down/restart are not idempotent under concurrency — one
+        // in-flight action at a time, however fast the menu is tapped.
+        if (actionRunning) return true
+        actionRunning = true
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch {
-            val result = action()
-            progressBar.visibility = View.GONE
-            when (result) {
-                is DockerResult.Success -> DockerInspectDialog.show(
-                    this@ComposeEditorActivity,
-                    getString(R.string.docker_stack_action_output_title, name),
-                    result.value.ifBlank { getString(R.string.docker_action_success) }
-                )
-                else -> DockerErrorPresenter.present(this@ComposeEditorActivity, result)
+            try {
+                val result = action()
+                if (!isAlive()) return@launch
+                progressBar.visibility = View.GONE
+                when (result) {
+                    is DockerResult.Success -> DockerInspectDialog.show(
+                        this@ComposeEditorActivity,
+                        getString(
+                            R.string.docker_stack_action_output_title,
+                            DockerText.display(name)
+                        ),
+                        DockerText.block(result.value).ifBlank {
+                            getString(R.string.docker_action_success)
+                        }
+                    )
+                    else -> DockerErrorPresenter.present(this@ComposeEditorActivity, result)
+                }
+            } finally {
+                actionRunning = false
             }
         }
         return true
     }
 
     private fun confirmDelete() {
-        val name = stack?.name ?: return
+        // Sanitized so a crafted name cannot bidi-reorder the confirmation text
+        // into naming a different stack than the one that will be deleted.
+        val name = DockerText.display(stack?.name ?: return)
         MaterialAlertDialogBuilder(this)
             .setTitle(name)
             .setMessage(getString(R.string.docker_stack_delete_message, name))
@@ -404,6 +439,9 @@ class ComposeEditorActivity : AppCompatActivity() {
     private fun deleteStack() {
         val current = session ?: return
         val existing = stack ?: return
+        // A second confirm tap must not re-run compose down and re-delete.
+        if (actionRunning) return
+        actionRunning = true
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch {
             current.transport.composeDown(existing.remotePath)

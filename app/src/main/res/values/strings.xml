@@ -395,6 +395,7 @@
     <string name="docker_host_error_custom_username">Enter the username</string>
     <string name="docker_host_error_no_keys">No SSH keys available — import or generate one first</string>
     <string name="docker_host_error_no_identities">No identities available — create one first</string>
+    <string name="docker_host_error_path">Paths must be absolute and contain no spaces or control characters</string>
     <string name="docker_host_socket_hint">Docker socket path</string>
     <string name="docker_host_compose_base_hint">Compose base path</string>
     <string name="docker_host_run_base_hint">Run-config base path</string>
@@ -457,6 +458,8 @@
     <string name="docker_driver_hint">Driver (optional)</string>
     <string name="docker_create">Create</string>
     <string name="docker_error_name_required">Enter a name</string>
+    <string name="docker_error_name_format">Names must start with a letter or digit and use only letters, digits, and _ . -</string>
+    <string name="docker_error_driver_format">Driver names use only letters, digits, and _ . -</string>
     <string name="docker_remove_volume_message">Remove volume %1$s? Its data is deleted. This cannot be undone.</string>
     <string name="docker_remove_network_message">Remove network %1$s?</string>
     <string name="docker_remove_image_message">Remove image %1$s?</string>
@@ -689,7 +692,11 @@
     <string name="docker_registry_auth_token">Bearer token</string>
     <string name="docker_registry_auth_anonymous">Anonymous (no credentials)</string>
     <string name="docker_registry_error_host">Enter a registry host</string>
+    <string name="docker_kill_container_message">Force-kill %1$s? Any unsaved state inside the container is lost.</string>
     <string name="docker_registry_saved">Credential saved</string>
+    <string name="docker_registry_save_failed">Could not save credential</string>
+    <string name="docker_registry_delete_failed">Could not delete credential</string>
+    <string name="docker_registry_error_host_format">Enter a registry host such as registry.example.com or registry.example.com:5000</string>
     <string name="docker_registry_delete_message">Delete the credential for %1$s? Update checks against this registry fall back to anonymous access.</string>
     <string name="docker_policy_title">Auto-update policy</string>
     <string name="docker_policy_enabled">Check for updates</string>
@@ -835,4 +842,32 @@
     <string name="virt_viewer_password_message">%1$s requires a password. It is used for this session only and is never saved.</string>
     <string name="virt_viewer_password_hint">Password</string>
     <string name="virt_viewer_password_required">A password is required for this connection</string>
+
+    <!-- Hypervisor list -->
+    <string name="hypervisor_icon_proxmox">🌐</string>
+    <string name="hypervisor_icon_xcpng">☁️</string>
+    <string name="hypervisor_icon_vmware">📦</string>
+    <string name="hypervisor_icon_oci">🔶</string>
+    <string name="hypervisor_icon_libvirt">🖥️</string>
+    <string name="hypervisor_type_proxmox">Proxmox</string>
+    <string name="hypervisor_type_xcpng">XCP-ng</string>
+    <string name="hypervisor_type_vmware">VMware</string>
+    <string name="hypervisor_type_oci">OCI (→ Cloud Accounts)</string>
+    <string name="hypervisor_type_libvirt">QEMU/libvirt</string>
+    <string name="hypervisor_endpoint_fmt">%1$s:%2$d</string>
+    <string name="hypervisor_account_region_fmt">Region: %1$s</string>
+    <string name="hypervisor_account_region_unset">—</string>
+    <string name="hypervisor_account_username_fmt">Username: %1$s</string>
+    <string name="hypervisor_account_realm_fmt">realm: %1$s</string>
+    <string name="hypervisor_load_failed_fmt">Failed to load hypervisors: %1$s</string>
+    <string name="hypervisor_oci_moved_title">OCI Hypervisor</string>
+    <string name="hypervisor_oci_moved_message">OCI has moved to Cloud Accounts. Manage your OCI instances from the Cloud Accounts tab.</string>
+    <string name="hypervisor_menu_open">Open</string>
+    <string name="hypervisor_menu_refresh_status">Refresh Status</string>
+    <string name="hypervisor_delete_title">Delete Hypervisor</string>
+    <string name="hypervisor_delete_message">Are you sure you want to delete \'%1$s\'?</string>
+    <string name="hypervisor_deleted_fmt">Deleted %1$s</string>
+    <string name="hypervisor_delete_failed_fmt">Failed to delete: %1$s</string>
+    <string name="hypervisor_reachable_fmt">✓ %1$s is reachable</string>
+    <string name="hypervisor_unreachable_fmt">✗ %1$s not reachable</string>
 </resources>

@@ -92,6 +92,18 @@ class SSHConnectionService : Service() {
     // entry per tab (four tabs = four notifications, even to one host).
     private var tabListener: io.github.tabssh.ui.tabs.TabManagerListener? = null
 
+    // Graphical (VNC/console) session tracking. The TabManagerListener's
+    // state callback is SSH-typed, so graphical tabs are observed directly:
+    // one watcher on allTabsFlow manages a per-tab connectionState collector
+    // for every Tab.Vnc/Tab.Console, mirroring the shade behaviour SSH tabs
+    // get — persistent "Connected" row with a Disconnect action, auto-
+    // clearing "Disconnected" row, heartbeat refresh.
+    private var graphicalWatchJob: Job? = null
+    private val graphicalStateObservers = mutableMapOf<String, Job>()
+
+    // De-dup set mirroring [disconnectedTabs] for graphical tabs.
+    private val disconnectedGraphicalTabs = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     // The single active monitoring coroutine. Stored so that a second
     // onStartCommand(ACTION_START_SERVICE) call (which can happen if the
     // app sends multiple startForegroundService() requests before the first
@@ -185,6 +197,7 @@ class SSHConnectionService : Service() {
         sweepPerTabNotifications(cancelAll = false)
         setupSessionManagerListener()
         setupTabManagerListener()
+        setupGraphicalTabWatcher()
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -237,6 +250,10 @@ class SSHConnectionService : Service() {
         sessionListener = null
         tabListener?.let { app.tabManager.removeListener(it) }
         tabListener = null
+        graphicalWatchJob?.cancel()
+        graphicalWatchJob = null
+        graphicalStateObservers.values.forEach { it.cancel() }
+        graphicalStateObservers.clear()
     }
     
     private fun startForegroundService() {
@@ -270,8 +287,16 @@ class SSHConnectionService : Service() {
             startForeground(id, notif)
             fgAnchorTabId = activeTab.tabId
         } else {
-            // Placeholder anchor, swapped out on first tab connect.
-            startForeground(NOTIFICATION_ID, buildPlaceholderNotification())
+            // No live SSH tab — a live graphical (VNC/console) tab can
+            // anchor the FG service just as well (pure-VNC sessions start
+            // the service with zero SSH tabs).
+            val graphicalTab = graphicalLiveTabs().firstOrNull()
+            if (graphicalTab != null) {
+                anchorOnGraphicalTab(graphicalTab)
+            } else {
+                // Placeholder anchor, swapped out on first tab connect.
+                startForeground(NOTIFICATION_ID, buildPlaceholderNotification())
+            }
         }
 
         Logger.i("SSHConnectionService", "Started foreground service")
@@ -366,11 +391,55 @@ class SSHConnectionService : Service() {
             val nextId = io.github.tabssh.utils.NotificationHelper.perTabNotificationId(nextLive.tabId)
             startForeground(nextId, nextNotif)
             fgAnchorTabId = nextLive.tabId
+            return
+        }
+        // No live SSH tab — try a live graphical (VNC/console) tab before
+        // giving up the FG anchor.
+        val nextGraphical = graphicalLiveTabs().firstOrNull { it.tabId != closingTabId }
+        if (nextGraphical != null) {
+            anchorOnGraphicalTab(nextGraphical)
         } else {
             // No live tab to anchor on — detach FG so the timeout-
             // after-30s on the disconnect notification can take effect.
             detachForeground()
         }
+    }
+
+    /** Live (CONNECTED) graphical tabs, in unified-list order. */
+    private fun graphicalLiveTabs(): List<io.github.tabssh.ui.tabs.Tab> = try {
+        app.tabManager.getAllTabsSealed().filter { entry ->
+            when (entry) {
+                is io.github.tabssh.ui.tabs.Tab.Ssh -> false
+                is io.github.tabssh.ui.tabs.Tab.Vnc ->
+                    entry.vncTab.connectionState.value == ConnectionState.CONNECTED
+                is io.github.tabssh.ui.tabs.Tab.Console ->
+                    entry.consoleTab.connectionState.value == ConnectionState.CONNECTED
+            }
+        }
+    } catch (_: Exception) { emptyList() }
+
+    /** Display title + protocol label + current state for a graphical tab. */
+    private fun graphicalTabInfo(
+        tab: io.github.tabssh.ui.tabs.Tab
+    ): Triple<String, String, ConnectionState>? = when (tab) {
+        is io.github.tabssh.ui.tabs.Tab.Ssh -> null
+        is io.github.tabssh.ui.tabs.Tab.Vnc -> Triple(
+            tab.vncTab.getDisplayTitle(), "vnc", tab.vncTab.connectionState.value
+        )
+        is io.github.tabssh.ui.tabs.Tab.Console -> Triple(
+            tab.consoleTab.getDisplayTitle(), "console", tab.consoleTab.connectionState.value
+        )
+    }
+
+    /** startForeground() on a graphical tab's status notification. */
+    private fun anchorOnGraphicalTab(tab: io.github.tabssh.ui.tabs.Tab) {
+        val (title, protocol, state) = graphicalTabInfo(tab) ?: return
+        val notif = io.github.tabssh.utils.NotificationHelper.buildGraphicalTabStatusNotification(
+            this, tab.tabId, title, protocol, state
+        )
+        val id = io.github.tabssh.utils.NotificationHelper.perTabNotificationId(tab.tabId)
+        startForeground(id, notif)
+        fgAnchorTabId = tab.tabId
     }
 
     /**
@@ -435,7 +504,120 @@ class SSHConnectionService : Service() {
         }
         nm.notify(nid, notif)
     }
-    
+
+    /**
+     * Graphical-tab counterpart of [renderTabNotification]: render or
+     * update the per-tab status notification for a Vnc/Console tab, with
+     * the same FG-anchor adopt/swap discipline. Must run on Main.
+     */
+    private fun renderGraphicalTabNotification(
+        tab: io.github.tabssh.ui.tabs.Tab,
+        disconnectingState: Boolean = false
+    ) {
+        val (title, protocol, liveState) = graphicalTabInfo(tab) ?: return
+        val effectiveState = if (disconnectingState) ConnectionState.DISCONNECTED else liveState
+
+        val notif = io.github.tabssh.utils.NotificationHelper.buildGraphicalTabStatusNotification(
+            this, tab.tabId, title, protocol, effectiveState
+        )
+        val nid = io.github.tabssh.utils.NotificationHelper.perTabNotificationId(tab.tabId)
+
+        if (!disconnectingState && liveState == ConnectionState.CONNECTED) {
+            if (fgAnchorTabId == null || fgAnchorTabId == tab.tabId) {
+                startForeground(nid, notif)
+                if (fgAnchorTabId == null) {
+                    getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
+                }
+                fgAnchorTabId = tab.tabId
+                return
+            }
+        }
+        if (disconnectingState) {
+            swapAnchorAwayFrom(tab.tabId)
+        }
+
+        val nm = getSystemService(NotificationManager::class.java)
+        // Same FG-flag reset as the SSH variant: cancel before re-posting
+        // the auto-clearing DISCONNECTED render.
+        if (disconnectingState) {
+            nm.cancel(nid)
+        }
+        nm.notify(nid, notif)
+    }
+
+    /**
+     * Observe [io.github.tabssh.ui.tabs.TabManager.allTabsFlow] and keep a
+     * per-tab connectionState collector alive for every graphical
+     * (Vnc/Console) tab — the notification driver those tabs don't get
+     * from the SSH-typed [io.github.tabssh.ui.tabs.TabManagerListener].
+     *
+     * Has-been-connected gating mirrors TabManager's SSH observer: a
+     * brand-new tab starts at DISCONNECTED, which must not render a
+     * "Disconnected" row.
+     */
+    private fun setupGraphicalTabWatcher() {
+        graphicalWatchJob = serviceScope.launch(Dispatchers.Main) {
+            app.tabManager.allTabsFlow.collect { tabs ->
+                // Drop observers + notifications for tabs that no longer exist.
+                val live = tabs.map { it.tabId }.toSet()
+                (graphicalStateObservers.keys - live).toList().forEach { id ->
+                    graphicalStateObservers.remove(id)?.cancel()
+                    swapAnchorAwayFrom(id)
+                    io.github.tabssh.utils.NotificationHelper.cancelTabNotification(
+                        this@SSHConnectionService, id
+                    )
+                    disconnectedGraphicalTabs.remove(id)
+                    updateConnectionCount()
+                    maybeScheduleStopIfIdle()
+                }
+                tabs.forEach { entry ->
+                    if (entry.tabId in graphicalStateObservers) return@forEach
+                    val stateFlow = when (entry) {
+                        is io.github.tabssh.ui.tabs.Tab.Ssh -> return@forEach
+                        is io.github.tabssh.ui.tabs.Tab.Vnc -> entry.vncTab.connectionState
+                        is io.github.tabssh.ui.tabs.Tab.Console -> entry.consoleTab.connectionState
+                    }
+                    graphicalStateObservers[entry.tabId] = serviceScope.launch(Dispatchers.Main) {
+                        var hasBeenConnected = false
+                        stateFlow.collect { state ->
+                            when (state) {
+                                ConnectionState.CONNECTED -> {
+                                    hasBeenConnected = true
+                                    disconnectedGraphicalTabs.remove(entry.tabId)
+                                    renderGraphicalTabNotification(entry, disconnectingState = false)
+                                    updateConnectionCount()
+                                }
+                                ConnectionState.DISCONNECTED -> {
+                                    if (hasBeenConnected &&
+                                        disconnectedGraphicalTabs.add(entry.tabId)) {
+                                        renderGraphicalTabNotification(entry, disconnectingState = true)
+                                        updateConnectionCount()
+                                        maybeScheduleStopIfIdle()
+                                    }
+                                }
+                                else -> {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Self-stop path for graphical-only sessions: SSH sessions stop the
+     * service via onAllConnectionsClosed, which VNC/SPICE never fire.
+     * Same 31s grace as that path so the auto-clearing "Disconnected"
+     * rows get their timeout window before the service dies.
+     */
+    private fun maybeScheduleStopIfIdle() {
+        if (activeConnections > 0) return
+        serviceScope.launch {
+            delay(31_000)
+            if (activeConnections == 0) stopSelf()
+        }
+    }
+
     private fun setupSessionManagerListener() {
         // Session-level listener: DB stats, audible alerts, and service
         // self-stop. Notification RENDERING is driven by the tab listener
@@ -572,7 +754,8 @@ class SSHConnectionService : Service() {
                     )
                     disconnectedTabs.remove(tab.tabId)
                     val connectedCount = app.tabManager.getAllTabs()
-                        .count { it.connectionState.value == ConnectionState.CONNECTED }
+                        .count { it.connectionState.value == ConnectionState.CONNECTED } +
+                        graphicalLiveTabs().size
                     io.github.tabssh.utils.NotificationHelper.postSshGroupSummary(
                         this@SSHConnectionService, connectedCount
                     )
@@ -588,8 +771,12 @@ class SSHConnectionService : Service() {
         // (whose underlying SSH session may be closed after handoff) are
         // still counted as live connections. A tab is "live" as long as its
         // connectionState is CONNECTED — that covers both pure SSH and mosh.
+        // Graphical (VNC/console) tabs count too: a pure-VNC session must
+        // keep the service (and its wake/WiFi locks) alive exactly like an
+        // SSH one, or the socket dies the moment the screen blanks.
         activeConnections = app.tabManager.getAllTabs()
-            .count { it.connectionState.value == io.github.tabssh.ssh.connection.ConnectionState.CONNECTED }
+            .count { it.connectionState.value == io.github.tabssh.ssh.connection.ConnectionState.CONNECTED } +
+            graphicalLiveTabs().size
 
         if (activeConnections == 0) {
             // Last session disconnected. Don't tear the service down
@@ -840,6 +1027,11 @@ class SSHConnectionService : Service() {
                     renderTabNotification(tab, disconnectingState = false)
                 }
             }
+            // Graphical tabs share the same heartbeat so their 20-minute
+            // safety-net timeout keeps getting reset while the service lives.
+            graphicalLiveTabs().forEach { tab ->
+                renderGraphicalTabNotification(tab, disconnectingState = false)
+            }
             // Orphan sweep — belt-and-braces cleanup for any per-tab
             // notification whose tab vanished without an onTabClosed
             // cancel (e.g. process restart with a stale shade entry).
@@ -864,7 +1056,10 @@ class SSHConnectionService : Service() {
      */
     private fun sweepPerTabNotifications(cancelAll: Boolean) {
         val nm = getSystemService(NotificationManager::class.java)
-        val tabs = try { app.tabManager.getAllTabs() } catch (_: Exception) { emptyList() }
+        // Sealed list: graphical (VNC/console) tabs share the per-tab id
+        // range, so an SSH-only live set would sweep their notifications
+        // away on every heartbeat.
+        val tabs = try { app.tabManager.getAllTabsSealed() } catch (_: Exception) { emptyList() }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val liveIds: Set<Int> = if (cancelAll) emptySet() else {
                 tabs.map { io.github.tabssh.utils.NotificationHelper.perTabNotificationId(it.tabId) }
@@ -881,12 +1076,14 @@ class SSHConnectionService : Service() {
                 }
             }
         }
-        // Keep the SSH group summary in sync: cancel it when sweeping all,
-        // refresh it when sweeping stale only (some may still be live).
+        // Keep the sessions group summary in sync: cancel it when sweeping
+        // all, refresh it when sweeping stale only (some may still be live).
         if (cancelAll) {
             io.github.tabssh.utils.NotificationHelper.postSshGroupSummary(this, 0)
         } else {
-            val connectedCount = tabs.count { it.connectionState.value == ConnectionState.CONNECTED }
+            val connectedCount = app.tabManager.getAllTabs()
+                .count { it.connectionState.value == ConnectionState.CONNECTED } +
+                graphicalLiveTabs().size
             io.github.tabssh.utils.NotificationHelper.postSshGroupSummary(this, connectedCount)
         }
     }

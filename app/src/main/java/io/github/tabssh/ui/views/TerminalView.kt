@@ -2919,6 +2919,18 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
+     * Show the selection magnifier locked onto the vertical center of [row].
+     * The finger rides the handle at the BOTTOM edge of the selected row, so
+     * magnifying the raw touch point shows the boundary between two rows
+     * (reads as "the wrong line") — TextView solves this by locking the
+     * magnifier's source to the text line being adjusted; do the same.
+     */
+    private fun showSelectionMagnifierAtRow(x: Float, row: Int) {
+        val sourceY = gridTop + (row + 0.5f) * cellHeight
+        getOrCreateSelectionMagnifier()?.show(x, sourceY)
+    }
+
+    /**
      * Draw the highlight rectangles + handle bubbles for the active
      * selection. Called from `renderTermuxBuffer` after the row glyphs
      * are drawn so the highlight overlays — alpha is low enough that
@@ -2988,7 +3000,10 @@ class TerminalView @JvmOverloads constructor(
                 val handle = hitTestHandle(event.x, event.y)
                 if (handle >= 0) {
                     selectionDragHandle = handle
-                    getOrCreateSelectionMagnifier()?.show(event.x, event.y)
+                    showSelectionMagnifierAtRow(
+                        event.x,
+                        if (handle == 0) selectionAnchorRow else selectionFocusRow
+                    )
                     return true
                 }
 
@@ -3015,7 +3030,10 @@ class TerminalView @JvmOverloads constructor(
                     val da = dxA * dxA + dyA * dyA
                     val df = dxF * dxF + dyF * dyF
                     selectionDragHandle = if (nearAnchor && da <= df) 0 else 1
-                    getOrCreateSelectionMagnifier()?.show(event.x, event.y)
+                    showSelectionMagnifierAtRow(
+                        event.x,
+                        if (selectionDragHandle == 0) selectionAnchorRow else selectionFocusRow
+                    )
                     return true
                 }
 
@@ -3053,7 +3071,7 @@ class TerminalView @JvmOverloads constructor(
                     selectionFocusCol = col
                     selectionFocusRow = row
                 }
-                getOrCreateSelectionMagnifier()?.show(event.x, event.y)
+                showSelectionMagnifierAtRow(event.x, row)
                 invalidate()
                 return true
             }

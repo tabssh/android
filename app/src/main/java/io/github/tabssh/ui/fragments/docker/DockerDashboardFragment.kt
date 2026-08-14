@@ -16,7 +16,14 @@ import io.github.tabssh.docker.transport.DockerDiskUsage
 import io.github.tabssh.docker.transport.DockerEngineInfo
 import io.github.tabssh.docker.transport.DockerVersionInfo
 import io.github.tabssh.ui.dialogs.DockerErrorPresenter
+import io.github.tabssh.ui.utils.DockerText
 import kotlinx.coroutines.launch
+
+/** Cap for a single daemon-reported field inside a formatted dashboard line. */
+private const val MAX_FIELD = 64
+
+/** Upper bound on `docker system df` rows rendered as child views. */
+private const val MAX_DISK_ROWS = 32
 
 /**
  * Host dashboard destination (PLAN.AI.md step 22): engine info, version, and
@@ -83,14 +90,18 @@ class DockerDashboardFragment : DockerPageFragment() {
 
     private fun bindEngine(info: DockerEngineInfo, version: DockerVersionInfo?) {
         cardEngine.visibility = View.VISIBLE
-        textEngineName.text = info.name
+        // Engine name, version and platform strings are whatever the remote
+        // daemon reports — strip control/bidi characters before display.
+        textEngineName.text = DockerText.display(info.name)
         textEngineVersion.text = getString(
             R.string.docker_dashboard_version_fmt,
-            version?.version ?: info.serverVersion,
-            version?.apiVersion ?: "?"
+            DockerText.display(version?.version ?: info.serverVersion, MAX_FIELD),
+            DockerText.display(version?.apiVersion ?: "?", MAX_FIELD)
         )
         textEngineOs.text = getString(
-            R.string.docker_dashboard_os_fmt, info.operatingSystem, info.architecture
+            R.string.docker_dashboard_os_fmt,
+            DockerText.display(info.operatingSystem, MAX_FIELD),
+            DockerText.display(info.architecture, MAX_FIELD)
         )
         textEngineContainers.text = getString(
             R.string.docker_dashboard_containers_fmt,
@@ -114,7 +125,9 @@ class DockerDashboardFragment : DockerPageFragment() {
             containerDiskRows, com.google.android.material.R.attr.colorOnSurface
         )
         val rowSpacing = resources.getDimensionPixelSize(R.dimen.space_xs)
-        disk.rows.forEach { row ->
+        // A daemon that reports hundreds of df rows would otherwise inflate
+        // hundreds of TextViews on the main thread.
+        disk.rows.take(MAX_DISK_ROWS).forEach { row ->
             val text = TextView(ctx)
             text.textSize = 13f
             text.setTextColor(rowColor)
@@ -126,7 +139,7 @@ class DockerDashboardFragment : DockerPageFragment() {
             text.layoutParams = params
             text.text = getString(
                 R.string.docker_dashboard_disk_row_fmt,
-                row.type,
+                DockerText.display(row.type, MAX_FIELD),
                 row.totalCount,
                 row.active,
                 Formatter.formatShortFileSize(ctx, row.sizeBytes),

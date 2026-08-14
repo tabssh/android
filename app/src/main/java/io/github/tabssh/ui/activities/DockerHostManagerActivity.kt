@@ -69,6 +69,18 @@ class DockerHostManagerActivity : AppCompatActivity() {
     var hostId: Long = -1L
         private set
 
+    // The retry button and the "retest transport" menu item both call
+    // acquireSession(); without this a double tap starts two handshakes that
+    // race to publish into sessionFlow.
+    private var acquiring = false
+
+    /** Guards prune against a second tap while the first is still running. */
+    private var pruning = false
+
+    /** False once the activity is tearing down — dialogs must not be shown then. */
+    private val isAlive: Boolean
+        get() = !isFinishing && !isDestroyed
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // The Images tab's inspect dialog can surface Config.Env from image
@@ -129,25 +141,33 @@ class DockerHostManagerActivity : AppCompatActivity() {
     }
 
     private fun acquireSession(force: Boolean) {
+        if (acquiring) return
+        acquiring = true
         connectingState.visibility = View.VISIBLE
         errorState.visibility = View.GONE
         viewPager.visibility = View.GONE
         lifecycleScope.launch {
-            when (val result = DockerSessionManager.acquire(app, hostId, force)) {
-                is DockerResult.Success -> {
-                    supportActionBar?.title = result.value.host.name
-                    supportActionBar?.subtitle = result.value.mode
-                    connectingState.visibility = View.GONE
-                    viewPager.visibility = View.VISIBLE
-                    mutableSessionFlow.value = result.value
+            try {
+                val result = DockerSessionManager.acquire(app, hostId, force)
+                if (!isAlive) return@launch
+                when (result) {
+                    is DockerResult.Success -> {
+                        supportActionBar?.title = result.value.host.name
+                        supportActionBar?.subtitle = result.value.mode
+                        connectingState.visibility = View.GONE
+                        viewPager.visibility = View.VISIBLE
+                        mutableSessionFlow.value = result.value
+                    }
+                    else -> {
+                        connectingState.visibility = View.GONE
+                        errorState.visibility = View.VISIBLE
+                        textError.text = DockerErrorPresenter.messageFor(
+                            this@DockerHostManagerActivity, result
+                        )
+                    }
                 }
-                else -> {
-                    connectingState.visibility = View.GONE
-                    errorState.visibility = View.VISIBLE
-                    textError.text = DockerErrorPresenter.messageFor(
-                        this@DockerHostManagerActivity, result
-                    )
-                }
+            } finally {
+                acquiring = false
             }
         }
     }
@@ -204,17 +224,27 @@ class DockerHostManagerActivity : AppCompatActivity() {
     ) {
         val session = sessionFlow.value ?: return
         PruneConfirmDialog.show(this, titleRes, messageRes) {
+            if (pruning) return@show
+            pruning = true
             lifecycleScope.launch {
-                when (val result = operation(session.transport)) {
-                    is DockerResult.Success -> {
-                        Toast.makeText(
-                            this@DockerHostManagerActivity,
-                            R.string.docker_prune_done,
-                            Toast.LENGTH_SHORT
-                        ).show()
-                        refreshFlow.tryEmit(Unit)
+                try {
+                    val result = operation(session.transport)
+                    // Prune can run for minutes on a large host — the user may
+                    // well have navigated away before it returns.
+                    if (!isAlive) return@launch
+                    when (result) {
+                        is DockerResult.Success -> {
+                            Toast.makeText(
+                                this@DockerHostManagerActivity,
+                                R.string.docker_prune_done,
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            refreshFlow.tryEmit(Unit)
+                        }
+                        else -> DockerErrorPresenter.present(this@DockerHostManagerActivity, result)
                     }
-                    else -> DockerErrorPresenter.present(this@DockerHostManagerActivity, result)
+                } finally {
+                    pruning = false
                 }
             }
         }

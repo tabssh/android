@@ -38,6 +38,38 @@ class OciApiClient(
     private val pinnedCertSha256: String? = null
 ) {
 
+    internal companion object {
+        /**
+         * Ceiling on a single response body we buffer. An instance page is
+         * tens of kilobytes; the endpoint is still a trust boundary, and
+         * `body.string()` would read whatever it is sent until the heap is
+         * gone. Matches the bound used by the other hypervisor clients.
+         */
+        private const val MAX_RESPONSE_BYTES = 8L * 1024 * 1024
+
+        /**
+         * Hard stop on `opc-next-page` following. A server that keeps handing
+         * back a next-page token — whether by bug or by malice — would
+         * otherwise spin this loop forever while the accumulated list grows.
+         * 100 items per page makes this a 20 000-instance ceiling.
+         */
+        private const val MAX_PAGES = 200
+
+        /**
+         * Return [value] unchanged if it is a well-formed OCID, otherwise
+         * throw. OCIDs are interpolated straight into request paths, so a
+         * value carrying `/` or `?` would retarget the request at another
+         * resource or endpoint.
+         */
+        internal fun requireValidOcid(value: String): String {
+            require(value.startsWith("ocid1.") && value.length <= 255 &&
+                value.all { it.isLetterOrDigit() || it == '.' || it == '-' || it == '_' }) {
+                "Invalid OCID"
+            }
+            return value
+        }
+    }
+
     private val identityHost = "identity.$region.oci.oraclecloud.com"
     private val iaasHost = "iaas.$region.oraclecloud.com"
     private val identityBaseUrl = "https://$identityHost/20160918"
@@ -114,22 +146,66 @@ class OciApiClient(
     }
 
     /**
+     * Read at most [MAX_RESPONSE_BYTES] from [response], rejecting anything
+     * larger instead of buffering it. `body.string()` is unbounded.
+     */
+    private fun readBounded(response: okhttp3.Response): String {
+        val source = response.body?.source() ?: return ""
+        source.request(MAX_RESPONSE_BYTES + 1L)
+        if (source.buffer.size > MAX_RESPONSE_BYTES) {
+            Logger.w("OciAPI", "Response exceeded $MAX_RESPONSE_BYTES bytes — rejecting")
+            throw java.io.IOException("OCI response too large")
+        }
+        return source.readByteString().utf8()
+    }
+
+    /**
+     * Describe an error body by size only. The text is server-controlled and
+     * can carry resource identifiers, so the log records how much came back
+     * rather than what it said.
+     */
+    private fun errorBodySummary(response: okhttp3.Response): String {
+        val length = try {
+            readBounded(response).length
+        } catch (e: java.io.IOException) {
+            Logger.d("OciAPI", "error body unreadable: ${e.message}")
+            return "<unreadable body>"
+        }
+        return if (length == 0) "<no body>" else "<$length-char body>"
+    }
+
+    /** Parse [raw] as a JSON array, reporting a malformed reply as an [java.io.IOException]. */
+    private fun jsonArrayOf(raw: String, what: String): JSONArray =
+        try {
+            JSONArray(raw)
+        } catch (e: org.json.JSONException) {
+            throw java.io.IOException("OCI $what: malformed JSON array response", e)
+        }
+
+    /** Parse [raw] as a JSON object, reporting a malformed reply as an [java.io.IOException]. */
+    private fun jsonObjectOf(raw: String, what: String): JSONObject =
+        try {
+            JSONObject(raw)
+        } catch (e: org.json.JSONException) {
+            throw java.io.IOException("OCI $what: malformed JSON object response", e)
+        }
+
+    /**
      * Live credential check — pulls the IAM user record. Returns true on
-     * 200, false on 401/403/404/etc. Throws only on transport errors so
-     * the onboarding flow can distinguish "key wrong" (false) from "no
-     * network" (exception).
+     * 200, false on 401/403/404/etc. Throws on transport errors, and on a
+     * malformed stored user OCID, so the onboarding flow can distinguish
+     * "key wrong" (false) from "no network" / "bad config" (exception).
      */
     suspend fun validateCredentials(): Boolean = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder()
-                .url("$identityBaseUrl/users/$userOcid".toHttpUrl())
+                .url("$identityBaseUrl/users/${requireValidOcid(userOcid)}".toHttpUrl())
                 .get()
                 .build()
             identityClient.newCall(request).execute().use { resp ->
                 val ok = resp.isSuccessful
                 if (!ok) {
-                    Logger.w("OciAPI", "validateCredentials HTTP ${resp.code}: " +
-                        (resp.body?.string()?.take(200) ?: "<no body>"))
+                    Logger.w("OciAPI", "validateCredentials HTTP ${resp.code}: ${errorBodySummary(resp)}")
                 }
                 ok
             }
@@ -146,7 +222,9 @@ class OciApiClient(
      * pagination until the header is absent. Each page requests up to 100
      * items (OCI's documented maximum per page for this endpoint). Pages are
      * accumulated in memory; most tenancies have < 1 000 instances per
-     * compartment so memory pressure is negligible.
+     * compartment so memory pressure is negligible. Following stops early on
+     * a repeated page token or after [MAX_PAGES] pages, so a server that
+     * never drops the header cannot spin this loop forever.
      *
      * Returns an empty list (not an exception) on HTTP errors so the caller
      * can show an empty state rather than crash the fragment.
@@ -155,8 +233,11 @@ class OciApiClient(
         withContext(Dispatchers.IO) {
             val accumulated = mutableListOf<OciInstance>()
             var pageToken: String? = null
+            val seenTokens = mutableSetOf<String>()
+            var pages = 0
 
             do {
+                pages++
                 val urlBuilder = "$iaasBaseUrl/instances".toHttpUrl().newBuilder()
                     .addQueryParameter("compartmentId", compartmentOcid)
                     .addQueryParameter("limit", "100")
@@ -166,13 +247,21 @@ class OciApiClient(
                 val request = Request.Builder().url(urlBuilder.build()).get().build()
                 val nextPage: String? = iaasClient.newCall(request).execute().use { resp ->
                     if (!resp.isSuccessful) {
-                        Logger.e("OciAPI", "listInstances HTTP ${resp.code}: " +
-                            (resp.body?.string()?.take(300) ?: "<no body>"))
+                        Logger.e("OciAPI", "listInstances HTTP ${resp.code}: ${errorBodySummary(resp)}")
                         return@withContext accumulated
                     }
-                    val raw = resp.body?.string().orEmpty()
-                    accumulated.addAll(parseInstances(JSONArray(raw)))
+                    accumulated.addAll(parseInstances(jsonArrayOf(readBounded(resp), "listInstances")))
                     resp.header("opc-next-page")
+                }
+                // A token we have already followed means the server is cycling
+                // us through the same pages; stop rather than loop forever.
+                if (nextPage != null && !seenTokens.add(nextPage)) {
+                    Logger.w("OciAPI", "listInstances: repeated opc-next-page token — stopping after $pages pages")
+                    return@withContext accumulated
+                }
+                if (pages >= MAX_PAGES && nextPage != null) {
+                    Logger.w("OciAPI", "listInstances: page limit $MAX_PAGES reached — returning partial list")
+                    return@withContext accumulated
                 }
                 pageToken = nextPage
             } while (pageToken != null)
@@ -183,15 +272,14 @@ class OciApiClient(
     suspend fun getInstance(instanceOcid: String): OciInstance? =
         withContext(Dispatchers.IO) {
             val request = Request.Builder()
-                .url("$iaasBaseUrl/instances/$instanceOcid".toHttpUrl())
+                .url("$iaasBaseUrl/instances/${requireValidOcid(instanceOcid)}".toHttpUrl())
                 .get().build()
             iaasClient.newCall(request).execute().use { resp ->
                 if (!resp.isSuccessful) {
                     Logger.w("OciAPI", "getInstance HTTP ${resp.code}")
                     return@withContext null
                 }
-                val raw = resp.body?.string().orEmpty()
-                parseInstance(JSONObject(raw))
+                parseInstance(jsonObjectOf(readBounded(resp), "getInstance"))
             }
         }
 
@@ -204,7 +292,7 @@ class OciApiClient(
         instanceOcid: String,
         action: OciInstanceAction
     ): Boolean = withContext(Dispatchers.IO) {
-        val url = "$iaasBaseUrl/instances/$instanceOcid".toHttpUrl().newBuilder()
+        val url = "$iaasBaseUrl/instances/${requireValidOcid(instanceOcid)}".toHttpUrl().newBuilder()
             .addQueryParameter("action", action.wireValue)
             .build()
         // Empty JSON body — OCI requires Content-Length even for actionless POSTs.
@@ -213,7 +301,7 @@ class OciApiClient(
         iaasClient.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) {
                 Logger.e("OciAPI", "instanceAction(${action.wireValue}) HTTP ${resp.code}: " +
-                    (resp.body?.string()?.take(200) ?: "<no body>"))
+                    errorBodySummary(resp))
                 false
             } else {
                 Logger.i("OciAPI", "instanceAction(${action.wireValue}) succeeded for $instanceOcid")
@@ -240,17 +328,17 @@ class OciApiClient(
             val attachments = iaasClient.newCall(Request.Builder().url(vaUrl).get().build())
                 .execute().use { r ->
                     if (!r.isSuccessful) return@withContext null to null
-                    JSONArray(r.body?.string().orEmpty())
+                    jsonArrayOf(readBounded(r), "vnicAttachments")
                 }
 
             // 2. Walk attachments, fetch each VNIC, return the first primary's IPs
             for (i in 0 until attachments.length()) {
                 val att = attachments.optJSONObject(i) ?: continue
                 val vnicId = att.optString("vnicId").takeIf { it.isNotEmpty() } ?: continue
-                val vnicUrl = "$iaasBaseUrl/vnics/$vnicId".toHttpUrl()
+                val vnicUrl = "$iaasBaseUrl/vnics/${requireValidOcid(vnicId)}".toHttpUrl()
                 val vnic = iaasClient.newCall(Request.Builder().url(vnicUrl).get().build())
                     .execute().use { r ->
-                        if (!r.isSuccessful) null else JSONObject(r.body?.string().orEmpty())
+                        if (!r.isSuccessful) null else jsonObjectOf(readBounded(r), "vnic")
                     } ?: continue
                 if (!vnic.optBoolean("isPrimary", false)) continue
                 val pub = vnic.optString("publicIp").takeIf { it.isNotEmpty() }

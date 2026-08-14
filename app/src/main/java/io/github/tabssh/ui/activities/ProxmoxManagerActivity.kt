@@ -30,7 +30,7 @@ import io.github.tabssh.ui.tabs.ConsoleConnectParams
 import io.github.tabssh.ui.tabs.HypervisorConsoleType
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
-import io.github.tabssh.utils.showError
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -48,6 +48,40 @@ class ProxmoxManagerActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "ProxmoxManager"
         const val EXTRA_HYPERVISOR_ID = "hypervisor_id"
+
+        /** Upper bound on a server-supplied name rendered in a row, dialog or log line. */
+        private const val MAX_NAME_LENGTH = 128
+
+        /** Upper bound on an error detail surfaced in a dialog or toast. */
+        private const val MAX_DETAIL_LENGTH = 300
+
+        /**
+         * Strip the characters a hostile Proxmox node could put in a VM/node name
+         * to forge log lines or spoof dialog text — C0/C1 controls plus the
+         * bidi override and isolate ranges — then bound the length.
+         */
+        internal fun safeName(raw: String?): String {
+            val cleaned = raw.orEmpty().filterNot { ch ->
+                val code = ch.code
+                code < 0x20 || code in 0x7F..0x9F ||
+                    code in 0x202A..0x202E || code in 0x2066..0x2069
+            }.trim().take(MAX_NAME_LENGTH)
+            return cleaned.ifBlank { "(unnamed)" }
+        }
+
+        /**
+         * Make an exception or API-supplied detail safe to display: same control
+         * character strip as [safeName], bounded so a multi-kilobyte error body
+         * cannot fill the screen.
+         */
+        internal fun safeDetail(detail: String?): String {
+            val cleaned = detail.orEmpty().filterNot { ch ->
+                val code = ch.code
+                code < 0x20 || code in 0x7F..0x9F ||
+                    code in 0x202A..0x202E || code in 0x2066..0x2069
+            }.trim().take(MAX_DETAIL_LENGTH)
+            return cleaned.ifBlank { "unknown error" }
+        }
     }
 
     private lateinit var app: TabSSHApplication
@@ -61,6 +95,21 @@ class ProxmoxManagerActivity : AppCompatActivity() {
     private var currentClient: ProxmoxApiClient? = null
     private var currentProfile: HypervisorProfile? = null
     private lateinit var adapter: VmAdapter
+
+    /**
+     * Single-flight latch for the VM actions. A second tap while a power op or a
+     * console connect is still in flight used to fire the whole path again —
+     * duplicate power commands, or two console tabs each owning their own
+     * [HypervisorConsoleManager] and socket.
+     */
+    private var actionInFlight = false
+
+    /**
+     * The snapshot dialog is the only dialog here that outlives an async load, so
+     * it is the one that can still be showing when the activity is torn down —
+     * leaking its window. Tracked so [onDestroy] can dismiss it.
+     */
+    private var snapshotDialog: AlertDialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -100,7 +149,15 @@ class ProxmoxManagerActivity : AppCompatActivity() {
     override fun onDestroy() {
         // Cancel any in-flight HTTP calls so OkHttp does not retain Activity
         // references through callbacks past onDestroy.
-        try { currentClient?.cancelAll() } catch (e: Exception) { Logger.w(TAG, "cancelAll: ${e.message}") }
+        // Only the exception type is logged — an OkHttp failure message can carry
+        // the request URL, which for Proxmox includes the auth ticket.
+        try {
+            currentClient?.cancelAll()
+        } catch (e: Exception) {
+            Logger.w(TAG, "cancelAll failed: ${e.javaClass.simpleName}")
+        }
+        snapshotDialog?.dismiss()
+        snapshotDialog = null
         super.onDestroy()
     }
 
@@ -116,8 +173,10 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 showError("Hypervisor profile not found (id=$hypervisorId)")
                 return@launch
             }
+            // The awaited DB hop can land after the user has left the screen.
+            if (isFinishing || isDestroyed) return@launch
             currentProfile = profile
-            supportActionBar?.title = profile.name
+            supportActionBar?.title = safeName(profile.name)
 
             try {
                 val creds = HypervisorPasswordStore.resolveCredentials(this@ProxmoxManagerActivity, profile)
@@ -143,9 +202,14 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 app.database.hypervisorDao().updateLastConnected(profile.id, System.currentTimeMillis())
                 currentClient = client
                 loadVMs(client)
+            } catch (e: CancellationException) {
+                // Activity scope cancelled — not a connection failure.
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Connect failed", e)
-                showError("Connection failed: proxmox ${profile.name}: ${e.message}")
+                // e.message can be a raw server error body; Proxmox echoes the
+                // request path (which carries the auth ticket) on some errors.
+                showError("Connection failed: proxmox ${safeName(profile.name)}: ${safeDetail(e.message)}")
             }
         }
     }
@@ -155,7 +219,15 @@ class ProxmoxManagerActivity : AppCompatActivity() {
             Toast.makeText(this, "Not connected — please wait", Toast.LENGTH_SHORT).show()
             return
         }
-        lifecycleScope.launch { loadVMs(client) }
+        if (actionInFlight) return
+        actionInFlight = true
+        lifecycleScope.launch {
+            try {
+                loadVMs(client)
+            } finally {
+                actionInFlight = false
+            }
+        }
     }
 
     private suspend fun loadVMs(client: ProxmoxApiClient) {
@@ -170,8 +242,10 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                         if (vm.status == "running") {
                             val ip = try {
                                 client.getVMIPAddress(vm.node, vm.vmid, vm.type)
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
-                                Logger.d(TAG, "No IP for ${vm.vmid}: ${e.message}")
+                                Logger.d(TAG, "No IP for ${vm.vmid}: ${e.javaClass.simpleName}")
                                 null
                             }
                             vm.copy(ipAddress = ip)
@@ -179,6 +253,8 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                     }
                 }.awaitAll()
             }
+            // The awaited API hop can land after the user has left the screen.
+            if (isFinishing || isDestroyed) return
             adapter.replaceAllWithDiff(
                 items = vms,
                 newItems = vmsWithIPs,
@@ -189,17 +265,33 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 statusText.visibility = View.VISIBLE
                 statusText.text = "No VMs found"
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "loadVMs failed", e)
-            showError("Could not load VMs: ${e.message}")
+            showError("Could not load VMs: ${safeDetail(e.message)}")
         }
     }
 
     // ── VM actions ────────────────────────────────────────────────────────────
 
+    /**
+     * Proxmox `stop` is a hard power-off (qm stop), not an ACPI shutdown — it is
+     * as destructive as `reset` and was the only power action reaching the API
+     * without a confirmation step.
+     */
+    private fun confirmStop(vm: ProxmoxApiClient.ProxmoxVM, client: ProxmoxApiClient) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Stop ${safeName(vm.name)}?")
+            .setMessage("Proxmox stop is a hard power-off, not a graceful shutdown. Any unsaved data will be lost.")
+            .setPositiveButton("Stop") { _, _ -> powerAction(vm, client, "stop") }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun confirmHardReset(vm: ProxmoxApiClient.ProxmoxVM, client: ProxmoxApiClient) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Hard Reset ${vm.name}?")
+            .setTitle("Hard Reset ${safeName(vm.name)}?")
             .setMessage("This is equivalent to pulling the power cord. Any unsaved data will be lost.")
             .setPositiveButton("Reset") { _, _ -> powerAction(vm, client, "reset") }
             .setNegativeButton("Cancel", null)
@@ -207,8 +299,13 @@ class ProxmoxManagerActivity : AppCompatActivity() {
     }
 
     private fun powerAction(vm: ProxmoxApiClient.ProxmoxVM, client: ProxmoxApiClient, action: String) {
+        // A second tap while the first request is still in flight used to send the
+        // power command twice — a start/stop race on the hypervisor.
+        if (actionInFlight) return
+        actionInFlight = true
+        val vmName = safeName(vm.name)
         lifecycleScope.launch {
-            showProgress("${action.replaceFirstChar { it.uppercase() }}ing ${vm.name}…")
+            showProgress("${action.replaceFirstChar { it.uppercase() }}ing $vmName…")
             try {
                 val ok = withContext(Dispatchers.IO) {
                     when (action) {
@@ -219,17 +316,23 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                         else     -> false
                     }
                 }
+                // The awaited API hop can land after the user has left the screen.
+                if (isFinishing || isDestroyed) return@launch
                 if (ok) {
-                    Toast.makeText(this@ProxmoxManagerActivity, "${vm.name}: $action sent", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@ProxmoxManagerActivity, "$vmName: $action sent", Toast.LENGTH_SHORT).show()
                     delay(2000)
                     loadVMs(client)
                 } else {
                     hideProgress()
-                    showError("$action failed for ${vm.name}")
+                    showError("$action failed for $vmName")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "$action failed for ${vm.name}", e)
-                showError("$action failed: ${e.message}")
+                Logger.e(TAG, "$action failed for $vmName", e)
+                showError("$action failed: ${safeDetail(e.message)}")
+            } finally {
+                actionInFlight = false
             }
         }
     }
@@ -247,8 +350,13 @@ class ProxmoxManagerActivity : AppCompatActivity() {
     private fun openConsole(vm: ProxmoxApiClient.ProxmoxVM) {
         val profile = currentProfile ?: return
         val client = currentClient ?: return
+        // Without this latch a double tap ran the connect twice and left two
+        // console tabs, each holding its own manager, socket and terminal bridge.
+        if (actionInFlight) return
+        actionInFlight = true
+        val vmName = safeName(vm.name)
         lifecycleScope.launch {
-            showProgress("Connecting to ${vm.name}…")
+            showProgress("Connecting to $vmName…")
             val creds = HypervisorPasswordStore.resolveCredentials(this@ProxmoxManagerActivity, profile)
             val manager = HypervisorConsoleManager()
 
@@ -263,12 +371,14 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                     runOnUiThread { consoleTab?.setConnectionState(ConnectionState.DISCONNECTED) }
                 }
                 override fun onError(message: String) {
-                    Logger.w(TAG, "Console error for ${vm.name}: $message")
+                    // message originates from the hypervisor — sanitize before it
+                    // reaches the log, or a crafted VM name forges log lines.
+                    Logger.w(TAG, "Console error for $vmName: ${safeDetail(message)}")
                 }
                 override fun onStrategyAttempt(strategyName: String) {
                     // One spinner; its text updates as the chain falls through (PLAN 14)
                     runOnUiThread {
-                        showProgress("Connecting to ${vm.name} (${HypervisorConsoleManager.strategyLabel(strategyName)})…")
+                        showProgress("Connecting to $vmName (${HypervisorConsoleManager.strategyLabel(strategyName)})…")
                     }
                 }
                 override fun onSwitchToGraphical(connection: HypervisorConsoleManager.ConsoleConnection.Graphical) {
@@ -298,6 +408,12 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                     hideProgress()
                     return@launch
                 }
+                // The connect can complete after the user has left the screen;
+                // dropping it here without disconnect() would leak the socket.
+                if (isFinishing || isDestroyed) {
+                    manager.disconnect()
+                    return@launch
+                }
 
                 val tab = app.tabManager.createConsoleTab(
                     ConsoleConnectParams(
@@ -309,7 +425,9 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                         verifySsl = profile.verifySsl,
                         pinnedCertSha256 = profile.pinnedCertSha256,
                         vmId = vm.vmid.toString(),
-                        vmName = vm.name,
+                        // Becomes the tab title — sanitized so a crafted VM name
+                        // cannot spoof or reorder the tab strip.
+                        vmName = vmName,
                         vmNode = vm.node,
                         vmType = vm.type,
                         realm = creds.realm ?: "pam"
@@ -355,16 +473,18 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                         putExtra(TabTerminalActivity.EXTRA_TAB_ID, tab.tabId)
                     }
                 )
-                Logger.i(TAG, "Opened console tab for ${vm.name} (vmid=${vm.vmid})")
-            } catch (e: kotlinx.coroutines.CancellationException) {
+                Logger.i(TAG, "Opened console tab for $vmName (vmid=${vm.vmid})")
+            } catch (e: CancellationException) {
                 // Cancellation is not a connection failure — swallowing it here
                 // left the progress spinner and an error toast behind when the
                 // activity scope was cancelled mid-connect.
                 throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Console connection error for ${vm.name}", e)
+                Logger.e(TAG, "Console connection error for $vmName", e)
                 hideProgress()
-                showError("Connection failed: vm ${vm.name}: ${e.message}")
+                showError("Connection failed: vm $vmName: ${safeDetail(e.message)}")
+            } finally {
+                actionInFlight = false
             }
         }
     }
@@ -373,6 +493,8 @@ class ProxmoxManagerActivity : AppCompatActivity() {
 
     private fun showProgress(message: String) {
         runOnUiThread {
+            // runOnUiThread posts; the post can run after the window is gone.
+            if (isFinishing || isDestroyed) return@runOnUiThread
             progressBar.visibility = View.VISIBLE
             statusText.visibility = View.VISIBLE
             statusText.text = message
@@ -381,6 +503,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
 
     private fun hideProgress() {
         runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
             progressBar.visibility = View.GONE
             statusText.visibility = View.GONE
         }
@@ -388,6 +511,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
 
     private fun showError(message: String) {
         runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
             progressBar.visibility = View.GONE
             statusText.visibility = View.VISIBLE
             statusText.text = "Error: $message"
@@ -428,12 +552,15 @@ class ProxmoxManagerActivity : AppCompatActivity() {
             val vm = items[position]
             val client = currentClient ?: return
 
-            holder.name.text = "${vm.name} (${vm.vmid})"
+            // name, node and ipAddress are all hypervisor-supplied; a crafted
+            // value could otherwise inject bidi overrides or control characters
+            // into the row and spoof which VM the buttons act on.
+            holder.name.text = "${safeName(vm.name)} (${vm.vmid})"
             holder.state.text = stateLabel(vm.status)
             holder.state.setTextColor(stateColor(vm.status))
-            holder.info.text = "Node: ${vm.node}  ·  VMID: ${vm.vmid}  ·  CPU: ${(vm.cpu * 100).toInt()}%  ·  RAM: ${vm.mem / 1024 / 1024}MB"
+            holder.info.text = "Node: ${safeName(vm.node)}  ·  VMID: ${vm.vmid}  ·  CPU: ${(vm.cpu * 100).toInt()}%  ·  RAM: ${vm.mem / 1024 / 1024}MB"
             if (vm.ipAddress != null) {
-                holder.ip.text = "IP: ${vm.ipAddress}"
+                holder.ip.text = "IP: ${safeName(vm.ipAddress)}"
                 holder.ip.visibility = View.VISIBLE
             } else {
                 holder.ip.visibility = View.GONE
@@ -482,7 +609,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
 
             holder.btnConsole.setOnClickListener { openConsole(vm) }
             holder.btnStart.setOnClickListener { powerAction(vm, client, "start") }
-            holder.btnStop.setOnClickListener { powerAction(vm, client, "stop") }
+            holder.btnStop.setOnClickListener { confirmStop(vm, client) }
             holder.btnReboot.setOnClickListener { powerAction(vm, client, "reboot") }
             holder.btnReset.setOnClickListener { confirmHardReset(vm, client) }
         }
@@ -511,6 +638,9 @@ class ProxmoxManagerActivity : AppCompatActivity() {
      * row; mirrors [XCPngManagerActivity]'s snapshot dialog pattern.
      */
     private fun showSnapshotDialog(vm: ProxmoxApiClient.ProxmoxVM, client: ProxmoxApiClient) {
+        // Re-entered from the create/delete coroutines, which can resume after
+        // the activity is gone — showing a dialog then throws BadTokenException.
+        if (isFinishing || isDestroyed) return
         val dialogView = layoutInflater.inflate(R.layout.dialog_vm_snapshots, null)
         val vmNameText = dialogView.findViewById<TextView>(R.id.vm_name_text)
         val dialogProgress = dialogView.findViewById<ProgressBar>(R.id.progress_bar)
@@ -520,17 +650,22 @@ class ProxmoxManagerActivity : AppCompatActivity() {
         val closeButton = dialogView.findViewById<android.widget.Button>(R.id.close_button)
 
         snapshotRecycler.layoutManager = LinearLayoutManager(this)
-        vmNameText.text = "VM: ${vm.name}"
+        vmNameText.text = "VM: ${safeName(vm.name)}"
 
+        // Replace any dialog left over from a previous open so only one is tracked.
+        snapshotDialog?.dismiss()
         val dialog = MaterialAlertDialogBuilder(this)
             .setView(dialogView)
             .create()
+        snapshotDialog = dialog
 
         // Load snapshots
         lifecycleScope.launch {
             try {
                 dialogProgress.visibility = View.VISIBLE
                 val snapshots = client.listSnapshots(vm.node, vm.vmid, vm.type)
+                // The awaited API hop can land after the dialog's activity is gone.
+                if (isFinishing || isDestroyed) return@launch
                 dialogProgress.visibility = View.GONE
 
                 if (snapshots.isEmpty()) {
@@ -543,8 +678,11 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                         handleSnapshotAction(vm, client, snapshot, action, dialog)
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to load snapshots: ${e.message}", e)
+                Logger.e(TAG, "Failed to load snapshots", e)
+                if (isFinishing || isDestroyed) return@launch
                 dialogProgress.visibility = View.GONE
                 emptyStateText.text = "Error loading snapshots"
                 emptyStateText.visibility = View.VISIBLE
@@ -577,7 +715,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
 
         MaterialAlertDialogBuilder(this)
             .setTitle("Create Snapshot")
-            .setMessage("Enter a name for the snapshot of ${vm.name}")
+            .setMessage("Enter a name for the snapshot of ${safeName(vm.name)}")
             .setView(form.root)
             .setPositiveButton("Create") { _, _ ->
                 val name = input.text.toString().trim()
@@ -594,6 +732,7 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     try {
                         val success = client.createSnapshot(vm.node, vm.vmid, vm.type, name)
+                        if (isFinishing || isDestroyed) return@launch
                         if (success) {
                             Toast.makeText(this@ProxmoxManagerActivity, "Snapshot created", Toast.LENGTH_SHORT).show()
                             parentDialog.dismiss()
@@ -602,9 +741,16 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                         } else {
                             Toast.makeText(this@ProxmoxManagerActivity, "Failed to create snapshot", Toast.LENGTH_SHORT).show()
                         }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
-                        Logger.e(TAG, "Snapshot creation error: ${e.message}", e)
-                        Toast.makeText(this@ProxmoxManagerActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                        Logger.e(TAG, "Snapshot creation error", e)
+                        if (isFinishing || isDestroyed) return@launch
+                        Toast.makeText(
+                            this@ProxmoxManagerActivity,
+                            "Error: ${safeDetail(e.message)}",
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
                 }
             }
@@ -620,20 +766,28 @@ class ProxmoxManagerActivity : AppCompatActivity() {
             "revert" -> {
                 MaterialAlertDialogBuilder(this)
                     .setTitle("Revert to Snapshot")
-                    .setMessage("Are you sure you want to revert ${vm.name} to snapshot '${snapshot.name}'?\n\nThis will restore the VM to its state when the snapshot was taken.")
+                    .setMessage("Are you sure you want to revert ${safeName(vm.name)} to snapshot '${safeName(snapshot.name)}'?\n\nThis will restore the VM to its state when the snapshot was taken.")
                     .setPositiveButton("Revert") { _, _ ->
                         lifecycleScope.launch {
                             try {
                                 val success = client.rollbackSnapshot(vm.node, vm.vmid, vm.type, snapshot.name)
+                                if (isFinishing || isDestroyed) return@launch
                                 if (success) {
                                     Toast.makeText(this@ProxmoxManagerActivity, "VM reverted to snapshot", Toast.LENGTH_SHORT).show()
                                     parentDialog.dismiss()
                                 } else {
                                     Toast.makeText(this@ProxmoxManagerActivity, "Failed to revert", Toast.LENGTH_SHORT).show()
                                 }
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
-                                Logger.e(TAG, "Revert error: ${e.message}", e)
-                                Toast.makeText(this@ProxmoxManagerActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                Logger.e(TAG, "Revert error", e)
+                                if (isFinishing || isDestroyed) return@launch
+                                Toast.makeText(
+                                    this@ProxmoxManagerActivity,
+                                    "Error: ${safeDetail(e.message)}",
+                                    Toast.LENGTH_LONG
+                                ).show()
                             }
                         }
                     }
@@ -643,11 +797,12 @@ class ProxmoxManagerActivity : AppCompatActivity() {
             "delete" -> {
                 MaterialAlertDialogBuilder(this)
                     .setTitle("Delete Snapshot")
-                    .setMessage("Are you sure you want to delete snapshot '${snapshot.name}'?\n\nThis action cannot be undone.")
+                    .setMessage("Are you sure you want to delete snapshot '${safeName(snapshot.name)}'?\n\nThis action cannot be undone.")
                     .setPositiveButton("Delete") { _, _ ->
                         lifecycleScope.launch {
                             try {
                                 val success = client.deleteSnapshot(vm.node, vm.vmid, vm.type, snapshot.name)
+                                if (isFinishing || isDestroyed) return@launch
                                 if (success) {
                                     Toast.makeText(this@ProxmoxManagerActivity, "Snapshot deleted", Toast.LENGTH_SHORT).show()
                                     parentDialog.dismiss()
@@ -656,9 +811,16 @@ class ProxmoxManagerActivity : AppCompatActivity() {
                                 } else {
                                     Toast.makeText(this@ProxmoxManagerActivity, "Failed to delete snapshot", Toast.LENGTH_SHORT).show()
                                 }
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
-                                Logger.e(TAG, "Delete error: ${e.message}", e)
-                                Toast.makeText(this@ProxmoxManagerActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                Logger.e(TAG, "Delete error", e)
+                                if (isFinishing || isDestroyed) return@launch
+                                Toast.makeText(
+                                    this@ProxmoxManagerActivity,
+                                    "Error: ${safeDetail(e.message)}",
+                                    Toast.LENGTH_LONG
+                                ).show()
                             }
                         }
                     }
@@ -693,12 +855,13 @@ class ProxmoxManagerActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: VH, position: Int) {
             val snapshot = snapshots[position]
 
-            holder.name.text = snapshot.name
+            // Both name and description come from the hypervisor.
+            holder.name.text = safeName(snapshot.name)
             // snaptime is epoch seconds; null while the snapshot is still being created
             holder.time.text = if (snapshot.snaptime != null) {
                 "Created: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(snapshot.snaptime * 1000))}"
             } else {
-                snapshot.description ?: "Creating…"
+                snapshot.description?.let { safeName(it) } ?: "Creating…"
             }
 
             holder.revertButton.setOnClickListener { onAction(snapshot, "revert") }

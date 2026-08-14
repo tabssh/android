@@ -1,5 +1,6 @@
 package io.github.tabssh.ui.dialogs
 
+import android.app.Activity
 import android.content.Context
 import android.view.LayoutInflater
 import android.widget.ArrayAdapter
@@ -24,7 +25,10 @@ object AutoUpdatePolicyDialog {
 
     /** Edit (or create) the policy row for [containerName] on [hostId]. */
     fun show(context: Context, app: TabSSHApplication, hostId: Long, containerName: String) {
-        val owner = context as LifecycleOwner
+        // Callers always pass an activity, but an unchecked cast would crash the
+        // app on a themed/application context — fail closed instead.
+        val owner = context as? LifecycleOwner ?: return
+        val activity = context as? Activity
         owner.lifecycleScope.launch {
             val policyDao = app.database.containerAutoUpdatePolicyDao()
             val existing = policyDao.getPoliciesForHost(hostId).first()
@@ -32,6 +36,10 @@ object AutoUpdatePolicyDialog {
                     it.containerNameOrStackName == containerName && it.scope == "container"
                 }
             val credentials = app.database.registryCredentialDao().getAllList()
+
+            // Two DAO reads have suspended by this point — showing a dialog on
+            // a finished activity throws BadTokenException.
+            if (activity != null && (activity.isFinishing || activity.isDestroyed)) return@launch
 
             val view = LayoutInflater.from(context)
                 .inflate(R.layout.dialog_auto_update_policy, null)
@@ -76,6 +84,11 @@ object AutoUpdatePolicyDialog {
                             policyDao.insert(policy)
                         } else {
                             policyDao.update(policy)
+                        }
+                        if (activity != null &&
+                            (activity.isFinishing || activity.isDestroyed)
+                        ) {
+                            return@launch
                         }
                         Toast.makeText(
                             context, R.string.docker_policy_saved, Toast.LENGTH_SHORT

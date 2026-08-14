@@ -5,6 +5,7 @@ import android.view.LayoutInflater
 import android.widget.TextView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
+import io.github.tabssh.ui.utils.DockerText
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -18,9 +19,13 @@ object DockerInspectDialog {
     fun show(context: Context, title: String, json: String) {
         val view = LayoutInflater.from(context)
             .inflate(R.layout.dialog_docker_inspect, null)
-        view.findViewById<TextView>(R.id.text_inspect).text = prettyPrint(json)
+        // Both the title and the payload come from the remote daemon — strip
+        // control/bidi characters and cap the blob so a pathological inspect
+        // response cannot reorder the dialog or exhaust memory.
+        view.findViewById<TextView>(R.id.text_inspect).text =
+            DockerText.block(prettyPrint(json))
         MaterialAlertDialogBuilder(context)
-            .setTitle(title)
+            .setTitle(DockerText.display(title))
             .setView(view)
             .setPositiveButton(R.string.close, null)
             .show()
@@ -35,7 +40,7 @@ object DockerInspectDialog {
                 trimmed.startsWith("{") -> JSONObject(trimmed).toString(2)
                 else -> json
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             json
         }
     }

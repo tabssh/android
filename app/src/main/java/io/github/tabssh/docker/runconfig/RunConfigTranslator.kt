@@ -26,7 +26,12 @@ object RunConfigTranslator {
      * Build the `docker run` argv for [config] as a token list — one execve
      * argument per element, in canonical order: options first (`-d` and, when
      * a name is set, `--name` always lead), then [RunConfig.extraArgs]
-     * verbatim, then the image reference, then the command tokens.
+     * verbatim, then `--`, then the image reference, then the command tokens.
+     *
+     * The `--` end-of-options marker matters: the image reference reaches this
+     * function from a user-edited `run.yml` or from remote inspect output, and
+     * without the marker a reference beginning with `-` would be parsed by
+     * `docker run` as another flag.
      *
      * The list does NOT include the `docker` binary itself — the CLI
      * transport prepends its per-host docker path. Values are raw tokens;
@@ -53,6 +58,7 @@ object RunConfigTranslator {
         for (d in config.devices) argv += listOf("--device", d)
         for (t in config.tmpfs) argv += listOf("--tmpfs", t)
         argv += config.extraArgs
+        argv += "--"
         argv += config.image
         argv += config.command
         return argv

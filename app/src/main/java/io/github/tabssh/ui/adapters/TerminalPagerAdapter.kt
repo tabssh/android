@@ -24,6 +24,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
@@ -334,7 +335,11 @@ class TerminalPagerAdapter(
             boundListener = listener
             rfbClient.listener = listener
             vncView.onPointerEvent = { x, y, mask -> ch.sendPointerEvent(x, y, mask) }
-            vncView.onKeyEvent = { keysym, down -> if (down) ch.sendKey(keysym) }
+            // Forward down AND up states raw — collapsing to sendKey() on down
+            // turned every modifier press into an immediate press+release, so
+            // Ctrl/Alt/Shift chords (hardware keyboards and the console keybar's
+            // modifier bracketing via VncView.sendKey) never arrived held-down.
+            vncView.onKeyEvent = { keysym, down -> ch.sendRawKeyEvent(keysym, down) }
             vncView.onTextInput = { text -> ch.sendText(text) }
             vncView.onBackspace = { ch.sendKey(RfbConstants.KEY_BACK_SPACE) }
             vncView.onViewSizeReady = { w, h -> ch.resizeToPixels(w, h) }
@@ -378,6 +383,11 @@ class TerminalPagerAdapter(
         }
 
         private fun unwireCallbacks() {
+            // close() stops the channel's dedicated writer thread — nulling
+            // without close leaks the thread (same fix as
+            // ConsoleViewHolder.unwireVnc). The RfbClient itself lives on
+            // VncTab and is not torn down here.
+            channel?.close()
             channel = null
             vncView.onPointerEvent = null
             vncView.onKeyEvent = null
@@ -433,13 +443,17 @@ class TerminalPagerAdapter(
         fun bind(consoleTab: ConsoleTab) {
             unbind()
             modeJob = holderScope.launch {
-                consoleTab.displayMode.collect { mode ->
-                    when (mode) {
-                        ConsoleDisplayMode.TEXT -> bindText(consoleTab)
-                        ConsoleDisplayMode.RFB -> bindGraphical(consoleTab)
-                        ConsoleDisplayMode.SPICE -> bindSpice(consoleTab)
+                // Combine with graphicalAttachSeq so a re-markGraphical with a
+                // NEW client while already in RFB mode (reconnect) still
+                // re-emits and rewires — displayMode alone dedupes equal values.
+                combine(consoleTab.displayMode, consoleTab.graphicalAttachSeq) { mode, _ -> mode }
+                    .collect { mode ->
+                        when (mode) {
+                            ConsoleDisplayMode.TEXT -> bindText(consoleTab)
+                            ConsoleDisplayMode.RFB -> bindGraphical(consoleTab)
+                            ConsoleDisplayMode.SPICE -> bindSpice(consoleTab)
+                        }
                     }
-                }
             }
         }
 
@@ -495,7 +509,11 @@ class TerminalPagerAdapter(
             boundListener = listener
             rfbClient.listener = listener
             vncView.onPointerEvent = { x, y, mask -> ch.sendPointerEvent(x, y, mask) }
-            vncView.onKeyEvent = { keysym, down -> if (down) ch.sendKey(keysym) }
+            // Forward down AND up states raw — collapsing to sendKey() on down
+            // turned every modifier press into an immediate press+release, so
+            // Ctrl/Alt/Shift chords (hardware keyboards and the console keybar's
+            // modifier bracketing via VncView.sendKey) never arrived held-down.
+            vncView.onKeyEvent = { keysym, down -> ch.sendRawKeyEvent(keysym, down) }
             vncView.onTextInput = { text -> ch.sendText(text) }
             vncView.onBackspace = { ch.sendKey(RfbConstants.KEY_BACK_SPACE) }
             vncView.onViewSizeReady = { w, h -> ch.resizeToPixels(w, h) }
@@ -599,6 +617,9 @@ class TerminalPagerAdapter(
             }
             boundClient = null
             boundListener = null
+            // Release the writer executor + resize-debouncer threads — dropping
+            // the reference without close() leaked one thread pair per rebind.
+            channel?.close()
             channel = null
             vncView.onPointerEvent = null
             vncView.onKeyEvent = null

@@ -192,6 +192,13 @@ class UpdateApplier(
                 }
                 // No HEALTHCHECK: sustained uptime is the success signal.
                 !sawHealthcheck && elapsed >= RecreateContainer.VERIFY_WINDOW_MS -> return null
+                // Terminal guard: a container whose Health block appears and
+                // then vanishes (image swapped, healthcheck disabled mid-run)
+                // matches no branch above, so without this the loop would
+                // never end.
+                elapsed >= HEALTH_WINDOW_MS ->
+                    return "Replacement container did not verify within " +
+                        "${HEALTH_WINDOW_MS / 1000}s"
             }
         }
     }

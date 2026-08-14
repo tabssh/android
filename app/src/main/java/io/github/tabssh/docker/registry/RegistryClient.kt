@@ -1,11 +1,13 @@
 package io.github.tabssh.docker.registry
 
 import io.github.tabssh.docker.transport.DockerResult
+import io.github.tabssh.network.SharedHttpClient
 import io.github.tabssh.storage.database.entities.RegistryCredential
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -89,9 +91,43 @@ open class RegistryClient(
 
         /** The default pull scope for a repository when the challenge has none. */
         fun pullScope(repository: String): String = "repository:$repository:pull"
+
+        /** Largest token-exchange or manifest body read into memory (1 MiB). */
+        const val MAX_BODY_BYTES = 1L * 1024 * 1024
+
+        /** Cap on registry-supplied text echoed into a DockerResult detail. */
+        const val MAX_DETAIL_CHARS = 512
+
+        // Token realms that are trusted to receive the credentials of the
+        // registry that issued the challenge, beyond the same-host default.
+        private val REALM_ALIASES = mapOf(
+            ImageRef.DOCKER_HUB_API_HOST to setOf("auth.docker.io"),
+            "index.docker.io" to setOf("auth.docker.io")
+        )
+
+        /**
+         * Whether the stored secret may be sent to [realm] for a challenge
+         * issued by [apiHost].
+         *
+         * A `WWW-Authenticate` header is attacker-controlled data from the
+         * moment a registry (or anything impersonating one over a redirect)
+         * answers 401, so the realm decides where the credential travels.
+         * Requiring https and a matching host stops a hostile registry from
+         * naming `http://evil/` — or any third-party host — as the realm and
+         * harvesting the Basic credential for another registry. An untrusted
+         * realm is not fatal: the exchange still happens anonymously, which
+         * is all a public image needs.
+         */
+        fun realmAcceptsCredentials(realm: HttpUrl, apiHost: String): Boolean {
+            if (!realm.isHttps) return false
+            val host = realm.host.lowercase()
+            val registry = apiHost.substringBefore(':').lowercase()
+            if (host == registry) return true
+            return REALM_ALIASES[registry]?.contains(host) == true
+        }
     }
 
-    private val http: OkHttpClient = client ?: OkHttpClient.Builder()
+    private val http: OkHttpClient = client ?: SharedHttpClient.client.newBuilder()
         .connectTimeout(TIMEOUT_S, TimeUnit.SECONDS)
         .readTimeout(TIMEOUT_S, TimeUnit.SECONDS)
         .build()
@@ -140,7 +176,7 @@ open class RegistryClient(
                     ?.let { "Bearer $it" }
                 ?: return@withContext DockerResult.PermissionDenied(
                     "Registry requires authentication for ${ref.canonicalRepository}",
-                    detail = challengeHeader
+                    detail = challengeHeader?.take(MAX_DETAIL_CHARS)
                 )
 
             headManifest(url, authValue).use { response ->
@@ -160,6 +196,27 @@ open class RegistryClient(
             DockerResult.Error("Registry check failed for ${ref.canonicalRepository}", e.message)
         }
     }
+
+    /**
+     * Read a response body as bytes, refusing anything over [MAX_BODY_BYTES].
+     *
+     * A registry is an untrusted remote peer: a plain `body.bytes()` lets it
+     * decide how much of this process's heap to consume. `peekBody` caps the
+     * read, and one byte over the cap is treated as a refusal rather than a
+     * truncation so nothing downstream parses or hashes a half document.
+     */
+    private fun readBoundedBytes(response: Response): ByteArray? {
+        val peeked = response.peekBody(MAX_BODY_BYTES + 1).bytes()
+        if (peeked.size > MAX_BODY_BYTES) {
+            Logger.w(TAG, "response body exceeded $MAX_BODY_BYTES bytes; refused")
+            return null
+        }
+        return peeked
+    }
+
+    /** Text form of [readBoundedBytes]. */
+    private fun readBounded(response: Response): String? =
+        readBoundedBytes(response)?.toString(Charsets.UTF_8)
 
     /** One manifest HEAD with the multi-arch Accept set. */
     private fun headManifest(url: String, authorization: String?): Response {
@@ -182,20 +239,33 @@ open class RegistryClient(
         credential: RegistryCredential?,
         secret: String?
     ): String? {
-        val realm = challenge.realm ?: return null
-        val urlBuilder = realm.toHttpUrlOrNull()?.newBuilder() ?: return null
+        val realmUrl = challenge.realm?.toHttpUrlOrNull() ?: return null
+        if (!realmUrl.isHttps) {
+            Logger.w(TAG, "token realm ${realmUrl.host} rejected: not https")
+            return null
+        }
+        val urlBuilder = realmUrl.newBuilder()
         challenge.service?.let { urlBuilder.addQueryParameter("service", it) }
         urlBuilder.addQueryParameter("scope", challenge.scope ?: pullScope(ref.repository))
         val builder = Request.Builder().url(urlBuilder.build()).get()
+        val mayAuthenticate = realmAcceptsCredentials(realmUrl, ref.apiHost)
         if (credential != null && credential.username.isNotEmpty() && !secret.isNullOrEmpty()) {
-            builder.header("Authorization", basicAuthValue(credential.username, secret))
+            if (mayAuthenticate) {
+                builder.header("Authorization", basicAuthValue(credential.username, secret))
+            } else {
+                Logger.w(
+                    TAG,
+                    "token realm ${realmUrl.host} is not ${ref.apiHost}; exchanging anonymously " +
+                        "(credential=xxxxx withheld)"
+                )
+            }
         }
         http.newCall(builder.build()).execute().use { response ->
             if (!response.isSuccessful) {
-                Logger.w(TAG, "token exchange at $realm failed (HTTP ${response.code})")
+                Logger.w(TAG, "token exchange at ${realmUrl.host} failed (HTTP ${response.code})")
                 return null
             }
-            val body = JSONObject(response.body?.string().orEmpty())
+            val body = JSONObject(readBounded(response).orEmpty())
             val token = body.optString("token").ifEmpty { body.optString("access_token") }
             return token.takeIf { it.isNotEmpty() }?.let { "Bearer $it" }
         }
@@ -207,15 +277,17 @@ open class RegistryClient(
      * the fallback for registries that omit the header on HEAD.
      */
     private fun digestFrom(response: Response, ref: ImageRef): DockerResult<String> {
-        response.header("Docker-Content-Digest")?.takeIf { it.isNotBlank() }?.let {
+        // The header is registry-supplied: only a well-formed digest is taken,
+        // anything else falls through to hashing the manifest locally.
+        response.header("Docker-Content-Digest")?.trim()?.takeIf { ImageRef.isValidDigest(it) }?.let {
             return DockerResult.Success(it)
         }
         // Preserve the auth the HEAD used for the fallback GET.
         val get = response.request.newBuilder().get().build()
         http.newCall(get).execute().use { body ->
             if (!body.isSuccessful) return classify(body, ref)
-            val bytes = body.body?.bytes()
-                ?: return DockerResult.Error("Manifest body was empty for ${ref.canonicalRepository}")
+            val bytes = readBoundedBytes(body)
+                ?: return DockerResult.Error("Manifest body was empty or oversized for ${ref.canonicalRepository}")
             val sha = MessageDigest.getInstance("SHA-256").digest(bytes)
             return DockerResult.Success(
                 "sha256:" + sha.joinToString("") { "%02x".format(it) }

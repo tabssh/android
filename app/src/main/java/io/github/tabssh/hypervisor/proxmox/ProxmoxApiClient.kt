@@ -8,8 +8,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.*
 import org.json.JSONObject
 import java.io.IOException
-import java.security.cert.X509Certificate
-import javax.net.ssl.*
 
 /*
  * Upper bounds on the hypervisor-supplied SPICE descriptor fields. The
@@ -30,14 +28,63 @@ class ProxmoxApiClient(
     private val username: String,
     private val password: String,
     private val realm: String = "pam",
-    private val verifySsl: Boolean = false,
+    // Verification on by default: an omitted argument must never be the
+    // insecure choice. Profiles that need the TOFU-only path pass false
+    // explicitly (per-entity opt-out, AI.md PART 6).
+    private val verifySsl: Boolean = true,
     private val pinnedCertSha256: String? = null
 ) {
 
     private val baseUrl = "https://$host:$port/api2/json"
     private val client: OkHttpClient
+    // Written by authenticate() on one IO thread and read by every later call
+    // on other IO dispatcher threads — publication must be visible across them.
+    @Volatile
     private var authTicket: String? = null
+    @Volatile
     private var csrfToken: String? = null
+
+    internal companion object {
+        /**
+         * Ceiling on any Proxmox API response we buffer. A PVE JSON answer is
+         * kilobytes; anything past 8 MiB is a broken or hostile endpoint and
+         * must not be allowed to allocate the heap unbounded.
+         */
+        internal const val MAX_RESPONSE_BYTES = 8L * 1024 * 1024
+
+        /** Longest server-supplied error text reproduced in a user-facing message. */
+        internal const val MAX_ERROR_TEXT_LEN = 200
+
+        /**
+         * Percent-encode one path segment. Node and snapshot names are
+         * interpolated into the REST path, and a name containing `/`, `?`,
+         * `#`, or a space would otherwise silently retarget the request at a
+         * different endpoint. `URLEncoder` is form-encoding, so its `+`-for-space
+         * is corrected here.
+         */
+        internal fun encodePathSegment(value: String): String =
+            java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+
+        /**
+         * Reduce server-supplied text to something safe to put in a log line or
+         * an error dialog: control characters (including the newlines that would
+         * let a hostile body forge extra log records) become spaces, runs of
+         * whitespace collapse, and the result is truncated.
+         */
+        internal fun sanitizeServerText(text: String?): String {
+            if (text.isNullOrEmpty()) return ""
+            val cleaned = buildString(text.length) {
+                for (ch in text) {
+                    append(if (ch.isISOControl()) ' ' else ch)
+                }
+            }.replace(Regex("\\s+"), " ").trim()
+            return if (cleaned.length <= MAX_ERROR_TEXT_LEN) {
+                cleaned
+            } else {
+                cleaned.take(MAX_ERROR_TEXT_LEN) + "…"
+            }
+        }
+    }
 
     /** Phase 1 TLS pin — caller reads after authenticate() to persist
      *  the TOFU capture. Null when verifySsl is false or pin already set. */
@@ -98,7 +145,7 @@ class ProxmoxApiClient(
                 .build()
 
             client.newCall(request).execute().use { response ->
-                val responseBody = response.body?.string()
+                val responseBody = readBounded(response)
 
                 if (response.isSuccessful && responseBody != null) {
                     val json = JSONObject(responseBody)
@@ -185,7 +232,8 @@ class ProxmoxApiClient(
 
     suspend fun startVM(node: String, vmid: Int, type: String = "qemu"): Boolean = withContext(Dispatchers.IO) {
         try {
-            val endpoint = if (type == "lxc") "/nodes/$node/lxc/$vmid/status/start" else "/nodes/$node/qemu/$vmid/status/start"
+            val n = encodePathSegment(node)
+            val endpoint = if (type == "lxc") "/nodes/$n/lxc/$vmid/status/start" else "/nodes/$n/qemu/$vmid/status/start"
             apiPost(endpoint)
             Logger.i("ProxmoxAPI", "Started VM $vmid")
             true
@@ -199,7 +247,8 @@ class ProxmoxApiClient(
 
     suspend fun stopVM(node: String, vmid: Int, type: String = "qemu"): Boolean = withContext(Dispatchers.IO) {
         try {
-            val endpoint = if (type == "lxc") "/nodes/$node/lxc/$vmid/status/stop" else "/nodes/$node/qemu/$vmid/status/stop"
+            val n = encodePathSegment(node)
+            val endpoint = if (type == "lxc") "/nodes/$n/lxc/$vmid/status/stop" else "/nodes/$n/qemu/$vmid/status/stop"
             apiPost(endpoint)
             Logger.i("ProxmoxAPI", "Stopped VM $vmid")
             true
@@ -213,7 +262,8 @@ class ProxmoxApiClient(
 
     suspend fun shutdownVM(node: String, vmid: Int, type: String = "qemu"): Boolean = withContext(Dispatchers.IO) {
         try {
-            val endpoint = if (type == "lxc") "/nodes/$node/lxc/$vmid/status/shutdown" else "/nodes/$node/qemu/$vmid/status/shutdown"
+            val n = encodePathSegment(node)
+            val endpoint = if (type == "lxc") "/nodes/$n/lxc/$vmid/status/shutdown" else "/nodes/$n/qemu/$vmid/status/shutdown"
             apiPost(endpoint)
             Logger.i("ProxmoxAPI", "Shutdown VM $vmid")
             true
@@ -232,7 +282,7 @@ class ProxmoxApiClient(
         try {
             if (type == "lxc") {
                 // For LXC containers, get IP from config
-                val json = apiGet("/nodes/$node/lxc/$vmid/interfaces")
+                val json = apiGet("/nodes/${encodePathSegment(node)}/lxc/$vmid/interfaces")
                 val data = json.optJSONArray("data")
                 if (data != null && data.length() > 0) {
                     for (i in 0 until data.length()) {
@@ -246,7 +296,7 @@ class ProxmoxApiClient(
             } else {
                 // For QEMU VMs, use guest agent
                 try {
-                    val json = apiGet("/nodes/$node/qemu/$vmid/agent/network-get-interfaces")
+                    val json = apiGet("/nodes/${encodePathSegment(node)}/qemu/$vmid/agent/network-get-interfaces")
                     val result = json.optJSONObject("data")?.optJSONObject("result")
                     val interfaces = result?.optJSONArray("result")
                     
@@ -283,7 +333,8 @@ class ProxmoxApiClient(
 
     suspend fun rebootVM(node: String, vmid: Int, type: String = "qemu"): Boolean = withContext(Dispatchers.IO) {
         try {
-            val endpoint = if (type == "lxc") "/nodes/$node/lxc/$vmid/status/reboot" else "/nodes/$node/qemu/$vmid/status/reboot"
+            val n = encodePathSegment(node)
+            val endpoint = if (type == "lxc") "/nodes/$n/lxc/$vmid/status/reboot" else "/nodes/$n/qemu/$vmid/status/reboot"
             apiPost(endpoint)
             Logger.i("ProxmoxAPI", "Rebooted VM $vmid")
             true
@@ -301,7 +352,8 @@ class ProxmoxApiClient(
      */
     suspend fun resetVM(node: String, vmid: Int, type: String = "qemu"): Boolean = withContext(Dispatchers.IO) {
         try {
-            val endpoint = if (type == "lxc") "/nodes/$node/lxc/$vmid/status/reset" else "/nodes/$node/qemu/$vmid/status/reset"
+            val n = encodePathSegment(node)
+            val endpoint = if (type == "lxc") "/nodes/$n/lxc/$vmid/status/reset" else "/nodes/$n/qemu/$vmid/status/reset"
             apiPost(endpoint)
             Logger.i("ProxmoxAPI", "Reset VM $vmid (hard reset)")
             true
@@ -326,7 +378,8 @@ class ProxmoxApiClient(
      */
     suspend fun listSnapshots(node: String, vmid: Int, type: String = "qemu"): List<ProxmoxSnapshot> = withContext(Dispatchers.IO) {
         try {
-            val endpoint = if (type == "lxc") "/nodes/$node/lxc/$vmid/snapshot" else "/nodes/$node/qemu/$vmid/snapshot"
+            val n = encodePathSegment(node)
+            val endpoint = if (type == "lxc") "/nodes/$n/lxc/$vmid/snapshot" else "/nodes/$n/qemu/$vmid/snapshot"
             val json = apiGet(endpoint)
             val snapshots = mutableListOf<ProxmoxSnapshot>()
 
@@ -359,7 +412,8 @@ class ProxmoxApiClient(
      */
     suspend fun createSnapshot(node: String, vmid: Int, type: String = "qemu", name: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val endpoint = if (type == "lxc") "/nodes/$node/lxc/$vmid/snapshot" else "/nodes/$node/qemu/$vmid/snapshot"
+            val n = encodePathSegment(node)
+            val endpoint = if (type == "lxc") "/nodes/$n/lxc/$vmid/snapshot" else "/nodes/$n/qemu/$vmid/snapshot"
             apiPost(endpoint, mapOf("snapname" to name))
             Logger.i("ProxmoxAPI", "Created snapshot '$name' for VM $vmid")
             true
@@ -424,7 +478,21 @@ class ProxmoxApiClient(
         val userid: String,
         val port: Int,
         val websocketUrl: String
-    )
+    ) {
+        /**
+         * Redacted rendering. Every string field here is a live credential:
+         * [authCookie] is the PVE session ticket, [termproxyTicket] is the
+         * console password, and [websocketUrl] carries the same ticket as a
+         * query parameter. The generated data-class `toString()` printed all
+         * three into any log line, crash report or debugger dump that touched
+         * the object.
+         */
+        override fun toString(): String =
+            "TermProxyResult(authCookie=${if (authCookie.isEmpty()) "<none>" else "xxxxx"}, " +
+                "termproxyTicket=${if (termproxyTicket.isEmpty()) "<none>" else "xxxxx"}, " +
+                "userid=$userid, port=$port, " +
+                "websocketUrl=${Logger.urlForLogging(websocketUrl)})"
+    }
 
     /**
      * Get terminal proxy for VM console access.
@@ -439,10 +507,11 @@ class ProxmoxApiClient(
     suspend fun getTermProxy(node: String, vmid: Int, type: String = "qemu"): TermProxyResult = withContext(Dispatchers.IO) {
         try {
             // Use termproxy for serial console (text-based, mobile-friendly)
+            val n = encodePathSegment(node)
             val endpoint = if (type == "lxc") {
-                "/nodes/$node/lxc/$vmid/termproxy"
+                "/nodes/$n/lxc/$vmid/termproxy"
             } else {
-                "/nodes/$node/qemu/$vmid/termproxy"
+                "/nodes/$n/qemu/$vmid/termproxy"
             }
 
             val json = apiPost(endpoint)
@@ -456,9 +525,9 @@ class ProxmoxApiClient(
                 // Format: wss://host:apiPort/api2/json/nodes/{node}/{type}/{vmid}/vncwebsocket?port={termProxyPort}&vncticket={ticket}
                 val encodedTicket = java.net.URLEncoder.encode(ticket, "UTF-8")
                 val wsEndpoint = if (type == "lxc") {
-                    "/nodes/$node/lxc/$vmid/vncwebsocket"
+                    "/nodes/$n/lxc/$vmid/vncwebsocket"
                 } else {
-                    "/nodes/$node/qemu/$vmid/vncwebsocket"
+                    "/nodes/$n/qemu/$vmid/vncwebsocket"
                 }
                 // Use this.port (hypervisor API port, usually 8006) for base URL
                 val websocketUrl = "wss://$host:${this@ProxmoxApiClient.port}/api2/json$wsEndpoint?port=$termProxyPort&vncticket=$encodedTicket"
@@ -478,13 +547,18 @@ class ProxmoxApiClient(
                 // actual error text from whichever field Proxmox used. The errors
                 // field is typically a JSONObject keyed by endpoint; pull the first
                 // value so downstream callers can do a simple string match.
-                val errMsg = json.optString("errors", "").takeIf { it.isNotBlank() }
-                    ?: json.optJSONObject("errors")?.let { errObj ->
-                        val key = errObj.keys().takeIf { it.hasNext() }?.next()
-                        key?.let { errObj.optString(it, "").takeIf { v -> v.isNotBlank() } }
-                            ?: errObj.toString().takeIf { it.isNotBlank() }
-                    }
-                    ?: json.optString("message", "").takeIf { it.isNotBlank() }
+                // The extracted text reaches the console UI, so it is sanitised
+                // (bounded, control characters stripped) like every other
+                // hypervisor-supplied error string.
+                val errMsg = sanitizeServerText(
+                    json.optString("errors", "").takeIf { it.isNotBlank() }
+                        ?: json.optJSONObject("errors")?.let { errObj ->
+                            val key = errObj.keys().takeIf { it.hasNext() }?.next()
+                            key?.let { errObj.optString(it, "").takeIf { v -> v.isNotBlank() } }
+                                ?: errObj.toString().takeIf { it.isNotBlank() }
+                        }
+                        ?: json.optString("message", "").takeIf { it.isNotBlank() }
+                ).takeIf { it.isNotBlank() }
                     // Null data with no error text still means no serial device —
                     // use a message that triggers the friendly hint downstream.
                     ?: "termproxy: serial interface not defined"
@@ -509,10 +583,11 @@ class ProxmoxApiClient(
      */
     suspend fun getVNCProxy(node: String, vmid: Int, type: String = "qemu"): TermProxyResult? = withContext(Dispatchers.IO) {
         try {
+            val n = encodePathSegment(node)
             val endpoint = if (type == "lxc") {
-                "/nodes/$node/lxc/$vmid/vncproxy"
+                "/nodes/$n/lxc/$vmid/vncproxy"
             } else {
-                "/nodes/$node/qemu/$vmid/vncproxy"
+                "/nodes/$n/qemu/$vmid/vncproxy"
             }
 
             // websocket=1 tells Proxmox to configure its internal VNC proxy for
@@ -526,9 +601,9 @@ class ProxmoxApiClient(
 
                 val encodedTicket = java.net.URLEncoder.encode(ticket, "UTF-8")
                 val wsEndpoint = if (type == "lxc") {
-                    "/nodes/$node/lxc/$vmid/vncwebsocket"
+                    "/nodes/$n/lxc/$vmid/vncwebsocket"
                 } else {
-                    "/nodes/$node/qemu/$vmid/vncwebsocket"
+                    "/nodes/$n/qemu/$vmid/vncwebsocket"
                 }
                 // Use the API port (this.port, e.g. 8006) for the WebSocket outer connection,
                 // not the VNC port from the response (which is an internal Proxmox port)
@@ -679,7 +754,7 @@ class ProxmoxApiClient(
     suspend fun getSPICEProxy(node: String, vmid: Int): SPICEProxyResult? = withContext(Dispatchers.IO) {
         try {
             val json = apiPost(
-                "/nodes/$node/qemu/$vmid/spiceproxy",
+                "/nodes/${encodePathSegment(node)}/qemu/$vmid/spiceproxy",
                 mapOf("proxy" to host),
             )
             val data = json.optJSONObject("data")
@@ -749,13 +824,19 @@ class ProxmoxApiClient(
     }
 
     /**
-     * Percent-encode one path segment. Node and snapshot names are interpolated
-     * into the REST path, and a name containing `/`, `?`, `#`, or a space would
-     * otherwise silently retarget the request at a different endpoint.
-     * `URLEncoder` is form-encoding, so its `+`-for-space is corrected here.
+     * Read at most [MAX_RESPONSE_BYTES] of a response body. `string()` buffers
+     * whatever the peer sends before we ever inspect it, so a hostile or broken
+     * PVE endpoint could exhaust the heap with one reply.
      */
-    private fun encodePathSegment(value: String): String =
-        java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+    private fun readBounded(response: Response): String? =
+        response.body?.source()?.let { source ->
+            source.request(MAX_RESPONSE_BYTES + 1L)
+            if (source.buffer.size > MAX_RESPONSE_BYTES) {
+                Logger.w("ProxmoxAPI", "Response exceeded $MAX_RESPONSE_BYTES bytes — rejecting")
+                throw IOException("Proxmox response too large")
+            }
+            source.readByteString().utf8()
+        }
 
     private fun apiGet(endpoint: String): JSONObject {
         val request = Request.Builder()
@@ -765,7 +846,7 @@ class ProxmoxApiClient(
             .build()
 
         return client.newCall(request).execute().use { response ->
-            val responseBody = response.body?.string()
+            val responseBody = readBounded(response)
             if (response.isSuccessful && responseBody != null) {
                 JSONObject(responseBody)
             } else {
@@ -783,7 +864,7 @@ class ProxmoxApiClient(
             .build()
 
         return client.newCall(request).execute().use { response ->
-            val responseBody = response.body?.string()
+            val responseBody = readBounded(response)
             if (response.isSuccessful && responseBody != null) {
                 JSONObject(responseBody)
             } else {
@@ -798,19 +879,25 @@ class ProxmoxApiClient(
      * surface the reason (e.g. "snapshot name too long") rather than a status code.
      * `errors` may be a flat string or a JSONObject keyed by endpoint
      * (e.g. `{"vmid":"serial interface not defined"}`); both forms are unwrapped.
+     *
+     * The result is shown to the user and written to the log, so it is passed
+     * through [sanitizeServerText] — the body is hypervisor-controlled and may
+     * be an unbounded HTML error page or carry embedded newlines.
      */
-    private fun proxmoxErrorDetail(responseBody: String?): String = try {
-        val body = JSONObject(responseBody ?: "{}")
-        body.optString("errors", "").takeIf { it.isNotBlank() }
-            ?: body.optJSONObject("errors")?.let { errObj ->
-                val key = errObj.keys().takeIf { it.hasNext() }?.next()
-                key?.let { errObj.optString(it, "").takeIf { v -> v.isNotBlank() } }
-                    ?: errObj.toString().takeIf { it.isNotBlank() }
-            }
-            ?: responseBody?.take(200) ?: ""
-    } catch (_: Exception) {
-        responseBody?.take(200) ?: ""
-    }
+    private fun proxmoxErrorDetail(responseBody: String?): String = sanitizeServerText(
+        try {
+            val body = JSONObject(responseBody ?: "{}")
+            body.optString("errors", "").takeIf { it.isNotBlank() }
+                ?: body.optJSONObject("errors")?.let { errObj ->
+                    val key = errObj.keys().takeIf { it.hasNext() }?.next()
+                    key?.let { errObj.optString(it, "").takeIf { v -> v.isNotBlank() } }
+                        ?: errObj.toString().takeIf { it.isNotBlank() }
+                }
+                ?: responseBody
+        } catch (_: Exception) {
+            responseBody
+        }
+    )
 
     private fun apiPost(endpoint: String, formParams: Map<String, String> = emptyMap()): JSONObject {
         // Proxmox API expects application/x-www-form-urlencoded, not JSON
@@ -826,7 +913,7 @@ class ProxmoxApiClient(
             .build()
 
         return client.newCall(request).execute().use { response ->
-            val responseBody = response.body?.string()
+            val responseBody = readBounded(response)
             if (response.isSuccessful && responseBody != null) {
                 JSONObject(responseBody)
             } else {

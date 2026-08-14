@@ -24,6 +24,7 @@ import io.github.tabssh.ui.dialogs.DockerActionSheet
 import io.github.tabssh.ui.dialogs.DockerErrorPresenter
 import io.github.tabssh.ui.dialogs.DockerInspectDialog
 import io.github.tabssh.ui.dialogs.PullImageDialog
+import io.github.tabssh.ui.utils.DockerText
 import kotlinx.coroutines.launch
 
 /**
@@ -41,6 +42,7 @@ class DockerImagesFragment : DockerPageFragment() {
     private lateinit var progressBar: ProgressBar
     private lateinit var fabAction: FloatingActionButton
     private lateinit var adapter: DockerImageAdapter
+    private var actionInFlight = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -152,9 +154,12 @@ class DockerImagesFragment : DockerPageFragment() {
     }
 
     private fun confirmRemove(ref: String, title: String) {
+        if (!isAdded) return
+        // The tag comes from the daemon and lands in a dialog title/message.
+        val safeTitle = DockerText.display(title)
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle(title)
-            .setMessage(getString(R.string.docker_remove_image_message, title))
+            .setTitle(safeTitle)
+            .setMessage(getString(R.string.docker_remove_image_message, safeTitle))
             .setPositiveButton(R.string.delete) { _, _ -> removeImage(ref) }
             .setNegativeButton(R.string.cancel, null)
             .show()
@@ -162,19 +167,28 @@ class DockerImagesFragment : DockerPageFragment() {
 
     private fun removeImage(ref: String) {
         val current = session ?: return
+        // The confirm dialog can be re-shown from the sheet while the first
+        // removal is still in flight; a second rmi only produces a spurious
+        // "no such image" error dialog.
+        if (actionInFlight) return
+        actionInFlight = true
         progressBar.visibility = View.VISIBLE
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = current.transport.removeImage(ref)
-            if (!isAdded) return@launch
-            progressBar.visibility = View.GONE
-            when (result) {
-                is DockerResult.Success -> {
-                    Toast.makeText(
-                        requireContext(), R.string.docker_action_success, Toast.LENGTH_SHORT
-                    ).show()
-                    onSessionReady(current)
+            try {
+                val result = current.transport.removeImage(ref)
+                if (!isAdded) return@launch
+                progressBar.visibility = View.GONE
+                when (result) {
+                    is DockerResult.Success -> {
+                        Toast.makeText(
+                            requireContext(), R.string.docker_action_success, Toast.LENGTH_SHORT
+                        ).show()
+                        onSessionReady(current)
+                    }
+                    else -> DockerErrorPresenter.present(requireContext(), result)
                 }
-                else -> DockerErrorPresenter.present(requireContext(), result)
+            } finally {
+                actionInFlight = false
             }
         }
     }

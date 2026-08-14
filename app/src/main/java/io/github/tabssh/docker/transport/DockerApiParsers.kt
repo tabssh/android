@@ -5,6 +5,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.EOFException
 import java.io.InputStream
+import java.io.Reader
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -22,6 +23,32 @@ object DockerApiParsers {
      * 1.43 are not used; the negotiated version is min(this, server).
      */
     const val CLIENT_MAX_API_VERSION = "1.43"
+
+    /** Read granularity for log payloads — also the largest single allocation. */
+    const val LOG_CHUNK_BYTES = 8192
+
+    /** Longest unterminated log line buffered before it is emitted as-is. */
+    const val MAX_PENDING_CHARS = 64 * 1024
+
+    /**
+     * Split "repo/name:tag" or "repo/name@sha256:…" into the `fromImage` and
+     * `tag` query values `POST /images/create` expects. A digest reference is
+     * split at the `@` — splitting it at the last `:` instead would put
+     * "repo@sha256" in fromImage and pull an image that does not exist.
+     */
+    fun splitImageRef(ref: String): Pair<String, String> {
+        val atIdx = ref.indexOf('@')
+        if (atIdx > 0) {
+            return Pair(ref.substring(0, atIdx), ref.substring(atIdx + 1))
+        }
+        val slashIdx = ref.lastIndexOf('/')
+        val colonIdx = ref.lastIndexOf(':')
+        return if (colonIdx > slashIdx) {
+            Pair(ref.substring(0, colonIdx), ref.substring(colonIdx + 1))
+        } else {
+            Pair(ref, "latest")
+        }
+    }
 
     // ── Version negotiation ─────────────────────────────────────────────────
 
@@ -351,11 +378,12 @@ object DockerApiParsers {
             // TTY stream — emit the sniffed bytes plus the rest raw.
             pending.append(String(header, 0, first, Charsets.UTF_8))
             emitLines(pending, emit)
-            val buf = ByteArray(8192)
+            val buf = ByteArray(LOG_CHUNK_BYTES)
             var n = input.read(buf)
             while (n > 0) {
                 pending.append(String(buf, 0, n, Charsets.UTF_8))
                 emitLines(pending, emit)
+                capPending(pending, emit)
                 n = input.read(buf)
             }
         } else {
@@ -368,23 +396,54 @@ object DockerApiParsers {
                     }
                 }
                 currentHeader = null
-                val length = ((head[4].toInt() and 0xFF) shl 24) or
-                    ((head[5].toInt() and 0xFF) shl 16) or
-                    ((head[6].toInt() and 0xFF) shl 8) or
-                    (head[7].toInt() and 0xFF)
-                if (length > 0) {
-                    val payload = ByteArray(length)
-                    if (readFully(input, payload, length) < length) {
-                        pending.append(String(payload, Charsets.UTF_8))
+                // The frame length is an unsigned 32-bit field, so it is read
+                // as a Long: a frame claiming 0x80000000 bytes would otherwise
+                // become a negative Int and blow up ByteArray(). The payload is
+                // then read in fixed chunks rather than allocated in one piece,
+                // so a hostile or corrupt length cannot drive an OOM.
+                var remaining = ((head[4].toLong() and 0xFF) shl 24) or
+                    ((head[5].toLong() and 0xFF) shl 16) or
+                    ((head[6].toLong() and 0xFF) shl 8) or
+                    (head[7].toLong() and 0xFF)
+                val payload = ByteArray(LOG_CHUNK_BYTES)
+                while (remaining > 0) {
+                    val want = minOf(remaining, LOG_CHUNK_BYTES.toLong()).toInt()
+                    val got = readFully(input, payload, want)
+                    if (got > 0) {
+                        pending.append(String(payload, 0, got, Charsets.UTF_8))
+                        emitLines(pending, emit)
+                        capPending(pending, emit)
+                    }
+                    if (got < want) {
                         flushPending(pending, emit)
                         return
                     }
-                    pending.append(String(payload, Charsets.UTF_8))
-                    emitLines(pending, emit)
+                    remaining -= got
                 }
             }
         }
         flushPending(pending, emit)
+    }
+
+    /**
+     * Read one newline-terminated line, keeping at most [MAX_PENDING_CHARS]
+     * characters of it and discarding the remainder of an over-long line.
+     *
+     * `BufferedReader.readLine()` grows without limit, so a daemon that never
+     * emits a newline on an NDJSON stream could exhaust the app's heap; the
+     * overflow is dropped rather than buffered because no consumer of these
+     * streams can use a JSON object that large anyway. Returns null at EOF.
+     */
+    fun readBoundedLine(reader: Reader): String? {
+        val line = StringBuilder()
+        var sawAny = false
+        while (true) {
+            val c = reader.read()
+            if (c < 0) return if (sawAny) line.toString() else null
+            sawAny = true
+            if (c == '\n'.code) return line.toString().removeSuffix("\r")
+            if (line.length < MAX_PENDING_CHARS) line.append(c.toChar())
+        }
     }
 
     /** Read up to [count] bytes; returns bytes read before EOF. */
@@ -409,6 +468,18 @@ object DockerApiParsers {
             emit(pending.substring(0, idx).removeSuffix("\r"))
             pending.delete(0, idx + 1)
             idx = pending.indexOf("\n")
+        }
+    }
+
+    /**
+     * Emit an over-long unterminated line so [decodeLogStream]'s buffer stays
+     * bounded. A container that writes megabytes without ever emitting a
+     * newline would otherwise grow [pending] until the app dies.
+     */
+    private fun capPending(pending: StringBuilder, emit: (String) -> Unit) {
+        while (pending.length >= MAX_PENDING_CHARS) {
+            emit(pending.substring(0, MAX_PENDING_CHARS))
+            pending.delete(0, MAX_PENDING_CHARS)
         }
     }
 

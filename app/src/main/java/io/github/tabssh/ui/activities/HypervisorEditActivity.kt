@@ -20,7 +20,9 @@ import io.github.tabssh.hypervisor.proxmox.ProxmoxApiClient
 import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.hypervisor.vmware.VMwareApiClient
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import io.github.tabssh.utils.showError
@@ -80,6 +82,9 @@ class HypervisorEditActivity : AppCompatActivity() {
     private var editingHypervisor: HypervisorProfile? = null
     private var linkedConnectionId: String? = null
 
+    /** Single-flight latch for [saveHypervisor] — blocks duplicate-row double taps. */
+    private var isSaving = false
+
     /**
      * The types available in the spinner. OCI is intentionally omitted — new OCI
      * hypervisor connections should be managed via Cloud Accounts. HypervisorType.OCI
@@ -97,7 +102,12 @@ class HypervisorEditActivity : AppCompatActivity() {
         setContentView(R.layout.activity_hypervisor_edit)
         
         app = application as TabSSHApplication
-        
+
+        // Resolve the edit target BEFORE setupToolbar() — it picks the screen
+        // title from hypervisorId, and reading it afterwards left every edit
+        // session titled "Add Hypervisor".
+        hypervisorId = intent.getLongExtra("hypervisor_id", -1).takeIf { it != -1L }
+
         setupViews()
         setupToolbar()
         setupSpinner()
@@ -106,7 +116,6 @@ class HypervisorEditActivity : AppCompatActivity() {
         setupSshIdentityDropdown()
         setupClickListeners()
 
-        hypervisorId = intent.getLongExtra("hypervisor_id", -1).takeIf { it != -1L }
         hypervisorId?.let { loadHypervisor(it) }
     }
 
@@ -125,34 +134,19 @@ class HypervisorEditActivity : AppCompatActivity() {
             availableAccounts = withContext(Dispatchers.IO) {
                 try {
                     app.database.hypervisorAccountDao().getAllAccountsList()
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-                    io.github.tabssh.utils.logging.Logger.w(
-                        "HypervisorEditActivity", "Failed to load accounts", e
-                    )
+                    Logger.w("HypervisorEditActivity", "Failed to load accounts", e)
                     emptyList()
                 }
             }
-            val labels = mutableListOf("(none — use inline credentials)")
-            labels += availableAccounts.map { it.getDisplayName() }
-            dropdownAccount.setAdapter(
-                ArrayAdapter(
-                    this@HypervisorEditActivity,
-                    android.R.layout.simple_dropdown_item_1line,
-                    labels
-                )
-            )
-            // Default to "(none)" until loadHypervisor() picks the right
-            // entry on edit, or the user changes it on a fresh row.
-            if (dropdownAccount.text.isNullOrEmpty()) {
-                dropdownAccount.setText(labels.first(), false)
-                applyAccountSelection(null)
-            }
-            dropdownAccount.setOnItemClickListener { _, _, position, _ ->
-                // position 0 = "(none)", subsequent positions index into
-                // availableAccounts.
-                val acc = if (position == 0) null else availableAccounts.getOrNull(position - 1)
-                applyAccountSelection(acc?.id)
-            }
+            // Rebuild through the single adapter/listener owner. Publishing an
+            // unfiltered adapter here raced setupSpinner()'s synchronous
+            // refreshAccountDropdownForType(): whichever landed last won, so the
+            // oci_api_key filter was silently defeated and the click listener
+            // could index a different list than the one on screen.
+            refreshAccountDropdown()
         }
     }
 
@@ -166,10 +160,10 @@ class HypervisorEditActivity : AppCompatActivity() {
             availableSshKeys = withContext(Dispatchers.IO) {
                 try {
                     app.database.keyDao().getAllKeysList()
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-                    io.github.tabssh.utils.logging.Logger.w(
-                        "HypervisorEditActivity", "Failed to load SSH keys", e
-                    )
+                    Logger.w("HypervisorEditActivity", "Failed to load SSH keys", e)
                     emptyList()
                 }
             }
@@ -392,10 +386,13 @@ class HypervisorEditActivity : AppCompatActivity() {
                     .setNegativeButton("Cancel", null)
                     .show()
 
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
+                Logger.w("HypervisorEditActivity", "Failed to load connections for import", e)
                 Toast.makeText(
                     this@HypervisorEditActivity,
-                    "Error loading connections: ${e.message}",
+                    "Error loading connections",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -415,17 +412,25 @@ class HypervisorEditActivity : AppCompatActivity() {
         editUsername.setText(connection.username)
 
         // Try to get password from secure storage (Keystore AES-GCM — must run on IO)
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val password = app.securePasswordManager.retrievePassword(connection.id)
-                if (password != null) {
-                    withContext(Dispatchers.Main) {
-                        editPassword.setText(password)
-                    }
+        lifecycleScope.launch {
+            val password = withContext(Dispatchers.IO) {
+                try {
+                    app.securePasswordManager.retrievePassword(connection.id)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Never log the exception body — a Keystore/cipher failure can
+                    // echo the plaintext it was handling. Presence only.
+                    Logger.w(
+                        "HypervisorEditActivity",
+                        "Keystore password retrieval failed for imported connection: ${e.javaClass.simpleName}"
+                    )
+                    null
                 }
-            } catch (e: Exception) {
-                // Password retrieval failed; user will need to enter it manually
             }
+            // The awaited IO hop can land after the user has left the screen.
+            if (isFinishing || isDestroyed) return@launch
+            if (password != null) editPassword.setText(password)
         }
 
         // Update port based on hypervisor type
@@ -478,7 +483,7 @@ class HypervisorEditActivity : AppCompatActivity() {
         switchVerifySsl.visibility = if (isLibvirt) View.GONE else View.VISIBLE
         layoutAccount.visibility = View.VISIBLE
 
-        refreshAccountDropdownForType(typePosition)
+        refreshAccountDropdown()
 
         when (selectedType) {
             HypervisorType.PROXMOX -> {
@@ -517,14 +522,14 @@ class HypervisorEditActivity : AppCompatActivity() {
     }
 
     /**
-     * Reload the account dropdown with accounts matching the selected type's
-     * auth model. Password-type hypervisors show `authType="password"` accounts;
-     * OCI shows `authType="oci_api_key"` accounts.
+     * Sole owner of the account dropdown's adapter AND its item-click listener —
+     * the two must always be built from the same filtered list or a tap resolves
+     * to the wrong account. OCI accounts are never selectable from this screen.
      *
      * Re-selects the current [selectedAccountId] if it is still in the filtered
      * list; otherwise clears to "(none)".
      */
-    private fun refreshAccountDropdownForType(typePosition: Int) {
+    private fun refreshAccountDropdown() {
         // OCI accounts are never shown via this spinner; filter them out for all types
         val filtered = availableAccounts.filter { acc -> acc.authType != "oci_api_key" }
         val labels = mutableListOf("(none — use inline credentials)")
@@ -587,28 +592,21 @@ class HypervisorEditActivity : AppCompatActivity() {
                     currentPin = hypervisor.pinnedCertSha256
                     updatePinnedCertVisibility(hypervisor.verifySsl)
 
-                    // Account dropdown — re-fetch on IO for the same reason.
-                    val accounts = withContext(Dispatchers.IO) {
+                    // Account dropdown — re-fetch on IO for the same reason, then
+                    // hand off to the single adapter/listener owner so the saved
+                    // account is re-selected against the same filtered list the
+                    // click listener indexes into.
+                    availableAccounts = withContext(Dispatchers.IO) {
                         try {
                             app.database.hypervisorAccountDao().getAllAccountsList()
-                        } catch (e: Exception) { emptyList() }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            emptyList()
+                        }
                     }
-                    availableAccounts = accounts
-                    val labels = mutableListOf("(none — use inline credentials)")
-                    labels += accounts.map { it.getDisplayName() }
-                    dropdownAccount.setAdapter(
-                        ArrayAdapter(
-                            this@HypervisorEditActivity,
-                            android.R.layout.simple_dropdown_item_1line,
-                            labels
-                        )
-                    )
-                    val linkedIdx = if (hypervisor.accountId != null)
-                        accounts.indexOfFirst { it.id == hypervisor.accountId }
-                            .takeIf { it >= 0 }?.plus(1) ?: 0
-                    else 0
-                    dropdownAccount.setText(labels[linkedIdx], false)
-                    applyAccountSelection(if (linkedIdx == 0) null else accounts[linkedIdx - 1].id)
+                    selectedAccountId = hypervisor.accountId
+                    refreshAccountDropdown()
 
                     // Load API type override
                     val apiTypeEntries = resources.getStringArray(R.array.api_type_entries)
@@ -625,7 +623,8 @@ class HypervisorEditActivity : AppCompatActivity() {
                     if (hypervisor.type == HypervisorType.LIBVIRT) {
                         val keys = withContext(Dispatchers.IO) {
                             try { app.database.keyDao().getAllKeysList() }
-                            catch (e: Exception) { emptyList() }
+                            catch (e: CancellationException) { throw e }
+                            catch (_: Exception) { emptyList() }
                         }
                         availableSshKeys = keys
                         val keyLabels = mutableListOf("(none — password only)")
@@ -649,7 +648,11 @@ class HypervisorEditActivity : AppCompatActivity() {
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                // Activity scope cancelled — not a load failure; never finish() here.
+                throw e
             } catch (e: Exception) {
+                Logger.e("HypervisorEditActivity", "Failed to load hypervisor", e)
                 showError("Failed to load hypervisor", "Error")
                 finish()
             }
@@ -674,7 +677,8 @@ class HypervisorEditActivity : AppCompatActivity() {
                 val account = if (accountId != null) {
                     withContext(Dispatchers.IO) {
                         try { app.database.hypervisorAccountDao().getById(accountId) }
-                        catch (e: Exception) { null }
+                        catch (e: CancellationException) { throw e }
+                        catch (_: Exception) { null }
                     }
                 } else null
                 val username = account?.username ?: editUsername.text.toString()
@@ -748,17 +752,29 @@ class HypervisorEditActivity : AppCompatActivity() {
                 } else {
                     showError("✗ Connection failed", "Error")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                showError("Error: ${e.message}", "Error")
+                Logger.w("HypervisorEditActivity", "Test connection failed", e)
+                // e.message can be a raw server error body (vSphere/XO echo the
+                // request, including the Authorization header) — sanitize and cap.
+                showError("Error: ${safeDetail(e.message)}", "Error")
             } finally {
-                buttonTestConnection.isEnabled = true
-                buttonTestConnection.text = "Test Connection"
+                if (!isFinishing && !isDestroyed) {
+                    buttonTestConnection.isEnabled = true
+                    buttonTestConnection.text = "Test Connection"
+                }
             }
         }
     }
 
     private fun saveHypervisor() {
         if (!validateFields()) return
+        // A second tap while the first save coroutine is still in flight used to
+        // run the whole insert path again and create a duplicate hypervisor row.
+        if (isSaving) return
+        isSaving = true
+        buttonSave.isEnabled = false
 
         lifecycleScope.launch {
             try {
@@ -819,34 +835,49 @@ class HypervisorEditActivity : AppCompatActivity() {
                     newId
                 }
 
-                if (accountId == null) {
-                    if (plaintextPassword.isNotBlank()) {
-                        // Inline-credential path: persist the per-host password.
-                        val storeOk = HypervisorPasswordStore.store(
-                            this@HypervisorEditActivity, savedId, plaintextPassword
-                        )
-                        if (!storeOk) {
-                            Toast.makeText(
-                                this@HypervisorEditActivity,
-                                "⚠ Password stored insecurely (Keystore unavailable). Re-edit to retry.",
-                                Toast.LENGTH_LONG
-                            ).show()
+                // The DB row is committed at this point. Cancelling here (user
+                // backs out, activity destroyed) would leave a saved hypervisor
+                // whose Keystore secret was never written, or an account-linked
+                // row still carrying a stale inline password. NonCancellable
+                // keeps the credential state consistent with the row.
+                val storeOk = withContext(NonCancellable) {
+                    if (accountId == null) {
+                        if (plaintextPassword.isNotBlank()) {
+                            // Inline-credential path: persist the per-host password.
+                            HypervisorPasswordStore.store(
+                                this@HypervisorEditActivity, savedId, plaintextPassword
+                            )
+                        } else {
+                            // Blank password (LIBVIRT + SSH key only) leaves any existing
+                            // Keystore entry intact — the user may want it as a fallback.
+                            true
                         }
+                    } else {
+                        // Account-linked: drop any per-host password we may
+                        // have left over from a previous inline configuration
+                        // so a future account-detach doesn't surface a stale
+                        // ghost credential. clear() is suspend + dispatches to IO internally.
+                        HypervisorPasswordStore.clear(this@HypervisorEditActivity, savedId)
+                        true
                     }
-                    // If plaintextPassword is blank (LIBVIRT + SSH key only), leave
-                    // any existing Keystore entry intact — the user may have a
-                    // previously saved password they want to keep as a fallback.
-                } else {
-                    // Account-linked: drop any per-host password we may
-                    // have left over from a previous inline configuration
-                    // so a future account-detach doesn't surface a stale
-                    // ghost credential. clear() is suspend + dispatches to IO internally.
-                    HypervisorPasswordStore.clear(this@HypervisorEditActivity, savedId)
                 }
-                
+                if (!storeOk) {
+                    Toast.makeText(
+                        this@HypervisorEditActivity,
+                        "⚠ Password stored insecurely (Keystore unavailable). Re-edit to retry.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
                 finish()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                showError("Failed to save: ${e.message}", "Error")
+                Logger.e("HypervisorEditActivity", "Failed to save hypervisor", e)
+                showError("Failed to save: ${safeDetail(e.message)}", "Error")
+            } finally {
+                isSaving = false
+                if (!isFinishing && !isDestroyed) buttonSave.isEnabled = true
             }
         }
     }
@@ -856,8 +887,17 @@ class HypervisorEditActivity : AppCompatActivity() {
             editName.error = "Name is required"
             return false
         }
-        if (editHost.text.toString().isBlank()) {
+        val host = editHost.text.toString().trim()
+        if (host.isBlank()) {
             editHost.error = "Host is required"
+            return false
+        }
+        // The host is concatenated into the https:// base URL of the Proxmox /
+        // XCP-ng / VMware clients and passed to JSch for libvirt. Whitespace,
+        // CR/LF, a scheme, or an embedded path/credential there is either a
+        // request-splitting primitive or silently redirects the connection.
+        if (!isValidHostValue(host)) {
+            editHost.error = "Invalid host — use a hostname or IP address only"
             return false
         }
         if (editPort.text.toString().isBlank()) {
@@ -897,6 +937,53 @@ class HypervisorEditActivity : AppCompatActivity() {
                 true
             }
             else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    // Companion-scoped and internal so the pure validation/redaction logic is
+    // unit-testable without inflating the activity.
+    internal companion object {
+        /** Upper bound on an error detail surfaced in a dialog. */
+        private const val MAX_DETAIL_LENGTH = 300
+
+        /**
+         * True when [host] is usable as a bare hostname / IPv4 / bracketed-IPv6
+         * authority. Rejects anything carrying a scheme, userinfo, port, path,
+         * query, whitespace or control character — all of which either redirect
+         * the connection somewhere else or split the constructed request.
+         */
+        internal fun isValidHostValue(host: String): Boolean {
+            if (host.isBlank() || host.length > 255) return false
+            if (host.any { it.isWhitespace() || it.code < 0x20 || it.code == 0x7F }) return false
+            if (host.contains("://") || host.contains('/') || host.contains('@') ||
+                host.contains('?') || host.contains('#') || host.contains('\\')
+            ) {
+                return false
+            }
+            // Bracketed IPv6 literal: [::1], [fe80::1%eth0]
+            if (host.startsWith("[")) {
+                return host.endsWith("]") &&
+                    host.length > 2 &&
+                    host.drop(1).dropLast(1).all { it.isLetterOrDigit() || it == ':' || it == '%' || it == '.' }
+            }
+            // A bare colon means a port was typed into the host field; the port
+            // has its own validated input and must not be smuggled in here.
+            if (host.contains(':')) return false
+            return host.all { it.isLetterOrDigit() || it == '.' || it == '-' || it == '_' }
+        }
+
+        /**
+         * Make a server-supplied or exception-supplied detail safe to put in a
+         * dialog: strip control characters (log/UI forging) and bound the
+         * length so a multi-kilobyte error body cannot fill the screen.
+         */
+        internal fun safeDetail(detail: String?): String {
+            val cleaned = detail.orEmpty().filterNot { ch ->
+                val code = ch.code
+                code < 0x20 || code in 0x7F..0x9F ||
+                    code in 0x202A..0x202E || code in 0x2066..0x2069
+            }.trim().take(MAX_DETAIL_LENGTH)
+            return cleaned.ifBlank { "unknown error" }
         }
     }
 }

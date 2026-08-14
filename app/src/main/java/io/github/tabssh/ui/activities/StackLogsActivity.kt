@@ -18,6 +18,8 @@ import io.github.tabssh.docker.DockerSessionManager
 import io.github.tabssh.docker.transport.DockerCliParsers
 import io.github.tabssh.docker.transport.DockerResult
 import io.github.tabssh.ui.dialogs.DockerErrorPresenter
+import io.github.tabssh.ui.utils.DockerText
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -39,10 +41,20 @@ class StackLogsActivity : AppCompatActivity() {
         const val EXTRA_CONFIG_FILE = "compose_config_file"
         const val EXTRA_EXTERNAL_NAME = "compose_external_name"
         private const val MAX_LOG_LINES = 2000
+        // Per-line cap — one pathological line must not blow up the TextView.
+        private const val MAX_LOG_LINE_CHARS = 4096
         // CSI sequences, OSC sequences (BEL or ST terminated), and stray ESCs.
         private val ANSI_REGEX = Regex(
             "\u001B\\[[0-9;?]*[ -/]*[@-~]|\u001B\\][^\u0007\u001B]*(\u0007|\u001B\\\\)?|\u001B"
         )
+
+        /**
+         * Compose log lines are fully remote-controlled: strip ANSI first, then
+         * drop the C0/C1 controls and bidi overrides ANSI_REGEX does not cover
+         * (a lone U+202E would visually reverse the rest of the line).
+         */
+        internal fun sanitizeLogLine(line: String): String =
+            DockerText.block(ANSI_REGEX.replace(line, ""), MAX_LOG_LINE_CHARS)
     }
 
     private lateinit var app: TabSSHApplication
@@ -62,6 +74,12 @@ class StackLogsActivity : AppCompatActivity() {
     private val logLines = ArrayDeque<String>()
     private var services: List<String> = emptyList()
     private var suppressSpinnerCallback = false
+
+    /** True while an auto-scroll runnable is already queued — one post per frame, not per line. */
+    private var scrollPending = false
+
+    /** False once the activity can no longer host a dialog or touch its views. */
+    private fun isAlive(): Boolean = !isFinishing && !isDestroyed
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -86,7 +104,9 @@ class StackLogsActivity : AppCompatActivity() {
 
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        toolbar.title = getString(R.string.docker_stack_logs_title, stackName)
+        // The stack name reaches this screen from `docker compose ls` output —
+        // sanitize before it becomes the toolbar title.
+        toolbar.title = getString(R.string.docker_stack_logs_title, DockerText.display(stackName))
         toolbar.setNavigationOnClickListener { finish() }
 
         spinnerService.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -106,7 +126,10 @@ class StackLogsActivity : AppCompatActivity() {
     private fun acquireSession() {
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch {
-            when (val result = DockerSessionManager.acquire(app, hostId)) {
+            val result = DockerSessionManager.acquire(app, hostId)
+            // acquire() suspends — the activity may be gone by the time it returns.
+            if (!isAlive()) return@launch
+            when (result) {
                 is DockerResult.Success -> {
                     session = result.value
                     loadServices()
@@ -125,9 +148,12 @@ class StackLogsActivity : AppCompatActivity() {
         val current = session ?: return
         lifecycleScope.launch {
             val output = psOutput(current)
+            if (!isAlive()) return@launch
             services = output?.let { DockerCliParsers.parseComposePsServices(it) }.orEmpty()
             val labels = mutableListOf(getString(R.string.docker_stack_logs_all_services))
-            labels.addAll(services)
+            // Service names come straight from `compose ps` — sanitize the
+            // spinner labels; `services` keeps the raw values the CLI expects.
+            labels.addAll(services.map { DockerText.display(it) })
             val adapter = ArrayAdapter(
                 this@StackLogsActivity, android.R.layout.simple_spinner_item, labels
             )
@@ -161,16 +187,41 @@ class StackLogsActivity : AppCompatActivity() {
         progressBar.visibility = View.VISIBLE
         val flow: Flow<String> = composeLogsFlow(current, service) ?: return
         logsJob = lifecycleScope.launch {
-            flow.collect { line ->
-                progressBar.visibility = View.GONE
-                logLines.addLast(ANSI_REGEX.replace(line, ""))
-                while (logLines.size > MAX_LOG_LINES) {
-                    logLines.removeFirst()
+            try {
+                flow.collect { line ->
+                    progressBar.visibility = View.GONE
+                    logLines.addLast(sanitizeLogLine(line))
+                    while (logLines.size > MAX_LOG_LINES) {
+                        logLines.removeFirst()
+                    }
+                    textLogs.text = logLines.joinToString("\n")
+                    // One queued scroll at a time — a fast stream would
+                    // otherwise post a runnable per line and starve the looper.
+                    if (!scrollPending) {
+                        scrollPending = true
+                        scrollLogs.post {
+                            scrollPending = false
+                            scrollLogs.fullScroll(View.FOCUS_DOWN)
+                        }
+                    }
                 }
-                textLogs.text = logLines.joinToString("\n")
-                scrollLogs.post { scrollLogs.fullScroll(View.FOCUS_DOWN) }
+                progressBar.visibility = View.GONE
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // The stream throws into the collector when the SSH session
+                // dies mid-follow — surface it instead of crashing the screen.
+                if (!isAlive()) return@launch
+                progressBar.visibility = View.GONE
+                DockerErrorPresenter.present(
+                    this@StackLogsActivity,
+                    DockerResult.Error(
+                        DockerText.display(e.message).ifEmpty {
+                            getString(R.string.docker_error_title)
+                        }
+                    )
+                )
             }
-            progressBar.visibility = View.GONE
         }
     }
 

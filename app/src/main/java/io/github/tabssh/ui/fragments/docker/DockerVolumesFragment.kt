@@ -24,6 +24,8 @@ import io.github.tabssh.ui.adapters.DockerVolumeAdapter
 import io.github.tabssh.ui.dialogs.DockerActionSheet
 import io.github.tabssh.ui.dialogs.DockerErrorPresenter
 import io.github.tabssh.ui.dialogs.DockerInspectDialog
+import io.github.tabssh.ui.utils.DockerNames
+import io.github.tabssh.ui.utils.DockerText
 import kotlinx.coroutines.launch
 
 /**
@@ -41,6 +43,7 @@ class DockerVolumesFragment : DockerPageFragment() {
     private lateinit var progressBar: ProgressBar
     private lateinit var fabAction: FloatingActionButton
     private lateinit var adapter: DockerVolumeAdapter
+    private var actionInFlight = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -120,9 +123,19 @@ class DockerVolumesFragment : DockerPageFragment() {
             .setPositiveButton(R.string.docker_create) { _, _ ->
                 val name = editName.text?.toString()?.trim().orEmpty()
                 val driver = editDriver.text?.toString()?.trim().orEmpty()
+                // Validate before the value reaches the transport: a name with
+                // whitespace or a leading dash would be parsed as CLI flags.
                 if (name.isEmpty()) {
                     Toast.makeText(
                         requireContext(), R.string.docker_error_name_required, Toast.LENGTH_SHORT
+                    ).show()
+                } else if (!DockerNames.isValidResourceName(name)) {
+                    Toast.makeText(
+                        requireContext(), R.string.docker_error_name_format, Toast.LENGTH_LONG
+                    ).show()
+                } else if (driver.isNotEmpty() && !DockerNames.isValidDriverName(driver)) {
+                    Toast.makeText(
+                        requireContext(), R.string.docker_error_driver_format, Toast.LENGTH_LONG
                     ).show()
                 } else {
                     createVolume(name, driver.ifEmpty { null })
@@ -134,14 +147,22 @@ class DockerVolumesFragment : DockerPageFragment() {
 
     private fun createVolume(name: String, driver: String?) {
         val current = session ?: return
+        // Volume creation is not idempotent from the user's point of view — a
+        // repeat tap surfaces a spurious "already exists" error dialog.
+        if (actionInFlight) return
+        actionInFlight = true
         progressBar.visibility = View.VISIBLE
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = current.transport.createVolume(name, driver)
-            if (!isAdded) return@launch
-            progressBar.visibility = View.GONE
-            when (result) {
-                is DockerResult.Success -> onSessionReady(current)
-                else -> DockerErrorPresenter.present(requireContext(), result)
+            try {
+                val result = current.transport.createVolume(name, driver)
+                if (!isAdded) return@launch
+                progressBar.visibility = View.GONE
+                when (result) {
+                    is DockerResult.Success -> onSessionReady(current)
+                    else -> DockerErrorPresenter.present(requireContext(), result)
+                }
+            } finally {
+                actionInFlight = false
             }
         }
     }
@@ -177,9 +198,13 @@ class DockerVolumesFragment : DockerPageFragment() {
     }
 
     private fun confirmRemove(volume: DockerVolumeSummary) {
+        if (!isAdded) return
+        // A bidi-override in a daemon-supplied name could make the
+        // confirmation read as a different volume than the one being deleted.
+        val safeName = DockerText.display(volume.name)
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle(volume.name)
-            .setMessage(getString(R.string.docker_remove_volume_message, volume.name))
+            .setTitle(safeName)
+            .setMessage(getString(R.string.docker_remove_volume_message, safeName))
             .setPositiveButton(R.string.delete) { _, _ -> removeVolume(volume.name) }
             .setNegativeButton(R.string.cancel, null)
             .show()
@@ -187,19 +212,25 @@ class DockerVolumesFragment : DockerPageFragment() {
 
     private fun removeVolume(name: String) {
         val current = session ?: return
+        if (actionInFlight) return
+        actionInFlight = true
         progressBar.visibility = View.VISIBLE
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = current.transport.removeVolume(name)
-            if (!isAdded) return@launch
-            progressBar.visibility = View.GONE
-            when (result) {
-                is DockerResult.Success -> {
-                    Toast.makeText(
-                        requireContext(), R.string.docker_action_success, Toast.LENGTH_SHORT
-                    ).show()
-                    onSessionReady(current)
+            try {
+                val result = current.transport.removeVolume(name)
+                if (!isAdded) return@launch
+                progressBar.visibility = View.GONE
+                when (result) {
+                    is DockerResult.Success -> {
+                        Toast.makeText(
+                            requireContext(), R.string.docker_action_success, Toast.LENGTH_SHORT
+                        ).show()
+                        onSessionReady(current)
+                    }
+                    else -> DockerErrorPresenter.present(requireContext(), result)
                 }
-                else -> DockerErrorPresenter.present(requireContext(), result)
+            } finally {
+                actionInFlight = false
             }
         }
     }

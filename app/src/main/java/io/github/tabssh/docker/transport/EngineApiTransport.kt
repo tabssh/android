@@ -41,6 +41,9 @@ class EngineApiTransport(
         private const val TAG = "EngineApiTransport"
         private const val CONNECT_TIMEOUT_S = 15L
         private const val READ_TIMEOUT_S = 60L
+
+        /** Cap on a single non-streaming response body held in memory (8 MiB). */
+        private const val MAX_BODY_BYTES = 8L * 1024 * 1024
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
         private val EMPTY_BODY: RequestBody = ByteArray(0).toRequestBody(null)
     }
@@ -108,16 +111,31 @@ class EngineApiTransport(
         val request = Request.Builder().url("${baseUrl()}/version").get().build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) return@withContext null
-            DockerApiParsers.parseVersion(response.body?.string().orEmpty())
+            DockerApiParsers.parseVersion(readBoundedBody(response))
         }
     }
 
     // ── HTTP plumbing ────────────────────────────────────────────────────────
 
+    /**
+     * Read a non-streaming response body, capped at [MAX_BODY_BYTES].
+     *
+     * The daemon sits behind an SSH relay on a remote host, so its answers are
+     * remote input: an unbounded `string()` would let one oversized `inspect`
+     * or `logs` reply exhaust the app's heap.
+     */
+    private fun readBoundedBody(response: Response): String {
+        val bytes = response.peekBody(MAX_BODY_BYTES).bytes()
+        if (bytes.size.toLong() >= MAX_BODY_BYTES) {
+            Logger.w(TAG, "response body reached the $MAX_BODY_BYTES byte cap; truncated")
+        }
+        return bytes.toString(Charsets.UTF_8)
+    }
+
     /** Map an HTTP failure response to the matching DockerResult. */
     private fun classifyHttp(context: String, response: Response): DockerResult<Nothing> {
         val body = try {
-            response.body?.string().orEmpty()
+            readBoundedBody(response)
         } catch (_: Exception) {
             ""
         }
@@ -147,7 +165,7 @@ class EngineApiTransport(
                 if (!response.isSuccessful) {
                     classifyHttp(context, response)
                 } else {
-                    DockerResult.Success(parse(response.body?.string().orEmpty()))
+                    DockerResult.Success(parse(readBoundedBody(response)))
                 }
             }
         } catch (e: TransportUnavailableException) {
@@ -199,7 +217,14 @@ class EngineApiTransport(
         // Collector cancellation closes the channel; cancelling the call
         // closes the socket, which unblocks the blocking body reader below.
         channel.invokeOnClose { call.cancel() }
-        val response = call.execute()
+        // execute() itself can fail (relay down, daemon gone); that is a closed
+        // stream for the collector, not an exception thrown out of the Flow.
+        val response = try {
+            call.execute()
+        } catch (e: java.io.IOException) {
+            Logger.d(TAG, "stream failed to open: ${e.message}")
+            return@channelFlow
+        }
         try {
             if (!response.isSuccessful) {
                 return@channelFlow
@@ -280,10 +305,10 @@ class EngineApiTransport(
         val path = "/containers/${urlEncode(id)}/stats?stream=1"
         return streamingFlow(path) { response, channel ->
             val reader = response.body?.charStream()?.let { BufferedReader(it) } ?: return@streamingFlow
-            var line = reader.readLine()
+            var line = DockerApiParsers.readBoundedLine(reader)
             while (line != null) {
                 DockerApiParsers.parseApiStats(line)?.let { channel.trySend(it) }
-                line = reader.readLine()
+                line = DockerApiParsers.readBoundedLine(reader)
             }
         }
     }
@@ -297,15 +322,15 @@ class EngineApiTransport(
         get("Failed to inspect image", "/images/${urlEncode(ref)}/json") { it }
 
     override fun pullImage(ref: String): Flow<PullProgressEvent> {
-        val (image, tag) = splitImageRef(ref)
+        val (image, tag) = DockerApiParsers.splitImageRef(ref)
         val path = "/images/create?fromImage=${urlEncode(image)}&tag=${urlEncode(tag)}"
         return streamingFlow(path, post = true) { response, channel ->
             val reader = response.body?.charStream()?.let { BufferedReader(it) } ?: return@streamingFlow
             // NDJSON progress stream — one JSON object per line.
-            var line = reader.readLine()
+            var line = DockerApiParsers.readBoundedLine(reader)
             while (line != null) {
                 DockerApiParsers.parsePullProgressLine(line)?.let { channel.trySend(it) }
-                line = reader.readLine()
+                line = DockerApiParsers.readBoundedLine(reader)
             }
         }
     }
@@ -461,17 +486,6 @@ class EngineApiTransport(
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
-
-    /** Split "repo/name:tag" into image + tag ("latest" default). */
-    private fun splitImageRef(ref: String): Pair<String, String> {
-        val slashIdx = ref.lastIndexOf('/')
-        val colonIdx = ref.lastIndexOf(':')
-        return if (colonIdx > slashIdx) {
-            Pair(ref.substring(0, colonIdx), ref.substring(colonIdx + 1))
-        } else {
-            Pair(ref, "latest")
-        }
-    }
 
     private fun urlEncode(value: String): String =
         java.net.URLEncoder.encode(value, "UTF-8")

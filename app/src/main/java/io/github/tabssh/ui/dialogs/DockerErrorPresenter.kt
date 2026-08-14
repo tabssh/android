@@ -5,6 +5,10 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.docker.transport.DockerResult
 import io.github.tabssh.docker.transport.DockerTransportMessages
+import io.github.tabssh.ui.utils.DockerText
+
+/** Upper bound on the remote stderr appended to a failure dialog. */
+private const val MAX_DETAIL_LENGTH = 2048
 
 /**
  * Centralized DockerResult-failure presentation (PLAN.AI.md step 34).
@@ -44,7 +48,14 @@ object DockerErrorPresenter {
                 context.getString(R.string.docker_msg_all_tiers_failed)
             else -> message
         }
-        return if (detail.isNullOrBlank()) localized else "$localized\n\n$detail"
+        // The detail is raw remote stderr — strip control/bidi characters and
+        // cap it so a hostile daemon cannot forge dialog text or hand the
+        // measure pass a megabyte-long line.
+        return if (detail.isNullOrBlank()) {
+            localized
+        } else {
+            "$localized\n\n${DockerText.block(detail, MAX_DETAIL_LENGTH)}"
+        }
     }
 
     /** Show the failure in a modal dialog (no-op for Success). */

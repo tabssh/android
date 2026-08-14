@@ -13,8 +13,6 @@ import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import java.io.IOException
 import java.io.StringReader
-import java.security.cert.X509Certificate
-import javax.net.ssl.*
 
 /**
  * VMware vSphere REST API Client
@@ -23,16 +21,104 @@ class VMwareApiClient(
     private val host: String,
     private val username: String,
     private val password: String,
-    private val verifySsl: Boolean = false,
+    // Verification on by default: an omitted argument must never select the
+    // insecure path. Profiles that opt out of chain validation (TOFU pinning
+    // is the compensating control) pass false explicitly — AI.md PART 6.
+    private val verifySsl: Boolean = true,
     private val pinnedCertSha256: String? = null
 ) {
 
     private val baseUrl = "https://$host/api"
     private val client: OkHttpClient
+
+    // authenticate() writes this on one IO thread; every later request reads it
+    // from another IO dispatcher thread, so the write must be visible to them.
+    @Volatile
     private var sessionId: String? = null
 
     private val capturedPin = io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.CapturedPin()
     fun getCapturedCertSha256(): String? = capturedPin.sha256
+
+    internal companion object {
+        /**
+         * Ceiling on a single response body we buffer into memory. vSphere
+         * inventory answers are kilobytes; the server is a trust boundary, so
+         * an unbounded read would let a hostile or broken endpoint exhaust the
+         * app's heap. Matches the bound used by the other hypervisor clients.
+         */
+        private const val MAX_RESPONSE_BYTES = 8L * 1024 * 1024
+
+        /** Longest server-supplied diagnostic reproduced in a message or log. */
+        internal const val MAX_ERROR_TEXT_LEN = 200
+
+        /** Longest plausible vmware-api-session-id; real tokens are ~32 hex chars. */
+        internal const val MAX_SESSION_ID_LEN = 256
+
+        /**
+         * Reduce server-supplied text to something safe to place in an
+         * exception message or a log line: control characters (including the
+         * newlines that would let it forge extra log records) become spaces,
+         * runs of whitespace collapse, and the result is length-bounded.
+         */
+        internal fun sanitizeServerText(text: String?): String {
+            if (text.isNullOrEmpty()) return ""
+            val cleaned = buildString(text.length) {
+                for (ch in text) {
+                    append(if (ch.isISOControl()) ' ' else ch)
+                }
+            }.replace(Regex("\\s+"), " ").trim()
+            return if (cleaned.length <= MAX_ERROR_TEXT_LEN) {
+                cleaned
+            } else {
+                cleaned.take(MAX_ERROR_TEXT_LEN) + "…"
+            }
+        }
+
+        /**
+         * Accept a session token only if it is a plausible opaque identifier.
+         * The value is echoed back in a request header, so a body containing
+         * CR/LF or other control characters must never reach the header
+         * builder; returns null when the response is not a usable token.
+         */
+        internal fun parseSessionId(responseBody: String?): String? {
+            val raw = responseBody?.trim()?.removeSurrounding("\"")?.trim() ?: return null
+            if (raw.isEmpty() || raw.length > MAX_SESSION_ID_LEN) return null
+            if (raw.any { it.isISOControl() || it.isWhitespace() }) return null
+            return raw
+        }
+
+        /**
+         * Return [value] unchanged if it is a well-formed managed-object
+         * reference (e.g. `vm-1042`), otherwise throw. MoRefs are interpolated
+         * into REST paths, so a value carrying `/`, `?`, or `..` would let a
+         * caller-supplied or server-supplied id retarget the request.
+         */
+        internal fun requireValidMoRef(value: String): String {
+            require(value.isNotEmpty() && value.length <= 128 &&
+                value.all { it.isLetterOrDigit() || it == '-' || it == '_' || it == '.' }) {
+                "Invalid managed object reference"
+            }
+            require(!value.contains("..")) { "Invalid managed object reference" }
+            return value
+        }
+
+        /**
+         * Unwrap the `{"value": …}` envelope used by the legacy `/rest` API.
+         * vSphere 7.0+ `/api` returns the payload bare, and appliances vary by
+         * version, so both shapes are accepted for the same endpoint.
+         */
+        internal fun unwrapValueArray(raw: String): JSONArray {
+            val trimmed = raw.trim()
+            if (trimmed.startsWith("[")) return JSONArray(trimmed)
+            return JSONObject(trimmed).getJSONArray("value")
+        }
+
+        /** Object-shaped counterpart of [unwrapValueArray]. */
+        internal fun unwrapValueObject(raw: String): JSONObject {
+            val obj = JSONObject(raw.trim())
+            return obj.optJSONObject("value") ?: obj
+        }
+    }
 
     data class VMwareVM(
         val vm: String,
@@ -75,9 +161,9 @@ class VMwareApiClient(
                 .build()
 
             client.newCall(request).execute().use { response ->
-                val responseBody = response.body?.string()
-                if (response.isSuccessful && responseBody != null) {
-                    sessionId = responseBody.replace("\"", "")
+                val token = parseSessionId(readBounded(response))
+                if (response.isSuccessful && token != null) {
+                    sessionId = token
                     Logger.i("VMwareAPI", "Authentication successful")
                     true
                 } else {
@@ -95,18 +181,16 @@ class VMwareApiClient(
 
     suspend fun getAllVMs(): List<VMwareVM> = withContext(Dispatchers.IO) {
         try {
-            val json = apiGet("/vcenter/vm")
             val vms = mutableListOf<VMwareVM>()
-            
-            val vmArray = json.getJSONArray("value")
+
+            val vmArray = unwrapValueArray(apiGet("/vcenter/vm"))
             for (i in 0 until vmArray.length()) {
                 val vm = vmArray.getJSONObject(i)
-                
+
                 // Get detailed info for each VM
-                val vmId = vm.getString("vm")
-                val detailJson = apiGet("/vcenter/vm/$vmId")
-                val detail = detailJson.getJSONObject("value")
-                
+                val vmId = requireValidMoRef(vm.getString("vm"))
+                val detail = unwrapValueObject(apiGet("/vcenter/vm/$vmId"))
+
                 vms.add(VMwareVM(
                     vm = vmId,
                     name = vm.getString("name"),
@@ -128,7 +212,7 @@ class VMwareApiClient(
 
     suspend fun startVM(vmId: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            apiPost("/vcenter/vm/$vmId/power?action=start")
+            apiPost("/vcenter/vm/${requireValidMoRef(vmId)}/power?action=start")
             Logger.i("VMwareAPI", "Started VM $vmId")
             true
         } catch (e: CancellationException) {
@@ -141,7 +225,7 @@ class VMwareApiClient(
 
     suspend fun stopVM(vmId: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            apiPost("/vcenter/vm/$vmId/power?action=stop")
+            apiPost("/vcenter/vm/${requireValidMoRef(vmId)}/power?action=stop")
             Logger.i("VMwareAPI", "Stopped VM $vmId")
             true
         } catch (e: CancellationException) {
@@ -154,7 +238,7 @@ class VMwareApiClient(
 
     suspend fun resetVM(vmId: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            apiPost("/vcenter/vm/$vmId/power?action=reset")
+            apiPost("/vcenter/vm/${requireValidMoRef(vmId)}/power?action=reset")
             Logger.i("VMwareAPI", "Reset VM $vmId")
             true
         } catch (e: CancellationException) {
@@ -172,26 +256,25 @@ class VMwareApiClient(
      * On 401 we call [authenticate] once and retry the request; if the
      * retry still fails or we have no session at all, the error propagates.
      */
-    private suspend fun apiGet(endpoint: String, isRetry: Boolean = false): JSONObject {
+    private suspend fun apiGet(endpoint: String, isRetry: Boolean = false): String {
         val request = Request.Builder()
             .url("$baseUrl$endpoint")
             .addHeader("vmware-api-session-id", sessionId ?: "")
             .get()
             .build()
 
-        val response = client.newCall(request).execute()
-        if (response.code == 401 && !isRetry && sessionId != null) {
-            response.close()
-            Logger.d("VMwareAPI", "Session expired on GET $endpoint — re-authenticating")
-            if (authenticate()) return apiGet(endpoint, isRetry = true)
-        }
-        return response.use { r ->
-            val responseBody = r.body?.string()
-            if (r.isSuccessful && responseBody != null) {
-                JSONObject(responseBody)
-            } else {
-                throw IOException("API request failed: ${r.code}")
+        client.newCall(request).execute().use { response ->
+            // The 401 branch must decide before the body is read: the previous
+            // form closed the response here and then fell through to read from
+            // the closed body when re-authentication failed.
+            if (response.code == 401 && !isRetry && sessionId != null) {
+                Logger.d("VMwareAPI", "Session expired on GET $endpoint — re-authenticating")
+                if (authenticate()) return apiGet(endpoint, isRetry = true)
+                throw IOException("API request failed: 401 (re-authentication failed)")
             }
+            val responseBody = readBounded(response)
+            if (response.isSuccessful && responseBody != null) return responseBody
+            throw IOException("API request failed: ${response.code}")
         }
     }
 
@@ -199,7 +282,7 @@ class VMwareApiClient(
      * POST to an API endpoint. Same re-auth-once-on-401 semantics as
      * [apiGet] — see that function's doc for the rationale.
      */
-    private suspend fun apiPost(endpoint: String, body: String = "", isRetry: Boolean = false): JSONObject {
+    private suspend fun apiPost(endpoint: String, body: String = "", isRetry: Boolean = false): String {
         val requestBody = body.toRequestBody("application/json".toMediaType())
 
         val request = Request.Builder()
@@ -208,22 +291,33 @@ class VMwareApiClient(
             .post(requestBody)
             .build()
 
-        val response = client.newCall(request).execute()
-        if (response.code == 401 && !isRetry && sessionId != null) {
-            response.close()
-            Logger.d("VMwareAPI", "Session expired on POST $endpoint — re-authenticating")
-            if (authenticate()) return apiPost(endpoint, body, isRetry = true)
-        }
-        return response.use { r ->
-            val responseBody = r.body?.string()
-            if (r.isSuccessful) {
-                if (responseBody != null && responseBody.isNotEmpty()) JSONObject(responseBody)
-                else JSONObject()
-            } else {
-                throw IOException("API request failed: ${r.code}")
+        client.newCall(request).execute().use { response ->
+            if (response.code == 401 && !isRetry && sessionId != null) {
+                Logger.d("VMwareAPI", "Session expired on POST $endpoint — re-authenticating")
+                if (authenticate()) return apiPost(endpoint, body, isRetry = true)
+                throw IOException("API request failed: 401 (re-authentication failed)")
             }
+            val responseBody = readBounded(response)
+            if (response.isSuccessful) return responseBody ?: ""
+            throw IOException("API request failed: ${response.code}")
         }
     }
+
+    /**
+     * Read at most [MAX_RESPONSE_BYTES] from [response], rejecting anything
+     * larger instead of buffering it. `body.string()` is unbounded, so a
+     * hostile or malfunctioning endpoint could otherwise stream until the
+     * process dies.
+     */
+    private fun readBounded(response: Response): String? =
+        response.body?.source()?.let { source ->
+            source.request(MAX_RESPONSE_BYTES + 1L)
+            if (source.buffer.size > MAX_RESPONSE_BYTES) {
+                Logger.w("VMwareAPI", "Response exceeded $MAX_RESPONSE_BYTES bytes — rejecting")
+                throw IOException("vSphere response too large")
+            }
+            source.readByteString().utf8()
+        }
 
     // ── VNC-via-vmx console (vim25 SOAP) ──────────────────────────────────────
 
@@ -371,10 +465,12 @@ class VMwareApiClient(
             .addHeader("SOAPAction", "\"urn:vim25/5.5\"")
         if (cookie != null) builder.addHeader("Cookie", cookie)
         client.newCall(builder.build()).execute().use { response ->
-            val body = response.body?.string() ?: ""
+            val body = readBounded(response) ?: ""
             if (!response.isSuccessful) {
-                val fault = parseTagText(body, "faultstring")
-                val detail = if (fault != null) ": $fault" else ""
+                // The faultstring is server-controlled and reaches a dialog and
+                // the log, so it is bounded and stripped of control characters.
+                val fault = sanitizeServerText(parseTagText(body, "faultstring"))
+                val detail = if (fault.isNotEmpty()) ": $fault" else ""
                 throw IOException("vim25 SOAP call failed: ${response.code}$detail")
             }
             val sessionCookie = response.headers("Set-Cookie")
@@ -400,8 +496,21 @@ class VMwareApiClient(
         .replace("\"", "&quot;")
         .replace("'", "&apos;")
 
+    /**
+     * Build a pull parser for one SOAP response. Document-type declarations
+     * are explicitly refused so a hostile endpoint cannot smuggle an internal
+     * DTD subset (entity-expansion / external-entity surface) into a reply we
+     * parse; the feature is off by default in KXmlParser, but stating it here
+     * makes the response a fixed, well-known shape rather than a factory
+     * default we inherit.
+     */
     private fun newParser(xml: String): XmlPullParser {
         val parser = XmlPullParserFactory.newInstance().newPullParser()
+        try {
+            parser.setFeature(XmlPullParser.FEATURE_PROCESS_DOCDECL, false)
+        } catch (e: org.xmlpull.v1.XmlPullParserException) {
+            Logger.d("VMwareAPI", "Parser does not expose FEATURE_PROCESS_DOCDECL: ${e.message}")
+        }
         parser.setInput(StringReader(xml))
         return parser
     }
@@ -434,22 +543,26 @@ class VMwareApiClient(
         var currentProp: String? = null
         var currentKey: String? = null
         val parser = newParser(xml)
-        var event = parser.eventType
-        while (event != XmlPullParser.END_DOCUMENT) {
-            if (event == XmlPullParser.START_TAG) {
-                when (parser.name) {
-                    // Each propSet carries <name>config.extraConfig|runtime.host</name>
-                    "name" -> currentProp = parser.nextText()
-                    "key" -> if (currentProp == "config.extraConfig") currentKey = parser.nextText()
-                    "value" -> if (currentProp == "config.extraConfig" && currentKey != null) {
-                        extraConfig[currentKey] = parser.nextText()
-                        currentKey = null
+        try {
+            var event = parser.eventType
+            while (event != XmlPullParser.END_DOCUMENT) {
+                if (event == XmlPullParser.START_TAG) {
+                    when (parser.name) {
+                        // Each propSet carries <name>config.extraConfig|runtime.host</name>
+                        "name" -> currentProp = parser.nextText()
+                        "key" -> if (currentProp == "config.extraConfig") currentKey = parser.nextText()
+                        "value" -> if (currentProp == "config.extraConfig" && currentKey != null) {
+                            extraConfig[currentKey] = parser.nextText()
+                            currentKey = null
+                        }
+                        // runtime.host's <val> is a text-only ManagedObjectReference
+                        "val" -> if (currentProp == "runtime.host") hostRef = parser.nextText()
                     }
-                    // runtime.host's <val> is a text-only ManagedObjectReference
-                    "val" -> if (currentProp == "runtime.host") hostRef = parser.nextText()
                 }
+                event = parser.next()
             }
-            event = parser.next()
+        } catch (e: org.xmlpull.v1.XmlPullParserException) {
+            throw IOException("vim25: malformed VirtualMachine property response: ${sanitizeServerText(e.message)}")
         }
         return Pair(extraConfig, hostRef)
     }
@@ -458,15 +571,19 @@ class VMwareApiClient(
     private fun parseHostSystemName(xml: String): String? {
         var currentProp: String? = null
         val parser = newParser(xml)
-        var event = parser.eventType
-        while (event != XmlPullParser.END_DOCUMENT) {
-            if (event == XmlPullParser.START_TAG) {
-                when (parser.name) {
-                    "name" -> currentProp = parser.nextText()
-                    "val" -> if (currentProp == "name") return parser.nextText()
+        try {
+            var event = parser.eventType
+            while (event != XmlPullParser.END_DOCUMENT) {
+                if (event == XmlPullParser.START_TAG) {
+                    when (parser.name) {
+                        "name" -> currentProp = parser.nextText()
+                        "val" -> if (currentProp == "name") return parser.nextText()
+                    }
                 }
+                event = parser.next()
             }
-            event = parser.next()
+        } catch (e: org.xmlpull.v1.XmlPullParserException) {
+            throw IOException("vim25: malformed HostSystem property response: ${sanitizeServerText(e.message)}")
         }
         return null
     }
@@ -680,25 +797,29 @@ class VMwareApiClient(
         var ref: String? = null
         var name: String? = null
         val parser = newParser(xml)
-        var event = parser.eventType
-        while (event != XmlPullParser.END_DOCUMENT) {
-            if (event == XmlPullParser.START_TAG) {
-                when (parser.name) {
-                    "rootSnapshotList", "childSnapshotList" -> {
-                        inNode = true
-                        ref = null
-                        name = null
-                    }
-                    "snapshot" -> if (inNode && ref == null) ref = parser.nextText()
-                    "name" -> if (inNode && name == null) name = parser.nextText()
-                    "createTime" -> if (inNode && ref != null && name != null) {
-                        snapshots.add(VMwareSnapshot(ref, name, parseXsdDateTime(parser.nextText())))
-                        ref = null
-                        name = null
+        try {
+            var event = parser.eventType
+            while (event != XmlPullParser.END_DOCUMENT) {
+                if (event == XmlPullParser.START_TAG) {
+                    when (parser.name) {
+                        "rootSnapshotList", "childSnapshotList" -> {
+                            inNode = true
+                            ref = null
+                            name = null
+                        }
+                        "snapshot" -> if (inNode && ref == null) ref = parser.nextText()
+                        "name" -> if (inNode && name == null) name = parser.nextText()
+                        "createTime" -> if (inNode && ref != null && name != null) {
+                            snapshots.add(VMwareSnapshot(ref, name, parseXsdDateTime(parser.nextText())))
+                            ref = null
+                            name = null
+                        }
                     }
                 }
+                event = parser.next()
             }
-            event = parser.next()
+        } catch (e: org.xmlpull.v1.XmlPullParserException) {
+            throw IOException("vim25: malformed snapshot tree response: ${sanitizeServerText(e.message)}")
         }
         return snapshots
     }
@@ -715,7 +836,7 @@ class VMwareApiClient(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Logger.w("VMwareAPI", "Unparseable xsd:dateTime '$value': ${e.message}")
+            Logger.w("VMwareAPI", "Unparseable xsd:dateTime '${sanitizeServerText(value)}': ${e.message}")
             0L
         }
     }

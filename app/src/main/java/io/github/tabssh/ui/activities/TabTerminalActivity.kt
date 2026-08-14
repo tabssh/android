@@ -416,6 +416,21 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
             }
 
+            override fun onGraphicalTabClosed(tab: io.github.tabssh.ui.tabs.Tab, index: Int) {
+                // Vnc/Console counterpart of onTabClosed: rebuild the pager
+                // and finish when the last tab is gone. Centralised here so a
+                // close initiated OUTSIDE this activity (the notification-shade
+                // Disconnect action) updates the UI exactly like a toolbar
+                // close — closeConsoleTab no longer does its own UI work.
+                Handler(Looper.getMainLooper()).post {
+                    if (isFinishing || isDestroyed) return@post
+                    removeTabFromUI(index)
+                    if (tabManager.getTabCount() == 0 && !isReconnecting) {
+                        finish()
+                    }
+                }
+            }
+
             override fun onActiveTabChanged(index: Int) {
                 Handler(Looper.getMainLooper()).post {
                     // Guard against the swipe feedback loop: when the user swiped
@@ -3266,6 +3281,12 @@ class TabTerminalActivity : AppCompatActivity() {
                         stateFlow.collect { state ->
                             if (state == ConnectionState.CONNECTED) {
                                 hasBeenConnected = true
+                                // Live graphical session → make sure the session
+                                // service is running so the per-tab "Connected"
+                                // notification (with its Disconnect action) is
+                                // posted — the SSH path starts it from
+                                // SSHSessionManager, which VNC/SPICE never touch.
+                                io.github.tabssh.services.SSHConnectionService.startService(applicationContext)
                             } else if (state == ConnectionState.DISCONNECTED && hasBeenConnected) {
                                 hasBeenConnected = false
                                 handleConsoleTabDisconnected(tab)
@@ -3311,18 +3332,13 @@ class TabTerminalActivity : AppCompatActivity() {
     }
 
     /**
-     * Close a Vnc/Console tab by id and handle the UI work onTabClosed does
-     * for SSH tabs (the TabManagerListener is SSH-typed, so Vnc/Console
-     * closes never reach it): rebuild the pager and finish when empty.
+     * Close a Vnc/Console tab by id. UI work (pager rebuild, finish when
+     * empty) happens in the [TabManagerListener.onGraphicalTabClosed]
+     * callback that [TabManager.closeTab] fires — the same callback path a
+     * notification-shade Disconnect takes, so both routes stay consistent.
      */
     private fun closeConsoleTab(tabId: String) {
-        val idx = tabManager.getAllTabsSealed().indexOfFirst { it.tabId == tabId }
-        if (idx < 0) return
-        tabManager.closeTab(idx)
-        removeTabFromUI(idx)
-        if (tabManager.getTabCount() == 0 && !isReconnecting) {
-            finish()
-        }
+        tabManager.closeTabByIdSealed(tabId)
     }
 
     /**

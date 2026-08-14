@@ -22,6 +22,7 @@ import io.github.tabssh.docker.transport.DockerResult
 import io.github.tabssh.ui.dialogs.ContainerRenameDialog
 import io.github.tabssh.ui.dialogs.DockerErrorPresenter
 import io.github.tabssh.ui.utils.DockerExecLauncher
+import io.github.tabssh.ui.utils.DockerText
 import io.github.tabssh.ui.views.SparklineView
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -46,6 +47,9 @@ class ContainerDetailActivity : AppCompatActivity() {
         const val TAB_LOGS = 2
         const val TAB_STATS = 3
         private const val MAX_LOG_LINES = 2000
+        // A single daemon log line is untrusted remote data — cap it so one
+        // pathological line cannot blow up the TextView layout pass.
+        private const val MAX_LOG_LINE_LENGTH = 1024
         // CSI sequences, OSC sequences (BEL or ST terminated), and stray ESCs.
         private val ANSI_REGEX = Regex(
             "\u001B\\[[0-9;?]*[ -/]*[@-~]|\u001B\\][^\u0007\u001B]*(\u0007|\u001B\\\\)?|\u001B"
@@ -79,6 +83,15 @@ class ContainerDetailActivity : AppCompatActivity() {
     private var statsJob: Job? = null
     private val logLines = ArrayDeque<String>()
 
+    // One lifecycle/exec action at a time — the menu stays tappable while a
+    // suspend call is in flight, and a double tap would fire two transport
+    // operations (two removes, two exec terminals) against the same container.
+    private var actionInFlight = false
+
+    /** False once the activity is tearing down — dialogs must not be shown then. */
+    private val isAlive: Boolean
+        get() = !isFinishing && !isDestroyed
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Env values and log output may contain secrets — block screenshots.
@@ -91,7 +104,12 @@ class ContainerDetailActivity : AppCompatActivity() {
         app = application as TabSSHApplication
         hostId = intent.getLongExtra(EXTRA_HOST_ID, 0)
         containerId = intent.getStringExtra(EXTRA_CONTAINER_ID) ?: ""
-        containerName = intent.getStringExtra(EXTRA_CONTAINER_NAME) ?: containerId.take(12)
+        // The name comes from the daemon and is rendered in the toolbar and in
+        // the remove-confirmation dialog — sanitize once at intake so bidi
+        // overrides cannot make the confirmation read as a different container.
+        containerName = DockerText.display(
+            intent.getStringExtra(EXTRA_CONTAINER_NAME)
+        ).ifEmpty { containerId.take(12) }
         if (containerId.isEmpty()) {
             finish()
             return
@@ -166,7 +184,12 @@ class ContainerDetailActivity : AppCompatActivity() {
     private fun acquireSession() {
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch {
-            when (val result = DockerSessionManager.acquire(app, hostId)) {
+            val result = DockerSessionManager.acquire(app, hostId)
+            // Acquisition suspends for the whole SSH/API handshake — the user
+            // can leave the screen in that window, and present() would then
+            // attach a dialog to a dead window token.
+            if (!isAlive) return@launch
+            when (result) {
                 is DockerResult.Success -> {
                     session = result.value
                     progressBar.visibility = View.GONE
@@ -189,11 +212,14 @@ class ContainerDetailActivity : AppCompatActivity() {
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch {
             val result = current.transport.inspectContainer(containerId)
+            if (!isAlive) return@launch
             progressBar.visibility = View.GONE
             when (result) {
                 is DockerResult.Success -> {
-                    textInspect.text = prettyJson(result.value)
-                    textConfig.text = buildConfigSummary(result.value)
+                    // Inspect output is daemon-controlled (labels, env values,
+                    // image names) — strip control/bidi characters and cap it.
+                    textInspect.text = DockerText.block(prettyJson(result.value))
+                    textConfig.text = DockerText.block(buildConfigSummary(result.value))
                 }
                 else -> DockerErrorPresenter.present(this@ContainerDetailActivity, result)
             }
@@ -209,7 +235,7 @@ class ContainerDetailActivity : AppCompatActivity() {
             } else {
                 JSONObject(trimmed).toString(2)
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             json
         }
     }
@@ -271,7 +297,7 @@ class ContainerDetailActivity : AppCompatActivity() {
                 }
             }
             builder.toString()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             none
         }
     }
@@ -282,13 +308,29 @@ class ContainerDetailActivity : AppCompatActivity() {
         logLines.clear()
         textLogs.text = ""
         logsJob = lifecycleScope.launch {
-            current.transport.streamLogs(containerId, tail = 200).collect { line ->
-                logLines.addLast(ANSI_REGEX.replace(line, ""))
-                while (logLines.size > MAX_LOG_LINES) {
-                    logLines.removeFirst()
+            // Unlike the suspend transport calls, the streaming Flows surface a
+            // dead session by throwing into the collector — an uncaught throw
+            // here would take the whole app down instead of the log tab.
+            try {
+                current.transport.streamLogs(containerId, tail = 200).collect { line ->
+                    // Daemon-controlled: strip ANSI first, then the remaining
+                    // C0/C1 controls and bidi overrides, and cap the line.
+                    logLines.addLast(
+                        DockerText.display(ANSI_REGEX.replace(line, ""), MAX_LOG_LINE_LENGTH)
+                    )
+                    while (logLines.size > MAX_LOG_LINES) {
+                        logLines.removeFirst()
+                    }
+                    textLogs.text = logLines.joinToString("\n")
+                    sectionLogs.post { sectionLogs.fullScroll(View.FOCUS_DOWN) }
                 }
-                textLogs.text = logLines.joinToString("\n")
-                sectionLogs.post { sectionLogs.fullScroll(View.FOCUS_DOWN) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (!isAlive) return@launch
+                textLogs.text = getString(
+                    R.string.docker_error_detail_fmt, DockerText.display(e.message)
+                )
             }
         }
     }
@@ -304,30 +346,41 @@ class ContainerDetailActivity : AppCompatActivity() {
         sparklineCpu.clear()
         sparklineMem.clear()
         statsJob = lifecycleScope.launch {
-            current.transport.streamStats(containerId).collect { stats ->
-                sparklineCpu.addSample(stats.cpuPercent.toFloat())
-                sparklineMem.addSample(stats.memPercent.toFloat())
-                val ctx = this@ContainerDetailActivity
+            // Same contract as the logs stream — a transport failure arrives as
+            // a throw into the collector and must not crash the activity.
+            try {
+                current.transport.streamStats(containerId).collect { stats ->
+                    sparklineCpu.addSample(stats.cpuPercent.toFloat())
+                    sparklineMem.addSample(stats.memPercent.toFloat())
+                    val ctx = this@ContainerDetailActivity
+                    textStatsCpu.text = getString(
+                        R.string.docker_stats_cpu_fmt, String.format("%.1f", stats.cpuPercent)
+                    )
+                    textStatsMem.text = getString(
+                        R.string.docker_stats_mem_fmt,
+                        android.text.format.Formatter.formatShortFileSize(ctx, stats.memUsageBytes),
+                        android.text.format.Formatter.formatShortFileSize(ctx, stats.memLimitBytes),
+                        String.format("%.1f", stats.memPercent)
+                    )
+                    textStatsNet.text = getString(
+                        R.string.docker_stats_net_fmt,
+                        android.text.format.Formatter.formatShortFileSize(ctx, stats.netInputBytes),
+                        android.text.format.Formatter.formatShortFileSize(ctx, stats.netOutputBytes)
+                    )
+                    textStatsBlock.text = getString(
+                        R.string.docker_stats_block_fmt,
+                        android.text.format.Formatter.formatShortFileSize(ctx, stats.blockReadBytes),
+                        android.text.format.Formatter.formatShortFileSize(ctx, stats.blockWriteBytes)
+                    )
+                    textStatsPids.text = getString(R.string.docker_stats_pids_fmt, stats.pids)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (!isAlive) return@launch
                 textStatsCpu.text = getString(
-                    R.string.docker_stats_cpu_fmt, String.format("%.1f", stats.cpuPercent)
+                    R.string.docker_error_detail_fmt, DockerText.display(e.message)
                 )
-                textStatsMem.text = getString(
-                    R.string.docker_stats_mem_fmt,
-                    android.text.format.Formatter.formatShortFileSize(ctx, stats.memUsageBytes),
-                    android.text.format.Formatter.formatShortFileSize(ctx, stats.memLimitBytes),
-                    String.format("%.1f", stats.memPercent)
-                )
-                textStatsNet.text = getString(
-                    R.string.docker_stats_net_fmt,
-                    android.text.format.Formatter.formatShortFileSize(ctx, stats.netInputBytes),
-                    android.text.format.Formatter.formatShortFileSize(ctx, stats.netOutputBytes)
-                )
-                textStatsBlock.text = getString(
-                    R.string.docker_stats_block_fmt,
-                    android.text.format.Formatter.formatShortFileSize(ctx, stats.blockReadBytes),
-                    android.text.format.Formatter.formatShortFileSize(ctx, stats.blockWriteBytes)
-                )
-                textStatsPids.text = getString(R.string.docker_stats_pids_fmt, stats.pids)
             }
         }
     }
@@ -361,7 +414,12 @@ class ContainerDetailActivity : AppCompatActivity() {
             R.id.action_restart -> runAction(ContainerAction.RESTART)
             R.id.action_pause -> runAction(ContainerAction.PAUSE)
             R.id.action_unpause -> runAction(ContainerAction.UNPAUSE)
-            R.id.action_kill -> runAction(ContainerAction.KILL)
+            R.id.action_kill -> {
+                // KILL sends SIGKILL — no graceful shutdown, so gate it behind
+                // the same confirmation the container list applies.
+                confirmKill()
+                true
+            }
             R.id.action_rename -> {
                 showRenameDialog()
                 true
@@ -374,21 +432,40 @@ class ContainerDetailActivity : AppCompatActivity() {
         }
     }
 
+    /** SIGKILL confirmation — the container name is the subject of the prompt. */
+    private fun confirmKill() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.docker_action_kill)
+            .setMessage(getString(R.string.docker_kill_container_message, containerName))
+            .setPositiveButton(R.string.docker_action_kill) { _, _ ->
+                runAction(ContainerAction.KILL)
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
     private fun runAction(action: ContainerAction): Boolean {
         val current = session ?: return true
+        if (actionInFlight) return true
+        actionInFlight = true
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch {
-            val result = current.transport.containerAction(containerId, action)
-            progressBar.visibility = View.GONE
-            when (result) {
-                is DockerResult.Success -> {
-                    Toast.makeText(
-                        this@ContainerDetailActivity,
-                        R.string.docker_action_success, Toast.LENGTH_SHORT
-                    ).show()
-                    loadInspect()
+            try {
+                val result = current.transport.containerAction(containerId, action)
+                if (!isAlive) return@launch
+                progressBar.visibility = View.GONE
+                when (result) {
+                    is DockerResult.Success -> {
+                        Toast.makeText(
+                            this@ContainerDetailActivity,
+                            R.string.docker_action_success, Toast.LENGTH_SHORT
+                        ).show()
+                        loadInspect()
+                    }
+                    else -> DockerErrorPresenter.present(this@ContainerDetailActivity, result)
                 }
-                else -> DockerErrorPresenter.present(this@ContainerDetailActivity, result)
+            } finally {
+                actionInFlight = false
             }
         }
         return true
@@ -397,17 +474,24 @@ class ContainerDetailActivity : AppCompatActivity() {
     private fun showRenameDialog() {
         ContainerRenameDialog.show(this, containerName) { newName ->
             val current = session ?: return@show
+            if (actionInFlight) return@show
+            actionInFlight = true
             progressBar.visibility = View.VISIBLE
             lifecycleScope.launch {
-                val result = current.transport.renameContainer(containerId, newName)
-                progressBar.visibility = View.GONE
-                when (result) {
-                    is DockerResult.Success -> {
-                        containerName = newName
-                        supportActionBar?.title = newName
-                        loadInspect()
+                try {
+                    val result = current.transport.renameContainer(containerId, newName)
+                    if (!isAlive) return@launch
+                    progressBar.visibility = View.GONE
+                    when (result) {
+                        is DockerResult.Success -> {
+                            containerName = DockerText.display(newName)
+                            supportActionBar?.title = containerName
+                            loadInspect()
+                        }
+                        else -> DockerErrorPresenter.present(this@ContainerDetailActivity, result)
                     }
-                    else -> DockerErrorPresenter.present(this@ContainerDetailActivity, result)
+                } finally {
+                    actionInFlight = false
                 }
             }
         }
@@ -424,13 +508,20 @@ class ContainerDetailActivity : AppCompatActivity() {
 
     private fun removeContainer() {
         val current = session ?: return
+        if (actionInFlight) return
+        actionInFlight = true
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch {
-            val result = current.transport.removeContainer(containerId, force = true)
-            progressBar.visibility = View.GONE
-            when (result) {
-                is DockerResult.Success -> finish()
-                else -> DockerErrorPresenter.present(this@ContainerDetailActivity, result)
+            try {
+                val result = current.transport.removeContainer(containerId, force = true)
+                if (!isAlive) return@launch
+                progressBar.visibility = View.GONE
+                when (result) {
+                    is DockerResult.Success -> finish()
+                    else -> DockerErrorPresenter.present(this@ContainerDetailActivity, result)
+                }
+            } finally {
+                actionInFlight = false
             }
         }
     }
@@ -441,14 +532,33 @@ class ContainerDetailActivity : AppCompatActivity() {
      */
     private fun enterTerminal() {
         val current = session ?: return
+        if (actionInFlight) return
+        actionInFlight = true
         progressBar.visibility = View.VISIBLE
         Toast.makeText(this, R.string.docker_terminal_probing, Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
-            val intent = DockerExecLauncher.buildExecIntent(
-                this@ContainerDetailActivity, current, hostId, containerId, containerName
-            )
-            progressBar.visibility = View.GONE
-            startActivity(intent)
+            try {
+                // buildExecIntent runs a shell probe over the session runner,
+                // which throws when the SSH session died since acquisition.
+                val intent = DockerExecLauncher.buildExecIntent(
+                    this@ContainerDetailActivity, current, hostId, containerId, containerName
+                )
+                if (!isAlive) return@launch
+                progressBar.visibility = View.GONE
+                startActivity(intent)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (!isAlive) return@launch
+                progressBar.visibility = View.GONE
+                Toast.makeText(
+                    this@ContainerDetailActivity,
+                    getString(R.string.docker_error_detail_fmt, DockerText.display(e.message)),
+                    Toast.LENGTH_LONG
+                ).show()
+            } finally {
+                actionInFlight = false
+            }
         }
     }
 

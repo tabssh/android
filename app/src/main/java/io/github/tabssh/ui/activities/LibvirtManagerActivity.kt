@@ -25,12 +25,14 @@ import io.github.tabssh.hypervisor.libvirt.LibvirtApiClient
 import io.github.tabssh.hypervisor.libvirt.LibvirtException
 import io.github.tabssh.hypervisor.libvirt.LibvirtVm
 import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.ssh.config.BulkImportParser
 import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -50,6 +52,24 @@ class LibvirtManagerActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "LibvirtManagerActivity"
         const val EXTRA_HYPERVISOR_ID = "hypervisor_id"
+
+        /** C0/C1 controls plus bidi overrides a hostile or broken hypervisor could embed in a name or message. */
+        private val CONTROL_CHARS = Regex("[\\p{Cntrl}\\u0080-\\u009F\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069]+")
+
+        /**
+         * Reduce a hypervisor- or exception-supplied string to something safe to
+         * put in a log line, a Toast or a dialog: control characters collapsed to
+         * a space and the result length-capped, so unbounded virsh output cannot
+         * forge log lines or flood the UI.
+         */
+        internal fun safeText(value: String?, max: Int = 160): String {
+            val cleaned = value.orEmpty().replace(CONTROL_CHARS, " ").trim()
+            return when {
+                cleaned.isEmpty() -> "unknown"
+                cleaned.length <= max -> cleaned
+                else -> cleaned.take(max) + "…"
+            }
+        }
     }
 
     private lateinit var app: TabSSHApplication
@@ -63,6 +83,14 @@ class LibvirtManagerActivity : AppCompatActivity() {
     private var hypervisorProfile: HypervisorProfile? = null
     private val vms = mutableListOf<LibvirtVm>()
     private lateinit var adapter: VmAdapter
+
+    // Single-flight latch for the power buttons: a second tap while a virsh
+    // command is still running would fire a duplicate start/stop/reboot/reset.
+    private var powerActionInFlight = false
+
+    // Single-flight latch for the console button: two taps would open two VNC
+    // channels and leak the one whose tab never gets created.
+    private var consoleInFlight = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -100,8 +128,14 @@ class LibvirtManagerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        // JSch tears the socket down on the calling thread, so hand the teardown
+        // to a worker: lifecycleScope is already cancelled by the time we get here.
+        val client = apiClient
+        apiClient = null
+        if (client != null) {
+            Thread({ client.disconnect() }, "libvirt-disconnect").start()
+        }
         super.onDestroy()
-        apiClient?.disconnect()
     }
 
     // ── Connection ────────────────────────────────────────────────────────────
@@ -127,12 +161,18 @@ class LibvirtManagerActivity : AppCompatActivity() {
                 }
                 apiClient = client
                 loadDomains(client)
+            } catch (e: CancellationException) {
+                // The activity is going away: close the half-built session rather
+                // than leaking it, then let the cancellation propagate.
+                Thread({ client.disconnect() }, "libvirt-disconnect").start()
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to connect to libvirt host", e)
-                val msg = e.message ?: "Unknown error"
+                val msg = safeText(e.message)
                 // "No credentials found" → Keystore entry is gone; offer shortcut to settings.
                 if (msg.startsWith("No credentials found")) {
                     runOnUiThread {
+                        if (isFinishing || isDestroyed) return@runOnUiThread
                         progressBar.visibility = View.GONE
                         MaterialAlertDialogBuilder(this@LibvirtManagerActivity)
                             .setTitle("Credentials Missing")
@@ -175,9 +215,11 @@ class LibvirtManagerActivity : AppCompatActivity() {
                 statusText.visibility = View.VISIBLE
                 statusText.text = "No domains found"
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to list domains", e)
-            showError("Could not list domains: ${e.message}")
+            showError("Could not list domains: ${safeText(e.message)}")
         }
     }
 
@@ -185,7 +227,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
 
     private fun confirmHardReset(vm: LibvirtVm, client: LibvirtApiClient) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Hard Reset ${vm.name}?")
+            .setTitle("Hard Reset ${safeText(vm.name, 64)}?")
             .setMessage("This is equivalent to pulling the power cord. Any unsaved data will be lost.")
             .setPositiveButton("Reset") { _, _ -> powerAction(vm, client, "reset") }
             .setNegativeButton("Cancel", null)
@@ -193,26 +235,40 @@ class LibvirtManagerActivity : AppCompatActivity() {
     }
 
     private fun powerAction(vm: LibvirtVm, client: LibvirtApiClient, action: String) {
+        // Double-tap guard: the power buttons stay enabled while the virsh call is
+        // in flight, so a second tap used to issue a duplicate power operation.
+        if (powerActionInFlight) return
+        powerActionInFlight = true
+        val vmLabel = safeText(vm.name, 64)
         lifecycleScope.launch {
-            showProgress("${action.replaceFirstChar { it.uppercase() }}ing ${vm.name}…")
+            showProgress("${action.replaceFirstChar { it.uppercase() }}ing $vmLabel…")
             try {
                 withContext(Dispatchers.IO) {
                     when (action) {
                         "start"  -> client.startDomain(vm.name)
-                        "stop"   -> client.destroyDomain(vm.name)
+                        // The button is labelled "Shutdown", so it must issue the
+                        // graceful `virsh shutdown`; `virsh destroy` cuts power and
+                        // belongs behind the confirmed hard-reset path only.
+                        "stop"   -> client.shutdownDomain(vm.name)
                         "reboot" -> client.rebootDomain(vm.name)
                         "reset"  -> client.resetDomain(vm.name)
                     }
                 }
-                Toast.makeText(this@LibvirtManagerActivity, "${vm.name}: $action sent", Toast.LENGTH_SHORT).show()
+                if (!isFinishing && !isDestroyed) {
+                    Toast.makeText(this@LibvirtManagerActivity, "$vmLabel: $action sent", Toast.LENGTH_SHORT).show()
+                }
                 loadDomains(client)
             } catch (e: LibvirtException) {
                 hideProgress()
-                showDomainError("$action failed", e.message ?: "virsh error")
+                showDomainError("$action failed", safeText(e.message, 200))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 hideProgress()
-                Logger.e(TAG, "$action failed for ${vm.name}", e)
-                showError("$action failed: ${e.message}")
+                Logger.e(TAG, "$action failed for $vmLabel", e)
+                showError("$action failed: ${safeText(e.message)}")
+            } finally {
+                powerActionInFlight = false
             }
         }
     }
@@ -244,8 +300,11 @@ class LibvirtManagerActivity : AppCompatActivity() {
      * loop at all.
      */
     private fun openConsole(vm: LibvirtVm, client: LibvirtApiClient) {
+        if (consoleInFlight) return
+        consoleInFlight = true
+        val vmLabel = safeText(vm.name, 64)
         lifecycleScope.launch {
-            showProgress("Opening console for ${vm.name}…")
+            showProgress("Opening console for $vmLabel…")
             try {
                 // SPICE first: richest protocol when the domain exposes it and
                 // the native library shipped; any miss falls through silently
@@ -253,12 +312,12 @@ class LibvirtManagerActivity : AppCompatActivity() {
                 val spiceDisplay = withContext(Dispatchers.IO) {
                     try {
                         client.getSpiceDisplay(vm.name)
-                    } catch (e: kotlinx.coroutines.CancellationException) {
+                    } catch (e: CancellationException) {
                         // A cancelled scope must not be reported as "no SPICE"
                         // and fall through to the VNC probe on a dead scope.
                         throw e
                     } catch (e: Exception) {
-                        Logger.i(TAG, "SPICE probe failed for ${vm.name}: ${e.message} — VNC fallback")
+                        Logger.i(TAG, "SPICE probe failed for $vmLabel: ${safeText(e.message)} — VNC fallback")
                         null
                     }
                 }
@@ -280,7 +339,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
                 hideProgress()
                 if (tab == null) {
                     try { rfbClient.stop() } catch (e: Exception) {
-                        Logger.d(TAG, "rfbClient.stop() suppressed after max-tabs reject: ${e.message}")
+                        Logger.d(TAG, "rfbClient.stop() suppressed after max-tabs reject: ${safeText(e.message)}")
                     }
                     vncChannel.close()
                     Toast.makeText(this@LibvirtManagerActivity, "Maximum tabs reached", Toast.LENGTH_SHORT).show()
@@ -298,20 +357,22 @@ class LibvirtManagerActivity : AppCompatActivity() {
                     }
                 )
             } catch (e: LibvirtException) {
-                Logger.w(TAG, "VNC unavailable for ${vm.name}: ${e.message}")
+                Logger.w(TAG, "VNC unavailable for $vmLabel: ${safeText(e.message)}")
                 hideProgress()
                 if (e.message?.contains("VNC not configured") == true) {
                     // VNC not configured on this VM — try SSH instead.
                     offerSshFallback(vm, client)
                 } else {
-                    showDomainError("Console Error", e.message ?: "VNC error")
+                    showDomainError("Console Error", safeText(e.message, 200))
                 }
-            } catch (e: kotlinx.coroutines.CancellationException) {
+            } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to open VNC channel for ${vm.name}", e)
+                Logger.e(TAG, "Failed to open VNC channel for $vmLabel", e)
                 hideProgress()
-                showError("Could not open console: ${e.message}")
+                showError("Could not open console: ${safeText(e.message)}")
+            } finally {
+                consoleInFlight = false
             }
         }
     }
@@ -360,7 +421,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
                 putExtra(TabTerminalActivity.EXTRA_TAB_ID, tab.tabId)
             }
         )
-        Logger.i(TAG, "Opened SPICE console tab for ${vm.name} via 127.0.0.1:${display.localPort}")
+        Logger.i(TAG, "Opened SPICE console tab for ${safeText(vm.name, 64)} via 127.0.0.1:${display.localPort}")
     }
 
     /**
@@ -369,12 +430,28 @@ class LibvirtManagerActivity : AppCompatActivity() {
      */
     private fun directSshToVm(vm: LibvirtVm, client: LibvirtApiClient) {
         lifecycleScope.launch {
-            val ip = withContext(Dispatchers.IO) {
-                try { client.getVmIpAddress(vm.name) } catch (e: Exception) { null }
-            }
+            val ip = detectVmIp(vm, client)
             launchSshToVm(vm, ip)
         }
     }
+
+    /**
+     * Ask virsh for the domain's address. The value is hypervisor-supplied, so it
+     * is validated before it can reach a stored profile or the SSH transport; a
+     * probe failure is not fatal and simply yields null.
+     */
+    private suspend fun detectVmIp(vm: LibvirtVm, client: LibvirtApiClient): String? =
+        withContext(Dispatchers.IO) {
+            val raw = try {
+                client.getVmIpAddress(vm.name)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.d(TAG, "IP probe failed for ${safeText(vm.name, 64)}: ${safeText(e.message)}")
+                null
+            }
+            raw?.trim()?.takeIf { BulkImportParser.isValidHostValue(it) }
+        }
 
     /**
      * Called when VNC is not available. Attempts to auto-detect the VM's IP via
@@ -383,9 +460,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
      */
     private fun offerSshFallback(vm: LibvirtVm, client: LibvirtApiClient) {
         lifecycleScope.launch {
-            val detectedIp = withContext(Dispatchers.IO) {
-                try { client.getVmIpAddress(vm.name) } catch (e: Exception) { null }
-            }
+            val detectedIp = detectVmIp(vm, client)
 
             val messageLines = mutableListOf<String>()
             messageLines += "This VM has no VNC display configured."
@@ -396,6 +471,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
             messageLines += "Connect via SSH? The connection will tunnel through"
             messageLines += "${hypervisorProfile?.host ?: "the hypervisor"} as a jump host."
 
+            if (isFinishing || isDestroyed) return@launch
             MaterialAlertDialogBuilder(this@LibvirtManagerActivity)
                 .setTitle("No Console Available")
                 .setMessage(messageLines.joinToString("\n"))
@@ -427,9 +503,10 @@ class LibvirtManagerActivity : AppCompatActivity() {
             showError("Hypervisor profile not loaded")
             return
         }
+        val vmLabel = safeText(vm.name, 64)
         lifecycleScope.launch {
             try {
-                val connectionName = "libvirt: ${vm.name}"
+                val connectionName = "libvirt: $vmLabel"
                 var existing = withContext(Dispatchers.IO) {
                     app.database.connectionDao().getByName(connectionName)
                 }
@@ -515,17 +592,19 @@ class LibvirtManagerActivity : AppCompatActivity() {
                         this@LibvirtManagerActivity, connectionId = existing.id
                     )
                     startActivity(intent)
-                    Logger.i(TAG, "Opened SSH editor for new VM profile ${vm.name} — user must set credentials")
+                    Logger.i(TAG, "Opened SSH editor for new VM profile $vmLabel — user must set credentials")
                 } else {
                     val intent = TabTerminalActivity.createIntent(
                         this@LibvirtManagerActivity, existing, autoConnect = host.isNotBlank()
                     )
                     startActivity(intent)
-                    Logger.i(TAG, "Launched SSH fallback for ${vm.name} → $host via jump:${hvProfile.host}:${hvProfile.port}")
+                    Logger.i(TAG, "Launched SSH fallback for $vmLabel via jump:${hvProfile.host}:${hvProfile.port}")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "SSH fallback launch failed for ${vm.name}", e)
-                showError("Failed to open SSH: ${e.message}")
+                Logger.e(TAG, "SSH fallback launch failed for $vmLabel", e)
+                showError("Failed to open SSH: ${safeText(e.message)}")
             }
         }
     }
@@ -534,6 +613,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
 
     private fun showProgress(message: String) {
         runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
             progressBar.visibility = View.VISIBLE
             statusText.visibility = View.VISIBLE
             statusText.text = message
@@ -542,6 +622,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
 
     private fun hideProgress() {
         runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
             progressBar.visibility = View.GONE
             statusText.visibility = View.GONE
         }
@@ -549,6 +630,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
 
     private fun showError(message: String) {
         runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
             progressBar.visibility = View.GONE
             statusText.visibility = View.VISIBLE
             statusText.text = "Error: $message"
@@ -556,6 +638,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
     }
 
     private fun showDomainError(title: String, message: String) {
+        if (isFinishing || isDestroyed) return
         MaterialAlertDialogBuilder(this)
             .setTitle(title)
             .setMessage(message)
@@ -579,7 +662,8 @@ class LibvirtManagerActivity : AppCompatActivity() {
         val closeButton = dialogView.findViewById<Button>(R.id.close_button)
 
         snapshotRecycler.layoutManager = LinearLayoutManager(this)
-        vmNameText.text = "VM: ${vm.name}"
+        val vmLabel = safeText(vm.name, 64)
+        vmNameText.text = "VM: $vmLabel"
 
         val dialog = MaterialAlertDialogBuilder(this)
             .setView(dialogView)
@@ -602,8 +686,10 @@ class LibvirtManagerActivity : AppCompatActivity() {
                         handleSnapshotAction(vm, client, snapshot, action, dialog)
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to load snapshots for ${vm.name}", e)
+                Logger.e(TAG, "Failed to load snapshots for $vmLabel", e)
                 dialogProgress.visibility = View.GONE
                 emptyStateText.text = "Error loading snapshots"
                 emptyStateText.visibility = View.VISIBLE
@@ -632,7 +718,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
 
         MaterialAlertDialogBuilder(this)
             .setTitle("Create Snapshot")
-            .setMessage("Enter a name for the snapshot of ${vm.name}")
+            .setMessage("Enter a name for the snapshot of ${safeText(vm.name, 64)}")
             .setView(form.root)
             .setPositiveButton("Create") { _, _ ->
                 val name = input.text.toString().trim()
@@ -651,9 +737,11 @@ class LibvirtManagerActivity : AppCompatActivity() {
                         parentDialog.dismiss()
                         // Refresh
                         showSnapshotDialog(vm, client)
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
-                        Logger.e(TAG, "Snapshot creation error for ${vm.name}", e)
-                        showDomainError("Error", "Failed to create snapshot: ${e.message}")
+                        Logger.e(TAG, "Snapshot creation error", e)
+                        showDomainError("Error", "Failed to create snapshot: ${safeText(e.message, 200)}")
                     }
                 }
             }
@@ -671,11 +759,15 @@ class LibvirtManagerActivity : AppCompatActivity() {
         action: String,
         parentDialog: AlertDialog
     ) {
+        // Both the domain name and the snapshot name come from virsh output, so
+        // clamp them before they are interpolated into a dialog body or a log line.
+        val vmLabel = safeText(vm.name, 64)
+        val snapLabel = safeText(snapshot.name, 64)
         when (action) {
             "revert" -> {
                 MaterialAlertDialogBuilder(this)
                     .setTitle("Revert to Snapshot")
-                    .setMessage("Are you sure you want to revert ${vm.name} to snapshot '${snapshot.name}'?\n\nThis will restore the VM to its state when the snapshot was taken.")
+                    .setMessage("Are you sure you want to revert $vmLabel to snapshot '$snapLabel'?\n\nThis will restore the VM to its state when the snapshot was taken.")
                     .setPositiveButton("Revert") { _, _ ->
                         lifecycleScope.launch {
                             try {
@@ -684,9 +776,11 @@ class LibvirtManagerActivity : AppCompatActivity() {
                                 parentDialog.dismiss()
                                 // Reverting can change the domain's power state — refresh the list
                                 loadDomains(client)
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
-                                Logger.e(TAG, "Revert error for ${vm.name}", e)
-                                showDomainError("Error", "Failed to revert: ${e.message}")
+                                Logger.e(TAG, "Revert error for $vmLabel", e)
+                                showDomainError("Error", "Failed to revert: ${safeText(e.message, 200)}")
                             }
                         }
                     }
@@ -696,7 +790,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
             "delete" -> {
                 MaterialAlertDialogBuilder(this)
                     .setTitle("Delete Snapshot")
-                    .setMessage("Are you sure you want to delete snapshot '${snapshot.name}'?\n\nThis action cannot be undone.")
+                    .setMessage("Are you sure you want to delete snapshot '$snapLabel'?\n\nThis action cannot be undone.")
                     .setPositiveButton("Delete") { _, _ ->
                         lifecycleScope.launch {
                             try {
@@ -705,9 +799,11 @@ class LibvirtManagerActivity : AppCompatActivity() {
                                 parentDialog.dismiss()
                                 // Refresh
                                 showSnapshotDialog(vm, client)
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
-                                Logger.e(TAG, "Delete error for ${vm.name}", e)
-                                showDomainError("Error", "Failed to delete snapshot: ${e.message}")
+                                Logger.e(TAG, "Snapshot delete error for $vmLabel", e)
+                                showDomainError("Error", "Failed to delete snapshot: ${safeText(e.message, 200)}")
                             }
                         }
                     }
@@ -742,8 +838,8 @@ class LibvirtManagerActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: VH, position: Int) {
             val snapshot = snapshots[position]
 
-            holder.name.text = snapshot.name
-            holder.time.text = "Created: ${snapshot.creationTime} (${snapshot.state})"
+            holder.name.text = safeText(snapshot.name, 64)
+            holder.time.text = "Created: ${safeText(snapshot.creationTime, 40)} (${safeText(snapshot.state, 24)})"
 
             holder.revertButton.setOnClickListener { onAction(snapshot, "revert") }
             holder.deleteButton.setOnClickListener { onAction(snapshot, "delete") }
@@ -784,7 +880,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
             val vm = items[position]
             val client = apiClient ?: return
 
-            holder.name.text = vm.name
+            holder.name.text = safeText(vm.name, 64)
             holder.state.text = stateLabel(vm.state)
             holder.state.setTextColor(stateColor(vm.state))
             holder.statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(stateColor(vm.state))
@@ -857,7 +953,7 @@ class LibvirtManagerActivity : AppCompatActivity() {
             "shut off"   -> "Stopped"
             "paused"     -> "Paused"
             "restarting" -> "Restarting"
-            else         -> state.replaceFirstChar { it.uppercase() }
+            else         -> safeText(state, 24).replaceFirstChar { it.uppercase() }
         }
     }
 }

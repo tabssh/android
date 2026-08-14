@@ -42,9 +42,13 @@ object DockerExecLauncher {
             JSONObject()
         }
         adv.put("requestTTY", "force")
+        // The container name comes from the remote daemon and becomes the tab
+        // title — strip control/bidi characters so it cannot rewrite the tab
+        // strip or the terminal's own title area.
+        val safeName = DockerText.display(containerName, 64)
         val execProfile = session.profile.copy(
             id = "docker-exec:$hostId:$containerId",
-            name = "docker: $containerName",
+            name = "docker: $safeName",
             remoteCommand = "$docker exec -it $quotedId $shell",
             multiplexerMode = "OFF",
             advancedSettings = adv.toString()

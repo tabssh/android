@@ -1,8 +1,11 @@
 package io.github.tabssh.docker.registry
 
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Pure auth helpers of [RegistryClient]: WWW-Authenticate challenge parsing
@@ -73,5 +76,62 @@ class RegistryClientAuthTest {
     @Test
     fun `pull scope follows the token spec`() {
         assertEquals("repository:library/nginx:pull", RegistryClient.pullScope("library/nginx"))
+    }
+
+    @Test
+    fun `hub token realm may receive hub credentials`() {
+        assertTrue(
+            RegistryClient.realmAcceptsCredentials(
+                "https://auth.docker.io/token".toHttpUrl(),
+                ImageRef.DOCKER_HUB_API_HOST
+            )
+        )
+    }
+
+    @Test
+    fun `same-host token realm may receive credentials`() {
+        assertTrue(
+            RegistryClient.realmAcceptsCredentials("https://ghcr.io/token".toHttpUrl(), "ghcr.io")
+        )
+        // A port on the registry side does not change the realm host match.
+        assertTrue(
+            RegistryClient.realmAcceptsCredentials(
+                "https://registry.local/token".toHttpUrl(),
+                "registry.local:5000"
+            )
+        )
+    }
+
+    @Test
+    fun `cleartext token realm never receives credentials`() {
+        assertFalse(
+            RegistryClient.realmAcceptsCredentials("http://ghcr.io/token".toHttpUrl(), "ghcr.io")
+        )
+    }
+
+    @Test
+    fun `third-party token realm never receives credentials`() {
+        // A hostile registry answering 401 with someone else's realm must not
+        // be able to harvest the stored credential.
+        assertFalse(
+            RegistryClient.realmAcceptsCredentials(
+                "https://evil.example.com/token".toHttpUrl(),
+                "ghcr.io"
+            )
+        )
+        // Nor may a non-Hub registry claim Docker Hub's auth realm.
+        assertFalse(
+            RegistryClient.realmAcceptsCredentials(
+                "https://auth.docker.io/token".toHttpUrl(),
+                "registry.example.com"
+            )
+        )
+        // Suffix tricks do not count as a host match.
+        assertFalse(
+            RegistryClient.realmAcceptsCredentials(
+                "https://ghcr.io.evil.example.com/token".toHttpUrl(),
+                "ghcr.io"
+            )
+        )
     }
 }

@@ -48,7 +48,10 @@ class ConfirmDisconnectActivity : AppCompatActivity() {
         }
 
         val app = applicationContext as TabSSHApplication
-        val tab = app.tabManager.getAllTabs().find { it.tabId == tabId }
+        // Sealed-aware lookup: the Disconnect action is carried by SSH AND
+        // graphical (VNC/console) per-tab notifications, so the tab can be
+        // any kind.
+        val tab = app.tabManager.getAllTabsSealed().find { it.tabId == tabId }
         if (tab == null) {
             // Tab already closed (stale notification action) — just make
             // sure the notification itself is gone and bail out quietly.
@@ -57,11 +60,26 @@ class ConfirmDisconnectActivity : AppCompatActivity() {
             finish()
             return
         }
-        val displayName = tab.getDisplayTitle()
+        val displayName: String
+        val sessionKind: String
+        when (tab) {
+            is io.github.tabssh.ui.tabs.Tab.Ssh -> {
+                displayName = tab.sshTab.getDisplayTitle()
+                sessionKind = "SSH"
+            }
+            is io.github.tabssh.ui.tabs.Tab.Vnc -> {
+                displayName = tab.vncTab.getDisplayTitle()
+                sessionKind = "VNC"
+            }
+            is io.github.tabssh.ui.tabs.Tab.Console -> {
+                displayName = tab.consoleTab.getDisplayTitle()
+                sessionKind = "console"
+            }
+        }
 
         MaterialAlertDialogBuilder(this)
             .setTitle("Disconnect?")
-            .setMessage("Close the SSH session \"$displayName\"?")
+            .setMessage("Close the $sessionKind session \"$displayName\"?")
             .setPositiveButton("Disconnect") { _, _ ->
                 Logger.i(TAG, "User confirmed disconnect for tab $tabId")
                 // Cancel the notification immediately for instant visual
@@ -77,20 +95,24 @@ class ConfirmDisconnectActivity : AppCompatActivity() {
                 // survives the activity being destroyed by finish() below.
                 app.applicationScope.launch(Dispatchers.IO) {
                     try {
-                        // Close exactly this tab (cleanup() closes its own
-                        // channel, bridge, mosh PTY — all connection types —
-                        // and fires TabManagerListener.onTabClosed so the
-                        // service updates its notifications and FG anchor).
-                        val closed = app.tabManager.closeTabById(tabId)
-                        val profileId = (closed ?: tab).profile.id
-                        // Tear the shared SSH session down only when no other
-                        // tab still uses this profile (Issue #163 siblings).
-                        val stillShared = app.tabManager.getAllTabs()
-                            .any { it.profile.id == profileId }
-                        if (!stillShared) {
-                            try {
-                                app.sshSessionManager.closeConnectionIntentionally(profileId)
-                            } catch (_: Exception) { }
+                        // Close exactly this tab (cleanup() stops its own
+                        // channel/bridge/mosh PTY for SSH, or the RFB/SPICE
+                        // client for graphical tabs — and fires the matching
+                        // TabManagerListener close callback so the service
+                        // and activity update their state).
+                        val closed = app.tabManager.closeTabByIdSealed(tabId)
+                        val sshTab = ((closed ?: tab) as? io.github.tabssh.ui.tabs.Tab.Ssh)?.sshTab
+                        if (sshTab != null) {
+                            val profileId = sshTab.profile.id
+                            // Tear the shared SSH session down only when no other
+                            // tab still uses this profile (Issue #163 siblings).
+                            val stillShared = app.tabManager.getAllTabs()
+                                .any { it.profile.id == profileId }
+                            if (!stillShared) {
+                                try {
+                                    app.sshSessionManager.closeConnectionIntentionally(profileId)
+                                } catch (_: Exception) { }
+                            }
                         }
                     } catch (e: Exception) {
                         Logger.e(TAG, "Disconnect failed for tab $tabId", e)

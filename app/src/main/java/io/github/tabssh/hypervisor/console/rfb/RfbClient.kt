@@ -1619,6 +1619,13 @@ class RfbClient(
      * Send a key event. [keysym] is an X11 keysym (see [RfbConstants.KEY_*]).
      */
     fun sendKeyEvent(keysym: Long, down: Boolean) {
+        // Guard: same rule as sendPointerEvent — fbWidth/fbHeight are 0 until
+        // serverInit() completes. A key typed mid-handshake would interleave a
+        // C2S message into the security/init exchange and desync the protocol.
+        if (fbWidth <= 0 || fbHeight <= 0) {
+            Logger.d(TAG, "KeyEvent dropped (handshake incomplete) keysym=0x${keysym.toString(16)} down=$down")
+            return
+        }
         Logger.d(TAG, "KeyEvent keysym=0x${keysym.toString(16)} down=$down")
         synchronized(outLock) {
             dout.writeByte(RfbConstants.C2S_KEY_EVENT)
@@ -1631,6 +1638,8 @@ class RfbClient(
 
     /** Send ClientCutText so clipboard paste works from device → VM. */
     fun sendClipboardText(text: String) {
+        // Guard: same pre-handshake rule as sendKeyEvent/sendPointerEvent.
+        if (fbWidth <= 0 || fbHeight <= 0) return
         // RFC 6143 §7.5.6: the text is Latin-1 and an end of line is a single
         // LF; a CR is not allowed. Android clipboard content copied from a
         // Windows source carries CRLF, which the VM would paste as a stray

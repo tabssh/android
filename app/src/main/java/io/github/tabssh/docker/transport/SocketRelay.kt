@@ -65,13 +65,23 @@ class SocketRelay(
 
     private val relayScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    /** Shared accept-loop state (both tiers use one [ServerSocket]). */
+    /**
+     * Shared accept-loop state (both tiers use one [ServerSocket]).
+     * Written on the opening coroutine and read by [close] from whichever
+     * thread tears the session down, so the reference must be volatile.
+     */
+    @Volatile
     private var serverSocket: ServerSocket? = null
 
     /** In-flight relays — force-closed by [close]; see [RelayHandle]. */
     private val activeRelays = Collections.synchronizedSet(mutableSetOf<RelayHandle>())
 
-    /** Resolved `docker system dial-stdio` command, cached after [probeDialStdio]. */
+    /**
+     * Resolved `docker system dial-stdio` command, cached after
+     * [probeDialStdio]. Written during probing and read by every relay
+     * coroutine that opens a channel, hence volatile.
+     */
+    @Volatile
     private var dialStdioCommand: String? = null
 
     /** The local 127.0.0.1 port OkHttp should target, or null before open. */

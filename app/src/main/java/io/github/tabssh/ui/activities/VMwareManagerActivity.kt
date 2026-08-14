@@ -27,7 +27,7 @@ import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
-import io.github.tabssh.utils.showError
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -46,6 +46,63 @@ class VMwareManagerActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "VMwareManager"
         const val EXTRA_HYPERVISOR_ID = "hypervisor_id"
+
+        /** Upper bound on a server-supplied name rendered in a row, dialog or log line. */
+        private const val MAX_NAME_LENGTH = 128
+
+        /** Upper bound on an error detail surfaced in a dialog or toast. */
+        private const val MAX_DETAIL_LENGTH = 300
+
+        /**
+         * Strip the characters a hostile vCenter could put in a VM/snapshot name
+         * to forge log lines or spoof dialog text — C0/C1 controls plus the bidi
+         * override and isolate ranges — then bound the length.
+         */
+        internal fun safeName(raw: String?): String {
+            val cleaned = raw.orEmpty().filterNot { ch ->
+                val code = ch.code
+                code < 0x20 || code in 0x7F..0x9F ||
+                    code in 0x202A..0x202E || code in 0x2066..0x2069
+            }.trim().take(MAX_NAME_LENGTH)
+            return cleaned.ifBlank { "(unnamed)" }
+        }
+
+        /**
+         * Make an exception or API-supplied detail safe to display: same control
+         * character strip as [safeName], bounded so a multi-kilobyte vSphere
+         * fault body cannot fill the screen.
+         */
+        internal fun safeDetail(detail: String?): String {
+            val cleaned = detail.orEmpty().filterNot { ch ->
+                val code = ch.code
+                code < 0x20 || code in 0x7F..0x9F ||
+                    code in 0x202A..0x202E || code in 0x2066..0x2069
+            }.trim().take(MAX_DETAIL_LENGTH)
+            return cleaned.ifBlank { "unknown error" }
+        }
+
+        /**
+         * True when [address] is a plain IPv4/IPv6 literal or bare hostname.
+         *
+         * The address arrives from VMware Tools inside the guest, so it is
+         * attacker-controlled on a compromised VM, and it is written straight
+         * into a saved [ConnectionProfile.host]. Anything carrying a scheme,
+         * userinfo, port, path or whitespace is rejected rather than stored.
+         */
+        internal fun isValidGuestAddress(address: String): Boolean {
+            if (address.isBlank() || address.length > 255) return false
+            if (address.any { it.isWhitespace() || it.code < 0x20 || it.code == 0x7F }) return false
+            if (address.contains("://") || address.contains('/') || address.contains('@') ||
+                address.contains('?') || address.contains('#') || address.contains('\\')
+            ) {
+                return false
+            }
+            // Unbracketed IPv6 literal — colons are legal here and nowhere else.
+            if (address.contains(':')) {
+                return address.all { it.isLetterOrDigit() || it == ':' || it == '.' || it == '%' }
+            }
+            return address.all { it.isLetterOrDigit() || it == '.' || it == '-' || it == '_' }
+        }
     }
 
     private lateinit var app: TabSSHApplication
@@ -59,6 +116,20 @@ class VMwareManagerActivity : AppCompatActivity() {
     private var currentClient: VMwareApiClient? = null
     private var currentProfile: HypervisorProfile? = null
     private lateinit var adapter: VmAdapter
+
+    /**
+     * Single-flight latch for the VM actions. A second tap while a power op or a
+     * console open is still in flight used to fire the whole path again —
+     * duplicate power commands, or two VNC tabs each owning their own socket.
+     */
+    private var actionInFlight = false
+
+    /**
+     * The snapshot dialog is the only dialog here that outlives an async load, so
+     * it is the one that can still be showing when the activity is torn down —
+     * leaking its window. Tracked so [onDestroy] can dismiss it.
+     */
+    private var snapshotDialog: AlertDialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -98,7 +169,15 @@ class VMwareManagerActivity : AppCompatActivity() {
     override fun onDestroy() {
         // Cancel any in-flight HTTP calls so OkHttp does not retain Activity
         // references through callbacks past onDestroy.
-        try { currentClient?.cancelAll() } catch (e: Exception) { Logger.w(TAG, "cancelAll: ${e.message}") }
+        // Only the exception type is logged — an OkHttp failure message can carry
+        // the request URL, which for vSphere includes the session identifier.
+        try {
+            currentClient?.cancelAll()
+        } catch (e: Exception) {
+            Logger.w(TAG, "cancelAll failed: ${e.javaClass.simpleName}")
+        }
+        snapshotDialog?.dismiss()
+        snapshotDialog = null
         super.onDestroy()
     }
 
@@ -114,8 +193,10 @@ class VMwareManagerActivity : AppCompatActivity() {
                 showError("Hypervisor profile not found (id=$hypervisorId)")
                 return@launch
             }
+            // The awaited DB hop can land after the user has left the screen.
+            if (isFinishing || isDestroyed) return@launch
             currentProfile = profile
-            supportActionBar?.title = profile.name
+            supportActionBar?.title = safeName(profile.name)
 
             try {
                 val creds = HypervisorPasswordStore.resolveCredentials(this@VMwareManagerActivity, profile)
@@ -137,13 +218,18 @@ class VMwareManagerActivity : AppCompatActivity() {
                 )
                 if (!capturedSha.isNullOrBlank()) currentProfile = profile.copy(pinnedCertSha256 = capturedSha)
                 val serverType = if (client.isVCenter()) "vCenter" else "ESXi"
-                Logger.i(TAG, "Connected to ${profile.name} ($serverType)")
+                Logger.i(TAG, "Connected to ${safeName(profile.name)} ($serverType)")
                 app.database.hypervisorDao().updateLastConnected(profile.id, System.currentTimeMillis())
                 currentClient = client
                 loadVMs(client)
+            } catch (e: CancellationException) {
+                // Activity scope cancelled — not a connection failure.
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Connect failed", e)
-                showError("Connection failed: vmware ${profile.name}: ${e.message}")
+                // e.message can be a raw vSphere fault body, which echoes the
+                // request — including the session cookie on some deployments.
+                showError("Connection failed: vmware ${safeName(profile.name)}: ${safeDetail(e.message)}")
             }
         }
     }
@@ -153,13 +239,23 @@ class VMwareManagerActivity : AppCompatActivity() {
             Toast.makeText(this, "Not connected — please wait", Toast.LENGTH_SHORT).show()
             return
         }
-        lifecycleScope.launch { loadVMs(client) }
+        if (actionInFlight) return
+        actionInFlight = true
+        lifecycleScope.launch {
+            try {
+                loadVMs(client)
+            } finally {
+                actionInFlight = false
+            }
+        }
     }
 
     private suspend fun loadVMs(client: VMwareApiClient) {
         showProgress("Loading VMs…")
         try {
             val vmList = client.getAllVMs() ?: emptyList()
+            // The awaited API hop can land after the user has left the screen.
+            if (isFinishing || isDestroyed) return
             adapter.replaceAllWithDiff(
                 items = vms,
                 newItems = vmList,
@@ -170,9 +266,11 @@ class VMwareManagerActivity : AppCompatActivity() {
                 statusText.visibility = View.VISIBLE
                 statusText.text = "No VMs found"
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "loadVMs failed", e)
-            showError("Could not load VMs: ${e.message}")
+            showError("Could not load VMs: ${safeDetail(e.message)}")
         }
     }
 
@@ -180,7 +278,7 @@ class VMwareManagerActivity : AppCompatActivity() {
 
     private fun confirmStop(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Stop ${vm.name}?")
+            .setTitle("Stop ${safeName(vm.name)}?")
             .setMessage("Shutdown Guest asks the guest OS to shut down cleanly (requires VMware Tools). Power Off forcibly cuts power — any unsaved data will be lost.")
             .setPositiveButton("Shutdown Guest") { _, _ -> vmAction(vm, client, "shutdown") }
             .setNeutralButton("Power Off") { _, _ -> vmAction(vm, client, "stop") }
@@ -190,7 +288,7 @@ class VMwareManagerActivity : AppCompatActivity() {
 
     private fun confirmHardReset(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Hard Reset ${vm.name}?")
+            .setTitle("Hard Reset ${safeName(vm.name)}?")
             .setMessage("This is equivalent to pulling the power cord. Any unsaved data will be lost.")
             .setPositiveButton("Reset") { _, _ -> vmAction(vm, client, "reset") }
             .setNegativeButton("Cancel", null)
@@ -198,6 +296,11 @@ class VMwareManagerActivity : AppCompatActivity() {
     }
 
     private fun vmAction(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient, action: String) {
+        // A second tap while the first request is still in flight used to send the
+        // power command twice — a start/stop race on the hypervisor.
+        if (actionInFlight) return
+        actionInFlight = true
+        val vmName = safeName(vm.name)
         lifecycleScope.launch {
             // Human-readable progress label per action verb
             val progressLabel = when (action) {
@@ -208,7 +311,7 @@ class VMwareManagerActivity : AppCompatActivity() {
                 "reset"    -> "Resetting"
                 else       -> action.replaceFirstChar { it.uppercase() }
             }
-            showProgress("$progressLabel ${vm.name}…")
+            showProgress("$progressLabel $vmName…")
             try {
                 val ok = withContext(Dispatchers.IO) {
                     when (action) {
@@ -220,17 +323,23 @@ class VMwareManagerActivity : AppCompatActivity() {
                         else       -> false
                     }
                 }
+                // The awaited API hop can land after the user has left the screen.
+                if (isFinishing || isDestroyed) return@launch
                 if (ok) {
-                    Toast.makeText(this@VMwareManagerActivity, "${vm.name}: $action sent", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@VMwareManagerActivity, "$vmName: $action sent", Toast.LENGTH_SHORT).show()
                     delay(2000)
                     loadVMs(client)
                 } else {
                     hideProgress()
-                    showError("$action failed for ${vm.name}")
+                    showError("$action failed for $vmName")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "$action failed for ${vm.name}", e)
-                showError("$action failed: ${e.message}")
+                Logger.e(TAG, "$action failed for $vmName", e)
+                showError("$action failed: ${safeDetail(e.message)}")
+            } finally {
+                actionInFlight = false
             }
         }
     }
@@ -240,19 +349,38 @@ class VMwareManagerActivity : AppCompatActivity() {
             Toast.makeText(this, "VM IP address not available", Toast.LENGTH_SHORT).show()
             return
         }
+        // The address is reported by VMware Tools running inside the guest, so on
+        // a compromised VM it is attacker-controlled — and it is written straight
+        // into a saved connection's host field.
+        if (!isValidGuestAddress(ip)) {
+            Toast.makeText(this, "VM reported an unusable IP address", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (actionInFlight) return
+        actionInFlight = true
+        val vmName = safeName(vm.name)
         lifecycleScope.launch {
             try {
-                val connectionName = "VMware: ${vm.name}"
-                var connection = withContext(Dispatchers.IO) {
+                val connectionName = "VMware: $vmName"
+                val vmHostsGroupId = withContext(Dispatchers.IO) {
+                    SystemGroupHelper.getOrCreateSystemGroupId(
+                        app.database, "vm_hosts", "VM Hosts", "vm"
+                    )
+                }
+                val existing = withContext(Dispatchers.IO) {
                     app.database.connectionDao().getByName(connectionName)
                 }
-                if (connection == null) {
-                    val vmHostsGroupId = withContext(Dispatchers.IO) {
-                        SystemGroupHelper.getOrCreateSystemGroupId(
-                            app.database, "vm_hosts", "VM Hosts", "vm"
-                        )
-                    }
-                    connection = ConnectionProfile(
+                // The lookup key is derived from a hypervisor-supplied VM name, so
+                // a VM renamed to collide with a user's own saved profile would
+                // otherwise repoint that profile's host at the VM's address.
+                // Only profiles this screen itself created (vm_hosts group) may
+                // be rewritten.
+                if (existing != null && existing.groupId != vmHostsGroupId) {
+                    showError("A saved connection named \"$connectionName\" already exists — rename it or the VM")
+                    return@launch
+                }
+                val connection = if (existing == null) {
+                    val created = ConnectionProfile(
                         name = connectionName,
                         host = ip,
                         port = 22,
@@ -262,21 +390,31 @@ class VMwareManagerActivity : AppCompatActivity() {
                         createdAt = System.currentTimeMillis(),
                         modifiedAt = System.currentTimeMillis()
                     )
+                    // ConnectionProfile.id is a client-generated UUID, so the row id
+                    // insertConnection returns carries no information we need.
                     withContext(Dispatchers.IO) {
-                        app.database.connectionDao().insertConnection(connection)
+                        app.database.connectionDao().insertConnection(created)
                     }
+                    created
                 } else {
-                    connection = connection.copy(host = ip, modifiedAt = System.currentTimeMillis())
+                    val updated = existing.copy(host = ip, modifiedAt = System.currentTimeMillis())
                     withContext(Dispatchers.IO) {
-                        app.database.connectionDao().updateConnection(connection)
+                        app.database.connectionDao().updateConnection(updated)
                     }
+                    updated
                 }
+                // The awaited DB hops can land after the user has left the screen.
+                if (isFinishing || isDestroyed) return@launch
                 val intent = TabTerminalActivity.createIntent(this@VMwareManagerActivity, connection, autoConnect = false)
                 startActivity(intent)
-                Logger.i(TAG, "Launching SSH to $ip for ${vm.name}")
+                Logger.i(TAG, "Launching SSH to $ip for $vmName")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to open SSH terminal for ${vm.name}", e)
-                showError("Failed to open terminal: ${e.message}", "Error")
+                Logger.e(TAG, "Failed to open SSH terminal for $vmName", e)
+                showError("Failed to open terminal: ${safeDetail(e.message)}")
+            } finally {
+                actionInFlight = false
             }
         }
     }
@@ -292,50 +430,75 @@ class VMwareManagerActivity : AppCompatActivity() {
             Toast.makeText(this, "Not connected — please wait", Toast.LENGTH_SHORT).show()
             return
         }
+        // Without this latch a double tap opened two sockets to the ESXi host and
+        // two VNC tabs, only one of which the user could ever close.
+        if (actionInFlight) return
+        actionInFlight = true
+        val vmName = safeName(vm.name)
         lifecycleScope.launch {
-            showProgress("Opening console for ${vm.name}…")
+            showProgress("Opening console for $vmName…")
+            // Held outside the try so every failure path below — including a
+            // cancellation between the connect and the tab taking ownership —
+            // can still close the connected socket.
+            var socket: java.net.Socket? = null
             try {
-                val (info, socket) = withContext(Dispatchers.IO) {
-                    val info = client.getVncConsoleInfo(vm.vm)
-                    val socket = java.net.Socket()
+                val info = withContext(Dispatchers.IO) {
+                    val consoleInfo = client.getVncConsoleInfo(vm.vm)
+                    val s = java.net.Socket()
                     try {
-                        socket.soTimeout = 30_000
-                        socket.connect(java.net.InetSocketAddress(info.host, info.port), 15_000)
+                        s.soTimeout = 30_000
+                        s.connect(java.net.InetSocketAddress(consoleInfo.host, consoleInfo.port), 15_000)
                     } catch (e: Throwable) {
                         // Close the fd on connect failure so we never leak the socket
-                        try { socket.close() } catch (ignored: Exception) {}
+                        try { s.close() } catch (_: Exception) {}
                         throw e
                     }
-                    Pair(info, socket)
+                    socket = s
+                    consoleInfo
                 }
+                val live = socket ?: return@launch
                 val rfbClient = io.github.tabssh.hypervisor.console.rfb.RfbClient(
-                    inputStream = socket.getInputStream(),
-                    outputStream = socket.getOutputStream(),
+                    inputStream = live.getInputStream(),
+                    outputStream = live.getOutputStream(),
                     vncPassword = info.password,
-                    rawSocket = socket,
+                    rawSocket = live,
                     consoleMode = true
                 )
                 // Ephemeral hypervisor consoles never auto-relaunch on resize rejection
                 rfbClient.canRequestResize = false
-                val tab = app.tabManager.createVncTab(vncHost = null, ephemeralDisplayName = vm.name)
+                if (isFinishing || isDestroyed) {
+                    try { rfbClient.stop() } catch (_: Exception) {}
+                    socket = null
+                    return@launch
+                }
+                val tab = app.tabManager.createVncTab(vncHost = null, ephemeralDisplayName = vmName)
                 hideProgress()
                 if (tab == null) {
                     try { rfbClient.stop() } catch (e: Exception) {
-                        Logger.d(TAG, "rfbClient.stop() suppressed after max-tabs reject: ${e.message}")
+                        Logger.d(TAG, "rfbClient.stop() suppressed after max-tabs reject: ${e.javaClass.simpleName}")
                     }
+                    socket = null
                     Toast.makeText(this@VMwareManagerActivity, "Maximum tabs reached", Toast.LENGTH_SHORT).show()
                     return@launch
                 }
                 tab.rfbClient = rfbClient
                 tab.setConnectionState(io.github.tabssh.ssh.connection.ConnectionState.CONNECTED)
+                // The tab owns the socket from here; clear the local handle so the
+                // finally block does not close a console the user is now using.
+                socket = null
                 startActivity(
                     Intent(this@VMwareManagerActivity, TabTerminalActivity::class.java).apply {
                         putExtra(TabTerminalActivity.EXTRA_TAB_ID, tab.tabId)
                     }
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to open VNC console for ${vm.name}", e)
-                showError(e.message ?: "Failed to open VNC console for ${vm.name}")
+                Logger.e(TAG, "Failed to open VNC console for $vmName", e)
+                showError("Failed to open VNC console for $vmName: ${safeDetail(e.message)}")
+            } finally {
+                try { socket?.close() } catch (_: Exception) {}
+                actionInFlight = false
             }
         }
     }
@@ -344,6 +507,8 @@ class VMwareManagerActivity : AppCompatActivity() {
 
     private fun showProgress(message: String) {
         runOnUiThread {
+            // runOnUiThread posts; the post can run after the window is gone.
+            if (isFinishing || isDestroyed) return@runOnUiThread
             progressBar.visibility = View.VISIBLE
             statusText.visibility = View.VISIBLE
             statusText.text = message
@@ -352,6 +517,7 @@ class VMwareManagerActivity : AppCompatActivity() {
 
     private fun hideProgress() {
         runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
             progressBar.visibility = View.GONE
             statusText.visibility = View.GONE
         }
@@ -359,6 +525,7 @@ class VMwareManagerActivity : AppCompatActivity() {
 
     private fun showError(message: String) {
         runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
             progressBar.visibility = View.GONE
             statusText.visibility = View.VISIBLE
             statusText.text = "Error: $message"
@@ -399,13 +566,16 @@ class VMwareManagerActivity : AppCompatActivity() {
             val vm = items[position]
             val client = currentClient ?: return
 
-            holder.name.text = vm.name
+            // name, powerState and ipAddress are all hypervisor/guest supplied; a
+            // crafted value could otherwise inject bidi overrides or control
+            // characters into the row and spoof which VM the buttons act on.
+            holder.name.text = safeName(vm.name)
             holder.state.text = stateLabel(vm.powerState)
             holder.state.setTextColor(stateColor(vm.powerState))
             holder.statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(stateColor(vm.powerState))
             holder.info.text = "CPUs: ${vm.cpuCount}  ·  RAM: ${vm.memoryMB}MB"
             if (!vm.ipAddress.isNullOrBlank()) {
-                holder.ip.text = "IP: ${vm.ipAddress}"
+                holder.ip.text = "IP: ${safeName(vm.ipAddress)}"
                 holder.ip.visibility = View.VISIBLE
             } else {
                 holder.ip.visibility = View.GONE
@@ -470,7 +640,7 @@ class VMwareManagerActivity : AppCompatActivity() {
             "POWERED_ON"  -> "Running"
             "POWERED_OFF" -> "Stopped"
             "SUSPENDED"   -> "Paused"
-            else          -> state.split("_").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+            else          -> safeName(state).split("_").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
         }
     }
 
@@ -481,6 +651,9 @@ class VMwareManagerActivity : AppCompatActivity() {
      */
     private fun showSnapshotDialog(vm: VMwareApiClient.VMwareVM) {
         val client = currentClient ?: return
+        // Re-entered from the create/delete coroutines, which can resume after
+        // the activity is gone — showing a dialog then throws BadTokenException.
+        if (isFinishing || isDestroyed) return
 
         val dialogView = layoutInflater.inflate(R.layout.dialog_vm_snapshots, null)
         val vmNameText = dialogView.findViewById<TextView>(R.id.vm_name_text)
@@ -491,17 +664,22 @@ class VMwareManagerActivity : AppCompatActivity() {
         val closeButton = dialogView.findViewById<Button>(R.id.close_button)
 
         snapshotRecyclerView.layoutManager = LinearLayoutManager(this)
-        vmNameText.text = "VM: ${vm.name}"
+        vmNameText.text = "VM: ${safeName(vm.name)}"
 
+        // Replace any dialog left over from a previous open so only one is tracked.
+        snapshotDialog?.dismiss()
         val dialog = MaterialAlertDialogBuilder(this)
             .setView(dialogView)
             .create()
+        snapshotDialog = dialog
 
         // Load snapshots
         lifecycleScope.launch {
             try {
                 dialogProgressBar.visibility = View.VISIBLE
                 val snapshots = client.listSnapshots(vm.vm)
+                // The awaited API hop can land after the dialog's activity is gone.
+                if (isFinishing || isDestroyed) return@launch
                 dialogProgressBar.visibility = View.GONE
 
                 if (snapshots.isEmpty()) {
@@ -514,8 +692,11 @@ class VMwareManagerActivity : AppCompatActivity() {
                         handleSnapshotAction(vm, snapshot, action, dialog)
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to load snapshots: ${e.message}", e)
+                Logger.e(TAG, "Failed to load snapshots", e)
+                if (isFinishing || isDestroyed) return@launch
                 dialogProgressBar.visibility = View.GONE
                 emptyStateText.text = "Error loading snapshots"
                 emptyStateText.visibility = View.VISIBLE
@@ -547,7 +728,7 @@ class VMwareManagerActivity : AppCompatActivity() {
 
         MaterialAlertDialogBuilder(this)
             .setTitle("Create Snapshot")
-            .setMessage("Enter a name for the snapshot of ${vm.name}")
+            .setMessage("Enter a name for the snapshot of ${safeName(vm.name)}")
             .setView(form.root)
             .setPositiveButton("Create") { _, _ ->
                 val name = input.text.toString().trim()
@@ -555,9 +736,16 @@ class VMwareManagerActivity : AppCompatActivity() {
                     showError("Enter a name for the snapshot")
                     return@setPositiveButton
                 }
+                // The name is sent to vCenter and echoed back into the snapshot
+                // list; control characters there would forge the dialog's rows.
+                if (name != safeName(name)) {
+                    showError("Snapshot name must not contain control characters")
+                    return@setPositiveButton
+                }
                 lifecycleScope.launch {
                     try {
                         val success = currentClient?.createSnapshot(vm.vm, name) ?: false
+                        if (isFinishing || isDestroyed) return@launch
                         if (success) {
                             Toast.makeText(this@VMwareManagerActivity, "Snapshot created", Toast.LENGTH_SHORT).show()
                             parentDialog.dismiss()
@@ -566,9 +754,11 @@ class VMwareManagerActivity : AppCompatActivity() {
                         } else {
                             showError("Failed to create snapshot")
                         }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
-                        Logger.e(TAG, "Snapshot creation error: ${e.message}", e)
-                        showError("Error: ${e.message}")
+                        Logger.e(TAG, "Snapshot creation error", e)
+                        showError("Error: ${safeDetail(e.message)}")
                     }
                 }
             }
@@ -584,20 +774,23 @@ class VMwareManagerActivity : AppCompatActivity() {
             "revert" -> {
                 MaterialAlertDialogBuilder(this)
                     .setTitle("Revert to Snapshot")
-                    .setMessage("Are you sure you want to revert ${vm.name} to snapshot '${snapshot.name}'?\n\nThis will restore the VM to its state when the snapshot was taken.")
+                    .setMessage("Are you sure you want to revert ${safeName(vm.name)} to snapshot '${safeName(snapshot.name)}'?\n\nThis will restore the VM to its state when the snapshot was taken.")
                     .setPositiveButton("Revert") { _, _ ->
                         lifecycleScope.launch {
                             try {
                                 val success = currentClient?.revertSnapshot(snapshot.snapshot) ?: false
+                                if (isFinishing || isDestroyed) return@launch
                                 if (success) {
                                     Toast.makeText(this@VMwareManagerActivity, "VM reverted to snapshot", Toast.LENGTH_SHORT).show()
                                     parentDialog.dismiss()
                                 } else {
                                     showError("Failed to revert")
                                 }
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
-                                Logger.e(TAG, "Revert error: ${e.message}", e)
-                                showError("Error: ${e.message}")
+                                Logger.e(TAG, "Revert error", e)
+                                showError("Error: ${safeDetail(e.message)}")
                             }
                         }
                     }
@@ -607,11 +800,12 @@ class VMwareManagerActivity : AppCompatActivity() {
             "delete" -> {
                 MaterialAlertDialogBuilder(this)
                     .setTitle("Delete Snapshot")
-                    .setMessage("Are you sure you want to delete snapshot '${snapshot.name}'?\n\nThis action cannot be undone.")
+                    .setMessage("Are you sure you want to delete snapshot '${safeName(snapshot.name)}'?\n\nThis action cannot be undone.")
                     .setPositiveButton("Delete") { _, _ ->
                         lifecycleScope.launch {
                             try {
                                 val success = currentClient?.deleteSnapshot(snapshot.snapshot) ?: false
+                                if (isFinishing || isDestroyed) return@launch
                                 if (success) {
                                     Toast.makeText(this@VMwareManagerActivity, "Snapshot deleted", Toast.LENGTH_SHORT).show()
                                     parentDialog.dismiss()
@@ -620,9 +814,11 @@ class VMwareManagerActivity : AppCompatActivity() {
                                 } else {
                                     showError("Failed to delete snapshot")
                                 }
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
-                                Logger.e(TAG, "Delete error: ${e.message}", e)
-                                showError("Error: ${e.message}")
+                                Logger.e(TAG, "Delete error", e)
+                                showError("Error: ${safeDetail(e.message)}")
                             }
                         }
                     }
@@ -655,7 +851,8 @@ class VMwareManagerActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val snapshot = snapshots[position]
 
-            holder.name.text = snapshot.name
+            // snapshot.name is supplied by vCenter.
+            holder.name.text = safeName(snapshot.name)
             holder.time.text = "Created: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(snapshot.createTime))}"
 
             holder.revertButton.setOnClickListener { onAction(snapshot, "revert") }

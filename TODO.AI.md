@@ -7,6 +7,32 @@ is in progress.
 Source: 2026-08-06 feature-coverage audit of IDEA.md § Business logic against
 the codebase (57 spec features → 53 implemented, 4 partial, 0 missing).
 
+## Open — 2026-08-13 docker/hypervisor audit follow-ups (needs user call)
+
+1. docker/transport/SocketRelay.kt — loopback relay accepts any local
+   connection unauthenticated; design decision needed (per-session token vs
+   accept-once) before hardening. Flagged by docker engine/transport audit.
+2. hypervisor/oci/OciApiClient.kt — `validateCredentials` now rethrows on a
+   malformed stored user OCID (surfaces as an onboarding error instead of a
+   silent 404). Confirm this is the wanted UX or switch to returning `false`.
+3. hypervisor/vmware/VMwareApiClient.kt — `apiGet`/`apiPost` return type
+   changed to `String` (private, callers updated in-file); `/api` vs `/rest`
+   envelope unwrap changed — watch these two spots in the combined gate.
+4. sync/tombstone/TombstoneRecorder.kt — `record()` uses
+   `runCatching {}.onFailure {}`, swallowing `CancellationException`; a
+   cancelled delete (DockerHostsFragment.deleteDockerHost) can silently
+   half-complete. Rethrow cancellation.
+5. storage/database/entities/HypervisorProfile.kt — data class with
+   `val password` and no redacting `toString()`; any interpolated log or
+   exception prints the password. Add `toString()` masking as `xxxxx`.
+6. hypervisor/console/HypervisorConsoleManager.kt — retains the Activity via
+   `ConsoleEventListener` with no detach path (leak, systemic across XCPng
+   and Proxmox managers). Needs a detach/clear-listener lifecycle hook.
+7. ~90 remaining hardcoded English strings in XCPngManagerActivity,
+   LibvirtManagerActivity, OciManagerActivity, VncHostsActivity (AI.md
+   PART 7) — mechanical i18n sweep deferred to avoid colliding with the
+   in-flight audit batch.
+
 ## Shipped — 2026-08-11 user batch (merged from root TODO.md)
 
 Items 1–3 shipped in fceb877 (docker/infra UX rework + tab index +

@@ -34,6 +34,17 @@ class SshExecRunner(
         private const val POLL_INTERVAL_MS = 50L
 
         /**
+         * Cap on captured stdout (and, separately, stderr) for one exec.
+         * Remote output is untrusted in size — `docker inspect` on a huge
+         * container set or a stray `cat` of a large file would otherwise be
+         * buffered whole. 8 MiB matches the bound used for Engine API bodies.
+         */
+        const val MAX_EXEC_OUTPUT_BYTES = 8 * 1024 * 1024
+
+        /** Longest unterminated line buffered by [stream] before it is emitted. */
+        const val MAX_STREAM_LINE_CHARS = 64 * 1024
+
+        /**
          * POSIX single-quote-escape [value] for safe interpolation into a
          * remote shell command. Same injection barrier as
          * LibvirtApiClient.shQuote — no metacharacter in [value] can break
@@ -139,6 +150,7 @@ class SshExecRunner(
             var n = stdout.read(buf)
             while (n > 0) {
                 pending.append(String(buf, 0, n, Charsets.UTF_8))
+                emitCompleteLines(pending) { emit(it) }
                 n = stdout.read(buf)
             }
             emitCompleteLines(pending) { emit(it) }
@@ -147,6 +159,21 @@ class SshExecRunner(
             channel.disconnect()
         }
     }.flowOn(Dispatchers.IO)
+
+    /**
+     * Append [count] bytes of [buf] to [sink], but never past
+     * [MAX_EXEC_OUTPUT_BYTES].
+     *
+     * Bytes over the cap are read and dropped rather than left unread: the
+     * remote process must keep draining so the channel closes and the command
+     * finishes, but a `docker logs` or `cat` against a multi-gigabyte file
+     * must not be buffered whole into the app's heap.
+     */
+    private fun appendCapped(sink: ByteArrayOutputStream, buf: ByteArray, count: Int) {
+        val room = MAX_EXEC_OUTPUT_BYTES - sink.size()
+        if (room <= 0) return
+        sink.write(buf, 0, minOf(count, room))
+    }
 
     /** Move every currently-available byte from [input] into [sink]. */
     private fun drainAvailable(
@@ -159,7 +186,7 @@ class SshExecRunner(
         while (available > 0) {
             val n = input.read(buf, 0, minOf(available, buf.size))
             if (n <= 0) break
-            sink.write(buf, 0, n)
+            appendCapped(sink, buf, n)
             moved += n
             available = input.available()
         }
@@ -174,7 +201,7 @@ class SshExecRunner(
     ) {
         var n = input.read(buf)
         while (n > 0) {
-            sink.write(buf, 0, n)
+            appendCapped(sink, buf, n)
             n = input.read(buf)
         }
     }
@@ -190,6 +217,13 @@ class SshExecRunner(
             pending.delete(0, idx + 1)
             emit(line)
             idx = pending.indexOf("\n")
+        }
+        // A remote process that never emits a newline would otherwise grow
+        // this buffer without limit; flush it in fixed slices instead.
+        while (pending.length >= MAX_STREAM_LINE_CHARS) {
+            val slice = pending.substring(0, MAX_STREAM_LINE_CHARS)
+            pending.delete(0, MAX_STREAM_LINE_CHARS)
+            emit(slice)
         }
     }
 }

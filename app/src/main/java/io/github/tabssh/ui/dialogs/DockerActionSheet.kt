@@ -10,6 +10,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.divider.MaterialDivider
 import io.github.tabssh.R
+import io.github.tabssh.ui.utils.DockerText
 
 /**
  * Shared bottom-sheet action menu for the Docker screens — replaces the old
@@ -37,13 +38,17 @@ object DockerActionSheet {
         val dialog = BottomSheetDialog(context)
         val root = LayoutInflater.from(context)
             .inflate(R.layout.sheet_docker_actions, null, false)
-        root.findViewById<TextView>(R.id.text_sheet_title).text = title
+        // Title/subtitle are server-controlled on every caller (container,
+        // image, volume, network, host names) — sanitize once here rather than
+        // trusting each call site.
+        root.findViewById<TextView>(R.id.text_sheet_title).text =
+            DockerText.display(title.toString())
         val subtitleView = root.findViewById<TextView>(R.id.text_sheet_subtitle)
         if (subtitle.isNullOrBlank()) {
             subtitleView.visibility = android.view.View.GONE
         } else {
             subtitleView.visibility = android.view.View.VISIBLE
-            subtitleView.text = subtitle
+            subtitleView.text = DockerText.display(subtitle.toString())
         }
 
         val container = root.findViewById<LinearLayout>(R.id.container_actions)

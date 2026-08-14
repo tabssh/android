@@ -8,6 +8,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
+import io.github.tabssh.ui.utils.DockerText
 
 /**
  * Shared three-line card adapter (item_docker_simple.xml) for the image,
@@ -102,13 +103,15 @@ abstract class DockerSimpleRowAdapter<T> :
 
         fun bind(item: T) {
             val (title, subtitle, detail) = linesOf(item, itemView.context)
-            textTitle.text = title
-            textSubtitle.text = subtitle
+            // Every subclass feeds daemon-supplied names/labels through here —
+            // sanitize once in the shared holder instead of per subclass.
+            textTitle.text = DockerText.display(title)
+            textSubtitle.text = DockerText.display(subtitle)
             if (detail.isBlank()) {
                 textDetail.visibility = View.GONE
             } else {
                 textDetail.visibility = View.VISIBLE
-                textDetail.text = detail
+                textDetail.text = DockerText.display(detail)
             }
         }
     }

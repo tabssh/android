@@ -28,6 +28,8 @@ import io.github.tabssh.ui.dialogs.AutoUpdatePolicyDialog
 import io.github.tabssh.ui.dialogs.DockerActionSheet
 import io.github.tabssh.ui.dialogs.DockerErrorPresenter
 import io.github.tabssh.ui.utils.DockerExecLauncher
+import io.github.tabssh.ui.utils.DockerText
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
@@ -48,6 +50,11 @@ class DockerContainersFragment : DockerPageFragment() {
     private lateinit var progressBar: ProgressBar
     private lateinit var fabAction: FloatingActionButton
     private lateinit var adapter: DockerContainerAdapter
+
+    // Reentrancy guard: the action strip and the sheet rows stay tappable while
+    // a lifecycle call is in flight, and double-tapping start/stop/kill/remove
+    // fires the operation twice against the daemon.
+    private var actionInFlight = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -228,7 +235,7 @@ class DockerContainersFragment : DockerPageFragment() {
             actions += DockerActionSheet.Action(
                 R.drawable.ic_flash, getString(R.string.docker_action_kill), destructive = true
             ) {
-                runAction(container, ContainerAction.KILL)
+                confirmKill(container, name)
             }
         }
         actions += DockerActionSheet.Action(
@@ -242,17 +249,53 @@ class DockerContainersFragment : DockerPageFragment() {
     /** One-tap docker exec into the container, opening a terminal tab. */
     private fun enterTerminal(container: DockerContainerSummary) {
         val current = session ?: return
+        if (actionInFlight) return
+        actionInFlight = true
         val name = container.names.firstOrNull()?.removePrefix("/") ?: container.id.take(12)
         progressBar.visibility = View.VISIBLE
         Toast.makeText(requireContext(), R.string.docker_terminal_probing, Toast.LENGTH_SHORT).show()
         viewLifecycleOwner.lifecycleScope.launch {
-            val intent = DockerExecLauncher.buildExecIntent(
-                requireContext(), current, manager.hostId, container.id, name
-            )
-            if (!isAdded) return@launch
-            progressBar.visibility = View.GONE
-            startActivity(intent)
+            try {
+                val intent = DockerExecLauncher.buildExecIntent(
+                    requireContext(), current, manager.hostId, container.id, name
+                )
+                if (!isAdded) return@launch
+                startActivity(intent)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // buildExecIntent runs a shell probe over the session runner,
+                // which throws outright when the transport has gone away —
+                // unlike the DockerResult-returning transport calls.
+                if (!isAdded) return@launch
+                Toast.makeText(
+                    requireContext(),
+                    getString(R.string.docker_error_detail_fmt, DockerText.display(e.message)),
+                    Toast.LENGTH_SHORT
+                ).show()
+            } finally {
+                actionInFlight = false
+                if (isAdded) progressBar.visibility = View.GONE
+            }
         }
+    }
+
+    /**
+     * Kill sends SIGKILL — unsaved in-container state is lost, so it is gated
+     * behind the same confirmation as remove rather than firing on one tap.
+     */
+    private fun confirmKill(container: DockerContainerSummary, name: String) {
+        if (!isAdded) return
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(DockerText.display(name))
+            .setMessage(
+                getString(R.string.docker_kill_container_message, DockerText.display(name))
+            )
+            .setPositiveButton(R.string.docker_action_kill) { _, _ ->
+                runAction(container, ContainerAction.KILL)
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun confirmRemove(container: DockerContainerSummary, name: String) {
@@ -269,33 +312,45 @@ class DockerContainersFragment : DockerPageFragment() {
 
     private fun removeContainer(container: DockerContainerSummary) {
         val current = session ?: return
+        if (actionInFlight) return
+        actionInFlight = true
         progressBar.visibility = View.VISIBLE
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = current.transport.removeContainer(container.id, force = true)
-            if (!isAdded) return@launch
-            progressBar.visibility = View.GONE
-            when (result) {
-                is DockerResult.Success -> onSessionReady(current)
-                else -> DockerErrorPresenter.present(requireContext(), result)
+            try {
+                val result = current.transport.removeContainer(container.id, force = true)
+                if (!isAdded) return@launch
+                when (result) {
+                    is DockerResult.Success -> onSessionReady(current)
+                    else -> DockerErrorPresenter.present(requireContext(), result)
+                }
+            } finally {
+                actionInFlight = false
+                if (isAdded) progressBar.visibility = View.GONE
             }
         }
     }
 
     private fun runAction(container: DockerContainerSummary, action: ContainerAction) {
         val current = session ?: return
+        if (actionInFlight) return
+        actionInFlight = true
         progressBar.visibility = View.VISIBLE
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = current.transport.containerAction(container.id, action)
-            if (!isAdded) return@launch
-            progressBar.visibility = View.GONE
-            when (result) {
-                is DockerResult.Success -> {
-                    Toast.makeText(
-                        requireContext(), R.string.docker_action_success, Toast.LENGTH_SHORT
-                    ).show()
-                    onSessionReady(current)
+            try {
+                val result = current.transport.containerAction(container.id, action)
+                if (!isAdded) return@launch
+                when (result) {
+                    is DockerResult.Success -> {
+                        Toast.makeText(
+                            requireContext(), R.string.docker_action_success, Toast.LENGTH_SHORT
+                        ).show()
+                        onSessionReady(current)
+                    }
+                    else -> DockerErrorPresenter.present(requireContext(), result)
                 }
-                else -> DockerErrorPresenter.present(requireContext(), result)
+            } finally {
+                actionInFlight = false
+                if (isAdded) progressBar.visibility = View.GONE
             }
         }
     }
