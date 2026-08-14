@@ -4,6 +4,7 @@ import com.jcraft.jsch.ChannelExec
 import com.jcraft.jsch.Session
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -47,6 +48,11 @@ object MoshHandoff {
         /** Build the canonical client invocation for the Mosh client. */
         fun toClientCommand(): String =
             "MOSH_KEY=$keyBase64 mosh -p $port $username@$host"
+
+        // Hand-written toString so the generated data-class one can never spill
+        // the Mosh session key into a log line, crash report, or debugger dump.
+        override fun toString(): String =
+            "MoshHandoffInfo(host=$host, username=$username, port=$port, keyBase64=xxxxx)"
     }
 
     sealed class Result {
@@ -84,16 +90,26 @@ object MoshHandoff {
             val sb = StringBuilder()
             val buf = ByteArray(2048)
             // mosh-server prints a few lines then daemonizes. Read a brief
-            // window then stop — don't hang waiting for EOF.
+            // window then stop — don't hang waiting for EOF. The remote is
+            // untrusted output, so cap the buffer: a host that streams
+            // forever must not grow this StringBuilder without bound.
             val deadline = System.currentTimeMillis() + 8_000L
-            while (System.currentTimeMillis() < deadline) {
+            while (System.currentTimeMillis() < deadline && sb.length < MAX_SERVER_OUTPUT_CHARS) {
                 val n = input.read(buf)
                 if (n < 0) break
-                if (n > 0) sb.append(String(buf, 0, n, Charsets.UTF_8))
+                if (n > 0) {
+                    sb.append(String(buf, 0, n, Charsets.UTF_8))
+                } else {
+                    // JSch's channel stream returns 0 when no data is pending;
+                    // yield instead of spinning the CPU until the deadline.
+                    Thread.sleep(20L)
+                }
                 if (sb.contains("MOSH CONNECT")) break
             }
             val raw = sb.toString()
-            Logger.d(TAG, "mosh-server raw output: ${raw.lineSequence().firstOrNull { "MOSH CONNECT" in it } ?: "(no MOSH CONNECT line)"}")
+            // Never log the raw line — it carries the Mosh session secret.
+            // Log only whether the handshake line was seen at all.
+            Logger.d(TAG, "mosh-server handshake line ${if ("MOSH CONNECT" in raw) "received" else "absent"}")
 
             val match = Regex("""MOSH CONNECT (\d+) (\S+)""").find(raw)
             if (match == null) {
@@ -105,15 +121,28 @@ object MoshHandoff {
                     else "Could not parse mosh-server response (mosh installed?)"
                 )
             }
-            val (port, key) = match.destructured
+            val (portStr, key) = match.destructured
+            // Everything past this point is remote-controlled. Validate before
+            // it reaches a ProcessBuilder / Intent extra: an out-of-range port
+            // or a key with shell/argument metacharacters is a protocol
+            // violation, not something to pass through.
+            val parsedPort = portStr.toIntOrNull()
+            if (parsedPort == null || parsedPort !in 1..65535) {
+                return@withContext Result.Error("mosh-server reported an invalid UDP port")
+            }
+            if (!isValidMoshKey(key)) {
+                return@withContext Result.Error("mosh-server reported a malformed session key")
+            }
             return@withContext Result.Success(
                 MoshHandoffInfo(
                     host = host,
                     username = username,
-                    port = port.toInt(),
+                    port = parsedPort,
                     keyBase64 = key
                 )
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Mosh handoff failed", e)
             return@withContext Result.Error("Bootstrap failed: ${e.message ?: e.javaClass.simpleName}")
@@ -123,4 +152,18 @@ object MoshHandoff {
     }
 
     private fun grabSession(ssh: SSHConnection): Session? = ssh.jschSession()
+
+    /**
+     * A Mosh session key is a 16-byte AES key printed as unpadded base64 (22
+     * chars). Accept the standard base64 alphabet with an optional pad and a
+     * sane length window rather than pinning exactly 22, so a future key size
+     * still passes — but reject anything containing shell or argument
+     * metacharacters.
+     */
+    internal fun isValidMoshKey(key: String): Boolean =
+        key.length in 16..64 && MOSH_KEY_REGEX.matches(key)
+
+    private val MOSH_KEY_REGEX = Regex("^[A-Za-z0-9+/]+={0,2}$")
+
+    private const val MAX_SERVER_OUTPUT_CHARS = 64 * 1024
 }

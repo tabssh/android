@@ -30,6 +30,28 @@ class SSHConfigParser {
 
         private const val DEFAULT_PORT = 22
         private const val DEFAULT_USERNAME = ""
+
+        // Upper bounds for the two numeric timeout directives. OpenSSH accepts
+        // any non-negative integer, but a config file is untrusted input here
+        // (imported from a share sheet or a cloud sync), and an absurd value
+        // would wedge a connection attempt for hours.
+        private const val MAX_SERVER_ALIVE_INTERVAL_SEC = 86_400
+        private const val MAX_CONNECT_TIMEOUT_SEC = 3_600
+
+        /**
+         * Parse a TCP port from config text, falling back to [fallback] for
+         * anything outside the valid 1..65535 range.
+         *
+         * `toIntOrNull()` alone accepts 0, negatives, and values above 65535,
+         * all of which reach `Socket.connect` and throw at connect time — or,
+         * worse, silently persist into a profile row.
+         */
+        internal fun parsePort(raw: String, fallback: Int = DEFAULT_PORT): Int =
+            raw.trim().toIntOrNull()?.takeIf { it in 1..65535 } ?: fallback
+
+        /** Parse a non-negative integer directive, clamped to [max]. */
+        internal fun parseSeconds(raw: String, fallback: Int, max: Int): Int =
+            raw.trim().toIntOrNull()?.takeIf { it in 0..max } ?: fallback
     }
 
     data class SSHHost(
@@ -147,13 +169,17 @@ class SSHConfigParser {
 
                     "hostname" -> currentHost?.hostname = value
                     "user" -> currentHost?.user = value
-                    "port" -> currentHost?.port = value.toIntOrNull() ?: DEFAULT_PORT
+                    "port" -> currentHost?.port = parsePort(value)
                     "identityfile" -> currentHost?.identityFileStr = expandPath(value)
                     "proxyjump" -> currentHost?.proxyJump = value
                     "proxycommand" -> currentHost?.proxyCommand = value
                     "compression" -> currentHost?.compression = value.equals("yes", ignoreCase = true)
-                    "serveraliveinterval" -> currentHost?.serverAliveInterval = value.toIntOrNull() ?: 0
-                    "connecttimeout" -> currentHost?.connectTimeout = value.toIntOrNull() ?: 15
+                    "serveraliveinterval" ->
+                        currentHost?.serverAliveInterval =
+                            parseSeconds(value, 0, MAX_SERVER_ALIVE_INTERVAL_SEC)
+                    "connecttimeout" ->
+                        currentHost?.connectTimeout =
+                            parseSeconds(value, 15, MAX_CONNECT_TIMEOUT_SEC)
                     "passwordauthentication" -> currentHost?.passwordAuthentication = value.equals("yes", ignoreCase = true)
                     "pubkeyauthentication" -> currentHost?.pubkeyAuthentication = value.equals("yes", ignoreCase = true)
                     "stricthostkeychecking" -> currentHost?.strictHostKeyChecking = value.lowercase()
@@ -330,7 +356,11 @@ class SSHConfigParser {
         val colonIdx = hostAndPort.lastIndexOf(':')
         return if (colonIdx > 0) {
             val host = hostAndPort.substring(0, colonIdx).trim()
-            val port = hostAndPort.substring(colonIdx + 1).trim().toIntOrNull()
+            // An out-of-range port here would be persisted onto the jump-host
+            // profile and only fail at connect time; drop it and let the
+            // default apply.
+            val port = hostAndPort.substring(colonIdx + 1).trim()
+                .toIntOrNull()?.takeIf { it in 1..65535 }
             if (host.isEmpty()) null else ParsedJump(user, host, port)
         } else {
             ParsedJump(user, hostAndPort, null)

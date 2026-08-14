@@ -27,8 +27,10 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
     private val database = TabSSHDatabase.getDatabase(context)
     private val hostKeyDao = database.hostKeyDao()
 
-    private var hostKeyChangedCallback: ((HostKeyChangedInfo) -> HostKeyAction)? = null
-    private var newHostKeyCallback: ((NewHostKeyInfo) -> HostKeyAction)? = null
+    // Registered from the UI thread, invoked from JSch's handshake thread —
+    // volatile so a freshly registered callback is never missed.
+    @Volatile private var hostKeyChangedCallback: ((HostKeyChangedInfo) -> HostKeyAction)? = null
+    @Volatile private var newHostKeyCallback: ((NewHostKeyInfo) -> HostKeyAction)? = null
 
     /**
      * Set callback for when host key changes are detected
@@ -373,7 +375,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
     /**
      * Parse hostname and port from host string
      */
-    private fun parseHostPort(host: String): Pair<String, Int> {
+    internal fun parseHostPort(host: String): Pair<String, Int> {
         val trimmed = host.trim()
 
         // Bracketed IPv6 literal, optionally with a port: "[::1]" or "[2001:db8::1]:2222".
@@ -382,7 +384,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
             if (close > 0) {
                 val addr = trimmed.substring(1, close)
                 val rest = trimmed.substring(close + 1)
-                val port = if (rest.startsWith(":")) rest.substring(1).toIntOrNull() ?: 22 else 22
+                val port = if (rest.startsWith(":")) validPort(rest.substring(1)) else DEFAULT_SSH_PORT
                 return Pair(addr, port)
             }
         }
@@ -390,17 +392,26 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
         // Bare IPv6 literal (two or more colons, no brackets) carries no port component;
         // splitting on ":" would corrupt the address, so return it verbatim.
         if (trimmed.count { it == ':' } > 1) {
-            return Pair(trimmed, 22)
+            return Pair(trimmed, DEFAULT_SSH_PORT)
         }
 
         // "host:port" or a bare host/IPv4. Split on the last colon so hostnames survive.
         val idx = trimmed.lastIndexOf(':')
         return if (idx > 0) {
-            Pair(trimmed.substring(0, idx), trimmed.substring(idx + 1).toIntOrNull() ?: 22)
+            Pair(trimmed.substring(0, idx), validPort(trimmed.substring(idx + 1)))
         } else {
-            Pair(trimmed, 22)
+            Pair(trimmed, DEFAULT_SSH_PORT)
         }
     }
+
+    /**
+     * Parse a port component, falling back to 22 for anything that is not a
+     * valid TCP port. An out-of-range value here would be stored on the host
+     * key row and make the lookup for the real host:22 entry miss, silently
+     * downgrading a known host to an unknown one.
+     */
+    private fun validPort(raw: String): Int =
+        raw.trim().toIntOrNull()?.takeIf { it in 1..65535 } ?: DEFAULT_SSH_PORT
 
     /**
      * Generate SHA256 fingerprint from key bytes
@@ -426,20 +437,28 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
     }
 
     /**
-     * Detect key type from key bytes
+     * Detect key type from key bytes.
+     *
+     * An SSH public key blob (RFC 4253 §6.6) starts with a uint32 big-endian
+     * length followed by exactly that many bytes of the algorithm name. Read
+     * that field instead of substring-searching the whole blob: the blob's
+     * modulus/point bytes are attacker-influenced, so a server could embed the
+     * ASCII "ssh-ed25519" inside an RSA key's payload and have this report the
+     * wrong algorithm — which then decides which stored key row this one is
+     * compared against.
      */
-    private fun detectKeyType(key: ByteArray): String {
+    internal fun detectKeyType(key: ByteArray): String {
         return try {
-            val keyStr = String(key)
-            when {
-                keyStr.contains("ssh-rsa") -> "ssh-rsa"
-                keyStr.contains("ssh-ed25519") -> "ssh-ed25519"
-                keyStr.contains("ecdsa-sha2-nistp256") -> "ecdsa-sha2-nistp256"
-                keyStr.contains("ecdsa-sha2-nistp384") -> "ecdsa-sha2-nistp384"
-                keyStr.contains("ecdsa-sha2-nistp521") -> "ecdsa-sha2-nistp521"
-                keyStr.contains("ssh-dss") -> "ssh-dss"
-                else -> "unknown"
-            }
+            if (key.size < 4) return "unknown"
+            val len = ((key[0].toInt() and 0xFF) shl 24) or
+                ((key[1].toInt() and 0xFF) shl 16) or
+                ((key[2].toInt() and 0xFF) shl 8) or
+                (key[3].toInt() and 0xFF)
+            // Algorithm names are short ASCII identifiers; anything else means
+            // this is not a well-formed key blob.
+            if (len !in 1..64 || 4 + len > key.size) return "unknown"
+            val name = String(key, 4, len, Charsets.US_ASCII)
+            if (name in KNOWN_KEY_TYPES) name else "unknown"
         } catch (e: Exception) {
             "unknown"
         }
@@ -625,6 +644,25 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
         /** Hard timeout for the host-key prompt dialogs — see kdoc on
          *  showBlockingHostDialog. */
         private const val DIALOG_TIMEOUT_SECONDS: Long = 30
+
+        /** Port assumed when a host string carries no valid port component. */
+        private const val DEFAULT_SSH_PORT: Int = 22
+
+        // Algorithm names accepted from a host key blob's leading name field.
+        // Anything outside this set is reported as "unknown" rather than
+        // echoed back, so a server cannot inject an arbitrary string into the
+        // stored key row or the fingerprint dialog.
+        private val KNOWN_KEY_TYPES = setOf(
+            "ssh-rsa",
+            "rsa-sha2-256",
+            "rsa-sha2-512",
+            "ssh-ed25519",
+            "ssh-ed448",
+            "ecdsa-sha2-nistp256",
+            "ecdsa-sha2-nistp384",
+            "ecdsa-sha2-nistp521",
+            "ssh-dss"
+        )
 
         // Dedicated single-thread dispatcher for all host-key DB access.
         // JSch invokes check()/add()/remove() synchronously on its handshake

@@ -15,10 +15,33 @@ class ANSIParser(private val buffer: TerminalBuffer) {
     private val parameters = mutableListOf<Int>()
     private var currentParam = StringBuilder()
     private var intermediateChars = StringBuilder()
-    
+
+    // Set while an ESC has been seen inside an OSC/DCS string: the next character
+    // decides whether it was the ST terminator (ESC backslash) or literal payload.
+    private var stringEscapePending = false
+
+
     companion object {
         private const val ESC = '\u001B'
         private const val CSI = '['
+
+        // Hostile-server bounds. A malicious or broken peer can open a control
+        // sequence and never terminate it; every accumulator below is capped so
+        // the parser abandons the sequence instead of growing without limit.
+        private const val MAX_ESCAPE_LENGTH = 4096
+        private const val MAX_STRING_LENGTH = 8192
+        private const val MAX_PARAMETERS = 32
+        private const val MAX_PARAM_VALUE = 65535
+        private const val MAX_LINK_URL_LENGTH = 2048
+        private const val MAX_TITLE_LENGTH = 256
+
+        // Schemes an OSC 8 hyperlink is allowed to carry. Anything else
+        // (javascript:, intent:, content:, data:, file:) is dropped: the URL is
+        // server-controlled and is handed to an "open link" dialog, so it must
+        // never be allowed to reach an Intent with an arbitrary scheme.
+        private val ALLOWED_LINK_SCHEMES = setOf(
+            "http", "https", "ftp", "ftps", "ssh", "sftp", "telnet", "mailto"
+        )
         private const val OSC = ']'
         private const val DCS = 'P'
         private const val ST = '\\'
@@ -34,16 +57,20 @@ class ANSIParser(private val buffer: TerminalBuffer) {
     }
     
     private enum class ParserState {
-        NORMAL,         // Normal text processing
-        ESCAPE,         // ESC received, waiting for next char
-        CSI_ENTRY,      // CSI sequence started
-        CSI_PARAM,      // Reading CSI parameters
-        CSI_INTERMEDIATE, // Reading intermediate chars
-        OSC_STRING,     // Operating System Command string
-        DCS_ENTRY,      // Device Control String
-        DCS_PARAM,      // DCS parameters
-        DCS_INTERMEDIATE, // DCS intermediate
-        DCS_PASSTHROUGH  // DCS data
+        // Normal text processing
+        NORMAL,
+        // ESC received, waiting for next char
+        ESCAPE,
+        // CSI sequence started
+        CSI_ENTRY,
+        // Reading CSI parameters
+        CSI_PARAM,
+        // Reading intermediate chars
+        CSI_INTERMEDIATE,
+        // Operating System Command string
+        OSC_STRING,
+        // Device Control String payload, consumed until ST but not interpreted
+        DCS_STRING
     }
     
     /**
@@ -71,10 +98,7 @@ class ANSIParser(private val buffer: TerminalBuffer) {
             ParserState.CSI_PARAM -> processCSIParam(ch)
             ParserState.CSI_INTERMEDIATE -> processCSIIntermediate(ch)
             ParserState.OSC_STRING -> processOSCString(ch)
-            ParserState.DCS_ENTRY -> processDCSEntry(ch)
-            ParserState.DCS_PARAM -> processDCSParam(ch)
-            ParserState.DCS_INTERMEDIATE -> processDCSIntermediate(ch)
-            ParserState.DCS_PASSTHROUGH -> processDCSPassthrough(ch)
+            ParserState.DCS_STRING -> processDCSString(ch)
         }
     }
     
@@ -94,17 +118,23 @@ class ANSIParser(private val buffer: TerminalBuffer) {
             CR -> buffer.writeChar('\r')
             BS -> buffer.writeChar('\b')
             else -> {
-                if (ch >= ' ' || ch.code >= 160) { // Printable characters
+                // Printable characters only: DEL (0x7F) and the C1 control block
+                // (0x80..0x9F) are control codes, not glyphs, and must never be
+                // written into the buffer where a server could use them to smuggle
+                // unrenderable cells into copied text.
+                val printable = ch.code >= 0x20 &&
+                    ch.code != 0x7F &&
+                    (ch.code < 0x80 || ch.code > 0x9F)
+                if (printable) {
                     buffer.writeChar(ch)
                 }
-                // Ignore other control characters
             }
         }
     }
     
     private fun processEscapeChar(ch: Char) {
-        escapeSequence.append(ch)
-        
+        if (appendToEscapeSequence(ch)) return
+
         when (ch) {
             CSI -> {
                 parserState = ParserState.CSI_ENTRY
@@ -115,12 +145,14 @@ class ANSIParser(private val buffer: TerminalBuffer) {
             OSC -> {
                 parserState = ParserState.OSC_STRING
                 currentParam.clear()
+                stringEscapePending = false
             }
             DCS -> {
-                parserState = ParserState.DCS_ENTRY
+                parserState = ParserState.DCS_STRING
                 parameters.clear()
                 currentParam.clear()
                 intermediateChars.clear()
+                stringEscapePending = false
             }
             // Two-character escape sequences
             '7' -> {
@@ -144,13 +176,13 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                 if (newRow >= buffer.getRows()) {
                     buffer.scrollUp()
                 } else {
-                    buffer.setCursorPosition(newRow, buffer.getCursorCol())
+                    buffer.setCursorPosition(buffer.getCursorCol(), newRow)
                 }
                 resetParser()
             }
             'E' -> {
                 // Next line (CR + LF)
-                buffer.setCursorPosition(buffer.getCursorRow() + 1, 0)
+                buffer.setCursorPosition(0, buffer.getCursorRow() + 1)
                 resetParser()
             }
             'M' -> {
@@ -159,7 +191,7 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                 if (newRow < 0) {
                     buffer.scrollDown()
                 } else {
-                    buffer.setCursorPosition(newRow, buffer.getCursorCol())
+                    buffer.setCursorPosition(buffer.getCursorCol(), newRow)
                 }
                 resetParser()
             }
@@ -171,16 +203,15 @@ class ANSIParser(private val buffer: TerminalBuffer) {
     }
     
     private fun processCSIEntry(ch: Char) {
-        escapeSequence.append(ch)
-        
+        if (appendToEscapeSequence(ch)) return
+
         when {
             ch in '0'..'9' -> {
-                currentParam.append(ch)
+                appendParamDigit(ch)
                 parserState = ParserState.CSI_PARAM
             }
             ch == ';' -> {
-                parameters.add(if (currentParam.isEmpty()) 0 else currentParam.toString().toIntOrNull() ?: 0)
-                currentParam.clear()
+                addParameter()
                 parserState = ParserState.CSI_PARAM
             }
             ch in '<'..'?' -> {
@@ -206,21 +237,19 @@ class ANSIParser(private val buffer: TerminalBuffer) {
     }
     
     private fun processCSIParam(ch: Char) {
-        escapeSequence.append(ch)
-        
+        if (appendToEscapeSequence(ch)) return
+
         when {
             ch in '0'..'9' -> {
-                currentParam.append(ch)
+                appendParamDigit(ch)
             }
             ch == ';' -> {
-                parameters.add(if (currentParam.isEmpty()) 0 else currentParam.toString().toIntOrNull() ?: 0)
-                currentParam.clear()
+                addParameter()
             }
             ch in ' '..'/' -> {
                 // Add current parameter if exists
                 if (currentParam.isNotEmpty()) {
-                    parameters.add(currentParam.toString().toIntOrNull() ?: 0)
-                    currentParam.clear()
+                    addParameter()
                 }
                 intermediateChars.append(ch)
                 parserState = ParserState.CSI_INTERMEDIATE
@@ -228,8 +257,7 @@ class ANSIParser(private val buffer: TerminalBuffer) {
             ch in '@'..'~' -> {
                 // Add current parameter if exists
                 if (currentParam.isNotEmpty()) {
-                    parameters.add(currentParam.toString().toIntOrNull() ?: 0)
-                    currentParam.clear()
+                    addParameter()
                 }
                 executeCSISequence(ch)
                 resetParser()
@@ -242,8 +270,8 @@ class ANSIParser(private val buffer: TerminalBuffer) {
     }
     
     private fun processCSIIntermediate(ch: Char) {
-        escapeSequence.append(ch)
-        
+        if (appendToEscapeSequence(ch)) return
+
         when {
             ch in ' '..'/' -> {
                 intermediateChars.append(ch)
@@ -281,20 +309,20 @@ class ANSIParser(private val buffer: TerminalBuffer) {
             }
             'E' -> { // Cursor Next Line
                 val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
-                buffer.setCursorPosition(buffer.getCursorRow() + n, 0)
+                buffer.setCursorPosition(0, buffer.getCursorRow() + n)
             }
             'F' -> { // Cursor Previous Line
                 val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
-                buffer.setCursorPosition(buffer.getCursorRow() - n, 0)
+                buffer.setCursorPosition(0, buffer.getCursorRow() - n)
             }
             'G' -> { // Cursor Horizontal Absolute
                 val col = parameters.getOrElse(0) { 1 } - 1
-                buffer.setCursorPosition(buffer.getCursorRow(), col)
+                buffer.setCursorPosition(col, buffer.getCursorRow())
             }
             'H', 'f' -> { // Cursor Position
                 val row = (parameters.getOrElse(0) { 1 } - 1).coerceAtLeast(0)
                 val col = (parameters.getOrElse(1) { 1 } - 1).coerceAtLeast(0)
-                buffer.setCursorPosition(row, col)
+                buffer.setCursorPosition(col, row)
             }
             'J' -> { // Erase Display
                 when (parameters.getOrElse(0) { 0 }) {
@@ -325,39 +353,39 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                 }
             }
             'L' -> { // Insert Lines
-                val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
+                // Clamped to the screen height: a server may send ESC[999999999L,
+                // and scrolling more than one screen has no additional effect.
+                val n = parameters.getOrElse(0) { 1 }.coerceIn(1, buffer.getRows())
                 repeat(n) {
                     buffer.scrollDown()
                 }
             }
             'M' -> { // Delete Lines
-                val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
+                val n = parameters.getOrElse(0) { 1 }.coerceIn(1, buffer.getRows())
                 repeat(n) {
                     buffer.scrollUp()
                 }
             }
             'P' -> { // Delete Characters
-                val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
+                // n is clamped to the line width: an unclamped count produced a
+                // negative range start below and crashed on a hostile ESC[999P.
+                val cols = buffer.getCols()
+                val n = parameters.getOrElse(0) { 1 }.coerceIn(1, cols)
                 val row = buffer.getCursorRow()
                 val col = buffer.getCursorCol()
                 val line = buffer.getLine(row)
                 if (line != null) {
-                    // Shift characters left
-                    for (i in col until buffer.getCols() - n) {
-                        line[i] = if (i + n < buffer.getCols()) line[i + n] else TerminalChar.empty()
-                    }
-                    // Clear the end
-                    for (i in (buffer.getCols() - n) until buffer.getCols()) {
-                        line[i] = TerminalChar.empty()
+                    for (i in col until cols) {
+                        line[i] = if (i + n < cols) line[i + n] else TerminalChar.empty()
                     }
                 }
             }
             'S' -> { // Scroll Up
-                val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
+                val n = parameters.getOrElse(0) { 1 }.coerceIn(1, buffer.getRows())
                 buffer.scrollUp(n)
             }
             'T' -> { // Scroll Down
-                val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
+                val n = parameters.getOrElse(0) { 1 }.coerceIn(1, buffer.getRows())
                 buffer.scrollDown(n)
             }
             'm' -> { // Select Graphic Rendition (SGR)
@@ -509,107 +537,207 @@ class ANSIParser(private val buffer: TerminalBuffer) {
         return index + 1
     }
     
+    /**
+     * Handle SM (ESC[...h) and RM (ESC[...l).
+     *
+     * The DEC private marker '?' selects a completely different mode namespace:
+     * ESC[4h is insert mode while ESC[?4h is smooth scrolling, and ESC[7h is a
+     * DECSET-only mode number. Dispatching both through one table let a server
+     * toggle auto-wrap or origin mode with an ANSI sequence that means something
+     * else entirely, so the two namespaces are now separated.
+     */
     private fun handleSetMode(set: Boolean) {
+        val decPrivate = intermediateChars.contains('?')
         for (param in parameters) {
-            when (param) {
-                4 -> buffer.setInsertMode(set) // Insert mode
-                20 -> { /* Automatic newline mode (LNM) - not supported */ }
-                1049 -> buffer.useAlternateScreen(set) // Alternate screen buffer
-                25 -> { /* Cursor visible - would affect cursor rendering */ }
-                7 -> buffer.setWrapMode(set) // Auto wrap mode
-                6 -> buffer.setOriginMode(set) // Origin mode
-                2004 -> buffer.setBracketedPasteMode(set) // Bracketed paste mode
-                else -> {
-                    Logger.d("ANSIParser", "Unhandled mode parameter: $param")
+            if (decPrivate) {
+                when (param) {
+                    6 -> buffer.setOriginMode(set)
+                    7 -> buffer.setWrapMode(set)
+                    1049 -> buffer.useAlternateScreen(set)
+                    2004 -> buffer.setBracketedPasteMode(set)
+                    else -> {
+                        Logger.d("ANSIParser", "Unhandled DEC private mode: $param")
+                    }
+                }
+            } else {
+                when (param) {
+                    4 -> buffer.setInsertMode(set)
+                    else -> {
+                        Logger.d("ANSIParser", "Unhandled ANSI mode: $param")
+                    }
                 }
             }
         }
     }
     
+    /**
+     * Accumulate an OSC payload until it is terminated by BEL or ST (ESC backslash).
+     *
+     * A bare backslash used to terminate the string, which truncated every title
+     * or hyperlink containing one and left the remainder to be printed as text;
+     * only the two-character ESC backslash sequence ends the string now.
+     */
     private fun processOSCString(ch: Char) {
+        if (stringEscapePending) {
+            stringEscapePending = false
+            if (ch == ST) {
+                executeOSCCommand(currentParam.toString())
+                resetParser()
+                return
+            }
+            appendToStringPayload(ESC)
+            if (parserState != ParserState.OSC_STRING) return
+        }
+
         when (ch) {
-            BEL, ST -> {
-                // Execute OSC command
-                val command = currentParam.toString()
-                executeOSCCommand(command)
+            BEL -> {
+                executeOSCCommand(currentParam.toString())
                 resetParser()
             }
             ESC -> {
-                // Might be ESC \ (ST)
-                if (currentParam.isNotEmpty()) {
-                    currentParam.append(ch)
-                }
+                stringEscapePending = true
             }
             else -> {
-                currentParam.append(ch)
+                appendToStringPayload(ch)
             }
         }
     }
     
     private fun executeOSCCommand(command: String) {
-        Logger.d("ANSIParser", "OSC command: $command")
-        
         // OSC commands typically start with a number followed by semicolon
         val parts = command.split(';', limit = 2)
         if (parts.size >= 2) {
             val commandNum = parts[0].toIntOrNull()
             val data = parts[1]
-            
+
+            // Payloads are never logged: OSC 52 carries clipboard contents, which
+            // can hold a password the user copied from a manager.
+            Logger.d("ANSIParser", "OSC command $commandNum (${data.length} chars)")
+
             when (commandNum) {
                 0, 2 -> {
-                    // Set window title
-                    Logger.d("ANSIParser", "Setting window title: $data")
-                    // This would notify UI to update title
+                    buffer.setTitle(sanitizeTitle(data))
                 }
                 1 -> {
-                    // Set icon name
-                    Logger.d("ANSIParser", "Setting icon name: $data")
+                    // Icon name is not surfaced anywhere in the UI; accepted and ignored.
                 }
                 8 -> {
                     // OSC 8 hyperlink: data = "params;URI"
                     // An empty URI closes the current link; non-empty opens one.
                     val semiIdx = data.indexOf(';')
                     val uri = if (semiIdx >= 0) data.substring(semiIdx + 1) else data
-                    buffer.setCurrentLinkUrl(uri.takeIf { it.isNotBlank() })
+                    buffer.setCurrentLinkUrl(sanitizeLinkUrl(uri))
                 }
                 else -> {
-                    Logger.d("ANSIParser", "Unhandled OSC command $commandNum: $data")
+                    Logger.d("ANSIParser", "Unhandled OSC command $commandNum")
                 }
             }
         }
     }
     
-    private fun processDCSEntry(ch: Char) {
-        // Device Control String - not commonly used
-        // For now, just consume until ST
-        if (ch == ST || ch == BEL) {
-            resetParser()
+    /**
+     * Consume a Device Control String. The payload is not interpreted, but it is
+     * length-counted so an unterminated DCS cannot make the parser swallow the
+     * rest of the session's output forever.
+     */
+    private fun processDCSString(ch: Char) {
+        if (stringEscapePending) {
+            stringEscapePending = false
+            if (ch == ST) {
+                resetParser()
+                return
+            }
+            appendToStringPayload(ESC)
+            if (parserState != ParserState.DCS_STRING) return
+        }
+
+        when (ch) {
+            BEL -> resetParser()
+            ESC -> stringEscapePending = true
+            else -> appendToStringPayload(ch)
         }
     }
-    
-    private fun processDCSParam(ch: Char) {
-        if (ch == ST || ch == BEL) {
+
+    /**
+     * Append one character to the escape sequence trace.
+     * @return true if the sequence exceeded [MAX_ESCAPE_LENGTH] and was abandoned.
+     */
+    private fun appendToEscapeSequence(ch: Char): Boolean {
+        if (escapeSequence.length >= MAX_ESCAPE_LENGTH) {
+            Logger.w("ANSIParser", "Escape sequence exceeded $MAX_ESCAPE_LENGTH chars, discarding")
             resetParser()
+            return true
+        }
+        escapeSequence.append(ch)
+        return false
+    }
+
+    /**
+     * Append one character to an OSC/DCS payload, abandoning the string if it
+     * grows past [MAX_STRING_LENGTH].
+     */
+    private fun appendToStringPayload(ch: Char) {
+        if (currentParam.length >= MAX_STRING_LENGTH) {
+            Logger.w("ANSIParser", "Control string exceeded $MAX_STRING_LENGTH chars, discarding")
+            resetParser()
+            return
+        }
+        currentParam.append(ch)
+    }
+
+    /**
+     * Append a digit to the parameter being parsed. Digits past the value cap are
+     * dropped so a long run cannot overflow Int (which silently parsed to 0).
+     */
+    private fun appendParamDigit(ch: Char) {
+        if (currentParam.length < MAX_PARAM_VALUE.toString().length) {
+            currentParam.append(ch)
         }
     }
-    
-    private fun processDCSIntermediate(ch: Char) {
-        if (ch == ST || ch == BEL) {
-            resetParser()
+
+    /**
+     * Commit the parameter under construction, clamping both its value and the
+     * total parameter count.
+     */
+    private fun addParameter() {
+        val value = (currentParam.toString().toIntOrNull() ?: 0).coerceIn(0, MAX_PARAM_VALUE)
+        currentParam.clear()
+        if (parameters.size < MAX_PARAMETERS) {
+            parameters.add(value)
         }
     }
-    
-    private fun processDCSPassthrough(ch: Char) {
-        if (ch == ST || ch == BEL) {
-            resetParser()
+
+    /**
+     * Strip control characters from a server-supplied window title and cap its
+     * length. The title is shown in the tab strip, so newlines or a multi-kilobyte
+     * string would let a remote host wreck or spoof the local UI.
+     */
+    private fun sanitizeTitle(title: String): String =
+        title.filter { it.code >= 0x20 && it.code != 0x7F }.take(MAX_TITLE_LENGTH)
+
+    /**
+     * Validate a server-supplied OSC 8 hyperlink target.
+     *
+     * @return the URL if it is safe to surface to the user, or null to drop it.
+     */
+    private fun sanitizeLinkUrl(uri: String): String? {
+        if (uri.isBlank() || uri.length > MAX_LINK_URL_LENGTH) return null
+        // Control characters would let a server spoof the "open this link" dialog.
+        if (uri.any { it.code < 0x20 || it.code == 0x7F }) return null
+        val scheme = uri.substringBefore(':', "").lowercase()
+        if (scheme.isEmpty() || scheme !in ALLOWED_LINK_SCHEMES) {
+            Logger.w("ANSIParser", "Dropping OSC 8 link with disallowed scheme")
+            return null
         }
+        return uri
     }
-    
+
     private fun resetParser() {
         parserState = ParserState.NORMAL
         escapeSequence.clear()
         parameters.clear()
         currentParam.clear()
         intermediateChars.clear()
+        stringEscapePending = false
     }
 }

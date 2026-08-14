@@ -44,6 +44,12 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
     // read coroutine on Dispatchers.IO while add/remove happen on UI.
     private val listeners = java.util.concurrent.CopyOnWriteArrayList<TerminalListener>()
 
+    // Wall-clock time of the last byte read or written, used by TerminalManager to
+    // decide which terminals are idle enough to reclaim. Volatile because the read
+    // coroutine updates it while the maintenance coroutine reads it.
+    @Volatile
+    private var lastActivityTime = System.currentTimeMillis()
+
     // I/O streams
     private var inputStream: InputStream? = null
     private var outputStream: OutputStream? = null
@@ -55,9 +61,15 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
      * Uses ANSIParser for full ANSI/VT100 escape sequence handling
      */
     fun processInput(data: ByteArray) {
+        lastActivityTime = System.currentTimeMillis()
         // Use ANSIParser for proper escape sequence handling
         ansiParser.processInput(data)
     }
+
+    /**
+     * Wall-clock timestamp of the most recent terminal activity.
+     */
+    fun getLastActivityTime(): Long = lastActivityTime
 
     /**
      * Send text to terminal (sends to SSH output stream)
@@ -65,6 +77,7 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
     fun sendText(text: String) {
         outputStream?.let { stream ->
             try {
+                lastActivityTime = System.currentTimeMillis()
                 val bytes = text.toByteArray(currentCharset)
                 stream.write(bytes)
                 stream.flush()

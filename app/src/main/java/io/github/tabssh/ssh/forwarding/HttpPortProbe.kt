@@ -39,10 +39,12 @@ object HttpPortProbe {
                 write("HEAD / HTTP/1.0\r\nHost: localhost\r\nConnection: close\r\n\r\n")
                 flush()
             }
-            val firstLine = s.getInputStream().bufferedReader().readLine().orEmpty()
+            val firstLine = readStatusLine(s)
             val ok = firstLine.startsWith("HTTP/")
-            Logger.d(TAG, "Probe :$localPort first-line='$firstLine' → ${if (ok) "HTTP" else "non-HTTP"}")
+            Logger.d(TAG, "Probe :$localPort first-line='${sanitiseForLog(firstLine)}' → ${if (ok) "HTTP" else "non-HTTP"}")
             ok
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.d(TAG, "Probe :$localPort failed: ${e.message}")
             false
@@ -50,4 +52,33 @@ object HttpPortProbe {
             try { s?.close() } catch (_: Exception) {}
         }
     }
+
+    /**
+     * Read at most [MAX_STATUS_LINE_BYTES] bytes, stopping at the first LF.
+     *
+     * A `bufferedReader().readLine()` here is unbounded: the peer on the
+     * forwarded port controls the stream and can push megabytes of LF-free
+     * data within the read timeout, so the probe would allocate without limit.
+     */
+    private fun readStatusLine(socket: Socket): String {
+        val input = socket.getInputStream()
+        val buf = ByteArray(MAX_STATUS_LINE_BYTES)
+        var len = 0
+        while (len < buf.size) {
+            val b = input.read()
+            if (b < 0 || b == '\n'.code) break
+            buf[len++] = b.toByte()
+        }
+        return String(buf, 0, len, Charsets.ISO_8859_1).trimEnd('\r')
+    }
+
+    /**
+     * Collapse control characters and clamp length before a peer-controlled
+     * banner reaches the log, so it cannot forge extra log lines.
+     */
+    private fun sanitiseForLog(raw: String): String =
+        raw.take(MAX_LOGGED_LINE_CHARS).map { if (it.code in 32..126) it else '.' }.joinToString("")
+
+    private const val MAX_STATUS_LINE_BYTES = 512
+    private const val MAX_LOGGED_LINE_CHARS = 128
 }

@@ -59,11 +59,29 @@ class TelnetConnection(
         // Subnegotiation: TERMINAL-TYPE
         private const val TT_IS: Int = 0
         private const val TT_SEND: Int = 1
+
+        // Upper bound on bytes scanned while looking for the IAC SE that ends
+        // a subnegotiation. Real subnegotiations are a handful of bytes.
+        private const val MAX_SUBNEG_SCAN_BYTES: Int = 8192
     }
 
-    private var socket: Socket? = null
-    private var rawIn: InputStream? = null
-    private var rawOut: OutputStream? = null
+    // Assigned on the connecting coroutine, read by the pump thread and by
+    // setWindowSize() on the UI thread — must be volatile.
+    @Volatile private var socket: Socket? = null
+    @Volatile private var rawIn: InputStream? = null
+    @Volatile private var rawOut: OutputStream? = null
+
+    // RFC 854 §"option negotiation": a party must only send a response when
+    // the response changes the option's state. Without this, two conforming
+    // implementations that both refuse an option ping-pong DONT/WONT forever.
+    // null = never negotiated, true = enabled, false = refused/disabled.
+    private val remoteOptionState = java.util.HashMap<Int, Boolean>()
+    private val localOptionState = java.util.HashMap<Int, Boolean>()
+
+    // Serializes every write to rawOut. The pump thread emits negotiation
+    // replies while the UI thread can call setWindowSize() → sendNaws()
+    // concurrently; interleaved writes would corrupt the IAC framing.
+    private val writeLock = Any()
 
     // What we expose to TermuxBridge:
     private val pipeOut = PipedOutputStream()
@@ -80,7 +98,7 @@ class TelnetConnection(
     /** NAWS — push window size. Safe to call any time after connect. */
     @Volatile private var lastCols = 80
     @Volatile private var lastRows = 24
-    private var termType: String = "xterm-256color"
+    private val termType: String = "xterm-256color"
 
     suspend fun connect(timeoutMs: Int = 15_000): Boolean = withContext(Dispatchers.IO) {
         val s = Socket()
@@ -157,25 +175,35 @@ class TelnetConnection(
             IAC -> pipeOut.write(IAC) // escaped literal 0xFF
             WILL -> {
                 val opt = input.read().also { if (it < 0) return }
-                respond(if (acceptWill(opt)) DO else DONT, opt)
+                val desired = acceptWill(opt)
+                if (remoteOptionState[opt] != desired) {
+                    remoteOptionState[opt] = desired
+                    respond(if (desired) DO else DONT, opt)
+                }
             }
             WONT -> {
                 val opt = input.read().also { if (it < 0) return }
-                respond(DONT, opt)
+                if (remoteOptionState[opt] != false) {
+                    remoteOptionState[opt] = false
+                    respond(DONT, opt)
+                }
             }
             DO -> {
                 val opt = input.read().also { if (it < 0) return }
-                if (acceptDo(opt)) {
-                    respond(WILL, opt)
+                val desired = acceptDo(opt)
+                if (localOptionState[opt] != desired) {
+                    localOptionState[opt] = desired
+                    respond(if (desired) WILL else WONT, opt)
                     // For NAWS we MUST follow up with the actual size sub-neg.
-                    if (opt == OPT_NAWS) sendNaws(lastCols, lastRows)
-                } else {
-                    respond(WONT, opt)
+                    if (desired && opt == OPT_NAWS) sendNaws(lastCols, lastRows)
                 }
             }
             DONT -> {
                 val opt = input.read().also { if (it < 0) return }
-                respond(WONT, opt)
+                if (localOptionState[opt] != false) {
+                    localOptionState[opt] = false
+                    respond(WONT, opt)
+                }
             }
             SB -> handleSubneg(input)
             else -> {
@@ -189,7 +217,15 @@ class TelnetConnection(
         val opt = input.read().also { if (it < 0) return }
         val buf = ByteArray(256)
         var len = 0
+        // A hostile or broken server can send a subnegotiation that never
+        // terminates with IAC SE. Bound the scan so the pump thread cannot be
+        // parked in this loop indefinitely.
+        var scanned = 0
         while (true) {
+            if (++scanned > MAX_SUBNEG_SCAN_BYTES) {
+                Logger.w(TAG, "Telnet subnegotiation exceeded $MAX_SUBNEG_SCAN_BYTES bytes without IAC SE — aborting")
+                return
+            }
             val b = input.read()
             if (b < 0) return
             if (b == IAC) {
@@ -223,8 +259,10 @@ class TelnetConnection(
     private fun respond(verb: Int, opt: Int) {
         val out = rawOut ?: return
         try {
-            out.write(byteArrayOf(IAC.toByte(), verb.toByte(), opt.toByte()))
-            out.flush()
+            synchronized(writeLock) {
+                out.write(byteArrayOf(IAC.toByte(), verb.toByte(), opt.toByte()))
+                out.flush()
+            }
         } catch (e: IOException) {
             Logger.w(TAG, "Telnet response IO: ${e.message}")
         }
@@ -242,23 +280,44 @@ class TelnetConnection(
         System.arraycopy(name, 0, pkt, i, name.size); i += name.size
         pkt[i++] = IAC.toByte()
         pkt[i] = SE.toByte()
-        try { out.write(pkt); out.flush() } catch (_: IOException) {}
+        try {
+            synchronized(writeLock) { out.write(pkt); out.flush() }
+        } catch (_: IOException) {}
     }
 
     private fun sendNaws(cols: Int, rows: Int) {
         val out = rawOut ?: return
-        val pkt = ByteArray(9)
-        var i = 0
-        pkt[i++] = IAC.toByte()
-        pkt[i++] = SB.toByte()
-        pkt[i++] = OPT_NAWS.toByte()
-        pkt[i++] = ((cols ushr 8) and 0xFF).toByte()
-        pkt[i++] = (cols and 0xFF).toByte()
-        pkt[i++] = ((rows ushr 8) and 0xFF).toByte()
-        pkt[i++] = (rows and 0xFF).toByte()
-        pkt[i++] = IAC.toByte()
-        pkt[i] = SE.toByte()
-        try { out.write(pkt); out.flush() } catch (_: IOException) {}
+        try {
+            synchronized(writeLock) { out.write(buildNawsPacket(cols, rows)); out.flush() }
+        } catch (_: IOException) {}
+    }
+
+    /**
+     * Build an RFC 1073 NAWS subnegotiation.
+     *
+     * Two correctness requirements the naive encoding misses:
+     *  - Dimensions are clamped to 1..65535. A 0 or negative value from a
+     *    not-yet-measured view would tell the server the window has no size,
+     *    and anything above 65535 silently truncates to a bogus dimension.
+     *  - Any width/height byte that equals 255 must be doubled, because the
+     *    payload travels inside an IAC-framed subnegotiation (RFC 854 §3 /
+     *    RFC 1073). Sending a bare 0xFF for a 255-column window terminates
+     *    the subnegotiation early and desynchronises the stream.
+     */
+    internal fun buildNawsPacket(cols: Int, rows: Int): ByteArray {
+        val c = cols.coerceIn(1, 65535)
+        val r = rows.coerceIn(1, 65535)
+        val out = java.io.ByteArrayOutputStream(12)
+        out.write(IAC)
+        out.write(SB)
+        out.write(OPT_NAWS)
+        for (v in intArrayOf((c ushr 8) and 0xFF, c and 0xFF, (r ushr 8) and 0xFF, r and 0xFF)) {
+            out.write(v)
+            if (v == IAC) out.write(IAC)
+        }
+        out.write(IAC)
+        out.write(SE)
+        return out.toByteArray()
     }
 
     /** OutputStream that escapes literal 0xFF as IAC IAC (RFC 854 §3). */

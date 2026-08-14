@@ -93,6 +93,18 @@ object TermuxMoshLauncher {
         keyBase64: String,
         username: String? = null
     ): Boolean {
+        // host/port/key all originate from the remote mosh-server handshake.
+        // Validate before they become argv entries and an env assignment in
+        // another app's process — a host beginning with '-' would be eaten by
+        // mosh-client's option parser, and a key containing a newline would
+        // inject a second RUN_COMMAND_ENVIRONMENT assignment.
+        if (!MoshNativeClient.isValidHostArgument(host) ||
+            port !in 1..65535 ||
+            !MoshHandoff.isValidMoshKey(keyBase64)
+        ) {
+            Logger.w(TAG, "Refusing Termux mosh launch: invalid host, port, or session key")
+            return false
+        }
         val intent = Intent(TERMUX_RUN_COMMAND_ACTION).apply {
             component = ComponentName(TERMUX_PKG, TERMUX_RUN_COMMAND_SERVICE)
             putExtra("com.termux.RUN_COMMAND_PATH", MOSH_CLIENT_PATH)

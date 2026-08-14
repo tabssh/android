@@ -3,6 +3,7 @@ package io.github.tabssh.terminal.recording
 import android.content.Context
 import io.github.tabssh.utils.logging.Logger
 import java.io.File
+import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -10,7 +11,13 @@ import java.util.*
  * Manages saved session transcripts
  */
 object TranscriptManager {
-    
+
+    // Upper bound on how much of a transcript is materialised for viewing or
+    // sharing. Transcripts are capped at 32 MB on disk; loading one of those
+    // into a String for a TextView is an out-of-memory kill on a low-end
+    // device, so only the tail is returned.
+    private const val MAX_VIEW_BYTES = 1L * 1024 * 1024
+
     data class Transcript(
         val file: File,
         val name: String,
@@ -48,9 +55,29 @@ object TranscriptManager {
         }
     }
     
+    /**
+     * Read a transcript for display. Files larger than [MAX_VIEW_BYTES] are
+     * truncated to their tail, which is the part of a session a user is
+     * actually looking for.
+     */
     fun getTranscriptContent(transcript: Transcript): String {
         return try {
-            transcript.file.readText()
+            val length = transcript.file.length()
+            if (length <= MAX_VIEW_BYTES) {
+                transcript.file.readText()
+            } else {
+                RandomAccessFile(transcript.file, "r").use { raf ->
+                    raf.seek(length - MAX_VIEW_BYTES)
+                    val bytes = ByteArray(MAX_VIEW_BYTES.toInt())
+                    raf.readFully(bytes)
+                    // Drop the leading partial line: it can also carry the tail
+                    // half of a split multi-byte UTF-8 character.
+                    val text = String(bytes, Charsets.UTF_8)
+                    val body = text.substringAfter('\n', text)
+                    "[Truncated: showing the last ${formatFileSize(MAX_VIEW_BYTES)} " +
+                        "of ${formatFileSize(length)}]\n\n" + body
+                }
+            }
         } catch (e: Exception) {
             Logger.e("TranscriptManager", "Failed to read transcript", e)
             "Error reading transcript"

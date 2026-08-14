@@ -2,12 +2,14 @@ package io.github.tabssh.terminal
 
 import android.os.Handler
 import android.os.Looper
+import android.view.KeyEvent
 import com.termux.terminal.TerminalBuffer
 import com.termux.terminal.TerminalEmulator
 import com.termux.terminal.TerminalOutput
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -47,6 +49,149 @@ class TermuxBridge(
         // tails a log file emitting OSC 8 sequences would otherwise grow the list
         // unbounded; once we hit this number we drop the oldest span on insert.
         private const val OSC8_LINK_CAP = 200
+
+        // Upper bound on a tracked OSC 8 target. A hostile server can emit an
+        // arbitrarily long URI; anything past this is not a usable link, only
+        // memory pressure and an unreadable confirmation dialog.
+        private const val OSC8_MAX_URL_LENGTH = 2048
+
+        // Schemes a remote is allowed to hand us through OSC 8. The tap handler
+        // ultimately routes an unrecognised scheme to an ACTION_VIEW intent, so
+        // without this a hostile server could aim the user at intent:// or
+        // javascript:/file:// targets from what looks like ordinary output.
+        private val OSC8_ALLOWED_SCHEMES = setOf(
+            "http", "https", "ftp", "ftps", "ssh", "sftp", "telnet", "mailto"
+        )
+
+        /**
+         * Validate an OSC 8 target, returning null when it must not be tracked.
+         */
+        internal fun sanitizeOsc8Url(url: String): String? {
+            val trimmed = url.trim()
+            if (trimmed.isEmpty() || trimmed.length > OSC8_MAX_URL_LENGTH) return null
+            if (trimmed.any { it.code < 0x20 || it.code == 0x7F }) return null
+            val scheme = trimmed.substringBefore(':', "").lowercase()
+            if (scheme.isEmpty() || scheme !in OSC8_ALLOWED_SCHEMES) return null
+            return trimmed
+        }
+
+        private const val ESC: Byte = 0x1B
+
+        // Characters produced by shift + the top-row digit keys, indexed by
+        // KEYCODE_0..KEYCODE_9.
+        private val SHIFTED_DIGITS = charArrayOf(
+            ')', '!', '@', '#', '$', '%', '^', '&', '*', '('
+        )
+
+        /**
+         * Build an escape sequence: ESC followed by the ASCII of [tail].
+         */
+        private fun escapeSequence(tail: String): ByteArray {
+            val out = ByteArray(tail.length + 1)
+            out[0] = ESC
+            for (i in tail.indices) out[i + 1] = tail[i].code.toByte()
+            return out
+        }
+
+        /**
+         * Translate an Android key code plus modifier state into the bytes a
+         * VT-style remote expects.
+         *
+         * Android key codes are not ASCII (KEYCODE_A is 29, not 65), so the
+         * control and meta paths must map through the key code table rather
+         * than doing arithmetic on the raw value — an earlier revision treated
+         * the code as ASCII, which meant Ctrl+A sent nothing at all while
+         * Ctrl+Enter sent Ctrl+B.
+         *
+         * Internal rather than private so the mapping can be unit tested.
+         */
+        internal fun keySequenceFor(
+            keyCode: Int,
+            isCtrl: Boolean,
+            isAlt: Boolean,
+            isShift: Boolean
+        ): ByteArray {
+            if (isCtrl) {
+                val ctrlByte = controlByteFor(keyCode) ?: return ByteArray(0)
+                return if (isAlt) byteArrayOf(ESC, ctrlByte) else byteArrayOf(ctrlByte)
+            }
+            val base = baseSequenceFor(keyCode, isShift)
+            if (base.isEmpty()) return base
+            return if (isAlt) byteArrayOf(ESC) + base else base
+        }
+
+        private fun controlByteFor(keyCode: Int): Byte? = when (keyCode) {
+            in KeyEvent.KEYCODE_A..KeyEvent.KEYCODE_Z ->
+                (keyCode - KeyEvent.KEYCODE_A + 1).toByte()
+            KeyEvent.KEYCODE_SPACE, KeyEvent.KEYCODE_AT -> 0
+            KeyEvent.KEYCODE_LEFT_BRACKET, KeyEvent.KEYCODE_ESCAPE -> 27
+            KeyEvent.KEYCODE_BACKSLASH -> 28
+            KeyEvent.KEYCODE_RIGHT_BRACKET -> 29
+            KeyEvent.KEYCODE_6 -> 30
+            KeyEvent.KEYCODE_MINUS -> 31
+            KeyEvent.KEYCODE_DEL -> 8
+            else -> null
+        }
+
+        private fun baseSequenceFor(keyCode: Int, isShift: Boolean): ByteArray = when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> escapeSequence("[A")
+            KeyEvent.KEYCODE_DPAD_DOWN -> escapeSequence("[B")
+            KeyEvent.KEYCODE_DPAD_RIGHT -> escapeSequence("[C")
+            KeyEvent.KEYCODE_DPAD_LEFT -> escapeSequence("[D")
+            KeyEvent.KEYCODE_MOVE_HOME -> escapeSequence("[1~")
+            KeyEvent.KEYCODE_MOVE_END -> escapeSequence("[4~")
+            KeyEvent.KEYCODE_PAGE_UP -> escapeSequence("[5~")
+            KeyEvent.KEYCODE_PAGE_DOWN -> escapeSequence("[6~")
+            KeyEvent.KEYCODE_FORWARD_DEL -> escapeSequence("[3~")
+            KeyEvent.KEYCODE_INSERT -> escapeSequence("[2~")
+            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> byteArrayOf(13)
+            KeyEvent.KEYCODE_TAB -> byteArrayOf(9)
+            KeyEvent.KEYCODE_DEL -> byteArrayOf(127)
+            KeyEvent.KEYCODE_ESCAPE -> byteArrayOf(ESC)
+            KeyEvent.KEYCODE_F1 -> escapeSequence("OP")
+            KeyEvent.KEYCODE_F2 -> escapeSequence("OQ")
+            KeyEvent.KEYCODE_F3 -> escapeSequence("OR")
+            KeyEvent.KEYCODE_F4 -> escapeSequence("OS")
+            KeyEvent.KEYCODE_F5 -> escapeSequence("[15~")
+            KeyEvent.KEYCODE_F6 -> escapeSequence("[17~")
+            KeyEvent.KEYCODE_F7 -> escapeSequence("[18~")
+            KeyEvent.KEYCODE_F8 -> escapeSequence("[19~")
+            KeyEvent.KEYCODE_F9 -> escapeSequence("[20~")
+            KeyEvent.KEYCODE_F10 -> escapeSequence("[21~")
+            KeyEvent.KEYCODE_F11 -> escapeSequence("[23~")
+            KeyEvent.KEYCODE_F12 -> escapeSequence("[24~")
+            else -> {
+                val ch = printableCharFor(keyCode, isShift)
+                if (ch == null) ByteArray(0) else ch.toString().toByteArray(Charsets.UTF_8)
+            }
+        }
+
+        private fun printableCharFor(keyCode: Int, isShift: Boolean): Char? = when (keyCode) {
+            in KeyEvent.KEYCODE_A..KeyEvent.KEYCODE_Z -> {
+                val base = 'a' + (keyCode - KeyEvent.KEYCODE_A)
+                if (isShift) base.uppercaseChar() else base
+            }
+            in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 ->
+                if (isShift) SHIFTED_DIGITS[keyCode - KeyEvent.KEYCODE_0]
+                else '0' + (keyCode - KeyEvent.KEYCODE_0)
+            KeyEvent.KEYCODE_SPACE -> ' '
+            KeyEvent.KEYCODE_COMMA -> if (isShift) '<' else ','
+            KeyEvent.KEYCODE_PERIOD -> if (isShift) '>' else '.'
+            KeyEvent.KEYCODE_GRAVE -> if (isShift) '~' else '`'
+            KeyEvent.KEYCODE_MINUS -> if (isShift) '_' else '-'
+            KeyEvent.KEYCODE_EQUALS -> if (isShift) '+' else '='
+            KeyEvent.KEYCODE_LEFT_BRACKET -> if (isShift) '{' else '['
+            KeyEvent.KEYCODE_RIGHT_BRACKET -> if (isShift) '}' else ']'
+            KeyEvent.KEYCODE_BACKSLASH -> if (isShift) '|' else '\\'
+            KeyEvent.KEYCODE_SEMICOLON -> if (isShift) ':' else ';'
+            KeyEvent.KEYCODE_APOSTROPHE -> if (isShift) '"' else '\''
+            KeyEvent.KEYCODE_SLASH -> if (isShift) '?' else '/'
+            KeyEvent.KEYCODE_AT -> '@'
+            KeyEvent.KEYCODE_PLUS -> '+'
+            KeyEvent.KEYCODE_STAR -> '*'
+            KeyEvent.KEYCODE_POUND -> '#'
+            else -> null
+        }
 
         /**
          * When false (default), keystroke writes log only `Sent N bytes to SSH`.
@@ -234,6 +379,17 @@ class TermuxBridge(
     @Volatile
     private var osc8Links = CopyOnWriteArrayList<Osc8Link>()
 
+    /**
+     * Optional sink for raw remote output, invoked with the read buffer and the
+     * number of valid bytes in it. Used by session recording.
+     *
+     * Volatile: installed and cleared from Main while the read loop invokes it
+     * on the IO dispatcher. The callback must not retain the array — it is the
+     * read loop's reusable buffer.
+     */
+    @Volatile
+    var outputRecorder: ((ByteArray, Int) -> Unit)? = null
+
     // Set by the read loop whenever the remote sends ESC[?2004h (enable) or
     // ESC[?2004l (disable).  Read by pasteText() on the UI/main thread.
     @Volatile
@@ -380,14 +536,21 @@ class TermuxBridge(
             val endRow = em.cursorRow
             val endCol = em.cursorCol
 
-            if (url.isNotBlank()) {
+            val safeUrl = sanitizeOsc8Url(url)
+            if (safeUrl == null) {
+                if (url.isNotBlank()) {
+                    // Never log the payload itself: an OSC 8 target can carry
+                    // session tokens or other secrets from the remote side.
+                    Logger.w(TAG, "Dropping OSC 8 link with disallowed scheme or length")
+                }
+            } else {
                 // Cap the list to prevent unbounded growth across a long session.
                 // CopyOnWriteArrayList.removeAt(0) is O(N) because it allocates
                 // a fresh backing array each call; on a flood that produces 200+
                 // links in one append this becomes O(N^2). Swap the whole list
                 // in one allocation when the cap is reached so the cost stays
                 // bounded and readers (UI thread) still see a consistent snapshot.
-                val newLink = Osc8Link(url, startRow, startCol, endRow, endCol)
+                val newLink = Osc8Link(safeUrl, startRow, startCol, endRow, endCol)
                 if (osc8Links.size >= OSC8_LINK_CAP) {
                     val keep = osc8Links.subList(osc8Links.size - OSC8_LINK_CAP + 1, osc8Links.size).toList()
                     osc8Links = CopyOnWriteArrayList<Osc8Link>(keep).apply { add(newLink) }
@@ -704,6 +867,16 @@ class TermuxBridge(
                         Logger.e(TAG, "EMULATOR IS NULL - cannot process $bytesRead bytes!")
                     }
 
+                    // Session recording. Never let a recorder failure (full
+                    // disk, revoked storage permission) take down the session.
+                    outputRecorder?.let { sink ->
+                        try {
+                            sink(buffer, bytesRead)
+                        } catch (e: Exception) {
+                            Logger.w(TAG, "Session recorder rejected output: ${e.message}")
+                        }
+                    }
+
                     // Notify screen changed (emulator may not call client
                     // for every change). One post per read chunk — NEVER
                     // per byte — so the UI thread sees at most ~one
@@ -714,6 +887,11 @@ class TermuxBridge(
                         listeners.forEach { it.onScreenChanged() }
                     }
                 }
+            } catch (e: CancellationException) {
+                // Tab close / scope shutdown. Rethrow so the job really ends up
+                // cancelled instead of being reported to the user as a read
+                // failure and completing normally.
+                throw e
             } catch (e: Exception) {
                 if (_isConnected.value) {
                     Logger.e(TAG, "Error reading from SSH", e)
@@ -790,57 +968,7 @@ class TermuxBridge(
      * Converts key codes to appropriate terminal escape sequences
      */
     fun sendKeyPress(keyCode: Int, isCtrl: Boolean = false, isAlt: Boolean = false, isShift: Boolean = false) {
-        val sequence = when {
-            isCtrl -> {
-                // Control key sequences
-                when (keyCode) {
-                    in 65..90 -> byteArrayOf((keyCode - 64).toByte()) // Ctrl+A-Z = 1-26
-                    else -> byteArrayOf()
-                }
-            }
-            isAlt -> {
-                // Alt key sequences (ESC + char)
-                byteArrayOf(27, keyCode.toByte())
-            }
-            else -> {
-                // Normal keys - handle special keys
-                when (keyCode) {
-                    // Arrow keys
-                    android.view.KeyEvent.KEYCODE_DPAD_UP -> "\u001b[A".toByteArray()
-                    android.view.KeyEvent.KEYCODE_DPAD_DOWN -> "\u001b[B".toByteArray()
-                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> "\u001b[C".toByteArray()
-                    android.view.KeyEvent.KEYCODE_DPAD_LEFT -> "\u001b[D".toByteArray()
-                    // Home/End
-                    android.view.KeyEvent.KEYCODE_MOVE_HOME -> "\u001b[1~".toByteArray()
-                    android.view.KeyEvent.KEYCODE_MOVE_END -> "\u001b[4~".toByteArray()
-                    // Page Up/Down
-                    android.view.KeyEvent.KEYCODE_PAGE_UP -> "\u001b[5~".toByteArray()
-                    android.view.KeyEvent.KEYCODE_PAGE_DOWN -> "\u001b[6~".toByteArray()
-                    // Delete/Insert
-                    android.view.KeyEvent.KEYCODE_FORWARD_DEL -> "\u001b[3~".toByteArray()
-                    android.view.KeyEvent.KEYCODE_INSERT -> "\u001b[2~".toByteArray()
-                    // Enter, Tab, Backspace, Escape
-                    android.view.KeyEvent.KEYCODE_ENTER -> byteArrayOf(13)
-                    android.view.KeyEvent.KEYCODE_TAB -> byteArrayOf(9)
-                    android.view.KeyEvent.KEYCODE_DEL -> byteArrayOf(127)
-                    android.view.KeyEvent.KEYCODE_ESCAPE -> byteArrayOf(27)
-                    // Function keys F1-F12
-                    android.view.KeyEvent.KEYCODE_F1 -> "\u001bOP".toByteArray()
-                    android.view.KeyEvent.KEYCODE_F2 -> "\u001bOQ".toByteArray()
-                    android.view.KeyEvent.KEYCODE_F3 -> "\u001bOR".toByteArray()
-                    android.view.KeyEvent.KEYCODE_F4 -> "\u001bOS".toByteArray()
-                    android.view.KeyEvent.KEYCODE_F5 -> "\u001b[15~".toByteArray()
-                    android.view.KeyEvent.KEYCODE_F6 -> "\u001b[17~".toByteArray()
-                    android.view.KeyEvent.KEYCODE_F7 -> "\u001b[18~".toByteArray()
-                    android.view.KeyEvent.KEYCODE_F8 -> "\u001b[19~".toByteArray()
-                    android.view.KeyEvent.KEYCODE_F9 -> "\u001b[20~".toByteArray()
-                    android.view.KeyEvent.KEYCODE_F10 -> "\u001b[21~".toByteArray()
-                    android.view.KeyEvent.KEYCODE_F11 -> "\u001b[23~".toByteArray()
-                    android.view.KeyEvent.KEYCODE_F12 -> "\u001b[24~".toByteArray()
-                    else -> byteArrayOf()
-                }
-            }
-        }
+        val sequence = keySequenceFor(keyCode, isCtrl, isAlt, isShift)
         if (sequence.isNotEmpty()) {
             write(sequence)
         }
@@ -1291,7 +1419,12 @@ class TermuxBridge(
                     }
                     kotlinx.coroutines.delay(pollMs)
                 }
-            } catch (_: Exception) {
+            } catch (e: CancellationException) {
+                // Session teardown cancelled the watchdog — unwind rather than
+                // swallowing it as a polling error.
+                throw e
+            } catch (e: Exception) {
+                Logger.w(TAG, "Mosh watchdog stopped: ${e.message}")
             }
         }
     }

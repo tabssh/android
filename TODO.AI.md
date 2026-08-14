@@ -79,6 +79,28 @@ Open decisions / documented limitations from the 4-8 diagnosis:
   UI consumer today — if a UI ever renders them, map to status_* colors
   at the render site
 
+Open follow-ups from the SSH/Mosh/Telnet stack audit (2026-08-13,
+details in AUDIT.AI.md § "SSH/Mosh/Telnet Stack Audit"):
+- TerminalEmulator.sendText() writes to the SSH OutputStream on the
+  calling (UI) thread — correct fix is a serialized single-thread
+  writer executor; deliberate design change, do not bolt on. Until
+  then TerminalViewComposingFlushTest's escape-race test is inherently
+  timing-sensitive
+- TerminalManager.cleanup() cancels `managerScope` (a val) and never
+  resets `isInitialized`, so a later initialize() runs with no
+  maintenance loop — latent (cleanup/createTerminal have no callers)
+- TerminalLinkClassifier falls through to LinkAction.Browser(url) for
+  any scheme a remote OSC 8 hyperlink supplies (intent:, file:, …) —
+  add a scheme allowlist (http/https/ssh/telnet/vnc/spice)
+- TelnetConnection.stopped latches permanently — fine today (fresh
+  instance per connection) but the class advertises reuse; either
+  document single-use or reset in connect()
+- TerminalView.getHandler() can be null when the InputConnection is
+  used while detached — current paths avoid it; future handler-based
+  IME work must not assume non-null
+- SessionPersistenceManager.kt:420 commented-out code (AI.md PART 0
+  violation) — remove
+
 1. Fix SSH active connections dying when creating VNC/docker/etc connections
    — root cause (diagnosed 2026-08-11): TabManager dual-index-space bug —
    `closeTab(index)`/`switchToTab(index)` index the unified `tabs` list, but

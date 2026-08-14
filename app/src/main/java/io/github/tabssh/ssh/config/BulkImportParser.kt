@@ -27,6 +27,39 @@ object BulkImportParser {
 
     private const val TAG = "BulkImportParser"
 
+    private const val DEFAULT_PORT = 22
+
+    /** Longest legal DNS name; also caps IPv6 literals with a wide margin. */
+    private const val MAX_HOST_LENGTH = 255
+
+    // Hostnames, IPv4/IPv6 literals, and bracketed IPv6 only. Everything an
+    // import file can carry that is NOT this — spaces, newlines, quotes, shell
+    // metacharacters — would be persisted into a profile row and later handed
+    // to a socket, a ProxyCommand, or an exported ssh_config.
+    private val HOST_REGEX = Regex("^[A-Za-z0-9._:\\[\\]-]+$")
+
+    /**
+     * True when [host] is safe to persist as a profile hostname.
+     *
+     * Every import format below funnels its host value through this, so a
+     * malformed row is dropped with a warning instead of becoming a broken
+     * (or injectable) connection profile.
+     */
+    internal fun isValidHostValue(host: String): Boolean =
+        host.isNotBlank() &&
+            host.length <= MAX_HOST_LENGTH &&
+            HOST_REGEX.matches(host)
+
+    /**
+     * Clamp an imported port to the valid TCP range.
+     *
+     * `toIntOrNull()` / `optInt()` happily yield 0, negatives, and values above
+     * 65535; those only fail much later at `Socket.connect`, after the bad row
+     * has already been written to the database.
+     */
+    internal fun sanitisePort(raw: Int?): Int =
+        raw?.takeIf { it in 1..65535 } ?: DEFAULT_PORT
+
     enum class Format { CSV, JSON, PUTTY_REG, TERRAFORM, UNKNOWN }
 
     /**
@@ -124,12 +157,12 @@ object BulkImportParser {
         val hosts = lines.drop(1).mapIndexedNotNull { i, line ->
             val cols = splitCsvLine(line)
             val host = cols.getOrNull(hostIdx)?.trim().orEmpty()
-            if (host.isBlank()) {
-                warnings.add("Row ${i + 2}: blank host — skipped")
+            if (!isValidHostValue(host)) {
+                warnings.add("Row ${i + 2}: blank or malformed host — skipped")
                 return@mapIndexedNotNull null
             }
             val name = cols.getOrNull(nameIdx)?.trim().orEmpty().ifBlank { host }
-            val port = cols.getOrNull(portIdx)?.trim()?.toIntOrNull() ?: 22
+            val port = sanitisePort(cols.getOrNull(portIdx)?.trim()?.toIntOrNull())
             ParsedHost(
                 name = name,
                 host = host,
@@ -181,15 +214,16 @@ object BulkImportParser {
             val host = (obj.optString("host", "").ifBlank { obj.optString("hostname") })
                 .ifBlank { obj.optString("address") }
                 .ifBlank { obj.optString("ip") }
-            if (host.isBlank()) {
-                warnings.add("Index $i: missing host — skipped")
+                .trim()
+            if (!isValidHostValue(host)) {
+                warnings.add("Index $i: missing or malformed host — skipped")
                 continue
             }
             hosts.add(
                 ParsedHost(
                     name = obj.optString("name").ifBlank { obj.optString("label") }.ifBlank { host },
                     host = host,
-                    port = obj.optInt("port", 22),
+                    port = sanitisePort(obj.optInt("port", DEFAULT_PORT)),
                     username = obj.optString("user", obj.optString("username", "")).takeIf { it.isNotBlank() },
                     authType = obj.optString("auth", obj.optString("authType", "")).lowercase().takeIf { it.isNotBlank() },
                     identityFile = obj.optString("identityFile", obj.optString("key", "")).takeIf { it.isNotBlank() },
@@ -223,12 +257,12 @@ object BulkImportParser {
         for (m in sessionRe.findAll(text)) {
             val sessionName = decodeRegName(m.groupValues[1])
             val body = m.groupValues[2]
-            val hostName = regString(body, "HostName")
-            if (hostName.isNullOrBlank()) {
-                warnings.add("Session '$sessionName': no HostName — skipped")
+            val hostName = regString(body, "HostName")?.trim()
+            if (hostName == null || !isValidHostValue(hostName)) {
+                warnings.add("Session '$sessionName': missing or malformed HostName — skipped")
                 continue
             }
-            val port = regDword(body, "PortNumber") ?: 22
+            val port = sanitisePort(regDword(body, "PortNumber"))
             val user = regString(body, "UserName")
             val keyFile = regString(body, "PublicKeyFile")
             hosts.add(
@@ -301,15 +335,16 @@ object BulkImportParser {
                 ?: tfString(body, "public_ip")
                 ?: tfString(body, "ip_address")
                 ?: tfString(body, "hostname")
-            if (host.isNullOrBlank()) {
-                warnings.add("$type.$name: no host attribute found")
+            val trimmedHost = host?.trim()
+            if (trimmedHost == null || !isValidHostValue(trimmedHost)) {
+                warnings.add("$type.$name: no usable host attribute found")
                 continue
             }
             hosts.add(
                 ParsedHost(
                     name = tfString(body, "name") ?: name,
-                    host = host,
-                    port = tfString(body, "port")?.toIntOrNull() ?: 22,
+                    host = trimmedHost,
+                    port = sanitisePort(tfString(body, "port")?.toIntOrNull()),
                     username = tfString(body, "user") ?: tfString(body, "username"),
                     authType = null,
                     identityFile = tfString(body, "private_key") ?: tfString(body, "key_file"),

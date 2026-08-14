@@ -787,3 +787,147 @@ Findings already fixed by the two earlier audits were not re-reported.
 - `app/src/test/java/io/github/tabssh/ui/tabs/ConsoleConnectParamsTest.kt`
   — password and certificate pin masked in `toString()`, diagnostics retained,
   `equals` unaffected.
+
+# SSH/Mosh/Telnet Stack Audit (2026-08-13)
+
+Two parallel audit passes over the terminal stack: transport layer
+(ssh/, protocols/mosh/, network/) and terminal emulator + session UI
+(terminal/, SSHTab, TerminalView, ConsoleKeyMapper). All findings below
+were fixed in this pass unless listed under "Logged, not fixed".
+
+## Pass 1 — Transport layer (ssh/, protocols/mosh/, network/)
+
+- `protocols/mosh/MoshHandoff.kt` — the `MOSH CONNECT <port> <key>` line
+  (the session secret) was logged verbatim; now logs presence only.
+  Generated `toString()` on `MoshHandoffInfo` spilled the key into crash
+  dumps — replaced with a hand-written redacting `toString()` using the
+  standard mask. Handshake read loop bounded at 64 KiB with a yield on
+  empty reads. Remote-supplied port range-checked (1..65535); new
+  `isValidMoshKey()` (base64 shape, 16..64 chars).
+  `CancellationException` rethrow added.
+- `protocols/mosh/MoshNativeClient.kt` — remote-derived host went into
+  `ProcessBuilder` argv; a host starting with `-` is parsed as an option
+  by `mosh-client`. Added `isValidHostArgument()` + port/key `require()`
+  guards before spawning.
+- `protocols/mosh/TermuxMoshLauncher.kt` — host/port/key passed into
+  Termux as argv + `MOSH_KEY=` env with no validation; now refuses
+  invalid input.
+- `ssh/forwarding/X11Proxy.kt` — functional bug: `relay()` returned
+  immediately after submitting pumps to the executor, so
+  `handleClient`'s `finally` closed both sockets the instant they
+  started — every X11 channel was torn down at setup. `relay()` now
+  returns a `Future` and the client-to-server direction is awaited.
+  `serverSocket` made `@Volatile`.
+- `ssh/connection/TelnetConnection.kt` — `handleIac` replied to every
+  WILL/WONT/DO/DONT unconditionally; two conforming refusers ping-pong
+  forever (RFC 854 requires replying only on state change) — per-option
+  state maps added. Subnegotiation scan bounded at 8192 bytes. Writers
+  serialized on `writeLock`; streams/socket `@Volatile`. NAWS builder
+  extracted with IAC doubling + clamping.
+- `ssh/connection/HostKeyVerifier.kt` — `detectKeyType`
+  substring-searched the whole key blob, letting a server embed
+  `"ssh-ed25519"` in an RSA payload to change which stored row is
+  compared — now parses the RFC 4253 §6.6 wire format against an
+  allowlist. Out-of-range port in `parseHostPort` silently downgraded a
+  known host to unknown — falls back to 22. Callbacks `@Volatile`.
+- `ssh/connection/SSHConnection.kt` — per-host env vars were ALL
+  silently dropped: JSch declares `setEnv` on package-private
+  `ChannelSession`, so the reflective call throws
+  `IllegalAccessException` without `isAccessible = true`. Fixed.
+  Password-length log and port-knock sequence removed from logs.
+  `CancellationException` rethrow in connect. Non-atomic
+  `_bytesTransferred` read-modify-writes replaced with `update {}`.
+  `@Volatile` on session/channels/proxy/job/callbacks.
+- `ssh/connection/SSHSessionManager.kt` — singleton callbacks and init
+  flag `@Volatile` (stale null callback silently skips host-key prompt).
+- `ssh/forwarding/HttpPortProbe.kt` — unbounded `readLine()` against a
+  peer-controlled port replaced with a 512-byte bounded read; response
+  line sanitized and clamped before logging (log forging); cancellation
+  rethrow.
+- `ssh/config/SSHConfigExporter.kt` — config injection: host, username,
+  env vars, remote command, proxy fields, and the Host tag were emitted
+  raw; CR/LF in any of them injects arbitrary OpenSSH directives (e.g.
+  `ProxyCommand`) into a file later fed to real ssh — `oneLine()` strips
+  control chars; host tag also drops embedded quotes.
+- `ssh/config/SSHConfigParser.kt` — `Port`, `ServerAliveInterval`,
+  `ConnectTimeout`, and `ProxyJump` port unvalidated — bounded parsers
+  added.
+- `ssh/config/BulkImportParser.kt` — port unvalidated in all four
+  formats (CSV, JSON, PuTTY, Terraform) and no host-shape validation —
+  `sanitisePort()` + `isValidHostValue()` at all four sites.
+- `network/NetworkAwareReconnector.kt` — `attempts`/`reconnectJob`
+  `@Volatile`.
+- Verified sound, no changes: `TimingSocketFactory.kt`,
+  `ConnectionState.kt`, `AuthType.kt`, `ConnectionDiagnostic.kt`,
+  `HistoryFetcher.kt`; `PortForwardCoordinator.kt` and
+  `PortForwardingManager.kt` needed minor cancellation hardening only.
+
+## Pass 2 — Terminal emulator & session UI
+
+- `ui/tabs/SSHTab.kt` — remote OSC 0/1/2 title injection reached the
+  tab bar/notification raw — `sanitizeRemoteTitle()` strips C0/C1
+  controls and bidi overrides (U+202A–202E, U+2066–2069), caps at 256.
+  Status prefix was permanently suppressed after the first remote title
+  — separate `terminalTitle` field composed with status. Title/clipboard
+  content no longer logged (length only / masked). Byte counters now
+  `AtomicLong`. `CancellationException` rethrows added; the SourceForge
+  shell-reopen launch had no catch at all (uncaught exception would
+  crash the process). Dead `onScreenChangedListener` plumbing removed.
+- `ui/views/TerminalView.kt` — remote-controlled strings (titles,
+  OSC 52 clipboard, long-pressed URL, selected word) masked in logs.
+  `onKeyDown` flushes pending IME composing before every hardware/bar
+  key write. One-shot bar modifier no longer leaks to the next
+  keystroke. `KEYCODE_DEL` unified through `sendText`.
+  `deleteSurroundingText(InCodePoints)` delegated to `deleteBefore()`:
+  composing consumed locally first, remainder clamped to 1024.
+  `performEditorAction`/`sendKeyEvent` flush composing. Per-keystroke
+  Handler allocation removed. `onDetachedFromWindow` now clears
+  runnables, stops the scroller, flushes and nulls the InputConnection.
+  Render path: char buffers hoisted to fields, URL underline ranges
+  cached with a dirty flag instead of recomputed per row per frame.
+- `terminal/emulator/TerminalBuffer.kt` — `scrollUp`/`scrollDown`
+  overloads repeated an unvalidated remote count — clamped to 0..rows.
+- Also hardened in this pass: `ANSIParser.kt` (OSC/DCS length caps,
+  parameter bounds), `TermuxBridge.kt`, `TerminalEmulator.kt`,
+  `TerminalManager.kt`, `PrefixParser.kt`, `TerminalGestureHandler.kt`,
+  `TranscriptManager.kt`, `SessionRecorder.kt`, `TerminalRenderer.kt`,
+  `ScrollbackSearchController.kt`.
+
+## Tests added
+
+- `protocols/mosh/MoshInputValidationTest.kt` — key shape/length, host
+  argv rejection (`-4`, `--help`, whitespace, `;`, newline, >255).
+- `ssh/connection/HostKeyVerifierParsingTest.kt` — RSA blob with
+  embedded `ssh-ed25519` must still detect as `ssh-rsa` (fail-before);
+  IPv6; out-of-range-port fallback.
+- `ssh/connection/TelnetNawsTest.kt` — IAC doubling at 255, multi-byte
+  sizes, clamping.
+- `ssh/config/ConfigImportExportValidationTest.kt` — port clamping in
+  both parsers, malformed-host row dropped end-to-end, exporter
+  control-character stripping and host-tag quoting.
+- `ui/tabs/SSHTabTitleSanitizeTest.kt` — C0/C1 + bidi stripping, cap,
+  blank-to-null fallback, pass-through.
+- `ui/views/TerminalViewDeleteBeforeTest.kt` — composing consumed before
+  the wire, remainder-only DEL, `Int.MAX_VALUE` bounded, zero/negative
+  no-op, code-point variant.
+- `terminal/emulator/TerminalBufferBoundsTest.kt`,
+  `terminal/emulator/ANSIParserHardeningTest.kt`,
+  `terminal/TermuxBridgeKeyMappingTest.kt`,
+  `terminal/gestures/PrefixParserTest.kt`,
+  `terminal/recording/TranscriptManagerTest.kt`.
+
+## Logged, not fixed (tracked in TODO.AI.md)
+
+- `TerminalEmulator.sendText()` writes on the calling (UI) thread —
+  needs a serialized writer executor; deliberate design change.
+- `TerminalManager.cleanup()` cancels its `val` scope and never resets
+  `isInitialized` — re-init runs without maintenance loop (latent; no
+  current callers of cleanup/createTerminal).
+- `TerminalLinkClassifier` accepts any OSC 8 scheme via the Browser
+  fallthrough (`intent:`, `file:`, …) — needs a scheme allowlist.
+- `TelnetConnection.stopped` latches permanently — fine today (fresh
+  instance per connection) but the class advertises reuse.
+- `X11Proxy.handleClient` holds one pool thread per live X11 window —
+  known characteristic, acceptable with the cached pool.
+- `SessionPersistenceManager.kt:420` commented-out code (PART 0
+  violation) — outside this audit's file scope.

@@ -24,19 +24,37 @@ data class TerminalChar(
  * Terminal buffer for storing character grid and scrollback
  */
 class TerminalBuffer(
-    private var rows: Int, 
-    private var cols: Int,
-    private var maxScrollbackLines: Int = -1 // -1 = unlimited
+    rows: Int,
+    cols: Int,
+    private var maxScrollbackLines: Int = DEFAULT_SCROLLBACK_LINES
 ) {
 
-    private var screen = Array(rows) { Array(cols) { TerminalChar(' ', 7, 0, false, false, false) } }
+    companion object {
+        // Default scrollback bound. The buffer used to default to unlimited, which
+        // let a chatty or hostile server grow the process heap without limit until
+        // the app was OOM-killed. Callers that genuinely want no limit must ask for
+        // it explicitly via setScrollbackLimit(-1).
+        const val DEFAULT_SCROLLBACK_LINES = 10000
+    }
+
+    // A zero or negative grid would make every screen[rows - 1] access throw, so
+    // the dimensions are clamped to a usable minimum on construction and resize.
+    private var rows: Int = rows.coerceAtLeast(1)
+    private var cols: Int = cols.coerceAtLeast(1)
+
+    private var screen = Array(this.rows) { Array(this.cols) { TerminalChar(' ', 7, 0, false, false, false) } }
 
     // Per-row soft-wrap flag.  true = this row ends with an auto-wrap (the line
     // continues on the next row); false = this row ends with a hard newline or is
     // the last row.  Used by getScreenContent() to decide whether to insert '\n'.
-    private var rowWrapped = BooleanArray(rows)
+    private var rowWrapped = BooleanArray(this.rows)
 
     private val scrollback = mutableListOf<Array<TerminalChar>>()
+
+    // Active ANSI palette (16 ARGB entries) installed by the theme, or null when
+    // the renderer's built-in default palette should be used.
+    private var colorPalette: IntArray? = null
+
     private var cursorX = 0
     private var cursorY = 0
     private var title = "Terminal"
@@ -104,16 +122,19 @@ class TerminalBuffer(
     }
 
     fun scrollDown() {
-        // Move last line from scrollback
-        if (scrollback.isNotEmpty()) {
-            val line = scrollback.removeLastOrNull()
-            if (line != null) {
-                for (i in rows - 1 downTo 1) {
-                    screen[i] = screen[i - 1]
-                }
-                screen[0] = line
-            }
+        // Pull the most recent scrollback line back onto the screen when there is
+        // one; otherwise insert a blank line, which is what insert-line (ESC[L) and
+        // reverse index expect. Previously an empty scrollback made both no-ops.
+        val restored = scrollback.removeLastOrNull()
+        for (i in rows - 1 downTo 1) {
+            screen[i] = screen[i - 1]
+            rowWrapped[i] = rowWrapped[i - 1]
         }
+        // Scrollback rows keep the width they had when they were pushed, so a line
+        // restored after a resize has to be re-fitted or the renderer would index
+        // past the end of it.
+        screen[0] = Array(cols) { c -> restored?.getOrNull(c) ?: TerminalChar(' ', 7, 0, false, false, false) }
+        rowWrapped[0] = false
     }
 
     fun clear() {
@@ -139,9 +160,16 @@ class TerminalBuffer(
 
     fun getScrollbackSize(): Int = scrollback.size
 
+    /**
+     * Install the active 16-entry ANSI colour palette (index 0..15 = ARGB).
+     * Shorter arrays are rejected so the renderer never indexes past the end.
+     */
     fun setColors(colors: IntArray) {
-        // Apply color palette
+        colorPalette = if (colors.size >= 16) colors.copyOf() else null
     }
+
+    /** The palette installed by [setColors], or null to use the renderer default. */
+    fun getColorPalette(): IntArray? = colorPalette
 
     fun eraseFromCursor() {
         // Clear from cursor to end of screen
@@ -308,24 +336,50 @@ class TerminalBuffer(
     fun resize(newRows: Int, newCols: Int) {
         val oldScreen = screen
         val oldRowWrapped = rowWrapped
-        rows = newRows
-        cols = newCols
-        screen = Array(rows) { Array(cols) { TerminalChar(' ', 7, 0, false, false, false) } }
+        val oldAlternate = if (alternateScreen) mainScreen else alternateScreenBuffer
+        rows = newRows.coerceAtLeast(1)
+        cols = newCols.coerceAtLeast(1)
+        screen = resizedGrid(oldScreen)
         rowWrapped = BooleanArray(rows)
 
-        // Copy existing content and wrap flags
+        // Carry the wrap flags across for the rows that survived the resize
         val copyRows = minOf(oldScreen.size, rows)
         for (r in 0 until copyRows) {
-            val copyCols = minOf(oldScreen[r].size, cols)
-            for (c in 0 until copyCols) {
-                screen[r][c] = oldScreen[r][c]
-            }
             rowWrapped[r] = oldRowWrapped.getOrElse(r) { false }
         }
 
-        // Adjust cursor position
-        cursorX = minOf(cursorX, cols - 1)
-        cursorY = minOf(cursorY, rows - 1)
+        // The off-screen buffer must be resized too. Leaving it at the old
+        // dimensions made the next alternate-screen switch index out of bounds
+        // whenever the view had grown (rotation, keyboard hide, font change).
+        val resizedOther = oldAlternate?.let { resizedGrid(it) }
+        if (alternateScreen) {
+            mainScreen = resizedOther ?: Array(rows) { Array(cols) { TerminalChar(' ', 7, 0, false, false, false) } }
+            alternateScreenBuffer = screen
+        } else {
+            mainScreen = screen
+            alternateScreenBuffer = resizedOther
+        }
+
+        // Adjust cursor position and the scrolling region to the new geometry
+        cursorX = cursorX.coerceIn(0, cols - 1)
+        cursorY = cursorY.coerceIn(0, rows - 1)
+        scrollTop = scrollTop.coerceIn(0, rows - 1)
+        scrollBottom = scrollBottom.coerceIn(scrollTop, rows - 1)
+    }
+
+    /**
+     * Copy [source] into a grid of the current [rows] x [cols], padding with blanks.
+     */
+    private fun resizedGrid(source: Array<Array<TerminalChar>>): Array<Array<TerminalChar>> {
+        val target = Array(rows) { Array(cols) { TerminalChar(' ', 7, 0, false, false, false) } }
+        val copyRows = minOf(source.size, rows)
+        for (r in 0 until copyRows) {
+            val copyCols = minOf(source[r].size, cols)
+            for (c in 0 until copyCols) {
+                target[r][c] = source[r][c]
+            }
+        }
+        return target
     }
 
     fun setCharacterAttributes(
@@ -365,12 +419,14 @@ class TerminalBuffer(
         }
     }
 
-    fun scrollUp(lines: Int = 1) {
-        repeat(lines) { scrollUp() }
+    // No default argument here: a defaulted parameter would make this overload
+    // a candidate for every bare scrollUp() call and make resolution ambiguous.
+    fun scrollUp(lines: Int) {
+        repeat(lines.coerceIn(0, rows)) { scrollUp() }
     }
 
-    fun scrollDown(lines: Int = 1) {
-        repeat(lines) { scrollDown() }
+    fun scrollDown(lines: Int) {
+        repeat(lines.coerceIn(0, rows)) { scrollDown() }
     }
 
     fun setScrollRegion(top: Int, bottom: Int) {

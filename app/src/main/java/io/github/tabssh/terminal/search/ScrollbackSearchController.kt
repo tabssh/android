@@ -14,6 +14,7 @@ import io.github.tabssh.R
 import io.github.tabssh.ui.tabs.SSHTab
 import io.github.tabssh.ui.views.TerminalView
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -56,6 +57,14 @@ class ScrollbackSearchController(
     private var currentIndex = -1
     private var caseSensitive = false
     private var debounceJob: Job? = null
+    private var searchJob: Job? = null
+
+    private companion object {
+        // Upper bound on reported hits. A one-character query against a full
+        // scrollback can match hundreds of thousands of times, and materialising
+        // every hit was enough to exhaust the heap on a low-memory device.
+        const val MAX_MATCHES = 5000
+    }
 
     val isVisible: Boolean get() = overlayRoot.visibility == View.VISIBLE
 
@@ -105,6 +114,12 @@ class ScrollbackSearchController(
     }
 
     fun dismiss() {
+        // Drop any pending or running search so it cannot repopulate the
+        // highlights after the bar has been closed.
+        debounceJob?.cancel()
+        debounceJob = null
+        searchJob?.cancel()
+        searchJob = null
         overlayRoot.visibility = View.GONE
         terminalView.clearSearchHighlights()
         matches = emptyList()
@@ -130,7 +145,11 @@ class ScrollbackSearchController(
     }
 
     private fun runSearch(query: String) {
-        scope.launch {
+        // Only one search may be in flight: without this, a slow search over a
+        // long scrollback could publish its results after a newer, narrower query
+        // had already finished, leaving the highlights out of sync with the box.
+        searchJob?.cancel()
+        searchJob = scope.launch {
             if (query.isEmpty()) {
                 withContext(Dispatchers.Main) { clearResults() }
                 return@launch
@@ -222,6 +241,9 @@ class ScrollbackSearchController(
             }
 
             result
+        } catch (e: CancellationException) {
+            // A superseded search must unwind, not be reported as a failure.
+            throw e
         } catch (e: Exception) {
             Logger.w("ScrollbackSearch", "Search failed: ${e.message}")
             result
@@ -234,10 +256,11 @@ class ScrollbackSearchController(
         externalRow: Int,
         out: MutableList<TerminalView.SearchMatch>
     ) {
+        if (out.size >= MAX_MATCHES) return
         val haystack = if (caseSensitive) line else line.lowercase()
         val needle   = if (caseSensitive) query else query.lowercase()
         var start = 0
-        while (true) {
+        while (out.size < MAX_MATCHES) {
             val idx = haystack.indexOf(needle, start)
             if (idx < 0) break
             out.add(TerminalView.SearchMatch(externalRow, idx, idx + needle.length))

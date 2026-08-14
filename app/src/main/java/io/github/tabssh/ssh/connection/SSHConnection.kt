@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.SocketException
@@ -79,6 +80,12 @@ class SSHConnection(
     fun notifyMetadataChanged() {
         try { metadataChangedCallback?.invoke() } catch (_: Exception) {}
     }
+    // The JSch session and every channel/proxy hung off it are created on the
+    // connect coroutine (Dispatchers.IO) and read/torn down from the UI thread,
+    // the reconnector, and the disconnect path — all of which are different
+    // threads. Without @Volatile a stale non-null session can be observed after
+    // disconnect() nulled it, and teardown silently skips the real object.
+    @Volatile
     private var session: Session? = null
 
     // In-module accessor for the underlying JSch session. Collaborators that
@@ -98,6 +105,7 @@ class SSHConnection(
     // from outside the JSch package it fails to resolve. So we use the
     // public `Channel` base type and dispatch on the concrete subclass at
     // call sites that need session-only methods (see `resizeActiveChannelPty`).
+    @Volatile
     private var shellChannel: Channel? = null
 
     // Raw JSch piped streams for the active shellChannel, captured BEFORE
@@ -131,10 +139,14 @@ class SSHConnection(
     // the user always activates the tab they just opened.
     private val openChannels: MutableSet<Channel> =
         java.util.Collections.synchronizedSet(mutableSetOf())
+    @Volatile
     private var sftpChannel: ChannelSftp? = null
+    @Volatile
     private var jumpHostSession: Session? = null
+    @Volatile
     private var jumpHostLocalPort: Int = 0
     // X11 forwarding proxy — non-null only while x11Forwarding is active
+    @Volatile
     private var x11Proxy: X11Proxy? = null
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
@@ -154,18 +166,22 @@ class SSHConnection(
     private val _warnings = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val warnings: SharedFlow<String> = _warnings.asSharedFlow()
 
+    @Volatile
     private var connectJob: Job? = null
 
     // Auto-reconnect should only fire after a session has been *established*
     // and then dropped — not on initial-connect failures (host unreachable,
     // wrong port, …). Without this gate the reconnect loop runs in the
     // background after the activity has bailed.
+    @Volatile
     private var hadSuccessfulConnect = false
+    @Volatile
     private var sessionStartMs: Long = 0   // wall-clock ms at last successful connect
 
     // Network-aware reconnector — pauses when the device is offline, wakes
     // immediately when the link returns, falls back to a 5-minute poll.
     // null until the first successful connect (same guard as hadSuccessfulConnect).
+    @Volatile
     private var reconnector: NetworkAwareReconnector? = null
 
     // CopyOnWriteArrayList: addConnectionListener may be called from UI
@@ -176,7 +192,12 @@ class SSHConnection(
 
     // Host key verification
     private val hostKeyVerifier = HostKeyVerifier(context)
+    // Assigned from the UI thread before connect(), invoked from JSch's
+    // verification callback on the connect coroutine — @Volatile so the
+    // callback is guaranteed visible and a host-key prompt is never skipped.
+    @Volatile
     var hostKeyChangedCallback: ((HostKeyChangedInfo) -> HostKeyAction)? = null
+    @Volatile
     var newHostKeyCallback: ((NewHostKeyInfo) -> HostKeyAction)? = null
 
     // Last decision returned from the HostKeyRepository.check() callback path.
@@ -452,13 +473,18 @@ class SSHConnection(
 
                 Logger.i("SSHConnection", "Connection complete to ${profile.host}")
                 
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Cooperative cancellation (activity torn down mid-connect) is
+                // not a connection error — rethrow so the job actually cancels
+                // instead of being reported to the user as a failure.
+                throw e
             } catch (e: Exception) {
                 Logger.e("SSHConnection", "Connection failed at some step", e)
                 handleConnectionError(e)
                 return@launch
             }
         }
-        
+
         connectJob?.join()
         return@withContext _connectionState.value == ConnectionState.CONNECTED
     }
@@ -609,8 +635,15 @@ class SSHConnection(
                 value = value.substring(1, value.length - 1)
             }
             try {
-                // JSch ChannelShell.setEnv signature accepts String/String
+                // JSch declares setEnv on ChannelSession, which is
+                // package-private. Reflection resolves the method on the
+                // concrete public subclass (ChannelShell/ChannelExec), but the
+                // Method object still carries the package-private declaring
+                // class, so invoke() throws IllegalAccessException unless the
+                // access check is suppressed — without this every per-host env
+                // var was silently dropped.
                 val m = channel.javaClass.getMethod("setEnv", String::class.java, String::class.java)
+                m.isAccessible = true
                 m.invoke(channel, key, value)
                 applied++
             } catch (e: Exception) {
@@ -1363,7 +1396,9 @@ class SSHConnection(
         if (effectivePassword != null) {
             cachedPassword = effectivePassword
             session.setPassword(effectivePassword)
-            Logger.d("SSHConnection", "Auth: Password cached for fallback (length=${effectivePassword.length})")
+            // Never log anything derived from the password — the length alone
+            // narrows a brute-force search and belongs to the credential.
+            Logger.d("SSHConnection", "Auth: Password cached for fallback")
         }
 
         // Priority 1: SSH key (if available and retrievable, and not overridden to keyboard-interactive)
@@ -2104,7 +2139,9 @@ class SSHConnection(
                     appendLine("Timeout: ${profile.connectTimeout}s")
                     appendLine("Proxy: ${profile.proxyType ?: "None"}")
                     if (profile.portKnockEnabled == true) {
-                        appendLine("Port Knock: Enabled (${profile.portKnockSequence})")
+                        // The knock sequence is the shared secret that opens the
+                        // firewall — report only that knocking is configured.
+                        appendLine("Port Knock: Enabled")
                     }
                     appendLine("\nStack Trace:")
                     appendLine(error.stackTraceToString())
@@ -2375,6 +2412,10 @@ class SSHConnection(
     // is always the live one. Wrapping at this single accessor point is
     // sufficient because every shell I/O path in the app goes through
     // getInputStream()/getOutputStream() (Termux bridge, SSHTab, exec).
+    // The two wrappers below are read and written from different threads (the
+    // terminal read pump and the input writer), so the transferred-byte
+    // counter is bumped via StateFlow.update — a plain `value = value + n`
+    // read-modify-write loses increments under that interleaving.
     private var countedInRef: InputStream? = null
     private var countedInWrap: InputStream? = null
     private var countedOutRef: OutputStream? = null
@@ -2391,12 +2432,12 @@ class SSHConnection(
             countedInWrap = object : InputStream() {
                 override fun read(): Int {
                     val b = raw.read()
-                    if (b >= 0) _bytesTransferred.value = _bytesTransferred.value + 1L
+                    if (b >= 0) _bytesTransferred.update { it + 1L }
                     return b
                 }
                 override fun read(b: ByteArray, off: Int, len: Int): Int {
                     val n = raw.read(b, off, len)
-                    if (n > 0) _bytesTransferred.value = _bytesTransferred.value + n.toLong()
+                    if (n > 0) _bytesTransferred.update { it + n.toLong() }
                     return n
                 }
                 override fun available(): Int = raw.available()
@@ -2418,11 +2459,11 @@ class SSHConnection(
             countedOutWrap = object : OutputStream() {
                 override fun write(b: Int) {
                     raw.write(b)
-                    _bytesTransferred.value = _bytesTransferred.value + 1L
+                    _bytesTransferred.update { it + 1L }
                 }
                 override fun write(b: ByteArray, off: Int, len: Int) {
                     raw.write(b, off, len)
-                    if (len > 0) _bytesTransferred.value = _bytesTransferred.value + len.toLong()
+                    if (len > 0) _bytesTransferred.update { it + len.toLong() }
                 }
                 override fun flush() = raw.flush()
                 override fun close() = raw.close()

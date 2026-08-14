@@ -79,8 +79,11 @@ class SSHTab(
     private val _title = MutableStateFlow(generateDefaultTitle())
     val title: StateFlow<String> = _title.asStateFlow()
 
-    // Track if title was set by OSC sequence (should not be overwritten by status)
-    private var titleSetByTerminal = false
+    // Title the remote set via OSC 0/1/2, already sanitised. Kept separate from
+    // _title so the connection-status indicator can still be applied on top of
+    // it — a server that set a title once used to suppress the status prefix
+    // for the rest of the session.
+    private var terminalTitle: String? = null
 
     // Last logged title with spinner glyphs stripped — gates title-change log spam
     private var lastLoggedTitle: String? = null
@@ -109,18 +112,27 @@ class SSHTab(
         internal set
 
     // Session statistics.
-    // @Volatile: bytesReceived/bytesSent are incremented from TermuxBridge's
-    // IO read loop and read from Main (status bar). sessionStartTime is set
-    // from connect-success on IO and read from Main.
+    // @Volatile: sessionStartTime is set from connect-success on IO and read
+    // from Main. The byte counters are read-modify-written from the terminal
+    // callbacks and from sendText(), so they are AtomicLong rather than
+    // volatile fields — a volatile Long makes ++ no safer than a plain field.
     @Volatile
     private var sessionStartTime: Long = 0
-    @Volatile
-    private var bytesReceived: Long = 0
-    @Volatile
-    private var bytesSent: Long = 0
+    private val bytesReceived = java.util.concurrent.atomic.AtomicLong(0)
+    private val bytesSent = java.util.concurrent.atomic.AtomicLong(0)
 
-    // Session recording
+    // Session recording. Assigning a recorder installs the bridge's raw-output
+    // sink; without this the recorder wrote only its header and footer because
+    // nothing ever fed it session output.
     var sessionRecorder: io.github.tabssh.terminal.recording.SessionRecorder? = null
+        set(value) {
+            field = value
+            termuxBridge.outputRecorder = if (value == null) {
+                null
+            } else {
+                { bytes, length -> value.recordOutput(String(bytes, 0, length, Charsets.UTF_8)) }
+            }
+        }
 
     /**
      * Active multiplexer type for this tab ("tmux", "screen", "zellij", or null
@@ -211,9 +223,6 @@ class SSHTab(
     val multiplexerAskRequestFlow: kotlinx.coroutines.flow.StateFlow<MultiplexerAskRequest?> =
         _multiplexerAskRequest.asStateFlow()
 
-    // Screen change listener for UI updates
-    private var onScreenChangedListener: (() -> Unit)? = null
-
     init {
         Logger.d("SSHTab", "Created tab ${profile.getDisplayName()}")
 
@@ -265,24 +274,34 @@ class SSHTab(
                     // without having to manually reconnect.
                     if (profile.remoteCommand?.trim() == "create" && conn.isSessionAlive()) {
                         connectionScope.launch {
-                            Logger.i("SSHTab", "SourceForge shell init complete — reopening plain shell in 2s")
-                            delay(2000)
-                            if (!conn.isSessionAlive()) return@launch
-                            val newChannel = conn.openShellChannel(forceShell = true)
-                            if (newChannel != null) {
-                                ownChannel = newChannel
-                                val inp = newChannel.inputStream
-                                val out = newChannel.outputStream
-                                if (inp != null && out != null) {
-                                    termuxBridge.onResizeCallback = { cols, rows ->
-                                        conn.resizePtyOf(newChannel, cols, rows)
+                            // The scope has no exception handler, so anything
+                            // thrown here would reach the default handler and
+                            // take the process down instead of failing the tab.
+                            try {
+                                Logger.i("SSHTab", "SourceForge shell init complete — reopening plain shell in 2s")
+                                delay(2000)
+                                if (!conn.isSessionAlive()) return@launch
+                                val newChannel = conn.openShellChannel(forceShell = true)
+                                if (newChannel != null) {
+                                    ownChannel = newChannel
+                                    val inp = newChannel.inputStream
+                                    val out = newChannel.outputStream
+                                    if (inp != null && out != null) {
+                                        termuxBridge.onResizeCallback = { cols, rows ->
+                                            conn.resizePtyOf(newChannel, cols, rows)
+                                        }
+                                        termuxBridge.connect(inp, out)
+                                    } else {
+                                        Logger.e("SSHTab", "SourceForge reconnect: null streams on new channel")
                                     }
-                                    termuxBridge.connect(inp, out)
                                 } else {
-                                    Logger.e("SSHTab", "SourceForge reconnect: null streams on new channel")
+                                    Logger.e("SSHTab", "SourceForge reconnect: failed to open shell channel")
                                 }
-                            } else {
-                                Logger.e("SSHTab", "SourceForge reconnect: failed to open shell channel")
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                _hasError.value = true
+                                Logger.e("SSHTab", "SourceForge shell reopen failed", e)
                             }
                         }
                         return
@@ -332,44 +351,42 @@ class SSHTab(
 
             override fun onScreenChanged() {
                 updateActivity()
-                bytesReceived++ // Approximate - actual bytes tracked in bridge
+                // Approximate - actual bytes tracked in bridge
+                bytesReceived.incrementAndGet()
 
                 // Mark as having unread output if tab is not active
                 if (!_isActive.value) {
                     _hasUnreadOutput.value = true
                     _unreadLines.value += 1
                 }
-
-                // Notify UI to redraw
-                onScreenChangedListener?.invoke()
             }
 
             override fun onTitleChanged(title: String) {
-                // Update tab title from terminal (e.g., from OSC sequences)
-                if (title.isNotBlank()) {
-                    _title.value = title
-                    titleSetByTerminal = true  // Mark that terminal set the title
-                } else {
-                    titleSetByTerminal = false
-                    _title.value = generateDefaultTitle()
-                }
+                // The title is fully remote-controlled: strip control and
+                // bidi-override characters and cap the length before it can
+                // reach the tab bar or the foreground-service notification.
+                val safeTitle = sanitizeRemoteTitle(title)
+                terminalTitle = safeTitle
+                updateTitleWithStatus(_connectionState.value)
+                // Mosh animates the title with Braille spinner glyphs (U+2800–U+28FF)
+                // about once a second — only react when the title changed beyond
+                // the spinner frame, so neither the log nor the session-manager
+                // broadcast is driven at the animation rate.
+                val stableTitle = safeTitle?.filterNot { it.code in 0x2800..0x28FF }
+                if (stableTitle == lastLoggedTitle) return
+                lastLoggedTitle = stableTitle
                 // Stash on the SSHConnection so the foreground service
                 // can read it when rebuilding the per-host notification
                 // text. Triggers a state-change re-broadcast so the
                 // SessionManagerListener pipeline (which the service
                 // listens on) refreshes without a new event type.
                 connection?.let { conn ->
-                    conn.terminalTitle = title.takeIf { it.isNotBlank() }
+                    conn.terminalTitle = safeTitle
                     conn.notifyMetadataChanged()
                 }
-                // Mosh animates the title with Braille spinner glyphs (U+2800–U+28FF)
-                // about once a second — log only when the title changed beyond the
-                // spinner frame so the debug log is not flooded
-                val stableTitle = title.filterNot { it.code in 0x2800..0x28FF }
-                if (stableTitle != lastLoggedTitle) {
-                    lastLoggedTitle = stableTitle
-                    Logger.d("SSHTab", "Tab title changed to: $title")
-                }
+                // Never log the title itself: it is remote-controlled and can
+                // carry whatever the host chooses to put in it.
+                Logger.d("SSHTab", "Tab title changed (${safeTitle?.length ?: 0} chars)")
             }
 
             override fun onBell() {
@@ -378,18 +395,19 @@ class SSHTab(
             }
 
             override fun onColorsChanged() {
-                // Colors changed - redraw
-                onScreenChangedListener?.invoke()
+                // TerminalView registers its own bridge listener for redraws;
+                // the tab only tracks activity.
+                updateActivity()
             }
 
             override fun onCursorStateChanged(visible: Boolean) {
-                // Cursor visibility changed - redraw
-                onScreenChangedListener?.invoke()
+                updateActivity()
             }
 
             override fun onCopyToClipboard(text: String) {
-                // Handle clipboard copy request
-                Logger.d("SSHTab", "Copy to clipboard: ${text.take(50)}...")
+                // Handle clipboard copy request. The payload is whatever the
+                // remote put in an OSC 52 sequence, so log the size only.
+                Logger.d("SSHTab", "Copy to clipboard requested: xxxxx (${text.length} chars)")
             }
 
             override fun onPasteFromClipboard() {
@@ -402,13 +420,6 @@ class SSHTab(
                 Logger.e("SSHTab", "Terminal error in tab ${profile.getDisplayName()}", e)
             }
         })
-    }
-
-    /**
-     * Set listener for screen changes (for UI redraw)
-     */
-    fun setOnScreenChangedListener(listener: (() -> Unit)?) {
-        onScreenChangedListener = listener
     }
 
     /**
@@ -732,7 +743,11 @@ class SSHTab(
     private fun disconnectBootstrapSession(bootstrap: SSHConnection) {
         val appScope = (bootstrap.context.applicationContext as? io.github.tabssh.TabSSHApplication)?.applicationScope
         val block: suspend () -> Unit = {
-            try { bootstrap.disconnect() } catch (e: Exception) {
+            try {
+                bootstrap.disconnect()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 Logger.d("SSHTab", "mosh bootstrap disconnect suppressed: ${e.message}")
             }
         }
@@ -858,8 +873,8 @@ class SSHTab(
             hasUnreadOutput = _hasUnreadOutput.value,
             unreadLines = _unreadLines.value,
             sessionDuration = duration,
-            bytesReceived = bytesReceived,
-            bytesSent = bytesSent,
+            bytesReceived = bytesReceived.get(),
+            bytesSent = bytesSent.get(),
             terminalRows = termuxBridge.getRows(),
             terminalCols = termuxBridge.getColumns(),
             lastActivity = _lastActivity.value
@@ -871,7 +886,7 @@ class SSHTab(
      */
     fun sendText(text: String) {
         termuxBridge.sendText(text)
-        bytesSent += text.length
+        bytesSent.addAndGet(text.length.toLong())
         updateActivity()
     }
 
@@ -1153,6 +1168,10 @@ class SSHTab(
                     Logger.i("SSHTab", "Multiplexer detached (none found in env)")
             }
             detected
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Cancelling the detection loop must not be reported as a probe
+            // failure, or the job stays alive past stopMultiplexerDetection().
+            throw e
         } catch (_: Exception) {
             // Detection failure is non-fatal — PREFIX key shows "unknown" state.
             null
@@ -1182,6 +1201,8 @@ class SSHTab(
         return try {
             val raw = conn.executeCommand(cmd, timeoutMs = 5000L)
             parseMultiplexerSessions(type, raw)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (_: Exception) {
             emptyList()
         }
@@ -1224,6 +1245,28 @@ class SSHTab(
     // Companion-scoped and internal (not private on the instance) so the pure
     // command-assembly logic is unit-testable without constructing an SSHTab.
     internal companion object {
+        // Upper bound for a remote-supplied OSC title. Long enough for any
+        // real shell prompt, short enough that a hostile host cannot flood the
+        // tab bar or the notification with a multi-kilobyte string.
+        private const val MAX_TITLE_LENGTH = 256
+
+        /**
+         * Strip everything a remote host could use to spoof or corrupt UI text
+         * out of an OSC 0/1/2 title, and bound its length. Returns null for a
+         * title that is empty once sanitised, meaning "fall back to the default
+         * title".
+         */
+        internal fun sanitizeRemoteTitle(title: String): String? {
+            val cleaned = title.filterNot { ch ->
+                val code = ch.code
+                code < 0x20 ||
+                    code in 0x7F..0x9F ||
+                    code in 0x202A..0x202E ||
+                    code in 0x2066..0x2069
+            }.trim().take(MAX_TITLE_LENGTH)
+            return cleaned.ifBlank { null }
+        }
+
         /**
          * tmux gets session-scoped mouse mode enabled in the same command
          * sequence (`\; set -q mouse on`): with mouse on, tmux enables mouse
@@ -1317,8 +1360,9 @@ class SSHTab(
      * Reset title to default (connection name)
      */
     fun resetTitle() {
-        titleSetByTerminal = false
-        _title.value = generateDefaultTitle()
+        terminalTitle = null
+        lastLoggedTitle = null
+        updateTitleWithStatus(_connectionState.value)
     }
 
     /**
@@ -1338,10 +1382,9 @@ class SSHTab(
      * Update title with connection status prefix
      */
     private fun updateTitleWithStatus(state: ConnectionState) {
-        // Don't override terminal-set title (from OSC sequences)
-        if (titleSetByTerminal) return
-
-        val baseTitle = generateDefaultTitle()
+        // A terminal-set title replaces the user@host base, but never the
+        // status indicator: a disconnected tab must still read as disconnected.
+        val baseTitle = terminalTitle ?: generateDefaultTitle()
         _title.value = when (state) {
             ConnectionState.CONNECTING -> "⏳ $baseTitle"
             ConnectionState.CONNECTED -> baseTitle
@@ -1386,6 +1429,11 @@ class SSHTab(
         Logger.d("SSHTab", "Cleaning up tab ${profile.getDisplayName()}")
 
         disconnect()
+        // Close the transcript file before the bridge goes away: a tab closed
+        // while recording used to leave the FileWriter open until the process
+        // died, with the trailing footer never written.
+        sessionRecorder?.stopRecording()
+        sessionRecorder = null
         termuxBridge.cleanup()
         connectionScope.cancel() // Cancel all coroutines
     }

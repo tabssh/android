@@ -25,17 +25,21 @@ class TerminalGestureHandler(
     private var initialY = 0f
     private var isGestureInProgress = false
     
-    // Thresholds
-    private val SWIPE_THRESHOLD = 100 // minimum distance for swipe
-    private val SWIPE_VELOCITY_THRESHOLD = 100 // minimum velocity
-    private val PINCH_THRESHOLD = 0.2f // scale change threshold for pinch
+    // Minimum travel before a multi-touch drag counts as a swipe, in pixels
+    // derived from a density-independent 56dp. A raw pixel constant made the
+    // gesture roughly four times harder to trigger on a high-density phone than
+    // on a low-density tablet.
+    private val swipeThresholdPx = 56f * context.resources.displayMetrics.density
+
+    // Scale change (relative to 1.0) before a pinch is reported.
+    private val pinchThreshold = 0.2f
     
     init {
         scaleGestureDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
                 val scaleFactor = detector.scaleFactor
                 
-                if (scaleFactor < 1.0f - PINCH_THRESHOLD) {
+                if (scaleFactor < 1.0f - pinchThreshold) {
                     // Pinch in
                     if (!isGestureInProgress && pointerCount == 2) {
                         isGestureInProgress = true
@@ -43,7 +47,7 @@ class TerminalGestureHandler(
                         Logger.d("TerminalGestureHandler", "Pinch in detected")
                         return true
                     }
-                } else if (scaleFactor > 1.0f + PINCH_THRESHOLD) {
+                } else if (scaleFactor > 1.0f + pinchThreshold) {
                     // Pinch out
                     if (!isGestureInProgress && pointerCount == 2) {
                         isGestureInProgress = true
@@ -103,7 +107,7 @@ class TerminalGestureHandler(
                     val deltaY = currentY - initialY
                     
                     // Check if swipe threshold is met
-                    if (abs(deltaX) > SWIPE_THRESHOLD || abs(deltaY) > SWIPE_THRESHOLD) {
+                    if (abs(deltaX) > swipeThresholdPx || abs(deltaY) > swipeThresholdPx) {
                         val gestureType = detectSwipeDirection(deltaX, deltaY, pointerCount)
                         if (gestureType != null) {
                             isGestureInProgress = true
@@ -140,7 +144,7 @@ class TerminalGestureHandler(
         
         return when {
             // Horizontal swipe
-            absX > absY && absX > SWIPE_THRESHOLD -> {
+            absX > absY && absX > swipeThresholdPx -> {
                 if (deltaX > 0) {
                     // Swipe right
                     when (fingers) {
@@ -159,7 +163,7 @@ class TerminalGestureHandler(
             }
             
             // Vertical swipe
-            absY > absX && absY > SWIPE_THRESHOLD -> {
+            absY > absX && absY > swipeThresholdPx -> {
                 if (deltaY > 0) {
                     // Swipe down
                     when (fingers) {

@@ -225,10 +225,14 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
                 false
             }
             
+        } catch (e: CancellationException) {
+            // Scope teardown, not a tunnel failure — never mark ERROR or the
+            // coroutine machinery loses the cancellation.
+            throw e
         } catch (e: Exception) {
             tunnel.updateState(TunnelState.ERROR)
             tunnel.lastError = e.message ?: "Unknown error"
-            
+
             Logger.e("PortForwardingManager", "Error starting tunnel $tunnelId", e)
             notifyListeners { onTunnelError(tunnel, e.message ?: "Unknown error") }
             false
@@ -279,10 +283,13 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
             }
             true
             
+        } catch (e: CancellationException) {
+            // Scope teardown, not a tunnel failure.
+            throw e
         } catch (e: Exception) {
             tunnel.updateState(TunnelState.ERROR)
             tunnel.lastError = e.message ?: "Unknown error"
-            
+
             Logger.e("PortForwardingManager", "Error stopping tunnel $tunnelId", e)
             notifyListeners { onTunnelError(tunnel, e.message ?: "Unknown error") }
             false

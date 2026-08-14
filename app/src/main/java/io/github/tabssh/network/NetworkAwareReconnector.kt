@@ -62,7 +62,7 @@ class NetworkAwareReconnector(
 ) {
     /** Backoff attempt counter — reset to 0 whenever the network returns
      *  or a connection is successfully restored. */
-    private var attempts = 0
+    @Volatile private var attempts = 0
 
     /** True while the network is known to be unavailable. No timer runs
      *  in this state; we wait for [networkDetector] to signal recovery. */
@@ -71,7 +71,7 @@ class NetworkAwareReconnector(
     /** True once [cancel] has been called — stops all activity. */
     @Volatile private var cancelled = false
 
-    private var reconnectJob: Job? = null
+    @Volatile private var reconnectJob: Job? = null
     private var networkObserverJob: Job? = null
     private var pollJob: Job? = null
 

@@ -41,28 +41,32 @@ object SSHConfigExporter {
             val hostTag = sanitiseHostTag(c.name.ifBlank { c.host })
             val groupSuffix = groupName?.let { "  ## [$it]" }.orEmpty()
             sb.append("Host $hostTag$groupSuffix\n")
-            sb.append("    HostName ${c.host}\n")
-            if (c.port != 22) sb.append("    Port ${c.port}\n")
-            if (c.username.isNotBlank()) sb.append("    User ${c.username}\n")
+            val hostName = oneLine(c.host)
+            if (hostName.isNotEmpty()) sb.append("    HostName $hostName\n")
+            if (c.port in 1..65535 && c.port != 22) sb.append("    Port ${c.port}\n")
+            val user = oneLine(c.username)
+            if (user.isNotEmpty()) sb.append("    User $user\n")
             if (c.compression) sb.append("    Compression yes\n")
             if (c.connectTimeout != 15) sb.append("    ConnectTimeout ${c.connectTimeout}\n")
             if (c.x11Forwarding) sb.append("    ForwardX11 yes\n")
             if (c.agentForwarding) sb.append("    ForwardAgent yes\n")
             // Identity file: emit only the original path if we kept it in advancedSettings.
-            decodeAdvanced(c.advancedSettings).optString("identityFileStr").takeIf { it.isNotBlank() }?.let {
-                sb.append("    IdentityFile $it\n")
-            }
+            decodeAdvanced(c.advancedSettings).optString("identityFileStr")
+                .let { oneLine(it) }
+                .takeIf { it.isNotEmpty() }
+                ?.let { sb.append("    IdentityFile $it\n") }
             // Jump host (subset of profile.proxyType "SSH"): we only know the host:port;
             // user-agnostic ssh config supports "ProxyJump user@host:port".
             if (c.proxyType.equals("SSH", ignoreCase = true) && !c.proxyHost.isNullOrBlank()) {
-                val jhUser = c.proxyUsername.takeUnless { it.isNullOrBlank() }
-                val jhPort = c.proxyPort?.takeIf { it > 0 && it != 22 }
+                val jhUser = c.proxyUsername?.let { oneLine(it) }?.takeIf { it.isNotEmpty() }
+                val jhPort = c.proxyPort?.takeIf { it in 1..65535 && it != 22 }
+                val jhHost = oneLine(c.proxyHost)
                 val jh = buildString {
                     if (jhUser != null) append("$jhUser@")
-                    append(c.proxyHost)
+                    append(jhHost)
                     if (jhPort != null) append(":$jhPort")
                 }
-                sb.append("    ProxyJump $jh\n")
+                if (jhHost.isNotEmpty()) sb.append("    ProxyJump $jh\n")
             }
             if (!c.envVars.isNullOrBlank()) {
                 // Issue #37 — Two related directives:
@@ -72,7 +76,7 @@ object SSHConfigExporter {
                 //    SendEnv-imported entries as `NAME=`); the value is taken
                 //    from the local environment per OpenSSH semantics.
                 for (line in c.envVars.lineSequence()) {
-                    val t = line.trim()
+                    val t = oneLine(line)
                     if (t.isEmpty()) continue
                     val eq = t.indexOf('=')
                     when {
@@ -85,8 +89,9 @@ object SSHConfigExporter {
             // Issue #37 — Round-trip the RemoteCommand directive. Always
             // emitted with `RequestTTY yes` since TabSSH always allocates
             // a PTY when running a RemoteCommand (see SSHConnection.kt).
-            if (!c.remoteCommand.isNullOrBlank()) {
-                sb.append("    RemoteCommand ${c.remoteCommand}\n")
+            val remoteCommand = c.remoteCommand?.let { oneLine(it) }.orEmpty()
+            if (remoteCommand.isNotEmpty()) {
+                sb.append("    RemoteCommand $remoteCommand\n")
                 sb.append("    RequestTTY yes\n")
             }
         }
@@ -94,10 +99,24 @@ object SSHConfigExporter {
     }
 
     /** Quote / escape Host tags that contain whitespace. */
-    private fun sanitiseHostTag(name: String): String {
-        val cleaned = name.trim().ifBlank { "host" }
+    internal fun sanitiseHostTag(name: String): String {
+        // Double quotes would terminate the quoted form early, so drop them
+        // along with the line breaks oneLine() already removes.
+        val cleaned = oneLine(name).replace("\"", "").trim().ifBlank { "host" }
         return if (cleaned.any { it.isWhitespace() }) "\"$cleaned\"" else cleaned
     }
+
+    /**
+     * Reduce a stored profile value to something that cannot escape the single
+     * config line it is written on.
+     *
+     * Profile fields are user-supplied and may have been round-tripped through
+     * an imported file, so a value containing CR/LF would inject arbitrary
+     * extra OpenSSH directives (`ProxyCommand`, `IdentityFile`, …) into the
+     * exported config. Every control character is stripped, not just newlines.
+     */
+    internal fun oneLine(value: String): String =
+        value.filter { it.code >= 32 && it.code != 127 }.trim()
 
     private fun decodeAdvanced(json: String?): JSONObject = try {
         if (json.isNullOrBlank()) JSONObject() else JSONObject(json)

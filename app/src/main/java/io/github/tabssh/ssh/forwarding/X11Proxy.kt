@@ -9,6 +9,7 @@ import java.io.OutputStream
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 
 /**
@@ -72,6 +73,9 @@ class X11Proxy(
     var port: Int = 0
         private set
 
+    // Written by start()/stop() on the caller's thread, read by the accept
+    // thread — must be volatile for the close-to-exit handshake to be visible.
+    @Volatile
     private var serverSocket: ServerSocket? = null
 
     @Volatile
@@ -165,8 +169,18 @@ class X11Proxy(
 
         Logger.d(TAG, "Relaying X11 channel: ${client.remoteSocketAddress} → X server")
         try {
-            relay(client.inputStream, xServer.outputStream)
-            relay(xServer.inputStream, client.outputStream)
+            // Both directions must finish before the sockets are closed.
+            // relay() is asynchronous, so awaiting the returned futures is what
+            // keeps the connection open — closing here without the await tore
+            // every X11 channel down the instant it was set up.
+            val clientToServer = relay(client.inputStream, xServer.outputStream)
+            val serverToClient = relay(xServer.inputStream, client.outputStream)
+            // Either direction reaching EOF ends the channel; close then unblocks
+            // the other pump's read and its future completes on the way out.
+            clientToServer.get()
+            serverToClient.cancel(true)
+        } catch (e: Exception) {
+            Logger.d(TAG, "X11 relay ended: ${e.message}")
         } finally {
             try { client.close() } catch (_: Exception) {}
             try { xServer.close() } catch (_: Exception) {}
@@ -226,9 +240,10 @@ class X11Proxy(
 
     /**
      * Spawn a daemon thread that copies [input] → [output] until EOF or error.
+     * The returned future completes when that pump stops.
      */
-    private fun relay(input: InputStream, output: OutputStream) {
-        executor.submit {
+    private fun relay(input: InputStream, output: OutputStream): Future<*> {
+        return executor.submit {
             try {
                 val buf = ByteArray(RELAY_BUFFER_SIZE)
                 var n = input.read(buf)

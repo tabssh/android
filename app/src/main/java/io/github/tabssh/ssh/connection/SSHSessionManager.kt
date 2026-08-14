@@ -30,10 +30,17 @@ class SSHSessionManager(private val context: Context) {
     // fires from connect/disconnect coroutines on Dispatchers.IO.
     private val listeners = java.util.concurrent.CopyOnWriteArrayList<SessionManagerListener>()
 
+    // This is a process-wide singleton reached from the UI thread and from
+    // every connection coroutine, so the init latch and both host-key
+    // callbacks must be volatile: a stale `false` re-runs JSch global setup,
+    // and a stale null callback silently skips a host-key prompt.
+    @Volatile
     private var isInitialized = false
 
     // Host key verification callbacks
+    @Volatile
     var hostKeyChangedCallback: ((HostKeyChangedInfo) -> HostKeyAction)? = null
+    @Volatile
     var newHostKeyCallback: ((NewHostKeyInfo) -> HostKeyAction)? = null
     
     fun initialize() {

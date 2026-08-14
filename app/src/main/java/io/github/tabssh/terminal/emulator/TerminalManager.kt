@@ -41,9 +41,9 @@ class TerminalManager(private val context: Context) {
     
     private fun loadSettings() {
         try {
-            // Settings would be loaded from PreferenceManager
-            // For now, use defaults
-            Logger.d("TerminalManager", "Using default terminal settings")
+            val prefs = PreferenceManager(context)
+            maxScrollback = prefs.getScrollbackLines().coerceIn(100, 50000)
+            Logger.d("TerminalManager", "Loaded terminal settings: scrollback=$maxScrollback lines")
         } catch (e: Exception) {
             Logger.e("TerminalManager", "Error loading terminal settings", e)
         }
@@ -65,8 +65,10 @@ class TerminalManager(private val context: Context) {
             return existing
         }
         
-        // Create new terminal
-        val buffer = TerminalBuffer(rows, cols)
+        // Create new terminal. The scrollback bound is applied at construction —
+        // it used to be accepted and then dropped, leaving every terminal on the
+        // buffer's unlimited default.
+        val buffer = TerminalBuffer(rows, cols, scrollback.coerceIn(100, 50000))
         val terminal = TerminalEmulator(buffer)
         
         terminals[terminalId] = terminal
@@ -154,23 +156,26 @@ class TerminalManager(private val context: Context) {
     }
     
     private fun getLastActivityTime(terminal: TerminalEmulator): Long {
-        // This would track last activity time if implemented
-        // For now, return current time to prevent premature cleanup
-        return System.currentTimeMillis()
+        return terminal.getLastActivityTime()
     }
-    
+
     private fun startMaintenance() {
         managerScope.launch {
             while (isActive) {
                 try {
                     // Perform maintenance every 5 minutes
                     delay(300000)
-                    
+
                     performMaintenance()
-                    
+
+                } catch (e: CancellationException) {
+                    // Scope shutdown: leave the loop instead of logging it as a
+                    // failure and then blocking in the error delay.
+                    throw e
                 } catch (e: Exception) {
                     Logger.e("TerminalManager", "Error in maintenance task", e)
-                    delay(60000) // Wait 1 minute on error
+                    // Back off for a minute before retrying maintenance
+                    delay(60000)
                 }
             }
         }
@@ -217,10 +222,13 @@ class TerminalManager(private val context: Context) {
         
         loadSettings()
         
-        // Apply settings to existing terminals
+        // Apply settings to existing terminals. The scrollback bound has to be
+        // pushed into each buffer as well, otherwise a changed preference only
+        // affected terminals created afterwards.
         terminals.values.forEach { terminal ->
             terminal.setTerminalType(defaultTerminalType)
             terminal.setEncoding(defaultEncoding)
+            terminal.getBuffer().setScrollbackLimit(maxScrollback)
         }
     }
     

@@ -112,6 +112,10 @@ class TerminalView @JvmOverloads constructor(
     private val resizeHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var pendingResize: Runnable? = null
 
+    // Shared main-looper handler for one-off UI callbacks. consumePendingPrefix()
+    // used to allocate a Handler per keystroke.
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
     // Touch and input handling
     private val gestureDetector: GestureDetector
     private val scaleGestureDetector: ScaleGestureDetector
@@ -157,6 +161,11 @@ class TerminalView @JvmOverloads constructor(
     // Reusable buffer for drawText — avoids one String allocation per glyph per frame.
     private val charBuf = CharArray(2)
 
+    // Reused across rows and frames: these were allocated once per row, i.e.
+    // tens of allocations per frame in the hot draw path.
+    private val runBuf = StringBuilder(256)
+    private val wideCharBuf = CharArray(2)
+
     // Pinch-to-zoom state
     private var isScaling = false
     private var minFontSize = 8f
@@ -198,6 +207,12 @@ class TerminalView @JvmOverloads constructor(
     // ')', ']', '"', or ''' that are not part of the URL. The path segment
     // [^\s<>"')\]]* refuses to consume those characters so they are not
     // included in the match.
+    // Cached wrap-aware URL underline ranges, keyed on screen geometry and
+    // scroll offset and invalidated whenever the terminal content changes.
+    private val urlUnderlineCache = HashMap<Int, MutableList<IntRange>>()
+    private var urlUnderlineKey = -1L
+    private var urlUnderlineDirty = true
+
     private val urlPattern = Regex(
         "(?:" +
             // Scheme-based: http/https/ftp/ftps/ssh/git/svn/file + authority + optional path
@@ -597,12 +612,16 @@ class TerminalView @JvmOverloads constructor(
                 termuxBuffer = bridge.getBuffer()
                 Logger.d("TerminalView", "onScreenChanged - scheduling redraw")
                 post {
+                    // Screen content changed, so the cached URL underline map
+                    // no longer matches what is on screen.
+                    urlUnderlineDirty = true
                     invalidate()
                 }
             }
 
             override fun onTitleChanged(title: String) {
-                Logger.d("TerminalView", "Terminal title: $title")
+                // The title is remote-controlled: log its size, never its text.
+                Logger.d("TerminalView", "Terminal title changed (${title.length} chars)")
             }
 
             override fun onBell() {
@@ -645,7 +664,8 @@ class TerminalView @JvmOverloads constructor(
             }
 
             override fun onCopyToClipboard(text: String) {
-                Logger.d("TerminalView", "Copy to clipboard: ${text.take(50)}...")
+                // An OSC 52 payload is attacker-supplied and may hold secrets.
+                Logger.d("TerminalView", "Copy to clipboard requested: xxxxx (${text.length} chars)")
             }
 
             override fun onPasteFromClipboard() {
@@ -716,6 +736,7 @@ class TerminalView @JvmOverloads constructor(
                     } else {
                         markAllRowsDirty()
                     }
+                    urlUnderlineDirty = true
                     invalidateDirtyRows()
                 }
             }
@@ -725,8 +746,9 @@ class TerminalView @JvmOverloads constructor(
             }
 
             override fun onTitleChanged(title: String) {
-                // Terminal title changed (e.g., from OSC sequences)
-                Logger.d("TerminalView", "Terminal title changed: $title")
+                // Terminal title changed (e.g., from OSC sequences). Remote
+                // controlled, so only the length is logged.
+                Logger.d("TerminalView", "Terminal title changed (${title.length} chars)")
             }
 
             override fun onTerminalError(error: Exception) {
@@ -768,6 +790,7 @@ class TerminalView @JvmOverloads constructor(
      */
     private fun markAllRowsDirty() {
         fullRedrawNeeded = true
+        urlUnderlineDirty = true
         dirtyRows.set(0, terminalRows)
     }
 
@@ -918,7 +941,7 @@ class TerminalView @JvmOverloads constructor(
     internal fun consumePendingPrefix() {
         if (!pendingPrefixArmed) return
         pendingPrefixArmed = false
-        android.os.Handler(android.os.Looper.getMainLooper()).post { onPrefixConsumed?.invoke() }
+        mainHandler.post { onPrefixConsumed?.invoke() }
     }
 
     /** Set/clear the pending one-shot modifier (CTL, ALT, or SFT from the bar). */
@@ -1431,44 +1454,13 @@ class TerminalView @JvmOverloads constructor(
         // match offset back to (row, colRange). Scrollback rows are not populated
         // here — they still use the per-row fallback below (Pass 3 also runs the
         // legacy row-local scan for any externalRow the map does not cover).
-        val urlUnderlineByRow = HashMap<Int, MutableList<IntRange>>()
-        run {
-            var r = 0
-            while (r < rows) {
-                var segEnd = r
-                while (segEnd < rows - 1 && isRowSoftWrapped(segEnd)) segEnd++
-                val combined = buildWrappedWindowText(r, segEnd) ?: ""
-                if (combined.isNotEmpty()) {
-                    // Per-row char lengths inside `combined`. Soft-wrapped rows
-                    // contribute exactly `cols` chars (getSelectedText joins them
-                    // without '\n'); the terminating row contributes its trimmed
-                    // length. Sum must equal combined.length or offset math drifts.
-                    val nRows = segEnd - r + 1
-                    val perRowLen = IntArray(nRows)
-                    for (i in 0 until nRows) {
-                        val rr = r + i
-                        perRowLen[i] = if (rr < segEnd) cols else getRowText(rr).trimEnd().length
-                    }
-                    for (match in urlPattern.findAll(combined)) {
-                        val mStart = match.range.first
-                        val mEnd = match.range.last
-                        var acc = 0
-                        for (i in 0 until nRows) {
-                            val rowStart = acc
-                            val rowEnd = acc + perRowLen[i] - 1
-                            if (perRowLen[i] > 0 && mEnd >= rowStart && mStart <= rowEnd) {
-                                val colStart = maxOf(mStart, rowStart) - rowStart
-                                val colEnd = minOf(mEnd, rowEnd) - rowStart
-                                urlUnderlineByRow.getOrPut(r + i) { mutableListOf() }
-                                    .add(colStart..colEnd)
-                            }
-                            acc += perRowLen[i]
-                        }
-                    }
-                }
-                r = segEnd + 1
-            }
+        val urlKey = (scrollRows.toLong() shl 32) or (rows.toLong() shl 16) or cols.toLong()
+        if (urlUnderlineDirty || urlKey != urlUnderlineKey) {
+            urlUnderlineKey = urlKey
+            urlUnderlineDirty = false
+            rebuildUrlUnderlines(rows, cols)
         }
+        val urlUnderlineByRow = urlUnderlineCache
 
         for (row in 0 until rows + extraRow) {
             val rowTop = startY + row * cellHeight
@@ -1528,12 +1520,9 @@ class TerminalView @JvmOverloads constructor(
             //   - All chars share the same fg colour + effects (bold/italic/underline)
             //   - All chars are single-cell-width (double-width chars flush & draw solo)
             // Spaces and NUL cells break the run but are not drawn themselves.
-            val runBuf = StringBuilder(cols)
+            runBuf.setLength(0)
             var runStartCol = 0
             var runStyle   = 0L
-            // Separate char buffer for wide-glyph solo draws so it does not
-            // alias the shared charBuf used for run character accumulation.
-            val wideCharBuf = CharArray(2)
 
             fun flushRun() {
                 if (runBuf.isEmpty()) return
@@ -1543,7 +1532,7 @@ class TerminalView @JvmOverloads constructor(
                 textPaint.isFakeBoldText = (eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_BOLD) != 0
                 textPaint.textSkewX      = if ((eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0) -0.25f else 0f
                 textPaint.isUnderlineText= (eff and com.termux.terminal.TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
-                canvas.drawText(runBuf.toString(), startX + runStartCol * cellWidth, y, textPaint)
+                canvas.drawText(runBuf, 0, runBuf.length, startX + runStartCol * cellWidth, y, textPaint)
                 textPaint.isFakeBoldText = false
                 textPaint.textSkewX      = 0f
                 textPaint.isUnderlineText= false
@@ -1789,6 +1778,52 @@ class TerminalView @JvmOverloads constructor(
         }
 
         return null
+    }
+
+    /**
+     * Rebuild [urlUnderlineCache] for the current live-screen rows. Only called
+     * when the screen content, geometry or scroll offset actually changed —
+     * running the URL regex over the whole screen on every frame made every
+     * cursor-blink tick as expensive as a full repaint.
+     */
+    private fun rebuildUrlUnderlines(rows: Int, cols: Int) {
+        val urlUnderlineByRow = urlUnderlineCache
+        urlUnderlineByRow.clear()
+        var r = 0
+        while (r < rows) {
+            var segEnd = r
+            while (segEnd < rows - 1 && isRowSoftWrapped(segEnd)) segEnd++
+            val combined = buildWrappedWindowText(r, segEnd) ?: ""
+            if (combined.isNotEmpty()) {
+                // Per-row char lengths inside `combined`. Soft-wrapped rows
+                // contribute exactly `cols` chars (getSelectedText joins them
+                // without '\n'); the terminating row contributes its trimmed
+                // length. Sum must equal combined.length or offset math drifts.
+                val nRows = segEnd - r + 1
+                val perRowLen = IntArray(nRows)
+                for (i in 0 until nRows) {
+                    val rr = r + i
+                    perRowLen[i] = if (rr < segEnd) cols else getRowText(rr).trimEnd().length
+                }
+                for (match in urlPattern.findAll(combined)) {
+                    val mStart = match.range.first
+                    val mEnd = match.range.last
+                    var acc = 0
+                    for (i in 0 until nRows) {
+                        val rowStart = acc
+                        val rowEnd = acc + perRowLen[i] - 1
+                        if (perRowLen[i] > 0 && mEnd >= rowStart && mStart <= rowEnd) {
+                            val colStart = maxOf(mStart, rowStart) - rowStart
+                            val colEnd = minOf(mEnd, rowEnd) - rowStart
+                            urlUnderlineByRow.getOrPut(r + i) { mutableListOf() }
+                                .add(colStart..colEnd)
+                        }
+                        acc += perRowLen[i]
+                    }
+                }
+            }
+            r = segEnd + 1
+        }
     }
 
     /**
@@ -2054,6 +2089,10 @@ class TerminalView @JvmOverloads constructor(
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        // Any key handled here is written straight to the terminal without
+        // going through the InputConnection, so an in-flight composition has
+        // to be emitted first or it would land after this keystroke.
+        flushPendingComposing()
         // Fire any armed PREFIX latch before this keystroke reaches the terminal.
         // Mirrors the one-shot modifier behaviour of pendingCtrl/pendingAlt.
         consumePendingPrefix()
@@ -2070,6 +2109,15 @@ class TerminalView @JvmOverloads constructor(
         val isAltGr = isRightAlt && !isLeftAlt
         val isAlt = (event.isAltPressed || pendingAlt) && !isAltGr
         val isShift = event.isShiftPressed
+        // The bar modifier is one-shot and belongs to this keystroke whichever
+        // branch below handles it. Only the ctrl-code, alt-char and unicode
+        // paths used to clear it, so every early-returning branch (arrows,
+        // Home/End, F-keys, Enter, Tab, Esc, Del) left the latch armed and it
+        // silently applied to the next key. Modifier keys themselves are
+        // skipped so holding a physical modifier does not eat the latch.
+        if (!KeyEvent.isModifierKey(keyCode)) {
+            consumePendingModifier()
+        }
 
         // Handle Ctrl+letter combinations (send control codes).
         // IMPORTANT: skip when Shift is also pressed — Ctrl+Shift+letter
@@ -2083,7 +2131,6 @@ class TerminalView @JvmOverloads constructor(
             val ctrlCode = getCtrlCode(keyCode)
             if (ctrlCode != null) {
                 sendText(ctrlCode)
-                consumePendingModifier()
                 return true
             }
         }
@@ -2099,7 +2146,6 @@ class TerminalView @JvmOverloads constructor(
             val char = event.unicodeChar.toChar()
             if (char.code != 0 && !Character.isISOControl(char)) {
                 sendKeySequence("\u001b$char")
-                consumePendingModifier()
                 return true
             }
         }
@@ -2114,7 +2160,7 @@ class TerminalView @JvmOverloads constructor(
                 return true
             }
             KeyEvent.KEYCODE_DEL -> {
-                sendText("")
+                sendText("\u007F")
                 return true
             }
             KeyEvent.KEYCODE_FORWARD_DEL -> {
@@ -2182,8 +2228,8 @@ class TerminalView @JvmOverloads constructor(
                 sendKeySequence(homeEndSeq('F', 4, isShift, isAlt, isCtrl))
                 return true
             }
-            KeyEvent.KEYCODE_PAGE_UP -> { flushPendingComposing(); sendKeySequence(tildeSeq(5, isShift, isAlt, isCtrl)); return true }
-            KeyEvent.KEYCODE_PAGE_DOWN -> { flushPendingComposing(); sendKeySequence(tildeSeq(6, isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_PAGE_UP -> { sendKeySequence(tildeSeq(5, isShift, isAlt, isCtrl)); return true }
+            KeyEvent.KEYCODE_PAGE_DOWN -> { sendKeySequence(tildeSeq(6, isShift, isAlt, isCtrl)); return true }
             KeyEvent.KEYCODE_INSERT -> { sendKeySequence(tildeSeq(2, isShift, isAlt, isCtrl)); return true }
 
             // Function keys F1-F12 - xterm modifier propagation, matching the
@@ -2609,7 +2655,7 @@ class TerminalView @JvmOverloads constructor(
             val url = detectUrlAtPosition(e.x, e.y)
             if (url != null) {
                 onUrlDetected?.invoke(url)
-                Logger.d("TerminalView", "Long press on URL: $url")
+                Logger.d("TerminalView", "Long press on URL: xxxxx (${url.length} chars)")
             } else {
                 onContextMenuRequested?.invoke(e.x, e.y)
                 Logger.d("TerminalView", "Long press — showing terminal menu")
@@ -3077,7 +3123,7 @@ class TerminalView @JvmOverloads constructor(
                     context, label = "Selected Text", text = word, sensitive = false
                 )
             }
-            Logger.d("TerminalView", "Double-tap selected word: $word (copied=$copyOnSelect)")
+            Logger.d("TerminalView", "Double-tap selected word: xxxxx (${word.length} chars, copied=$copyOnSelect)")
         }
     }
 
@@ -3285,6 +3331,20 @@ class TerminalView @JvmOverloads constructor(
         stopCursorBlink()
         pendingResize?.let { resizeHandler.removeCallbacks(it) }
         pendingResize = null
+        // A ViewPager2 page can be detached and recycled while the long-press
+        // selection arm is still queued; letting it fire would arm selection on
+        // a view that is no longer showing this tab.
+        selectionArmRunnable?.let { removeCallbacks(it) }
+        selectionArmRunnable = null
+        mainHandler.removeCallbacksAndMessages(null)
+        // Stop any fling in flight so computeScroll() cannot keep driving
+        // scrollYf after detach.
+        scroller.forceFinished(true)
+        // Emit anything the IME was still composing before the connection is
+        // dropped, then release the InputConnection so a recycled page cannot
+        // flush it into the wrong tab.
+        activeInputConnection?.flushComposing()
+        activeInputConnection = null
         // Drop the scrollbar drag state so a ViewPager2 page detach can never
         // leave a stale claimed pointer.
         thumbDragging = false
@@ -3343,14 +3403,33 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
     override fun getExtractedText(request: ExtractedTextRequest?, flags: Int): ExtractedText? = null
 
     override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
-        repeat(beforeLength) { terminalView.sendText("\u007F") } // DEL, not BS
+        deleteBefore(beforeLength)
         return true
     }
 
     override fun deleteSurroundingTextInCodePoints(beforeLength: Int, afterLength: Int): Boolean {
         // Handle deletion in code points (for multi-byte characters)
-        repeat(beforeLength) { terminalView.sendText("\u007F") } // DEL, not BS
+        deleteBefore(beforeLength)
         return true
+    }
+
+    /**
+     * Delete [beforeLength] characters ahead of the cursor. Characters still
+     * held in the composition are dropped locally instead of being sent, and
+     * the remaining count is bounded — an IME (or a malformed one) asking for
+     * a huge deletion must not turn into an unbounded burst of DEL bytes on
+     * the wire.
+     */
+    private fun deleteBefore(beforeLength: Int) {
+        var remaining = beforeLength.coerceIn(0, MAX_DELETE_BEFORE)
+        if (remaining == 0) return
+        if (composingText.isNotEmpty()) {
+            val trimmed = minOf(remaining, composingText.length)
+            composingText = composingText.dropLast(trimmed)
+            remaining -= trimmed
+        }
+        // DEL (0x7F), not BS — matches the KEYCODE_DEL path.
+        repeat(remaining) { terminalView.sendText("\u007F") }
     }
 
     override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
@@ -3376,6 +3455,9 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
         // it (DONE, GO, SEND, NEXT, UNSPECIFIED, NONE — Gboard sends
         // UNSPECIFIED with TYPE_NULL fields, which our previous switch
         // ignored, swallowing every ENTER press).
+        // This bypasses the composition, so emit any pending composing text
+        // before the submit rather than after it.
+        flushComposing()
         terminalView.sendText("\r")
         return true
     }
@@ -3387,6 +3469,9 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
     override fun endBatchEdit(): Boolean = false
 
     override fun sendKeyEvent(event: KeyEvent): Boolean {
+        // Key events are written straight to the terminal by onKeyDown, which
+        // would otherwise race ahead of an unfinished composition.
+        flushComposing()
         terminalView.dispatchKeyEvent(event)
         return true
     }
@@ -3450,6 +3535,12 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
             replacement.composingText = composingText
             composingText = ""
         }
+    }
+
+    private companion object {
+        // Upper bound on a single IME deletion request. Nothing legitimate
+        // deletes more than a line's worth of characters in one call.
+        const val MAX_DELETE_BEFORE = 1024
     }
 
     override fun closeConnection() {

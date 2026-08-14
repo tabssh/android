@@ -47,6 +47,9 @@ class TerminalRenderer(
         // to textPaint (font size, antialiasing) are picked up.
         glyphPaint.set(textPaint)
 
+        // Theme palette installed via TerminalBuffer.setColors(), if any.
+        val palette = buffer.getColorPalette() ?: defaultColors
+
         // Draw text
         for (row in 0 until rows) {
             val y = offsetY + (row * cellHeight) - scrollY
@@ -56,17 +59,19 @@ class TerminalRenderer(
 
             for (col in 0 until cols) {
                 val x = offsetX + (col * cellWidth)
-                val char = line[col]
+                // A row can be narrower than the grid for one frame if a resize
+                // lands between the row lookup and this loop; skip rather than throw.
+                val char = line.getOrNull(col) ?: continue
 
                 // Resolve effective foreground colour from the 16-colour palette
-                var fgInt = if (char.fgColor in defaultColors.indices) {
-                    defaultColors[char.fgColor]
+                var fgInt = if (char.fgColor in palette.indices) {
+                    palette[char.fgColor]
                 } else Color.WHITE
 
                 // Resolve effective background; index 0 means the terminal's base background
                 var bgInt = when {
                     char.bgColor == 0 -> backgroundPaint.color
-                    char.bgColor in defaultColors.indices -> defaultColors[char.bgColor]
+                    char.bgColor in palette.indices -> palette[char.bgColor]
                     else -> Color.BLACK
                 }
 

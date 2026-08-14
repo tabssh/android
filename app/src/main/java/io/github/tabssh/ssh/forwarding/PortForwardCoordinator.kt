@@ -87,6 +87,10 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
             running[pf.id] = Running(key, tunnel.id)
             Logger.i("PortForwardCoordinator", "Started ${pf.forwardType} forward '${pf.name}': ${pf.getSummary()}")
             Result.success(Unit)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Cancellation is scope teardown, not a start failure — wrapping it
+            // in Result.failure would leave the caller's coroutine looking alive.
+            throw e
         } catch (e: Exception) {
             Logger.e("PortForwardCoordinator", "Failed to start forward '${pf.name}'", e)
             Result.failure(e)
@@ -103,6 +107,8 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
         val manager = managers[handle.endpointKey] ?: return
         try {
             manager.removeTunnel(handle.tunnelId)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.w("PortForwardCoordinator", "Error stopping tunnel: ${e.message}")
         }

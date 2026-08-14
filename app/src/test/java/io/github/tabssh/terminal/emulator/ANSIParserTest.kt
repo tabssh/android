@@ -95,7 +95,10 @@ class ANSIParserTest {
     fun `test cursor positioning`() {
         // Set cursor position: ESC[10;20H
         parser.processText("\u001B[10;20H")
-        verify(mockBuffer).setCursorPosition(9, 19) // Convert from 1-based to 0-based
+        // setCursorPosition takes (x = column, y = row), so ESC[10;20H (row 10,
+        // column 20, 1-based) must arrive as (19, 9). The parser used to pass
+        // these the wrong way round.
+        verify(mockBuffer).setCursorPosition(19, 9)
         
         // Home position: ESC[H (equivalent to ESC[1;1H)
         parser.processText("\u001B[H")

@@ -42,9 +42,12 @@ object PrefixParser {
                 parseAltKey(trimmed)
             }
 
-            // Literal single character: `, ~, etc.
+            // Literal single character: `, ~, etc. Encoded as UTF-8 rather than
+            // a single truncated byte so a non-ASCII prefix (e.g. a European
+            // keyboard's dead key) reaches the remote as the character the user
+            // actually configured instead of a mangled low byte.
             trimmed.length == 1 -> {
-                byteArrayOf(trimmed[0].code.toByte())
+                trimmed.toByteArray(Charsets.UTF_8)
             }
 
             // Hex notation: 0x02, \x02

@@ -77,6 +77,13 @@ object MoshNativeClient {
     ): Session {
         val binary = resolveBinary(context)
             ?: throw IllegalStateException("mosh-client native binary is not bundled in this APK build")
+        // ProcessBuilder takes an argv array, so there is no shell to inject
+        // into — but a host beginning with '-' would be consumed by
+        // mosh-client's own option parser, and the key lands in the child's
+        // environment. Validate all three before the process exists.
+        require(isValidHostArgument(host)) { "Invalid Mosh host argument" }
+        require(port in 1..65535) { "Invalid Mosh port: $port" }
+        require(MoshHandoff.isValidMoshKey(moshKeyBase64)) { "Invalid Mosh session key" }
         val pb = ProcessBuilder(binary.absolutePath, host, port.toString()).apply {
             environment()["MOSH_KEY"] = moshKeyBase64
             // mosh-client writes to TERM-driven curses; xterm-256color is the
@@ -91,6 +98,19 @@ object MoshNativeClient {
         Logger.i(TAG, "Spawning mosh-client $host:$port (binary=${binary.absolutePath})")
         return Session(pb.start())
     }
+
+    /**
+     * Accept hostnames, IPv4 literals and bare IPv6 literals, and reject
+     * anything that could be mistaken for an option (leading '-') or that
+     * carries whitespace / NUL / shell metacharacters.
+     */
+    internal fun isValidHostArgument(host: String): Boolean =
+        host.isNotEmpty() &&
+            host.length <= 255 &&
+            !host.startsWith("-") &&
+            HOST_ARG_REGEX.matches(host)
+
+    private val HOST_ARG_REGEX = Regex("^[A-Za-z0-9._:\\[\\]-]+$")
 
     class Session internal constructor(private val process: Process) {
 
