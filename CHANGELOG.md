@@ -7,6 +7,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Release channels reworked** — the rolling development prerelease is now built by `development.yml` (daily + every push to main) from a new `devel` build variant: full release configuration (R8, resource shrinking, signed, **not debuggable** — debuggable sideloaded APKs trip Play Protect) with the Debug Log force-enabled. A new `beta.yml` channel builds prereleases from `*beta` tags. Every channel now ships the same asset set: APK splits, `mapping.txt`, `version.txt`, a source archive, a CycloneDX SBOM (`tabssh-sbom.cdx.json`), aggregate `sha256.txt`/`sha512.txt`, and GitHub build-provenance attestations. Asset filenames are identical across channels — the tag and `version.txt` carry the channel identity
+- **"Debug Mode" internals renamed to "Debug Log"** (`DEBUG_LOG`) to match what the toggle actually controls; no behavior change
+
 ### Security
 
 - **Tasker integration is now opt-in (default OFF)** — the setting previously defaulted to ON, which was harmless while the only entry point was the signature-gated `TaskerActionReceiver`, but the new Locale plugin fire receiver is exported without a permission (the protocol requires it), so on a fresh install any app on the device could have driven SSH sessions with no user action. Existing installs keep whatever the toggle is already set to

@@ -1,42 +1,34 @@
-name: Production Release
+name: Beta Release
 
 # ─────────────────────────────────────────────────────────────────────────
-# RELEASE CHANNEL: stable (AI.md PART 12/13)
+# RELEASE CHANNEL: beta (AI.md PART 12/13)
 #
-# Fires on push of a `v*` tag (e.g. v0.0.9, v1.0.0). Runs the full test +
-# DependencyCheck + coverage gates, builds the `release` variant, then
-# publishes the canonical asset set as a non-prerelease GitHub release.
-# Version identity is the tag without the `v` prefix; asset names are
+# Fires on push of a `*beta` tag (e.g. 1.1.0beta, v1.1.0-beta1). Builds
+# the `release` variant and publishes the canonical asset set as a
+# prerelease. Version identity is the tag as-is; asset names are
 # identical across channels — channel identity lives in the tag, the
 # release object, and version.txt, never in mutated filenames.
 #
 # The other channels: development.yml (rolling `development` prerelease)
-# and beta.yml (tag *beta, prerelease).
-#
-# `mosh-binaries.yml` and `spice-libs.yml` produce build-infra-only channels:
-# their releases are marked prerelease and don't appear on the repo's main
-# page — they're consumed at build time by `scripts/fetch-mosh-binaries.sh`
-# and `scripts/fetch-spice-libs.sh` respectively.
+# and release.yml (tag v*, stable).
 # ─────────────────────────────────────────────────────────────────────────
 
 on:
   push:
     tags:
-      - 'v*'
+      - '*beta*'
 
-# Group by tag ref — re-pushing the same tag cancels any in-flight rebuild
-# for that tag, but distinct version tags pushed back-to-back each get to
-# complete and publish their own release.
+# Group by tag ref — re-pushing the same beta tag cancels any in-flight
+# rebuild for that tag; distinct beta tags each complete and publish.
 concurrency:
-  group: release-${{ github.ref }}
+  group: beta-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: write
-  packages: read
 
 jobs:
-  # Pull-only, fail-fast gate: the release runs inside this image, so if it is
+  # Pull-only, fail-fast gate: the build runs inside this image, so if it is
   # missing we stop immediately rather than provisioning a toolchain inline.
   ensure-build-image:
     name: Ensure build image
@@ -64,8 +56,8 @@ jobs:
         fi
         echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
-  release:
-    name: Build & Publish Release
+  build-beta:
+    name: Build Beta Release
     needs: ensure-build-image
     runs-on: ubuntu-latest
     permissions:
@@ -85,7 +77,8 @@ jobs:
         shell: bash
 
     steps:
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+    - name: Checkout code
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
     - name: Trust the checked-out workspace inside the container
       # The container runs as a different UID than whatever created
@@ -111,31 +104,18 @@ jobs:
         echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
         echo "✅ Keystore decoded and ready"
 
-    - name: Run all tests
-      run: ./gradlew test --no-daemon
-
-    - name: Run security scan
-      env:
-        NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-      run: ./gradlew dependencyCheckAnalyze --no-daemon
-
-    - name: Verify test coverage
-      run: ./gradlew jacocoTestReport jacocoTestCoverageVerification --no-daemon
-
     - name: Capture build identity
       id: version
       run: |
-        # Stable-channel version identity is the tag without the `v` prefix
+        # Beta-channel version identity is the tag exactly as pushed
         # (AI.md PART 13). BUILD_EPOCH is captured exactly once here and
-        # exported as SOURCE_DATE_EPOCH so BuildConfig.BUILD_EPOCH matches
-        # version.txt.
+        # exported as SOURCE_DATE_EPOCH so BuildConfig.BUILD_EPOCH
+        # matches version.txt.
         TAG_NAME=${GITHUB_REF#refs/tags/}
-        VERSION=${TAG_NAME#v}
         BUILD_EPOCH=$(date -u +%s)
         echo "TAG_NAME=${TAG_NAME}" >> "$GITHUB_OUTPUT"
-        echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
         echo "BUILD_EPOCH=${BUILD_EPOCH}" >> "$GITHUB_OUTPUT"
-        echo "📦 Building release for tag: ${TAG_NAME} (version ${VERSION})"
+        echo "📦 Building beta release: ${TAG_NAME}"
 
     - name: Fetch latest mosh-client binaries
       env:
@@ -164,10 +144,9 @@ jobs:
         chmod +x scripts/fetch-fonts.sh
         scripts/fetch-fonts.sh
 
-    - name: Build release APK
+    - name: Build release-variant APKs
       run: ./gradlew assembleRelease --no-daemon
       env:
-        RELEASE_BUILD: true
         SOURCE_DATE_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
         # Passed through so a future KEYSTORE_PASSWORD / KEY_PASSWORD secret is
         # picked up automatically. When the secret is absent GitHub expands it to
@@ -175,38 +154,25 @@ jobs:
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-    - name: Build F-Droid compatible APK (sanity check, not uploaded)
-      run: |
-        # Smoke test: ensure proguard-fdroid.pro and the fdroidRelease build
-        # type still build successfully. F-Droid distributes via their own
-        # build infrastructure (cloning the source, building on F-Droid
-        # servers, signing with F-Droid keys), so we never upload the APK
-        # ourselves — uploading our-key-signed F-Droid builds to GitHub
-        # would just be a confusing duplicate that nobody can use.
-        ./gradlew assembleFdroidRelease --no-daemon
-        echo "✅ F-Droid build succeeded — proguard-fdroid.pro is healthy"
-        ls -lh app/build/outputs/apk/fdroidRelease/*.apk
-
     - name: Generate SBOM
       run: ./gradlew :app:cyclonedxBom --no-daemon
 
     - name: Stage release assets
       env:
-        VERSION: ${{ steps.version.outputs.VERSION }}
+        TAG_NAME: ${{ steps.version.outputs.TAG_NAME }}
         BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
       run: |
         # Canonical channel flow (AI.md PART 13): stage APK splits +
         # mapping.txt -> version.txt -> source archive -> SBOM -> aggregate
-        # sha256.txt/sha512.txt computed LAST over every staged asset —
-        # never per-artifact checksum sidecars.
+        # sha256.txt/sha512.txt computed LAST over every staged asset.
         mkdir -p dist
         cp app/build/outputs/apk/release/tabssh-android-*.apk dist/
         cp app/build/outputs/mapping/release/mapping.txt dist/mapping.txt
 
         printf 'version: %s\ncommit: %s\nbuild_epoch: %s\n' \
-          "${VERSION}" "$(git rev-parse HEAD)" "${BUILD_EPOCH}" > dist/version.txt
+          "${TAG_NAME}" "$(git rev-parse HEAD)" "${BUILD_EPOCH}" > dist/version.txt
 
-        git archive --format=tar.gz -o "dist/tabssh-${VERSION}-source.tar.gz" HEAD
+        git archive --format=tar.gz -o "dist/tabssh-${TAG_NAME}-source.tar.gz" HEAD
 
         SBOM=$(find app/build -name '*.json' -path '*cyclonedx*' -o -name 'bom.json' | head -1)
         cp "$SBOM" dist/tabssh-sbom.cdx.json
@@ -223,10 +189,12 @@ jobs:
 
     - name: Generate release notes
       env:
-        VERSION: ${{ steps.version.outputs.VERSION }}
+        TAG_NAME: ${{ steps.version.outputs.TAG_NAME }}
       run: |
         {
-          echo "# TabSSH ${VERSION} - Complete Mobile SSH Client"
+          echo "# TabSSH ${TAG_NAME} — Beta Release"
+          echo ""
+          echo "**⚠️ Beta build for testing — expect rough edges. Use stable releases for production.**"
           echo ""
           echo "## 📦 Downloads"
           echo "- **tabssh-android-universal.apk** - Recommended (works on all devices)"
@@ -237,36 +205,16 @@ jobs:
           echo ""
           echo "Checksums: see \`sha256.txt\` / \`sha512.txt\` release assets."
           echo ""
-        } > RELEASE_NOTES.md
-        cat CHANGELOG.md >> RELEASE_NOTES.md
+        } > RELEASE_NOTES_BETA.md
+        cat CHANGELOG.md >> RELEASE_NOTES_BETA.md
 
-    - name: Delete existing release if exists
-      continue-on-error: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        TAG_NAME: ${{ steps.version.outputs.TAG_NAME }}
-      run: |
-        # Re-pushing the same tag rebuilds and republishes it — delete the
-        # stale release object first so asset uploads can't collide.
-        gh release delete "$TAG_NAME" --yes || echo "Release $TAG_NAME not found"
-        echo "✅ Cleanup complete, ready to create new release"
-
-    - name: Create GitHub Release
+    - name: Create beta release
       uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        name: "TabSSH ${{ steps.version.outputs.VERSION }} - Complete Mobile SSH Client"
+        name: "TabSSH ${{ steps.version.outputs.TAG_NAME }} (beta)"
         tag_name: ${{ steps.version.outputs.TAG_NAME }}
         files: dist/*
-        body_path: RELEASE_NOTES.md
-        generate_release_notes: false
-        prerelease: false
+        body_path: RELEASE_NOTES_BETA.md
+        prerelease: true
         draft: false
-
-    - name: Notify community
-      env:
-        MATRIX_TOKEN: ${{ secrets.MATRIX_TOKEN }}
-        MASTODON_TOKEN: ${{ secrets.MASTODON_TOKEN }}
-      run: |
-        # Send release notifications
-        ./scripts/notify-release.sh "${{ github.ref_name }}"

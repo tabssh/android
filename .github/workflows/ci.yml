@@ -2,7 +2,7 @@ name: Validation Tests
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
@@ -67,11 +67,21 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    - name: Compile (KSP + Kotlin)
+    - name: Gradle cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          gradle-${{ runner.os }}-
+
+    - name: Compile, lint, unit tests (mirrors make check)
       run: |
-        echo "🛠️  Compiling project (mirrors make check)..."
-        ./gradlew kspDebugKotlin compileDebugKotlin --no-daemon
-        echo "✅ Compilation succeeded"
+        echo "🛠️  Compiling, linting, and unit-testing project..."
+        ./gradlew kspDebugKotlin compileDebugKotlin lintDebug testDebugUnitTest --no-daemon
+        echo "✅ Compile + lint + unit tests succeeded"
 
     - name: Validate project structure
       run: |

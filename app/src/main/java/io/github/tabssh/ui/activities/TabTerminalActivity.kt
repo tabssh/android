@@ -2770,7 +2770,14 @@ class TabTerminalActivity : AppCompatActivity() {
      *
      * - Green + full alpha: multiplexer attached → prefix sends correctly
      * - Dim + still clickable: no multiplexer → click shows type picker
+     *
+     * RepeatOnLifecycleWrongUsage is suppressed deliberately: the check
+     * assumes repeat-per-call leaks duplicate collectors, but this observer
+     * is keyed to the active tab (not the view), must restart on every tab
+     * switch, and cancels the previous job before launching — exactly one
+     * collector exists at any time.
      */
+    @android.annotation.SuppressLint("RepeatOnLifecycleWrongUsage")
     private fun observeMultiplexerState(tab: io.github.tabssh.ui.tabs.SSHTab?) {
         multiplexerObserverJob?.cancel()
         // The picker's item lambda captures the tab it was built for, so a

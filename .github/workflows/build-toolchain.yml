@@ -2,7 +2,7 @@ name: Build Toolchain Image
 
 # ─────────────────────────────────────────────────────────────────────────
 # Builds and publishes the CI toolchain image {owner}/{repo}:build used by
-# ci.yml, dev-builds.yml, and release.yml as their `container:`.
+# ci.yml, development.yml, beta.yml, and release.yml as their `container:`.
 #
 # The image (docker/Dockerfile.build) bakes in the full Android toolchain —
 # SDK, platform-tools, build-tools, CMake, NDK — plus pre-warmed Gradle

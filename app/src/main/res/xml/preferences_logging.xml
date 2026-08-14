@@ -45,7 +45,7 @@
             android:dependency="debug_logging_enabled" />
 
         <!-- Debug-build only: triggers a test crash to verify the crash
-             reporting dialog. Hidden at runtime when BuildConfig.DEBUG_MODE
+             reporting dialog. Hidden at runtime when BuildConfig.DEBUG_LOG
              is false so it never appears in release builds. -->
         <Preference
             android:key="test_crash"

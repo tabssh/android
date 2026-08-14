@@ -7,6 +7,7 @@ import android.graphics.Path
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.View
+import androidx.core.graphics.ColorUtils
 import com.google.android.material.R as MaterialR
 
 /**
@@ -36,8 +37,11 @@ class SparklineView @JvmOverloads constructor(
 
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = resolveThemeColor(MaterialR.attr.colorPrimary)
-        alpha = 48
+        // 48/255 ≈ 19% alpha baked into the color — lint's Range check
+        // misresolves the Kotlin `alpha = 48` Paint setter as a 0..1 float
+        color = ColorUtils.setAlphaComponent(
+            resolveThemeColor(MaterialR.attr.colorPrimary), 48
+        )
     }
 
     /** Append a sample and redraw; the window slides after MAX_SAMPLES. */

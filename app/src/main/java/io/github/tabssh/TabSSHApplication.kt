@@ -120,13 +120,13 @@ class TabSSHApplication : Application() {
         Security.insertProviderAt(BouncyCastleProvider(), 1)
 
         // Logger init policy:
-        //   - debug builds always have BuildConfig.DEBUG_MODE = true and
+        //   - debug builds always have BuildConfig.DEBUG_LOG = true and
         //     auto-enable debug-file logging.
-        //   - release / fdroidRelease builds compute DEBUG_MODE from the
+        //   - release / fdroidRelease builds compute DEBUG_LOG from the
         //     versionName at configure time: a clean "x.x.x" semver (e.g.
         //     "1.0.0", "0.9.2") is treated as a production release and gets
-        //     DEBUG_MODE = false; anything else ("0.9.1-beta", "1.0.0-rc1",
-        //     "1.2.3-devel") is a pre-production build and gets DEBUG_MODE
+        //     DEBUG_LOG = false; anything else ("0.9.1-beta", "1.0.0-rc1",
+        //     "1.2.3-devel") is a pre-production build and gets DEBUG_LOG
         //     = true so testers and beta users have logs ready when filing
         //     issues. See app/build.gradle :: isProductionRelease.
         //   - Production users can still opt in manually via Settings →
@@ -135,12 +135,12 @@ class TabSSHApplication : Application() {
         // The app log (sanitized for public sharing) is always on regardless
         // — it's safe and cheap and powers the Copy App Log menu item.
         val savedDebug = preferencesManager.isDebugLoggingEnabled()
-        val debugLoggingActive = BuildConfig.DEBUG_MODE || savedDebug
+        val debugLoggingActive = BuildConfig.DEBUG_LOG || savedDebug
         // Sync the toggle pref to match the actual active state. On debug
-        // builds DEBUG_MODE forces logging on regardless of what the user
+        // builds DEBUG_LOG forces logging on regardless of what the user
         // last set; without this sync the Settings → Logging toggle shows
         // "Off" even though the logger is running — misleading.
-        if (BuildConfig.DEBUG_MODE && !savedDebug) {
+        if (BuildConfig.DEBUG_LOG && !savedDebug) {
             preferencesManager.setDebugLoggingEnabled(true)
         }
         Logger.initialize(this, debugLoggingActive)
@@ -583,7 +583,7 @@ class TabSSHApplication : Application() {
             Logger.writeCrashSync(thread, throwable)
             Logger.e("TabSSHApplication", "Uncaught exception in thread ${thread.name}", throwable)
 
-            if (BuildConfig.DEBUG_MODE) {
+            if (BuildConfig.DEBUG_LOG) {
                 try {
                     val trace     = android.util.Log.getStackTraceString(throwable)
                     val crashTime = System.currentTimeMillis()

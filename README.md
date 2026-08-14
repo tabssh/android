@@ -311,7 +311,7 @@ android/
 │   └── ui/             # Activities, Fragments, Adapters, ViewModels
 ├── app/src/main/res/   # Layouts, strings, themes, drawables
 ├── app/schemas/        # Room migration JSON schemas
-├── .github/workflows/  # CI/CD (ci, dev-builds, mosh-binaries, release)
+├── .github/workflows/  # CI/CD (ci, security, development, beta, release, mosh-binaries)
 ├── docker/             # Dockerfile (toolchain image), docker-compose.yml
 ├── scripts/            # Build and automation scripts
 ├── metadata/           # F-Droid metadata
@@ -331,7 +331,7 @@ docker compose -f docker/docker-compose.yml run --rm build
 make build
 ```
 
-The `:build` image (`docker/Dockerfile`) contains Android SDK 34, JDK 17, and Gradle. It is rebuilt monthly by the `dev-builds.yml` workflow.
+The `:build` image (`docker/Dockerfile.build`) contains Android SDK 34, JDK 17, and Gradle. It is rebuilt monthly by the `build-toolchain.yml` workflow.
 
 ---
 

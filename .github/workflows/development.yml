@@ -1,33 +1,30 @@
 name: Development Build
 
 # ─────────────────────────────────────────────────────────────────────────
-# RELEASE CHANNEL: dev (development / pre-release)
+# RELEASE CHANNEL: development (AI.md PART 12/13)
 #
-# Fires on every push to a development branch. Builds release-variant
-# APKs (non-debuggable, minified — a `debuggable` sideloaded APK is a
-# prime Google Play Protect "harmful app" heuristic trigger; dev tags
-# keep DEBUG_MODE logging on in the release variant anyway via the
-# isProductionRelease rule in build.gradle), marks them prerelease,
-# overwrites the rolling `development` tag. Release name is
-# `devel-{shortsha}` (no version number — versions are reserved for
-# the `ver` channel). Filenames are `tabssh-android-{arch}-dev.apk`.
+# Daily schedule + every push to main. Builds the `devel` variant —
+# release configuration (R8, shrinkResources, signed, NOT debuggable —
+# a debuggable sideloaded APK trips Play Protect's "tries to bypass
+# Android's security protections" heuristic) with devel/debug features
+# and the Debug Log force-enabled via BuildConfig flags (DEVEL,
+# DEBUG_LOG). Publishes the canonical asset set to the rolling
+# `development` prerelease: release and tag are deleted and recreated
+# on every run. Version identity is the short commit id; asset names
+# are identical across channels — channel identity lives in the tag,
+# the release object, and version.txt, never in mutated filenames.
 #
-# This is one of two user-facing release channels. The other is `ver`
-# (`.github/workflows/release.yml`) which fires on `v*` tags and produces
-# the unsuffixed stable APKs.
-#
-# Mosh refreshes (`mosh-binaries.yml`) are also published as prerelease
-# so they don't claim the repo's "Latest" badge — those are build infra,
-# not user downloads.
+# The other channels: beta.yml (tag *beta) and release.yml (tag v*).
 # ─────────────────────────────────────────────────────────────────────────
 
 on:
+  schedule:
+    - cron: '17 4 * * *'
   push:
-    branches: [ main, master, devel, develop ]
+    branches: [ main ]
 
-# Only one development build per ref at a time — cancel any in-flight run
-# when a newer push arrives so we don't race on the rolling `development`
-# release tag.
+# Only one development build at a time — cancel any in-flight run when a
+# newer push arrives so we don't race on the rolling `development` tag.
 concurrency:
   group: dev-build-${{ github.ref }}
   cancel-in-progress: true
@@ -71,6 +68,8 @@ jobs:
     permissions:
       contents: write
       packages: read
+      id-token: write
+      attestations: write
     container:
       image: ${{ needs.ensure-build-image.outputs.image }}
       credentials:
@@ -96,6 +95,16 @@ jobs:
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
+
+    - name: Gradle cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          gradle-${{ runner.os }}-
 
     - name: Decode and setup keystore
       env:
@@ -130,30 +139,19 @@ jobs:
           echo "✅ Ephemeral debug keystore generated"
         fi
 
-    - name: Compute development version label
+    - name: Capture build identity
       id: version
       run: |
-        # Dev builds don't carry the real release version — that lives in
-        # `release.txt` and is reserved for actual stable / pre-release
-        # tags via release.yml. Slamming `1.0.0-{commit}` onto every push
-        # made dev builds look like real 1.0.0 releases on the GH releases
-        # page, which was confusing.
-        #
-        # Use a fixed `devel` label and append the short commit so the
-        # release title still uniquely identifies the build:
-        #
-        #   tag:           development          (overwritten on each push)
-        #   release name:  devel-{commit}       (e.g. devel-8d267f6)
-        #   "Version:" md: devel
-        VERSION_NAME="devel"
+        # Development-channel version identity is the short commit id
+        # (AI.md PART 13) — real semver versions are reserved for tags.
+        # BUILD_EPOCH is captured exactly once here and exported as
+        # SOURCE_DATE_EPOCH so BuildConfig.BUILD_EPOCH matches version.txt.
         COMMIT_HASH=$(git rev-parse --short HEAD)
-        RELEASE_TITLE="${VERSION_NAME}-${COMMIT_HASH}"
-
-        echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_OUTPUT
-        echo "COMMIT_HASH=${COMMIT_HASH}" >> $GITHUB_OUTPUT
-        echo "RELEASE_TITLE=${RELEASE_TITLE}" >> $GITHUB_OUTPUT
-
-        echo "📦 Building dev release: ${RELEASE_TITLE}"
+        BUILD_EPOCH=$(date -u +%s)
+        echo "COMMIT_HASH=${COMMIT_HASH}" >> "$GITHUB_OUTPUT"
+        echo "BUILD_EPOCH=${BUILD_EPOCH}" >> "$GITHUB_OUTPUT"
+        echo "RELEASE_TITLE=devel-${COMMIT_HASH}" >> "$GITHUB_OUTPUT"
+        echo "📦 Building development release: devel-${COMMIT_HASH}"
 
     - name: Fetch latest mosh-client binaries
       env:
@@ -182,13 +180,12 @@ jobs:
         chmod +x scripts/fetch-fonts.sh
         scripts/fetch-fonts.sh
 
-    - name: Build release-variant APKs
-      # assembleRelease, not assembleDebug: a debuggable sideloaded APK
-      # trips Play Protect's "tries to bypass Android's security
-      # protections" heuristic. Dev builds lose nothing — DEBUG_MODE
-      # logging stays on for non-production version names.
-      run: ./gradlew assembleRelease --no-daemon
+    - name: Build devel-variant APKs
+      # assembleDevel (AI.md PART 4): release configuration — signed, R8,
+      # NOT debuggable — with DEVEL/DEBUG_LOG BuildConfig flags forced on.
+      run: ./gradlew assembleDevel --no-daemon
       env:
+        SOURCE_DATE_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
         # Passed through so a future KEYSTORE_PASSWORD / KEY_PASSWORD secret is
         # picked up automatically. When absent GitHub expands to an empty string
         # and build.gradle falls back to the current password — which matches the
@@ -196,33 +193,43 @@ jobs:
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-    - name: Rename APKs with -dev suffix
+    - name: Generate SBOM
+      run: ./gradlew :app:cyclonedxBom --no-daemon
+
+    - name: Stage release assets
+      env:
+        COMMIT_HASH: ${{ steps.version.outputs.COMMIT_HASH }}
+        BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
       run: |
-        cd app/build/outputs/apk/release/
+        # Canonical channel flow (AI.md PART 13): stage APK splits +
+        # mapping.txt -> version.txt -> source archive -> SBOM -> aggregate
+        # sha256.txt/sha512.txt computed LAST over every staged asset.
+        mkdir -p dist
+        cp app/build/outputs/apk/devel/tabssh-android-*.apk dist/
+        cp app/build/outputs/mapping/devel/mapping.txt dist/mapping.txt
 
-        # build.gradle already outputs the unified naming as
-        # tabssh-android-{arch}.apk (where arch is the simplified tag:
-        # arm64 / arm / amd64 / x86 / universal). All we do here is append
-        # the -dev marker before the extension so dev builds stand apart
-        # from stable releases on the GitHub releases page.
-        for apk in tabssh-android-*.apk; do
-          [[ -e "$apk" ]] || continue
-          base="${apk%.apk}"
-          cp "$apk" "${base}-dev.apk"
-        done
+        printf 'version: %s\ncommit: %s\nbuild_epoch: %s\n' \
+          "${COMMIT_HASH}" "$(git rev-parse HEAD)" "${BUILD_EPOCH}" > dist/version.txt
 
-        echo "📱 APKs renamed:"
-        ls -lh tabssh-android-*-dev.apk
+        git archive --format=tar.gz -o "dist/tabssh-${COMMIT_HASH}-source.tar.gz" HEAD
 
-    - name: Generate checksums
-      run: |
-        cd app/build/outputs/apk/release/
-        sha256sum tabssh-android-*-dev.apk > checksums-dev.sha256
+        SBOM=$(find app/build -name '*.json' -path '*cyclonedx*' -o -name 'bom.json' | head -1)
+        cp "$SBOM" dist/tabssh-sbom.cdx.json
 
-        echo "🔐 SHA256 Checksums:"
-        cat checksums-dev.sha256
+        cd dist
+        sha256sum -- * > sha256.txt.tmp && mv sha256.txt.tmp sha256.txt
+        sha512sum -- * | grep -v -- ' sha256.txt$' > sha512.txt.tmp && mv sha512.txt.tmp sha512.txt
+        ls -lh
+
+    - name: Attest build provenance
+      uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      with:
+        subject-path: dist/*
 
     - name: Generate release notes
+      env:
+        RELEASE_TITLE: ${{ steps.version.outputs.RELEASE_TITLE }}
+        COMMIT_HASH: ${{ steps.version.outputs.COMMIT_HASH }}
       run: |
         BUILD_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
 
@@ -233,69 +240,38 @@ jobs:
 
         ## Build Information
 
-        - **Version:** ${{ steps.version.outputs.VERSION_NAME }}
-        - **Commit:** ${{ steps.version.outputs.COMMIT_HASH }}
-        - **Branch:** ${{ github.ref_name }}
+        - **Build:** ${RELEASE_TITLE}
+        - **Commit:** ${COMMIT_HASH}
         - **Built:** ${BUILD_DATE}
+        - **Variant:** devel (release configuration + Debug Log enabled, not debuggable)
 
         ## Downloads
 
-        - **tabssh-android-universal-dev.apk** - Recommended (works on all devices)
-        - **tabssh-android-arm64-dev.apk** - Modern ARM 64-bit devices
-        - **tabssh-android-arm-dev.apk** - Older ARM 32-bit devices
-        - **tabssh-android-amd64-dev.apk** - x86_64 (emulators, Chromebooks)
-        - **tabssh-android-x86-dev.apk** - x86 32-bit (older emulators)
+        - **tabssh-android-universal.apk** - Recommended (works on all devices)
+        - **tabssh-android-arm64.apk** - Modern ARM 64-bit devices
+        - **tabssh-android-arm.apk** - Older ARM 32-bit devices
+        - **tabssh-android-amd64.apk** - x86_64 (emulators, Chromebooks)
+        - **tabssh-android-x86.apk** - x86 32-bit (older emulators)
 
-        ## What's New in This Build
+        Checksums: see \`sha256.txt\` / \`sha512.txt\` release assets.
 
-        Latest changes from the \`${{ github.ref_name }}\` branch:
+        ## Recent Commits
 
         EOF
-
-        # Add recent commits
-        echo "### Recent Commits" >> RELEASE_NOTES_DEV.md
-        echo "" >> RELEASE_NOTES_DEV.md
         git log --pretty=format:"- %s (%h)" -10 >> RELEASE_NOTES_DEV.md
-        echo "" >> RELEASE_NOTES_DEV.md
-        echo "" >> RELEASE_NOTES_DEV.md
-
-        # Add checksums
-        echo "## 🔐 SHA256 Checksums" >> RELEASE_NOTES_DEV.md
-        echo "" >> RELEASE_NOTES_DEV.md
-        echo '```' >> RELEASE_NOTES_DEV.md
-        cat app/build/outputs/apk/release/checksums-dev.sha256 >> RELEASE_NOTES_DEV.md
-        echo '```' >> RELEASE_NOTES_DEV.md
-        echo "" >> RELEASE_NOTES_DEV.md
-
-        # Add warning
         cat >> RELEASE_NOTES_DEV.md << 'EOF'
+
+
         ## ⚠️ Important Notes
 
         - This is a **development build** for testing purposes
         - May contain bugs or unfinished features
-        - Not recommended for production use
-        - Replaces previous development build
+        - Replaces the previous development build
         - Use official releases for stable versions
-
-        ## Installation
-
-        ```bash
-        # Via ADB
-        adb install tabssh-android-universal-dev.apk
-
-        # Manual
-        1. Download APK to device
-        2. Enable "Install from Unknown Sources"
-        3. Tap APK to install
-        ```
 
         ## Reporting Issues
 
         Found a bug? Report it: https://github.com/tabssh/android/issues
-
-        ---
-
-        **Built automatically from commit ${{ steps.version.outputs.COMMIT_HASH }}**
         EOF
 
     - name: Delete existing development release
@@ -303,12 +279,8 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        echo "🗑️ Checking for existing development release..."
-
-        # Try to delete the 'development' release
+        # Rolling release: delete + recreate on every run (AI.md PART 13)
         gh release delete development --yes || echo "No existing development release found"
-
-        # Also delete the tag if it exists
         git push origin :refs/tags/development || echo "No development tag to delete"
 
     - name: Create development release
@@ -317,34 +289,30 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         name: "${{ steps.version.outputs.RELEASE_TITLE }}"
         tag_name: development
-        files: |
-          app/build/outputs/apk/release/tabssh-android-universal-dev.apk
-          app/build/outputs/apk/release/tabssh-android-arm64-dev.apk
-          app/build/outputs/apk/release/tabssh-android-arm-dev.apk
-          app/build/outputs/apk/release/tabssh-android-amd64-dev.apk
-          app/build/outputs/apk/release/tabssh-android-x86-dev.apk
-          app/build/outputs/apk/release/checksums-dev.sha256
-          RELEASE_NOTES_DEV.md
+        files: dist/*
         body_path: RELEASE_NOTES_DEV.md
         prerelease: true
         draft: false
 
     - name: Build summary
+      env:
+        RELEASE_TITLE: ${{ steps.version.outputs.RELEASE_TITLE }}
+        COMMIT_HASH: ${{ steps.version.outputs.COMMIT_HASH }}
       run: |
-        echo "## 🎉 Development Build Complete!" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Version:** ${{ steps.version.outputs.RELEASE_TITLE }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Commit:** ${{ steps.version.outputs.COMMIT_HASH }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 📦 APKs Built:" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        cd app/build/outputs/apk/release/
-        for apk in tabssh-android-*-dev.apk; do
-          SIZE=$(du -h "$apk" | cut -f1)
-          echo "- \`$apk\` ($SIZE)" >> $GITHUB_STEP_SUMMARY
-        done
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 🔗 Download:" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "https://github.com/${{ github.repository }}/releases/tag/development" >> $GITHUB_STEP_SUMMARY
+        {
+          echo "## 🎉 Development Build Complete!"
+          echo ""
+          echo "**Build:** ${RELEASE_TITLE}"
+          echo "**Commit:** ${COMMIT_HASH}"
+          echo ""
+          echo "### 📦 Release assets:"
+          echo ""
+          for f in dist/*; do
+            SIZE=$(du -h "$f" | cut -f1)
+            echo "- \`$(basename "$f")\` ($SIZE)"
+          done
+          echo ""
+          echo "### 🔗 Download:"
+          echo ""
+          echo "https://github.com/${{ github.repository }}/releases/tag/development"
+        } >> "$GITHUB_STEP_SUMMARY"

@@ -1,4 +1,8 @@
 # TabSSH Android Build Image
+# Why this Dockerfile.build exists (AI.md PART 4 escape hatch): the maintained
+# casjaysdev/android:latest toolchain image does not exist yet, so this repo
+# ships its own image, declared as build_image in IDEA.md ## Toolchain and
+# shared by CI and local Docker builds for reproducibility.
 # Pre-built with all tools and pre-warmed Gradle/Android dependency caches
 # so incremental builds start in seconds rather than downloading from scratch.
 # Usage: docker pull ghcr.io/tabssh/android:build
@@ -19,7 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ── GitHub CLI ─────────────────────────────────────────────────────────────────
-# The release.yml and dev-builds.yml workflows run inside this image and call
+# The release.yml and development.yml workflows run inside this image and call
 # `gh release delete`; without gh those container jobs fail. Installed from the
 # official multi-arch apt repo so both linux/amd64 and linux/arm64 resolve it.
 RUN mkdir -p -m 755 /etc/apt/keyrings && \

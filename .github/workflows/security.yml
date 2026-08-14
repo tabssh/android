@@ -1,0 +1,30 @@
+# Secret scanning on every push and PR (AI.md PART 12).
+# TruffleHog scans the diff range (base..HEAD) for verified credentials.
+name: Security Scan
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trufflehog:
+    name: TruffleHog secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history for diff scan)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog scan
+        uses: trufflesecurity/trufflehog@bcfcf73aaf4759d4dadc2783177c245a02792318 # v3.97.0
+        with:
+          path: ./
+          extra_args: --results=verified,unknown

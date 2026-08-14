@@ -34,3 +34,18 @@ or push developers to bypass the gate entirely.
    device attached.
 3. Unit tests that do not require a device (`./gradlew test`) run as part of
    `make check` and must always pass.
+
+---
+
+## Extra Makefile device-helper targets
+
+**AI.md rule** (PART 4 → Make targets): the canonical target set is
+`help / check / build / release / test / install / clean`, with `install`
+as the only host-adb touchpoint.
+
+**Project override:**
+The Makefile additionally keeps `adb-reconnect`, `logs`, and `test-install`
+— host-adb convenience targets for the developer's remote (WireGuard) phone
+workflow — plus the `image` and `fetch-*` asset helpers. They are additions
+only; the canonical targets keep their specified behavior.
+

@@ -10,6 +10,8 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.serialization' version '2.4.10'
     id 'com.google.devtools.ksp'
     id 'jacoco'
+    // CycloneDX SBOM generation — release channels attach {project}-sbom.cdx.json
+    id 'org.cyclonedx.bom' version '3.4.1'
 }
 
 // Resolve a build-time identifier for the current source. Preference:
@@ -75,8 +77,8 @@ android {
     // users automatically have logs ready when reporting issues.
     //
     // This is evaluated once at configure time against `defaultConfig.versionName`,
-    // then baked into `BuildConfig.DEBUG_MODE` for each non-debug build type.
-    // The `debug` build type ignores it entirely and forces DEBUG_MODE = true.
+    // then baked into `BuildConfig.DEBUG_LOG` for each non-debug build type.
+    // The `debug` build type ignores it entirely and forces DEBUG_LOG = true.
     def isProductionRelease = { String v -> v ==~ /^\d+\.\d+\.\d+$/ }
 
     // F-Droid builder detection. The recipe in metadata/io.github.tabssh.yml
@@ -128,6 +130,11 @@ android {
             fmt.format(new java.util.Date(resolveBuildEpochSeconds() * 1000L))
         }() + "\""
         buildConfigField "String", "FULL_VERSION", "\"${versionName} (${versionCode})\""
+        // Build epoch (seconds, UTC) captured once per build; the fdroidRelease
+        // flavor resolves it to the last-commit epoch for reproducibility
+        buildConfigField "long", "BUILD_EPOCH", "${resolveBuildEpochSeconds()}L"
+        // Development-channel marker — true only in the devel build type
+        buildConfigField "boolean", "DEVEL", "false"
     }
 
     signingConfigs {
@@ -136,7 +143,8 @@ android {
         // an empty CI secret also triggers the fallback). Migration path: add
         // KEYSTORE_PASSWORD / KEY_PASSWORD as CI secrets and the env value takes
         // over automatically with no code change. Until then the fallback keeps
-        // release.yml and dev-builds.yml building against the current keystore.
+        // release.yml, beta.yml, and development.yml building against the
+        // current keystore.
         release {
             storeFile file("../keystore.jks")
             storePassword System.getenv("KEYSTORE_PASSWORD") ?: "tabssh123"
@@ -151,7 +159,7 @@ android {
             // applicationIdSuffix ".debug"
             debuggable true
             minifyEnabled false
-            buildConfigField "boolean", "DEBUG_MODE", "true"
+            buildConfigField "boolean", "DEBUG_LOG", "true"
             buildConfigField "String", "BUILD_TYPE", '"debug"'
 
             // Use the same keystore as release for consistent signing
@@ -165,7 +173,7 @@ android {
             // Only a clean "x.x.x" version is a real production release;
             // every pre-release tag keeps debug logging on. See the
             // `isProductionRelease` closure at the top of the android block.
-            buildConfigField "boolean", "DEBUG_MODE",
+            buildConfigField "boolean", "DEBUG_LOG",
                 "${!isProductionRelease(defaultConfig.versionName)}"
             buildConfigField "String", "BUILD_TYPE", '"release"'
 
@@ -183,12 +191,25 @@ android {
             }
         }
         
+        devel {
+            initWith release
+            // Development channel (AI.md PART 4/13): release configuration —
+            // R8, shrinkResources, signed, NOT debuggable — with devel/debug
+            // features and the Debug Log force-enabled via BuildConfig flags.
+            // Logger sanitation applies here exactly as in release.
+            buildConfigField "boolean", "DEVEL", "true"
+            buildConfigField "boolean", "DEBUG_LOG", "true"
+            buildConfigField "String", "BUILD_TYPE", '"devel"'
+            matchingFallbacks = ['release']
+            signingConfig signingConfigs.release
+        }
+
         fdroidRelease {
             initWith release
-            // initWith copies DEBUG_MODE from release; re-state it here so a
+            // initWith copies DEBUG_LOG from release; re-state it here so a
             // future edit to the release stanza doesn't silently change fdroid
             // behaviour. Same production-vs-pre-release rule applies.
-            buildConfigField "boolean", "DEBUG_MODE",
+            buildConfigField "boolean", "DEBUG_LOG",
                 "${!isProductionRelease(defaultConfig.versionName)}"
             buildConfigField "String", "BUILD_TYPE", '"fdroid"'
             applicationIdSuffix ""
@@ -267,6 +288,12 @@ android {
         abortOnError true
         checkReleaseBuilds true
         disable 'InvalidPackage'
+
+        // Community translations are perpetually incomplete; a missing
+        // per-locale string falls back to the base locale at runtime, so
+        // this is a translation-coverage gap, not a code defect. Keep it
+        // visible as a warning but don't fail the lint gate on it.
+        warning 'MissingTranslation'
 
         // NOTE: do NOT use `checkOnly` here. `checkOnly` *replaces* the entire
         // default check set with only the listed IDs, which silently disabled

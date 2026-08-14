@@ -385,7 +385,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             //                  enable it (Settings → Logging) rather than
             //                  silently flipping it from this menu (the
             //                  user wants this controlled from Settings).
-            val msg = if (BuildConfig.DEBUG_MODE) {
+            val msg = if (BuildConfig.DEBUG_LOG) {
                 "Debug logging is enabled (this is a development build) but " +
                 "no events have been captured yet.\n\nUse the app a bit " +
                 "(open a connection, navigate around) and try Copy Debug " +
@@ -400,7 +400,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 .setMessage(msg)
                 .setPositiveButton("OK", null)
                 .also { b ->
-                    if (!BuildConfig.DEBUG_MODE) {
+                    if (!BuildConfig.DEBUG_LOG) {
                         b.setNeutralButton("Open Settings") { _, _ ->
                             startActivity(Intent(this, SettingsActivity::class.java))
                         }

@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
-    <!--SuppressfalsepositivesforAndroidlibraries-->
+    <!-- Suppress false positives for Android libraries -->
     <suppress>
-        <notes>Android SDK and support libraries are maintained by Google</notes>
+        <notes>False positive: Google-maintained com.google.android artifacts are CPE-matched against unrelated products sharing the "android" name; Android platform CVEs do not apply to these Maven libraries</notes>
         <packageUrl regex="true">^pkg:maven/com\.google\.android.*$</packageUrl>
     </suppress>
     <suppress>
-        <notes>AndroidX libraries are maintained by Google</notes>
+        <notes>False positive: AndroidX artifacts are CPE-matched against Android OS CVEs; androidx.* are app-side support libraries, not the platform the CVEs describe</notes>
         <packageUrl regex="true">^pkg:maven/androidx\..*$</packageUrl>
     </suppress>
     <suppress>
-        <notes>JSch is widely used and maintained</notes>
-        <packageUrl regex="true">^pkg:maven/com\.jcraft/jsch.*$</packageUrl>
+        <notes>False positive: the app ships the actively maintained mwiede JSch fork (com.github.mwiede:jsch), but CPE matching misattributes it as cpe:/a:jcraft:jsch and reports CVEs for the abandoned com.jcraft 0.1.x line; the fork patched them (e.g. Terrapin CVE-2023-48795 fixed in 0.2.15, we pin 2.27.x)</notes>
+        <packageUrl regex="true">^pkg:maven/com\.github\.mwiede/jsch.*$</packageUrl>
     </suppress>
 </suppressions>

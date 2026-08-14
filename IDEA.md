@@ -21,7 +21,7 @@ store_targets: fdroid, provider-releases
 form_factors: phone, widget
 repository: https://github.com/tabssh/android
 
-## Applicability
+### Applicability
 
 database: yes
 network: yes
@@ -30,7 +30,7 @@ background_work: yes
 backup_sync: yes
 media: no
 
-## Toolchain
+### Toolchain
 
 # The template default casjaysdev/android:latest does not exist yet —
 # do not switch to it. This repo's pre-baked CI image (Android SDK +
@@ -159,7 +159,7 @@ version_code_scheme: manual
 - Include analytics, crash reporting SDKs, or tracking pixels without explicit user opt-in
 - Require network access on first launch
 
-## Accepted design decisions
+### Accepted design decisions
 
 - Docker unix-socket forwarding uses the SSH library's native
   `direct-streamlocal@openssh.com` support (no custom protocol code) —

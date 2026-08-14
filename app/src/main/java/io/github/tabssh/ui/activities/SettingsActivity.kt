@@ -899,7 +899,7 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
 
         // Debug Logging category is developer-only. Hide it entirely in release
         // builds so production users never see it.
-        if (!io.github.tabssh.BuildConfig.DEBUG_MODE) {
+        if (!io.github.tabssh.BuildConfig.DEBUG_LOG) {
             findPreference<androidx.preference.PreferenceCategory>("debug_logging_category")?.isVisible = false
         }
 
@@ -991,7 +991,7 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
         // main thread so the UncaughtExceptionHandler fires and the crash
         // dialog appears, letting developers verify crash reporting end-to-end.
         val testCrashPref = findPreference<androidx.preference.Preference>("test_crash")
-        if (io.github.tabssh.BuildConfig.DEBUG_MODE) {
+        if (io.github.tabssh.BuildConfig.DEBUG_LOG) {
             testCrashPref?.setOnPreferenceClickListener {
                 throw RuntimeException(
                     "Test crash — verify crash dialog\n" +
