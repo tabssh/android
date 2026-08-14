@@ -62,6 +62,14 @@ class TerminalRenderer(
         // to textPaint (font size, antialiasing) are picked up.
         glyphPaint.set(textPaint)
 
+        // Baseline that vertically centers the font box in the cell —
+        // cellHeight includes the line-spacing multiplier, so the cell is
+        // taller than the font box. The old `cellHeight * 0.8f` guess
+        // drifted from the true baseline as font size or spacing changed,
+        // misaligning glyphs against the full-cell cursor.
+        val fm = glyphPaint.fontMetrics
+        val baselineInCell = (cellHeight - (fm.bottom - fm.top)) / 2f - fm.top
+
         // Theme palette installed via TerminalBuffer.setColors(), if any.
         val palette = buffer.getColorPalette() ?: defaultColors
 
@@ -112,7 +120,7 @@ class TerminalRenderer(
                     glyphPaint.typeface = if (char.bold) boldFor(textPaint.typeface) else textPaint.typeface
                     glyphPaint.isUnderlineText = char.underline
 
-                    canvas.drawText(char.char.toString(), x, y + cellHeight * 0.8f, glyphPaint)
+                    canvas.drawText(char.char.toString(), x, y + baselineInCell, glyphPaint)
                 }
             }
         }

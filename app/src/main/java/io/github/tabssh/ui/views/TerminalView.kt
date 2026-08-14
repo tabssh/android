@@ -1377,16 +1377,23 @@ class TerminalView @JvmOverloads constructor(
                 val rows = buffer.getRows()
                 val cols = buffer.getCols()
                 val urlUnderlineH = maxOf(2f, cellHeight * 0.06f)
+                // Glyphs are vertically centered in the cell (see
+                // TerminalRenderer.render); anchor underlines to the glyph
+                // box bottom, not the cell bottom, so they hug the text.
+                val fbFm = textPaint.fontMetrics
+                val fbGlyphBottom = (cellHeight - (fbFm.bottom - fbFm.top)) / 2f - fbFm.top + fbFm.bottom
                 for (row in 0 until rows) {
                     val rowBottom = gridTop + (row + 1) * cellHeight - scrollYInt
                     if (rowBottom < 0 || rowBottom - cellHeight > height) continue
+                    val fbUnderlineBottom = rowBottom - cellHeight + fbGlyphBottom
+                    val fbUnderlineTop = fbUnderlineBottom - urlUnderlineH
                     val line = buffer.getLine(row)
                     // Regex URL underlines
                     val rowText = line?.map { it.char }?.joinToString("") ?: continue
                     for (match in urlPattern.findAll(rowText)) {
                         val ux = paddingLeft + match.range.first * cellWidth
                         val uw = (match.range.last - match.range.first + 1) * cellWidth
-                        canvas.drawRect(ux, rowBottom - urlUnderlineH, ux + uw, rowBottom, urlUnderlinePaint)
+                        canvas.drawRect(ux, fbUnderlineTop, ux + uw, fbUnderlineBottom, urlUnderlinePaint)
                     }
                     // OSC 8 cell-attribute underlines — run-length encoded to avoid
                     // drawing one rect per cell.
@@ -1398,7 +1405,7 @@ class TerminalView @JvmOverloads constructor(
                         } else if (!hasLink && linkRunStart >= 0) {
                             val ux = paddingLeft + linkRunStart * cellWidth
                             val uw = (col - linkRunStart) * cellWidth
-                            canvas.drawRect(ux, rowBottom - urlUnderlineH, ux + uw, rowBottom, urlUnderlinePaint)
+                            canvas.drawRect(ux, fbUnderlineTop, ux + uw, fbUnderlineBottom, urlUnderlinePaint)
                             linkRunStart = -1
                         }
                     }
@@ -1475,10 +1482,21 @@ class TerminalView @JvmOverloads constructor(
         }
         val urlUnderlineByRow = urlUnderlineCache
 
+        // Baseline offset that vertically CENTERS the font box in the cell.
+        // cellHeight includes the line-spacing multiplier, so the cell is
+        // taller than the font box; pinning glyphs to the cell bottom
+        // (the old `rowBottom - descent()`) stacked ALL of that leading
+        // above the glyph, so the full-cell cursor floated visibly above
+        // the text (worse the higher the spacing pref). Splitting the
+        // leading evenly keeps glyphs aligned with the cursor, selection,
+        // and search overlays at any line-spacing setting.
+        val fm = textPaint.fontMetrics
+        val baselineInCell = (cellHeight - (fm.bottom - fm.top)) / 2f - fm.top
+
         for (row in 0 until rows + extraRow) {
             val rowTop = startY + row * cellHeight
             val rowBottom = startY + (row + 1) * cellHeight
-            val y = rowBottom - textPaint.descent()
+            val y = rowTop + baselineInCell
 
             // Clear row background
             canvas.drawRect(startX, rowTop, width.toFloat(), rowBottom, backgroundPaint)
@@ -1617,13 +1635,18 @@ class TerminalView @JvmOverloads constructor(
             // OSC 8 spans and regex-detected URLs). Only the live-screen rows
             // are checked for OSC 8; scrollback rows fall back to regex only.
             val urlUnderlineH = maxOf(2f, cellHeight * 0.06f)
+            // Anchor underlines to the glyph box bottom (baseline + descent),
+            // not the cell bottom — glyphs are vertically centered in the
+            // cell, so a cell-bottom underline would detach below the text.
+            val urlUnderlineBottom = y + fm.bottom
+            val urlUnderlineTop = urlUnderlineBottom - urlUnderlineH
             // OSC 8 spans — emitted by the read loop's appendWithOsc8Tracking.
             // `bridge` is already non-null here (it's the outer function parameter).
             if (externalRow in 0 until rows) {
                 for ((startCol, endCol, _) in bridge.getOsc8RangesForRow(externalRow)) {
                     val ux = startX + startCol * cellWidth
                     val uw = (endCol - startCol) * cellWidth
-                    canvas.drawRect(ux, rowBottom - urlUnderlineH, ux + uw, rowBottom, urlUnderlinePaint)
+                    canvas.drawRect(ux, urlUnderlineTop, ux + uw, urlUnderlineBottom, urlUnderlinePaint)
                 }
             }
             // Regex-detected URLs.
@@ -1638,7 +1661,7 @@ class TerminalView @JvmOverloads constructor(
                 for (range in precomputed) {
                     val ux = startX + range.first * cellWidth
                     val uw = (range.last - range.first + 1) * cellWidth
-                    canvas.drawRect(ux, rowBottom - urlUnderlineH, ux + uw, rowBottom, urlUnderlinePaint)
+                    canvas.drawRect(ux, urlUnderlineTop, ux + uw, urlUnderlineBottom, urlUnderlinePaint)
                 }
             } else {
                 val rowText = try {
@@ -1647,7 +1670,7 @@ class TerminalView @JvmOverloads constructor(
                 for (match in urlPattern.findAll(rowText)) {
                     val ux = startX + match.range.first * cellWidth
                     val uw = (match.range.last - match.range.first + 1) * cellWidth
-                    canvas.drawRect(ux, rowBottom - urlUnderlineH, ux + uw, rowBottom, urlUnderlinePaint)
+                    canvas.drawRect(ux, urlUnderlineTop, ux + uw, urlUnderlineBottom, urlUnderlinePaint)
                 }
             }
         }
