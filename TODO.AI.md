@@ -7,6 +7,16 @@ is in progress.
 Source: 2026-08-06 feature-coverage audit of IDEA.md § Business logic against
 the codebase (57 spec features → 53 implemented, 4 partial, 0 missing).
 
+## Open — 2026-08-14 terminal feature-completeness follow-ups
+
+1. Legacy `ANSIParser.handleExtendedColor` (terminal/emulator/ANSIParser.kt
+   ~467) downsamples SGR 38;5/48;5 256-color indices to the nearest of 16
+   colors and truecolor to 16 as well — the legacy (non-Termux) emulator
+   path never shows real 256-color output. The active render path uses the
+   Termux emulator, so impact is limited to wherever the legacy
+   TerminalEmulator is still wired. Decide: fix the legacy path to carry
+   full 256/truecolor, or retire the legacy emulator entirely.
+
 ## Open — 2026-08-13 docker/hypervisor audit follow-ups (needs user call)
 
 1. RESOLVED 2026-08-14 — user chose per-session token: SocketRelay now

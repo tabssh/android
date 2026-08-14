@@ -1830,11 +1830,17 @@ class TerminalView @JvmOverloads constructor(
             colorIndex < 256 -> {
                 // 256-color palette
                 if (colorIndex < 232) {
-                    // Color cube (6x6x6): indices 16-231
+                    // Color cube (6x6x6): indices 16-231. xterm's channel
+                    // levels are 0,95,135,175,215,255 (0 → 0, else v*40+55) —
+                    // NOT evenly spaced v*51, which rendered every cube colour
+                    // darker and off-hue vs. every other terminal emulator.
                     val idx = colorIndex - 16
-                    val r = (idx / 36) * 51
-                    val g = ((idx / 6) % 6) * 51
-                    val b = (idx % 6) * 51
+                    val rl = idx / 36
+                    val gl = (idx / 6) % 6
+                    val bl = idx % 6
+                    val r = if (rl == 0) 0 else rl * 40 + 55
+                    val g = if (gl == 0) 0 else gl * 40 + 55
+                    val b = if (bl == 0) 0 else bl * 40 + 55
                     Color.rgb(r, g, b)
                 } else {
                     // Grayscale: indices 232-255
