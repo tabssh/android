@@ -40,18 +40,18 @@ internal class PlatformSelectionMagnifier(hostView: View) : SelectionMagnifier {
     private val magnifier = android.widget.Magnifier(hostView)
 
     override fun show(x: Float, y: Float) {
-        // Offset above the finger so the loupe isn't hidden by the finger
-        // that's dragging the handle.
-        magnifier.show(x, (y - MAGNIFIER_ABOVE_FINGER_OFFSET_PX).coerceAtLeast(0f))
+        // (x, y) is the SOURCE center — the content the loupe copies. The
+        // platform widget already renders the loupe above the source by its
+        // own default source-to-magnifier offset, so no manual "above the
+        // finger" shift belongs here: subtracting from y moved the COPIED
+        // region up ~2 text rows, magnifying lines above the selection.
+        magnifier.show(x, y)
     }
 
     override fun dismiss() {
         magnifier.dismiss()
     }
 }
-
-/** Default vertical offset (px) placing the magnifier above the dragging finger. */
-private const val MAGNIFIER_ABOVE_FINGER_OFFSET_PX = 100f
 
 /**
  * Custom terminal view implementing VT100/ANSI terminal emulation
