@@ -2,7 +2,7 @@
 
 **Name**: {project_name}
 
-**About this file:** `APPLICATION.md` is the master template for Android apps. When applied to a project, this file is copied (or symlinked) into the project as `AI.md`. Throughout this document, all references to `AI.md` refer to that resulting file in a real project.
+**About this file:** `AI.md` is the complete, authoritative specification for this Android project.
 
 **Note:** `{PROJECT_NAME}` and `{project_name}` in this file are reference tokens, not setup-time text replacements. Their values are resolved from `IDEA.md ## Project variables` while `AI.md` remains read-only.
 
@@ -22,8 +22,8 @@ IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
 
 | File | Role | Update When |
 |------|------|-------------|
-| **AI.md** | SOURCE OF TRUTH - implementation rules (readonly template copy) | No — use SPEC.md for project-specific rule overrides |
-| **SPEC.md** | Project-specific rule overrides — created only when a rule must contradict the template or global. May be empty. SPEC.md wins over AI.md. | When a project rule must differ from the template or global |
+| **AI.md** | SOURCE OF TRUTH - implementation rules (readonly) | No — use SPEC.md for project-specific rule overrides |
+| **SPEC.md** | Project-specific rule overrides — created only when a rule must contradict this specification or global. May be empty. SPEC.md wins over AI.md. | When a project rule must differ from this specification or global |
 | **IDEA.md** | PROJECT PLAN - must follow AI.md | Features change, project variables change |
 
 **Rule hierarchy:** SPEC.md > AI.md > global CLAUDE.md. If SPEC.md and AI.md conflict, SPEC.md wins — that is its purpose.
@@ -31,7 +31,7 @@ IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
 
 ## IDEA.md Required Layout
 
-**Every IDEA.md MUST have exactly these three top-level sections, in this order. For the fillable Android template, see PART FINAL → "IDEA.md REFERENCE".**
+**Every IDEA.md MUST have exactly these three top-level sections, in this order. For the fillable IDEA.md template, see PART 14 → "IDEA.md REFERENCE".**
 
 ```markdown
 ## Project description
@@ -42,7 +42,7 @@ IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
 
 (All project variables in `key: value` form. Required keys at minimum: `project_name`,
 `project_org`, `internal_name`, `internal_org`. Android apps add `app_id`, `min_sdk`,
-`ui_toolkit`, `store_targets`, and the `## Applicability` matrix — see PART FINAL.)
+`ui_toolkit`, `store_targets`, and the `### Applicability` matrix — see PART 14.)
 
 Example:
 
@@ -78,7 +78,7 @@ and any exceptions.)
 
 ## Migrating Existing `CLAUDE.md` Into `IDEA.md`
 
-**If a repository already has a pre-template `CLAUDE.md` or `.claude/CLAUDE.md` with real project details, those project details MUST be migrated into `IDEA.md`.**
+**If a repository already has a pre-existing `CLAUDE.md` or `.claude/CLAUDE.md` with real project details, those project details MUST be migrated into `IDEA.md`.**
 
 **What belongs in `IDEA.md`:**
 - project description / elevator pitch
@@ -113,9 +113,9 @@ and any exceptions.)
 # Project is not configured until IDEA.md exists and has required variables
 [ ! -f IDEA.md ] && echo "SETUP NEEDED - IDEA.md missing"
 
-have_name=$(grep -cE '^project_name:[[:space:]]*.+$' IDEA.md 2>/dev/null || true)
-have_org=$(grep -cE '^project_org:[[:space:]]*.+$' IDEA.md 2>/dev/null || true)
-have_internal=$(grep -cE '^internal_name:[[:space:]]*.+$' IDEA.md 2>/dev/null || true)
+have_name=$(grep -cE '^project_name:[[:space:]]*.+$' IDEA.md 2>/dev/null || echo 0)
+have_org=$(grep -cE '^project_org:[[:space:]]*.+$' IDEA.md 2>/dev/null || echo 0)
+have_internal=$(grep -cE '^internal_name:[[:space:]]*.+$' IDEA.md 2>/dev/null || echo 0)
 
 [ "$have_name" -eq 0 ] || [ "$have_org" -eq 0 ] || [ "$have_internal" -eq 0 ] && \
   echo "SETUP NEEDED - IDEA.md project variables incomplete"
@@ -130,13 +130,15 @@ have_internal=$(grep -cE '^internal_name:[[:space:]]*.+$' IDEA.md 2>/dev/null ||
 | `{internal_name}` | IDEA.md `## Project variables` (set once at first run, never edited after) | First-time setup: copy from `{project_name}` |
 | `{internal_org}` | IDEA.md `## Project variables` (set once at first run, never edited after) | First-time setup: copy from `{project_org}` |
 | `{app_id}` | **Derived (not stored)**: `io.github.{internal_org}.{internal_name}` | Existing app: read `applicationId` from `app/build.gradle` and freeze it in IDEA.md |
+| `{app_id_path}` | **Derived (not stored)**: `{app_id}` with dots replaced by slashes, e.g. `com/example/app` | Recompute whenever `{app_id}` changes; never store separately |
 
 **Detection commands (use commands — never guess):**
 ```bash
 project_name=$(basename "$PWD")
 project_org=$(basename "$(dirname "$PWD")")
 internal_name="$project_name"
-app_id="io.github.${project_org}.${internal_name}"
+internal_org="$project_org"
+app_id="io.github.${internal_org}.${internal_name}"
 ```
 
 **Why a separate `{internal_name}`:** if a project renames itself later, the new name applies to user-visible places (app label, docs, repo). But `{internal_name}` — and therefore `{app_id}` — stays fixed forever. **An Android `applicationId` can NEVER change after first release**: changing it publishes a different app, orphans every install, and breaks updates. `{app_id}` is the single most immutable value in an Android project.
@@ -171,21 +173,21 @@ Load PARTs on demand with `grep -n "^# PART N" AI.md` — never read this file e
 
 | PART | Title | ~Line |
 |------|-------|-------|
-| 0 | CRITICAL RULES - READ FIRST | 192 |
-| 1 | PROJECT FILES & GOVERNANCE | 311 |
-| 2 | ANDROID APPLICATION MODEL | 415 |
-| 3 | PROJECT STRUCTURE | 473 |
-| 4 | TOOLCHAIN, BUILD & DOCKER | 535 |
-| 5 | STORAGE & DATABASE | 628 |
-| 6 | SECURITY & CRYPTO | 662 |
-| 7 | UI, THEMING, ACCESSIBILITY, I18N | 691 |
-| 8 | NOTIFICATIONS, SERVICES, BACKGROUND WORK | 728 |
-| 9 | NETWORK & CONNECTIVITY | 761 |
-| 10 | BACKUP, RESTORE & SYNC | 792 |
-| 11 | TESTING & EMULATORS | 813 |
-| 12 | CI/CD WORKFLOWS | 840 |
-| 13 | RELEASE, SIGNING & F-DROID | 867 |
-| FINAL | IDEA.md REFERENCE | 905 |
+| 0 | CRITICAL RULES - READ FIRST | 194 |
+| 1 | PROJECT FILES & GOVERNANCE | 317 |
+| 2 | ANDROID APPLICATION MODEL | 423 |
+| 3 | PROJECT STRUCTURE | 481 |
+| 4 | TOOLCHAIN, BUILD & DOCKER | 543 |
+| 5 | STORAGE & DATABASE | 640 |
+| 6 | SECURITY & CRYPTO | 674 |
+| 7 | UI, THEMING, ACCESSIBILITY, I18N | 703 |
+| 8 | NOTIFICATIONS, SERVICES, BACKGROUND WORK | 758 |
+| 9 | NETWORK & CONNECTIVITY | 791 |
+| 10 | BACKUP, RESTORE & SYNC | 822 |
+| 11 | TESTING & EMULATORS | 843 |
+| 12 | CI/CD WORKFLOWS | 871 |
+| 13 | RELEASE, SIGNING & F-DROID | 912 |
+| 14 | IDEA.md REFERENCE | 977 |
 
 ---
 
@@ -258,7 +260,7 @@ Update these when their subject changes:
 - **ALWAYS keep `minSdk` working** — new dependencies must respect the project's `minSdk` or be guarded by `Build.VERSION.SDK_INT` checks
 - **ALWAYS keep the F-Droid flavor reproducible** (PART 13) — no non-deterministic codegen, no proprietary services, no network-fetching Gradle plugins
 - **ALWAYS use `Flow`/`StateFlow` for new reactive code** — never introduce LiveData, RxJava, or callback chains
-- **ALWAYS run `make check` before every commit** — compile + lint gate; never commit with errors or violations
+- **ALWAYS run `make check` before every commit** — compile + lint + JVM unit tests; never commit with errors, violations, or failing unit tests
 - **ALWAYS follow the commit workflow** in PART 1 — `gitcommit --dir {dir} all` is the only commit path
 - **ALWAYS update `CHANGELOG.md` in the same commit** as any user-visible behavior change
 
@@ -318,8 +320,8 @@ This file cannot be fully read in one pass and must not be. Navigate with the PA
 
 | File | Purpose | Update When |
 |------|---------|-------------|
-| **AI.md** | Implementation spec (HOW) - SOURCE OF TRUTH, readonly template copy | No — use SPEC.md for project-specific rule overrides |
-| **SPEC.md** | Project-specific rule overrides (optional, may be empty) | When a project rule must contradict the template or global |
+| **AI.md** | Implementation spec (HOW) - SOURCE OF TRUTH, readonly | No — use SPEC.md for project-specific rule overrides |
+| **SPEC.md** | Project-specific rule overrides (optional, may be empty) | When a project rule must contradict this specification or global |
 | **IDEA.md** | Project plan (WHAT) | Features or variables change |
 | **TODO.AI.md** | Task tracking (AI-owned) | Tasks added/completed |
 | **TODO.md** | Task tracking (human-owned) | AI may mark done; never delete/empty |
@@ -342,7 +344,7 @@ This file cannot be fully read in one pass and must not be. Navigate with the PA
 
 **AI MUST verify its own work with real tools before reporting a task as done. Do not rely on "the code looks right."**
 
-**This rule applies to EVERY change type covered by this template — Kotlin logic, UI, storage, services, build, Docker, CI/CD, configuration, documentation, security — not only one category.** Whatever you touched, you verify.
+**This rule applies to EVERY change type covered by this specification — Kotlin logic, UI, storage, services, build, Docker, CI/CD, configuration, documentation, security — not only one category.** Whatever you touched, you verify.
 
 Getting code correct on the first try is much harder than iterating with feedback. Close the loop every time. All execution goes through the project's containerised targets — never a host SDK/Gradle/JDK.
 
@@ -379,14 +381,14 @@ Getting code correct on the first try is much harder than iterating with feedbac
 
 | Goal | Command |
 |------|---------|
-| Compile-only + lint gate | `make check` |
+| Compile + lint + JVM unit-test gate | `make check` |
 | Debug APKs → `./binaries/` | `make build` |
 | Release APKs → `./releases/` (local verification only) | `make release` |
 | Unit tests | `make test` |
 | Install universal APK to device | `make install` |
 | Clean | `make clean` |
 
-`make release` builds release APKs locally for verification only — production releases are still published from `release.yml` on tag push, never from a local `make release` run.
+`make release` builds release APKs locally for verification only — production releases are still published by the channel workflows (PART 12/13), never from a local `make release` run.
 
 ## Code editing rules
 
@@ -404,7 +406,7 @@ Getting code correct on the first try is much harder than iterating with feedbac
 ## Commit workflow (required on every commit)
 
 1. `git status --porcelain` + `git diff --stat` — see exactly what changed.
-2. **Run `make check`** — compile + lint; the mandatory pre-commit gate. Run `make test` when tests are touched or behavior changed.
+2. **Run `make check`** — compile + lint + device-free JVM unit tests; the mandatory pre-commit gate (instrumented tests need a device/emulator the build host generally lacks — that is why the gate is `check`, not `test`). Run `make test` when an emulator/device is reachable and the change touches security-critical code (crypto, storage, transport, exported components) — and always before tagging a release.
 3. **Changelog gate** — user-visible change ⇒ `CHANGELOG.md` (and the in-app what's-new asset if present) staged in the same commit.
 4. Write `.git/COMMIT_MESS` from the diff — every changed file described; never from memory.
 5. Re-read `COMMIT_MESS` against the diff; rewrite if anything is missing.
@@ -420,7 +422,7 @@ Maintain a terminology table in IDEA.md for the app's domain nouns (what a "sess
 
 # PART 2: ANDROID APPLICATION MODEL
 
-This template targets a **single Kotlin Android application**: one `app/` module by default, form factors per IDEA.md (PART 7), zero-config first run, and no hosted services — the app may consume remote services but never hosts any.
+This specification targets a **single Kotlin Android application**: one `app/` module by default, form factors per IDEA.md (PART 7), zero-config first run, and no hosted services — the app may consume remote services but never hosts any.
 
 ## Application class
 
@@ -511,7 +513,7 @@ Every non-trivial user flow (onboarding, primary task, import/export) is documen
 
 ## Package layout (under `{app_id}`)
 
-Organize by responsibility, plural-free Android convention (packages are singular by Java convention):
+Organize by responsibility, using plural package names (this project's convention):
 
 | Package | Responsibility |
 |---|---|
@@ -548,16 +550,17 @@ Resolve **current stable versions at bootstrap** (fetch, never guess) and record
 |---|---|
 | Kotlin | 2.x current stable |
 | Android Gradle Plugin | 8.x current stable |
-| Gradle | wrapper pinned, current stable for the AGP version |
-| JDK | 17 (temurin) |
-| compileSdk / targetSdk | current stable platform |
+| Gradle | wrapper pinned to the toolchain image's `GRADLE_VERSION` (compatible with the AGP version) |
+| JDK | 17 (temurin — `JAVA_HOME=/opt/jdk-17` in the toolchain image) |
+| compileSdk / targetSdk | current stable platform (a platform the toolchain image ships) |
 | minSdk | `{min_sdk}` (default 24) |
+| CMake / NDK (native projects only) | the versions baked into the toolchain image (`$ANDROID_CMAKE_VERSION` / `$ANDROID_NDK_VERSION`) — pin the same in `app/build.gradle` |
 
 Version bumps are their own commits, verified with `make check` before anything else changes.
 
 ## Toolchain image — `casjaysdev/android:latest`
 
-All Android CI jobs and containerized builds use this maintained image by default: Android SDK + build-tools, Gradle, JDK 17, lint tooling pre-installed. Selection precedence (first match):
+All Android CI jobs and containerized builds use this maintained image by default. Built from `dockersrc/android` on the CasjaysDev debian base, it ships: Temurin JDK 17 (`JAVA_HOME=/opt/jdk-17`), the Android SDK at `/opt/android-sdk` (`ANDROID_HOME`/`ANDROID_SDK_ROOT`) with cmdline-tools, platform-tools, and pinned platforms, build-tools, `cmake`, and NDK baked in, a pre-warmed Gradle wrapper distribution (unpacked under `/root/.gradle`), the GitHub CLI (`gh`) for release-managing jobs, and `git`/`curl`/`wget`/`unzip`/`gnupg` — `gradle`, build-tools, `cmake`, and the NDK LLVM toolchain are all on `PATH`, and CI jobs run inside the container and must never inline-install tools (PART 12). Tool versions are pinned in the image and exported as env vars — discover them at runtime (`$GRADLE_VERSION`, `$ANDROID_BUILD_TOOLS_VERSION`, `$ANDROID_CMAKE_VERSION`, `$ANDROID_NDK_VERSION`; installed platforms via `sdkmanager --list_installed`) instead of hardcoding, and align the project's Gradle wrapper, `compileSdk`, and NDK/CMake pins to what the image ships. Selection precedence (first match):
 
 1. Image declared by the project in IDEA.md/SPEC.md/AI.md
 2. Project `docker/Dockerfile.build` if it exists (escape hatch below)
@@ -573,6 +576,7 @@ This picks the toolchain image only; any runtime/service image the project ships
 |---|---|
 | `debug` | Local dev; debuggable; `.debug` applicationId suffix optional |
 | `release` | Shipped build; R8 minify + shrinkResources; signed |
+| `devel` | Development-channel build (PART 13): `release` configuration plus devel/debug features and the Debug Log enabled via `BuildConfig` flags (`DEVEL`, `DEBUG_LOG`); not debuggable; signed; Logger sanitation (PART 6) applies here too — the Debug Log is never exempt |
 | `fdroidRelease` | Reproducible flavor for F-Droid (PART 13) — only if the app targets F-Droid |
 
 ## APK splits and naming
@@ -600,10 +604,10 @@ ABI splits ON for release. Rename outputs with simplified arch tags:
 | Target | Effect | Output |
 |---|---|---|
 | `help` | list targets | stdout |
-| `check` | compile-only + lint inside Docker (fast gate) | stdout |
+| `check` | compile + lint + JVM unit tests inside Docker (fast, device-free gate) | stdout |
 | `build` | debug APKs inside Docker | `./binaries/` |
 | `release` | release APKs inside Docker (local verification only — real releases are CI) | `./releases/` |
-| `test` | unit tests inside Docker; UI tests if an emulator/device is reachable | report |
+| `test` | everything in `check` plus instrumented/UI tests when an emulator/device is reachable | report |
 | `install` | `adb install -r` universal APK (device path — skip when adb absent) | device |
 | `clean` | remove `.gradle/`, `app/build`, `binaries/` | — |
 
@@ -624,8 +628,10 @@ build:
 
 Rules:
 - Source tree → `/workspace`; Gradle cache → `GRADLE_USER_HOME=/workspace/.gradle` (project-scoped, safe for concurrent projects).
+- That override bypasses the image's pre-warmed wrapper dist at `/root/.gradle` — seed it once so `./gradlew` never re-downloads Gradle: `[ -d /workspace/.gradle/wrapper ] || cp -a /root/.gradle/wrapper /workspace/.gradle/` as the first step of the containerized command.
 - **Never volume-mount `/opt/android-sdk`** — it overlays the baked SDK. `ANDROID_HOME` is preset in the image.
 - `--rm --name {project_name}-XXXXXX` on every run; resource limits always set; never `-it` for batch commands.
+- Native (JNI/NDK) projects: `cmake`/`ndk` versions are pinned in `app/build.gradle` AND pre-baked into the toolchain image at those same versions — Gradle must never lazily download SDK components mid-build (nondeterministic, and corrupt mid-build `sdkmanager` downloads are a known CI flake).
 - In Makefiles use `$(PWD)`; in direct shell commands use `$PWD` (never `$(pwd)`).
 - Test-service containers (a test sshd, a mock API) run on an isolated named network `{project_name}-test-net`, torn down after tests.
 
@@ -704,16 +710,34 @@ Offer per-credential persistence levels where secrets are cached:
 
 ## Accessibility (required, not optional)
 
-- Full TalkBack support: content descriptions everywhere, state announcements for async operations, ANSI/markup stripped before screen-reader text.
+- Full TalkBack support: content descriptions everywhere, state announcements for async operations, markup stripped before screen-reader text.
 - Keyboard navigation: Tab/arrow/Enter/Escape traversal, visible focus indicators, hardware-keyboard shortcuts for primary actions.
 - High-contrast mode toggle applied as a palette overlay.
-- Touch targets ≥ 44×44dp; a large-touch-target preference where the UI is dense.
+- Touch targets ≥ 48×48dp; a large-touch-target preference where the UI is dense.
 
 ## I18N
 
 - All user-visible strings in `res/values/strings.xml` — zero hardcoded UI strings in code or layouts.
 - Locale folders (`values-es/`, `values-fr/`, …) added as translations arrive; the language picker lists only locales with real translation files.
 - Dates/numbers via `java.text`/ICU formatting, never string concatenation.
+
+## Human-Readable Values (User-Facing Output)
+
+**Every value shown on a user-facing surface — Compose/View text, notifications, toasts — MUST be human-readable. Raw machine values belong to JSON/API payloads and logs only.**
+
+| Kind | Rule | Examples |
+|------|------|----------|
+| **Durations** | Largest fitting unit, at most two units, correct singular/plural: <60 s → seconds · ≥60 s → minutes · ≥60 min → hours · ≥24 h → days | `1 second` · `45 seconds` · `3 minutes` · `2 minutes 5 seconds` · `2 hours` · `1 hour 30 minutes` · `3 days 4 hours` |
+| **Sizes** | 1024 boundaries, full unit names, singular/plural, at most one decimal (drop `.0`): bytes → kilobytes → megabytes → gigabytes → terabytes | `1 byte` · `512 bytes` · `1 kilobyte` · `2.5 megabytes` · `5 gigabytes` · `1.2 terabytes` |
+| **Counts** | Locale-aware thousands separators | `12,847` |
+| **Timestamps** | Locale-aware via `java.text`/ICU formatting per the I18N rules above — never raw epoch values in visible text | `January 05, 2026 at 14:03:07 UTC` |
+
+| Rule | Detail |
+|------|--------|
+| **Shared helpers** | One implementation: `Format.duration()` / `Format.size()` / `Format.count()` in a shared util — never per-screen ad-hoc formatting |
+| **i18n** | Unit names go through plural string resources (`R.plurals.*`) with per-language plural rules — never hardcoded English unit strings |
+| **Raw value preserved** | UI MAY carry the machine value in a tooltip/`contentDescription` where useful; the visible text is always the human form |
+| **Machine surfaces unchanged** | JSON/API fields and log files keep raw base units (seconds, bytes) — formatting is a presentation concern only |
 
 ## Layout rules
 
@@ -790,7 +814,7 @@ Include only if the IDEA.md `## Applicability` matrix declares `network: yes`.
 ## Connectivity & threading
 
 - Connectivity state via `ConnectivityManager.NetworkCallback` exposed as `StateFlow` — never polling.
-- All network calls are `suspend` on `Dispatchers.IO`; never on Main (PART 2 threading discipline).
+- All network calls are `suspend` on `Dispatchers.IO`; never on Main (PART 0 threading discipline).
 - Every network error surfaces through the PART 2 error surfaces with a retry path; no raw exceptions to the user.
 
 ---
@@ -822,18 +846,19 @@ Include only if the IDEA.md `## Applicability` matrix declares `backup_sync: yes
 
 | Layer | Location | Runs |
 |---|---|---|
-| Unit (JVM) | `app/src/test/` | every `make test`, every CI run |
+| Unit (JVM) | `app/src/test/` | every `make check` — and therefore every commit and every CI run |
 | Instrumented/UI | `app/src/androidTest/` | on emulator/device when reachable; release CI |
 | Migration tests | `app/src/androidTest/` + committed schemas | every Room version bump |
 
 - New behavior ships with a test that fails before and passes after.
 - Room migrations are tested with `MigrationTestHelper` against the committed schema JSON.
+- Instrumented tests are **required** — not best-effort — before tagging a release and for changes touching crypto, storage, transport, or exported components whenever an emulator/device is reachable (PART 1 commit workflow).
 
 ## Emulator management
 
 A `scripts/android-emulator.sh` helper manages headless test emulators:
 - One AVD per (type, size); one running emulator at a time.
-- Subcommands `start` / `stop` / `delete` / `clean` / `list`; types `phone` / `tablet` / `fold` / `tv`, optional `small` / `large`.
+- Subcommands `start` / `stop` / `delete` / `clean` / `list`; types `phone` / `tablet` / `fold` / `tv` / `wear` / `auto`, optional `small` / `large`.
 - Pin `-port` and address the instance as `adb -s emulator-{port}` so boot-waits can't attach to a stale instance.
 - Auto-install missing SDK pieces via `sdkmanager` **inside the container/emulator host**, never the dev host.
 
@@ -852,10 +877,11 @@ Provider-specific file locations and syntax: the matching `*_conventions.md` glo
 | Workflow | Trigger | Job |
 |---|---|---|
 | `ci.yml` | push + PR to main | `make check`-equivalent: compile, lint, unit tests, structure/security validation |
-| `dev-builds.yml` | push to dev branches | `assembleDebug`, rename to `{project_name}-*-dev.apk`, SHA-256 sums, publish rolling prerelease |
-| `release.yml` | tag `v*` | tests + DependencyCheck + coverage → `assembleRelease` (+ `assembleFdroidRelease` smoke build if F-Droid flavor exists; + `bundleRelease` AAB only if `store_targets` includes `play`) → versioned APKs + `mapping.txt` + checksums → provider release |
+| `development.yml` | daily schedule + push to main | canonical release flow (PART 13) on the `devel` variant → rolling `development` prerelease |
+| `beta.yml` | tag `*beta` | canonical release flow (PART 13) on the `release` variant → prerelease |
+| `release.yml` | tag `v*` | tests + DependencyCheck + coverage → canonical release flow (PART 13) on the `release` variant (+ `assembleFdroidRelease` smoke build if F-Droid flavor exists; + `bundleRelease` AAB only if `store_targets` includes `play`) → provider release |
 
-Creation order: security-only workflows first, `ci.yml`/`release.yml` last; every staged workflow passes `act --list -W {file}` before commit.
+Creation order: security-only workflows first, `ci.yml` and the channel workflows (`release.yml`, `beta.yml`, `development.yml`) last; every staged workflow passes `act --list -W {file}` before commit.
 
 ## Rules
 
@@ -863,9 +889,10 @@ Creation order: security-only workflows first, `ci.yml`/`release.yml` last; ever
 - Third-party actions pinned to full commit SHAs, never tags.
 - Signing keystore decoded from a `KEYSTORE_BASE64` secret at job time — never committed.
 - Gradle cache keyed on `hashFiles('**/*.gradle*', '**/gradle-wrapper.properties')`.
-- truffleHog secret scan on every push/PR.
+- TruffleHog secret scan on every push/PR.
 - OWASP DependencyCheck in `release.yml`; CVSS ≥ 7.0 fails; suppressions live in `config/dependency-check-suppressions.xml` with a reason comment per entry.
 - Custom security greps (e.g. hardcoded-password patterns) maintain their exclusion list in the workflow with a documented reason per exclusion — never delete an exclusion without checking why it exists.
+- Release-managing jobs that run inside the toolchain container (the `development.yml` rolling delete + recreate, asset uploads) use the provider CLI (`gh`/`glab`/`tea`) shipped in the image — never inline-installed in a step.
 - Renovate for dependency updates — never Dependabot.
 
 ## Post-Push CI Verification
@@ -892,9 +919,27 @@ Driven by `store_targets:` in IDEA.md. **Default: `fdroid, provider-releases`** 
 - **fdroid (default):** F-Droid section below.
 - **play (opt-in only):** adds `bundleRelease` AAB to `release.yml`, requires meeting Play's current target-SDK policy, and a data-safety form kept accurate in the repo (`metadata/play/`); Play inclusion never justifies adding Play Services to the app (PART 0).
 
+## Release channels — one canonical flow
+
+Every channel runs the same skeleton — only the context differs (trigger, tag, version identity, build variant, prerelease flag):
+
+build (`BUILD_EPOCH` captured once) → stage APK splits (PART 4 naming) + `mapping.txt` → `version.txt` (version, commit id, build epoch) → source archive (`git archive` → `{project_name}-{version}-source.tar.gz`) → SBOM (CycloneDX Gradle plugin → `{project_name}-sbom.cdx.json`) → aggregate `sha256.txt` + `sha512.txt` over every staged asset, computed LAST — never per-artifact `.sha256` sidecars → provenance attestation of every asset (GitHub only) → publish provider release.
+
+| Channel | Workflow | Trigger | Tag | Version identity | Variant | Prerelease |
+|---|---|---|---|---|---|---|
+| stable | `release.yml` | tag push | `vX.Y.Z` | tag without `v` | `release` | no |
+| beta | `beta.yml` | tag push | `*beta` | tag as-is | `release` | yes |
+| development | `development.yml` | daily schedule + push to main | rolling `development` — release and tag deleted + recreated on every run | short commit id | `devel` | yes |
+
+- **No docker-image publishing in any channel** — this is an Android app; there is no runtime image to release. Builds still execute inside `casjaysdev/android:latest` (PART 4): that is the toolchain, not a release artifact.
+- The `devel` variant (PART 4) enables devel/debug features and the Debug Log; Logger sanitation (PART 6) applies in every variant.
+- Asset names are identical across channels — channel identity lives in the tag, the release object, and `version.txt`, never in mutated filenames.
+
 ## Versioning
 
 - Semver tags `vX.Y.Z`; `versionCode` monotonically increases (derive from semver: `X*10000 + Y*100 + Z` or maintain manually — pick once, record in IDEA.md).
+- Beta and development builds keep the in-tree `versionCode`/`versionName` — channel identity lives in the tag and `version.txt`, never in a mutated `versionCode`.
+- **`BUILD_EPOCH` is embedded in every build, local and CI** — captured once per build (`date -u +%s`) and exposed as a `BuildConfig` field; the `fdroidRelease` flavor pins it to the last-commit epoch (`git log -1 --format=%ct`) to stay reproducible.
 - Release notes generated from `CHANGELOG.md [Unreleased]`, which moves to a versioned section at tag time.
 
 ## Signing
@@ -908,6 +953,15 @@ Driven by `store_targets:` in IDEA.md. **Default: `fdroid, provider-releases`** 
 - Release builds: minify + shrinkResources ON; keep rules per reflective dependency (Room, serialization, crypto providers) in `proguard-rules.pro`, each rule commented with why.
 - `mapping.txt` uploaded as a release asset for crash de-obfuscation.
 
+## Play Protect & sideload warnings
+
+Sideloaded provider-release APKs can trigger a Play Protect "unsafe app blocked / app not verified" warning even when the app is completely clean: the heuristic flags R8-obfuscated APKs signed by a certificate Google has never seen with a low install base. This is inherent to sideloading a new app, not a defect to fix in code.
+
+- The remedy is certificate-identity consistency + time: sign every release with the same escrowed production keystore forever; the warning fades as the certificate accrues installs.
+- **Never disable R8/minification to appease the heuristic** — that trades a cosmetic warning for a real regression; the R8 rules above stay mandatory.
+- `mapping.txt` stays a release asset so obfuscated crash reports remain diagnosable.
+- F-Droid installs don't hit this path — F-Droid signs with its own key and users install through the F-Droid client.
+
 ## F-Droid (default target; skip only if removed from `store_targets`)
 
 - Dedicated `fdroidRelease` flavor: reproducible — deterministic R8 (`proguard-fdroid.pro` exports seeds/usage/mapping), no proprietary deps, no network at build time beyond declared Gradle deps.
@@ -920,11 +974,15 @@ If the app shows a "What's New" screen, its asset (`app/src/main/assets/whats_ne
 
 ---
 
-# PART FINAL: IDEA.md REFERENCE
+# PART 14: IDEA.md REFERENCE
 
-`IDEA.md` holds everything project-specific this template deliberately leaves open:
+`IDEA.md` holds everything project-specific this specification deliberately leaves open:
 
 ```markdown
+## Project description
+{Brief description of what the app does, its primary users, and what problem it
+solves. Free-form prose, 1–3 paragraphs.}
+
 ## Project variables
 project_name: ...
 project_org: ...
@@ -938,7 +996,7 @@ di: manual                # manual (default), koin, or hilt (declared need only)
 store_targets: fdroid, provider-releases   # play is opt-in
 form_factors: phone       # add wear/tv/auto/widget as needed
 
-## Applicability
+### Applicability
 database: yes|no
 network: yes|no
 notifications: yes|no
@@ -946,7 +1004,7 @@ background_work: yes|no
 backup_sync: yes|no
 media: yes|no
 
-## Toolchain
+### Toolchain
 # Only if overriding casjaysdev/android:latest — document why
 build_image: casjaysdev/android:latest
 kotlin: ...
@@ -956,15 +1014,17 @@ compile_sdk: ...
 target_sdk: ...
 version_code_scheme: ...  # semver-derived or manual
 
-## Features
+## Business logic
+
+### Features
 # App domain: feature list, package map additions, canonical user flows,
 # permission justifications (PART 2), sync coverage matrix (if PART 10 applies),
 # notification channel table + FG service type justifications (PART 8),
 # HTTP client choice (PART 9), theme list, supported locales
 
-## Release
+### Release
 # Keystore escrow location (never the keystore itself), release cadence,
 # crash-reporting endpoint if the ACRA-style opt-in is used (PART 2)
 ```
 
-**Bootstrap order for a new app:** IDEA.md variables → PART 3 skeleton → PART 4 toolchain + `make check` green in Docker → PART 12 security workflows → first feature → `ci.yml`/`release.yml` last.
+**Bootstrap order for a new app:** IDEA.md variables → PART 3 skeleton → PART 4 toolchain + `make check` green in Docker → PART 12 security workflows → first feature → `ci.yml` and the channel workflows last.
