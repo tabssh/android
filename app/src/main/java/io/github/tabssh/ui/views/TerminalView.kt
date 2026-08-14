@@ -3171,12 +3171,16 @@ class TerminalView @JvmOverloads constructor(
     // ── Scrollbar helpers ────────────────────────────────────────────────────
 
     /**
-     * True when the thumb can accept a touch-down: local scrollback exists
-     * and no text selection owns the touch stream. The bar itself is always
-     * drawn; only its draggability depends on having somewhere to scroll.
+     * True when the thumb can accept a touch-down: no text selection owns
+     * the touch stream. The bar always owns vertical drags in its strip —
+     * even with nothing to scroll back through (alt-screen app, empty
+     * transcript) it claims and consumes the drag doing nothing, exactly
+     * like xfce4-terminal's scrollbar. Without that claim the drag falls
+     * through to the swipe path, which converts it into wheel/arrow
+     * forwarding — a desktop scrollbar never synthesizes keys.
      */
     private fun isThumbInteractive(): Boolean {
-        return !selectionActive && maxScrollYPx() > 0
+        return !selectionActive
     }
 
     /** Draw the persistent scrollbar — called last in onDraw so it sits on top. */
@@ -3223,10 +3227,13 @@ class TerminalView @JvmOverloads constructor(
      * sees the full stream; the claim happens on the first ACTION_MOVE whose
      * movement is predominantly vertical, at which point the gestureDetector
      * gets a synthetic ACTION_CANCEL and the thumb scrubs scrollYf until the
-     * pointer lifts. Horizontal movement, an inert (full-track) thumb, or a
-     * touch off the thumb all leave the event stream completely untouched —
-     * taps, tab edge-swipes, and selection near the right edge behave exactly
-     * as before.
+     * pointer lifts. With no scrollback (alt-screen app, empty transcript)
+     * the full-track thumb still claims vertical drags and consumes them
+     * doing nothing — a desktop scrollbar is inert there, and letting the
+     * drag fall through would turn it into wheel/arrow forwarding via the
+     * swipe path. Horizontal movement or a touch off the thumb leave the
+     * event stream completely untouched — taps, tab edge-swipes, and
+     * selection near the right edge behave exactly as before.
      */
     private fun handleThumbTouch(event: MotionEvent): Boolean {
         when (event.actionMasked) {
@@ -3236,8 +3243,17 @@ class TerminalView @JvmOverloads constructor(
                 if (isThumbInteractive()) {
                     val trackH = height.toFloat()
                     val maxScroll = maxScrollYPx().toFloat()
-                    val len = ScrollbarThumbGeometry.thumbLengthPx(trackH, maxScroll, thumbMinLenPx)
-                    val top = ScrollbarThumbGeometry.thumbTopPx(trackH, maxScroll, scrollYf, len)
+                    // Full-track thumb when there is no scrollback — the whole
+                    // strip is the grab target, mirroring drawScrollThumb.
+                    val len: Float
+                    val top: Float
+                    if (maxScroll <= 0f) {
+                        len = trackH
+                        top = 0f
+                    } else {
+                        len = ScrollbarThumbGeometry.thumbLengthPx(trackH, maxScroll, thumbMinLenPx)
+                        top = ScrollbarThumbGeometry.thumbTopPx(trackH, maxScroll, scrollYf, len)
+                    }
                     if (ScrollbarThumbGeometry.isInThumbTouchTarget(
                             event.x, event.y, width.toFloat(), thumbTouchStripPx,
                             top, len, thumbTouchPadPx
@@ -3264,9 +3280,16 @@ class TerminalView @JvmOverloads constructor(
                     thumbLastDragY = event.y
                     val trackH = height.toFloat()
                     val maxScroll = maxScrollYPx().toFloat()
-                    val len = ScrollbarThumbGeometry.thumbLengthPx(trackH, maxScroll, thumbMinLenPx)
-                    val delta = ScrollbarThumbGeometry.dragScrollDelta(dy, trackH, maxScroll, len)
-                    scrollYf = (scrollYf + delta).coerceIn(0f, maxScroll)
+                    if (maxScroll > 0f) {
+                        val len = ScrollbarThumbGeometry.thumbLengthPx(trackH, maxScroll, thumbMinLenPx)
+                        val delta = ScrollbarThumbGeometry.dragScrollDelta(dy, trackH, maxScroll, len)
+                        scrollYf = (scrollYf + delta).coerceIn(0f, maxScroll)
+                    }
+                    // maxScroll == 0 (alt-screen app, empty transcript): the
+                    // drag is still consumed — doing nothing — so it can never
+                    // fall through to the swipe path and get converted into
+                    // wheel/arrow forwarding. xfce4-terminal's scrollbar is
+                    // inert on the alternate screen; it never synthesizes keys.
                     invalidate()
                     return true
                 }
