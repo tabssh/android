@@ -7,6 +7,23 @@ is in progress.
 Source: 2026-08-06 feature-coverage audit of IDEA.md § Business logic against
 the codebase (57 spec features → 53 implemented, 4 partial, 0 missing).
 
+## Open — 2026-08-14 Play Protect false positive (user action required)
+
+1. Google Play Protect flags dev-build APKs as "Harmful app blocked —
+   tries to bypass Android's security protections". False positive:
+   heuristic reaction to a debuggable sideloaded APK that execs a
+   bundled native binary (mosh-client), holds
+   com.termux.permission.RUN_COMMAND, boot receiver + battery-opt
+   exemption, on a signing cert with no Play reputation. Mitigated in
+   repo: dev-builds.yml now ships assembleRelease (non-debuggable,
+   minified). Remaining step only the developer can do: submit a Play
+   Protect appeal for the app's signing cert + package
+   (io.github.tabssh) per Google's developer guidance for Play Protect
+   warnings (appeal via the Play Console Help page):
+   https://developers.google.com/android/play-protect/warning-dev-guidance
+   Until appealed/re-classified, "Install anyway" + verifying
+   checksums-dev.sha256 is the workaround.
+
 ## Open — 2026-08-14 terminal feature-completeness follow-ups
 
 1. Legacy `ANSIParser.handleExtendedColor` (terminal/emulator/ANSIParser.kt

@@ -3,9 +3,13 @@ name: Development Build
 # ─────────────────────────────────────────────────────────────────────────
 # RELEASE CHANNEL: dev (development / pre-release)
 #
-# Fires on every push to a development branch. Builds debug APKs, marks
-# them prerelease, overwrites the rolling `development` tag. Release name
-# is `devel-{shortsha}` (no version number — versions are reserved for
+# Fires on every push to a development branch. Builds release-variant
+# APKs (non-debuggable, minified — a `debuggable` sideloaded APK is a
+# prime Google Play Protect "harmful app" heuristic trigger; dev tags
+# keep DEBUG_MODE logging on in the release variant anyway via the
+# isProductionRelease rule in build.gradle), marks them prerelease,
+# overwrites the rolling `development` tag. Release name is
+# `devel-{shortsha}` (no version number — versions are reserved for
 # the `ver` channel). Filenames are `tabssh-android-{arch}-dev.apk`.
 #
 # This is one of two user-facing release channels. The other is `ver`
@@ -178,8 +182,12 @@ jobs:
         chmod +x scripts/fetch-fonts.sh
         scripts/fetch-fonts.sh
 
-    - name: Build debug APKs
-      run: ./gradlew assembleDebug --no-daemon
+    - name: Build release-variant APKs
+      # assembleRelease, not assembleDebug: a debuggable sideloaded APK
+      # trips Play Protect's "tries to bypass Android's security
+      # protections" heuristic. Dev builds lose nothing — DEBUG_MODE
+      # logging stays on for non-production version names.
+      run: ./gradlew assembleRelease --no-daemon
       env:
         # Passed through so a future KEYSTORE_PASSWORD / KEY_PASSWORD secret is
         # picked up automatically. When absent GitHub expands to an empty string
@@ -190,7 +198,7 @@ jobs:
 
     - name: Rename APKs with -dev suffix
       run: |
-        cd app/build/outputs/apk/debug/
+        cd app/build/outputs/apk/release/
 
         # build.gradle already outputs the unified naming as
         # tabssh-android-{arch}.apk (where arch is the simplified tag:
@@ -208,7 +216,7 @@ jobs:
 
     - name: Generate checksums
       run: |
-        cd app/build/outputs/apk/debug/
+        cd app/build/outputs/apk/release/
         sha256sum tabssh-android-*-dev.apk > checksums-dev.sha256
 
         echo "🔐 SHA256 Checksums:"
@@ -255,7 +263,7 @@ jobs:
         echo "## 🔐 SHA256 Checksums" >> RELEASE_NOTES_DEV.md
         echo "" >> RELEASE_NOTES_DEV.md
         echo '```' >> RELEASE_NOTES_DEV.md
-        cat app/build/outputs/apk/debug/checksums-dev.sha256 >> RELEASE_NOTES_DEV.md
+        cat app/build/outputs/apk/release/checksums-dev.sha256 >> RELEASE_NOTES_DEV.md
         echo '```' >> RELEASE_NOTES_DEV.md
         echo "" >> RELEASE_NOTES_DEV.md
 
@@ -310,12 +318,12 @@ jobs:
         name: "${{ steps.version.outputs.RELEASE_TITLE }}"
         tag_name: development
         files: |
-          app/build/outputs/apk/debug/tabssh-android-universal-dev.apk
-          app/build/outputs/apk/debug/tabssh-android-arm64-dev.apk
-          app/build/outputs/apk/debug/tabssh-android-arm-dev.apk
-          app/build/outputs/apk/debug/tabssh-android-amd64-dev.apk
-          app/build/outputs/apk/debug/tabssh-android-x86-dev.apk
-          app/build/outputs/apk/debug/checksums-dev.sha256
+          app/build/outputs/apk/release/tabssh-android-universal-dev.apk
+          app/build/outputs/apk/release/tabssh-android-arm64-dev.apk
+          app/build/outputs/apk/release/tabssh-android-arm-dev.apk
+          app/build/outputs/apk/release/tabssh-android-amd64-dev.apk
+          app/build/outputs/apk/release/tabssh-android-x86-dev.apk
+          app/build/outputs/apk/release/checksums-dev.sha256
           RELEASE_NOTES_DEV.md
         body_path: RELEASE_NOTES_DEV.md
         prerelease: true
@@ -331,7 +339,7 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 📦 APKs Built:" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        cd app/build/outputs/apk/debug/
+        cd app/build/outputs/apk/release/
         for apk in tabssh-android-*-dev.apk; do
           SIZE=$(du -h "$apk" | cut -f1)
           echo "- \`$apk\` ($SIZE)" >> $GITHUB_STEP_SUMMARY
