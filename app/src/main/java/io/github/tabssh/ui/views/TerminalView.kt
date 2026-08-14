@@ -1537,7 +1537,10 @@ class TerminalView @JvmOverloads constructor(
                 val cp = if (Character.isHighSurrogate(ch) && bgCharIdx + 1 < lineChars.size)
                     Character.toCodePoint(ch, lineChars[bgCharIdx + 1]) else ch.code
                 val cw = com.termux.terminal.WcWidth.width(cp)
-                bgCol += if (cw > 0) cw else 1
+                // Zero-width chars (combining marks, VS16, ZWJ) share their
+                // base glyph's cell — advancing the column for them shifted
+                // every following cell one to the right.
+                bgCol += if (cw > 0) cw else 0
                 bgCharIdx += if (cp > 0xFFFF) 2 else 1
             }
             backgroundPaint.color = currentTheme?.background ?: Color.BLACK
@@ -1572,6 +1575,9 @@ class TerminalView @JvmOverloads constructor(
 
             var charIndex = 0
             var col = 0
+            // Column of the most recent solo-drawn double-width glyph; a
+            // zero-width mark arriving while no run is open composes there.
+            var lastWideCol = -1
             while (col < cols && charIndex < charsUsed) {
                 val char = if (charIndex < lineChars.size) lineChars[charIndex] else ' '
                 val codePoint: Int
@@ -1588,7 +1594,26 @@ class TerminalView @JvmOverloads constructor(
                 val charWidth = com.termux.terminal.WcWidth.width(codePoint)
                 val isVisible = codePoint != 0 && codePoint != ' '.code
 
-                if (isVisible) {
+                if (isVisible && charWidth == 0) {
+                    // Zero-width char (combining mark, variation selector,
+                    // ZWJ): belongs to the PRECEDING glyph's cell — it must
+                    // never advance the column or break the run (staying in
+                    // the same drawText call is what makes it compose onto
+                    // its base glyph).
+                    if (runBuf.isNotEmpty()) {
+                        val count = Character.toChars(codePoint, charBuf, 0)
+                        runBuf.append(charBuf, 0, count)
+                    } else if (lastWideCol >= 0) {
+                        // Base glyph was double-width and already drawn solo —
+                        // draw the mark at that glyph's origin so it overlays.
+                        val fg = com.termux.terminal.TextStyle.decodeForeColor(style)
+                        textPaint.color = termuxColorToAndroid(fg)
+                        val count = Character.toChars(codePoint, wideCharBuf, 0)
+                        canvas.drawText(wideCharBuf, 0, count, startX + lastWideCol * cellWidth, y, textPaint)
+                    }
+                    // No base glyph at all (row starts with a lone mark):
+                    // nothing sensible to compose onto — drop it.
+                } else if (isVisible) {
                     // Style differs or double-width char → flush current run first.
                     val sameStyle = runBuf.isNotEmpty() &&
                         com.termux.terminal.TextStyle.decodeForeColor(style) == com.termux.terminal.TextStyle.decodeForeColor(runStyle) &&
@@ -1597,6 +1622,7 @@ class TerminalView @JvmOverloads constructor(
                     if (!sameStyle || isWide) flushRun()
 
                     if (isWide) {
+                        lastWideCol = col
                         // Double-width glyph: draw solo using wideCharBuf so it
                         // does not alias the charBuf used for run accumulation.
                         val fg  = com.termux.terminal.TextStyle.decodeForeColor(style)
@@ -1621,11 +1647,15 @@ class TerminalView @JvmOverloads constructor(
                         runBuf.append(charBuf, 0, count)
                     }
                 } else {
-                    // Space / NUL breaks any active run.
+                    // Space / NUL breaks any active run — and any pending
+                    // compose target (a mark never composes across a gap).
                     flushRun()
+                    lastWideCol = -1
                 }
 
-                col      += if (charWidth > 0) charWidth else 1
+                // Zero-width chars share their base glyph's cell — never
+                // advance the column for them.
+                col      += if (charWidth > 0) charWidth else 0
                 charIndex += charsConsumed
             }
             flushRun()
