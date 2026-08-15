@@ -43,7 +43,13 @@ object MoshHandoff {
         val host: String,
         val username: String,
         val port: Int,
-        val keyBase64: String
+        val keyBase64: String,
+        // PID that mosh-server prints on its "[mosh-server detached, pid = N]"
+        // line, when we manage to capture it. Used to reap an orphaned server
+        // if the client never attaches (fast SSH fallback). Null when the
+        // remote mosh-server didn't print it (older builds) — reap then falls
+        // back to killing whatever is bound to [port].
+        val serverPid: Int? = null
     ) {
         /** Build the canonical client invocation for the Mosh client. */
         fun toClientCommand(): String =
@@ -52,7 +58,7 @@ object MoshHandoff {
         // Hand-written toString so the generated data-class one can never spill
         // the Mosh session key into a log line, crash report, or debugger dump.
         override fun toString(): String =
-            "MoshHandoffInfo(host=$host, username=$username, port=$port, keyBase64=xxxxx)"
+            "MoshHandoffInfo(host=$host, username=$username, port=$port, serverPid=$serverPid, keyBase64=xxxxx)"
     }
 
     sealed class Result {
@@ -69,7 +75,8 @@ object MoshHandoff {
         ssh: SSHConnection,
         username: String,
         host: String,
-        commandOverride: String? = null
+        commandOverride: String? = null,
+        networkTimeoutSeconds: Int = DEFAULT_NETWORK_TMOUT_SECONDS
     ): Result = withContext(Dispatchers.IO) {
         val session = grabSession(ssh) ?: return@withContext Result.Error("SSH session not connected")
         // Do NOT use -s here. The -s flag tells mosh-server to read its
@@ -77,8 +84,13 @@ object MoshHandoff {
         // stdin, mosh-server blocks indefinitely and the 8-second deadline
         // fires with empty output. Without -s, mosh-server generates its own
         // key and immediately prints "MOSH CONNECT <port> <key>".
-        val cmd = commandOverride?.takeIf { it.isNotBlank() }
+        val baseCmd = commandOverride?.takeIf { it.isNotBlank() }
             ?: "mosh-server new -l LANG=en_US.UTF-8"
+        // Bound the detached server's lifetime. Without this, a mosh-server
+        // whose client roams away or whose app is killed lingers forever,
+        // holding a utmp/`who` entry, and every reconnect spawns another —
+        // orphans pile up on the host without bound.
+        val cmd = withNetworkTimeout(baseCmd, networkTimeoutSeconds)
 
         var ch: ChannelExec? = null
         try {
@@ -102,6 +114,12 @@ object MoshHandoff {
             // untrusted output, so cap the buffer: a host that streams
             // forever must not grow this StringBuilder without bound.
             val deadline = System.currentTimeMillis() + 8_000L
+            // Once "MOSH CONNECT" is seen, linger a short grace trying to also
+            // capture the "[mosh-server detached, pid = N]" line — it arrives in
+            // the same startup burst and lets us reap the server by PID on a
+            // fast SSH fallback. Best-effort: if it never comes, proceed without
+            // it rather than delay the whole connect.
+            var connectSeenAt = 0L
             while (System.currentTimeMillis() < deadline && sb.length < MAX_SERVER_OUTPUT_CHARS) {
                 val n = input.read(buf)
                 if (n < 0) break
@@ -112,7 +130,10 @@ object MoshHandoff {
                     // yield instead of spinning the CPU until the deadline.
                     Thread.sleep(20L)
                 }
-                if (sb.contains("MOSH CONNECT")) break
+                val hasConnect = sb.contains("MOSH CONNECT")
+                if (hasConnect && connectSeenAt == 0L) connectSeenAt = System.currentTimeMillis()
+                val hasPid = hasConnect && MOSH_PID_REGEX.containsMatchIn(sb)
+                if (hasConnect && (hasPid || System.currentTimeMillis() - connectSeenAt > PID_GRACE_MS)) break
             }
             val raw = sb.toString()
             // Never log the raw line — it carries the Mosh session secret.
@@ -146,7 +167,8 @@ object MoshHandoff {
                     host = host,
                     username = username,
                     port = parsedPort,
-                    keyBase64 = key
+                    keyBase64 = key,
+                    serverPid = parseDetachedPid(raw)
                 )
             )
         } catch (e: CancellationException) {
@@ -154,6 +176,70 @@ object MoshHandoff {
         } catch (e: Exception) {
             Logger.e(TAG, "Mosh handoff failed", e)
             return@withContext Result.Error("Bootstrap failed: ${e.message ?: e.javaClass.simpleName}")
+        } finally {
+            try { ch?.disconnect() } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * Prepend `MOSH_SERVER_NETWORK_TMOUT=<seconds>` to the launch command so a
+     * detached mosh-server whose client stops checking in exits on its own
+     * instead of lingering forever (mosh's default is 0 = never). Leaves the
+     * command untouched when the caller already set the variable, or when the
+     * timeout is disabled (<= 0). The prefix is valid `VAR=val cmd` shell for
+     * both the default command and custom paths like `/usr/local/bin/mosh-server`.
+     */
+    internal fun withNetworkTimeout(command: String, seconds: Int): String =
+        if (seconds <= 0 || command.contains("MOSH_SERVER_NETWORK_TMOUT")) command
+        else "MOSH_SERVER_NETWORK_TMOUT=$seconds $command"
+
+    /**
+     * Pull the PID out of mosh-server's "[mosh-server detached, pid = N]" line.
+     * Returns null when the line is absent (older mosh builds) or unparseable.
+     */
+    internal fun parseDetachedPid(raw: String): Int? =
+        MOSH_PID_REGEX.find(raw)?.groupValues?.getOrNull(1)?.toIntOrNull()
+
+    /**
+     * Best-effort reap of an orphaned mosh-server we bootstrapped but never
+     * attached a client to (the fast SSH-fallback path). Prefers the captured
+     * [pid]; falls back to whatever process is bound to the published UDP
+     * [port]. Runs over the still-open SSH session and never throws — cleanup
+     * is advisory, so a missing `fuser`/`kill` or a closed channel is ignored.
+     *
+     * [pid] and [port] are integers parsed from mosh-server's own output and
+     * the validated handshake, so neither can carry shell metacharacters.
+     */
+    suspend fun reapServer(ssh: SSHConnection, pid: Int?, port: Int) = withContext(Dispatchers.IO) {
+        val session = grabSession(ssh) ?: return@withContext
+        val kills = buildList {
+            if (pid != null && pid > 1) add("kill $pid 2>/dev/null")
+            if (port in 1..65535) add("kill \$(fuser -n udp $port 2>/dev/null) 2>/dev/null")
+        }
+        if (kills.isEmpty()) return@withContext
+        val cmd = "sh -c '${kills.joinToString(" ; ")} ; true'"
+        var ch: ChannelExec? = null
+        try {
+            ch = session.openChannel("exec") as ChannelExec
+            ch.setCommand(cmd)
+            ch.connect(5_000)
+            // Drain briefly so the remote command actually runs before we
+            // disconnect the channel; bounded so a wedged host can't hang us.
+            val ins = ch.inputStream
+            val drain = ByteArray(256)
+            val deadline = System.currentTimeMillis() + 3_000L
+            while (System.currentTimeMillis() < deadline && ch.isConnected) {
+                if (ins.available() > 0) {
+                    if (ins.read(drain) < 0) break
+                } else if (ch.isEOF) {
+                    break
+                } else {
+                    Thread.sleep(20L)
+                }
+            }
+            Logger.d(TAG, "Reaped orphaned mosh-server (pid=${pid ?: "?"}, port=$port)")
+        } catch (e: Exception) {
+            Logger.d(TAG, "mosh-server reap best-effort failed: ${e.message}")
         } finally {
             try { ch?.disconnect() } catch (_: Exception) {}
         }
@@ -173,5 +259,19 @@ object MoshHandoff {
 
     private val MOSH_KEY_REGEX = Regex("^[A-Za-z0-9+/]+={0,2}$")
 
+    // mosh-server announces its daemon PID as "[mosh-server detached, pid = N]".
+    private val MOSH_PID_REGEX = Regex("""mosh-server detached, pid\s*=?\s*(\d+)""")
+
     private const val MAX_SERVER_OUTPUT_CHARS = 64 * 1024
+
+    // Grace window (ms) to keep reading after "MOSH CONNECT" so the detached-pid
+    // line can be captured; short enough not to add noticeable connect latency.
+    private const val PID_GRACE_MS = 400L
+
+    // Default MOSH_SERVER_NETWORK_TMOUT (seconds). A detached server that loses
+    // its client self-terminates after this long, so a roamed-away or
+    // app-killed session can't orphan a mosh-server forever. Seven days is
+    // generous enough never to cut off a real reconnect yet guarantees no
+    // orphan outlives a week; the fast-fallback path reaps its server at once.
+    private const val DEFAULT_NETWORK_TMOUT_SECONDS = 604_800
 }

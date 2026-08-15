@@ -2341,7 +2341,14 @@ class TabTerminalActivity : AppCompatActivity() {
                                 connected = true
                             } else {
                                 // mosh-client process failed to start — fall back.
+                                // The mosh-server we just bootstrapped now has no
+                                // client and would linger on the host until its
+                                // network timeout; reap it now while the SSH
+                                // session is still open (best-effort).
                                 Logger.w("TabTerminalActivity", "Mosh attach failed; falling back to SSH")
+                                io.github.tabssh.protocols.mosh.MoshHandoff.reapServer(
+                                    sshConnection, handoff.info.serverPid, handoff.info.port
+                                )
                                 connected = tab.connect(sshConnection)
                                 showToast(if (moshMode == "on") "Mosh failed — using SSH" else "Connected to ${profile.getDisplayName()}")
                             }
