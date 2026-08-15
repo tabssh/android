@@ -179,8 +179,10 @@ class BackupManager(private val context: Context) {
                 // v3 single-JSON format (optionally AES-GCM encrypted).
                 // Detect the SyncEncryptor magic header so we can surface a
                 // clear "need password" error instead of a raw JSONException.
-                val isEncrypted = allBytes.size >= 14 &&
-                    String(allBytes, 0, 14, Charsets.ISO_8859_1) == "TABSSH_SYNC_V2"
+                // Match the shared 13-byte prefix so both the legacy V2 and the
+                // current V3 magic ("TABSSH_SYNC_V2"/"...V3") are recognized.
+                val isEncrypted = allBytes.size >= 13 &&
+                    String(allBytes, 0, 13, Charsets.ISO_8859_1) == "TABSSH_SYNC_V"
                 if (isEncrypted && password == null) {
                     return@withContext RestoreResult(
                         success = false,

@@ -233,8 +233,9 @@ class BackupValidator {
      * Check whether a v3 backup file is encrypted.
      *
      * v3 backups produced by [BackupManager] are either plain UTF-8 JSON or
-     * an AES-GCM ciphertext with the literal magic header `TABSSH_SYNC_V2`
-     * (see [io.github.tabssh.sync.encryption.SyncEncryptor]). The previous
+     * an AES-GCM ciphertext with a `TABSSH_SYNC_V*` magic header — `V2` for
+     * legacy files, `V3` for current ones (see
+     * [io.github.tabssh.sync.encryption.SyncEncryptor]). The previous
      * heuristic — "fails to parse as JSON and matches a base64 regex" —
      * never matched because SyncEncryptor's output is raw binary, not
      * base64, so any encrypted backup was misreported as plaintext.
@@ -242,8 +243,8 @@ class BackupValidator {
      * String-decoded form for callers that still pass a `String` view.
      */
     fun isBackupEncrypted(data: ByteArray): Boolean {
-        if (data.size < 14) return false
-        return String(data, 0, 14, Charsets.ISO_8859_1) == "TABSSH_SYNC_V2"
+        if (data.size < 13) return false
+        return String(data, 0, 13, Charsets.ISO_8859_1) == "TABSSH_SYNC_V"
     }
 
     fun isBackupEncrypted(data: String): Boolean {

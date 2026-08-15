@@ -26,9 +26,39 @@ class SyncEncryptor {
         private const val IV_SIZE = 12
         private const val TAG_SIZE = 128
         private const val SALT_SIZE = 32
-        private const val PBKDF2_ITERATIONS = 100_000
 
-        private const val HEADER_MAGIC = "TABSSH_SYNC_V2"
+        // Write-time PBKDF2 cost. Raised from 100k to OWASP's 2023 floor for
+        // PBKDF2-HMAC-SHA256. NOT a hardcoded read constant: every file records
+        // the count it was written with in its header (see createHeader), so
+        // this value can move again in future without breaking any file already
+        // on disk — the reader always honours the stored count, never this one.
+        private const val PBKDF2_ITERATIONS = 600_000
+
+        // Iteration count for legacy V2 files, which predate the self-describing
+        // header field. Those files were always produced at exactly 100k, so a
+        // V2 magic is read back with this fixed count.
+        private const val PBKDF2_ITERATIONS_LEGACY = 100_000
+
+        // Shared 13-byte prefix of every version magic ("TABSSH_SYNC_V"); the
+        // 14th byte is the ASCII version digit ('2' legacy, '3' current). New
+        // files are written as V3 with the iteration count embedded; V2 files
+        // are still read (at PBKDF2_ITERATIONS_LEGACY) so existing encrypted
+        // backups and sync snapshots keep decrypting unchanged.
+        private const val MAGIC_PREFIX = "TABSSH_SYNC_V"
+        private const val VERSION_LEGACY = '2'
+        private const val VERSION_CURRENT = '3'
+        private const val HEADER_MAGIC = "$MAGIC_PREFIX$VERSION_CURRENT"
+
+        // Big-endian int32 iteration count lives here, right after the 14-byte
+        // magic, inside the 32-byte header. V2 headers have zeroes here.
+        private const val ITER_OFFSET = 14
+
+        // Guard band for a header-declared iteration count: reject a corrupted
+        // or absurd value and fall back to the legacy count rather than spin
+        // for minutes (or trivially) on a garbage header.
+        private const val ITER_MIN = 1_000
+        private const val ITER_MAX = 100_000_000
+
         private const val HEADER_SIZE = 32
     }
 
@@ -51,7 +81,7 @@ class SyncEncryptor {
      */
     fun decrypt(data: ByteArray, password: String): ByteArray {
         val encrypted = deserializeEncryptedData(data)
-        return decryptSyncFile(encrypted, password)
+        return decryptSyncFile(encrypted, password, readIterations(data))
     }
 
     /**
@@ -85,9 +115,13 @@ class SyncEncryptor {
     /**
      * Decrypt data with password-based decryption
      */
-    fun decryptSyncFile(encrypted: EncryptedData, password: String): ByteArray {
+    fun decryptSyncFile(
+        encrypted: EncryptedData,
+        password: String,
+        iterations: Int = PBKDF2_ITERATIONS
+    ): ByteArray {
         try {
-            val key = deriveKey(password, encrypted.salt)
+            val key = deriveKey(password, encrypted.salt, iterations)
             val cipher = Cipher.getInstance(ALGORITHM)
             val gcmSpec = GCMParameterSpec(TAG_SIZE, encrypted.iv)
             cipher.init(Cipher.DECRYPT_MODE, key, gcmSpec)
@@ -118,12 +152,16 @@ class SyncEncryptor {
     /**
      * Derive encryption key from password using PBKDF2
      */
-    fun deriveKey(password: String, salt: ByteArray): SecretKey {
+    fun deriveKey(
+        password: String,
+        salt: ByteArray,
+        iterations: Int = PBKDF2_ITERATIONS
+    ): SecretKey {
         try {
             val spec = PBEKeySpec(
                 password.toCharArray(),
                 salt,
-                PBKDF2_ITERATIONS,
+                iterations,
                 KEY_SIZE
             )
 
@@ -141,7 +179,7 @@ class SyncEncryptor {
      * Serialize encrypted data to byte array for storage
      */
     fun serializeEncryptedData(encrypted: EncryptedData): ByteArray {
-        val header = createHeader()
+        val header = createHeader(PBKDF2_ITERATIONS)
         val totalSize = HEADER_SIZE + SALT_SIZE + IV_SIZE + encrypted.ciphertext.size
 
         val output = ByteArray(totalSize)
@@ -216,23 +254,55 @@ class SyncEncryptor {
     /**
      * Create file header with magic bytes and version
      */
-    private fun createHeader(): ByteArray {
+    private fun createHeader(iterations: Int): ByteArray {
         val header = ByteArray(HEADER_SIZE)
         val magicBytes = HEADER_MAGIC.toByteArray()
         System.arraycopy(magicBytes, 0, header, 0, minOf(magicBytes.size, HEADER_SIZE))
+        // Embed the PBKDF2 iteration count (big-endian) so the file is
+        // self-describing: a reader derives the key with the count the file was
+        // written with, never a compiled-in constant.
+        header[ITER_OFFSET] = (iterations ushr 24 and 0xFF).toByte()
+        header[ITER_OFFSET + 1] = (iterations ushr 16 and 0xFF).toByte()
+        header[ITER_OFFSET + 2] = (iterations ushr 8 and 0xFF).toByte()
+        header[ITER_OFFSET + 3] = (iterations and 0xFF).toByte()
         return header
     }
 
     /**
-     * Validate file header
+     * Validate file header. Accepts both the current V3 magic and the legacy
+     * V2 magic (shared 13-byte prefix + a '2' or '3' version digit); any other
+     * prefix or version digit is rejected.
      */
     private fun validateHeader(header: ByteArray) {
-        val magicBytes = HEADER_MAGIC.toByteArray()
-        for (i in magicBytes.indices) {
-            if (header[i] != magicBytes[i]) {
+        val prefixBytes = MAGIC_PREFIX.toByteArray()
+        for (i in prefixBytes.indices) {
+            if (header[i] != prefixBytes[i]) {
                 throw SyncEncryptionException("Invalid file format: header mismatch")
             }
         }
+        val version = header[prefixBytes.size].toInt().toChar()
+        if (version != VERSION_LEGACY && version != VERSION_CURRENT) {
+            throw SyncEncryptionException("Unsupported sync file version: $version")
+        }
+    }
+
+    /**
+     * Recover the PBKDF2 iteration count a serialized file was written with.
+     * V3 files carry a big-endian int32 in the header; V2 files predate the
+     * field and are always the fixed legacy count. A missing or out-of-range
+     * value falls back to the legacy count so a corrupted header fails via GCM
+     * authentication rather than a runaway KDF cost.
+     */
+    private fun readIterations(data: ByteArray): Int {
+        if (data.size < ITER_OFFSET + 4) return PBKDF2_ITERATIONS_LEGACY
+        val version = data[MAGIC_PREFIX.length].toInt().toChar()
+        if (version != VERSION_CURRENT) return PBKDF2_ITERATIONS_LEGACY
+        val iterations =
+            (data[ITER_OFFSET].toInt() and 0xFF shl 24) or
+                (data[ITER_OFFSET + 1].toInt() and 0xFF shl 16) or
+                (data[ITER_OFFSET + 2].toInt() and 0xFF shl 8) or
+                (data[ITER_OFFSET + 3].toInt() and 0xFF)
+        return if (iterations in ITER_MIN..ITER_MAX) iterations else PBKDF2_ITERATIONS_LEGACY
     }
 
     /**
