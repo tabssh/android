@@ -96,14 +96,14 @@ object MoshHandoff {
         try {
             ch = session.openChannel("exec") as ChannelExec
             ch.setCommand(cmd)
-            // Request a pty for the bootstrap: sshd only records a login in
-            // utmp/wtmp/lastlog when a tty is allocated, so without this a
-            // mosh connect never shows up in `lastlog` while a plain ssh
-            // login does. mosh-server double-forks and detaches before the
-            // channel closes, so it survives the pty teardown; the only
-            // stream-level effect is CRLF line endings, which the
-            // "MOSH CONNECT" regex already tolerates.
-            ch.setPty(true)
+            // No pty here — bootstrap mosh-server over a plain exec channel,
+            // exactly as the `mosh` client does. An earlier build allocated a
+            // pty to force a `lastlog`/utmp entry so a mosh connect would look
+            // like an ssh login, but that made every detached mosh-server
+            // register a `who` entry (host field literally "mosh [pid]"), so
+            // leaked servers flooded the login banner's `who` list. Mosh is
+            // now left to do what mosh does by default: it still writes its own
+            // utmp/wtmp/lastlog, and MOTD prints through the login shell.
             val input = ch.inputStream
             ch.connect(10_000)
 
