@@ -1348,6 +1348,11 @@ class SSHTab(
                     val ansi = Regex("\\u001B\\[[0-9;]*m")
                     lines.map { ansi.replace(it, "") }
                         .filter { it.isNotBlank() && !it.startsWith("No active") }
+                        // The verbose `zellij list-sessions` fallback also lists dead
+                        // sessions as "name [Created ...] (EXITED - attach to resurrect)".
+                        // `zellij attach <name>` fails on those, so they must not be
+                        // offered in the picker as if they were live.
+                        .filter { !it.contains("EXITED") }
                         .mapNotNull { it.split(Regex("\\s+")).firstOrNull() }
                         .filter { it.isNotBlank() }
                 }

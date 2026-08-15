@@ -11,7 +11,7 @@ import io.github.tabssh.ui.utils.DockerText
 private const val MAX_DETAIL_LENGTH = 2048
 
 /**
- * Centralized DockerResult-failure presentation (PLAN.AI.md step 34).
+ * Centralized DockerResult-failure presentation.
  *
  * Maps the transport-layer message constants ([DockerTransportMessages]) onto
  * their string-resource equivalents so every screen shows the same actionable

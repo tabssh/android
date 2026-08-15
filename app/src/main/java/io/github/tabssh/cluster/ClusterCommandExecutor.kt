@@ -164,6 +164,12 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
                 error = "Timeout after ${timeoutMs}ms",
                 executionTimeMs = executionTime
             )
+        } catch (e: CancellationException) {
+            // Structured cancellation (cancelAll()) must propagate. Swallowing it
+            // here let the coroutine complete normally, so awaitAll() never
+            // fast-aborted and cancelAll() had no effect. TimeoutCancellation is
+            // a CancellationException too, so it stays caught above this.
+            throw e
         } catch (e: Exception) {
             val executionTime = System.currentTimeMillis() - startTime
             Logger.e("ClusterCommand", "Failed on ${profile.name}", e)

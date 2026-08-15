@@ -9,7 +9,7 @@ import kotlinx.serialization.Serializable
 /**
  * App-driven auto-update policy for one container or one compose stack
  * service on a [DockerHost] — registry digest checks + pull/recreate,
- * no host agent (see PLAN.AI.md).
+ * no host agent.
  */
 @Entity(
     tableName = "container_auto_update_policies",
@@ -39,7 +39,7 @@ data class ContainerAutoUpdatePolicy(
     val enabled: Boolean = true,
 
     /**
-     * Second per-policy gate (PLAN.AI.md step 31): when true, the background
+     * Second per-policy gate: when true, the background
      * worker not only flags a pending update but pulls + recreates the
      * container unattended. Default OFF — flag-and-notify only.
      */

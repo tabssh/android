@@ -1,7 +1,7 @@
 package io.github.tabssh.docker.registry
 
 /**
- * Parsed container image reference (PLAN.AI.md step 29).
+ * Parsed container image reference.
  *
  * Follows the docker/distribution reference grammar closely enough for the
  * update-check flow: the first path component is a registry host only when

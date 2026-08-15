@@ -27,7 +27,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
 /**
- * Periodic app-driven Docker image update checker (PLAN.AI.md step 31).
+ * Periodic app-driven Docker image update checker.
  *
  * Every cycle (default 12 h — twice daily) the worker walks all enabled
  * [ContainerAutoUpdatePolicy] rows grouped by Docker host and, for each host

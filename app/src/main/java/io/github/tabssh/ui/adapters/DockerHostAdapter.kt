@@ -12,7 +12,7 @@ import io.github.tabssh.R
 import io.github.tabssh.storage.database.entities.DockerHost
 
 /**
- * Docker host list rows for DockerHostsFragment (PLAN.AI.md step 19).
+ * Docker host list rows for DockerHostsFragment.
  * Same DiffUtil update pattern as HypervisorAdapter; [connectionNames]
  * maps ConnectionProfile.id → display name for the linked-connection line.
  */

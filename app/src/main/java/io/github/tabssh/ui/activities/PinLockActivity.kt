@@ -240,8 +240,15 @@ class PinLockActivity : AppCompatActivity() {
     private fun handleVerifySubmit(pin: String) {
         val expected = app.preferencesManager.getString(PREF_PIN_HASH, "")
         if (expected.isBlank()) {
-            // Misconfigured — let user through rather than soft-bricking.
-            Logger.w(TAG, "Verify mode without a stored hash — bypassing")
+            // App lock is on but no hash is stored — the lock cannot be
+            // satisfied by anyone, so it is not a lock. Previously this just
+            // waved the caller through while leaving app_lock_enabled set, so
+            // the UI kept claiming the app was locked and every later launch
+            // silently bypassed. Clear the flag instead: the user is let in
+            // (no soft-brick) and Settings now honestly shows the lock off.
+            Logger.w(TAG, "Verify mode without a stored hash — disabling app lock")
+            app.preferencesManager.setBoolean(PREF_PIN_ENABLED, false)
+            app.preferencesManager.setInt(PREF_PIN_FAIL_COUNT, 0)
             setResult(Activity.RESULT_OK)
             finish()
             return

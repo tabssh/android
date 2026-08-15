@@ -251,7 +251,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
          * v8 → v9: add the five Docker-feature tables (docker_hosts,
          * compose_stacks, single_container_configs,
          * container_auto_update_policies, registry_credentials) — Docker
-         * host management data model (PLAN.AI.md Phase 1). New tables only;
+         * host management data model. New tables only;
          * no data transform. DDL matches Room's generated schema exactly
          * (column order, NOT NULL flags, and the five indices). All
          * references between the tables are FK-by-convention, mirroring

@@ -10,7 +10,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Per-policy registry update check (PLAN.AI.md step 30).
+ * Per-policy registry update check.
  *
  * For each enabled [ContainerAutoUpdatePolicy] on a host: resolve the digest
  * the running container was pulled from (inspect `RepoDigests`, preferred) or

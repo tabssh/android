@@ -24,7 +24,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * Process-wide registry of live Docker host sessions (PLAN.AI.md step 21).
+ * Process-wide registry of live Docker host sessions.
  *
  * A [DockerSession] bundles everything the Docker UI needs for one host —
  * the SSH connection, exec runner, and the detected [DockerTransport] — and

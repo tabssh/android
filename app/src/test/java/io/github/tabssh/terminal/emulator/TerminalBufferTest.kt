@@ -187,15 +187,32 @@ class TerminalBufferTest {
     }
 
     @Test
-    fun `test scroll region set does not crash`() {
-        // Region-aware scrolling is not implemented: scrollUp()/scrollDown()
-        // ignore the region. This verifies setScrollRegion accepts a valid
-        // range and the buffer keeps functioning. See AUDIT.AI.md.
+    fun `test scroll region confines scrolling and skips scrollback`() {
         buffer.setScrollRegion(5, 15)
+
+        // Rows outside the region must not move, and a partial region never
+        // contributes to scrollback — those rows are still on screen.
+        buffer.setCursorPosition(0, 4)
+        buffer.write("above")
+        buffer.setCursorPosition(0, 5)
+        buffer.write("top")
 
         val before = buffer.getScrollbackSize()
         buffer.scrollUp()
-        assertEquals(before + 1, buffer.getScrollbackSize())
+
+        assertEquals(before, buffer.getScrollbackSize())
+        // Row 4 sits above the region and is untouched.
+        assertEquals('a', buffer.getChar(4, 0)?.char)
+        // Row 5 is the region's top and now holds the (blank) old row 6.
+        assertEquals(' ', buffer.getChar(5, 0)?.char)
+    }
+
+    @Test
+    fun `test scroll region with an out of range top does not throw`() {
+        // A remote host can send ESC[999;5r; the clamped top must also become
+        // the lower bound of the bottom, or coerceIn gets min greater than max.
+        buffer.setScrollRegion(998, 4)
+        buffer.scrollUp()
     }
 
     @Test
@@ -210,6 +227,65 @@ class TerminalBufferTest {
         }
 
         assertTrue(smallBuffer.getScrollbackSize() <= maxScrollback)
+    }
+
+    @Test
+    fun `insert mode shifts the rest of the line right`() {
+        buffer.write("ABCD")
+        buffer.setCursorPosition(1, 0)
+        buffer.setInsertMode(true)
+        buffer.writeChar('X')
+
+        // IRM: "ABCD" with X inserted at column 1 becomes "AXBCD".
+        assertEquals('A', buffer.getChar(0, 0)?.char)
+        assertEquals('X', buffer.getChar(0, 1)?.char)
+        assertEquals('B', buffer.getChar(0, 2)?.char)
+        assertEquals('C', buffer.getChar(0, 3)?.char)
+        assertEquals('D', buffer.getChar(0, 4)?.char)
+    }
+
+    @Test
+    fun `insert mode off overwrites in place`() {
+        buffer.write("ABCD")
+        buffer.setCursorPosition(1, 0)
+        buffer.writeChar('X')
+
+        assertEquals('A', buffer.getChar(0, 0)?.char)
+        assertEquals('X', buffer.getChar(0, 1)?.char)
+        assertEquals('C', buffer.getChar(0, 2)?.char)
+    }
+
+    @Test
+    fun `origin mode makes absolute positioning relative to the scroll region`() {
+        buffer.setScrollRegion(5, 15)
+        buffer.setOriginMode(true)
+
+        // Row 0 in origin mode is the top of the region.
+        buffer.setCursorPositionAbsolute(0, 0)
+        assertEquals(5, buffer.getCursorRow())
+
+        buffer.setCursorPositionAbsolute(0, 3)
+        assertEquals(8, buffer.getCursorRow())
+
+        // The cursor may not escape the region.
+        buffer.setCursorPositionAbsolute(0, 99)
+        assertEquals(15, buffer.getCursorRow())
+    }
+
+    @Test
+    fun `origin mode off leaves absolute positioning screen-relative`() {
+        buffer.setScrollRegion(5, 15)
+        buffer.setCursorPositionAbsolute(0, 0)
+        assertEquals(0, buffer.getCursorRow())
+    }
+
+    @Test
+    fun `cursor visibility tracks DECTCEM`() {
+        assertTrue(buffer.isCursorVisible())
+        buffer.setCursorVisible(false)
+        assertFalse(buffer.isCursorVisible())
+        buffer.setCursorVisible(true)
+        assertTrue(buffer.isCursorVisible())
     }
 
     @Test

@@ -33,7 +33,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
- * Single-container run.yml editor (PLAN.AI.md step 26): a structured form
+ * Single-container run.yml editor: a structured form
  * over the RunConfig fields with an advanced raw-YAML toggle. Save writes
  * {runConfigBase}/{name}/run.yml on the host plus the Room row; Run
  * translates the config to docker run argv and executes it over the

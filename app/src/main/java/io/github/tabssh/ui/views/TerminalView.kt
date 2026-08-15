@@ -591,13 +591,16 @@ class TerminalView @JvmOverloads constructor(
         terminalEmulator = null
         terminalBuffer = null
 
-        // Remove listener from old bridge if different
-        if (termuxBridge != null && termuxBridge != bridge) {
-            currentBridgeListener?.let { listener ->
-                termuxBridge?.removeListener(listener)
-                Logger.d("TerminalView", "Removed listener from old bridge")
-            }
+        // Always detach the previously registered listener, including when the
+        // bridge instance is unchanged — that is the normal case on every
+        // ViewPager2 rebind, and skipping it appended another listener to the
+        // bridge's list on each rebind (unbounded growth, one extra invalidate
+        // per listener for every byte of output).
+        currentBridgeListener?.let { listener ->
+            termuxBridge?.removeListener(listener)
+            Logger.d("TerminalView", "Removed previously registered bridge listener")
         }
+        currentBridgeListener = null
 
         // Set up Termux bridge
         termuxBridge = bridge

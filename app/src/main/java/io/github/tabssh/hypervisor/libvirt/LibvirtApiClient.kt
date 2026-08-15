@@ -752,7 +752,12 @@ class LibvirtApiClient(
             val buf = ByteArray(4096)
             val deadline = System.currentTimeMillis() + EXEC_TIMEOUT_MS
             var truncated = false
-            while (!ch.isClosed && System.currentTimeMillis() < deadline) {
+            var timedOut = false
+            while (!ch.isClosed) {
+                if (System.currentTimeMillis() >= deadline) {
+                    timedOut = true
+                    break
+                }
                 val available = output.available()
                 if (available > 0) {
                     val n = output.read(buf, 0, minOf(available, buf.size))
@@ -782,6 +787,12 @@ class LibvirtApiClient(
             }
             if (truncated) {
                 Logger.w(TAG, "runCommand output exceeded $MAX_COMMAND_OUTPUT_BYTES bytes — truncated")
+            }
+            // A deadline exit means the command never finished. Callers parse this
+            // string into domain/VM state, so returning the partial buffer would be
+            // reported as a successful (but wrong) result instead of a failure.
+            if (timedOut) {
+                throw LibvirtException("Command timed out after ${EXEC_TIMEOUT_MS}ms: $command")
             }
             Logger.d(TAG, "runCommand('$command') exit=${ch.exitStatus}")
             collected.toString(Charsets.UTF_8.name())

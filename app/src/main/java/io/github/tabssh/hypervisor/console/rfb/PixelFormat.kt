@@ -144,7 +144,10 @@ data class PixelFormat(
             val redShift = din.readUnsignedByte()
             val greenShift = din.readUnsignedByte()
             val blueShift = din.readUnsignedByte()
-            din.skipBytes(3) // padding
+            // readFully, not skipBytes: skipBytes may skip fewer bytes than asked
+            // and a short skip silently desyncs the whole RFB session — the next
+            // read is a length used for allocation.
+            din.readFully(ByteArray(3))
             return PixelFormat(bpp, depth, bigEndian, trueColor,
                 redMax, greenMax, blueMax, redShift, greenShift, blueShift)
         }

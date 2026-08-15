@@ -10,11 +10,15 @@ import kotlinx.coroutines.withContext
  */
 class MetricsCollector(private val sshConnection: SSHConnection) {
 
-    private var previousNetworkStats: Pair<Long, Long>? = null // (rxBytes, txBytes)
-    private var previousNetworkTime: Long = 0
+    // @Volatile: collectMetrics() runs on Dispatchers.IO, so successive polls
+    // can land on different threads. Non-volatile state produced stale or
+    // torn reads of the previous-sample values, yielding bogus network rates.
+    // (rxBytes, txBytes)
+    @Volatile private var previousNetworkStats: Pair<Long, Long>? = null
+    @Volatile private var previousNetworkTime: Long = 0
 
     // Platform info is cached since it doesn't change during a session
-    private var cachedPlatformInfo: PlatformInfo? = null
+    @Volatile private var cachedPlatformInfo: PlatformInfo? = null
 
     /**
      * Collect all performance metrics

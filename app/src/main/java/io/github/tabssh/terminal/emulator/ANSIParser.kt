@@ -1,6 +1,10 @@
 package io.github.tabssh.terminal.emulator
 
 import io.github.tabssh.utils.logging.Logger
+import java.nio.ByteBuffer
+import java.nio.CharBuffer
+import java.nio.charset.CharsetDecoder
+import java.nio.charset.CodingErrorAction
 import java.util.*
 
 /**
@@ -74,11 +78,36 @@ class ANSIParser(private val buffer: TerminalBuffer) {
     }
     
     /**
+     * Stateful UTF-8 decoder. A socket read can end in the middle of a
+     * multi-byte sequence; `String(data, UTF_8)` would turn every split
+     * character into U+FFFD. The decoder leaves the incomplete trailing bytes
+     * in [pendingBytes] and completes them on the next chunk.
+     */
+    private val utf8Decoder: CharsetDecoder = Charsets.UTF_8.newDecoder()
+        .onMalformedInput(CodingErrorAction.REPLACE)
+        .onUnmappableCharacter(CodingErrorAction.REPLACE)
+
+    /** Trailing bytes of an incomplete UTF-8 sequence (at most 3). */
+    private var pendingBytes = ByteArray(0)
+
+    /**
      * Process input data and update terminal buffer
      */
     fun processInput(data: ByteArray) {
-        val text = String(data, Charsets.UTF_8)
-        processText(text)
+        val input = if (pendingBytes.isEmpty()) data else pendingBytes + data
+        if (input.isEmpty()) return
+        val inBuf = ByteBuffer.wrap(input)
+        val outBuf = CharBuffer.allocate(input.size + 1)
+        utf8Decoder.decode(inBuf, outBuf, false)
+        outBuf.flip()
+        pendingBytes = if (inBuf.hasRemaining()) {
+            ByteArray(inBuf.remaining()).also { inBuf.get(it) }
+        } else {
+            ByteArray(0)
+        }
+        if (outBuf.hasRemaining()) {
+            processText(outBuf.toString())
+        }
     }
     
     /**
@@ -291,21 +320,24 @@ class ANSIParser(private val buffer: TerminalBuffer) {
         Logger.d("ANSIParser", "Executing CSI sequence: ${escapeSequence}$finalChar with params: $parameters")
         
         when (finalChar) {
+            // moveCursor takes (deltaX, deltaY) — X is the column. These four
+            // passed the count on the opposite axis, so Up/Down moved sideways
+            // and Left/Right moved vertically in every full-screen program.
             'A' -> { // Cursor Up
                 val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
-                buffer.moveCursor(-n, 0)
+                buffer.moveCursor(0, -n)
             }
             'B' -> { // Cursor Down
                 val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
-                buffer.moveCursor(n, 0)
+                buffer.moveCursor(0, n)
             }
             'C' -> { // Cursor Forward
                 val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
-                buffer.moveCursor(0, n)
+                buffer.moveCursor(n, 0)
             }
             'D' -> { // Cursor Back
                 val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
-                buffer.moveCursor(0, -n)
+                buffer.moveCursor(-n, 0)
             }
             'E' -> { // Cursor Next Line
                 val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
@@ -322,7 +354,7 @@ class ANSIParser(private val buffer: TerminalBuffer) {
             'H', 'f' -> { // Cursor Position
                 val row = (parameters.getOrElse(0) { 1 } - 1).coerceAtLeast(0)
                 val col = (parameters.getOrElse(1) { 1 } - 1).coerceAtLeast(0)
-                buffer.setCursorPosition(col, row)
+                buffer.setCursorPositionAbsolute(col, row)
             }
             'J' -> { // Erase Display
                 when (parameters.getOrElse(0) { 0 }) {
@@ -352,18 +384,21 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                     2 -> buffer.clearLine()
                 }
             }
+            // IL/DL shift lines from the cursor row down, leaving everything above
+            // the cursor untouched. Routing them through scrollDown()/scrollUp()
+            // scrolled the whole screen and pulled stale scrollback rows back in.
             'L' -> { // Insert Lines
                 // Clamped to the screen height: a server may send ESC[999999999L,
-                // and scrolling more than one screen has no additional effect.
+                // and inserting more than one screen has no additional effect.
                 val n = parameters.getOrElse(0) { 1 }.coerceIn(1, buffer.getRows())
                 repeat(n) {
-                    buffer.scrollDown()
+                    buffer.insertLine(buffer.getCursorRow())
                 }
             }
             'M' -> { // Delete Lines
                 val n = parameters.getOrElse(0) { 1 }.coerceIn(1, buffer.getRows())
                 repeat(n) {
-                    buffer.scrollUp()
+                    buffer.deleteLine(buffer.getCursorRow())
                 }
             }
             'P' -> { // Delete Characters
@@ -553,6 +588,7 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                 when (param) {
                     6 -> buffer.setOriginMode(set)
                     7 -> buffer.setWrapMode(set)
+                    25 -> buffer.setCursorVisible(set)
                     1049 -> buffer.useAlternateScreen(set)
                     2004 -> buffer.setBracketedPasteMode(set)
                     else -> {

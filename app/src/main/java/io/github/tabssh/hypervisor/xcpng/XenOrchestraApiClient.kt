@@ -314,6 +314,11 @@ class XenOrchestraApiClient(
                     )
                     return@withContext client.newCall(newRequest).execute()
                 }
+                // Re-auth failed. Falling through here returned the response that
+                // was just closed above, so every caller's response.body?.string()
+                // threw IllegalStateException("closed") and the real cause — an
+                // authentication failure — was lost.
+                throw IOException("Xen Orchestra request failed: 401 (re-authentication failed)")
             }
 
             response
@@ -1296,8 +1301,13 @@ class XenOrchestraApiClient(
         fun onError(error: String)
     }
     
+    // Written from OkHttp dispatcher threads (onOpen/onClosed/onFailure) and read
+    // from the UI thread, same as every other cross-thread field in this class.
+    @Volatile
     private var webSocket: WebSocket? = null
+    @Volatile
     private var eventListener: EventListener? = null
+    @Volatile
     private var isWebSocketConnected = false
     
     /**

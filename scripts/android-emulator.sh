@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-##@Version YYYYMMDDHHMM-git
+##@Version 202608142059-git
 # scripts/android-emulator.sh — manage TabSSH test emulators.
 #
 # Usage:
@@ -31,6 +31,7 @@
 
 set -euo pipefail
 
+VERSION="202608142059-git"
 API_LEVEL="${API_LEVEL:-34}"
 SDK=""
 SDKMGR=""
@@ -236,7 +237,7 @@ __start_avd() {
   echo
 
   if [[ "$("$ADB" -s "$serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != "1" ]]; then
-    echo "⚠  Emulator did not finish booting. See /tmp/${name}.log"
+    echo "⚠  Emulator did not finish booting. See $logdir/${name}.log"
     return 1
   fi
 

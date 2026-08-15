@@ -63,46 +63,50 @@ class ANSIParserTest {
     
     @Test
     fun `test cursor movement sequences`() {
+        // moveCursor takes (deltaX, deltaY), so vertical motion belongs in the
+        // second argument. These assertions previously encoded the opposite and
+        // locked in an axis-swap bug in the parser.
         // Cursor up: ESC[A
         parser.processText("\u001B[A")
-        verify(mockBuffer).moveCursor(-1, 0)
+        verify(mockBuffer).moveCursor(0, -1)
         
         // Cursor down: ESC[B  
         parser.processText("\u001B[B")
-        verify(mockBuffer).moveCursor(1, 0)
+        verify(mockBuffer).moveCursor(0, 1)
         
         // Cursor forward: ESC[C
         parser.processText("\u001B[C")
-        verify(mockBuffer).moveCursor(0, 1)
+        verify(mockBuffer).moveCursor(1, 0)
         
         // Cursor back: ESC[D
         parser.processText("\u001B[D")
-        verify(mockBuffer).moveCursor(0, -1)
+        verify(mockBuffer).moveCursor(-1, 0)
     }
     
     @Test
     fun `test cursor movement with parameters`() {
         // Cursor up 5 lines: ESC[5A
         parser.processText("\u001B[5A")
-        verify(mockBuffer).moveCursor(-5, 0)
+        verify(mockBuffer).moveCursor(0, -5)
         
         // Cursor forward 10 columns: ESC[10C
         parser.processText("\u001B[10C")
-        verify(mockBuffer).moveCursor(0, 10)
+        verify(mockBuffer).moveCursor(10, 0)
     }
     
     @Test
     fun `test cursor positioning`() {
         // Set cursor position: ESC[10;20H
         parser.processText("\u001B[10;20H")
-        // setCursorPosition takes (x = column, y = row), so ESC[10;20H (row 10,
-        // column 20, 1-based) must arrive as (19, 9). The parser used to pass
-        // these the wrong way round.
-        verify(mockBuffer).setCursorPosition(19, 9)
+        // setCursorPositionAbsolute takes (x = column, y = row), so ESC[10;20H
+        // (row 10, column 20, 1-based) must arrive as (19, 9). The parser used
+        // to pass these the wrong way round. CUP goes through the absolute
+        // setter so DECOM (origin mode) is honoured.
+        verify(mockBuffer).setCursorPositionAbsolute(19, 9)
         
         // Home position: ESC[H (equivalent to ESC[1;1H)
         parser.processText("\u001B[H")
-        verify(mockBuffer).setCursorPosition(0, 0)
+        verify(mockBuffer).setCursorPositionAbsolute(0, 0)
     }
     
     @Test
@@ -234,7 +238,7 @@ class ANSIParserTest {
         verify(mockBuffer).setCharacterAttributes(fgColor = 1) // Red
         verify(mockBuffer).resetCharacterAttributes()
         verify(mockBuffer).clearScreen()
-        verify(mockBuffer).setCursorPosition(0, 0)
+        verify(mockBuffer).setCursorPositionAbsolute(0, 0)
         verify(mockBuffer).setCharacterAttributes(bold = true)
     }
     
@@ -254,6 +258,33 @@ class ANSIParserTest {
         parser.processText("\u001B")
     }
     
+    @Test
+    fun `DECTCEM toggles cursor visibility`() {
+        parser.processText("\u001B[?25l")
+        verify(mockBuffer).setCursorVisible(false)
+
+        parser.processText("\u001B[?25h")
+        verify(mockBuffer).setCursorVisible(true)
+    }
+
+    @Test
+    fun `multi-byte UTF-8 split across chunks is decoded once`() {
+        // "é" is 0xC3 0xA9. Feeding the two bytes in separate reads previously
+        // produced two U+FFFD replacement characters.
+        parser.processInput(byteArrayOf(0xC3.toByte()))
+        parser.processInput(byteArrayOf(0xA9.toByte()))
+
+        verify(mockBuffer).writeChar('\u00E9')
+        verify(mockBuffer, Mockito.never()).writeChar('\uFFFD')
+    }
+
+    @Test
+    fun `whole multi-byte UTF-8 in one chunk still decodes`() {
+        parser.processInput("héllo".toByteArray(Charsets.UTF_8))
+        verify(mockBuffer).writeChar('\u00E9')
+        verify(mockBuffer, times(2)).writeChar('l')
+    }
+
     @Test
     fun `test 256 color support`() {
         // 256-color foreground: ESC[38;5;196m (bright red)

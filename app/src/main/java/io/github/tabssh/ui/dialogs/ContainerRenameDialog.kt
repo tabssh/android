@@ -10,7 +10,7 @@ import io.github.tabssh.ui.utils.DockerNames
 import io.github.tabssh.ui.utils.DockerText
 
 /**
- * Rename prompt for a container (PLAN.AI.md step 24). Validation only —
+ * Rename prompt for a container. Validation only —
  * the caller performs the actual transport rename.
  */
 object ContainerRenameDialog {

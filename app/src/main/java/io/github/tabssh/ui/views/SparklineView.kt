@@ -11,7 +11,7 @@ import androidx.core.graphics.ColorUtils
 import com.google.android.material.R as MaterialR
 
 /**
- * Minimal sparkline for live container stats (PLAN.AI.md step 24). Keeps a
+ * Minimal sparkline for live container stats. Keeps a
  * rolling window of samples and draws a filled line chart using the theme's
  * primary color, so it follows dark/light mode without hardcoded colors.
  */

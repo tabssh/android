@@ -12,7 +12,7 @@ import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
 /**
- * Three-tier transport detection (PLAN.AI.md step 14):
+ * Three-tier transport detection:
  *  (a) direct-streamlocal relay + unversioned `GET /version`
  *  (b) `docker system dial-stdio` relay + unversioned `GET /version`
  *  (c) `docker version --format '{{json .}}'` over SSH exec

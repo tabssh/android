@@ -163,3 +163,15 @@
 # classes — so those introspection paths are unreachable at runtime and
 # the missing classes are safe to ignore in every minified variant.
 -dontwarn java.beans.**
+
+# Settings screens: preferences_main.xml wires every settings page via
+# android:fragment="io.github.tabssh.ui.activities.XxxSettingsFragment",
+# and SettingsActivity instantiates them reflectively by that string
+# (FragmentFactory.instantiate -> Class.forName). AAPT2 only emits keep
+# rules for classes referenced from layouts/manifest — res/xml preference
+# files get none — so R8 stripped all eight fragments and every settings
+# click crashed with ClassNotFoundException in minified builds. Keep the
+# name and the no-arg constructor of every app Fragment subclass.
+-keep public class io.github.tabssh.** extends androidx.fragment.app.Fragment {
+    <init>();
+}

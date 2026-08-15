@@ -100,8 +100,18 @@ jobs:
           gradle-${{ runner.os }}-
 
     - name: Decode and setup keystore
+      env:
+        KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
       run: |
-        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
+        # Read the secret from the environment, never via GitHub expression
+        # interpolation inside the script body — interpolation splices the
+        # value into the generated shell text, where a newline or quote in
+        # the secret becomes executable script.
+        if [ -z "$KEYSTORE_B64" ]; then
+          echo "::error::KEYSTORE_BASE64 secret is not set" >&2
+          exit 1
+        fi
+        printf '%s' "$KEYSTORE_B64" | base64 -d > keystore.jks
         echo "✅ Keystore decoded and ready"
 
     - name: Capture build identity
@@ -174,7 +184,14 @@ jobs:
 
         git archive --format=tar.gz -o "dist/tabssh-${TAG_NAME}-source.tar.gz" HEAD
 
-        SBOM=$(find app/build -name '*.json' -path '*cyclonedx*' -o -name 'bom.json' | head -1)
+        # Parenthesised: without them find parses this as
+        # (-name '*.json' -a -path '*cyclonedx*') -o (-name 'bom.json'),
+        # so an unrelated bom.json anywhere under app/build could win.
+        SBOM=$(find app/build \( -name '*.json' -a -path '*cyclonedx*' \) -o -name 'bom.json' | head -1)
+        if [ -z "$SBOM" ]; then
+          echo "::error::CycloneDX SBOM not found under app/build" >&2
+          exit 1
+        fi
         cp "$SBOM" dist/tabssh-sbom.cdx.json
 
         cd dist

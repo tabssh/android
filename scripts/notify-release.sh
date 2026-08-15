@@ -4,14 +4,16 @@
 # Sends to any channel whose token/webhook env var is set; skips the rest silently.
 #
 # Usage:  scripts/notify-release.sh <version>
-# Env:    MATRIX_TOKEN, MASTODON_TOKEN, DISCORD_WEBHOOK
+# Env:    MATRIX_TOKEN + MATRIX_ROOM (+ optional MATRIX_HOMESERVER),
+#         MASTODON_TOKEN (+ optional MASTODON_HOST), DISCORD_WEBHOOK
 
 set -euo pipefail
 
 VERSION="${1:?Usage: $0 <version>  (e.g. v1.2.0)}"
-TMPDIR="${TMPDIR:-/tmp}"
-OUTFILE="$TMPDIR/tabssh-android/release-message.txt"
-mkdir -p "$(dirname "$OUTFILE")"
+# mktemp -d rather than a fixed, predictable path another user could
+# pre-create as a symlink.
+OUTDIR="$(mktemp -d "${TMPDIR:-/tmp}/tabssh-release-XXXXXX")"
+OUTFILE="$OUTDIR/release-message.txt"
 
 read -r -d '' MESSAGE << EOF || true
 🎉 TabSSH $VERSION Released!
@@ -31,21 +33,32 @@ echo "$MESSAGE" > "$OUTFILE"
 echo "   (saved to $OUTFILE)"
 echo ""
 
+# Matrix needs a room in addition to the token; without MATRIX_ROOM there is
+# nowhere to post, so say that instead of silently doing nothing.
 if [[ -n "${MATRIX_TOKEN:-}" ]]; then
     echo "📱 Sending Matrix notification..."
-    # curl -q -LSsf -X POST "https://matrix.org/_matrix/client/r0/rooms/!room:server/send/m.room.message" \
-    #   -H "Authorization: Bearer $MATRIX_TOKEN" \
-    #   -H "Content-Type: application/json" \
-    #   -d "{\"msgtype\":\"m.text\",\"body\":$(printf '%s' "$MESSAGE" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}"
-    echo "  (MATRIX_TOKEN set — uncomment the curl call above to enable)"
+    if [[ -z "${MATRIX_ROOM:-}" ]]; then
+        echo "  ⚠️  MATRIX_ROOM not set — skipping Matrix notification"
+    else
+        MATRIX_HOMESERVER="${MATRIX_HOMESERVER:-https://matrix.org}"
+        MATRIX_PAYLOAD="$(printf '%s' "$MESSAGE" |
+            python3 -c 'import json,sys; print(json.dumps({"msgtype": "m.text", "body": sys.stdin.read()}))')"
+        curl -q -LSsf -X POST \
+            "${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${MATRIX_ROOM}/send/m.room.message" \
+            -H "Authorization: Bearer $MATRIX_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$MATRIX_PAYLOAD"
+        echo "  ✅ Matrix notification sent"
+    fi
 fi
 
 if [[ -n "${MASTODON_TOKEN:-}" ]]; then
     echo "🐘 Sending Mastodon notification..."
-    # curl -q -LSsf -X POST "https://mastodon.social/api/v1/statuses" \
-    #   -H "Authorization: Bearer $MASTODON_TOKEN" \
-    #   --data-urlencode "status=$MESSAGE"
-    echo "  (MASTODON_TOKEN set — uncomment the curl call above to enable)"
+    MASTODON_HOST="${MASTODON_HOST:-https://mastodon.social}"
+    curl -q -LSsf -X POST "${MASTODON_HOST}/api/v1/statuses" \
+        -H "Authorization: Bearer $MASTODON_TOKEN" \
+        --data-urlencode "status=$MESSAGE"
+    echo "  ✅ Mastodon notification sent"
 fi
 
 if [[ -n "${DISCORD_WEBHOOK:-}" ]]; then

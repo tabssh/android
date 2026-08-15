@@ -60,6 +60,7 @@ RUN yes | sdkmanager --licenses > /dev/null 2>&1 || true && \
         "platforms;android-34" \
         "platforms;android-35" \
         "build-tools;34.0.0" \
+        "build-tools;35.0.0" \
         "cmake;3.22.1" \
         "ndk;26.1.10909125" \
     > /dev/null 2>&1

@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Registry credential manager (PLAN.AI.md step 30): list, add, edit, and
+ * Registry credential manager: list, add, edit, and
  * delete credentials for private registries. Both the list and the editor
  * explain what the credentials are for: the auto-update checker's on-device
  * HEAD /v2 manifest digest checks. The secret never touches Room — it goes

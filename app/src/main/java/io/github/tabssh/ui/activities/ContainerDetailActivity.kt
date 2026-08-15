@@ -29,7 +29,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 /**
- * Container detail screen (PLAN.AI.md step 24): inspect, env/mounts/ports,
+ * Container detail screen: inspect, env/mounts/ports,
  * live logs (ANSI-stripped follow), and live stats with sparklines, plus the
  * full lifecycle action menu and the docker-exec terminal entry point.
  * FLAG_SECURE keeps env values and logs out of screenshots and recents.

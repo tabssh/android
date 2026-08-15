@@ -8,11 +8,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TMPDIR="${TMPDIR:-/tmp}"
-OUT="$TMPDIR/tabssh-android/fdroid-submission"
 
-rm -rf "$OUT"
-mkdir -p "$OUT"
+# mktemp -d, not a fixed path: the previous $TMPDIR/tabssh-android/... path was
+# predictable and then rm -rf'd, so on a shared machine another user could
+# pre-create it (or a symlink at it) and steer the delete.
+OUT="$(mktemp -d "${TMPDIR:-/tmp}/tabssh-fdroid-XXXXXX")"
 
 echo "📦 Preparing F-Droid submission artefacts → $OUT"
 

@@ -5,6 +5,7 @@ import io.github.tabssh.hypervisor.oci.OciInstanceAction
 import io.github.tabssh.hypervisor.oci.OciKeyMaterial
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import org.json.JSONObject
 
 /**
@@ -177,6 +178,10 @@ class OciCloudClient : CloudProvider {
             val creds     = JSONObject(bearerToken)
             val apiClient = buildApiClient(creds)
             apiClient.instanceAction(instanceId, action)
+        } catch (e: CancellationException) {
+            // Never report a cancelled coroutine as a failed power action —
+            // callers must see the cancellation, not a bogus "false".
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "ociAction(${action.wireValue}, $instanceId) failed", e)
             false

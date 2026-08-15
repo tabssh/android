@@ -99,42 +99,79 @@ class TerminalBuffer(
         cursorY = y.coerceIn(0, rows - 1)
     }
 
+    /**
+     * Absolute cursor positioning (CUP / HVP). With DECOM (origin mode) set,
+     * row 1 means the top of the DECSTBM scrolling region and the cursor may
+     * not be placed outside it. Without DECOM this is plain screen-absolute
+     * positioning.
+     */
+    fun setCursorPositionAbsolute(x: Int, y: Int) {
+        if (originMode) {
+            cursorX = x.coerceIn(0, cols - 1)
+            cursorY = (scrollTop + y).coerceIn(scrollTop, scrollBottom)
+        } else {
+            setCursorPosition(x, y)
+        }
+    }
+
     fun getCursorPosition(): Pair<Int, Int> = Pair(cursorX, cursorY)
 
-    fun scrollUp() {
-        // Move first line to scrollback
-        scrollback.add(screen[0].copyOf())
+    /**
+     * DECTCEM (ESC[?25h / ESC[?25l). Renderers ask for this so a full-screen
+     * app that hides the cursor while redrawing does not leave a block
+     * flickering over its output.
+     */
+    fun setCursorVisible(visible: Boolean) {
+        cursorVisible = visible
+    }
 
-        // Shift all lines up, carrying wrap flags with them
-        for (i in 1 until rows) {
+    fun isCursorVisible(): Boolean = cursorVisible
+
+    /**
+     * True when the scrolling region covers the whole screen and the main screen
+     * is active — the only situation in which departing rows belong in scrollback.
+     * A DECSTBM region (vi's status line, tmux panes) must scroll in place, and
+     * alternate-screen rows are editor frames the user never asked to keep.
+     */
+    private fun scrollbackEligible(): Boolean =
+        scrollTop == 0 && scrollBottom == rows - 1 && !alternateScreen
+
+    fun scrollUp() {
+        // Move the departing line to scrollback (full-region main screen only)
+        if (scrollbackEligible()) {
+            scrollback.add(screen[scrollTop].copyOf())
+
+            // Limit scrollback size based on preference
+            if (maxScrollbackLines != -1 && scrollback.size > maxScrollbackLines) {
+                scrollback.removeAt(0)
+            }
+        }
+
+        // Shift the region's lines up, carrying wrap flags with them
+        for (i in scrollTop + 1..scrollBottom) {
             screen[i - 1] = screen[i]
             rowWrapped[i - 1] = rowWrapped[i]
         }
 
-        // Clear last line and its wrap flag
-        screen[rows - 1] = Array(cols) { TerminalChar(' ', 7, 0, false, false, false) }
-        rowWrapped[rows - 1] = false
-        
-        // Limit scrollback size based on preference
-        if (maxScrollbackLines != -1 && scrollback.size > maxScrollbackLines) {
-            scrollback.removeAt(0)
-        }
+        // Clear the region's last line and its wrap flag
+        screen[scrollBottom] = Array(cols) { TerminalChar(' ', 7, 0, false, false, false) }
+        rowWrapped[scrollBottom] = false
     }
 
     fun scrollDown() {
         // Pull the most recent scrollback line back onto the screen when there is
-        // one; otherwise insert a blank line, which is what insert-line (ESC[L) and
-        // reverse index expect. Previously an empty scrollback made both no-ops.
-        val restored = scrollback.removeLastOrNull()
-        for (i in rows - 1 downTo 1) {
+        // one; otherwise insert a blank line, which is what reverse index expects.
+        // Previously an empty scrollback made it a no-op.
+        val restored = if (scrollbackEligible()) scrollback.removeLastOrNull() else null
+        for (i in scrollBottom downTo scrollTop + 1) {
             screen[i] = screen[i - 1]
             rowWrapped[i] = rowWrapped[i - 1]
         }
         // Scrollback rows keep the width they had when they were pushed, so a line
         // restored after a resize has to be re-fitted or the renderer would index
         // past the end of it.
-        screen[0] = Array(cols) { c -> restored?.getOrNull(c) ?: TerminalChar(' ', 7, 0, false, false, false) }
-        rowWrapped[0] = false
+        screen[scrollTop] = Array(cols) { c -> restored?.getOrNull(c) ?: TerminalChar(' ', 7, 0, false, false, false) }
+        rowWrapped[scrollTop] = false
     }
 
     fun clear() {
@@ -215,9 +252,17 @@ class TerminalBuffer(
         }
     }
 
+    /**
+     * Lines shifted by insert/delete-line stop at the scrolling region's last row:
+     * IL/DL inside a DECSTBM region must never push rows past its bottom margin.
+     */
+    private fun shiftBoundary(row: Int): Int =
+        if (row in scrollTop..scrollBottom) scrollBottom else rows - 1
+
     fun insertLine(row: Int) {
         if (row in 0 until rows) {
-            for (i in rows - 1 downTo row + 1) {
+            val bottom = shiftBoundary(row)
+            for (i in bottom downTo row + 1) {
                 screen[i] = screen[i - 1]
                 rowWrapped[i] = rowWrapped[i - 1]
             }
@@ -228,12 +273,13 @@ class TerminalBuffer(
 
     fun deleteLine(row: Int) {
         if (row in 0 until rows) {
-            for (i in row until rows - 1) {
+            val bottom = shiftBoundary(row)
+            for (i in row until bottom) {
                 screen[i] = screen[i + 1]
                 rowWrapped[i] = rowWrapped[i + 1]
             }
-            screen[rows - 1] = Array(cols) { TerminalChar(' ', 7, 0, false, false, false) }
-            rowWrapped[rows - 1] = false
+            screen[bottom] = Array(cols) { TerminalChar(' ', 7, 0, false, false, false) }
+            rowWrapped[bottom] = false
         }
     }
 
@@ -271,6 +317,7 @@ class TerminalBuffer(
     private var insertMode = false
     private var wrapMode = true
     private var originMode = false
+    private var cursorVisible = true
     private var alternateScreen = false
     private var mainScreen = screen
     private var alternateScreenBuffer: Array<Array<TerminalChar>>? = null
@@ -430,8 +477,12 @@ class TerminalBuffer(
     }
 
     fun setScrollRegion(top: Int, bottom: Int) {
-        scrollTop = top.coerceIn(0, rows - 1)
-        scrollBottom = bottom.coerceIn(top, rows - 1)
+        // Clamp the top FIRST and derive the bottom's lower bound from the clamped
+        // value: a remote host can send ESC[999;5r, and coerceIn(999, rows - 1)
+        // has min > max, which throws IllegalArgumentException on the UI thread.
+        val clampedTop = top.coerceIn(0, rows - 1)
+        scrollTop = clampedTop
+        scrollBottom = bottom.coerceIn(clampedTop, rows - 1)
     }
 
     fun setInsertMode(enabled: Boolean) {
@@ -464,16 +515,26 @@ class TerminalBuffer(
         }
     }
 
+    /**
+     * Move the cursor down one line, scrolling the active region when it is
+     * sitting on the region's last row. Scrolling on `cursorY >= rows` alone
+     * ignored DECSTBM entirely, so a program with a scroll region (vi's status
+     * line, tmux) scrolled rows it must leave untouched.
+     */
+    private fun advanceLine() {
+        if (cursorY == scrollBottom) {
+            scrollUp()
+        } else {
+            cursorY = (cursorY + 1).coerceAtMost(rows - 1)
+        }
+    }
+
     fun writeChar(ch: Char) {
         when (ch) {
             '\n' -> {
                 // Hard newline — the current row is NOT soft-wrapped
                 rowWrapped[cursorY] = false
-                cursorY++
-                if (cursorY >= rows) {
-                    scrollUp()
-                    cursorY = rows - 1
-                }
+                advanceLine()
             }
             '\r' -> cursorX = 0
             '\t' -> {
@@ -488,6 +549,16 @@ class TerminalBuffer(
             }
             else -> {
                 if (cursorX < cols && cursorY < rows) {
+                    // IRM (ESC[4h): the character is inserted, so everything from
+                    // the cursor rightwards shifts one cell and the last cell of
+                    // the row falls off. Without this the mode was accepted and
+                    // then silently overwrote, corrupting line editors that rely
+                    // on it instead of redrawing.
+                    if (insertMode) {
+                        for (c in cols - 1 downTo cursorX + 1) {
+                            screen[cursorY][c] = screen[cursorY][c - 1]
+                        }
+                    }
                     screen[cursorY][cursorX] = TerminalChar(
                         ch,
                         currentAttrs.fgColor,
@@ -502,11 +573,7 @@ class TerminalBuffer(
                         // Mark this row as soft-wrapped before advancing to the next
                         rowWrapped[cursorY] = true
                         cursorX = 0
-                        cursorY++
-                        if (cursorY >= rows) {
-                            scrollUp()
-                            cursorY = rows - 1
-                        }
+                        advanceLine()
                     }
                 }
             }

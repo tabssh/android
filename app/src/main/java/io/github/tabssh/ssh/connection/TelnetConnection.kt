@@ -86,7 +86,7 @@ class TelnetConnection(
     // What we expose to TermuxBridge:
     private val pipeOut = PipedOutputStream()
     private val pipeIn = PipedInputStream(pipeOut, 64 * 1024)
-    private val outFilter = EscapingOutputStream { socket?.getOutputStream() }
+    private val outFilter = EscapingOutputStream(writeLock) { socket?.getOutputStream() }
 
     val inputStream: InputStream get() = pipeIn
     val outputStream: OutputStream get() = outFilter
@@ -323,32 +323,48 @@ class TelnetConnection(
         return out.toByteArray()
     }
 
-    /** OutputStream that escapes literal 0xFF as IAC IAC (RFC 854 §3). */
-    private class EscapingOutputStream(private val target: () -> OutputStream?) : OutputStream() {
+    /**
+     * OutputStream that escapes literal 0xFF as IAC IAC (RFC 854 §3).
+     *
+     * Holds [lock] — the connection's writeLock — for the whole of each write.
+     * Without it, user keystrokes on this stream could interleave with an
+     * option negotiation or NAWS subnegotiation packet sent from the reader
+     * thread, splicing two Telnet commands into one corrupt byte sequence.
+     */
+    private class EscapingOutputStream(
+        private val lock: Any,
+        private val target: () -> OutputStream?
+    ) : OutputStream() {
         override fun write(b: Int) {
-            val out = target() ?: throw IOException("Telnet socket closed")
-            if ((b and 0xFF) == IAC) {
-                out.write(IAC); out.write(IAC)
-            } else {
-                out.write(b)
+            synchronized(lock) {
+                val out = target() ?: throw IOException("Telnet socket closed")
+                if ((b and 0xFF) == IAC) {
+                    out.write(IAC); out.write(IAC)
+                } else {
+                    out.write(b)
+                }
             }
         }
         override fun write(b: ByteArray, off: Int, len: Int) {
-            val out = target() ?: throw IOException("Telnet socket closed")
-            // Fast path for the common case (no 0xFF in payload).
-            var start = off
-            val end = off + len
-            var i = off
-            while (i < end) {
-                if ((b[i].toInt() and 0xFF) == IAC) {
-                    if (i > start) out.write(b, start, i - start)
-                    out.write(IAC); out.write(IAC)
-                    start = i + 1
+            synchronized(lock) {
+                val out = target() ?: throw IOException("Telnet socket closed")
+                // Fast path for the common case (no 0xFF in payload).
+                var start = off
+                val end = off + len
+                var i = off
+                while (i < end) {
+                    if ((b[i].toInt() and 0xFF) == IAC) {
+                        if (i > start) out.write(b, start, i - start)
+                        out.write(IAC); out.write(IAC)
+                        start = i + 1
+                    }
+                    i++
                 }
-                i++
+                if (start < end) out.write(b, start, end - start)
             }
-            if (start < end) out.write(b, start, end - start)
         }
-        override fun flush() { target()?.flush() }
+        override fun flush() {
+            synchronized(lock) { target()?.flush() }
+        }
     }
 }

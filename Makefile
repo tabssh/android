@@ -3,7 +3,10 @@
 
 # === Configuration ===
 PROJECT := tabssh
-VERSION := $(shell grep -- versionName app/build.gradle | head -1 | sed 's/.*"\(.*\)".*/\1/')
+# Anchored to the declaration, not the bare word: an unanchored match hit the
+# explanatory comment above defaultConfig first, and the resulting string
+# carried backticks that every recipe then ran as command substitution.
+VERSION := $(shell grep -m1 -E -- '^[[:space:]]*versionName[[:space:]]+"' app/build.gradle | sed 's/.*"\(.*\)".*/\1/')
 # Toolchain image declared in IDEA.md ## Toolchain (build_image)
 BUILD_IMAGE ?= ghcr.io/tabssh/android:build
 # 4g proved too small: the Gradle daemon (Xmx2048m) plus Kotlin/KSP daemons
@@ -40,7 +43,7 @@ BLUE := \033[0;34m
 YELLOW := \033[1;33m
 NC := \033[0m
 
-.PHONY: help check build release test test-install install clean image fetch-mosh fetch-spice fetch-fonts adb-reconnect logs
+.PHONY: help check build release test test-install install clean image fetch-mosh fetch-spice fetch-fonts adb-reconnect logs _ensure-image
 
 .DEFAULT_GOAL := help
 

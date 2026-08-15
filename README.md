@@ -161,7 +161,7 @@ Submission metadata lives in `metadata/`; run `./scripts/prepare-fdroid-submissi
 
 ### Requirements
 
-- **Minimum:** Android 5.0 (API 21)
+- **Minimum:** Android 7.0 (API 24)
 - **Recommended:** Android 8.0+ (API 26) for best performance
 - **Storage:** 50 MB free
 - **RAM:** 512 MB minimum
@@ -203,7 +203,7 @@ Cloud          → Cloud Accounts → tap account → view live instances
 
 ## 🎨 Themes
 
-22 built-in themes: **Dracula**, **Solarized Light/Dark**, **Nord**, **Monokai**, **One Dark**, **Tokyo Night**, **Gruvbox**, **Tomorrow Night**, **Catppuccin Mocha**, and 13 more.
+23 built-in themes: **Dracula**, **Solarized Light/Dark**, **Nord**, **Monokai**, **One Dark**, **Tokyo Night**, **Gruvbox**, **Tomorrow Night**, **Catppuccin Mocha**, and 14 more.
 
 **Custom themes:** Settings → General → Appearance → Theme Editor. Import/export JSON:
 
@@ -224,17 +224,17 @@ Cloud          → Cloud Accounts → tap account → view live instances
 
 | Metric | Value |
 |---|---|
-| Kotlin files | 257 |
-| Lines of code | ~86,000 |
-| Activities | 37 |
-| Fragments | 7 |
-| Services | 1 (`SSHConnectionService`) |
-| Built-in themes | 22 |
+| Kotlin files | 352 |
+| Lines of code | ~117,000 |
+| Activities | 45 |
+| Fragments | 24 |
+| Services | 2 (`SSHConnectionService`, `VncKeepAliveService`) |
+| Built-in themes | 23 |
 | Translations | 4 (EN/ES/FR/DE) |
 | APK variants | 5 (universal + 4 arch-specific) |
 | Hypervisor backends | 4 (Proxmox, XCP-ng, VMware, QEMU/libvirt) |
 | Cloud providers | 8 (DO, Hetzner, Linode, Vultr, AWS, GCP, Azure, OCI) |
-| Room DB version | 37 (36 forward migrations from v1) |
+| Room DB version | 11 (9 forward migrations from v2) |
 | Trackers | 0 |
 
 ---
@@ -246,8 +246,7 @@ See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for guidelines.
 ```bash
 git checkout -b feature/my-feature
 # make changes
-make check          # must pass
-./gradlew test      # must pass
+make check          # must pass (runs compile + lint + unit tests in Docker)
 # open pull request
 ```
 
@@ -279,7 +278,7 @@ make check          # must pass
 - Docker 20.10+ and Docker Compose 2.0+
 
 **Local build**
-- Android SDK 34, JDK 17 (Temurin/OpenJDK), Gradle 8.11.1+
+- Android SDK 35 (compile) / 34 (target), JDK 17 (Temurin/OpenJDK), Gradle 8.14.5
 
 ### Build Commands
 
@@ -305,14 +304,15 @@ android/
 │   ├── ssh/            # SSHConnection, SSHSessionManager, port forwarding, X11
 │   ├── sftp/           # SFTP browser and file transfer
 │   ├── terminal/       # TermuxBridge, TerminalView, VNC RFB client
-│   ├── storage/        # Room DB (v37, 36 migrations), DAOs, entities
+│   ├── storage/        # Room DB (v11, 9 migrations), DAOs, entities
 │   ├── sync/           # SAF-based 3-way merge sync
 │   ├── backup/         # Encrypted ZIP backup/restore
 │   └── ui/             # Activities, Fragments, Adapters, ViewModels
 ├── app/src/main/res/   # Layouts, strings, themes, drawables
 ├── app/schemas/        # Room migration JSON schemas
-├── .github/workflows/  # CI/CD (ci, security, development, beta, release, mosh-binaries)
-├── docker/             # Dockerfile (toolchain image), docker-compose.yml
+├── .github/workflows/  # CI/CD (ci, security, development, beta, release,
+│                       #        build-toolchain, mosh-binaries, spice-libs)
+├── docker/             # Dockerfile.build (toolchain image), docker-compose.yml
 ├── scripts/            # Build and automation scripts
 ├── metadata/           # F-Droid metadata
 ├── Makefile
@@ -325,13 +325,13 @@ The build toolchain runs inside Docker — no local Android SDK or JDK required.
 
 ```bash
 # Build debug APKs
-docker compose -f docker/docker-compose.yml run --rm build
+docker compose -f docker/docker-compose.yml run --rm tabssh-build
 
 # Or via make (recommended)
 make build
 ```
 
-The `:build` image (`docker/Dockerfile.build`) contains Android SDK 34, JDK 17, and Gradle. It is rebuilt monthly by the `build-toolchain.yml` workflow.
+The `:build` image (`docker/Dockerfile.build`) contains the Android SDK, JDK 17, and Gradle. It is rebuilt monthly by the `build-toolchain.yml` workflow.
 
 ---
 

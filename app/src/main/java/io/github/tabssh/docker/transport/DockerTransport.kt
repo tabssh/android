@@ -82,7 +82,7 @@ enum class ComposeInvocation(val commandPrefix: String) {
 }
 
 /**
- * Transport-agnostic Docker host operations (PLAN.AI.md step 11).
+ * Transport-agnostic Docker host operations.
  *
  * Implementations:
  *  - [EngineApiTransport] — Docker Engine REST API over an SSH unix-socket
@@ -115,7 +115,7 @@ interface DockerTransport {
 
     /**
      * Create AND start a container named [name] from a recreate plan
-     * (RecreateContainer, PLAN.AI.md step 32). Each tier consumes its half of
+     * (RecreateContainer, ). Each tier consumes its half of
      * the plan: the Engine API posts [createBody] verbatim to
      * `/containers/create?name={name}` and starts the result; the CLI tier
      * runs the [runArgv] `docker run` tokens (which already carry `--name`) —

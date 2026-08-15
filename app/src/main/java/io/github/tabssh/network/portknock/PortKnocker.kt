@@ -1,6 +1,7 @@
 package io.github.tabssh.network.portknock
 
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -70,6 +71,10 @@ class PortKnocker {
 
             Logger.i("PortKnocker", "Knock sequence completed on $host")
             true
+        } catch (e: CancellationException) {
+            // delay() between knocks throws this when the caller aborts the
+            // connection; swallowing it turned a cancel into a "knock failed".
+            throw e
         } catch (e: Exception) {
             Logger.e("PortKnocker", "Failed to execute knock sequence", e)
             false

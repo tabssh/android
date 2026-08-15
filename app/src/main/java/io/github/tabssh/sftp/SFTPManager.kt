@@ -16,6 +16,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.Vector
@@ -86,6 +87,30 @@ class SFTPManager(private val sshConnection: SSHConnection) {
     }
     
     /**
+     * Advance [stream] by exactly [count] bytes, or throw.
+     *
+     * `InputStream.skip` is best-effort — on JSch's network-backed `get()` stream
+     * it routinely returns short. A short skip on a resumed transfer appends from
+     * the wrong offset, producing a byte-gap the caller then reports as Success.
+     */
+    private fun skipFully(stream: InputStream, count: Long) {
+        var remaining = count
+        while (remaining > 0) {
+            val skipped = stream.skip(remaining)
+            if (skipped > 0) {
+                remaining -= skipped
+                continue
+            }
+            // skip() returned 0: fall back to reading, and treat EOF as fatal
+            // rather than silently resuming from the wrong position.
+            if (stream.read() < 0) {
+                throw IOException("Cannot resume: stream ended $remaining bytes before offset $count")
+            }
+            remaining--
+        }
+    }
+
+    /**
      * Disconnect SFTP channel
      */
     fun disconnect() {
@@ -95,10 +120,27 @@ class SFTPManager(private val sshConnection: SSHConnection) {
         activeTransfers.values.forEach { it.cancel() }
         activeTransfers.clear()
         
-        sftpChannel?.disconnect()
+        // Clear the field first so any withChannel() that has not yet taken the
+        // mutex falls straight through to its default, then tear the channel down
+        // behind channelMutex. disconnect() is not suspend, so it previously
+        // destroyed the channel unguarded — potentially in the middle of an
+        // in-flight ls()/stat() holding the very lock that exists because
+        // JSch's ChannelSftp is not thread-safe.
+        val closing = sftpChannel
         sftpChannel = null
         _isConnected.value = false
-        
+        if (closing != null) {
+            transferScope.launch {
+                channelMutex.withLock {
+                    try {
+                        closing.disconnect()
+                    } catch (e: Exception) {
+                        Logger.w("SFTPManager", "Failed to disconnect SFTP channel: ${e.message}")
+                    }
+                }
+            }
+        }
+
         notifyListeners { onSFTPDisconnected() }
     }
     
@@ -285,7 +327,7 @@ class SFTPManager(private val sshConnection: SSHConnection) {
             outputStream.use { out ->
                 localFile.inputStream().use { inputStream ->
                     if (startOffset > 0) {
-                        inputStream.skip(startOffset)
+                        skipFully(inputStream, startOffset)
                     }
                     transferWithProgress(inputStream, out, task)
                 }
@@ -336,6 +378,11 @@ class SFTPManager(private val sshConnection: SSHConnection) {
                 Logger.w("SFTPManager", "Audit log (sftpUpload) failed: ${e.message}")
             }
 
+        } catch (e: CancellationException) {
+            // Scope cancellation is not a transfer error — reporting it as one
+            // hid a cancelled transfer behind a bogus TransferResult.Error.
+            task.complete(TransferResult.Cancelled)
+            throw e
         } catch (e: Exception) {
             Logger.e("SFTPManager", "Upload failed: ${task.localPath}", e)
             task.complete(TransferResult.Error(e.message ?: "Upload failed"))
@@ -379,7 +426,7 @@ class SFTPManager(private val sshConnection: SSHConnection) {
             channel.get(task.remotePath).use { inputStream ->
                 // Skip bytes if resuming
                 if (startOffset > 0) {
-                    inputStream.skip(startOffset)
+                    skipFully(inputStream, startOffset)
                 }
 
                 // Resume-download fix: previously this branch called
@@ -445,6 +492,11 @@ class SFTPManager(private val sshConnection: SSHConnection) {
                 Logger.w("SFTPManager", "Audit log (sftpDownload) failed: ${e.message}")
             }
 
+        } catch (e: CancellationException) {
+            // Same as the upload path: cancellation must propagate, not be
+            // reported to the UI as a failed transfer.
+            task.complete(TransferResult.Cancelled)
+            throw e
         } catch (e: Exception) {
             Logger.e("SFTPManager", "Download failed: ${task.remotePath}", e)
             task.complete(TransferResult.Error(e.message ?: "Download failed"))

@@ -14,7 +14,7 @@ import org.json.JSONObject
  * Fallback transport: every operation runs `docker … --format '{{json .}}'`
  * over SSH exec (modeled on LibvirtApiClient.runCommand via [SshExecRunner]).
  *
- * Degradations vs [EngineApiTransport] (documented per PLAN.AI.md step 13):
+ * Degradations vs [EngineApiTransport]:
  *  - [streamStats] polls `docker stats --no-stream` every ~2 s instead of a
  *    push stream; the loop is cancellable via normal Flow cancellation.
  *  - [pullImage] emits raw `docker pull` output lines as status-only events

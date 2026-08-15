@@ -15,8 +15,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Base for the six DockerHostManagerActivity destination fragments.
- * Wires the activity's shared session flow (transport acquired once, PLAN.AI.md
- * step 21) and refresh ticks into one [onSessionReady] callback.
+ * Wires the activity's shared session flow (transport acquired once) and
+ * refresh ticks into one [onSessionReady] callback.
  */
 abstract class DockerPageFragment : Fragment() {
 

@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
  * where [relayPort] is the local end of a [SocketRelay] (streamlocal channel
  * or dial-stdio relay) to the host's docker.sock.
  *
- * API version negotiation (PLAN.AI.md architectural findings): one
+ * API version negotiation: one
  * unversioned `GET /version`, negotiated = min(client ceiling
  * [DockerApiParsers.CLIENT_MAX_API_VERSION], server ApiVersion), cached for
  * the transport's lifetime; DockerHost.pinnedApiVersion overrides.

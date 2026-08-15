@@ -138,7 +138,7 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
-    // v8 → v9: the five Docker-feature tables created (PLAN.AI.md Phase 1)
+    // v8 → v9: the five Docker-feature tables created
     // -------------------------------------------------------------------------
 
     @Test

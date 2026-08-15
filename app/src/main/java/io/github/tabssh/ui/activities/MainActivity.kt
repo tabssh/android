@@ -379,33 +379,28 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         val haveRealLogs = file != null && file.exists() && file.length() > 0
         if (!haveRealLogs) {
             // Show a hint that depends on which build the user is on:
-            //   debug build  → debug logging is supposed to be on, but no
-            //                  events captured yet — "do something first"
-            //   release build → debug logging is off; tell them where to
-            //                  enable it (Settings → Logging) rather than
-            //                  silently flipping it from this menu (the
-            //                  user wants this controlled from Settings).
+            //   DEBUG_LOG build → debug logging is on, but no events captured
+            //                     yet — "do something first"
+            //   release build   → the Debug Logging settings category is
+            //                     hidden when DEBUG_LOG is false (see
+            //                     LoggingSettingsFragment), so pointing the
+            //                     user at Settings was a dead end. Say what is
+            //                     actually true: this build cannot capture
+            //                     debug logs at all.
             val msg = if (BuildConfig.DEBUG_LOG) {
                 "Debug logging is enabled (this is a development build) but " +
                 "no events have been captured yet.\n\nUse the app a bit " +
                 "(open a connection, navigate around) and try Copy Debug " +
                 "Logs again."
             } else {
-                "Debug logging is OFF in this release build.\n\n" +
-                "Enable it in Settings → Logging → \"Enable Debug Logging\", " +
-                "reproduce the issue, then come back here to copy the logs."
+                "Debug logging is not available in this release build.\n\n" +
+                "Install a development build if you need to capture logs for " +
+                "a bug report."
             }
             MaterialAlertDialogBuilder(this)
                 .setTitle("No Debug Logs Yet")
                 .setMessage(msg)
                 .setPositiveButton("OK", null)
-                .also { b ->
-                    if (!BuildConfig.DEBUG_LOG) {
-                        b.setNeutralButton("Open Settings") { _, _ ->
-                            startActivity(Intent(this, SettingsActivity::class.java))
-                        }
-                    }
-                }
                 .show()
             return
         }

@@ -24,12 +24,16 @@ class RemoteExecOps(
         private const val FILE_TIMEOUT_MS = 60_000L
     }
 
+    // @Volatile: these caches are written from whichever Dispatchers.IO thread
+    // first resolves them and read from every later call, which may run on a
+    // different thread. Without it a stale null (or a partially published
+    // ComposeInvocation) is visible to concurrent callers.
     /** Remote `$USER`/`$HOME` values, fetched once per instance. */
-    private var remoteUser: String? = null
-    private var remoteHome: String? = null
+    @Volatile private var remoteUser: String? = null
+    @Volatile private var remoteHome: String? = null
 
     /** Compose invocation, detected once per instance. */
-    private var composeInvocation: ComposeInvocation? = null
+    @Volatile private var composeInvocation: ComposeInvocation? = null
 
     /** The docker binary to invoke — explicit per-host path or PATH lookup. */
     val dockerBin: String

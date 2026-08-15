@@ -213,7 +213,14 @@ jobs:
 
         git archive --format=tar.gz -o "dist/tabssh-${COMMIT_HASH}-source.tar.gz" HEAD
 
-        SBOM=$(find app/build -name '*.json' -path '*cyclonedx*' -o -name 'bom.json' | head -1)
+        # Parenthesised: without them find parses this as
+        # (-name '*.json' -a -path '*cyclonedx*') -o (-name 'bom.json'),
+        # so an unrelated bom.json anywhere under app/build could win.
+        SBOM=$(find app/build \( -name '*.json' -a -path '*cyclonedx*' \) -o -name 'bom.json' | head -1)
+        if [ -z "$SBOM" ]; then
+          echo "::error::CycloneDX SBOM not found under app/build" >&2
+          exit 1
+        fi
         cp "$SBOM" dist/tabssh-sbom.cdx.json
 
         cd dist

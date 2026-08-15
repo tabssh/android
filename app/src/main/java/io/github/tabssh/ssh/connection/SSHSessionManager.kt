@@ -14,7 +14,12 @@ import java.util.concurrent.ConcurrentHashMap
  * Manages multiple SSH connections and sessions
  */
 class SSHSessionManager(private val context: Context) {
-    
+
+    private companion object {
+        // Upper bound on the blocking wait in cleanup().
+        const val CLEANUP_TIMEOUT_MS = 5_000L
+    }
+
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     
     // Active connections mapped by connection profile ID
@@ -448,10 +453,20 @@ class SSHSessionManager(private val context: Context) {
     /**
      * Cleanup resources. Blocks the calling thread until all active connections
      * are torn down, then cancels the internal coroutine scope.
+     *
+     * The wait is bounded: a server that stops responding mid-teardown would
+     * otherwise block the caller (potentially the main thread) indefinitely.
+     * `scope.cancel()` below tears down anything still in flight after the
+     * deadline.
      */
     fun cleanup() {
         Logger.d("SSHSessionManager", "Cleaning up SSH session manager")
-        runBlocking { closeAllConnections() }
+        val finished = runBlocking {
+            withTimeoutOrNull(CLEANUP_TIMEOUT_MS) { closeAllConnections() } != null
+        }
+        if (!finished) {
+            Logger.w("SSHSessionManager", "Cleanup timed out after ${CLEANUP_TIMEOUT_MS}ms; cancelling scope")
+        }
         scope.cancel()
     }
 }

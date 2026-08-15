@@ -37,39 +37,48 @@ internal object Cbor {
 
     class CborException(message: String) : RuntimeException(message)
 
+    /** Maximum container nesting accepted by [decode]. Real payloads use 3. */
+    private const val MAX_DEPTH = 16
+
     fun decode(bytes: ByteArray): Value = Decoder(bytes).decodeOne()
 
     private class Decoder(private val bytes: ByteArray) {
         private var pos = 0
+        private var depth = 0
 
         fun decodeOne(): Value {
+            // Bound recursion: a QR payload of nothing but array headers
+            // ("\u009F"-style nesting) would otherwise recurse until the
+            // decoder thread's stack overflows, which is not catchable as a
+            // CborException by the scanner UI.
+            if (depth > MAX_DEPTH) throw CborException("nesting deeper than $MAX_DEPTH at byte $pos")
             val initial = readByte()
             val major = (initial ushr 5) and 0x07
             val ai = initial and 0x1F
             return when (major) {
                 0 -> Value.IntValue(readUInt(ai))
-                2 -> {
-                    val n = readUInt(ai).toInt()
-                    Value.BytesValue(readBytes(n))
-                }
-                3 -> {
-                    val n = readUInt(ai).toInt()
-                    Value.TextValue(String(readBytes(n), Charsets.UTF_8))
-                }
+                2 -> Value.BytesValue(readBytes(readLength(ai, 1)))
+                3 -> Value.TextValue(String(readBytes(readLength(ai, 1)), Charsets.UTF_8))
                 4 -> {
-                    val n = readUInt(ai).toInt()
+                    val n = readLength(ai, 1)
                     val items = ArrayList<Value>(n)
+                    depth++
                     repeat(n) { items.add(decodeOne()) }
+                    depth--
                     Value.ArrayValue(items)
                 }
                 5 -> {
-                    val n = readUInt(ai).toInt()
+                    // A map entry is a key plus a value, so it needs at least
+                    // 2 remaining bytes.
+                    val n = readLength(ai, 2)
                     val map = LinkedHashMap<String, Value>(n)
+                    depth++
                     repeat(n) {
                         val key = decodeOne()
                         if (key !is Value.TextValue) throw CborException("non-text map key at byte $pos")
                         map[key.value] = decodeOne()
                     }
+                    depth--
                     Value.MapValue(map)
                 }
                 7 -> when (ai) {
@@ -87,8 +96,31 @@ internal object Cbor {
             return bytes[pos++].toInt() and 0xFF
         }
 
+        /**
+         * Read a definite length and validate it against what is actually
+         * left in the buffer.
+         *
+         * Two problems this closes. First, `readUInt(ai).toInt()` silently
+         * truncated 64-bit lengths — 0x1_0000_0000 became 0. Second, an
+         * unvalidated element count was passed straight to
+         * `ArrayList(n)` / `LinkedHashMap(n)`, so a 5-byte QR code claiming
+         * an array of 2^31-1 items allocated a multi-gigabyte backing array
+         * and OOM-killed the app before a single element was decoded.
+         *
+         * [bytesPerItem] is the minimum encoded size of one element, so an
+         * element count can never exceed the bytes remaining to decode it.
+         */
+        private fun readLength(ai: Int, bytesPerItem: Int): Int {
+            val raw = readUInt(ai)
+            val remaining = (bytes.size - pos).toLong()
+            if (raw < 0L || raw > remaining / bytesPerItem) {
+                throw CborException("length $raw exceeds $remaining remaining bytes at byte $pos")
+            }
+            return raw.toInt()
+        }
+
         private fun readBytes(n: Int): ByteArray {
-            if (n < 0 || pos + n > bytes.size) throw CborException("byte string out of range (need $n at byte $pos)")
+            if (n < 0 || n > bytes.size - pos) throw CborException("byte string out of range (need $n at byte $pos)")
             val out = bytes.copyOfRange(pos, pos + n)
             pos += n
             return out

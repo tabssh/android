@@ -126,7 +126,7 @@ data class ExecResult(
 /**
  * One row of `docker compose ls --all --format json` — a compose project
  * discovered on the host regardless of whether it is tracked in Room
- * (PLAN.AI.md TODO.D external-stack discovery).
+ * (external-stack discovery).
  */
 data class ComposeLsEntry(
     val name: String,

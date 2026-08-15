@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-##@Version YYYYMMDDHHMM-git
+##@Version 202608142059-git
 # Idempotent launcher for the TabSSH beta-test sshd container.
 #
 # Builds (or rebuilds, if the Dockerfile changed) the test-sshd image and
@@ -16,6 +16,7 @@
 
 set -euo pipefail
 
+VERSION="202608142059-git"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 SHARED="/tmp/tabssh-android/sshd"

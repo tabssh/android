@@ -7,7 +7,7 @@ import io.github.tabssh.R
 
 /**
  * Shared confirmation for the destructive prune actions (images, volumes,
- * networks) launched from the Docker host manager menu (PLAN.AI.md step 22).
+ * networks) launched from the Docker host manager menu.
  */
 object PruneConfirmDialog {
 

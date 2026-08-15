@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
-##@Version YYYYMMDDHHMM-git
+##@Version 202608142059-git
 # scripts/clean-build.sh — full clean of build artefacts then rebuild.
+
+# Not `set -e`: the build's exit status is inspected explicitly below.
+set -uo pipefail
+
+VERSION="202608142059-git"
+
+# Every rm -rf below is a relative path, so anchor to the repo root instead
+# of trusting the caller's working directory.
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." || exit 1
 
 echo "🧹 TabSSH Clean Build"
 echo "====================="

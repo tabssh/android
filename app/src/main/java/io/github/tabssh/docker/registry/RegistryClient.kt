@@ -19,7 +19,7 @@ import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 /**
- * Registry HTTP API v2 client for update digest checks (PLAN.AI.md step 29).
+ * Registry HTTP API v2 client for update digest checks.
  *
  * The only operation the update checker needs is `HEAD /v2/{name}/manifests/
  * {reference}` with the multi-arch Accept set, reading `Docker-Content-Digest`

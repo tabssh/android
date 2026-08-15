@@ -11,7 +11,7 @@ import io.github.tabssh.R
 import io.github.tabssh.ui.utils.DockerText
 
 /**
- * Compose stack list rows (PLAN.AI.md step 22): name, remote path, and the
+ * Compose stack list rows: name, remote path, and the
  * last-known per-service status snapshot (refreshed via composePs) for
  * Room-tracked stacks; discovered-but-untracked stacks (TODO.AI.md § D) show
  * their `docker compose ls` config file path and an "External" badge.

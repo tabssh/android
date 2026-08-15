@@ -10,19 +10,21 @@ services:
   tabssh-builder:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.build
     image: ghcr.io/tabssh/android:build
     volumes:
       - ../:/workspace
-      # Path matches GRADLE_USER_HOME baked into the Dockerfile so the
-      # cache mount lands in the right place. If you change one,
-      # change both.
-      - gradle-cache:/root/.gradle
+      # AI.md PART 4 pins GRADLE_USER_HOME to the project-scoped
+      # /workspace/.gradle so concurrent projects never share a cache.
+      # The named volume is mounted at that same path; if you change
+      # one, change both.
+      - gradle-cache:/workspace/.gradle
     working_dir: /workspace
     environment:
-      - GRADLE_USER_HOME=/root/.gradle
+      - GRADLE_USER_HOME=/workspace/.gradle
     command: >
       bash -c "
+        [ -d /workspace/.gradle/wrapper ] || cp -a /root/.gradle/wrapper /workspace/.gradle/;
         echo '🚀 TabSSH - Docker Build Environment';
         echo '====================================';
         echo '';
@@ -41,16 +43,17 @@ services:
   tabssh-test:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.build
     image: ghcr.io/tabssh/android:build
     volumes:
       - ../:/workspace
-      - gradle-cache:/root/.gradle
+      - gradle-cache:/workspace/.gradle
     working_dir: /workspace
     environment:
-      - GRADLE_USER_HOME=/root/.gradle
+      - GRADLE_USER_HOME=/workspace/.gradle
     command: >
       bash -c "
+        [ -d /workspace/.gradle/wrapper ] || cp -a /root/.gradle/wrapper /workspace/.gradle/;
         echo '🧪 TabSSH - Test Suite';
         echo '======================';
         ./gradlew test --console=plain;
@@ -65,16 +68,17 @@ services:
   tabssh-build:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.build
     image: ghcr.io/tabssh/android:build
     volumes:
       - ../:/workspace
-      - gradle-cache:/root/.gradle
+      - gradle-cache:/workspace/.gradle
     working_dir: /workspace
     environment:
-      - GRADLE_USER_HOME=/root/.gradle
+      - GRADLE_USER_HOME=/workspace/.gradle
     command: >
       bash -c "
+        [ -d /workspace/.gradle/wrapper ] || cp -a /root/.gradle/wrapper /workspace/.gradle/;
         echo '📱 TabSSH - APK Build';
         echo '=====================';
         ./gradlew assembleDebug --console=plain;

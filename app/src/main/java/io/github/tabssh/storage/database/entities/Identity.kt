@@ -46,7 +46,7 @@ data class Identity(
      * Android Keystore). This column is kept as a read fallback in
      * `SSHConnection` so backups and migrations from pre-Keystore installs
      * still work. Dropping the column requires `ALTER TABLE … DROP COLUMN`
-     * (SQLite ≥ 3.35 → Android 12+ only) which would bump minSdk from 21.
+     * (SQLite ≥ 3.35 → Android 12+ only) which would bump minSdk from 24.
      * Until minSdk is raised, never write new passwords here.
      */
     @ColumnInfo(name = "password")

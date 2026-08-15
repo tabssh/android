@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
-##@Version YYYYMMDDHHMM-git
+##@Version 202608142059-git
 # scripts/install-to-device.sh — install TabSSH APK to a connected device via ADB.
+
+# Not `set -e`: adb failures are handled explicitly with tailored messages.
+set -uo pipefail
+
+VERSION="202608142059-git"
+
+# The candidate APK paths below are relative, so anchor to the repo root
+# instead of trusting the caller's working directory. Remember where the
+# caller was so a relative APK argument still resolves against it.
+ORIG_PWD="$PWD"
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." || exit 1
 
 echo "📱 TabSSH APK Installer"
 echo "========================"
@@ -40,13 +51,18 @@ echo ""
 APK_PATH=""
 APK_TYPE=""
 
-if [ -n "$1" ]; then
-    # User specified APK path
-    if [ -f "$1" ]; then
-        APK_PATH="$1"
+USER_APK="${1:-}"
+if [ -n "$USER_APK" ]; then
+    # User-specified APK: absolute paths as given, relative ones resolved
+    # against the directory the user actually ran the script from.
+    if [ -f "$USER_APK" ]; then
+        APK_PATH="$USER_APK"
+        APK_TYPE="specified"
+    elif [ -f "$ORIG_PWD/$USER_APK" ]; then
+        APK_PATH="$ORIG_PWD/$USER_APK"
         APK_TYPE="specified"
     else
-        echo -e "${RED}❌ APK not found: $1${NC}"
+        echo -e "${RED}❌ APK not found: $USER_APK${NC}"
         exit 1
     fi
 elif [ -f "binaries/tabssh-android-universal.apk" ]; then

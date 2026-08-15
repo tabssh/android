@@ -37,7 +37,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Add/edit one Docker host (PLAN.AI.md step 20): name, linked SSH connection,
+ * Add/edit one Docker host: name, linked SSH connection,
  * socket path, the two remote base-path overrides (defaults from the entity),
  * optional CLI path and notes — plus "Test transport", which runs the full
  * three-tier TransportCapabilityDetector against the current form values and

@@ -31,7 +31,7 @@ import org.yaml.snakeyaml.nodes.MappingNode
 import java.io.StringReader
 
 /**
- * Compose stack editor (PLAN.AI.md step 25): paste-first new-stack flow —
+ * Compose stack editor: paste-first new-stack flow —
  * name it, paste the YAML, validate, and push to
  * {composeBase}/{name}/compose.yaml plus an optional .env. Edit mode loads
  * both files back from the host and adds the compose lifecycle menu.

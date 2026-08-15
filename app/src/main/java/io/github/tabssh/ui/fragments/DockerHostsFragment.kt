@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Docker host list — third Infra sub-tab (PLAN.AI.md step 19).
+ * Docker host list — third Infra sub-tab.
  * Same structure as HypervisorsFragment: DAO Flow → DiffUtil adapter, FAB /
  * empty-state add. Row overflow button and long-press open the same action
  * sheet (Open / Test connection / Edit / Delete — destructive last).

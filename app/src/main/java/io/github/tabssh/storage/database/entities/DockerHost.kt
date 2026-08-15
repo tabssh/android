@@ -9,7 +9,7 @@ import kotlinx.serialization.Serializable
 /**
  * Docker host managed over an existing SSH connection.
  *
- * Transport is HYBRID (see PLAN.AI.md): Docker Engine REST API over an SSH
+ * Transport is HYBRID: Docker Engine REST API over an SSH
  * unix-socket forward of [socketPath] (primary), with automatic fallback to
  * `docker … --format '{{json .}}'` CLI over SSH exec. [transportMode] pins
  * one tier or leaves selection automatic.

@@ -26,7 +26,7 @@ private const val MAX_FIELD = 64
 private const val MAX_DISK_ROWS = 32
 
 /**
- * Host dashboard destination (PLAN.AI.md step 22): engine info, version, and
+ * Host dashboard destination: engine info, version, and
  * disk usage from the shared transport.
  */
 class DockerDashboardFragment : DockerPageFragment() {

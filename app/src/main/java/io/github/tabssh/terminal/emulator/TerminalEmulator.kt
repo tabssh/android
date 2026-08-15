@@ -362,7 +362,15 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
 
                 closeStreams()
                 shutdownWriteExecutor(activeWriteExecutor)
-                this@TerminalEmulator.readJob = null
+                // Only clear the field if it still points at THIS loop. A
+                // reconnect can install a new job before the dying loop's
+                // finally runs; clearing unconditionally orphaned the new read
+                // loop, so a later disconnect() cancelled nothing and the
+                // socket stayed open for the process lifetime.
+                val thisJob = coroutineContext[Job]
+                if (this@TerminalEmulator.readJob === thisJob) {
+                    this@TerminalEmulator.readJob = null
+                }
                 Logger.d("TerminalEmulator", "SSH read loop terminated")
             }
         }

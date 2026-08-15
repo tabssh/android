@@ -818,7 +818,7 @@ object Logger {
                 appendLine("Exported: ${dateFormat.format(Date())}")
                 appendLine("App Version: ${io.github.tabssh.BuildConfig.VERSION_NAME} (${io.github.tabssh.BuildConfig.VERSION_CODE})")
                 appendLine("Build Commit: ${io.github.tabssh.BuildConfig.GIT_COMMIT_ID ?: "unknown"}")
-                appendLine("Debug Mode: $debugMode")
+                appendLine("Debug Log: $debugMode")
                 appendLine("Log File: ${file.absolutePath}")
                 appendLine("Log Size: ${file.length()} bytes")
                 appendLine("========================")
@@ -842,7 +842,7 @@ object Logger {
         appContext = context.applicationContext
         logFile = File(context.filesDir, LOG_FILE_NAME)
 
-        i("Logger", "=== Debug Mode Force-Enabled ===")
+        i("Logger", "=== Debug Log Force-Enabled ===")
         i("Logger", "App Version: ${getAppVersion(context)}")
         i("Logger", "Android: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
         i("Logger", "Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
@@ -854,7 +854,7 @@ object Logger {
     fun disableDebugMode() {
         if (!debugMode) return
 
-        i("Logger", "=== Debug Mode Disabled ===")
+        i("Logger", "=== Debug Log Disabled ===")
 
         debugMode = false
         logToFile = false

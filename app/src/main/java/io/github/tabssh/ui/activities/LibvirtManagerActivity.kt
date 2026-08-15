@@ -80,6 +80,13 @@ class LibvirtManagerActivity : AppCompatActivity() {
     private lateinit var recyclerView: RecyclerView
 
     private var apiClient: LibvirtApiClient? = null
+
+    /**
+     * The snapshot list dialog outlives a configuration change or a back-press
+     * unless it is dismissed explicitly, leaking its window. Tracked so
+     * [onDestroy] can dismiss it.
+     */
+    private var snapshotDialog: AlertDialog? = null
     private var hypervisorProfile: HypervisorProfile? = null
     private val vms = mutableListOf<LibvirtVm>()
     private lateinit var adapter: VmAdapter
@@ -135,6 +142,8 @@ class LibvirtManagerActivity : AppCompatActivity() {
         if (client != null) {
             Thread({ client.disconnect() }, "libvirt-disconnect").start()
         }
+        snapshotDialog?.dismiss()
+        snapshotDialog = null
         super.onDestroy()
     }
 
@@ -668,9 +677,11 @@ class LibvirtManagerActivity : AppCompatActivity() {
         val vmLabel = safeText(vm.name, 64)
         vmNameText.text = getString(R.string.hypervisor_vm_label_fmt, vmLabel)
 
+        snapshotDialog?.dismiss()
         val dialog = MaterialAlertDialogBuilder(this)
             .setView(dialogView)
             .create()
+        snapshotDialog = dialog
 
         // Load snapshots
         lifecycleScope.launch {

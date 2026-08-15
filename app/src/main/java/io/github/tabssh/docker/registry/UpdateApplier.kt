@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.flow
 import org.json.JSONObject
 
 /**
- * Execution half of the pull-and-recreate flow (PLAN.AI.md step 32) — walks
+ * Execution half of the pull-and-recreate flow — walks
  * [RecreateContainer.PLAN] against a [DockerTransport]:
  *
  * pull → stop → rename to `{name}_old` → create+start under the original

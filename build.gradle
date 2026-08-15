@@ -23,8 +23,10 @@ plugins {
 
 // Repositories are now managed in settings.gradle
 
-task clean(type: Delete) {
-    delete rootProject.buildDir
+// layout.buildDirectory, not the deprecated Project.buildDir accessor —
+// the latter is removed in Gradle 9.
+tasks.register('clean', Delete) {
+    delete rootProject.layout.buildDirectory
 }
 
 // Dependency security scanning configuration

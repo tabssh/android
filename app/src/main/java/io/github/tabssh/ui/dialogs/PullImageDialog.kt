@@ -18,7 +18,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
- * Image pull dialog (PLAN.AI.md step 23): image reference input plus live
+ * Image pull dialog: image reference input plus live
  * per-layer progress rows fed by the transport's pullImage Flow. The dialog
  * stays open during the pull; dismissing it cancels the stream.
  */

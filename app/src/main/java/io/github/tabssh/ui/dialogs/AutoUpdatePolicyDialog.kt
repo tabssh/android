@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * Per-container auto-update policy editor (PLAN.AI.md step 31): toggles the
+ * Per-container auto-update policy editor: toggles the
  * digest check and the pull+recreate gate, and links an optional registry
  * credential for private images.
  */

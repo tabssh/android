@@ -69,17 +69,11 @@ android {
     namespace 'io.github.tabssh'
     compileSdk 35
 
-    // Production-release detection. A clean semver "x.x.x" (e.g. "1.0.0",
-    // "1.2.3") is a production release — debug logging stays off so end users
-    // don't pay the I/O cost or risk leaking diagnostic detail. Anything else
-    // ("0.9.1-beta", "1.0.0-rc1", "0.9.1-devel", "1.0.0-SNAPSHOT") is a
-    // pre-production build — debug logging defaults on so testers and beta
-    // users automatically have logs ready when reporting issues.
-    //
-    // This is evaluated once at configure time against `defaultConfig.versionName`,
-    // then baked into `BuildConfig.DEBUG_LOG` for each non-debug build type.
-    // The `debug` build type ignores it entirely and forces DEBUG_LOG = true.
-    def isProductionRelease = { String v -> v ==~ /^\d+\.\d+\.\d+$/ }
+    // Pinned to a version baked into the toolchain image (AI.md PART 4):
+    // leaving it to the AGP default lets a Gradle/AGP bump silently trigger a
+    // mid-build sdkmanager download, which is nondeterministic and a known CI
+    // flake. Bump this and docker/Dockerfile.build together.
+    buildToolsVersion '35.0.0'
 
     // F-Droid builder detection. The recipe in metadata/io.github.tabssh.yml
     // writes `org.gradle.project.fdroidBuild=true` into gradle.properties in
@@ -155,8 +149,8 @@ android {
 
     buildTypes {
         debug {
-            // Remove debug suffix so updates work
-            // applicationIdSuffix ".debug"
+            // No applicationIdSuffix: debug builds must be able to update an
+            // installed release build (they share the release signing config).
             debuggable true
             minifyEnabled false
             buildConfigField "boolean", "DEBUG_LOG", "true"
@@ -170,25 +164,14 @@ android {
             minifyEnabled true
             shrinkResources true
             debuggable false
-            // Only a clean "x.x.x" version is a real production release;
-            // every pre-release tag keeps debug logging on. See the
-            // `isProductionRelease` closure at the top of the android block.
-            buildConfigField "boolean", "DEBUG_LOG",
-                "${!isProductionRelease(defaultConfig.versionName)}"
+            // AI.md PART 4/13: `devel` is the variant that enables the Debug
+            // Log. Shipped release builds always have it off.
+            buildConfigField "boolean", "DEBUG_LOG", "false"
             buildConfigField "String", "BUILD_TYPE", '"release"'
 
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
 
             signingConfig signingConfigs.release
-            
-            // Ensure mapping.txt is generated
-            postprocessing {
-                removeUnusedCode true
-                removeUnusedResources true
-                obfuscate true
-                optimizeCode true
-                proguardFiles 'proguard-rules.pro'
-            }
         }
         
         devel {
@@ -208,9 +191,8 @@ android {
             initWith release
             // initWith copies DEBUG_LOG from release; re-state it here so a
             // future edit to the release stanza doesn't silently change fdroid
-            // behaviour. Same production-vs-pre-release rule applies.
-            buildConfigField "boolean", "DEBUG_LOG",
-                "${!isProductionRelease(defaultConfig.versionName)}"
+            // behaviour.
+            buildConfigField "boolean", "DEBUG_LOG", "false"
             buildConfigField "String", "BUILD_TYPE", '"fdroid"'
             applicationIdSuffix ""
             
