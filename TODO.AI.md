@@ -21,6 +21,252 @@ is in progress.
    Until appealed/re-classified, "Install anyway" + verifying
    checksums-dev.sha256 is the workaround.
 
+## Open — 2026-08-14 user-reported regressions in devel-3d12d05e (all fully working before; must be fixed)
+
+1. Settings ANR: every settings page hangs (ANR) in the minified devel
+   build. Debug log shows an active mosh session streaming during the
+   hang; prime suspect is Logger lock contention under DEBUG_LOG=true.
+   Second log (cleared-then-reproduced, 84 s window) confirms: the
+   settings tap emits ZERO log lines while a session streams — the main
+   thread blocks before the first Logger call in the settings path.
+   Debugger agent reproducing live on the AVD with an active session.
+2. Debug-log spam: TerminalView logs "onScreenChanged - scheduling
+   redraw" per frame and "Terminal title changed" per second — 97.5% of
+   the user's 463 KB log; the export's interesting window (settings
+   taps, proxmox, docker) was pushed past the paste-service 100 KB cap.
+   Remove or rate-limit per-frame logging.
+3. Proxmox/VNC not working (user report). Second debug log shows the
+   transport SUCCEEDING: termproxy ticket OK → serial console rejected
+   with a 35-byte binary error frame → intentional vncproxy fallback →
+   "VncView: VNC connected: 720×400 'QEMU (router)'" with RfbClient
+   pointer events flowing. So the break is rendering/interaction, not
+   connection. Leads: repeated "W/TerminalView: Terminal renderer is
+   null in onDraw" as the console tab wires up, and "E/TermuxBridge:
+   Error reading from SSH: Pipe closed" fired during the serial→VNC
+   teardown — check whether that error path blanks/kills the tab the
+   VNC view lives in. VNC itself locally testable against a VNC server
+   container on host dockerd.
+4. Docker dashboard "just loads" — spinner forever, never renders data.
+   Locally testable against host dockerd over SSH to the host sshd.
+
+## Open — 2026-08-15 beta pass on the AVD (findings + remaining coverage)
+
+1. RESOLVED 2026-08-15 — VNC console rendered black. TabTerminalActivity's
+   reattach path used `tabManager.getAllTabs()` (SSH tabs only), so an
+   activity launched for a VNC/SPICE tab saw an empty list, skipped
+   `updateViewPagerAdapter()`, and never bound the console page —
+   `RfbClient.start()` is only called from that bind, so the RFB handshake
+   never began. Now uses `getAllTabsSealed()`.
+2. RESOLVED 2026-08-15 — "Enter container" landed on the Docker host shell.
+   The ephemeral exec profile inherited Mosh "auto"; mosh-server always
+   starts a login shell and dropped the `docker exec` RemoteCommand. Any
+   profile with a RemoteCommand now stays on the SSH exec channel.
+3. RESOLVED 2026-08-15 — Docker dashboard "just loads": root cause was the
+   SSH user missing docker.sock group access, not app code; all Docker
+   tabs (containers, stacks, images, volumes, networks, dashboard) plus
+   inspect/config/logs/live stats verified against the host daemon.
+4. RESOLVED 2026-08-15 — VNC/RFB sessions produced no application-log
+   lines (tag `RfbClient` is on the app-log chatter denylist). Console
+   ready / closed-by-server / resize-rejection end now go through
+   `Logger.event`.
+5. RESOLVED 2026-08-15 — scripts/ui-test.sh: a value-taking step with no
+   value (e.g. trailing `--present`) aborted the whole run with
+   "$1: unbound variable"; steps now fail the assertion and continue. Also
+   removed the abandoned `__exec_run_steps` stub and fixed three `info`
+   calls that invoked the system `info` binary instead of `__info`.
+6. RESOLVED 2026-08-15 — "Browse Files (SFTP)" from the connections list
+   opened `SFTPActivity`, logged "Connection not found: <id>" and closed
+   instantly: the activity only looked in `SSHSessionManager`'s active
+   connection map, which is empty unless the host already has a terminal
+   session. It now falls back to loading the profile and dialing it, and
+   the "+" SFTP tab picker no longer hides connections that are not
+   already live.
+7. RESOLVED 2026-08-15 — the "Scrollback Buffer" setting was decorative:
+   every tab was built with a hardcoded `transcriptRows = 2000`, so the
+   preference (and its -1 "unlimited" default) never reached the emulator,
+   and the settings row rendered the raw value as a bare "-1". Tabs, split
+   panes, Tasker-created tabs, and restored sessions now take the value
+   from `PreferenceManager.getTranscriptRows()` (-1 → 50 000-row cap), the
+   summary reads "Unlimited (capped at 50,000 lines per tab)" or "N lines",
+   and the accepted maximum matches the applied cap (was 100 000).
+8. RESOLVED 2026-08-15 — app lock never asked for the PIN. With
+   "App Lock" enabled and a PIN stored, a cold launch went straight to
+   the connection list: `maybeRequireUnlock()` only fired when the
+   separate `security_auto_lock_background` toggle was on *and* a prior
+   background timestamp existed, so the lock was effectively inert on
+   launch. A per-process `appUnlockedThisProcess` flag now gates the
+   first foregrounded activity, and `PinLockActivity` clears it via
+   `TabSSHApplication.markAppUnlocked()` on every success path.
+9. RESOLVED 2026-08-15 — the PIN lock screen rendered unthemed (bare
+   platform input and buttons next to Material3 everywhere else): its
+   layout is built in code, which bypasses AppCompat/Material view
+   inflation. Now constructs `TextInputLayout`/`TextInputEditText` and
+   `MaterialButton` explicitly.
+10. RESOLVED 2026-08-15 — VNC session closed ~0.5 s after "console ready"
+    with `Unexpected QEMU ext sub-type 255`. Confirmed from a tcpdump of
+    the real session: `handleCursorWithAlpha()` did not read the U32
+    encoding field that precedes the cursor image (`pseudoEncodingCursorWithAlpha`
+    payload is `U32 encoding` + image), so the reader ran 4 bytes behind
+    from the first cursor rect onward — the next rect header was read out
+    of the cursor bitmap and the following message byte landed on 0xFF.
+    Now reads the encoding, requires Raw (the only value TigerVNC emits),
+    and closes with a clear reason for anything else.
+11. RESOLVED 2026-08-15 — with App Theme = Light every app bar rendered as
+    a blank white strip (white title, subtitle and back arrow on the light
+    surface colour), and the Settings icons were near-invisible pale grey.
+    `Widget.TabSSH.Toolbar` set white foreground colours but no background,
+    so Material3's surface default applied; the icons were framework
+    `@android:drawable/ic_menu_*` bitmaps, which are drawn for dark
+    backgrounds and cannot be tinted. The toolbar style now pins
+    `@color/primary_500` and is wired to `toolbarStyle`/`materialToolbarStyle`
+    in both themes (covering the screens that never named the style), and
+    every preference icon is now a project vector tinted `?attr/colorOnSurface`.
+12. RESOLVED 2026-08-15 — with the CursorWithAlpha desync fixed, the VNC
+    session painted the full desktop and then still died after ~1.5 s.
+    TigerVNC's own log gave the reason: `closed: (invalid pixel format)`.
+    `sendSetDesktopSize()` wrote number-of-screens and its padding as U16s
+    when the RFB spec defines both as U8, so every resize request put two
+    extra bytes on the wire; the server resumed parsing inside the screen
+    descriptor and read a bogus SetPixelFormat. Both fields are now U8.
+13. RESOLVED 2026-08-15 — third and final VNC teardown: with the resize
+    request fixed, TigerVNC accepted it (1280×1024 → 1080×1389) and then
+    closed with `Pixel buffer request 16x16 at 1069,0 exceeds framebuffer
+    1080x1389`. The continuous-updates region registered before the resize
+    stays registered on the server, so after a shrink the server encodes
+    rects outside its own framebuffer. `rearmContinuousUpdates()` now
+    re-registers the region on every resize path (DesktopSize,
+    ExtendedDesktopSize, UltraVNC ResizeFrameBuffer).
+14. Remaining beta coverage on the AVD.
+    - Themes: DONE 2026-08-15 — Light and Dark both verified; app bars keep
+      the branded blue in both, settings icons legible, VNC Hosts / Proxmox
+      toolbars no longer white-on-white after the toolbarStyle change.
+    - Proxmox console: DONE 2026-08-15 — added proxmox-test hypervisor
+      (192.168.122.10:8006, verifySsl off/TOFU pin), Test Connection
+      authenticated, VM 100 vnc-target started, console opened. Serial-term
+      WebSocket returned a Proxmox serial-error frame; client auto-fell-back
+      to vncproxy, RfbClient decoded the live ZRLE stream and rendered the
+      QEMU SeaBIOS screen. End-to-end Proxmox VNC console now works.
+    - Still not exercised: Proxmox SPICE display, telnet, backup/restore, and
+      log export against the paste service size cap.
+15. FINDING 2026-08-15 — Proxmox SPICE strategy is effectively unreachable.
+    In HypervisorConsoleManager.openProxmoxConsole the ConsoleStrategyChain is
+    ordered proxmox-termproxy → proxmox-spiceproxy (qemu only) → proxmox-vncproxy
+    and resolves first-success-wins. Proxmox issues a valid termproxy ticket for
+    every VM, even one with no serial device, so the chain ALWAYS resolves on
+    termproxy and the proxmox-spiceproxy strategy never runs — SpiceLoader
+    .isSpiceAvailable() is never even called on this path (confirmed: no
+    SpiceLoader log line ever appears). The later runtime serial-error fallback
+    goes termproxy→vncproxy, never SPICE. Net effect: with the shipped
+    libtabssh_native.so statically linking real libspice, the Proxmox SPICE
+    display can never be selected from the UI. The native SPICE client itself is
+    reachable and testable via the raw spice:// LinkHandlerActivity path (bare
+    display server, no Proxmox API), which is how SPICE render is being verified
+    on the AVD. Fix options (defer to user): (a) add an explicit console-type
+    picker so the user can force SPICE; (b) make the qemu SPICE strategy prefer
+    ahead of termproxy when the VM advertises a SPICE-capable vga (qxl/virtio);
+    (c) leave as-is and document that Proxmox SPICE is only via .vv/spice:// URIs.
+16. FIXED (source) 2026-08-15 — SPICE client never opened a socket; session
+    reported "started" but stayed black forever with no error. Reproduced
+    end-to-end on the AVD via the raw spice:// path (LinkHandlerActivity →
+    SpiceClient) against a real QEMU qxl SPICE server (containerised, reachable
+    at 10.0.2.2:5930): dialog + connect worked, native handle allocated,
+    "SPICE session started" logged — but `ss` showed NO TCP connection to the
+    server and the server logged no client (only a manual REDQ probe). No
+    onConnected / onError / onDisconnected ever fired. Root cause in
+    spice/cpp/spice_client_glib.c tabssh_spice_impl_start: it posted the connect
+    with g_main_context_invoke(), which runs the callback INLINE on the calling
+    JNI thread whenever it can acquire the context — and during the startup
+    window before loop_thread_main reaches g_main_loop_run nothing owns main_ctx,
+    so spice_session_connect() ran on the JNI thread where the thread-default
+    context is the global default (main_ctx is only pushed as thread-default on
+    the worker thread). libspice bound its async socket-connect sources to that
+    global-default context, which no loop ever iterates → connect never executed,
+    no socket, no error. Fix: replace g_main_context_invoke with an explicitly
+    g_source_attach'd idle source on main_ctx, so the connect is always
+    dispatched by the worker's g_main_loop_run with main_ctx as thread-default.
+    NOTE: libtabssh_native.so ships as a prebuilt fetched from the spice-libs
+    GitHub release (built by .github/workflows/spice-libs.yml from spice/cpp/ via
+    spice/Dockerfile + spice/build-android.sh); the source fix takes effect only
+    after that release is rebuilt. On-device re-verification is pending a local
+    x86_64 rebuild (in progress) or the next spice-libs CI release.
+    UPDATE 2026-08-15 — local x86_64 rebuild + hot-swap of the fixed .so
+    CONFIRMED the g_source_attach fix works to the socket layer: the SPICE
+    server (disable-ticketing=on, 5930) now logs a real client handshake
+    attempt correlated in time with the connect, whereas before NO socket ever
+    reached it. Remaining: the main channel drops right after link with no
+    client-side callback — root cause found: on_channel_new never connected the
+    `channel-event` signal, so SPICE_CHANNEL_ERROR_*/CLOSED were swallowed
+    (silent black screen, no emit_error). Second fix applied in
+    spice/cpp/spice_client_glib.c: added on_channel_event handler wired for all
+    channels, mapping each ERROR_* to emit_error with an actionable message and
+    a main-channel CLOSED to emit_disconnected, logging every transition. Second
+    x86_64 rebuild in progress to surface the actual link failure and confirm
+    end-to-end.
+    UPDATE 2 2026-08-15 — the second build (with channel-event) did NOT connect
+    at all: emulator-level `ss` confirmed the app opened NO socket, no
+    tabssh-spice worker thread was alive, no channel-event/error fired. So the
+    g_source_attach idle-source approach is RACY, not a reliable fix: the connect
+    is queued as a low-priority G_PRIORITY_DEFAULT_IDLE source attached to
+    main_ctx from the JNI thread, which races the worker's g_main_loop_run
+    startup — it dispatched in the first run (08:52 server handshake) but not the
+    second, leaving a session that reports "started" with no socket and no error.
+    THIRD fix (current, rebuilding): drop the idle source entirely and call
+    spice_session_connect INLINE inside loop_thread_main, after
+    push_thread_default(main_ctx) and before g_main_loop_run — so the async
+    transport sources bind to main_ctx deterministically every time. Removed the
+    now-dead start_session_on_worker + the g_source_attach block from
+    impl_start; added LOGI/LOGE around the worker loop start/connect/exit so the
+    flow is visible in logcat. Combined with the channel-event handler, the next
+    run should either complete end-to-end or log the precise link failure.
+    UPDATE 3 2026-08-15 — the third (inline-connect) build PROVED the worker now
+    runs: logcat showed `SPICE worker loop starting — initiating connect` on the
+    worker tid, no "connect failed", no "worker loop exited" — so
+    spice_session_connect returned TRUE and the loop was running. But STILL no
+    socket and no channel-event. Real root cause found by reading the spice-gtk
+    0.42 source (spice/cpp had it wrong all along): spice-gtk's gio-coroutine
+    schedules EVERY wakeup on the GLOBAL default GMainContext — socket-wait
+    sources via g_source_attach(src, NULL) (gio-coroutine.c:59,169) and signal
+    marshalling via g_idle_add (gio-coroutine.c:223,260), both of which resolve
+    to g_main_context_default() irrespective of any thread-default. Our worker
+    ran a PRIVATE g_main_context_new() context, which libspice's coroutine never
+    touches, so the connect coroutine started but never advanced — no socket, no
+    error, silent black screen. FIX (current, rebuilding): impl_create now takes
+    sess->main_ctx = g_main_context_ref(g_main_context_default()) instead of
+    g_main_context_new(); loop_thread_main no longer pushes a thread-default
+    context (GLib forbids pushing the global-default as thread-default, and with
+    nothing pushed g_socket_client_connect_async also targets the default
+    context) and just runs g_main_loop_run on the default context. This is the
+    context libspice's coroutine actually dispatches on. Fourth x86_64 rebuild in
+    progress to verify end-to-end.
+    VERIFIED FIXED 2026-08-15 — fourth build (sha256 8631f06a…, hot-swapped onto
+    the AVD) connects END TO END against the containerised QEMU qxl SPICE server
+    (10.0.2.2:5930, disable-ticketing). logcat: worker starts → three ESTAB TCP
+    sockets to :5930 → `SPICE channel type=1 opened` (main), type=3 (inputs),
+    type=2 (display); type=4 (cursor) ignored → `TabSSH:SpiceView: SPICE
+    connected: 720x400 ''`. That last line is onNativeConnected, which the native
+    bridge fires only from on_display_primary_create — so the primary surface/
+    framebuffer was created and the resolution propagated to the UI. The view
+    stays black solely because the QEMU test container boots no guest OS (720x400
+    is blank SeaBIOS VGA text mode); the SPICE client/render path itself is
+    proven working. Item 16 CLOSED.
+
+17. FINDING 2026-08-15 — telnet connects and works fully (verified: tester@
+    Alpine container at 10.0.2.2:2323, full MOTD + live shell + whoami=tester),
+    but at connect time `W/TabSSH:TelnetConnection: NAWS send failed: null`
+    fires — window-size (NAWS, RFC 1073) negotiation silently fails. The
+    session is unaffected (server falls back to default 80x24-ish), but the
+    remote never learns the real terminal dimensions. Root cause: setWindowSize's
+    connect-time push (SSHTab.kt:637) races the transport and threw a non-IO
+    exception (NPE, null message) that sendNaws only guarded for IOException, so
+    setWindowSize's generic catch logged the useless "null". The authoritative
+    NAWS is sent from handleIac(DO NAWS) (line 201) when the peer requests it, so
+    the connect-time push is a best-effort duplicate and the session's size IS
+    negotiated. FIXED 2026-08-15 — sendNaws now contains all exceptions (IO +
+    non-IO) and logs the real throwable at debug via Logger.d(TAG, msg, e);
+    setWindowSize no longer wraps/relogs. Removes the warning-level noise and
+    makes any future failure diagnosable with a stack trace instead of a bare
+    null. Kotlin-only change, no native rebuild needed; verified by `make check`.
+
 ## Open — 2026-08-14 terminal feature-completeness follow-ups
 
 1. Legacy `ANSIParser.handleExtendedColor` (terminal/emulator/ANSIParser.kt

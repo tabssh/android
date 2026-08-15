@@ -141,11 +141,10 @@ class TelnetConnection(
         lastCols = cols
         lastRows = rows
         if (!connected) return
-        try {
-            sendNaws(cols, rows)
-        } catch (e: Exception) {
-            Logger.w(TAG, "NAWS send failed: ${e.message}")
-        }
+        // sendNaws contains its own failures — a window-size hint (RFC 1073) is
+        // best-effort and the peer-driven send in handleIac(DO NAWS) carries the
+        // authoritative size, so nothing here needs to escalate.
+        sendNaws(cols, rows)
     }
 
     private fun startPump() {
@@ -292,7 +291,17 @@ class TelnetConnection(
         val out = rawOut ?: return
         try {
             synchronized(writeLock) { out.write(buildNawsPacket(cols, rows)); out.flush() }
-        } catch (_: IOException) {}
+        } catch (e: IOException) {
+            // Transport tearing down mid-write — expected on disconnect; NAWS is
+            // best-effort so this is debug-level, never a warning.
+            Logger.d(TAG, "NAWS send skipped (io)", e)
+        } catch (e: Exception) {
+            // Any non-IO failure (e.g. the output stream being closed under us on
+            // another thread, which surfaces as an NPE with a null message) must
+            // never propagate: a size hint is not worth disrupting the session.
+            // Log with the throwable so the cause is diagnosable, not a bare null.
+            Logger.d(TAG, "NAWS send skipped", e)
+        }
     }
 
     /**

@@ -624,7 +624,12 @@ class TerminalView @JvmOverloads constructor(
             override fun onScreenChanged() {
                 // Update buffer reference and redraw
                 termuxBuffer = bridge.getBuffer()
-                Logger.d("TerminalView", "onScreenChanged - scheduling redraw")
+                // Fires on every emulator screen update — can be many times
+                // per second during bulk output. Throttled so an active
+                // session doesn't flood the Logger write queue.
+                Logger.dThrottled("TerminalView", "onScreenChanged", 500) {
+                    "onScreenChanged - scheduling redraw"
+                }
                 post {
                     // Screen content changed, so the cached URL underline map
                     // no longer matches what is on screen.
@@ -634,8 +639,12 @@ class TerminalView @JvmOverloads constructor(
             }
 
             override fun onTitleChanged(title: String) {
-                // The title is remote-controlled: log its size, never its text.
-                Logger.d("TerminalView", "Terminal title changed (${title.length} chars)")
+                // The title is remote-controlled: log its size, never its
+                // text. OSC title updates can arrive in rapid bursts, so
+                // throttle to avoid flooding the Logger write queue.
+                Logger.dThrottled("TerminalView", "onTitleChanged", 1000) {
+                    "Terminal title changed (${title.length} chars)"
+                }
             }
 
             override fun onBell() {
@@ -761,8 +770,11 @@ class TerminalView @JvmOverloads constructor(
 
             override fun onTitleChanged(title: String) {
                 // Terminal title changed (e.g., from OSC sequences). Remote
-                // controlled, so only the length is logged.
-                Logger.d("TerminalView", "Terminal title changed (${title.length} chars)")
+                // controlled, so only the length is logged. Throttled — OSC
+                // title updates can arrive in rapid bursts.
+                Logger.dThrottled("TerminalView", "onTitleChanged", 1000) {
+                    "Terminal title changed (${title.length} chars)"
+                }
             }
 
             override fun onTerminalError(error: Exception) {

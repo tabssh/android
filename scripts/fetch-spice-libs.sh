@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-##@Version YYYYMMDDHHMM-git
+##@Version 202608150001-git
 # scripts/fetch-spice-libs.sh — pull the cross-compiled SPICE native library
 # (libtabssh_native.so) from the latest GitHub release `spice-libs-<version>`
 # and place one per ABI under app/src/main/jniLibs/.
@@ -14,6 +14,8 @@
 # Triggered by `make build` before APK packaging.
 
 set -euo pipefail
+
+VERSION="202608150001-git"
 
 REPO="${TABSSH_REPO:-tabssh/android}"
 ABIS=(arm64-v8a armeabi-v7a x86_64 x86)

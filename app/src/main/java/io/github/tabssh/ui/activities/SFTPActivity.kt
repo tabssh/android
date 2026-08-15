@@ -137,13 +137,32 @@ class SFTPActivity : AppCompatActivity() {
         
         lifecycleScope.launch {
             try {
-                val connection = withContext(Dispatchers.IO) {
+                // Reuse an already-open terminal session when there is one.
+                // Opened from the connections list the host is usually NOT
+                // connected yet — the old code treated that as a fatal
+                // "Connection not found" and closed the browser immediately.
+                val active = withContext(Dispatchers.IO) {
                     app.sshSessionManager.getConnection(connectionId)
                 }
-                if (connection == null) {
-                    Logger.e("SFTPActivity", "Connection not found: $connectionId")
-                    finish()
-                    return@launch
+                val connection = active ?: run {
+                    val profile = withContext(Dispatchers.IO) {
+                        app.database.connectionDao().getConnectionById(connectionId)
+                    }
+                    if (profile == null) {
+                        Logger.e("SFTPActivity", "Connection profile not found: $connectionId")
+                        showError("This connection no longer exists", "Error")
+                        finish()
+                        return@launch
+                    }
+                    Logger.event("SFTPActivity", "Opening SSH session for SFTP: ${profile.getDisplayName()}")
+                    withContext(Dispatchers.IO) {
+                        app.sshSessionManager.connectToServer(profile)
+                    } ?: run {
+                        Logger.e("SFTPActivity", "SSH connect failed for SFTP: ${profile.getDisplayName()}")
+                        showError("Could not connect to ${profile.getDisplayName()}", "Error")
+                        finish()
+                        return@launch
+                    }
                 }
 
                 sftpManager = SFTPManager(connection)
@@ -233,15 +252,14 @@ class SFTPActivity : AppCompatActivity() {
 
     private fun showAddSftpTabPicker() {
         lifecycleScope.launch {
-            val candidates = try { withContext(Dispatchers.IO) { app.database.connectionDao().getRecentConnections(50) } } catch (_: Exception) { emptyList() }
-                .filter { c ->
-                    // Only those with an active SSH connection — opening a fresh SSH
-                    // just for SFTP would mean a separate auth dialog flow.
-                    app.sshSessionManager.getConnection(c.id) != null
-                }
+            // Any saved connection is offerable — [openNewSftpTab] dials one that
+            // has no live session instead of refusing it.
+            val candidates = try {
+                withContext(Dispatchers.IO) { app.database.connectionDao().getRecentConnections(50) }
+            } catch (_: Exception) { emptyList() }
             runOnUiThread {
                 if (candidates.isEmpty()) {
-                    showError("Open the connection in the terminal first, then return here to add it as an SFTP tab.", "No active SSH sessions")
+                    showError("Add a connection first, then return here to open it as an SFTP tab.", "No saved connections")
                     return@runOnUiThread
                 }
                 val labels = candidates.map { it.getDisplayName() }.toTypedArray()
@@ -262,9 +280,12 @@ class SFTPActivity : AppCompatActivity() {
             return
         }
         lifecycleScope.launch {
-            val conn = withContext(Dispatchers.IO) { app.sshSessionManager.getConnection(profile.id) }
+            val existing = withContext(Dispatchers.IO) { app.sshSessionManager.getConnection(profile.id) }
+            val conn = existing ?: withContext(Dispatchers.IO) {
+                app.sshSessionManager.connectToServer(profile)
+            }
             if (conn == null) {
-                runOnUiThread { showError("SSH session not active", "Error") }
+                runOnUiThread { showError("Could not connect to ${profile.getDisplayName()}", "Error") }
                 return@launch
             }
             val mgr = SFTPManager(conn)

@@ -43,6 +43,10 @@
         <item name="android:textColorTertiary">@color/gray_600</item>
         <item name="android:textColorHint">@color/gray_500</item>
         
+        <!-- Applies the branded app bar to every toolbar, including the
+             screens whose layouts do not name the style explicitly. -->
+        <item name="toolbarStyle">@style/Widget.TabSSH.Toolbar</item>
+
         <!-- Custom attributes -->
         <item name="terminalBackgroundColor">@color/terminal_background</item>
         <item name="terminalTextColor">@color/terminal_foreground</item>
@@ -53,7 +57,7 @@
         <item name="connectionStatusDisconnected">@color/disconnected</item>
         <item name="connectionStatusError">@color/connection_error</item>
     </style>
-    
+
     <!-- Dark theme — force dark unconditionally. Was DayNight parent before
          which caused Issue #35: with system in light mode, DayNight handed us
          a LIGHT background but our explicit dark text-color overrides won,
@@ -94,6 +98,10 @@
         <item name="android:textColorSecondary">@color/on_surface_variant_dark</item>
         <item name="android:textColorTertiary">@color/gray_400</item>
         <item name="android:textColorHint">@color/gray_500</item>
+
+        <!-- Applies the branded app bar to every toolbar, including the
+             screens whose layouts do not name the style explicitly. -->
+        <item name="toolbarStyle">@style/Widget.TabSSH.Toolbar</item>
 
         <!-- Custom attributes -->
         <item name="terminalBackgroundColor">@color/terminal_background</item>
@@ -164,8 +172,12 @@
         <item name="android:lineSpacingMultiplier">1.2</item>
     </style>
     
-    <!-- Toolbar styles -->
+    <!-- Toolbar styles. The background must be pinned here: the title,
+         subtitle and navigation icon are all white, while Material3's default
+         toolbar background is the surface colour — light in Light mode, which
+         rendered every app bar white-on-white. -->
     <style name="Widget.TabSSH.Toolbar" parent="Widget.Material3.Toolbar">
+        <item name="android:background">@color/primary_500</item>
         <item name="titleTextColor">@color/white</item>
         <item name="subtitleTextColor">@color/primary_100</item>
         <item name="navigationIconTint">@color/white</item>

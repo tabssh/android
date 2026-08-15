@@ -16,7 +16,6 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            android:background="@color/primary_500"
             app:title="Cloud Accounts"
             app:titleTextColor="@color/white"
             app:popupTheme="@style/ThemeOverlay.Material3.Light" />

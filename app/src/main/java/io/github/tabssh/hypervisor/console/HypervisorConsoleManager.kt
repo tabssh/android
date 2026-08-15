@@ -61,6 +61,12 @@ class HypervisorConsoleManager {
     // the other's transport.
     @Volatile private var vncFallbackStarted = false
 
+    // Guards [reconnectGraphicalWithoutResize] to at most one automatic
+    // attempt per connectProxmoxConsole() call. Without this, a server that
+    // keeps closing the WebSocket for an unrelated reason after a resize was
+    // once rejected would retry forever instead of surfacing the error.
+    @Volatile private var resizeReconnectAttempted = false
+
     /**
      * The active [RfbClient] when a graphical console is running, or null for
      * text consoles.  Stored so [disconnect] can call [RfbClient.stop] before
@@ -182,6 +188,7 @@ class HypervisorConsoleManager {
         listener: ConsoleEventListener? = null
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
         activeListener = listener
+        resizeReconnectAttempted = false
         // Phase 1: obtain a console ticket via an ordered strategy chain.
         // termproxy first — text consoles are the mobile-friendly default;
         // spiceproxy second — richest graphical protocol, but only for qemu
@@ -307,6 +314,22 @@ class HypervisorConsoleManager {
 
                 override fun onDisconnected(reason: String) {
                     Logger.i(TAG, "Proxmox console disconnected: $reason")
+                    // Older Proxmox vncproxy servers reject an ExtendedDesktopSize
+                    // request (ClientInit-time resize on connect, e.g. rotating the
+                    // device) by closing the WebSocket outright instead of replying
+                    // with a rejection rect — RfbClient still flips canRequestResize
+                    // to false, so that flag doubles as "a resize was in flight when
+                    // this connection died" and lets us tell that case apart from a
+                    // real disconnect worth surfacing to the user.
+                    if (protocol == ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC &&
+                        activeRfbClient?.canRequestResize == false &&
+                        resizeReconnectAttempted.not()
+                    ) {
+                        resizeReconnectAttempted = true
+                        Logger.i(TAG, "Proxmox VNC closed after a rejected resize — reconnecting without resize")
+                        scope.launch { reconnectGraphicalWithoutResize(activeListener) }
+                        return
+                    }
                     activeListener?.onDisconnected(reason)
                 }
 
@@ -701,6 +724,14 @@ class HypervisorConsoleManager {
 
             override fun onDisconnected(reason: String) {
                 Logger.i(TAG, "VNC fallback disconnected: $reason")
+                // Same rejected-resize recovery as the direct vncproxy path above —
+                // this WebSocket is also PROXMOX_VNC once the serial fallback lands here.
+                if (activeRfbClient?.canRequestResize == false && resizeReconnectAttempted.not()) {
+                    resizeReconnectAttempted = true
+                    Logger.i(TAG, "Proxmox VNC (fallback) closed after a rejected resize — reconnecting without resize")
+                    scope.launch { reconnectGraphicalWithoutResize(activeListener) }
+                    return
+                }
                 activeListener?.onDisconnected(reason)
             }
 

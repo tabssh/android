@@ -157,7 +157,7 @@ class TaskerWorker(
             val connection = SSHConnection(profile, app.applicationScope, applicationContext)
             connection.connect()
             val cursorStyle = app.preferencesManager.getCursorStyleInt()
-            val tab = app.tabManager.createTab(profile, cursorStyle)
+            val tab = app.tabManager.createTab(profile, cursorStyle, app.preferencesManager.getTranscriptRows())
             if (tab == null) {
                 connection.disconnect()
                 broadcastError("Tab limit reached — close an existing session first")
@@ -201,7 +201,7 @@ class TaskerWorker(
             val connection = SSHConnection(profile, app.applicationScope, applicationContext)
             connection.connect()
             val cursorStyle = app.preferencesManager.getCursorStyleInt()
-            tab = app.tabManager.createTab(profile, cursorStyle)
+            tab = app.tabManager.createTab(profile, cursorStyle, app.preferencesManager.getTranscriptRows())
             tab?.connect(connection)
         }
         if (tab == null) {

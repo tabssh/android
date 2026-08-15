@@ -8,7 +8,7 @@
         android:key="audit_mdm_status"
         android:title="Managed by your organisation"
         android:summary="Audit logging is controlled by your IT administrator via MDM policy. Some settings below may be locked."
-        android:icon="@android:drawable/ic_lock_lock"
+        android:icon="@drawable/ic_security"
         android:selectable="false"
         android:visible="false" />
 
@@ -20,7 +20,7 @@
             android:title="Enable Audit Logging"
             android:summary="Record security-relevant events: auth, commands, file transfers, port forwards. Default: OFF for privacy."
             android:defaultValue="false"
-            android:icon="@android:drawable/ic_menu_save" />
+            android:icon="@drawable/ic_logs" />
 
         <EditTextPreference
             android:key="audit_log_max_size_mb"

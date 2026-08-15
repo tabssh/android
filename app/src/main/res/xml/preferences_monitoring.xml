@@ -15,14 +15,14 @@
             android:key="monitoring_battery_status"
             android:title="Battery optimization"
             android:summary="Checking…"
-            android:icon="@android:drawable/ic_menu_info_details" />
+            android:icon="@drawable/ic_info" />
 
         <!-- OEM-specific battery settings shortcut (Samsung, Xiaomi, etc.). -->
         <Preference
             android:key="monitoring_oem_battery"
             android:title="Device battery settings"
             android:summary="Open your device's battery management screen to allow background activity"
-            android:icon="@android:drawable/ic_menu_manage" />
+            android:icon="@drawable/ic_settings" />
 
     </PreferenceCategory>
 
@@ -102,7 +102,7 @@
             android:key="monitoring_open_notification_channel"
             android:title="Notification channel settings"
             android:summary="Manage sound, vibration, and importance for monitoring alerts"
-            android:icon="@android:drawable/ic_menu_manage" />
+            android:icon="@drawable/ic_settings" />
 
     </PreferenceCategory>
 

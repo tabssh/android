@@ -103,6 +103,10 @@ class TabSSHApplication : Application() {
     private var currentActivityRef: WeakReference<Activity>? = null
     private var foregroundActivityCount = 0
 
+    // False until the PIN gate has been satisfied in this process, so a cold
+    // launch with app lock on is stopped at PinLockActivity.
+    private var appUnlockedThisProcess = false
+
     /**
      * Get the current foreground Activity.
      * Used for showing dialogs from background threads (like host key verification).
@@ -469,31 +473,43 @@ class TabSSHApplication : Application() {
     }
     
     /**
-     * Background-lock guard — invoked from `onActivityStarted` for every
-     * Activity. If the user has `security_auto_lock_background` on AND
-     * the app was backgrounded for longer than `security_auto_lock_timeout`
-     * seconds AND a PIN is configured, redirect to the PIN-verify screen.
+     * App-lock guard — invoked from `onActivityStarted` for every Activity.
      *
-     * Skipped for the PinLockActivity itself (would loop) and skipped if
-     * we're tracking the very first launch (no prior background timestamp).
+     * Two triggers, both requiring a configured PIN (`app_lock_enabled`):
+     *  - cold launch: the first Activity of a new process is gated, which is
+     *    what the "Prompt for PIN on app launch" setting promises. Before
+     *    this existed, a PIN only ever did anything when the separate
+     *    "Lock When Backgrounded" switch was also on, so setting a PIN and
+     *    relaunching walked straight into the app.
+     *  - return from background: `security_auto_lock_background` on AND the
+     *    app was away longer than `security_auto_lock_timeout` seconds.
+     *
+     * Skipped for the PinLockActivity itself (would loop).
      */
     private fun maybeRequireUnlock(activity: Activity) {
         try {
             val prefs = androidx.preference.PreferenceManager
                 .getDefaultSharedPreferences(this)
-            if (!prefs.getBoolean("security_auto_lock_background", false)) return
             if (!prefs.getBoolean("app_lock_enabled", false)) return
             if (activity::class.java.simpleName == "PinLockActivity") return
+            // App lock with no stored hash cannot be satisfied — PinLockActivity
+            // clears the flag in that state; don't gate on it here.
+            if (prefs.getString("app_lock_pin_hash", "").isNullOrBlank()) return
 
-            val backgroundedAt = prefs.getLong("ui_last_backgrounded_at", 0L)
-            if (backgroundedAt == 0L) return  // first launch in this process
-            val timeoutSec = (prefs.getString("security_auto_lock_timeout", "300") ?: "300")
-                .toIntOrNull() ?: 300
-            val elapsed = (System.currentTimeMillis() - backgroundedAt) / 1000
-            if (elapsed < timeoutSec) return
-
-            Logger.i("TabSSHApplication",
-                "Auto-lock triggered after ${elapsed}s background (limit ${timeoutSec}s)")
+            val coldLaunch = !appUnlockedThisProcess
+            if (!coldLaunch) {
+                if (!prefs.getBoolean("security_auto_lock_background", false)) return
+                val backgroundedAt = prefs.getLong("ui_last_backgrounded_at", 0L)
+                if (backgroundedAt == 0L) return
+                val timeoutSec = (prefs.getString("security_auto_lock_timeout", "300") ?: "300")
+                    .toIntOrNull() ?: 300
+                val elapsed = (System.currentTimeMillis() - backgroundedAt) / 1000
+                if (elapsed < timeoutSec) return
+                Logger.i("TabSSHApplication",
+                    "Auto-lock triggered after ${elapsed}s background (limit ${timeoutSec}s)")
+            } else {
+                Logger.i("TabSSHApplication", "App lock: PIN required on launch")
+            }
             // Reset the timestamp so we don't re-trigger immediately if the
             // PIN screen itself moves through the lifecycle hooks.
             prefs.edit().putLong("ui_last_backgrounded_at", 0L).apply()
@@ -506,6 +522,15 @@ class TabSSHApplication : Application() {
         } catch (e: Exception) {
             Logger.w("TabSSHApplication", "maybeRequireUnlock failed: ${e.message}")
         }
+    }
+
+    /**
+     * Called by [io.github.tabssh.ui.activities.PinLockActivity] once the PIN
+     * has been accepted (or set), so the cold-launch gate in
+     * [maybeRequireUnlock] stops firing for the rest of this process.
+     */
+    fun markAppUnlocked() {
+        appUnlockedThisProcess = true
     }
 
     private fun applyWindowSecurityFlags(activity: Activity) {

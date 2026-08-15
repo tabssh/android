@@ -374,6 +374,10 @@ class RfbClient(
             sendSetPixelFormat()
             sendSetEncodings()
             sendFullUpdateRequest()
+            // RfbClient is on the app-log chatter denylist (its I-level output is
+            // per-rect render detail), so the one moment a user needs in their own
+            // log — the console actually came up — goes through event().
+            Logger.event(TAG, "VNC console ready: ${desktopName.ifEmpty { "(unnamed)" }} ${fbWidth}×$fbHeight")
             eventLoop()
         } catch (e: InterruptedException) {
             Logger.d(TAG, "RFB reader interrupted")
@@ -385,7 +389,7 @@ class RfbClient(
                     // SetDesktopSize request (QEMU behaviour).  This is not a
                     // protocol error from the user's perspective — the session
                     // simply ended because the server doesn't support resize.
-                    Logger.i(TAG, "Server closed after resize rejection — treating as clean disconnect")
+                    Logger.event(TAG, "VNC console ended: server rejected the resize and closed the session")
                     listener?.onDisconnected("Server closed after resize rejection")
                     // For the tab gate this is still ERROR: the user did not ask
                     // for the session to end, so offer reconnect, never auto-close.
@@ -393,7 +397,7 @@ class RfbClient(
                 } else {
                     val reason = ConsoleDisconnectClassifier.classifyRfb(atMessageBoundary, e)
                     if (reason == ConsoleDisconnectReason.CLEAN) {
-                        Logger.i(TAG, "RFB server closed the connection (orderly EOF)")
+                        Logger.event(TAG, "VNC console closed by server")
                         listener?.onDisconnected("Server closed the connection")
                         fireSessionEnded(ConsoleDisconnectReason.CLEAN, "Server closed the connection")
                     } else {
@@ -471,10 +475,31 @@ class RfbClient(
         din.readFully(types)
         Logger.d(TAG, "Security types offered: ${types.map { it.toInt() and 0xFF }}")
 
+        // TigerVNC's default VeNCrypt sub-type (TLSVnc/TLSNone/TLSPlain) runs TLS
+        // with anonymous Diffie-Hellman — no certificate. Android's TLS provider
+        // ships no anonymous cipher suites, so those sub-types can never complete
+        // here; committing to security type 19 would fail the whole session with
+        // "Unable to parse TLS packet header". When the platform has no anonymous
+        // suite and the server also offers a non-VeNCrypt type we can satisfy,
+        // take that instead of a guaranteed failure. X509 sub-types use real
+        // certificates and are unaffected — servers configured for them advertise
+        // VeNCrypt alone, so this branch does not downgrade them.
+        val anonTlsUsable = platformSupportsAnonTls()
+        val hasPlainFallback = types.contains(RfbConstants.SECURITY_NONE.toByte()) ||
+            (types.contains(RfbConstants.SECURITY_VNC_AUTH.toByte()) && vncPassword != null)
+        val preferVeNCrypt = rawSocket != null && (anonTlsUsable || !hasPlainFallback)
+        if (!preferVeNCrypt && types.contains(RfbConstants.SECURITY_VENCRYPT.toByte()) && rawSocket != null) {
+            Logger.event(
+                TAG,
+                "VNC server offers VeNCrypt over anonymous TLS, which Android cannot negotiate — " +
+                    "continuing with the server's unencrypted security type instead"
+            )
+        }
+
         // Prefer VeNCrypt (when rawSocket is available), then None, then VNC Auth.
         // VeNCrypt requires RFB 3.7+, which is already satisfied here.
         val chosen = when {
-            types.contains(RfbConstants.SECURITY_VENCRYPT.toByte()) && rawSocket != null ->
+            types.contains(RfbConstants.SECURITY_VENCRYPT.toByte()) && preferVeNCrypt ->
                 RfbConstants.SECURITY_VENCRYPT
             types.contains(RfbConstants.SECURITY_NONE.toByte()) -> RfbConstants.SECURITY_NONE
             types.contains(RfbConstants.SECURITY_VNC_AUTH.toByte()) && vncPassword != null ->
@@ -683,8 +708,15 @@ class RfbClient(
         val accepted = din.readUnsignedByte()
         if (accepted == 0) throw Exception("Server rejected VeNCrypt sub-type $chosen")
 
+        // TLS* sub-types (as opposed to X509*) carry no certificate: the session
+        // key comes from anonymous Diffie-Hellman, so the handshake needs an
+        // anon suite explicitly enabled.
+        val anonymous = chosen == RfbConstants.VENCRYPT_TLS_NONE ||
+            chosen == RfbConstants.VENCRYPT_TLS_VNC ||
+            chosen == RfbConstants.VENCRYPT_TLS_PLAIN
+
         // Upgrade to TLS
-        val sslSocket = upgradeTls()
+        val sslSocket = upgradeTls(anonymous)
 
         // Replace streams — all subsequent RFB traffic goes over TLS
         synchronized(outLock) {
@@ -727,9 +759,38 @@ class RfbClient(
         }
     }
 
-    /** Wrap [rawSocket] with TLS. Uses a permissive trust manager when [tlsVerify] is false. */
-    private fun upgradeTls(): SSLSocket {
+    /**
+     * Cipher suites this platform can offer for a certificate-less (anonymous
+     * Diffie-Hellman) TLS handshake — what VeNCrypt's TLSNone/TLSVnc/TLSPlain
+     * sub-types require. Empty on every current Android release; queried rather
+     * than assumed so a provider that does ship them is used automatically.
+     */
+    private fun anonTlsCipherSuites(): List<String> = try {
+        val ctx = SSLContext.getInstance("TLS")
+        ctx.init(null, null, null)
+        ctx.socketFactory.supportedCipherSuites.filter { it.contains("_anon_") }
+    } catch (e: Exception) {
+        Logger.d(TAG, "Anonymous TLS suite probe failed: ${e.message}")
+        emptyList()
+    }
+
+    /** True when at least one anonymous-DH suite is available for VeNCrypt TLS sub-types. */
+    private fun platformSupportsAnonTls(): Boolean = anonTlsCipherSuites().isNotEmpty()
+
+    /**
+     * Wrap [rawSocket] with TLS. Uses a permissive trust manager when [tlsVerify]
+     * is false. [anonymous] selects the certificate-less VeNCrypt TLS* mode, which
+     * needs an anonymous-DH suite enabled on the socket.
+     */
+    private fun upgradeTls(anonymous: Boolean): SSLSocket {
         val socket = rawSocket ?: throw Exception("No raw socket for TLS upgrade")
+        val anonSuites = if (anonymous) anonTlsCipherSuites() else emptyList()
+        if (anonymous && anonSuites.isEmpty()) {
+            throw Exception(
+                "Server offers only certificate-less VeNCrypt TLS, which this device's " +
+                    "TLS provider cannot negotiate — configure the server for X509 or VNC password auth"
+            )
+        }
         val trustManagers: Array<TrustManager> = if (tlsVerify) {
             // Use the platform default trust store
             val tmf = javax.net.ssl.TrustManagerFactory.getInstance(
@@ -767,6 +828,13 @@ class RfbClient(
             val params = sslSocket.sslParameters
             params.endpointIdentificationAlgorithm = "HTTPS"
             sslSocket.sslParameters = params
+        }
+        if (anonSuites.isNotEmpty()) {
+            // Anon suites are supported-but-disabled by default; add them to
+            // whatever the platform already enables rather than replacing the list.
+            sslSocket.enabledCipherSuites = (sslSocket.enabledCipherSuites.toList() + anonSuites)
+                .distinct()
+                .toTypedArray()
         }
         sslSocket.startHandshake()
         Logger.d(TAG, "VeNCrypt TLS handshake complete; cipher=${sslSocket.session.cipherSuite}")
@@ -897,15 +965,19 @@ class RfbClient(
             dout.writeByte(0)          // padding
             dout.writeShort(width)
             dout.writeShort(height)
-            dout.writeShort(1)         // number of screens
-            dout.writeShort(0)         // padding
+            // number-of-screens and its padding are ONE byte each, not two.
+            // Writing shorts here put two extra bytes on the wire, so the
+            // server resumed parsing inside our screen descriptor and closed
+            // the session ("invalid pixel format" in the TigerVNC log).
+            dout.writeByte(1)
+            dout.writeByte(0)
             // Screen descriptor: id, x, y, width, height, flags
-            dout.writeInt(0)           // screen id
-            dout.writeShort(0)         // x-position
-            dout.writeShort(0)         // y-position
-            dout.writeShort(width)     // width
-            dout.writeShort(height)    // height
-            dout.writeInt(0)           // flags
+            dout.writeInt(0)
+            dout.writeShort(0)
+            dout.writeShort(0)
+            dout.writeShort(width)
+            dout.writeShort(height)
+            dout.writeInt(0)
             dout.flush()
         }
         Logger.d(TAG, "SetDesktopSize sent: ${width}×$height")
@@ -926,6 +998,24 @@ class RfbClient(
             dout.flush()
         }
         Logger.d(TAG, "EnableContinuousUpdates enable=$enable region=${w}×${h}@($x,$y)")
+    }
+
+    /**
+     * Re-register the continuous-updates region after a desktop resize.
+     *
+     * The region is in framebuffer coordinates and the server keeps whatever
+     * was registered before the resize.  Left stale, a shrink makes the server
+     * encode rects outside its own framebuffer and drop the connection
+     * ("Pixel buffer request … exceeds framebuffer" in TigerVNC).  No-op when
+     * continuous updates were never enabled.
+     */
+    private fun rearmContinuousUpdates() {
+        if (!continuousUpdatesEnabled || fbWidth <= 0 || fbHeight <= 0) return
+        try {
+            sendEnableContinuousUpdates(true, 0, 0, fbWidth, fbHeight)
+        } catch (e: Exception) {
+            Logger.w(TAG, "EnableContinuousUpdates re-arm after resize failed: ${e.message}")
+        }
     }
 
     private fun sendFullUpdateRequest() {
@@ -1106,6 +1196,7 @@ class RfbClient(
                     fbWidth = rw; fbHeight = rh
                     framebuffer = allocFramebuffer(fbWidth, fbHeight)
                     listener?.onDesktopResize(fbWidth, fbHeight, framebuffer)
+                    rearmContinuousUpdates()
                     sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
                 }
                 RfbConstants.ENC_EXTENDED_DESKTOP_SIZE,
@@ -1141,6 +1232,7 @@ class RfbClient(
                                 // avoiding the feedback loop that produced ~50 EDS per second.
                                 framebuffer = allocFramebuffer(fbWidth, fbHeight)
                                 listener?.onDesktopResize(fbWidth, fbHeight, framebuffer)
+                                rearmContinuousUpdates()
                                 sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
                             }
                         }
@@ -1495,6 +1587,20 @@ class RfbClient(
      * [RfbListener.onCursorUpdate] contract as [handleCursor] is maintained.
      */
     private fun handleCursorWithAlpha(hotX: Int, hotY: Int, w: Int, h: Int) {
+        // The CursorWithAlpha payload starts with a U32 naming the encoding the
+        // cursor image itself uses — it is NOT raw RGBA straight after the rect
+        // header. Skipping it left the reader 4 bytes behind for the rest of the
+        // session: the next rect header was read from inside the cursor bitmap,
+        // which is what made TigerVNC sessions die on the first update.
+        val cursorEncoding = din.readInt()
+        if (cursorEncoding != RfbConstants.ENC_RAW) {
+            // Only Raw is emitted in practice (TigerVNC hardcodes it). Anything
+            // else has an unknown payload length, so the stream cannot be
+            // resynchronised — fail loudly instead of silently desyncing.
+            Logger.w(TAG, "CursorWithAlpha uses unsupported encoding $cursorEncoding — closing session")
+            running.set(false)
+            throw java.io.IOException("CursorWithAlpha encoding $cursorEncoding is not supported")
+        }
         if (w <= 0 || h <= 0) return
         checkCursorSize(w, h, "CursorWithAlpha")
         val count = w * h
@@ -1542,6 +1648,7 @@ class RfbClient(
             fbWidth = w; fbHeight = h
             framebuffer = allocFramebuffer(fbWidth, fbHeight)
             listener?.onDesktopResize(fbWidth, fbHeight, framebuffer)
+            rearmContinuousUpdates()
             sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
         }
     }

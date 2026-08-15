@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-##@Version YYYYMMDDHHMM-git
+##@Version 202608150001-git
 # scripts/prepare-fdroid-submission.sh — bundle F-Droid submission artefacts.
 # Writes output to /tmp/tabssh-android/fdroid-submission/ (never the repo tree).
 #
 # Usage:  scripts/prepare-fdroid-submission.sh
 
 set -euo pipefail
+
+VERSION="202608150001-git"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -25,14 +27,14 @@ for f in README.md CHANGELOG.md LICENSE.md; do
 done
 
 # Generate RFP stub
-VERSION="$(grep -- versionName "$ROOT/app/build.gradle" | head -1 | sed 's/.*"\(.*\)".*/\1/')"
+APP_VERSION="$(grep -- versionName "$ROOT/app/build.gradle" | head -1 | sed 's/.*"\(.*\)".*/\1/')"
 
 cat > "$OUT/RFP_SUBMISSION.md" << EOF
 # F-Droid Request for Packaging (RFP)
 
 **App Name**: TabSSH
 **Package Name**: io.github.tabssh
-**Version**: $VERSION
+**Version**: $APP_VERSION
 **Source Code**: https://github.com/tabssh/android
 **License**: MIT
 **Categories**: System, Internet, Security

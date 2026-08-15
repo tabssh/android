@@ -659,13 +659,17 @@ class TermuxBridge(
                         outputStream?.let { stream ->
                             stream.write(dataCopy)
                             stream.flush()
+                            // Throttled — rapid writes (paste, scripted PTY
+                            // output) can otherwise flood the Logger write
+                            // queue with one entry per chunk.
                             if (logKeystrokeBytes) {
-                                Logger.d(
-                                    TAG,
+                                Logger.dThrottled(TAG, "sentBytesSsh", 300) {
                                     "Sent ${dataCopy.size} bytes to SSH (bytes=${dataCopy.toBriefHex()})"
-                                )
+                                }
                             } else {
-                                Logger.d(TAG, "Sent ${dataCopy.size} bytes to SSH")
+                                Logger.dThrottled(TAG, "sentBytesSsh", 300) {
+                                    "Sent ${dataCopy.size} bytes to SSH"
+                                }
                             }
                         }
                         // Wave 2.7 — broadcast input. After our own SSH write
@@ -974,7 +978,12 @@ class TermuxBridge(
                 writeLock.withLock {
                     try {
                         ms.write(data, 0, data.size)
-                        Logger.d(TAG, "Sent ${data.size} bytes to mosh-client PTY")
+                        // Throttled — an active mosh session can write PTY
+                        // bytes many times per second, otherwise flooding the
+                        // Logger write queue with one entry per write.
+                        Logger.dThrottled(TAG, "sentBytesMosh", 300) {
+                            "Sent ${data.size} bytes to mosh-client PTY"
+                        }
                     } catch (e: Exception) {
                         Logger.e(TAG, "Error writing to mosh session", e)
                     }

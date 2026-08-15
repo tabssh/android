@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-##@Version YYYYMMDDHHMM-git
+##@Version 202608150001-git
 # scripts/fetch-fonts.sh — pull the 9 Nerd Fonts the dropdown advertises
 # (see app/src/main/res/values/arrays.xml `terminal_font_*`) and place
 # them as `app/src/main/assets/fonts/<NerdFontName>-Regular.ttf`.
@@ -16,6 +16,8 @@
 # that's gitignored.
 
 set -euo pipefail
+
+VERSION="202608150001-git"
 
 ASSETS="$(cd "$(dirname "$0")/.." && pwd)/app/src/main/assets/fonts"
 

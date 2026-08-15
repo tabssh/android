@@ -5,7 +5,7 @@
     <!-- Application Log (always-on, sanitized) -->
     <PreferenceCategory
         android:title="Application Log"
-        android:icon="@android:drawable/ic_menu_agenda">
+        android:icon="@drawable/ic_logs">
 
         <!-- Not a toggle — the app log is always on. This is informational. -->
         <Preference
@@ -20,7 +20,7 @@
     <PreferenceCategory
         android:key="debug_logging_category"
         android:title="Debug Logging"
-        android:icon="@android:drawable/ic_menu_info_details">
+        android:icon="@drawable/ic_info">
 
         <SwitchPreferenceCompat
             android:key="debug_logging_enabled"
@@ -58,7 +58,7 @@
     <!-- Per-host Session Logs -->
     <PreferenceCategory
         android:title="Host Logs"
-        android:icon="@android:drawable/ic_menu_edit">
+        android:icon="@drawable/ic_computer">
 
         <SwitchPreferenceCompat
             android:key="host_logging_enabled"
@@ -88,58 +88,58 @@
     <!-- Log Viewers -->
     <PreferenceCategory
         android:title="View Logs"
-        android:icon="@android:drawable/ic_menu_view">
+        android:icon="@drawable/ic_file_text">
 
         <Preference
             android:key="view_app_log"
             android:title="View Application Log"
             android:summary="Sanitized log — info, warnings, and errors"
-            android:icon="@android:drawable/ic_menu_agenda" />
+            android:icon="@drawable/ic_logs" />
 
         <Preference
             android:key="view_debug_log"
             android:title="View Debug Log"
             android:summary="Full verbose log (only available when debug logging is on)"
-            android:icon="@android:drawable/ic_menu_info_details" />
+            android:icon="@drawable/ic_info" />
 
         <Preference
             android:key="view_host_logs"
             android:title="View Host Logs"
             android:summary="Per-connection session logs"
-            android:icon="@android:drawable/ic_menu_edit"
+            android:icon="@drawable/ic_computer"
             android:dependency="host_logging_enabled" />
 
         <Preference
             android:key="view_audit_log"
             android:title="View Audit Log"
             android:summary="Security events — auth, commands, file transfers (requires audit logging enabled)"
-            android:icon="@android:drawable/ic_lock_lock" />
+            android:icon="@drawable/ic_security" />
 
     </PreferenceCategory>
 
     <!-- Log Management -->
     <PreferenceCategory
         android:title="Log Management"
-        android:icon="@android:drawable/ic_menu_manage">
+        android:icon="@drawable/ic_settings">
 
         <Preference
             android:key="export_logs"
             android:title="Export Logs"
             android:summary="Save app log and host logs to a ZIP for sharing"
-            android:icon="@android:drawable/ic_menu_save" />
+            android:icon="@drawable/ic_download" />
 
         <Preference
             android:key="clear_logs"
             android:title="Clear Logs"
             android:summary="Delete app log and all host log files (cannot be undone)"
-            android:icon="@android:drawable/ic_menu_delete" />
+            android:icon="@drawable/ic_clear" />
 
     </PreferenceCategory>
 
     <!-- Issue Reporting / Paste Service -->
     <PreferenceCategory
         android:title="Issue Reporting"
-        android:icon="@android:drawable/ic_menu_send">
+        android:icon="@drawable/ic_share">
 
         <ListPreference
             android:key="paste_service"

@@ -9,6 +9,11 @@ import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.concurrent.Executors
+import java.util.concurrent.ThreadFactory
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Issue #12 — connection-phase socket factory with two jobs:
@@ -33,7 +38,12 @@ import java.net.Socket
  * the connect budget itself: the total budget is [totalTimeoutMs]; each
  * non-final address gets an equal slice (floored at [MIN_ATTEMPT_MS]) so a
  * black-holed first address cannot starve the fallback; the final address
- * gets whatever budget remains.
+ * gets whatever budget remains. `InetAddress.getAllByName` itself has no
+ * timeout parameter and is not covered by the per-address connect slices —
+ * a nameserver that never answers (dead resolver, black-holed DNS over a
+ * VPN/firewall) hangs that call indefinitely regardless of [totalTimeoutMs].
+ * [resolveWithTimeout] runs it on [dnsExecutor] and bounds the wait so this
+ * class's own "connect budget" claim holds for the DNS phase too.
  */
 class TimingSocketFactory(
     private val ipMode: String,
@@ -48,7 +58,7 @@ class TimingSocketFactory(
         val deadline = System.currentTimeMillis() + budgetMs
 
         val tDns = System.currentTimeMillis()
-        val resolved = InetAddress.getAllByName(host)
+        val resolved = resolveWithTimeout(host, budgetMs)
         val dnsMs = System.currentTimeMillis() - tDns
         val v4 = resolved.count { it is Inet4Address }
         val v6 = resolved.size - v4
@@ -105,6 +115,26 @@ class TimingSocketFactory(
 
     override fun getOutputStream(socket: Socket): OutputStream = socket.getOutputStream()
 
+    /**
+     * Resolve [host] with a hard [timeoutMs] wall-clock bound. Runs the
+     * blocking `InetAddress.getAllByName` call on [dnsExecutor] so a dead
+     * resolver only leaks one daemon thread (reclaimed once the OS-level
+     * lookup eventually gives up) instead of hanging this connect attempt —
+     * and every caller waiting on it — forever.
+     */
+    @Throws(IOException::class)
+    private fun resolveWithTimeout(host: String, timeoutMs: Int): Array<InetAddress> {
+        val future = dnsExecutor.submit<Array<InetAddress>> { InetAddress.getAllByName(host) }
+        return try {
+            future.get(timeoutMs.toLong(), TimeUnit.MILLISECONDS)
+        } catch (e: TimeoutException) {
+            future.cancel(true)
+            throw IOException("DNS resolution for $host timed out after ${timeoutMs}ms", e)
+        } catch (e: java.util.concurrent.ExecutionException) {
+            throw IOException(e.cause?.message ?: "DNS resolution for $host failed", e.cause)
+        }
+    }
+
     private companion object {
         const val TAG = "TimingSocketFactory"
         // Matches the historical profile.connectTimeout default.
@@ -112,5 +142,19 @@ class TimingSocketFactory(
         // Floor per non-final attempt so many resolved addresses can't
         // shrink slices below a workable TCP handshake window.
         const val MIN_ATTEMPT_MS = 4_000
+
+        private val dnsThreadCount = AtomicInteger(0)
+
+        // Cached (not fixed) pool: lookups are rare and short-lived in the
+        // common case, but a black-holed resolver's thread lingers past its
+        // caller's timeout (getAllByName is not interruptible) — cached pool
+        // reclaims idle threads instead of accumulating a fixed set of
+        // permanently blocked ones. Daemon so a stuck lookup can't keep the
+        // process alive.
+        val dnsExecutor = Executors.newCachedThreadPool(ThreadFactory { runnable ->
+            Thread(runnable, "dns-resolve-${dnsThreadCount.incrementAndGet()}").apply {
+                isDaemon = true
+            }
+        })
     }
 }

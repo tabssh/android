@@ -71,6 +71,12 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_CURSOR_STYLE = "terminal_cursor_style"
         private const val KEY_CURSOR_BLINK = "terminal_cursor_blink"
         private const val KEY_SCROLLBACK_LINES = "terminal_scrollback"
+
+        // Usable transcript-row range for the Termux emulator; the settings
+        // screen enforces the same 250 floor and treats -1 as unlimited.
+        private const val MIN_TRANSCRIPT_ROWS = 250
+        private const val MAX_TRANSCRIPT_ROWS = 50000
+
         private const val KEY_REVERSE_SCROLL = "terminal_reverse_scroll"
         private const val KEY_WORD_WRAP = "terminal_word_wrap"
         private const val KEY_COPY_ON_SELECT = "terminal_copy_on_select"
@@ -284,6 +290,18 @@ class PreferenceManager(private val context: Context) {
     
     fun getScrollbackLines(): Int = getStringAsInt(KEY_SCROLLBACK_LINES, 1000)
     fun setScrollbackLines(lines: Int) = setString(KEY_SCROLLBACK_LINES, lines.toString())
+
+    /**
+     * The scrollback preference expressed as Termux transcript rows, which is
+     * what every terminal tab is actually built with. The stored value uses
+     * -1 for "unlimited"; the Termux emulator allocates a fixed transcript, so
+     * unlimited maps to the 50 000-row ceiling (rows are allocated lazily) and
+     * any explicit value is clamped into the same usable range.
+     */
+    fun getTranscriptRows(): Int {
+        val stored = getScrollbackLines()
+        return if (stored <= 0) MAX_TRANSCRIPT_ROWS else stored.coerceIn(MIN_TRANSCRIPT_ROWS, MAX_TRANSCRIPT_ROWS)
+    }
 
     /**
      * Scroll direction for the terminal scrollback gesture.

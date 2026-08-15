@@ -383,6 +383,16 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
             true
         }
 
+        // Scrollback summary — the simple summary provider showed the raw
+        // stored value, so the default read as a bare "-1" with no meaning.
+        findPreference<androidx.preference.EditTextPreference>("terminal_scrollback")?.summaryProvider =
+            androidx.preference.Preference.SummaryProvider<androidx.preference.EditTextPreference> { pref ->
+                when (val lines = pref.text?.toIntOrNull() ?: -1) {
+                    -1 -> "Unlimited (capped at 50,000 lines per tab)"
+                    else -> "$lines lines"
+                }
+            }
+
         // Scrollback buffer change listener
         findPreference<Preference>("terminal_scrollback")?.setOnPreferenceChangeListener { _, newValue ->
             val lines = newValue as String
@@ -393,8 +403,8 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
                     android.widget.Toast.makeText(requireContext(), "Scrollback minimum is 250 lines (or -1 for unlimited)", android.widget.Toast.LENGTH_SHORT).show()
                     return@setOnPreferenceChangeListener false
                 }
-                if (numLines > 100000 && numLines != -1) {
-                    android.widget.Toast.makeText(requireContext(), "Scrollback maximum is 100,000 lines", android.widget.Toast.LENGTH_SHORT).show()
+                if (numLines > 50000 && numLines != -1) {
+                    android.widget.Toast.makeText(requireContext(), "Scrollback maximum is 50,000 lines", android.widget.Toast.LENGTH_SHORT).show()
                     return@setOnPreferenceChangeListener false
                 }
                 val message = if (numLines == -1) "Scrollback: Unlimited" else "Scrollback: $numLines lines"
@@ -1009,11 +1019,15 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
     private fun showLogViewer(title: String, logType: String) {
         lifecycleScope.launch {
             try {
-                val logContent = when (logType) {
-                    "debug" -> io.github.tabssh.utils.logging.Logger.getDebugLogs()
-                    "app" -> io.github.tabssh.utils.logging.Logger.getRecentLogs()
-                        .joinToString("\n") { "${it.timestamp} [${it.level}] ${it.tag}: ${it.message}" }
-                    else -> "No logs available"
+                // Disk reads must be off Main — these log files can reach
+                // several MB and Logger's own read calls are synchronous.
+                val logContent = withContext(Dispatchers.IO) {
+                    when (logType) {
+                        "debug" -> io.github.tabssh.utils.logging.Logger.getDebugLogs()
+                        "app" -> io.github.tabssh.utils.logging.Logger.getRecentLogs()
+                            .joinToString("\n") { "${it.timestamp} [${it.level}] ${it.tag}: ${it.message}" }
+                        else -> "No logs available"
+                    }
                 }
 
                 val displayContent = if (logContent.isBlank()) "No logs found" else logContent
@@ -1053,7 +1067,11 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
     private fun showHostLogsSelector() {
         lifecycleScope.launch {
             try {
-                val hostLogs = io.github.tabssh.utils.logging.Logger.getHostLogFiles()
+                // Directory listing is off Main to match the other log reads
+                // in this fragment.
+                val hostLogs = withContext(Dispatchers.IO) {
+                    io.github.tabssh.utils.logging.Logger.getHostLogFiles()
+                }
 
                 if (hostLogs.isEmpty()) {
                     android.widget.Toast.makeText(requireContext(), "No host logs found", android.widget.Toast.LENGTH_SHORT).show()
@@ -1079,7 +1097,10 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
     private fun showHostLogContent(logFile: java.io.File) {
         lifecycleScope.launch {
             try {
-                val content = logFile.readText()
+                // Host log files can grow to several MB — read off Main to
+                // avoid blocking the UI thread (this is the same hazard
+                // documented in LogViewerActivity).
+                val content = withContext(Dispatchers.IO) { logFile.readText() }
                 val displayContent = if (content.isBlank()) "No content" else content
 
                 val scrollView = android.widget.ScrollView(requireContext())

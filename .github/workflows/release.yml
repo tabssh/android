@@ -178,6 +178,24 @@ jobs:
         chmod +x scripts/fetch-fonts.sh
         scripts/fetch-fonts.sh
 
+    # Published builds must never silently ship without mosh, SPICE, or the
+    # bundled fonts — the fetch steps above soft-fail by design, so gate here.
+    - name: Verify bundled mosh/SPICE/fonts are present
+      run: |
+        for abi in arm64-v8a armeabi-v7a x86_64 x86; do
+          for lib in libmosh-client.so libtabssh_native.so; do
+            if [ ! -f "app/src/main/jniLibs/$abi/$lib" ]; then
+              echo "::error::$lib missing for $abi — every published build must bundle mosh and SPICE for all ABIs" >&2
+              exit 1
+            fi
+          done
+        done
+        FONTS=$(ls app/src/main/assets/fonts/*.ttf 2>/dev/null | wc -l)
+        if [ "$FONTS" -lt 9 ]; then
+          echo "::error::Only $FONTS of 9 bundled Nerd Fonts present in assets/fonts" >&2
+          exit 1
+        fi
+
     - name: Build release APK
       run: ./gradlew assembleRelease --no-daemon
       env:

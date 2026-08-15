@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-##@Version YYYYMMDDHHMM-git
+##@Version 202608150001-git
 # scripts/dev-shell.sh — enter an interactive development container shell.
 # Mounts the project source at /workspace with the build image.
 # Use this for one-off Gradle commands outside of `make`.
 
 set -euo pipefail
+
+VERSION="202608150001-git"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 

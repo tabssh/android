@@ -69,8 +69,7 @@
             android:title="Scrollback Buffer"
             android:summary="Lines in history (250 min, -1 unlimited)"
             android:defaultValue="-1"
-            android:inputType="numberSigned"
-            app:useSimpleSummaryProvider="true" />
+            android:inputType="numberSigned" />
 
         <SwitchPreferenceCompat
             android:key="terminal_reverse_scroll"

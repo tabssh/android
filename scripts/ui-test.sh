@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-##@Version YYYYMMDDHHMM-git
+##@Version 202608150001-git
 # scripts/ui-test.sh — scriptable UI test runner for TabSSH on a live emulator/device.
 #
 # Resolves __adb the same way android-emulator.sh does.  Each named test is a
@@ -88,10 +88,17 @@
 
 set -euo pipefail
 
+VERSION="202608150001-git"
+
 # ── colour ───────────────────────────────────────────────────────────────────
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
-TEST_FAILS=0   # per-test assertion failure counter; reset by run_test / run_inline
+if [[ -n "${NO_COLOR:-}" ]]; then
+    RED=''; GREEN=''; YELLOW=''
+    BLUE=''; CYAN=''; NC=''
+else
+    RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
+fi
+TEST_FAILS=0
 
 __pass()  { echo -e "${GREEN}  ✅ $*${NC}"; }
 __fail()  { echo -e "${RED}  ❌ $*${NC}"; TEST_FAILS=$((TEST_FAILS+1)); }
@@ -118,7 +125,8 @@ SERIAL="${ADB_SERIAL:-}"
 APK=""
 INSTALL=0
 VERBOSE=0
-TESTS=()     # positional list of test names / "run" tokens
+# Positional list of test names / "run" tokens
+TESTS=()
 
 __usage() {
     grep -E -- '^#' "$0" | grep -v -- '^#!/' | sed 's/^# \{0,1\}//'
@@ -167,10 +175,10 @@ if [[ -z "$SERIAL" ]]; then
     echo "❌ No Android device/emulator connected." >&2
     exit 2
 fi
-info "Device: $SERIAL"
+__info "Device: $SERIAL"
 
 # ── optional root elevation (emulators only) ─────────────────────────────────
-# Try `__adb root` so ui_inject_crash_prefs can push directly to /data/data/.
+# Try `__adb root` so __ui_inject_crash_prefs can push directly to /data/data/.
 # Silently ignored on real devices (root not available) and when already root.
 "$_ADB_BIN" ${SERIAL:+-s "$SERIAL"} root >/dev/null 2>&1 || true
 sleep 1
@@ -228,12 +236,12 @@ __ui_dump() {
 __ui_dismiss_anr() {
     local i
     for i in 1 2 3; do
-        ui_dump
+        __ui_dump
         __ui_texts | grep -qF -- "isn't responding" || return 0
         local coords
-        coords=$(ui_find_xy "Wait") || true
+        coords=$(__ui_find_xy "Wait") || true
         [[ -n "$coords" ]] || return 0
-        debug "ANR dialog detected — tapping Wait (attempt $i)"
+        __debug "ANR dialog detected — tapping Wait (attempt $i)"
         __adb shell input tap $coords
         sleep 6
     done
@@ -260,7 +268,7 @@ PY
 # Emit the centre "x y" of the nearest clickable ancestor of a node matching
 # the given text.  Prints nothing if not found.
 __ui_find_xy() {
-    [[ -s "$UI_XML" ]] || ui_dump
+    [[ -s "$UI_XML" ]] || __ui_dump
     python3 - "$UI_XML" "$1" <<'PY'
 import sys, xml.etree.ElementTree as ET
 
@@ -290,9 +298,9 @@ PY
 }
 
 # Get a named attribute from the node (or its clickable ancestor) matching text.
-# Usage: ui_get_attr "Switch label" "checked"
+# Usage: __ui_get_attr "Switch label" "checked"
 __ui_get_attr() {
-    [[ -s "$UI_XML" ]] || ui_dump
+    [[ -s "$UI_XML" ]] || __ui_dump
     python3 - "$UI_XML" "$1" "$2" <<'PY'
 import sys, xml.etree.ElementTree as ET
 
@@ -319,7 +327,7 @@ PY
 
 # Count how many nodes have the given text.
 __ui_count_text() {
-    [[ -s "$UI_XML" ]] || ui_dump
+    [[ -s "$UI_XML" ]] || __ui_dump
     python3 - "$UI_XML" "$1" <<'PY'
 import sys, xml.etree.ElementTree as ET
 target = sys.argv[2]
@@ -337,7 +345,7 @@ PY
 # Tap at exact screen coordinates.
 __ui_tap_xy() {
     local x="$1" y="$2"
-    info "Tap ($x, $y)"
+    __info "Tap ($x, $y)"
     __adb shell input tap "$x" "$y"
     sleep 0.5
 }
@@ -345,34 +353,35 @@ __ui_tap_xy() {
 # Long-press at exact screen coordinates.
 __ui_long_tap_xy() {
     local x="$1" y="$2" ms="${3:-800}"
-    info "Long-tap ($x, $y) for ${ms}ms"
+    __info "Long-tap ($x, $y) for ${ms}ms"
     __adb shell input swipe "$x" "$y" "$x" "$y" "$ms"
     sleep 0.5
 }
 
 # Swipe in a cardinal direction.
-# ui_swipe up|down|left|right [distance_px=800]
+# __ui_swipe up|down|left|right [distance_px=800]
 __ui_swipe() {
     local dir="$1" dist="${2:-800}" ms="${3:-400}"
-    local cx=540 cy=960   # centre of a 1080×1920 screen
+    # Centre of a 1080×1920 screen
+    local cx=540 cy=960
     local x1=$cx y1=$cy x2=$cx y2=$cy
     case "$dir" in
         up)    y1=$((cy+dist/2)); y2=$((cy-dist/2)) ;;
         down)  y1=$((cy-dist/2)); y2=$((cy+dist/2)) ;;
         left)  x1=$((cx+dist/2)); x2=$((cx-dist/2)) ;;
         right) x1=$((cx-dist/2)); x2=$((cx+dist/2)) ;;
-        *) warn "Unknown swipe direction: $dir"; return ;;
+        *) __warn "Unknown swipe direction: $dir"; return ;;
     esac
-    debug "swipe $dir (${x1},${y1})→(${x2},${y2})"
+    __debug "swipe $dir (${x1},${y1})→(${x2},${y2})"
     __adb shell input swipe "$x1" "$y1" "$x2" "$y2" "$ms"
     sleep 0.3
 }
 
 # Arbitrary swipe between two coordinates.
-# ui_swipe_xy x1 y1 x2 y2 [duration_ms=400]
+# __ui_swipe_xy x1 y1 x2 y2 [duration_ms=400]
 __ui_swipe_xy() {
     local x1="$1" y1="$2" x2="$3" y2="$4" ms="${5:-400}"
-    info "Swipe ($x1,$y1)→($x2,$y2)"
+    __info "Swipe ($x1,$y1)→($x2,$y2)"
     __adb shell input swipe "$x1" "$y1" "$x2" "$y2" "$ms"
     sleep 0.3
 }
@@ -387,14 +396,18 @@ __ui_key()         { __adb shell input keyevent "$1"; sleep 0.3; }
 # Type text into the currently-focused field.
 __ui_input_text() {
     local text="$1"
-    # __adb input text handles spaces as %s
-    __adb shell input text "${text// /%s}"
+    # Escape device-shell metacharacters, then encode spaces as %s (input-text convention).
+    # Without this, ';', '|', '$', quotes etc. are interpreted by the device-side sh.
+    local esc
+    esc=$(printf '%s' "$text" | sed -e 's/[][(){}<>|;&*\\~"'"'"'`$!#?=]/\\&/g' -e 's/ /%s/g')
+    __adb shell input text "$esc"
     sleep 0.3
 }
 
 # Select-all then delete — clears the focused field.
 __ui_clear_text() {
-    __adb shell input keyevent --longpress KEYCODE_A   # select all
+    # Ctrl+A (CTRL_LEFT=113, A=29) selects all; longpress KEYCODE_A types a literal 'a' on API 30+
+    __adb shell input keycombination 113 29
     sleep 0.2
     __adb shell input keyevent KEYCODE_DEL
     sleep 0.2
@@ -403,14 +416,14 @@ __ui_clear_text() {
 # ── primitives: screenshot ────────────────────────────────────────────────────
 
 # Pull a screenshot from the device to $UITEST_TMP/.
-# ui_screenshot [label]
+# __ui_screenshot [label]
 __ui_screenshot() {
     SCREENSHOT_N=$((SCREENSHOT_N+1))
     local label="${1:-screen}"
     local fname="${UITEST_TMP}/${SCREENSHOT_N}_${label}.png"
     __adb shell screencap -p /sdcard/ui_test_cap.png >/dev/null 2>&1
     __adb pull /sdcard/ui_test_cap.png "$fname" >/dev/null 2>&1
-    info "Screenshot → $fname"
+    __info "Screenshot → $fname"
 }
 
 # ── primitives: navigation ────────────────────────────────────────────────────
@@ -421,57 +434,57 @@ __ui_launch() {
     local component="$1"
     # Prepend PKG if caller passed a short form like ".ui.activities.Foo"
     [[ "$component" != *"/"* ]] && component="$PKG/$component"
-    info "Launch $component"
+    __info "Launch $component"
     __adb shell am start -n "$component" >/dev/null
     sleep 2
-    ui_dismiss_anr
-    ui_dump
+    __ui_dismiss_anr
+    __ui_dump
 }
 
 # Force-stop the app and wait for the process to fully die.
 __ui_stop() {
-    info "Stop $PKG"
+    __info "Stop $PKG"
     __adb shell am force-stop "$PKG" >/dev/null 2>&1 || true
     sleep 2
 }
 
 # Scroll until text is visible (without tapping).  Returns 0 if found.
-# ui_scroll_to text [max_scrolls=8] [direction=up]
+# __ui_scroll_to text [max_scrolls=8] [direction=up]
 __ui_scroll_to() {
     local text="$1" max="${2:-8}" dir="${3:-up}"
     local i
     for i in $(seq 1 "$max"); do
-        ui_dismiss_anr
+        __ui_dismiss_anr
         if __ui_texts | grep -qF -- "$text"; then
-            debug "scroll_to: found \"$text\" after $((i-1)) scroll(s)"
+            __debug "scroll_to: found \"$text\" after $((i-1)) scroll(s)"
             return 0
         fi
         # Brief settle pause before swiping — avoids queuing swipes on a still-
         # recovering UI after ANR dismissal, which would re-trigger another ANR.
         sleep 1
-        ui_swipe "$dir"
+        __ui_swipe "$dir"
     done
     return 1
 }
 
 # Tap the element with the given text, scrolling if needed.
-# ui_tap text [max_scrolls=5] [direction=up]
+# __ui_tap text [max_scrolls=5] [direction=up]
 __ui_tap() {
     local text="$1" max="${2:-5}" dir="${3:-up}"
     local i
     for i in $(seq 1 "$max"); do
-        ui_dump
+        __ui_dump
         local coords
-        coords=$(ui_find_xy "$text") || true
+        coords=$(__ui_find_xy "$text") || true
         if [[ -n "$coords" ]]; then
             __adb shell input tap $coords
             sleep 1
-            ui_dump
+            __ui_dump
             return 0
         fi
-        ui_swipe "$dir"
+        __ui_swipe "$dir"
     done
-    warn "ui_tap: \"$text\" not found after $max scroll(s)"
+    __warn "__ui_tap: \"$text\" not found after $max scroll(s)"
     return 1
 }
 
@@ -479,19 +492,19 @@ __ui_tap() {
 __ui_long_tap() {
     local text="$1" max="${2:-5}"
     for _ in $(seq 1 "$max"); do
-        ui_dump
+        __ui_dump
         local coords
-        coords=$(ui_find_xy "$text") || true
+        coords=$(__ui_find_xy "$text") || true
         if [[ -n "$coords" ]]; then
             local x y
             read -r x y <<< "$coords"
-            ui_long_tap_xy "$x" "$y"
-            ui_dump
+            __ui_long_tap_xy "$x" "$y"
+            __ui_dump
             return 0
         fi
-        ui_swipe up
+        __ui_swipe up
     done
-    warn "ui_long_tap: \"$text\" not found after $max scroll(s)"
+    __warn "__ui_long_tap: \"$text\" not found after $max scroll(s)"
     return 1
 }
 
@@ -501,93 +514,93 @@ __ui_long_tap() {
 __ui_wait_for() {
     local text="$1" timeout="${2:-8}" waited=0
     while [[ $waited -lt $timeout ]]; do
-        ui_dismiss_anr
+        __ui_dismiss_anr
         if __ui_texts | grep -qF -- "$text"; then
-            pass "Found: \"$text\""
+            __pass "Found: \"$text\""
             return
         fi
         sleep 1
         waited=$((waited+1))
     done
-    fail "Timed out after ${timeout}s waiting for \"$text\""
-    info "Screen:"; __ui_texts | sed 's/^/    /'
+    __fail "Timed out after ${timeout}s waiting for \"$text\""
+    __info "Screen:"; __ui_texts | sed 's/^/    /'
 }
 
 # Wait up to N seconds for text to disappear.
 __ui_wait_gone() {
     local text="$1" timeout="${2:-8}" waited=0
     while [[ $waited -lt $timeout ]]; do
-        ui_dump
+        __ui_dump
         if ! __ui_texts | grep -qF -- "$text"; then
-            pass "Gone: \"$text\""
+            __pass "Gone: \"$text\""
             return
         fi
         sleep 1
         waited=$((waited+1))
     done
-    fail "Timed out after ${timeout}s — \"$text\" is still visible"
+    __fail "Timed out after ${timeout}s — \"$text\" is still visible"
 }
 
 # Assert text is visible on the current screen (single dump).
 __ui_assert_present() {
     local text="$1"
-    ui_dismiss_anr
+    __ui_dismiss_anr
     if __ui_texts | grep -qF -- "$text"; then
-        pass "Present: \"$text\""
+        __pass "Present: \"$text\""
     else
-        fail "Expected \"$text\" — not on screen"
-        info "Screen:"; __ui_texts | sed 's/^/    /'
+        __fail "Expected \"$text\" — not on screen"
+        __info "Screen:"; __ui_texts | sed 's/^/    /'
     fi
 }
 
 # Scroll until text is visible, then assert it.  Use when the item may be
-# below the current viewport — safer than ui_assert_present for long screens.
+# below the current viewport — safer than __ui_assert_present for long screens.
 __ui_assert_scroll() {
     local text="$1" max="${2:-6}"
-    ui_dismiss_anr
-    if ui_scroll_to "$text" "$max"; then
-        pass "Found (scrolled): \"$text\""
+    __ui_dismiss_anr
+    if __ui_scroll_to "$text" "$max"; then
+        __pass "Found (scrolled): \"$text\""
     else
-        fail "Not found after scrolling: \"$text\""
-        info "Screen:"; __ui_texts | sed 's/^/    /'
+        __fail "Not found after scrolling: \"$text\""
+        __info "Screen:"; __ui_texts | sed 's/^/    /'
     fi
 }
 
 # Assert text is NOT visible on the current screen.
 __ui_assert_absent() {
     local text="$1"
-    ui_dump
+    __ui_dump
     if __ui_texts | grep -qF -- "$text"; then
-        fail "Unexpected \"$text\" — is on screen"
+        __fail "Unexpected \"$text\" — is on screen"
     else
-        pass "Absent: \"$text\""
+        __pass "Absent: \"$text\""
     fi
 }
 
 # Assert a node matching text has attribute=value.
-# e.g. ui_assert_attr "Enable Debug Logging" "checked" "true"
+# e.g. __ui_assert_attr "Enable Debug Logging" "checked" "true"
 __ui_assert_attr() {
     local text="$1" attr="$2" expected="$3"
-    ui_dump
+    __ui_dump
     local actual
-    actual=$(ui_get_attr "$text" "$attr")
+    actual=$(__ui_get_attr "$text" "$attr")
     if [[ "$actual" == "$expected" ]]; then
-        pass "\"$text\": $attr=$actual"
+        __pass "\"$text\": $attr=$actual"
     else
-        fail "\"$text\": expected $attr=$expected, got $attr=${actual:-<not found>}"
+        __fail "\"$text\": expected $attr=$expected, got $attr=${actual:-<not found>}"
     fi
 }
 
 # Assert text appears exactly N times on the current screen.
 __ui_assert_count() {
     local text="$1" expected="$2"
-    ui_dump
+    __ui_dump
     local actual
-    actual=$(ui_count_text "$text")
+    actual=$(__ui_count_text "$text")
     if [[ "$actual" == "$expected" ]]; then
-        pass "Count of \"$text\": $actual (expected $expected)"
+        __pass "Count of \"$text\": $actual (expected $expected)"
     else
-        fail "Count of \"$text\": got $actual, expected $expected"
+        __fail "Count of \"$text\": got $actual, expected $expected"
     fi
 }
 
@@ -619,49 +632,32 @@ __ui_inject_crash_prefs() {
     __adb shell "mkdir -p $prefs_dir" >/dev/null 2>&1 || true
     if __adb push "$local_tmp" "$prefs_path" >/dev/null 2>&1; then
         __adb shell "chmod 660 $prefs_path" >/dev/null 2>&1 || true
-        info "Crash prefs injected"
+        __info "Crash prefs injected"
     else
-        fail "Could not inject crash prefs (__adb push failed — emulator may not be rooted)"
+        __fail "Could not inject crash prefs (__adb push failed — emulator may not be rooted)"
     fi
     rm -f "$local_tmp"
 }
 
 # ── inline `run` executor ─────────────────────────────────────────────────────
-# Parses a STEPS array and executes each step sequentially.
+# Parses the STEPS list and executes each step sequentially, with lookahead for
+# the optional numeric/label arguments some steps accept.
 # Called by the top-level argument loop when it sees "run".
 
-__exec_run_steps() {
-    local name="$1"; shift  # test label
-    local steps=("$@")
-    local i=0 n=${#steps[@]}
+# Steps whose value argument is mandatory. A missing value used to fall through
+# to `"$1"` under `set -u` and abort the whole run with "$1: unbound variable".
+__UI_VALUE_STEPS=" --activity --tap --long-tap --input --key --sleep --scroll-to --wait-for --wait-gone --present --absent --scroll-assert --swipe "
 
-    while [[ $i -lt $n ]]; do
-        local step="${steps[$i]}"
-        i=$((i+1))
-
-        case "$step" in
-            --activity)
-                ui_launch "${steps[$i]}"; i=$((i+1)) ;;
-            --stop)
-                ui_stop ;;
-            --inject-crash)
-                ui_inject_crash_prefs ;;
-            --tap)
-                local max_s=5
-                # peek: if next token is a bare integer use it as max_scrolls
-                if [[ $i -lt $n && "${steps[$i]}" =~ ^[0-9]+$ ]]; then
-                    max_s="${steps[$i]}"; i=$((i+1))
-                fi
-                ui_tap "${steps[$i-1]}" "$max_s"
-                # re-read the text arg (already consumed above); tap was called with it
-                # Actually need to restructure: consume text first
-                ;;
-            # ↑ that's awkward; cleaner to always consume text right after flag:
-        esac
-    done
+# Number of mandatory values the given step consumes.
+__ui_step_arity() {
+    case "$1" in
+        --swipe-xy) echo 4 ;;
+        --attr) echo 3 ;;
+        --tap-xy|--long-tap-xy|--count) echo 2 ;;
+        *) if [[ "$__UI_VALUE_STEPS" == *" $1 "* ]]; then echo 1; else echo 0; fi ;;
+    esac
 }
 
-# Actually, simpler: re-implement inline step processing with a proper lookahead.
 __run_inline() {
     local name="${1:-inline}"; shift
     echo ""
@@ -669,85 +665,94 @@ __run_inline() {
     TEST_FAILS=0
 
     while [[ $# -gt 0 ]]; do
+        local _arity
+        _arity="$(__ui_step_arity "$1")"
+        if [[ $_arity -gt 0 && $(($# - 1)) -lt $_arity ]]; then
+            __fail "Step $1 requires $_arity value(s) — none given"
+            shift
+            continue
+        fi
         case "$1" in
             --activity)
-                shift; ui_launch "$1" ;;
+                shift; __ui_launch "$1" ;;
             --stop)
-                ui_stop ;;
+                __ui_stop ;;
             --inject-crash)
-                ui_inject_crash_prefs ;;
+                __ui_inject_crash_prefs ;;
             --tap)
                 shift
                 local _tap_text="$1"
                 local _tap_max=5
                 if [[ $# -gt 1 && "${2:-}" =~ ^[0-9]+$ ]]; then shift; _tap_max="$1"; fi
-                ui_tap "$_tap_text" "$_tap_max" || fail "ui_tap: \"$_tap_text\" not found" ;;
+                __ui_tap "$_tap_text" "$_tap_max" || __fail "__ui_tap: \"$_tap_text\" not found" ;;
             --tap-xy)
                 shift; local _tx="$1"; shift; local _ty="$1"
-                ui_tap_xy "$_tx" "$_ty" ;;
+                __ui_tap_xy "$_tx" "$_ty" ;;
             --long-tap)
-                shift; ui_long_tap "$1" || fail "ui_long_tap: \"$1\" not found" ;;
+                shift; __ui_long_tap "$1" || __fail "__ui_long_tap: \"$1\" not found" ;;
             --long-tap-xy)
                 shift; local _lx="$1"; shift; local _ly="$1"
-                ui_long_tap_xy "$_lx" "$_ly" ;;
+                __ui_long_tap_xy "$_lx" "$_ly" ;;
             --swipe)
                 shift; local _sdir="$1"
                 local _sdist=800
                 if [[ $# -gt 1 && "${2:-}" =~ ^[0-9]+$ ]]; then shift; _sdist="$1"; fi
-                ui_swipe "$_sdir" "$_sdist" ;;
+                __ui_swipe "$_sdir" "$_sdist" ;;
             --swipe-xy)
                 shift; local _sx1="$1"; shift; local _sy1="$1"
                 shift; local _sx2="$1"; shift; local _sy2="$1"
                 local _sms=400
                 if [[ $# -gt 1 && "${2:-}" =~ ^[0-9]+$ ]]; then shift; _sms="$1"; fi
-                ui_swipe_xy "$_sx1" "$_sy1" "$_sx2" "$_sy2" "$_sms" ;;
+                __ui_swipe_xy "$_sx1" "$_sy1" "$_sx2" "$_sy2" "$_sms" ;;
             --scroll-to)
-                shift; ui_scroll_to "$1" || fail "ui_scroll_to: \"$1\" not found" ;;
+                shift; local _st_text="$1" _st_max=8
+                if [[ $# -gt 1 && "${2:-}" =~ ^[0-9]+$ ]]; then shift; _st_max="$1"; fi
+                __ui_scroll_to "$_st_text" "$_st_max" || __fail "__ui_scroll_to: \"$_st_text\" not found" ;;
             --input)
-                shift; ui_input_text "$1" ;;
+                shift; __ui_input_text "$1" ;;
             --clear)
-                ui_clear_text ;;
+                __ui_clear_text ;;
             --back)
-                ui_press_back ;;
+                __ui_press_back ;;
             --home)
-                ui_press_home ;;
+                __ui_press_home ;;
             --enter)
-                ui_press_enter ;;
+                __ui_press_enter ;;
             --key)
-                shift; ui_key "$1" ;;
+                shift; __ui_key "$1" ;;
             --sleep)
                 shift; sleep "$1" ;;
             --screenshot)
                 local _label="screen"
                 if [[ $# -gt 1 && "${2:-}" != --* ]]; then shift; _label="$1"; fi
-                ui_screenshot "$_label" ;;
+                __ui_screenshot "$_label" ;;
             --wait-for)
                 shift; local _wtext="$1"
                 local _wt=8
                 if [[ $# -gt 1 && "${2:-}" =~ ^[0-9]+$ ]]; then shift; _wt="$1"; fi
-                ui_wait_for "$_wtext" "$_wt" ;;
+                __ui_wait_for "$_wtext" "$_wt" ;;
             --wait-gone)
                 shift; local _wgtext="$1"
                 local _wgt=8
                 if [[ $# -gt 1 && "${2:-}" =~ ^[0-9]+$ ]]; then shift; _wgt="$1"; fi
-                ui_wait_gone "$_wgtext" "$_wgt" ;;
+                __ui_wait_gone "$_wgtext" "$_wgt" ;;
             --present)
-                shift; ui_assert_present "$1" ;;
+                shift; __ui_assert_present "$1" ;;
             --absent)
-                shift; ui_assert_absent "$1" ;;
+                shift; __ui_assert_absent "$1" ;;
             --scroll-assert)
                 shift; local _satext="$1"
                 local _samax=6
                 if [[ $# -gt 1 && "${2:-}" =~ ^[0-9]+$ ]]; then shift; _samax="$1"; fi
-                ui_assert_scroll "$_satext" "$_samax" ;;
+                __ui_assert_scroll "$_satext" "$_samax" ;;
             --attr)
                 shift; local _atext="$1"; shift; local _aattr="$1"; shift; local _aval="$1"
-                ui_assert_attr "$_atext" "$_aattr" "$_aval" ;;
+                __ui_assert_attr "$_atext" "$_aattr" "$_aval" ;;
             --count)
                 shift; local _ctext="$1"; shift; local _cn="$1"
-                ui_assert_count "$_ctext" "$_cn" ;;
+                __ui_assert_count "$_ctext" "$_cn" ;;
             *)
-                warn "Unknown step: $1" ;;
+                __warn "Unknown step: $1" ;;
         esac
         shift
     done
@@ -770,7 +775,12 @@ __run_test() {
     echo ""
     echo -e "${BLUE}━━━ Test: $name ━━━${NC}"
     TEST_FAILS=0
-    "test_${name//-/_}" || true
+    local fn="__test_${name//-/_}"
+    if declare -F -- "$fn" >/dev/null; then
+        "$fn" || true
+    else
+        __fail "test function $fn is not defined"
+    fi
     if [[ $TEST_FAILS -eq 0 ]]; then
         PASS_COUNT=$((PASS_COUNT+1))
         echo -e "${GREEN}  PASS${NC}"
@@ -781,108 +791,94 @@ __run_test() {
 }
 
 __test_settings_opens() {
-    ui_stop
-    ui_launch "$PKG/.ui.activities.SettingsActivity"
-    ui_wait_for       "Settings"
-    ui_assert_present "Connection"
-    ui_assert_present "Logging"
+    __ui_stop
+    __ui_launch "$PKG/.ui.activities.SettingsActivity"
+    __ui_wait_for       "Settings"
+    __ui_assert_present "Connection"
+    __ui_assert_scroll  "Logging" 8
 }
 
 __test_hypervisor_form() {
-    ui_stop
-    ui_launch "$PKG/.ui.activities.HypervisorEditActivity"
-    # "Name" is a TextInputLayout hint that may be absent from the accessibility tree on
-    # SwiftShader emulators; "Host" (the address field) is reliably present once rendered.
-    # Allow 15 s for SwiftShader to finish inflating the form.
-    ui_wait_for       "Host" 15
-    # "Verify SSL Certificate" is a plain Switch preference that appears unconditionally.
-    ui_assert_present "Verify SSL Certificate"
-    ui_assert_absent  "Application Not Responding"
-    ui_stop
+    __ui_stop
+    __ui_launch "$PKG/.ui.activities.HypervisorEditActivity"
+    __ui_wait_for       "Host" 15
+    __ui_assert_scroll  "Verify SSL Certificate" 8
+    __ui_assert_absent  "Application Not Responding"
+    __ui_stop
 }
 
 # ── test: logging-navigation ─────────────────────────────────────────────────
 # Navigates Settings → Logging and scrolls through the entire screen, asserting
 # every category heading and a representative preference from each one.
-# Uses ui_assert_scroll for every item so each one is scrolled into view before
-# being checked — a single ui_scroll_to on the header is not enough because the
+# Uses __ui_assert_scroll for every item so each one is scrolled into view before
+# being checked — a single __ui_scroll_to on the header is not enough because the
 # items lower in the section can still be off-screen.
 # Also confirms "Test crash dialog" is visible (debug build only behaviour).
 __test_logging_navigation() {
-    ui_stop
-    ui_launch "$PKG/.ui.activities.SettingsActivity"
-    ui_wait_for "Settings"
-    ui_tap      "Logging"
+    __ui_stop
+    __ui_launch "$PKG/.ui.activities.SettingsActivity"
+    __ui_wait_for "Settings"
+    __ui_tap      "Logging"
     # Logging preferences screen has ~25 items and can trigger an ANR on slow
     # emulators (SwiftShader GPU) while inflating the preference XML.
     # Allow 15 seconds for inflation before attempting any assertions.
     sleep 15
-    ui_dismiss_anr
-    ui_wait_for "Debug Logging" 30
+    __ui_dismiss_anr
+    __ui_wait_for "Debug Logging" 30
 
     # ── Debug Logging (use wait_for, not assert_present, because inflation may
     # still be in progress on SwiftShader after the section header appears) ───
-    ui_wait_for "Enable Debug Logging" 15
-    ui_wait_for "Debug Log Level" 10
-    ui_wait_for "Log raw keystroke bytes (privacy risk)" 10
+    __ui_wait_for "Enable Debug Logging" 15
+    __ui_wait_for "Debug Log Level" 10
+    __ui_wait_for "Log raw keystroke bytes (privacy risk)" 10
+    # In the Debug Logging section near the top — assert before scrolling down.
+    __ui_assert_scroll "Test crash dialog"    12  # visible only in devel builds
 
-    # ── Host Logging ──────────────────────────────────────────────────────────
+    # ── Application Log ───────────────────────────────────────────────────────
     # Use max=12 scrolls throughout — the preferences list is long and
     # SwiftShader renders slowly so each scroll iteration takes extra time.
-    ui_assert_scroll "Host Logging"         12
-    ui_assert_scroll "Enable Host Logging"  12
-    ui_assert_scroll "Log Filename Pattern" 12
-    ui_assert_scroll "Append to Existing Logs" 12
-    ui_assert_scroll "Log User Input"       12
-    ui_assert_scroll "Include Timestamps"   12
+    __ui_assert_scroll "Application Log"      12
+    __ui_assert_scroll "Always-on sanitized log" 12
 
-    # ── Error Logging ─────────────────────────────────────────────────────────
-    ui_assert_scroll "Error Logging"        12
-    ui_assert_scroll "Enable Error Logging" 12
-    ui_assert_scroll "Include Stack Traces" 12
-
-    # ── Audit Logging ─────────────────────────────────────────────────────────
-    ui_assert_scroll "Audit Logging"        12
-    ui_assert_scroll "Enable Audit Logging" 12
-    ui_assert_scroll "Audit Events"         12
+    # ── Host Logs ─────────────────────────────────────────────────────────────
+    __ui_assert_scroll "Host Logs"            12
+    __ui_assert_scroll "Enable Host Logs"     12
+    __ui_assert_scroll "One log file per connection" 12
+    __ui_assert_scroll "Max Size per Host (MB)" 12
 
     # ── View Logs ─────────────────────────────────────────────────────────────
-    ui_assert_scroll "View Logs"            12
-    ui_assert_scroll "View Application Log" 12
-    ui_assert_scroll "View Debug Log"       12
-    ui_assert_scroll "View Host Logs"       12
-    ui_assert_scroll "View Error Log"       12
-    ui_assert_scroll "View Audit Log"       12
+    __ui_assert_scroll "View Logs"            12
+    __ui_assert_scroll "View Application Log" 12
+    __ui_assert_scroll "View Debug Log"       12
+    __ui_assert_scroll "View Host Logs"       12
+    __ui_assert_scroll "View Audit Log"       12
 
     # ── Log Management ────────────────────────────────────────────────────────
-    ui_assert_scroll "Log Management"       12
-    ui_assert_scroll "Export All Logs"      12
-    ui_assert_scroll "Clear All Logs"       12
-    ui_assert_scroll "Test crash dialog"    12  # visible only in debug builds
+    __ui_assert_scroll "Log Management"       12
+    __ui_assert_scroll "Export Logs"          12
+    __ui_assert_scroll "Clear Logs"           12
 
     # ── Issue Reporting ───────────────────────────────────────────────────────
-    ui_assert_scroll "Issue Reporting"      12
-    ui_assert_scroll "Paste Service"        12
-    ui_assert_scroll "MicroBin Server"      12
-    ui_assert_scroll "Lenpaste Server"      12
-    ui_assert_scroll "Stikked Server"       12
-    ui_assert_scroll "Pastebin API Key"     12
+    __ui_assert_scroll "Issue Reporting"      12
+    __ui_assert_scroll "Paste Service"        12
+    __ui_assert_scroll "MicroBin Server"      12
+    __ui_assert_scroll "Lenpaste Server"      12
+    __ui_assert_scroll "Stikked Server"       12
+    __ui_assert_scroll "Pastebin API Key"     12
 
-    ui_stop
+    __ui_stop
 }
 
 __test_crash_dialog() {
-    ui_stop
-    info "Injecting crash prefs…"
-    ui_inject_crash_prefs
-    ui_launch "$PKG/.ui.activities.CrashReportActivity"
-    # On slow emulators (SwiftShader) the activity renders buttons async.
-    # Use wait_for with ANR-dismissal loops instead of assert_present for each button.
-    ui_wait_for "Paste / Issue" 15
-    ui_assert_absent  "Share"
-    ui_wait_for "Copy"    10
-    ui_wait_for "Restart" 10
-    ui_stop
+    __ui_stop
+    __info "Injecting crash prefs…"
+    __ui_inject_crash_prefs
+    __ui_launch "$PKG/.ui.activities.CrashReportActivity"
+    __ui_wait_for "Paste / Issue" 15
+    __ui_assert_absent  "Share"
+    __ui_wait_for "Copy"    10
+    __ui_wait_for "Restart" 10
+    __ui_stop
 }
 
 # ── dispatch ──────────────────────────────────────────────────────────────────
@@ -918,14 +914,14 @@ while [[ $i -lt ${#TESTS[@]} ]]; do
             INLINE_STEPS+=("$next")
             i=$((i+1))
         done
-        run_inline "$INLINE_NAME" "${INLINE_STEPS[@]}"
+        __run_inline "$INLINE_NAME" "${INLINE_STEPS[@]}"
     else
-        fn="test_${token//-/_}"
+        fn="__test_${token//-/_}"
         if ! declare -f "$fn" >/dev/null 2>&1; then
             echo "❌ Unknown test: $token  (use --list)" >&2
             FAIL_COUNT=$((FAIL_COUNT+1))
         else
-            run_test "$token"
+            __run_test "$token"
         fi
     fi
 done

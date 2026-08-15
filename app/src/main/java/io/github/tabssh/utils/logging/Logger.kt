@@ -4,19 +4,33 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import io.github.tabssh.BuildConfig
+import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.concurrent.Executors
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 /**
- * Centralized logging system for TabSSH
+ * Centralized logging system for TabSSH — two tiers, two audiences.
  *
- * Features:
- * - Captures crashes automatically via UncaughtExceptionHandler
- * - Appends to log file (only clears on explicit clear or max size rotation)
- * - Deletes log file when debug mode is disabled
+ * DEBUG log (tabssh_debug.log, DEBUG_LOG builds only): verbose diagnostics —
+ * D/I chatter plus W/E with full sanitized stack traces. Protected against
+ * noise at the writer: identical consecutive lines collapse into a single
+ * "repeated N times" summary and D-level lines are rate-capped per tag, so
+ * no call site can flood the file or push real events past export caps.
+ *
+ * APP log (tabssh_app.log, always on, sanitized for public sharing): the
+ * end-user record — session/auth/security lifecycle events (allowlisted
+ * I-level tags plus the explicit event() API) and W/E entries condensed to
+ * exception class + message + top frame: just enough detail to fix.
+ *
+ * Both sinks share one bounded single-writer executor and keep a persistent
+ * buffered writer per file — no per-line open/write/close cycles.
+ *
+ * Crashes are captured via UncaughtExceptionHandler (writeCrashSync).
  */
 object Logger {
 
@@ -47,7 +61,25 @@ object Logger {
     private var logFile: File? = null
     private var appLogFile: File? = null  // Always-on sanitized log for bug reports
     private var appContext: Context? = null
-    private val executor = Executors.newSingleThreadExecutor()
+
+    // Bounded, drop-oldest queue — an unbounded queue (the Executors.
+    // newSingleThreadExecutor() default) lets a chatty session (VNC/mosh
+    // streaming, per-frame redraws) pile up thousands of pending file writes
+    // faster than the single writer thread can drain them. That backlog
+    // means the writer thread stays continuously busy doing tiny synchronous
+    // FileWriter open/write/close cycles, which saturates disk I/O and
+    // contends with anything else on the device touching storage — a
+    // contributor to the settings-page ANR under load. Capping the queue and
+    // dropping the oldest pending write when full keeps the writer caught up
+    // to "now" instead of processing a multi-minute-old backlog.
+    private const val MAX_QUEUED_WRITES = 256
+    private val writeQueue = ArrayBlockingQueue<Runnable>(MAX_QUEUED_WRITES)
+    private val executor = ThreadPoolExecutor(
+        1, 1, 0L, TimeUnit.MILLISECONDS, writeQueue
+    ) { r, exec ->
+        exec.queue.poll()
+        exec.execute(r)
+    }
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
 
     private const val TAG_PREFIX = "TabSSH"
@@ -269,14 +301,69 @@ object Logger {
         // Debug messages NOT written to app log (too verbose, may contain sensitive data)
     }
 
+    // Last-emit timestamp per throttle key, guarded by its own lock — kept
+    // separate from the executor so throttling decisions never wait on the
+    // (potentially backlogged) file-write queue.
+    private val throttleTimestamps = mutableMapOf<String, Long>()
+
+    /**
+     * Rate-limited variant of d() for call sites that fire many times per
+     * second during an active session (per-frame redraw scheduling, per-byte
+     * PTY writes). Unthrottled, these calls flood the single-writer executor
+     * with tiny synchronous file opens, which both saturates disk I/O — a
+     * contributor to main-thread jank/ANRs on slower storage — and truncates
+     * exported logs long before anything useful in them is captured.
+     * At most one call per (tag, key) is written every [minIntervalMs].
+     */
+    fun dThrottled(tag: String, key: String, minIntervalMs: Long, message: () -> String) {
+        if (!debugMode || !shouldLog(LVL_DEBUG)) return
+        val throttleKey = "$tag:$key"
+        val now = System.currentTimeMillis()
+        val emit = synchronized(throttleTimestamps) {
+            val last = throttleTimestamps[throttleKey]
+            if (last == null || now - last >= minIntervalMs) {
+                throttleTimestamps[throttleKey] = now
+                true
+            } else {
+                false
+            }
+        }
+        if (emit) {
+            val resolved = message()
+            Log.d("$TAG_PREFIX:$tag", logcatMessage(resolved), null)
+            writeToFile("D", tag, resolved, null)
+        }
+    }
+
     fun i(tag: String, message: String, throwable: Throwable? = null) {
         if (!shouldLog(LVL_INFO)) return
         Log.i("$TAG_PREFIX:$tag", logcatMessage(message), throwable)
         if (logToFile) {
             writeToFile("I", tag, message, throwable)
         }
-        // Write sanitized version to app log
-        writeToAppLog("I", tag, message, throwable)
+        // App log is the end-user record: every subsystem's I-level events
+        // reach it (hypervisors, clouds, protocols, sync — present and
+        // future) EXCEPT known UI/render chatter tags, which stay in the
+        // debug log only. A per-tag rate cap inside writeToAppLog guards
+        // against any non-listed tag turning chatty.
+        if (tag !in APP_CHATTER_TAGS) {
+            writeToAppLog("I", tag, message, throwable, rateCapped = true)
+        }
+    }
+
+    /**
+     * Log an end-user-meaningful event: always reaches the app log —
+     * bypassing both the chatter denylist and the I-level rate cap
+     * (plus logcat and the debug log). Use for things a user reading
+     * their own log should see — connect, disconnect, auth outcome,
+     * backup completed, key imported.
+     */
+    fun event(tag: String, message: String) {
+        Log.i("$TAG_PREFIX:$tag", logcatMessage(message))
+        if (logToFile) {
+            writeToFile("I", tag, message, null)
+        }
+        writeToAppLog("I", tag, message, null, rateCapped = false)
     }
 
     fun w(tag: String, message: String, throwable: Throwable? = null) {
@@ -309,91 +396,206 @@ object Logger {
     }
 
     /**
-     * Write to log file asynchronously
-     * Only rotates when max size exceeded (preserves existing logs)
+     * Persistent buffered writer for one log sink. All methods run on the
+     * single writer thread only — never call from other threads. Replaces
+     * the old per-line FileWriter open/write/close cycle, whose syscall
+     * storm under a chatty session saturated storage I/O (a contributor to
+     * the settings-page ANR). Detects external delete/swap of the target
+     * file (clearLogs, disableDebugMode) and transparently reopens.
+     */
+    private class SinkWriter(private val baseName: String, private val maxSize: Long, private val onRotate: (() -> Unit)? = null) {
+        private var writer: BufferedWriter? = null
+        private var openedFile: File? = null
+
+        fun writeLine(target: File?, line: String) {
+            val f = target ?: return
+            try {
+                if (f.exists() && f.length() > maxSize) {
+                    close()
+                    Logger.rotateLogFiles(f, baseName)
+                    onRotate?.invoke()
+                }
+                if (writer == null || openedFile != f || !f.exists()) {
+                    close()
+                    writer = BufferedWriter(FileWriter(f, true))
+                    openedFile = f
+                }
+                writer?.let {
+                    it.append(line)
+                    it.flush()
+                }
+            } catch (e: Exception) {
+                close()
+                Log.e("$TAG_PREFIX:Logger", "Failed to write to $baseName", e)
+            }
+        }
+
+        fun close() {
+            try { writer?.close() } catch (_: Exception) {}
+            writer = null
+            openedFile = null
+        }
+    }
+
+    /**
+     * Writer-side noise control — the systemic replacement for chasing
+     * individual chatty call sites. Two independent mechanisms:
+     *  1. Duplicate collapse: identical consecutive level/tag/message lines
+     *     become one line plus a "repeated N times" summary when the stream
+     *     moves on — a stuck loop can no longer fill the log.
+     *  2. Per-tag rate cap (rate-capped levels only, i.e. D): at most
+     *     [MAX_TAG_LINES_PER_WINDOW] lines per tag per second; overflow is
+     *     dropped and acknowledged with one "suppressed N lines" summary —
+     *     per-frame/per-byte logging can never dominate the file again.
+     * All state is touched from the single writer thread only.
+     * Internal (not private) with an injectable clock so the unit test can
+     * drive window boundaries deterministically.
+     */
+    internal class NoiseGate(private val now: () -> Long = System::currentTimeMillis) {
+        private var lastKey: String? = null
+        private var lastTag: String = ""
+        private var repeatCount = 0
+        private val windowStart = mutableMapOf<String, Long>()
+        private val windowCount = mutableMapOf<String, Int>()
+        private val suppressed = mutableMapOf<String, Int>()
+
+        fun filter(level: String, tag: String, body: String, rateCapped: Boolean, timestamp: String): List<String> {
+            val out = mutableListOf<String>()
+            val key = "$level/$tag: $body"
+
+            if (key == lastKey) {
+                repeatCount++
+                return out
+            }
+            if (repeatCount > 0) {
+                out.add("$timestamp I/$TAG_PREFIX:$lastTag: (previous line repeated $repeatCount more times)\n")
+                repeatCount = 0
+            }
+            lastKey = key
+            lastTag = tag
+
+            if (rateCapped) {
+                val now = now()
+                val start = windowStart[tag] ?: 0L
+                if (now - start >= RATE_WINDOW_MS) {
+                    val dropped = suppressed.remove(tag) ?: 0
+                    if (dropped > 0) {
+                        out.add("$timestamp I/$TAG_PREFIX:$tag: (rate cap: suppressed $dropped lines in the last ${RATE_WINDOW_MS / 1000}s)\n")
+                    }
+                    windowStart[tag] = now
+                    windowCount[tag] = 0
+                }
+                val count = (windowCount[tag] ?: 0) + 1
+                windowCount[tag] = count
+                if (count > MAX_TAG_LINES_PER_WINDOW) {
+                    suppressed[tag] = (suppressed[tag] ?: 0) + 1
+                    return out
+                }
+            }
+
+            out.add("$timestamp $level/$TAG_PREFIX:$tag: $body\n")
+            return out
+        }
+    }
+
+    private const val RATE_WINDOW_MS = 1000L
+    private const val MAX_TAG_LINES_PER_WINDOW = 8
+
+    private val debugSink = SinkWriter(LOG_FILE_NAME, MAX_LOG_SIZE.toLong())
+    private val debugGate = NoiseGate()
+    private val appGate = NoiseGate()
+    private val appSink = SinkWriter(APP_LOG_FILE_NAME, MAX_APP_LOG_SIZE.toLong()) {
+        // Reset anonymization maps on app-log rotation (writer thread).
+        hostMap.clear()
+        userMap.clear()
+        hostCounter = 0
+        userCounter = 0
+        jumpHostMap.clear()
+        jumpHostCounter = 0
+        // NOTE: jumpHostSet is intentionally NOT cleared here.
+        // The registry is populated at connect time by SSHConnection
+        // and must survive log rotation so mid-session lines keep
+        // resolving jump hosts to jump{N}. It resets in clearAppLog().
+    }
+
+    // I-level tags whose lines are UI/render/internal chatter, NOT
+    // end-user events — these stay out of the app log (they remain in the
+    // debug log). Everything else passes through: a denylist means every
+    // hypervisor, cloud provider, protocol, and future subsystem reaches
+    // the end-user record automatically instead of silently dropping out
+    // of a hand-maintained allowlist. The app log records what happened,
+    // not how it was drawn. As a safety net against a chatty non-listed
+    // tag, I-level app-log lines are also rate-capped per tag (see
+    // writeToAppLog); W/E are never rate-capped anywhere.
+    private val APP_CHATTER_TAGS = setOf(
+        "TerminalView", "TerminalEmulator", "TerminalManager", "TermuxBridge",
+        "TabTerminalActivity", "MainActivity", "ConnectionEditActivity",
+        "SettingsActivity", "Settings", "SessionPersistenceManager",
+        "ThemeManager", "ThemeValidator", "PerformanceManager",
+        "ConsoleWebSocket", "RfbClient", "RfbDecoder", "SocketRelay",
+        "VncKeepAliveService", "ANSIParser", "TerminalBuffer",
+    )
+
+    /**
+     * Write to the debug log asynchronously through the persistent sink.
+     * Sanitizes at write time (on the writer thread, never the caller's),
+     * then runs the noise gate: duplicate collapse for every level, plus
+     * the per-tag rate cap for D-level lines.
      */
     private fun writeToFile(level: String, tag: String, message: String, throwable: Throwable?) {
         if (!logToFile || logFile == null) return
 
         executor.execute {
-            try {
-                val file = logFile ?: return@execute
-
-                // Only rotate if file exceeds max size
-                if (file.exists() && file.length() > MAX_LOG_SIZE) {
-                    rotateLogFiles(file, LOG_FILE_NAME)
-                    // Start fresh log with rotation notice
-                    FileWriter(file, false).use { writer ->
-                        val timestamp = dateFormat.format(Date())
-                        writer.append("$timestamp I/$TAG_PREFIX:Logger: Log rotated (previous log saved as .1)\n")
-                    }
+            val timestamp = dateFormat.format(Date())
+            // Sanitize before writing — debug log is pre-sanitized at write
+            // time so the full blob never needs expensive post-hoc regex.
+            val body = buildString {
+                append(sanitizeForPublic(message))
+                throwable?.let {
+                    append("\n")
+                    append(sanitizeForPublic(Log.getStackTraceString(it)))
                 }
-
-                // Sanitize before writing — debug log is pre-sanitized at write
-                // time so the full blob never needs expensive post-hoc regex.
-                val sanitizedMessage = sanitizeForPublic(message)
-                val sanitizedStack = throwable?.let { sanitizeForPublic(Log.getStackTraceString(it)) }
-
-                // Append to log file
-                FileWriter(file, true).use { writer ->
-                    val timestamp = dateFormat.format(Date())
-                    val logLine = buildString {
-                        append("$timestamp $level/$TAG_PREFIX:$tag: $sanitizedMessage")
-                        if (sanitizedStack != null) {
-                            append("\n")
-                            append(sanitizedStack)
-                        }
-                        append("\n")
-                    }
-                    writer.append(logLine)
-                }
-            } catch (e: Exception) {
-                Log.e("$TAG_PREFIX:Logger", "Failed to write to log file", e)
+            }
+            val rateCapped = level == "D" && throwable == null
+            for (line in debugGate.filter(level, tag, body, rateCapped, timestamp)) {
+                debugSink.writeLine(logFile, line)
             }
         }
     }
 
     /**
-     * Write to app log (sanitized for public sharing)
-     * Always enabled - safe for bug reports, GitHub issues, pastebin
+     * Condense a throwable to one app-log-sized line: exception class,
+     * message, and the top stack frame — just enough detail to fix. The
+     * full sanitized stack goes to the debug log, never the app log.
      */
-    private fun writeToAppLog(level: String, tag: String, message: String, throwable: Throwable? = null) {
-        val file = appLogFile ?: return
+    private fun condenseThrowable(t: Throwable): String {
+        val top = t.stackTrace.firstOrNull()?.let {
+            " at ${it.className}.${it.methodName}(${it.fileName}:${it.lineNumber})"
+        } ?: ""
+        return "${t.javaClass.simpleName}: ${t.message ?: "no message"}$top"
+    }
+
+    /**
+     * Write to app log (sanitized for public sharing, always enabled).
+     * The end-user record: W/E entries arrive condensed (class + message +
+     * top frame via condenseThrowable), duplicate lines collapse via the
+     * noise gate, and writes go through the persistent buffered sink.
+     */
+    private fun writeToAppLog(level: String, tag: String, message: String, throwable: Throwable? = null, rateCapped: Boolean = false) {
+        if (appLogFile == null) return
 
         executor.execute {
             try {
-                // Rotate if file exceeds max size
-                if (file.exists() && file.length() > MAX_APP_LOG_SIZE) {
-                    rotateLogFiles(file, APP_LOG_FILE_NAME)
-                    // Reset anonymization maps on rotation
-                    hostMap.clear()
-                    userMap.clear()
-                    hostCounter = 0
-                    userCounter = 0
-                    jumpHostMap.clear()
-                    jumpHostCounter = 0
-                    // NOTE: jumpHostSet is intentionally NOT cleared here.
-                    // The registry is populated at connect time by SSHConnection
-                    // and must survive log rotation so mid-session lines keep
-                    // resolving jump hosts to jump{N}. It resets in clearAppLog().
-                }
-
-                // Sanitize message for public sharing
-                val sanitizedMessage = sanitizeForPublic(message)
-                val sanitizedThrowable = throwable?.let { sanitizeStackTrace(it) }
-
-                // Append to app log
-                FileWriter(file, true).use { writer ->
-                    val timestamp = dateFormat.format(Date())
-                    val logLine = buildString {
-                        append("$timestamp $level/$TAG_PREFIX:$tag: $sanitizedMessage")
-                        if (sanitizedThrowable != null) {
-                            append("\n")
-                            append(sanitizedThrowable)
-                        }
-                        append("\n")
+                val timestamp = dateFormat.format(Date())
+                val body = buildString {
+                    append(sanitizeForPublic(message))
+                    throwable?.let {
+                        append(" — ")
+                        append(sanitizeForPublic(condenseThrowable(it)))
                     }
-                    writer.append(logLine)
+                }
+                for (line in appGate.filter(level, tag, body, rateCapped, timestamp)) {
+                    appSink.writeLine(appLogFile, line)
                 }
             } catch (e: Exception) {
                 // Don't create an infinite loop by writing back through the
@@ -727,6 +929,9 @@ object Logger {
      * Clear all logs (debug log only, not app log)
      */
     fun clearLogs() {
+        // Release the cached writer on the writer thread so the delete below
+        // doesn't leave it appending to an unlinked inode.
+        executor.execute { debugSink.close() }
         logFile?.delete()
         // Issue #36 — also clear all rotated backups
         logFile?.parentFile?.let { dir ->
@@ -745,6 +950,7 @@ object Logger {
      * Clear app log (the sanitized public log)
      */
     fun clearAppLog() {
+        executor.execute { appSink.close() }
         appLogFile?.delete()
         appLogFile?.parentFile?.let { dir ->
             File(dir, "$APP_LOG_FILE_NAME.old").delete()
@@ -860,6 +1066,7 @@ object Logger {
         logToFile = false
 
         // Delete log files (Issue #36 — N-file rotation cleanup)
+        executor.execute { debugSink.close() }
         logFile?.delete()
         logFile?.parentFile?.let { dir ->
             File(dir, "$LOG_FILE_NAME.old").delete()

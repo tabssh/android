@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-##@Version YYYYMMDDHHMM-git
+##@Version 202608150001-git
 # scripts/generate-keystore.sh — create a release signing keystore.
 # Prompts for a password rather than hardcoding one.
 #
@@ -7,6 +7,8 @@
 # Output: keystore.jks (default) or the path you specify
 
 set -euo pipefail
+
+VERSION="202608150001-git"
 
 OUT="${1:-keystore.jks}"
 

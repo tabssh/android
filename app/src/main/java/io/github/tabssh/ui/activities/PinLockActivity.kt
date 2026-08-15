@@ -8,7 +8,6 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -162,20 +161,49 @@ class PinLockActivity : AppCompatActivity() {
         }
         root.addView(status)
 
-        pinInput = EditText(this).apply {
+        // Views are built in code, which bypasses the Material view inflater —
+        // a plain Button/EditText here renders unthemed next to the rest of the
+        // app, so the Material widgets are constructed explicitly.
+        pinInput = com.google.android.material.textfield.TextInputEditText(this).apply {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
             gravity = Gravity.CENTER
             textSize = 28f
+            hint = "••••"
             filters = arrayOf(android.text.InputFilter.LengthFilter(8))
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                    onSubmit()
+                    true
+                } else {
+                    false
+                }
+            }
         }
-        root.addView(pinInput)
+        val inputField = com.google.android.material.textfield.TextInputLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            addView(pinInput)
+        }
+        root.addView(inputField)
 
-        val submit = Button(this).apply { text = if (mode == MODE_SET) "Continue" else "Unlock" }
+        val submit = com.google.android.material.button.MaterialButton(this).apply {
+            text = if (mode == MODE_SET) "Continue" else "Unlock"
+            layoutParams = LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(16)
+            }
+        }
         submit.setOnClickListener { onSubmit() }
         root.addView(submit)
 
         if (mode == MODE_SET) {
-            val cancel = Button(this).apply { text = "Cancel" }
+            val cancel = com.google.android.material.button.MaterialButton(
+                this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle
+            ).apply {
+                text = "Cancel"
+                layoutParams = LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = dp(8)
+                }
+            }
             cancel.setOnClickListener {
                 setResult(Activity.RESULT_CANCELED)
                 finish()
@@ -232,6 +260,7 @@ class PinLockActivity : AppCompatActivity() {
             setBusy(false)
             Toast.makeText(this@PinLockActivity, "App lock PIN set", Toast.LENGTH_SHORT).show()
             Logger.i(TAG, "PIN configured")
+            app.markAppUnlocked()
             setResult(Activity.RESULT_OK)
             finish()
         }
@@ -249,6 +278,7 @@ class PinLockActivity : AppCompatActivity() {
             Logger.w(TAG, "Verify mode without a stored hash — disabling app lock")
             app.preferencesManager.setBoolean(PREF_PIN_ENABLED, false)
             app.preferencesManager.setInt(PREF_PIN_FAIL_COUNT, 0)
+            app.markAppUnlocked()
             setResult(Activity.RESULT_OK)
             finish()
             return
@@ -264,6 +294,7 @@ class PinLockActivity : AppCompatActivity() {
                 // session starts fresh.
                 app.preferencesManager.setInt(PREF_PIN_FAIL_COUNT, 0)
                 attempts = 0
+                app.markAppUnlocked()
                 setResult(Activity.RESULT_OK)
                 finish()
                 return@launch

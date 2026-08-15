@@ -468,7 +468,12 @@ class TabTerminalActivity : AppCompatActivity() {
         // Posted (not called inline) so the ViewPager + TabLayout are
         // fully attached to the window first; addTabToUI's update path
         // touches both.
-        val existingTabs = tabManager.getAllTabs()
+        // Sealed list, not getAllTabs() — that one returns SSH tabs only, so an
+        // activity launched for a VNC/SPICE tab (VncHostsActivity creates the tab
+        // then starts this activity) saw an empty list, skipped the adapter
+        // rebuild, and left the console page unbound — RfbClient.start() is only
+        // called from the pager's bind, so the framebuffer stayed black.
+        val existingTabs = tabManager.getAllTabsSealed()
         if (existingTabs.isNotEmpty()) {
             Logger.i(
                 "TabTerminalActivity",
@@ -2276,7 +2281,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 
                 // Create new tab with the connection (using user's preferred cursor style)
                 val cursorStyle = app.preferencesManager.getCursorStyleInt()
-                val tab = tabManager.createTab(profile, cursorStyle)
+                val tab = tabManager.createTab(profile, cursorStyle, app.preferencesManager.getTranscriptRows())
 
                 if (tab != null) {
                     Logger.d("TabTerminalActivity", "Tab created successfully: ${tab.tabId}")
@@ -2306,7 +2311,11 @@ class TabTerminalActivity : AppCompatActivity() {
                     // is the only one; lastlog/MOTD prints normally through it.
                     // For "off" (or telnet): open the SSH shell directly.
                     Logger.i("TabTerminalActivity", "🔌 Connecting terminal to SSH streams...")
-                    val moshMode = profile.moshMode
+                    // Mosh cannot carry a RemoteCommand: mosh-server always starts a
+                    // login shell, so handing off would silently drop the command and
+                    // land the user in a plain shell (docker exec tabs, forced-command
+                    // jails, SFTP-only accounts). Those profiles stay on the SSH channel.
+                    val moshMode = if (!profile.remoteCommand.isNullOrBlank()) "off" else profile.moshMode
                     val binaryAvailable = io.github.tabssh.protocols.mosh.MoshNativeClient.resolveBinary(this) != null
                     val connected: Boolean
                     if (moshMode != "off" && binaryAvailable) {
@@ -2528,7 +2537,7 @@ class TabTerminalActivity : AppCompatActivity() {
         val telnet = io.github.tabssh.ssh.connection.TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23)
 
         val cursorStyle = app.preferencesManager.getCursorStyleInt()
-        val tab = tabManager.createTab(profile, cursorStyle)
+        val tab = tabManager.createTab(profile, cursorStyle, app.preferencesManager.getTranscriptRows())
         if (tab == null) {
             Logger.e("TabTerminalActivity", "Failed to create tab for ${profile.getDisplayName()}")
             showError("Failed to create terminal tab", "Error")
@@ -3805,7 +3814,13 @@ class TabTerminalActivity : AppCompatActivity() {
             // Telnet branch (separate path)
             if (profile.protocol.equals("telnet", ignoreCase = true)) {
                 val telnet = io.github.tabssh.ssh.connection.TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23)
-                val newTab = SSHTab(profile, io.github.tabssh.terminal.TermuxBridge())
+                val newTab = SSHTab(
+                    profile,
+                    io.github.tabssh.terminal.TermuxBridge(
+                        transcriptRows = app.preferencesManager.getTranscriptRows(),
+                        cursorStyle = app.preferencesManager.getCursorStyleInt()
+                    )
+                )
                 term.attachTerminalEmulator(newTab.termuxBridge)
                 try {
                     kotlinx.coroutines.delay(150)
@@ -3835,7 +3850,13 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
                 return@launch
             }
-            val newTab = SSHTab(profile, io.github.tabssh.terminal.TermuxBridge())
+            val newTab = SSHTab(
+                    profile,
+                    io.github.tabssh.terminal.TermuxBridge(
+                        transcriptRows = app.preferencesManager.getTranscriptRows(),
+                        cursorStyle = app.preferencesManager.getCursorStyleInt()
+                    )
+                )
             term.attachTerminalEmulator(newTab.termuxBridge)
             try {
                 kotlinx.coroutines.delay(150)

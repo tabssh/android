@@ -296,6 +296,58 @@ static void on_main_agent_notify(SpiceMainChannel *main_channel, GParamSpec *psp
 }
 
 /*
+ * channel-event — libspice reports each channel's transport state here:
+ * OPENED / SWITCHING / CLOSED plus the ERROR_* family (connect, TLS, link,
+ * auth, IO). Without handling it a failed link closes the socket silently
+ * and the Kotlin side never learns why — the console just stays black. Map
+ * every error to emit_error with an actionable message, a clean main-channel
+ * close to emit_disconnected, and log every transition so debug logs show
+ * exactly where a handshake stalls.
+ */
+static void on_channel_event(SpiceChannel *channel, SpiceChannelEvent event,
+                              gpointer user_data) {
+    tabssh_spice_session *sess = (tabssh_spice_session *)user_data;
+    int type = -1;
+    g_object_get(channel, "channel-type", &type, NULL);
+
+    switch (event) {
+        case SPICE_CHANNEL_OPENED:
+            LOGI("SPICE channel type=%d opened", type);
+            break;
+        case SPICE_CHANNEL_SWITCHING:
+            LOGI("SPICE channel type=%d switching host", type);
+            break;
+        case SPICE_CHANNEL_CLOSED:
+            LOGI("SPICE channel type=%d closed", type);
+            if (SPICE_IS_MAIN_CHANNEL(channel))
+                emit_disconnected(sess, "spice main channel closed");
+            break;
+        case SPICE_CHANNEL_ERROR_CONNECT:
+            LOGE("SPICE channel type=%d connect error", type);
+            emit_error(sess, "connection refused or host unreachable");
+            break;
+        case SPICE_CHANNEL_ERROR_TLS:
+            LOGE("SPICE channel type=%d TLS error", type);
+            emit_error(sess, "TLS handshake failed");
+            break;
+        case SPICE_CHANNEL_ERROR_LINK:
+            LOGE("SPICE channel type=%d link error", type);
+            emit_error(sess, "protocol link failed (version/capability mismatch)");
+            break;
+        case SPICE_CHANNEL_ERROR_AUTH:
+            LOGE("SPICE channel type=%d auth error", type);
+            emit_error(sess, "authentication failed (wrong or missing password)");
+            break;
+        case SPICE_CHANNEL_ERROR_IO:
+            LOGE("SPICE channel type=%d I/O error", type);
+            emit_error(sess, "connection lost");
+            break;
+        default:
+            break;
+    }
+}
+
+/*
  * Fired when SpiceSession creates a new channel. We wire up the ones
  * we care about (main, display, inputs) and connect them; libspice
  * emits channel-new on the same GMainContext we drive from the
@@ -306,6 +358,9 @@ static void on_channel_new(SpiceSession *session, SpiceChannel *channel, gpointe
     tabssh_spice_session *sess = (tabssh_spice_session *)user_data;
     int type = -1;
     g_object_get(channel, "channel-type", &type, NULL);
+
+    g_signal_connect(channel, "channel-event",
+                      G_CALLBACK(on_channel_event), sess);
 
     if (SPICE_IS_MAIN_CHANNEL(channel)) {
         sess->main_channel = SPICE_MAIN_CHANNEL(channel);
@@ -352,9 +407,27 @@ static void on_session_disconnected(SpiceSession *session, gpointer user_data) {
  */
 static gpointer loop_thread_main(gpointer user_data) {
     tabssh_spice_session *sess = (tabssh_spice_session *)user_data;
-    g_main_context_push_thread_default(sess->main_ctx);
-    g_main_loop_run(sess->main_loop);
-    g_main_context_pop_thread_default(sess->main_ctx);
+
+    /*
+     * Initiate the connect HERE, inline on the worker thread, before entering
+     * g_main_loop_run. spice_session_connect is async: it returns immediately
+     * and its coroutine (gio-coroutine) schedules all socket-wait and signal
+     * wakeups on the GLOBAL default GMainContext. sess->main_ctx IS the global
+     * default (see impl_create), and this loop runs it, so those sources
+     * dispatch on this thread. We deliberately do NOT push a thread-default
+     * context: GLib forbids pushing the global-default context as
+     * thread-default, and with nothing pushed g_socket_client_connect_async
+     * also targets the global default — consistent with the coroutine.
+     */
+    LOGI("SPICE worker loop starting — initiating connect");
+    if (!spice_session_connect(sess->session)) {
+        LOGE("spice_session_connect failed");
+        emit_error(sess, "spice_session_connect failed");
+    } else {
+        g_main_loop_run(sess->main_loop);
+    }
+
+    LOGI("SPICE worker loop exited");
 
     /* Detach so the JVM does not leak per-worker thread refs. */
     if (g_vm) (*g_vm)->DetachCurrentThread(g_vm);
@@ -367,7 +440,19 @@ jlong tabssh_spice_impl_create(JNIEnv *env, jstring host, jint port, jint tls_po
     tabssh_spice_session *sess = g_new0(tabssh_spice_session, 1);
     if (!sess) return 0;
 
-    sess->main_ctx = g_main_context_new();
+    /*
+     * Use the GLOBAL default GMainContext, not a private one. spice-gtk's
+     * gio-coroutine schedules every wakeup on the default context: the
+     * socket-wait sources via g_source_attach(src, NULL) and the signal
+     * marshalling via g_idle_add() — both of which resolve to
+     * g_main_context_default() regardless of any thread-default. A private
+     * g_main_context_new() context is therefore never iterated by libspice's
+     * coroutine, so the connect coroutine starts but never advances: no
+     * socket, no channel-event, no error — exactly the silent black screen we
+     * saw. Running the worker loop on the default context makes those sources
+     * dispatch.
+     */
+    sess->main_ctx = g_main_context_ref(g_main_context_default());
     sess->main_loop = g_main_loop_new(sess->main_ctx, FALSE);
     sess->session = spice_session_new();
 
@@ -411,20 +496,6 @@ jlong tabssh_spice_impl_create(JNIEnv *env, jstring host, jint port, jint tls_po
     return (jlong)(uintptr_t)sess;
 }
 
-/*
- * Invoked on the worker thread once the main loop is up. Fires
- * spice_session_connect so libspice starts the transport handshake
- * from the correct GMainContext.
- */
-static gboolean start_session_on_worker(gpointer user_data) {
-    tabssh_spice_session *sess = (tabssh_spice_session *)user_data;
-    if (!spice_session_connect(sess->session)) {
-        emit_error(sess, "spice_session_connect failed");
-        if (sess->main_loop) g_main_loop_quit(sess->main_loop);
-    }
-    return G_SOURCE_REMOVE;
-}
-
 jboolean tabssh_spice_impl_start(JNIEnv *env, jlong handle, jobject self) {
     tabssh_spice_session *sess = (tabssh_spice_session *)(uintptr_t)handle;
     if (!sess) return JNI_FALSE;
@@ -436,19 +507,17 @@ jboolean tabssh_spice_impl_start(JNIEnv *env, jlong handle, jobject self) {
     if (!sess->client_ref) return JNI_FALSE;
 
     GError *err = NULL;
+    /*
+     * The worker (loop_thread_main) initiates spice_session_connect itself,
+     * inline before g_main_loop_run, so the async transport sources bind to
+     * main_ctx deterministically. No cross-thread source queuing here.
+     */
     sess->loop_thread = g_thread_try_new("tabssh-spice", loop_thread_main, sess, &err);
     if (!sess->loop_thread) {
         LOGE("g_thread_try_new failed: %s", err ? err->message : "?");
         if (err) g_error_free(err);
         return JNI_FALSE;
     }
-
-    /*
-     * Post the connect onto the worker context. The idle source runs
-     * as soon as the loop starts iterating, which will be nearly
-     * immediately after g_main_loop_run enters its poll.
-     */
-    g_main_context_invoke(sess->main_ctx, start_session_on_worker, sess);
     return JNI_TRUE;
 }
 

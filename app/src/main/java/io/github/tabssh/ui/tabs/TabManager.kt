@@ -101,8 +101,11 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     /**
      * Create new tab with connection profile
      * @param cursorStyle 0=block, 1=underline, 2=bar (I-beam)
+     * @param transcriptRows scrollback size for the new tab, from
+     *   `PreferenceManager.getTranscriptRows()`; the default is only for
+     *   callers with no access to preferences
      */
-    fun createTab(profile: ConnectionProfile, cursorStyle: Int = 2): SSHTab? = synchronized(tabsLock) {
+    fun createTab(profile: ConnectionProfile, cursorStyle: Int = 2, transcriptRows: Int = 2000): SSHTab? = synchronized(tabsLock) {
         if (tabs.size >= maxTabs) {
             Logger.w("TabManager", "Maximum tabs reached: $maxTabs")
             return null
@@ -112,7 +115,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
         val termuxBridge = TermuxBridge(
             columns = 80,
             rows = 24,
-            transcriptRows = 2000,
+            transcriptRows = transcriptRows,
             cursorStyle = cursorStyle
         )
 

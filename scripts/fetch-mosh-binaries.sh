@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-##@Version YYYYMMDDHHMM-git
+##@Version 202608150001-git
 # scripts/fetch-mosh-binaries.sh — pull the latest mosh-client binaries
 # from the GitHub release `mosh-<version>` and place them as native libs.
 #
@@ -13,6 +13,8 @@
 # does not fail the build — the APK ships without Mosh in that case.
 
 set -euo pipefail
+
+VERSION="202608150001-git"
 
 REPO="${TABSSH_REPO:-tabssh/android}"
 ABIS=(arm64-v8a armeabi-v7a x86_64 x86)
