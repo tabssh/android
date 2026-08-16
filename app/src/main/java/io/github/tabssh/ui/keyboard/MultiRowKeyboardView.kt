@@ -39,6 +39,15 @@ class MultiRowKeyboardView @JvmOverloads constructor(
     /** Currently latched modifier ("CTL", "ALT", "SFT") or null. FN is handled via row swap. */
     private var currentModifier: String? = null
 
+    /**
+     * Whether the current modifier is LOCKED on (long-press to engage). While
+     * locked the modifier survives each keystroke instead of being cleared
+     * after the first non-modifier key, so the user can repeat e.g. Ctrl+←/→
+     * word-jumps without re-arming CTL every time. Released by long-pressing or
+     * tapping the same modifier again.
+     */
+    private var modifierLocked = false
+
     /** Whether the FN row swap is currently active. */
     private var fnMode = false
 
@@ -236,7 +245,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
             val row = KeyboardRowView(context)
             row.setOnKeyClickListener { key -> handleRowKey(key) }
             row.setOnToggleClickListener { onToggleClickListener?.invoke() }
-            row.setOnKeyLongClickListener { key -> onKeyLongClickListener?.invoke(key) }
+            row.setOnKeyLongClickListener { key -> handleRowLongClick(key) }
             keyboardRows.add(row)
             addView(row)
         }
@@ -268,8 +277,9 @@ class MultiRowKeyboardView @JvmOverloads constructor(
                 // The activity is responsible for the modifier-aware sending.
                 // We just emit the raw key plus the current modifier state.
                 onKeyClickListener?.invoke(key)
-                // CTL/ALT are one-shot — clear after the first non-modifier key.
-                if (currentModifier != null) {
+                // CTL/ALT/SFT are one-shot — clear after the first non-modifier
+                // key. When the modifier is LOCKED, it stays armed instead.
+                if (currentModifier != null && !modifierLocked) {
                     setCurrentModifier(null)
                 }
             }
@@ -278,7 +288,9 @@ class MultiRowKeyboardView @JvmOverloads constructor(
 
     /**
      * Handle a modifier key tap. CTL/ALT toggle the sticky state; FN swaps the
-     * row layout to expose F1-F12.
+     * row layout to expose F1-F12. A tap always leaves the modifier one-shot —
+     * tapping a locked modifier releases the lock (via [setCurrentModifier]
+     * clearing [modifierLocked]).
      */
     private fun handleModifierTap(key: KeyboardKey) {
         when (key.id) {
@@ -292,15 +304,44 @@ class MultiRowKeyboardView @JvmOverloads constructor(
         }
     }
 
-    private fun setCurrentModifier(modifier: String?) {
-        if (currentModifier == modifier) return
+    /**
+     * Long-press dispatch from any row. A long-press on CTL/ALT/SFT toggles the
+     * modifier LOCK; every other key falls through to the activity's own
+     * long-press handler (e.g. PREFIX's multiplexer picker).
+     */
+    private fun handleRowLongClick(key: KeyboardKey) {
+        if (key.category == KeyboardKey.KeyCategory.MODIFIER &&
+            (key.id == "CTL" || key.id == "ALT" || key.id == "SFT")
+        ) {
+            toggleModifierLock(key.id)
+            return
+        }
+        onKeyLongClickListener?.invoke(key)
+    }
+
+    /**
+     * Engage or release the modifier lock for [id]. Long-pressing the already
+     * locked modifier releases it; otherwise it locks [id] on.
+     */
+    private fun toggleModifierLock(id: String) {
+        if (modifierLocked && currentModifier == id) {
+            setCurrentModifier(null)
+        } else {
+            setCurrentModifier(id, locked = true)
+        }
+    }
+
+    private fun setCurrentModifier(modifier: String?, locked: Boolean = false) {
+        val newLocked = locked && modifier != null
+        if (currentModifier == modifier && modifierLocked == newLocked) return
         currentModifier = modifier
+        modifierLocked = newLocked
         applyModifierHighlight()
         onModifierChangedListener?.invoke(modifier)
     }
 
     private fun applyModifierHighlight() {
-        keyboardRows.forEach { it.highlightModifier(currentModifier) }
+        keyboardRows.forEach { it.highlightModifier(currentModifier, modifierLocked) }
     }
 
     /**
@@ -458,9 +499,16 @@ class MultiRowKeyboardView @JvmOverloads constructor(
     /** Currently latched modifier ("CTL", "ALT", "SFT") or null. */
     fun getCurrentModifier(): String? = currentModifier
 
-    /** Force-clear the latched modifier (e.g. after the terminal consumes it). */
+    /** Whether the current modifier is locked on (survives keystrokes). */
+    fun isModifierLocked(): Boolean = modifierLocked
+
+    /**
+     * Clear the one-shot latched modifier (e.g. after the terminal consumes it).
+     * No-op while the modifier is LOCKED — a locked modifier is only released by
+     * long-pressing or tapping it again.
+     */
     fun clearModifier() {
-        if (currentModifier != null) setCurrentModifier(null)
+        if (currentModifier != null && !modifierLocked) setCurrentModifier(null)
     }
 
     /**
@@ -472,6 +520,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
         savedLayout = null
         fullLayout = null
         currentModifier = null
+        modifierLocked = false
         if (portraitRowCount == 0) portraitRowCount = DEFAULT_ROWS
         numberOfRows = effectiveRowCount()
         rebuildRows()

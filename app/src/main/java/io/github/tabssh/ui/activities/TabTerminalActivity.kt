@@ -4322,8 +4322,12 @@ class TabTerminalActivity : AppCompatActivity() {
     private fun sendConsoleKeyPress(consoleTab: ConsoleTab, key: io.github.tabssh.ui.keyboard.KeyboardKey) {
         val inputView = getActiveInputView()
         val modifier = consolePendingModifier
-        consolePendingModifier = null
-        if (modifier != null) binding.multiRowKeyboard.clearModifier()
+        // When LOCKED, keep the modifier armed for the next console key; otherwise
+        // consume the one-shot modifier and clear its bar visual.
+        if (!binding.multiRowKeyboard.isModifierLocked()) {
+            consolePendingModifier = null
+            if (modifier != null) binding.multiRowKeyboard.clearModifier()
+        }
 
         when (consoleTab.displayMode.value) {
             ConsoleDisplayMode.RFB -> {
@@ -5248,7 +5252,14 @@ class TabTerminalActivity : AppCompatActivity() {
             if (tv != null) {
                 tv.setPendingModifier(modifier)
                 tv.onModifierConsumed = {
-                    binding.multiRowKeyboard.clearModifier()
+                    // When LOCKED, the bar keeps the modifier armed — the terminal
+                    // just consumed its pending copy, so re-arm it for the next key.
+                    // Otherwise clear the one-shot modifier and its bar visual.
+                    if (binding.multiRowKeyboard.isModifierLocked()) {
+                        tv.setPendingModifier(binding.multiRowKeyboard.getCurrentModifier())
+                    } else {
+                        binding.multiRowKeyboard.clearModifier()
+                    }
                 }
                 return@setOnModifierChangedListener
             }

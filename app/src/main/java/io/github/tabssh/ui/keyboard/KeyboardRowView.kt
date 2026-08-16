@@ -100,10 +100,10 @@ class KeyboardRowView @JvmOverloads constructor(
      * fill with dark text so the active state is unmistakable at a glance —
      * a subtle alpha change is easy to miss on a bright screen.
      */
-    fun highlightModifier(activeId: String?) {
+    fun highlightModifier(activeId: String?, locked: Boolean = false) {
         modifierButtons.forEach { (id, btn) ->
             val active = id == activeId
-            btn.setActive(active)
+            btn.setActive(active, active && locked)
             btn.alpha = if (active) 1.0f else 0.7f
         }
     }
@@ -292,9 +292,19 @@ class KeyboardRowView @JvmOverloads constructor(
             // visible on both the light and dark keyboard surface
             color = androidx.core.graphics.ColorUtils.setAlphaComponent(defaultTextColor, 0x33)
         }
+        // Locked-modifier indicator: an inner dark-green ring drawn inside the
+        // green active fill, so a LOCKED modifier reads differently at a glance
+        // from a one-shot armed one.
+        private val lockPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            color = activeTextColor
+            strokeWidth = 2f * density
+        }
         private val rectF = RectF()
+        private val lockRectF = RectF()
         private val cornerR = 4f * density
         private var isActive = false   // true = latched modifier / active PREFIX
+        private var isLocked = false   // true = modifier locked on (inner ring)
 
         init {
             isClickable = true
@@ -309,8 +319,9 @@ class KeyboardRowView @JvmOverloads constructor(
          * WCAG AA (green on dark-green is ~4.7:1).
          * Inactive = default outline style.
          */
-        fun setActive(active: Boolean) {
+        fun setActive(active: Boolean, locked: Boolean = false) {
             isActive = active
+            isLocked = active && locked
             strokePaint.color = if (active) activeFillColor else defaultStrokeColor
             textPaint.color   = if (active) activeTextColor else defaultTextColor
             invalidate()
@@ -341,6 +352,13 @@ class KeyboardRowView @JvmOverloads constructor(
             }
             if (isPressed) canvas.drawRoundRect(rectF, cornerR, cornerR, pressPaint)
             canvas.drawRoundRect(rectF, cornerR, cornerR, strokePaint)
+
+            // Locked modifier: inner ring inside the green fill.
+            if (isLocked) {
+                val d = 3f * density
+                lockRectF.set(rectF.left + d, rectF.top + d, rectF.right - d, rectF.bottom - d)
+                canvas.drawRoundRect(lockRectF, cornerR, cornerR, lockPaint)
+            }
 
             val cx = width / 2f
             val cy = height / 2f - (textPaint.ascent() + textPaint.descent()) / 2f
