@@ -1,0 +1,188 @@
+name: Tor Native Binaries
+
+# Builds the tor client for all 4 Android ABIs and publishes a GitHub release
+# tagged `tor-<version>`. Runs monthly; if the pinned tor version (in
+# tor/build-android.sh) already has a matching `tor-*` release, exits cleanly.
+#
+# Triggered manually via workflow_dispatch with optional `force: true` to
+# rebuild even if the pinned version is unchanged.
+#
+# Output: release `tor-<X.Y.Z.W>` with assets:
+#   - tor-arm64-v8a
+#   - tor-armeabi-v7a
+#   - tor-x86_64
+#   - tor-x86
+#
+# `scripts/fetch-tor-binaries.sh` consumes the latest such release at APK
+# build time (drops files to app/src/main/jniLibs/<abi>/libtor.so).
+
+on:
+  schedule:
+    - cron: '0 6 2 * *'   # 06:00 UTC on the 2nd of every month
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force rebuild even if pinned version unchanged'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write   # need write to create the release
+
+jobs:
+  check-version:
+    name: Check pinned tor version
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.compare.outputs.should_build }}
+      tor_version: ${{ steps.compare.outputs.tor_version }}
+      release_tag: ${{ steps.compare.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Resolve pinned tor version
+        id: pinned
+        run: |
+          # The version tor/build-android.sh unpacks is the single source of
+          # truth for which tor we ship.
+          version=$(grep -oE -- 'tor-[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?\.tar\.gz' \
+                      tor/build-android.sh | head -n1 \
+                    | sed -E 's/tor-(.*)\.tar\.gz/\1/')
+          if [[ -z "$version" ]]; then
+            echo "Could not determine pinned tor version" >&2
+            exit 1
+          fi
+          echo "tor_version=$version" >> "$GITHUB_OUTPUT"
+          echo "Pinned tor: $version"
+
+      - name: Resolve last published tor-binary release
+        id: ours
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ours=$(gh release list --repo "${GITHUB_REPOSITORY}" --limit 50 \
+                  --json tagName --jq '.[].tagName' \
+                  | grep -E '^tor-[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$' \
+                  | head -n1 || true)
+          version=${ours#tor-}
+          echo "previous_version=${version:-none}" >> "$GITHUB_OUTPUT"
+          echo "Previous TabSSH tor-binary release: ${version:-none}"
+
+      - name: Decide whether to build
+        id: compare
+        run: |
+          pinned="${{ steps.pinned.outputs.tor_version }}"
+          previous="${{ steps.ours.outputs.previous_version }}"
+          force="${{ inputs.force }}"
+          tag="tor-${pinned}"
+
+          if [[ "$force" == "true" ]]; then
+            echo "Force rebuild requested"
+            should_build=true
+          elif [[ "$previous" == "none" || "$previous" != "$pinned" ]]; then
+            echo "Version changed: $previous → $pinned"
+            should_build=true
+          else
+            echo "No change ($previous == $pinned); skipping"
+            should_build=false
+          fi
+
+          {
+            echo "should_build=$should_build"
+            echo "tor_version=$pinned"
+            echo "release_tag=$tag"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build tor (${{ matrix.abi }})
+    needs: check-version
+    if: needs.check-version.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64-v8a, armeabi-v7a, x86_64, x86]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Build cross-compile image
+        run: |
+          docker build -t tabssh/tor-build:latest tor/
+
+      - name: Cross-compile tor for ${{ matrix.abi }}
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/tor:/work" \
+            tabssh/tor-build:latest \
+            /work/build-android.sh ${{ matrix.abi }}
+
+      - name: Verify binary
+        run: |
+          binary="tor/out/${{ matrix.abi }}/tor"
+          test -f "$binary" || { echo "Missing binary"; exit 1; }
+          file "$binary"
+          ls -la "$binary"
+          # Rename to flat asset name (no .so for the GH release).
+          mkdir -p artifacts
+          cp "$binary" "artifacts/tor-${{ matrix.abi }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tor-${{ matrix.abi }}
+          path: artifacts/tor-${{ matrix.abi }}
+          retention-days: 7
+
+  release:
+    name: Publish GitHub release
+    needs: [check-version, build]
+    if: needs.check-version.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List collected binaries
+        run: ls -la artifacts/
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ needs.check-version.outputs.release_tag }}"
+          version="${{ needs.check-version.outputs.tor_version }}"
+
+          # If a release with this tag already exists (e.g. force rebuild),
+          # delete it first so we can replace assets cleanly.
+          gh release view "$tag" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1 \
+            && gh release delete "$tag" --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag \
+            || true
+
+          cat > /tmp/tor-release-notes.md <<EOF
+          Cross-compiled \`tor\` ${version} (upstream [Tor Project](https://gitlab.torproject.org/tpo/core/tor)) for Android, all four ABIs.
+
+          These binaries are bundled into the TabSSH APK at \`app/src/main/jniLibs/<abi>/libtor.so\` so they get unpacked to the app's \`nativeLibraryDir\` on install. tor runs client-only as a loopback SOCKS proxy; the built-in Tor route sends SSH traffic through it exactly like any external SOCKS5 proxy.
+
+          **License:** \`tor\` is BSD-3-Clause (see [Tor LICENSE](https://gitlab.torproject.org/tpo/core/tor/-/blob/main/LICENSE)). It is aggregated alongside TabSSH (MIT).
+
+          **Built from:** tor ${version} + libevent + openssl + zlib, via \`tor/Dockerfile\` + \`tor/build-android.sh\` in this repo.
+          EOF
+
+          # Tor binary refreshes are infrastructure, not user-facing app
+          # releases. Mark them prerelease so they don't claim the repo's
+          # "Latest" badge — that slot is reserved for actual TabSSH APK
+          # releases (see .github/workflows/release.yml).
+          gh release create "$tag" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Tor ${version} for Android" \
+            --notes-file /tmp/tor-release-notes.md \
+            --prerelease \
+            artifacts/tor-*

@@ -38,6 +38,8 @@ data class SyncItemCounts(
     val dashboard: Int = 0,
     /** Saved SSH port-forward rules. */
     val portForwards: Int = 0,
+    /** Reusable network routes (proxies and SSH jump hosts). */
+    val networkRoutes: Int = 0,
     /** Docker subsystem: hosts, registry credentials, compose stacks, single-container
      *  run configs, and auto-update policies. */
     val dockerHosts: Int = 0,
@@ -49,7 +51,7 @@ data class SyncItemCounts(
     fun total(): Int = connections + keys + themes + preferences + hostKeys +
         workspaces + snippets + identities + groups + hypervisors + certificates +
         macros + monitorSlots + hypervisorAccounts + vncHosts + vncIdentities +
-        cloudAccounts + dashboard + portForwards + dockerHosts + registryCredentials +
+        cloudAccounts + dashboard + portForwards + networkRoutes + dockerHosts + registryCredentials +
         composeStacks + singleContainerConfigs + containerAutoUpdatePolicies
 }
 
@@ -115,6 +117,8 @@ data class SyncDataPackage(
     val dashboardConfig: Map<String, String> = emptyMap(),
     /** Saved SSH port-forward rules, last-write-wins REPLACE on UUID PK. */
     val portForwards: List<io.github.tabssh.storage.database.entities.PortForward> = emptyList(),
+    /** Reusable network routes (proxies and SSH jump hosts), last-write-wins REPLACE on UUID PK. */
+    val networkRoutes: List<io.github.tabssh.storage.database.entities.NetworkRoute> = emptyList(),
     /** Docker subsystem — all use autoGenerate Long PKs, so cross-device ID collisions
      *  are possible (same caveat as HypervisorProfile above, documented in AI.md §9.4).
      *  DockerHost's custom-endpoint SSH password and RegistryCredential's secret stay

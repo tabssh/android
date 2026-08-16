@@ -275,7 +275,20 @@ data class ConnectionProfile(
      * Null for every profile created through the normal add-connection flow.
      */
     @ColumnInfo(name = "oci_instance_id")
-    val ociInstanceId: String? = null
+    val ociInstanceId: String? = null,
+
+    /**
+     * Routing & Forwarding — the reusable NetworkRoute this connection dials
+     * through (proxy or SSH jump host).
+     *   null                  = inherit the global default route preference.
+     *   NetworkRoute.DIRECT   = force a direct connection (opt out of default).
+     *   any other value       = a `network_routes.id` to route through.
+     * The legacy inline `proxy_*` columns are migrated into a NetworkRoute row
+     * and this field on first launch after upgrade; they remain readable for
+     * backup/export back-compat only.
+     */
+    @ColumnInfo(name = "route_id")
+    val routeId: String? = null
 ) {
     fun getAuthTypeEnum(): AuthType = AuthType.fromString(authType)
     

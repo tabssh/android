@@ -617,6 +617,15 @@ class PreferenceManager(private val context: Context) {
     fun getProxyPassword(): String? = getString("proxy_password", "")
     fun setProxyPassword(password: String?) = setString("proxy_password", password ?: "")
 
+    /**
+     * Routing & Forwarding — the global default NetworkRoute id applied to any
+     * connection whose own `route_id` is null (inherit). Empty = no default
+     * (connect directly). The sentinel NetworkRoute.DIRECT can also be stored
+     * to make "direct" the explicit global default.
+     */
+    fun getDefaultRouteId(): String? = getString("default_route_id", "").takeIf { it.isNotBlank() }
+    fun setDefaultRouteId(routeId: String?) = setString("default_route_id", routeId ?: "")
+
     fun getProxyBypassHosts(): List<String> {
         val hosts = getString("proxy_bypass_hosts", "")
         return if (hosts.isNotEmpty()) hosts.split(",") else emptyList()
@@ -699,6 +708,9 @@ class PreferenceManager(private val context: Context) {
 
     fun isSyncPortForwardsEnabled(): Boolean = getBoolean("sync_port_forwards", true)
     fun setSyncPortForwardsEnabled(enabled: Boolean) = setBoolean("sync_port_forwards", enabled)
+
+    fun isSyncNetworkRoutesEnabled(): Boolean = getBoolean("sync_network_routes", true)
+    fun setSyncNetworkRoutesEnabled(enabled: Boolean) = setBoolean("sync_network_routes", enabled)
 
     fun isSyncDockerEnabled(): Boolean = getBoolean("sync_docker", true)
     fun setSyncDockerEnabled(enabled: Boolean) = setBoolean("sync_docker", enabled)

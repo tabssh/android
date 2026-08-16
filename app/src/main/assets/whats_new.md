@@ -1,5 +1,41 @@
 # What's New
 
+## Wave 67 — Routing & Forwarding, built-in Tor
+
+### Reusable network routes
+
+- **Set up a proxy or jump host once, reuse it everywhere** — the
+  old per-connection "Proxy / Jump Host" form is now a picker.
+  Define a route (HTTP / SOCKS4 / SOCKS5 proxy, or an SSH jump
+  host) once under the renamed **Routing & Forwarding** section,
+  then pick it on any connection. No more re-typing the same
+  bastion or proxy on every host.
+- **Per-connection choice** — each connection can use a saved
+  route, connect **Direct** (ignore everything), or **inherit the
+  global default route** you set once for the whole app.
+- **Your existing proxy/jump settings are migrated automatically**
+  — every connection that already had inline proxy or jump-host
+  config is turned into a saved route and linked, with nothing
+  lost. No passwords move into the database: proxies authenticate
+  by username, and jump hosts reuse the connection's own
+  credentials, exactly as before.
+
+### Tor, two ways
+
+- **Orbot preset** — one tap fills in a SOCKS5 route pointing at
+  Orbot's default `127.0.0.1:9050`, for routing SSH through Tor via
+  the Orbot app.
+- **Built-in Tor** — when a bundled `tor` binary is present for
+  your device, a **Tor (built-in)** route runs Tor inside TabSSH
+  as a loopback SOCKS proxy — no separate app required. SSH traffic
+  is then routed through Tor just like any other SOCKS5 proxy.
+
+### Unified section
+
+- **Routes and port forwards, one place** — proxies, jump hosts,
+  and port-forward rules now live together under **Routing &
+  Forwarding**. Routes are included in backups and restore.
+
 ## Wave 66 — Docker management, Tasker plugin, console polish
 
 ### Docker hosts

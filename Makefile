@@ -43,7 +43,7 @@ BLUE := \033[0;34m
 YELLOW := \033[1;33m
 NC := \033[0m
 
-.PHONY: help check build release test test-install install clean image fetch-mosh fetch-spice fetch-fonts adb-reconnect logs _ensure-image
+.PHONY: help check build release test test-install install clean image fetch-mosh fetch-tor fetch-spice fetch-fonts adb-reconnect logs _ensure-image
 
 .DEFAULT_GOAL := help
 
@@ -57,7 +57,7 @@ check: _ensure-image ## Compile + lint + JVM unit tests in Docker (pre-commit ga
 		&& echo -e "$(GREEN)✅ No errors$(NC)" \
 		|| { echo -e "$(YELLOW)❌ Errors found$(NC)"; exit 1; }
 
-build: _ensure-image fetch-mosh fetch-spice fetch-fonts ## Build debug APKs -> ./binaries/
+build: _ensure-image fetch-mosh fetch-tor fetch-spice fetch-fonts ## Build debug APKs -> ./binaries/
 	@echo -e "$(GREEN)🚀 Building TabSSH v$(VERSION)...$(NC)"
 	@$(DOCKER_RUN) $(BUILD_IMAGE) sh -c "$(GRADLE_SEED); ./gradlew clean assembleDebug --no-daemon --build-cache"
 	@mkdir -p $(BINARIES)
@@ -65,7 +65,7 @@ build: _ensure-image fetch-mosh fetch-spice fetch-fonts ## Build debug APKs -> .
 	@echo -e "$(GREEN)✅ Done$(NC)"
 	@ls -lh $(BINARIES)/*.apk 2>/dev/null
 
-release: _ensure-image fetch-mosh fetch-spice fetch-fonts ## Build release APKs -> ./releases/ (local verification only)
+release: _ensure-image fetch-mosh fetch-tor fetch-spice fetch-fonts ## Build release APKs -> ./releases/ (local verification only)
 	@echo -e "$(GREEN)🚀 Building TabSSH v$(VERSION) (release)...$(NC)"
 	@$(DOCKER_RUN) $(BUILD_IMAGE) sh -c "$(GRADLE_SEED); ./gradlew clean assembleRelease --no-daemon --build-cache"
 	@mkdir -p $(RELEASES)
@@ -83,6 +83,9 @@ test: check ## Everything in check, plus UI tests when a device is reachable
 
 fetch-mosh: ## Fetch mosh-client binaries from latest GH release
 	@scripts/fetch-mosh-binaries.sh
+
+fetch-tor: ## Fetch tor binaries from latest GH release
+	@scripts/fetch-tor-binaries.sh
 
 fetch-spice: ## Fetch SPICE native libs (libtabssh_native.so) from latest GH release
 	@scripts/fetch-spice-libs.sh

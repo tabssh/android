@@ -18,6 +18,7 @@ import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.storage.database.entities.Macro
 import io.github.tabssh.storage.database.entities.MonitorSlot
+import io.github.tabssh.storage.database.entities.NetworkRoute
 import io.github.tabssh.storage.database.entities.PortForward
 import io.github.tabssh.storage.database.entities.RegistryCredential
 import io.github.tabssh.storage.database.entities.SingleContainerConfig
@@ -137,6 +138,8 @@ class BackupImporter(
             { restoreVncIdentities(it, effectiveOverwrite) }) { out["vnc_identities"] = it; Logger.d(TAG, "Restored $it VNC identities") }
         table(BackupExporter.FILE_PORT_FORWARDS, "port_forwards",
             { restorePortForwards(it, effectiveOverwrite) }) { out["port_forwards"] = it; Logger.d(TAG, "Restored $it port forwards") }
+        table(BackupExporter.FILE_NETWORK_ROUTES, "network_routes",
+            { restoreNetworkRoutes(it, effectiveOverwrite) }) { out["network_routes"] = it; Logger.d(TAG, "Restored $it network routes") }
         table(BackupExporter.FILE_DOCKER_HOSTS, "docker_hosts",
             { restoreDockerHosts(it, effectiveOverwrite) }) { out["docker_hosts"] = it; Logger.d(TAG, "Restored $it Docker hosts") }
         table(BackupExporter.FILE_REGISTRY_CREDENTIALS, "registry_credentials",
@@ -226,6 +229,9 @@ class BackupImporter(
         }
         if (backupData.containsKey(BackupExporter.FILE_PORT_FORWARDS)) {
             database.portForwardDao().getAllList().forEach { database.portForwardDao().delete(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_NETWORK_ROUTES)) {
+            database.networkRouteDao().getAllList().forEach { database.networkRouteDao().delete(it) }
         }
         if (backupData.containsKey(BackupExporter.FILE_DOCKER_HOSTS)) {
             database.dockerHostDao().getAllList().forEach { database.dockerHostDao().delete(it) }
@@ -479,6 +485,18 @@ class BackupImporter(
             val existing = database.portForwardDao().getById(pf.id)
             if (existing != null && !overwriteExisting) return@restoreV2List false
             database.portForwardDao().insert(pf); true
+        }
+
+    private suspend fun restoreNetworkRoutes(data: String, overwriteExisting: Boolean): Int =
+        // Non-secret routing metadata only — a route carries no password
+        // (proxies auth by username; jump hosts reuse the connection's own
+        // credentials at connect time), so nothing is restored from secrets.
+        restoreV2List(data, ListSerializer(NetworkRoute.serializer())) { route ->
+            val existing = database.networkRouteDao().getById(route.id)
+            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing == null) database.networkRouteDao().insert(route)
+            else database.networkRouteDao().update(route)
+            true
         }
 
     // ── Docker ───────────────────────────────────────────────────────────────

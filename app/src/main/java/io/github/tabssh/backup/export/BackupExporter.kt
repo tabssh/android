@@ -16,6 +16,7 @@ import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.storage.database.entities.Macro
 import io.github.tabssh.storage.database.entities.MonitorSlot
+import io.github.tabssh.storage.database.entities.NetworkRoute
 import io.github.tabssh.storage.database.entities.PortForward
 import io.github.tabssh.storage.database.entities.RegistryCredential
 import io.github.tabssh.storage.database.entities.SingleContainerConfig
@@ -112,6 +113,14 @@ class BackupExporter(
         const val FILE_VNC_IDENTITIES    = "vnc_identities.json"
         const val FILE_PORT_FORWARDS     = "port_forwards.json"
         /**
+         * Reusable network routes (proxies + SSH jump hosts) for the Routing &
+         * Forwarding feature. Non-secret metadata only — a route carries no
+         * password (proxies auth by username; jump hosts reuse the connection's
+         * own credentials at connect time). Connections reference a route by id
+         * via their `route_id` column, which rides along in [FILE_CONNECTIONS].
+         */
+        const val FILE_NETWORK_ROUTES    = "network_routes.json"
+        /**
          * Docker subsystem — hosts, private registry credentials, compose stacks,
          * single-container run configs, and container/stack auto-update policies.
          * Custom-endpoint SSH passwords and registry secrets live in [FILE_SECRETS]
@@ -185,6 +194,7 @@ class BackupExporter(
         out[FILE_VNC_HOSTS]        = exportVncHosts()
         out[FILE_VNC_IDENTITIES]   = exportVncIdentities()
         out[FILE_PORT_FORWARDS]    = exportPortForwards()
+        out[FILE_NETWORK_ROUTES]   = exportNetworkRoutes()
         out[FILE_DOCKER_HOSTS]     = exportDockerHosts()
         out[FILE_REGISTRY_CREDENTIALS] = exportRegistryCredentials()
         out[FILE_COMPOSE_STACKS]   = exportComposeStacks()
@@ -318,6 +328,10 @@ class BackupExporter(
     private suspend fun exportPortForwards(): String =
         encodeEntities(ListSerializer(PortForward.serializer()),
             database.portForwardDao().getAllList())
+
+    private suspend fun exportNetworkRoutes(): String =
+        encodeEntities(ListSerializer(NetworkRoute.serializer()),
+            database.networkRouteDao().getAllList())
 
     private suspend fun exportDockerHosts(): String =
         // No secret column — custom-endpoint passwords live in exportSecrets()

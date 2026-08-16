@@ -53,6 +53,7 @@ object TombstoneRecorder {
     const val VNC_IDENTITY = "vnc_identity"
     const val CLOUD_ACCOUNT = "cloud_account"
     const val PORT_FORWARD = "port_forward"
+    const val NETWORK_ROUTE = "network_route"
     const val DOCKER_HOST = "docker_host"
     const val REGISTRY_CREDENTIAL = "registry_credential"
     const val COMPOSE_STACK = "compose_stack"

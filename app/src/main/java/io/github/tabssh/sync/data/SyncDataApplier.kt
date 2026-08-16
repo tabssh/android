@@ -365,6 +365,19 @@ class SyncDataApplier {
                 }
             }
 
+            // Reusable network routes (last-write-wins REPLACE on UUID PK).
+            if (preferenceManager.isSyncNetworkRoutesEnabled()) {
+                data.networkRoutes.forEach { nr ->
+                    try {
+                        if (suppressed(TombstoneRecorder.NETWORK_ROUTE, nr.id, nr.modifiedAt)) return@forEach
+                        database.networkRouteDao().insert(nr)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply network route: ${nr.name}", e)
+                    }
+                }
+            }
+
             // Docker subsystem — five Long-PK entities, applied by raw id (see
             // TombstoneRecorder KDoc); tombstone suppression keys on naturalKey().
             if (preferenceManager.isSyncDockerEnabled()) {
@@ -586,6 +599,11 @@ class SyncDataApplier {
                             val row = database.portForwardDao().getById(t.entityKey)
                             if (row != null && row.modifiedAt > t.deletedAt) true
                             else { if (row != null) database.portForwardDao().deleteById(t.entityKey); false }
+                        }
+                        TombstoneRecorder.NETWORK_ROUTE -> {
+                            val row = database.networkRouteDao().getById(t.entityKey)
+                            if (row != null && row.modifiedAt > t.deletedAt) true
+                            else { if (row != null) database.networkRouteDao().deleteById(t.entityKey); false }
                         }
                         TombstoneRecorder.HYPERVISOR_ACCOUNT -> {
                             val row = accountsByKey[t.entityKey]
@@ -1043,6 +1061,7 @@ class SyncDataApplier {
                     "syncCertificates"      -> preferenceManager.setSyncCertificatesEnabled(value as Boolean)
                     "syncDashboard"         -> preferenceManager.setSyncDashboardEnabled(value as Boolean)
                     "syncPortForwards"      -> preferenceManager.setSyncPortForwardsEnabled(value as Boolean)
+                    "syncNetworkRoutes"     -> preferenceManager.setSyncNetworkRoutesEnabled(value as Boolean)
                     "syncDocker"            -> preferenceManager.setSyncDockerEnabled(value as Boolean)
                     "autoResolve"           -> preferenceManager.setAutoResolveConflicts(value as Boolean)
                 }

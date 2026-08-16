@@ -36,6 +36,7 @@ class TabSSHApplication : Application() {
         // One-time migration guard + legacy pref key for the removed global
         // "Enable PRE Key" toggle — see migrateLegacyPrefixKeyPref().
         private const val KEY_PRE_KEY_GLOBAL_MIGRATED = "pre_key_global_migrated"
+        private const val KEY_INLINE_PROXY_ROUTE_MIGRATED = "inline_proxy_route_migrated"
         private const val LEGACY_KEY_PREFIX_KEY_ENABLED = "terminal_prefix_key_enabled"
 
         // Intent extras used to pass crash data directly to CrashReportActivity.
@@ -271,6 +272,7 @@ class TabSSHApplication : Application() {
             io.github.tabssh.crypto.storage.HypervisorPasswordStore
                 .sweepLegacyPlaintext(this@TabSSHApplication)
             migrateLegacyPrefixKeyPref()
+            migrateInlineProxiesToRoutes()
             // Re-register periodic sync work on every cold start. WorkManager's
             // DB survives process death but can be wiped by reinstall or system
             // maintenance. Re-registering is idempotent when
@@ -312,6 +314,26 @@ class TabSSHApplication : Application() {
             )
         }
         prefs.edit().putBoolean(KEY_PRE_KEY_GLOBAL_MIGRATED, true).apply()
+    }
+
+    /**
+     * One-time Routing & Forwarding migration: copy each connection's legacy
+     * inline proxy/jump config into a reusable NetworkRoute and link it via
+     * route_id (see InlineProxyRouteMigration). Guarded by a flag so it runs at
+     * most once; the underlying query is itself idempotent (already-routed
+     * rows are skipped), so this is a belt-and-suspenders no-op on later
+     * launches and for users who never configured a proxy.
+     */
+    private suspend fun migrateInlineProxiesToRoutes() {
+        val prefs = getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_INLINE_PROXY_ROUTE_MIGRATED, false)) return
+        try {
+            io.github.tabssh.storage.database.InlineProxyRouteMigration.run(database)
+        } catch (e: Exception) {
+            Logger.e("TabSSHApplication", "Inline proxy → route migration failed", e)
+            return
+        }
+        prefs.edit().putBoolean(KEY_INLINE_PROXY_ROUTE_MIGRATED, true).apply()
     }
 
     private fun wireGlobalNotifications() {

@@ -13,6 +13,7 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.databinding.ActivityConnectionEditBinding
 import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.storage.database.entities.NetworkRoute
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.storage.database.entities.VncHost
 import io.github.tabssh.storage.database.entities.VncIdentity
@@ -57,6 +58,12 @@ class ConnectionEditActivity : AppCompatActivity() {
         /** When present, load + save as [VncHost] regardless of protocol spinner. */
         const val EXTRA_VNC_HOST_ID = "vnc_host_id"
         private const val REQUEST_CODE_IMPORT_KEY = 1001
+
+        // Fixed positions in the network route spinner. Saved routes start at
+        // index 2; the final index is always the "+ Add new route…" action.
+        private const val ROUTE_POS_DIRECT = 0
+        private const val ROUTE_POS_GLOBAL = 1
+        private const val ROUTE_POS_ROUTES_START = 2
 
         val MOSH_PRESETS = listOf(
             MoshPreset("Default", "mosh-server new -l LANG=en_US.UTF-8"),
@@ -107,7 +114,30 @@ class ConnectionEditActivity : AppCompatActivity() {
     private var availableKeys: List<StoredKey> = emptyList()
     private var selectedKeyIndex: Int = -1
     private var pendingRestoreKeyId: String? = null
-    private var pendingRestoreProxyKeyId: String? = null
+
+    // Network route selection for this connection.
+    //   null                -> inherit the global default route
+    //   NetworkRoute.DIRECT -> force a direct connection (no proxy/jump)
+    //   any other value     -> the referenced NetworkRoute id
+    private var availableRoutes: List<NetworkRoute> = emptyList()
+    private var selectedRouteId: String? = null
+    private var routesLoaded: Boolean = false
+
+    // Launches the route editor for the "+ Add new route…" option and selects
+    // the freshly created route when the editor returns successfully.
+    private val routeEditorLauncher =
+        registerForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (result.resultCode == RESULT_OK) {
+                val newId = result.data?.getStringExtra(
+                    NetworkRouteEditActivity.RESULT_ROUTE_ID
+                )
+                loadRoutesIntoSpinner(forceSelectRouteId = newId)
+            } else {
+                renderRouteSelection()
+            }
+        }
 
     private var selectedGroupId: String? = null
     private var selectedGroupName: String = "No Group"
@@ -161,7 +191,7 @@ class ConnectionEditActivity : AppCompatActivity() {
         setupAuthTypeSpinner()
         setupKeySpinner()
         setupGroupSpinner()
-        setupProxyTypeSpinner()
+        setupRouteSpinner()
         setupTerminalTypeSpinner()
         setupMultiplexerSpinner()
         setupConnectionThemeSpinner()
@@ -451,23 +481,6 @@ class ConnectionEditActivity : AppCompatActivity() {
                 binding.spinnerSshKey.setText(keyNames[position], false)
             }
         }
-        binding.spinnerProxySshKey.setAdapter(
-            ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, placeholder)
-        )
-        // Proxy key click listener — reads availableKeys at click time so it
-        // continues to work after setupKeySpinner() swaps the adapter. Position 0
-        // is the "Select SSH Key..." sentinel and clears any prior selection.
-        binding.spinnerProxySshKey.setOnItemClickListener { _, _, position, _ ->
-            val names = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
-            if (position >= names.size) return@setOnItemClickListener
-            if (position == 0) {
-                binding.spinnerProxySshKey.setText("", false)
-                pendingRestoreProxyKeyId = null
-            } else {
-                binding.spinnerProxySshKey.setText(names[position], false)
-            }
-            hasUnsavedChanges = true
-        }
     }
 
     /** Populate the identity spinner with SSH [Identity] rows. */
@@ -641,23 +654,6 @@ class ConnectionEditActivity : AppCompatActivity() {
                         binding.spinnerSshKey.setText(keyNames[selectedKeyIndex], false)
                     }
                 }
-
-                // Rebuild proxy SSH key spinner now that availableKeys is populated,
-                // and restore any pending proxy key selection set by populateFields()
-                // before this coroutine completed.
-                val proxyKeyAdapter = ArrayAdapter(
-                    this@ConnectionEditActivity,
-                    android.R.layout.simple_dropdown_item_1line,
-                    keyNames
-                )
-                binding.spinnerProxySshKey.setAdapter(proxyKeyAdapter)
-                pendingRestoreProxyKeyId?.let { proxyKeyId ->
-                    pendingRestoreProxyKeyId = null
-                    val proxyKeyIndex = availableKeys.indexOfFirst { it.keyId == proxyKeyId }
-                    if (proxyKeyIndex >= 0) {
-                        binding.spinnerProxySshKey.setText(keyNames[proxyKeyIndex + 1], false)
-                    }
-                }
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to load SSH keys", e)
                 showError("Failed to load SSH keys", "Error")
@@ -666,76 +662,109 @@ class ConnectionEditActivity : AppCompatActivity() {
     }
 
     // -------------------------------------------------------------------------
-    // Proxy type spinner
+    // Network route picker
+    //
+    // A connection either inherits the global default route, forces a direct
+    // connection, or references a reusable NetworkRoute (proxy / jump host)
+    // managed on the Routing & Forwarding hub. The editor stores only the
+    // chosen route id on the profile — proxy details live on the route.
     // -------------------------------------------------------------------------
 
-    private fun setupProxyTypeSpinner() {
-        val proxyTypes = listOf("None", "HTTP", "SOCKS4", "SOCKS5", "SSH Jump Host")
-        val adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, proxyTypes)
-        binding.spinnerProxyType.setAdapter(adapter)
-        binding.spinnerProxyType.setOnItemClickListener { _, _, position, _ ->
-            updateProxyTypeUI(proxyTypes[position])
+    private fun setupRouteSpinner() {
+        binding.spinnerRoute.setOnItemClickListener { _, _, position, _ ->
+            val labels = currentRouteLabels()
+            when (position) {
+                ROUTE_POS_DIRECT -> {
+                    selectedRouteId = NetworkRoute.DIRECT
+                    hasUnsavedChanges = true
+                }
+                ROUTE_POS_GLOBAL -> {
+                    selectedRouteId = null
+                    hasUnsavedChanges = true
+                }
+                labels.size - 1 -> {
+                    // "+ Add new route…" — open the editor and re-select on return.
+                    routeEditorLauncher.launch(
+                        Intent(this, NetworkRouteEditActivity::class.java)
+                    )
+                    // Restore the label so the transient "+ Add…" text is not left
+                    // showing if the user cancels.
+                    renderRouteSelection()
+                    return@setOnItemClickListener
+                }
+                else -> {
+                    availableRoutes.getOrNull(position - ROUTE_POS_ROUTES_START)?.let {
+                        selectedRouteId = it.id
+                        hasUnsavedChanges = true
+                    }
+                }
+            }
+            renderRouteSelection()
         }
-        binding.spinnerProxyType.setText(proxyTypes[0], false)
-        updateProxyTypeUI(proxyTypes[0])
+        loadRoutesIntoSpinner()
+    }
 
-        val authTypes = AuthType.getAvailableTypes()
-        val authAdapter = ArrayAdapter(
-            this, android.R.layout.simple_list_item_1, authTypes.map { it.displayName }
+    /**
+     * Build the ordered spinner labels: Direct, Global default, each saved
+     * route by name, then the "add new" action as the final item.
+     */
+    private fun currentRouteLabels(): List<String> {
+        val labels = mutableListOf(
+            getString(R.string.conn_route_direct),
+            getString(R.string.conn_route_global_default)
         )
-        binding.spinnerProxyAuthType.setAdapter(authAdapter)
-        binding.spinnerProxyAuthType.setOnItemClickListener { _, _, position, _ ->
-            updateProxyAuthTypeUI(authTypes[position])
-        }
-        // Re-sync proxy auth UI when the user types directly instead of picking
-        // from the dropdown (bug-08) — mirrors the main spinnerAuthType handler.
-        binding.spinnerProxyAuthType.setOnFocusChangeListener { _, hasFocus ->
-            if (!hasFocus) updateProxyAuthTypeUI(getSelectedProxyAuthType())
-        }
-
-        // Proxy SSH key spinner adapter is built inside setupKeySpinner() once
-        // availableKeys is loaded; click listener is set in bootstrapKeySpinner()
-        // and reads availableKeys at click time so it survives adapter swaps.
+        labels += availableRoutes.map { it.name.ifBlank { it.getSummary() } }
+        labels += getString(R.string.conn_route_add_new)
+        return labels
     }
 
-    private fun updateProxyTypeUI(proxyType: String) {
-        when (proxyType) {
-            "None" -> {
-                binding.layoutProxyConfig.visibility = View.GONE
-                binding.layoutJumpHostAuth.visibility = View.GONE
-                // Clear stale proxy data so it does not get persisted on save (bug-09).
-                binding.editProxyHost.text?.clear()
-                binding.editProxyPort.text?.clear()
-                binding.editProxyUsername.text?.clear()
+    /**
+     * Load saved routes off the main thread, refresh the adapter, and re-render
+     * the current selection. [forceSelectRouteId] overrides the selection (used
+     * after adding a new route from the picker).
+     */
+    private fun loadRoutesIntoSpinner(forceSelectRouteId: String? = null) {
+        lifecycleScope.launch {
+            availableRoutes = withContext(Dispatchers.IO) {
+                app.database.networkRouteDao().getAllList()
             }
-            "SSH Jump Host" -> {
-                binding.layoutProxyConfig.visibility = View.VISIBLE
-                binding.layoutJumpHostAuth.visibility = View.VISIBLE
-                binding.editProxyPort.setText("22")
-                // Re-sync the proxy key picker visibility from the current proxy auth
-                // type selection. Without this, toggling proxy type away then back to
-                // SSH Jump Host leaves layoutProxyKey hidden even when PUBLIC_KEY is shown.
-                val authTypes = AuthType.getAvailableTypes()
-                val selectedText = binding.spinnerProxyAuthType.text.toString()
-                val currentProxyAuth = authTypes.find { it.displayName == selectedText } ?: AuthType.PASSWORD
-                updateProxyAuthTypeUI(currentProxyAuth)
+            routesLoaded = true
+            if (forceSelectRouteId != null) {
+                selectedRouteId = forceSelectRouteId
+                hasUnsavedChanges = true
             }
-            "HTTP" -> {
-                binding.layoutProxyConfig.visibility = View.VISIBLE
-                binding.layoutJumpHostAuth.visibility = View.GONE
-                binding.editProxyPort.setText("8080")
-            }
-            "SOCKS4", "SOCKS5" -> {
-                binding.layoutProxyConfig.visibility = View.VISIBLE
-                binding.layoutJumpHostAuth.visibility = View.GONE
-                binding.editProxyPort.setText("1080")
-            }
+            binding.spinnerRoute.setAdapter(
+                ArrayAdapter(
+                    this@ConnectionEditActivity,
+                    android.R.layout.simple_dropdown_item_1line,
+                    currentRouteLabels()
+                )
+            )
+            renderRouteSelection()
         }
     }
 
-    private fun updateProxyAuthTypeUI(authType: AuthType) {
-        binding.layoutProxyKey.visibility =
-            if (authType == AuthType.PUBLIC_KEY) View.VISIBLE else View.GONE
+    /** Sync the visible spinner text with [selectedRouteId]. */
+    private fun renderRouteSelection() {
+        val labels = currentRouteLabels()
+        val text = when (val id = selectedRouteId) {
+            NetworkRoute.DIRECT -> labels[ROUTE_POS_DIRECT]
+            null -> labels[ROUTE_POS_GLOBAL]
+            else -> {
+                val idx = availableRoutes.indexOfFirst { it.id == id }
+                when {
+                    idx >= 0 -> labels[idx + ROUTE_POS_ROUTES_START]
+                    // Referenced route was deleted — fall back to the global default.
+                    routesLoaded -> {
+                        selectedRouteId = null
+                        labels[ROUTE_POS_GLOBAL]
+                    }
+                    // Routes not loaded yet — keep the id, show default placeholder.
+                    else -> labels[ROUTE_POS_GLOBAL]
+                }
+            }
+        }
+        binding.spinnerRoute.setText(text, false)
     }
 
     // -------------------------------------------------------------------------
@@ -816,11 +845,8 @@ class ConnectionEditActivity : AppCompatActivity() {
         binding.editReadTimeout.addTextChangedListener(watcher)
         binding.editServerAliveInterval.addTextChangedListener(watcher)
         binding.editPortKnockDelay.addTextChangedListener(watcher)
-        // bug-15: track changes on proxy / mosh / remote-command custom fields
-        // so the unsaved-changes guard fires for every editable field on the form.
-        binding.editProxyHost.addTextChangedListener(watcher)
-        binding.editProxyPort.addTextChangedListener(watcher)
-        binding.editProxyUsername.addTextChangedListener(watcher)
+        // bug-15: track changes on mosh / remote-command custom fields so the
+        // unsaved-changes guard fires for every editable field on the form.
         binding.editMoshCustomCommand.addTextChangedListener(watcher)
         binding.editMoshCustomDesc.addTextChangedListener(watcher)
         binding.editRemoteCommandCustom.addTextChangedListener(watcher)
@@ -1072,45 +1098,11 @@ class ConnectionEditActivity : AppCompatActivity() {
         currentColorTag = profile.colorTag
         renderColorTagPreview()
 
-        val proxyTypes = listOf("None", "HTTP", "SOCKS4", "SOCKS5", "SSH Jump Host")
-        val proxyType = profile.proxyType ?: "None"
-        val proxyTypeDisplay = when (proxyType) {
-            "SSH" -> "SSH Jump Host"
-            else -> if (proxyTypes.contains(proxyType)) proxyType else "None"
-        }
-        binding.spinnerProxyType.setText(proxyTypeDisplay, false)
-        updateProxyTypeUI(proxyTypeDisplay)
-
-        if (proxyType != "None") {
-            profile.proxyHost?.let { binding.editProxyHost.setText(it) }
-            profile.proxyPort?.let { binding.editProxyPort.setText(it.toString()) }
-            if (proxyType == "SSH") {
-                profile.proxyUsername?.let { binding.editProxyUsername.setText(it) }
-                if (profile.proxyAuthType != null) {
-                    val proxyAuthType = try {
-                        AuthType.valueOf(profile.proxyAuthType)
-                    } catch (e: IllegalArgumentException) { AuthType.PASSWORD }
-                    val authTypes = AuthType.getAvailableTypes()
-                    val proxyAuthTypeIndex = authTypes.indexOf(proxyAuthType)
-                    if (proxyAuthTypeIndex >= 0) {
-                        binding.spinnerProxyAuthType.setText(authTypes[proxyAuthTypeIndex].displayName, false)
-                        updateProxyAuthTypeUI(authTypes[proxyAuthTypeIndex])
-                    }
-                    if (proxyAuthType == AuthType.PUBLIC_KEY && profile.proxyKeyId != null) {
-                        val keyIndex = availableKeys.indexOfFirst { it.keyId == profile.proxyKeyId }
-                        if (keyIndex >= 0) {
-                            val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
-                            if (keyIndex + 1 < keyNames.size) {
-                                binding.spinnerProxySshKey.setText(keyNames[keyIndex + 1], false)
-                            }
-                        } else {
-                            // availableKeys not yet loaded — defer to setupKeySpinner() completion
-                            pendingRestoreProxyKeyId = profile.proxyKeyId
-                        }
-                    }
-                }
-            }
-        }
+        // Network route — restore the saved selection. renderRouteSelection()
+        // resolves it against the route list, which may still be loading; the
+        // route loader re-renders once it completes.
+        selectedRouteId = profile.routeId
+        renderRouteSelection()
 
         // Port knock — restore persisted sequence into local state and switch.
         pendingKnockSequence = profile.portKnockSequence
@@ -1475,26 +1467,10 @@ class ConnectionEditActivity : AppCompatActivity() {
         val ipMode = when (binding.spinnerIpMode.selectedItemPosition) { 1 -> "ipv4"; 2 -> "ipv6"; else -> "auto" }
         val colorTag = currentColorTag
 
-        val proxyTypeDisplay = binding.spinnerProxyType.text.toString()
-        val proxyType = when (proxyTypeDisplay) {
-            "SSH Jump Host" -> "SSH"
-            "None" -> null
-            else -> proxyTypeDisplay
-        }
-        val proxyHost = if (proxyType != null) binding.editProxyHost.text.toString().takeIf { it.isNotBlank() } else null
-        val proxyPort = if (proxyType != null) binding.editProxyPort.text.toString().toIntOrNull() else null
-        val proxyUsername = if (proxyType == "SSH") binding.editProxyUsername.text.toString().takeIf { it.isNotBlank() } else null
-        val proxyAuthType = if (proxyType == "SSH") {
-            val authTypes = AuthType.getAvailableTypes()
-            val selectedText = binding.spinnerProxyAuthType.text.toString()
-            authTypes.find { it.displayName == selectedText }?.name
-        } else null
-        val proxyKeyId = if (proxyType == "SSH" && proxyAuthType == AuthType.PUBLIC_KEY.name) {
-            val selectedProxyKeyText = binding.spinnerProxySshKey.text.toString()
-            if (selectedProxyKeyText != "Select SSH Key...") {
-                availableKeys.find { it.getDisplayName() == selectedProxyKeyText }?.keyId
-            } else null
-        } else null
+        // Routing is now driven by routeId (see the network route picker). Legacy
+        // proxy_* columns are explicitly cleared so a migrated connection never
+        // double-applies both a saved route and a stale inline proxy config.
+        val routeId = selectedRouteId
 
         val notifAlertEntries = resources.getStringArray(R.array.notif_alert_mode_entries)
         val notifSoundMode = notifAlertEntries.indexOf(binding.spinnerNotifSound.text.toString()).takeIf { it >= 0 } ?: 0
@@ -1526,8 +1502,9 @@ class ConnectionEditActivity : AppCompatActivity() {
             postConnectScript = postConnectScript, envVars = envVars,
             agentForwarding = agentForwarding, remoteCommand = remoteCommand,
             ipMode = ipMode, groupId = selectedGroupId,
-            proxyType = proxyType, proxyHost = proxyHost, proxyPort = proxyPort,
-            proxyUsername = proxyUsername, proxyAuthType = proxyAuthType, proxyKeyId = proxyKeyId,
+            proxyType = null, proxyHost = null, proxyPort = null,
+            proxyUsername = null, proxyAuthType = null, proxyKeyId = null,
+            routeId = routeId,
             colorTag = colorTag, notifSoundMode = notifSoundMode, notifVibrateMode = notifVibrateMode,
             portKnockEnabled = knockEnabled, portKnockSequence = knockSequence, portKnockDelayMs = portKnockDelayMs,
             encoding = encoding, connectTimeout = connectTimeout, readTimeout = readTimeout, serverAliveInterval = serverAliveInterval,
@@ -1544,8 +1521,7 @@ class ConnectionEditActivity : AppCompatActivity() {
             postConnectScript = postConnectScript, envVars = envVars,
             agentForwarding = agentForwarding, remoteCommand = remoteCommand,
             ipMode = ipMode, groupId = selectedGroupId,
-            proxyType = proxyType, proxyHost = proxyHost, proxyPort = proxyPort,
-            proxyUsername = proxyUsername, proxyAuthType = proxyAuthType, proxyKeyId = proxyKeyId,
+            routeId = routeId,
             notifSoundMode = notifSoundMode, notifVibrateMode = notifVibrateMode,
             portKnockEnabled = knockEnabled, portKnockSequence = knockSequence, portKnockDelayMs = portKnockDelayMs,
             encoding = encoding, connectTimeout = connectTimeout, readTimeout = readTimeout, serverAliveInterval = serverAliveInterval,
@@ -1647,12 +1623,6 @@ class ConnectionEditActivity : AppCompatActivity() {
     private fun getSelectedAuthType(): AuthType {
         val authTypes = AuthType.getAvailableTypes()
         val selectedText = binding.spinnerAuthType.text.toString()
-        return authTypes.find { it.displayName == selectedText } ?: AuthType.PASSWORD
-    }
-
-    private fun getSelectedProxyAuthType(): AuthType {
-        val authTypes = AuthType.getAvailableTypes()
-        val selectedText = binding.spinnerProxyAuthType.text.toString()
         return authTypes.find { it.displayName == selectedText } ?: AuthType.PASSWORD
     }
 
@@ -2043,7 +2013,6 @@ class ConnectionEditActivity : AppCompatActivity() {
                     val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
                     val adapter = ArrayAdapter(this@ConnectionEditActivity, android.R.layout.simple_dropdown_item_1line, keyNames)
                     binding.spinnerSshKey.setAdapter(adapter)
-                    binding.spinnerProxySshKey.setAdapter(adapter)
                     val importedKeyIndex = availableKeys.indexOfFirst { it.keyId == result.keyId }
                     if (importedKeyIndex >= 0) {
                         selectedKeyIndex = importedKeyIndex + 1
@@ -2093,7 +2062,6 @@ class ConnectionEditActivity : AppCompatActivity() {
                         val keyNames = listOf("Select SSH Key...") + availableKeys.map { it.getDisplayName() }
                         val adapter = ArrayAdapter(this@ConnectionEditActivity, android.R.layout.simple_dropdown_item_1line, keyNames)
                         binding.spinnerSshKey.setAdapter(adapter)
-                        binding.spinnerProxySshKey.setAdapter(adapter)
                         val importedKeyIndex = availableKeys.indexOfFirst { it.keyId == result.keyId }
                         if (importedKeyIndex >= 0) {
                             selectedKeyIndex = importedKeyIndex + 1

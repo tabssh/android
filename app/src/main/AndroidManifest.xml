@@ -466,6 +466,14 @@
             android:parentActivityName=".ui.activities.PortForwardingActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- Add / edit a saved network route (proxy or SSH jump host) -->
+        <activity
+            android:name=".ui.activities.NetworkRouteEditActivity"
+            android:exported="false"
+            android:label="@string/route_edit_title_new"
+            android:parentActivityName=".ui.activities.PortForwardingActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- Transparent confirm-disconnect dialog launched from the SSH session
              notification action. android:excludeFromRecents prevents it from
              appearing in the app switcher. android:taskAffinity="" keeps it out

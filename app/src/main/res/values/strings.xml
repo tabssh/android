@@ -215,6 +215,8 @@
     
     <string name="sync_password_too_short">Minimum 8 characters</string>
     <string name="sync_password_mismatch">Passwords do not match</string>
+    <string name="sync_network_routes">Network Routes</string>
+    <string name="sync_network_routes_summary">Reusable proxies and SSH jump hosts</string>
 
     <!-- MDM / Managed App Configuration descriptions (app_restrictions.xml) -->
     <string name="mdm_desc_audit_enabled">Force audit logging on or off. When set, overrides the user\'s in-app preference.</string>
@@ -224,8 +226,8 @@
     <string name="mdm_desc_syslog_host">Hostname or IP address of a UDP syslog receiver (RFC 5424). Leave blank to disable forwarding.</string>
     <string name="mdm_desc_syslog_port">UDP port of the syslog receiver.</string>
 
-    <!-- Port forwarding — list screen -->
-    <string name="port_forwarding_title">Port Forwarding</string>
+    <!-- Routing & Forwarding — hub screen -->
+    <string name="port_forwarding_title">Routing &amp; Forwarding</string>
     <string name="port_forward_add">Add forward</string>
     <string name="port_forward_empty_title">No port forwards yet</string>
     <string name="port_forward_empty_body">Create a forward to reach a remote service, expose a local one, or run a SOCKS proxy over SSH.</string>
@@ -292,6 +294,73 @@
     <string name="port_forward_error_ssh_username">Enter a username</string>
     <string name="port_forward_error_port_range">Enter a port from 1 to 65535</string>
     <string name="port_forward_error_host_ip">Enter the target host</string>
+
+    <!-- Routing & Forwarding hub — section headers -->
+    <string name="routing_section_routes_title">Network Routes</string>
+    <string name="routing_section_routes_subtitle">Proxies and SSH jump hosts your connections dial through.</string>
+    <string name="routing_section_forwards_title">Port Forwards</string>
+    <string name="routes_empty_title">No network routes yet</string>
+    <string name="routes_empty_body">Add a proxy, SSH jump host, or Tor route to reuse across your connections.</string>
+
+    <!-- Routing & Forwarding hub — default route -->
+    <string name="route_default_label">Default route</string>
+    <string name="route_default_summary">Applied to connections set to use the global default.</string>
+    <string name="route_default_direct">Direct connection</string>
+    <string name="route_default_choose_title">Default route</string>
+
+    <!-- Network route — list row -->
+    <string name="route_add">Add route</string>
+    <string name="route_more_actions">More actions</string>
+    <string name="route_edit">Edit route</string>
+    <string name="route_delete">Delete route</string>
+    <string name="route_enable">Enable route</string>
+    <string name="route_disable">Disable route</string>
+    <string name="route_status_enabled">Enabled</string>
+    <string name="route_status_disabled">Disabled</string>
+    <string name="route_delete_title">Delete route?</string>
+    <string name="route_delete_message">This removes the saved route “%1$s”. Connections using it fall back to the global default.</string>
+
+    <!-- Network route — editor screen -->
+    <string name="route_edit_title_new">New Route</string>
+    <string name="route_edit_title_edit">Edit Route</string>
+    <string name="route_section_general">General</string>
+    <string name="route_section_presets">Presets</string>
+    <string name="route_section_endpoint">Endpoint</string>
+    <string name="route_section_options">Options</string>
+    <string name="route_name_hint">Route name</string>
+    <string name="route_name_helper">A short label, e.g. “Office proxy”</string>
+    <string name="route_type_hint">Type</string>
+    <string name="route_type_proxy_http">HTTP proxy</string>
+    <string name="route_type_proxy_socks4">SOCKS4 proxy</string>
+    <string name="route_type_proxy_socks5">SOCKS5 proxy</string>
+    <string name="route_type_jump_host">SSH jump host</string>
+    <string name="route_preset_orbot">Orbot (SOCKS5 127.0.0.1:9050)</string>
+    <string name="route_preset_tor">Tor (built-in)</string>
+    <string name="route_preset_tor_desc">Route through the app\'s bundled Tor client.</string>
+    <string name="route_host_hint">Host</string>
+    <string name="route_port_hint">Port</string>
+    <string name="route_username_hint">Username</string>
+    <string name="route_username_optional_helper">Optional</string>
+    <string name="route_auth_type_hint">Authentication</string>
+    <string name="route_auth_password">Password</string>
+    <string name="route_auth_key">SSH key</string>
+    <string name="route_key_hint">SSH key</string>
+    <string name="route_key_select_placeholder">Select SSH key…</string>
+    <string name="route_switch_enabled">Enabled</string>
+    <string name="route_switch_enabled_desc">Off means connections can\'t select this route.</string>
+    <string name="route_error_name">Enter a route name</string>
+    <string name="route_error_host">Enter a host</string>
+    <string name="route_error_port_range">Enter a port from 1 to 65535</string>
+    <string name="route_error_username">Enter a username</string>
+    <string name="route_error_key">Choose an SSH key</string>
+
+    <!-- Connection editor — network route picker -->
+    <string name="conn_route_section_title">Network route</string>
+    <string name="conn_route_hint">Network route</string>
+    <string name="conn_route_helper">How this connection reaches the server.</string>
+    <string name="conn_route_direct">Direct (no proxy or jump)</string>
+    <string name="conn_route_global_default">Use global default</string>
+    <string name="conn_route_add_new">+ Add new route…</string>
 
     <!-- Infra tab (Docker / Hypervisors / Cloud sub-tabs) -->
     <string name="infra_tab_hypervisors">Hypervisors</string>

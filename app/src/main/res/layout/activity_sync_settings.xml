@@ -540,6 +540,9 @@
                             android:id="@+id/row_sync_port_forwards" />
                         <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="16dp" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
+                            android:id="@+id/row_sync_network_routes" />
+                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="16dp" android:background="?attr/colorOutlineVariant" />
+                        <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_docker" />
 
                     </LinearLayout>

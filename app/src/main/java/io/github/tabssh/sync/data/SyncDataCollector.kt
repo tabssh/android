@@ -102,6 +102,7 @@ class SyncDataCollector {
         val syncCertificates       = preferenceManager.isSyncCertificatesEnabled()
         val syncDashboard          = preferenceManager.isSyncDashboardEnabled()
         val syncPortForwards       = preferenceManager.isSyncPortForwardsEnabled()
+        val syncNetworkRoutes      = preferenceManager.isSyncNetworkRoutesEnabled()
         val syncDocker             = preferenceManager.isSyncDockerEnabled()
 
         val connections        = if (syncConns)              collectConnections()        else emptyList()
@@ -123,6 +124,7 @@ class SyncDataCollector {
         val cloudAccounts      = if (syncCloudAccounts)      collectCloudAccounts()      else emptyList()
         val dashboardConfig    = if (syncDashboard)          collectDashboardConfig()    else emptyMap()
         val portForwards       = if (syncPortForwards)       collectPortForwards()       else emptyList()
+        val networkRoutes      = if (syncNetworkRoutes)      collectNetworkRoutes()      else emptyList()
         val dockerHosts                = if (syncDocker) collectDockerHosts()                else emptyList()
         val registryCredentials        = if (syncDocker) collectRegistryCredentials()        else emptyList()
         val composeStacks              = if (syncDocker) collectComposeStacks()               else emptyList()
@@ -149,6 +151,7 @@ class SyncDataCollector {
             cloudAccounts      = cloudAccounts.size,
             dashboard          = dashboardConfig.size,
             portForwards       = portForwards.size,
+            networkRoutes      = networkRoutes.size,
             dockerHosts                     = dockerHosts.size,
             registryCredentials             = registryCredentials.size,
             composeStacks                   = composeStacks.size,
@@ -183,6 +186,7 @@ class SyncDataCollector {
             cloudAccounts      = cloudAccounts,
             dashboardConfig    = dashboardConfig,
             portForwards       = portForwards,
+            networkRoutes      = networkRoutes,
             dockerHosts                 = dockerHosts,
             registryCredentials         = registryCredentials,
             composeStacks               = composeStacks,
@@ -292,6 +296,16 @@ class SyncDataCollector {
             database.portForwardDao().getAllList()
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to collect port forwards", e)
+            emptyList()
+        }
+    }
+
+    /** Reusable network routes (proxies and SSH jump hosts). No secrets; all columns are safe to sync. */
+    private suspend fun collectNetworkRoutes(): List<io.github.tabssh.storage.database.entities.NetworkRoute> {
+        return try {
+            database.networkRouteDao().getAllList()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect network routes", e)
             emptyList()
         }
     }
@@ -417,6 +431,7 @@ class SyncDataCollector {
         val syncCertificates       = preferenceManager.isSyncCertificatesEnabled()
         val syncDashboard          = preferenceManager.isSyncDashboardEnabled()
         val syncPortForwards       = preferenceManager.isSyncPortForwardsEnabled()
+        val syncNetworkRoutes      = preferenceManager.isSyncNetworkRoutesEnabled()
         val syncDocker             = preferenceManager.isSyncDockerEnabled()
 
         val connections = if (syncConns)      collectConnections().filter { it.modifiedAt > timestamp } else emptyList()
@@ -447,6 +462,9 @@ class SyncDataCollector {
         // PortForward has modifiedAt; delta-filter it like the other simple entities.
         val portForwards = if (syncPortForwards)
             collectPortForwards().filter { it.modifiedAt > timestamp } else emptyList()
+        // NetworkRoute has modifiedAt; delta-filter it like the other simple entities.
+        val networkRoutes = if (syncNetworkRoutes)
+            collectNetworkRoutes().filter { it.modifiedAt > timestamp } else emptyList()
         // DockerHost/RegistryCredential/ContainerAutoUpdatePolicy have no modifiedAt
         // column — low-volume, always include in full like HypervisorProfile above.
         // ComposeStack/SingleContainerConfig have updatedAt, so delta-filter them.
@@ -484,6 +502,7 @@ class SyncDataCollector {
             cloudAccounts      = cloudAccounts.size,
             dashboard          = dashboardConfig.size,
             portForwards       = portForwards.size,
+            networkRoutes      = networkRoutes.size,
             dockerHosts                     = dockerHosts.size,
             registryCredentials             = registryCredentials.size,
             composeStacks                   = composeStacks.size,
@@ -521,6 +540,7 @@ class SyncDataCollector {
             cloudAccounts      = cloudAccounts,
             dashboardConfig    = dashboardConfig,
             portForwards       = portForwards,
+            networkRoutes      = networkRoutes,
             dockerHosts                 = dockerHosts,
             registryCredentials         = registryCredentials,
             composeStacks               = composeStacks,
@@ -566,6 +586,7 @@ class SyncDataCollector {
         if (preferenceManager.isSyncVncIdentitiesEnabled())      out += TombstoneRecorder.VNC_IDENTITY
         if (preferenceManager.isSyncCloudAccountsEnabled())      out += TombstoneRecorder.CLOUD_ACCOUNT
         if (preferenceManager.isSyncPortForwardsEnabled())       out += TombstoneRecorder.PORT_FORWARD
+        if (preferenceManager.isSyncNetworkRoutesEnabled())      out += TombstoneRecorder.NETWORK_ROUTE
         if (preferenceManager.isSyncDockerEnabled()) {
             out += TombstoneRecorder.DOCKER_HOST
             out += TombstoneRecorder.REGISTRY_CREDENTIAL
@@ -597,6 +618,7 @@ class SyncDataCollector {
         TombstoneRecorder.VNC_IDENTITY      -> collectVncIdentities().map { it.id }
         TombstoneRecorder.CLOUD_ACCOUNT     -> collectCloudAccounts().map { it.id }
         TombstoneRecorder.PORT_FORWARD      -> collectPortForwards().map { it.id }
+        TombstoneRecorder.NETWORK_ROUTE     -> collectNetworkRoutes().map { it.id }
         TombstoneRecorder.DOCKER_HOST       -> collectDockerHosts().map { TombstoneRecorder.naturalKey(it) }
         TombstoneRecorder.REGISTRY_CREDENTIAL -> collectRegistryCredentials().map { TombstoneRecorder.naturalKey(it) }
         TombstoneRecorder.COMPOSE_STACK     -> collectComposeStacks().map { TombstoneRecorder.naturalKey(it) }
@@ -1010,6 +1032,7 @@ class SyncDataCollector {
             "syncCertificates"      to preferenceManager.isSyncCertificatesEnabled(),
             "syncDashboard"         to preferenceManager.isSyncDashboardEnabled(),
             "syncPortForwards"      to preferenceManager.isSyncPortForwardsEnabled(),
+            "syncNetworkRoutes"     to preferenceManager.isSyncNetworkRoutesEnabled(),
             "autoResolve"           to preferenceManager.isAutoResolveConflictsEnabled()
         )
     }
@@ -1146,7 +1169,8 @@ class SyncDataCollector {
             vncIdentities     = try { database.vncIdentityDao().getAllIdentitiesList().size } catch (_: Exception) { 0 },
             cloudAccounts     = try { database.cloudAccountDao().getAll().size } catch (_: Exception) { 0 },
             dashboard         = try { collectDashboardConfig().size } catch (_: Exception) { 0 },
-            portForwards      = try { database.portForwardDao().getAllList().size } catch (_: Exception) { 0 }
+            portForwards      = try { database.portForwardDao().getAllList().size } catch (_: Exception) { 0 },
+            networkRoutes     = try { database.networkRouteDao().getAllList().size } catch (_: Exception) { 0 }
         )
     }
 

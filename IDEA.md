@@ -88,6 +88,7 @@ version_code_scheme: manual
 ### Sync and backup
 - Cross-device sync via SAF — user supplies any DocumentsProvider (Google Drive, Dropbox, OneDrive, Nextcloud, local); app embeds no cloud SDKs
 - Cross-device merge with per-entity conflict resolution
+- Reusable network routes (proxies and SSH jump hosts) sync device-to-device like port-forward rules — full row, last-write-wins, and no secrets to keep Keystore-bound
 - End-to-end encrypted sync — a user passphrase is required, there are no server-side keys, and sync data is never readable by the storage provider
 - Backup and restore as a portable encrypted archive — backups made by older app versions must always import into newer versions
 

@@ -54,7 +54,7 @@
     
     <item
         android:id="@+id/action_port_forwarding"
-        android:title="Port Forwarding"
+        android:title="@string/port_forwarding_title"
         android:icon="@drawable/ic_interface"
         app:showAsAction="never" />
     

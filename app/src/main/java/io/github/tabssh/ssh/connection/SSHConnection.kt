@@ -3,6 +3,8 @@ package io.github.tabssh.ssh.connection
 import com.jcraft.jsch.*
 import io.github.tabssh.network.NetworkAwareReconnector
 import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.storage.database.entities.NetworkRoute
+import io.github.tabssh.storage.database.entities.NetworkRouteType
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.ssh.forwarding.X11NoServerException
 import io.github.tabssh.ssh.forwarding.X11Proxy
@@ -145,6 +147,20 @@ class SSHConnection(
     private var jumpHostSession: Session? = null
     @Volatile
     private var jumpHostLocalPort: Int = 0
+
+    /**
+     * Routing & Forwarding — the effective NetworkRoute this connect() resolved
+     * (per-connection route, global default, or a back-compat route synthesized
+     * from the legacy inline proxy columns). Null = direct connection. Populated
+     * by [resolveEffectiveRoute] before jump-host / proxy setup, so both read
+     * from the route instead of the legacy `profile.proxy*` columns.
+     */
+    @Volatile
+    private var resolvedRoute: io.github.tabssh.storage.database.entities.NetworkRoute? = null
+
+    /** Loopback SOCKS port for a built-in Tor route (0 = not started). */
+    @Volatile
+    private var resolvedTorPort: Int = 0
     // X11 forwarding proxy — non-null only while x11Forwarding is active
     @Volatile
     private var x11Proxy: X11Proxy? = null
@@ -343,6 +359,12 @@ class SSHConnection(
                     lastHostKeyDecision = action
                     action
                 }
+
+                // Routing & Forwarding — resolve the effective route (per-conn
+                // route, global default, or legacy inline proxy) once, so both
+                // jump-host and HTTP/SOCKS setup below read from it.
+                resolveEffectiveRoute(app)
+                stepDone("route-resolve")
 
                 // Setup jump host if configured
                 Logger.d("SSHConnection", "STEP 5: Checking jump host configuration")
@@ -1171,6 +1193,110 @@ class SSHConnection(
         }
     }
 
+    // --- Routing & Forwarding: effective route accessors ---
+    // Both jump-host and HTTP/SOCKS setup read THESE instead of the legacy
+    // profile.proxy* columns, so a reusable NetworkRoute (or the global default)
+    // drives connection routing. Values are null until resolveEffectiveRoute()
+    // runs and only when a route actually applies.
+
+    /** Legacy-style proxy type string ("HTTP"/"SOCKS4"/"SOCKS5"/"SSH") for the resolved route. */
+    private val effectiveProxyType: String?
+        get() = resolvedRoute?.let {
+            when (it.routeType) {
+                NetworkRouteType.JUMP_HOST -> "SSH"
+                NetworkRouteType.PROXY_HTTP -> "HTTP"
+                NetworkRouteType.PROXY_SOCKS4 -> "SOCKS4"
+                NetworkRouteType.PROXY_SOCKS5 -> "SOCKS5"
+            }
+        }
+
+    private val effectiveProxyHost: String?
+        get() = resolvedRoute?.let { if (it.builtInTor) "127.0.0.1" else it.host }
+
+    private val effectiveProxyPort: Int?
+        get() = resolvedRoute?.let { if (it.builtInTor) resolvedTorPort else it.port }
+
+    private val effectiveProxyUsername: String?
+        get() = resolvedRoute?.username
+
+    private val effectiveProxyAuthType: String?
+        get() = resolvedRoute?.authType
+
+    private val effectiveProxyKeyId: String?
+        get() = resolvedRoute?.keyId
+
+    /**
+     * Resolve which NetworkRoute (if any) governs this connection, following
+     * the precedence: an explicit per-connection route_id wins; the sentinel
+     * "DIRECT" forces a direct connection; a null route_id inherits the global
+     * default route preference. As a back-compat backstop, a profile that still
+     * carries legacy inline proxy columns and has no route_id yet is routed
+     * through a route synthesized from those columns (so upgrades keep working
+     * even before the one-time data migration runs). A built-in Tor route
+     * starts the embedded tor process and captures its loopback SOCKS port.
+     */
+    private suspend fun resolveEffectiveRoute(
+        app: io.github.tabssh.TabSSHApplication?
+    ) = withContext(Dispatchers.IO) {
+        val routeDao = app?.database?.networkRouteDao()
+        val perConn = profile.routeId
+
+        // The global default route preference, consulted only when the
+        // connection carries no explicit per-connection route_id. Captured up
+        // front so the legacy backstop below can distinguish "user set a global
+        // default" (a deliberate routing intent that must win) from "no routing
+        // intent anywhere" (the only case where legacy inline columns apply).
+        val defaultId: String? = if (perConn.isNullOrBlank()) {
+            io.github.tabssh.storage.preferences.PreferenceManager(context)
+                .getDefaultRouteId()
+        } else {
+            null
+        }
+
+        val chosen: NetworkRoute? = when {
+            perConn == NetworkRoute.DIRECT -> null
+            !perConn.isNullOrBlank() -> routeDao?.getById(perConn)
+            else -> {
+                if (!defaultId.isNullOrBlank() && defaultId != NetworkRoute.DIRECT) {
+                    routeDao?.getById(defaultId)
+                } else {
+                    null
+                }
+            }
+        }
+
+        // Back-compat backstop: synthesize a route from the legacy inline proxy
+        // columns ONLY for a profile with no routing intent at any level — no
+        // per-connection route_id AND no global default preference set. If a
+        // global default exists (including DIRECT or a route since deleted),
+        // that intent wins and stale legacy proxy config is never resurfaced.
+        val effective = chosen ?: run {
+            if (perConn.isNullOrBlank() && defaultId.isNullOrBlank() &&
+                !profile.proxyType.isNullOrBlank()
+            ) {
+                NetworkRoute.fromLegacyProfileProxy(profile)
+            } else {
+                null
+            }
+        }
+
+        resolvedRoute = effective?.takeIf { it.enabled }
+
+        val route = resolvedRoute
+        if (route != null && route.builtInTor) {
+            try {
+                resolvedTorPort = io.github.tabssh.protocols.tor.TorManager
+                    .getInstance(context).ensureStarted()
+                Logger.i("SSHConnection", "Built-in Tor ready on loopback SOCKS port $resolvedTorPort")
+            } catch (e: Exception) {
+                Logger.e("SSHConnection", "Failed to start built-in Tor; connecting direct", e)
+                resolvedRoute = null
+                resolvedTorPort = 0
+            }
+        }
+        Unit
+    }
+
     /**
      * Setup SSH jump host (bastion) connection if configured
      * Returns local port number for forwarding, or null if no jump host
@@ -1179,7 +1305,8 @@ class SSHConnection(
         jsch: JSch,
         stepDone: (String) -> Unit = {}
     ): Int? = withContext(Dispatchers.IO) {
-        if (profile.proxyType != "SSH" || profile.proxyHost == null) {
+        val jumpHostAddr = effectiveProxyHost
+        if (effectiveProxyType != "SSH" || jumpHostAddr == null) {
             return@withContext null
         }
 
@@ -1194,13 +1321,13 @@ class SSHConnection(
             // Issue #12 — register jump host with the sanitizer BEFORE the
             // first log line mentions it so it renders as jump{N} rather
             // than sharing the server{N} pool with the target host.
-            Logger.registerJumpHost(profile.proxyHost)
+            Logger.registerJumpHost(jumpHostAddr)
 
-            Logger.i("SSHConnection", "Setting up SSH jump host: ${profile.proxyHost}:${profile.proxyPort}")
+            Logger.i("SSHConnection", "Setting up SSH jump host: $jumpHostAddr:${effectiveProxyPort}")
 
-            val jumpHost = profile.proxyHost
-            val jumpPort = profile.proxyPort ?: 22
-            val jumpUsername = profile.proxyUsername ?: profile.username
+            val jumpHost = jumpHostAddr
+            val jumpPort = effectiveProxyPort ?: 22
+            val jumpUsername = effectiveProxyUsername ?: profile.username
 
             // Create jump host session
             val jumpSession = jsch.getSession(jumpUsername, jumpHost, jumpPort)
@@ -1226,9 +1353,10 @@ class SSHConnection(
             stepDone("jump-config")
 
             // Authenticate to jump host
-            when (profile.proxyAuthType) {
+            when (effectiveProxyAuthType) {
                 AuthType.PUBLIC_KEY.name -> {
-                    if (profile.proxyKeyId != null) {
+                    val jumpKeyId = effectiveProxyKeyId
+                    if (jumpKeyId != null) {
                         Logger.d("SSHConnection", "Jump host: Using public key authentication")
                         // Load jump host SSH key as OpenSSH PEM bytes.
                         // getJSchBytesWithFallback() returns the correct format for
@@ -1236,11 +1364,11 @@ class SSHConnection(
                         // returns PKCS#8 DER which JSch rejects as "invalid private key".
                         val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
                             ?: throw SSHException("applicationContext is not TabSSHApplication")
-                        val jschBytes = app.keyStorage.getJSchBytesWithFallback(profile.proxyKeyId)
+                        val jschBytes = app.keyStorage.getJSchBytesWithFallback(jumpKeyId)
                         if (jschBytes != null) {
                             try {
                                 jsch.addIdentity(
-                                    profile.proxyKeyId,
+                                    jumpKeyId,
                                     jschBytes,
                                     null, // public key (JSch can derive it)
                                     null  // passphrase — keys stored unencrypted in Keystore
@@ -1250,7 +1378,7 @@ class SSHConnection(
                                 jschBytes.fill(0)
                             }
                         } else {
-                            throw SSHException("Jump host key not found: ${profile.proxyKeyId}")
+                            throw SSHException("Jump host key not found: $jumpKeyId")
                         }
                     }
                 }
@@ -1263,7 +1391,7 @@ class SSHConnection(
                     }
                 }
                 else -> {
-                    Logger.w("SSHConnection", "Jump host: Unsupported auth type ${profile.proxyAuthType}, using password")
+                    Logger.w("SSHConnection", "Jump host: Unsupported auth type ${effectiveProxyAuthType}, using password")
                     val password = getPasswordForAuthentication()
                     if (password != null) {
                         jumpSession.setPassword(password)
@@ -1314,15 +1442,16 @@ class SSHConnection(
      * Setup HTTP/SOCKS proxy if configured (for non-SSH proxies)
      */
     private fun setupHttpSocksProxy(session: Session) {
-        val proxyType = profile.proxyType ?: return
-        val proxyHost = profile.proxyHost ?: return
-        val proxyPort = profile.proxyPort ?: return
+        val proxyType = effectiveProxyType ?: return
+        val proxyHost = effectiveProxyHost ?: return
+        val proxyPort = effectiveProxyPort ?: return
+        val proxyUsername = effectiveProxyUsername
 
         when (proxyType.uppercase()) {
             "HTTP" -> {
                 Logger.i("SSHConnection", "Setting up HTTP proxy: $proxyHost:$proxyPort")
                 val proxy = ProxyHTTP(proxyHost, proxyPort)
-                profile.proxyUsername?.let { username ->
+                proxyUsername?.let { username ->
                     proxy.setUserPasswd(username, "") // Password not commonly used for HTTP proxies
                 }
                 session.setProxy(proxy)
@@ -1330,7 +1459,7 @@ class SSHConnection(
             "SOCKS4" -> {
                 Logger.i("SSHConnection", "Setting up SOCKS4 proxy: $proxyHost:$proxyPort")
                 val proxy = ProxySOCKS4(proxyHost, proxyPort)
-                profile.proxyUsername?.let { username ->
+                proxyUsername?.let { username ->
                     proxy.setUserPasswd(username, "")
                 }
                 session.setProxy(proxy)
@@ -1338,7 +1467,7 @@ class SSHConnection(
             "SOCKS5" -> {
                 Logger.i("SSHConnection", "Setting up SOCKS5 proxy: $proxyHost:$proxyPort")
                 val proxy = ProxySOCKS5(proxyHost, proxyPort)
-                profile.proxyUsername?.let { username ->
+                proxyUsername?.let { username ->
                     proxy.setUserPasswd(username, "")
                 }
                 session.setProxy(proxy)

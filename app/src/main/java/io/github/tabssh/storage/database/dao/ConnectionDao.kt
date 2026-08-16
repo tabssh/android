@@ -129,4 +129,23 @@ interface ConnectionDao {
      */
     @Query("UPDATE connections SET multiplexer_override = 'off' WHERE multiplexer_override IS NULL")
     suspend fun disablePrefixKeyForProfilesWithNullOverride(): Int
+
+    /**
+     * One-time Routing & Forwarding migration
+     * (see InlineProxyRouteMigration): profiles that still carry legacy inline
+     * proxy config and have not yet been assigned a reusable NetworkRoute.
+     * Excludes already-migrated rows (route_id set) so the migration is
+     * idempotent.
+     */
+    @Query(
+        "SELECT * FROM connections " +
+            "WHERE proxy_type IS NOT NULL AND proxy_type != '' AND route_id IS NULL"
+    )
+    suspend fun getConnectionsWithLegacyProxyAndNoRoute(): List<ConnectionProfile>
+
+    /**
+     * Point a connection at a reusable NetworkRoute (or clear it with null).
+     */
+    @Query("UPDATE connections SET route_id = :routeId WHERE id = :id")
+    suspend fun setRouteId(id: String, routeId: String?)
 }

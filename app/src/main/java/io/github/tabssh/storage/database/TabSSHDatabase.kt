@@ -14,7 +14,7 @@ import io.github.tabssh.utils.logging.Logger
 /**
  * Main Room database for TabSSH.
  *
- * Current version: 11.
+ * Current version: 12.
  * Versions 1 and 2 never shipped to real users, so v3 is the effective schema
  * baseline and no fallback path exists for them. Every version bump from v3
  * onward MUST register a real Migration object via addMigrations(); destructive
@@ -48,9 +48,10 @@ import io.github.tabssh.utils.logging.Logger
         ComposeStack::class,
         SingleContainerConfig::class,
         ContainerAutoUpdatePolicy::class,
-        RegistryCredential::class
+        RegistryCredential::class,
+        NetworkRoute::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -83,6 +84,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun singleContainerConfigDao(): SingleContainerConfigDao
     abstract fun containerAutoUpdatePolicyDao(): ContainerAutoUpdatePolicyDao
     abstract fun registryCredentialDao(): RegistryCredentialDao
+    abstract fun networkRouteDao(): NetworkRouteDao
 
     companion object {
         @Volatile
@@ -376,6 +378,53 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v11 → v12 (Routing & Forwarding): add the `network_routes` table —
+         * reusable proxy / SSH-jump-host definitions — and a nullable
+         * `connections.route_id` FK-by-convention column pointing at a route
+         * (null = inherit global default, "DIRECT" = force direct).
+         *
+         * Additive only. The one-time transform that copies each connection's
+         * legacy inline `proxy_*` columns into a generated network_routes row
+         * and sets its route_id runs in app code
+         * (TabSSHApplication.migrateInlineProxiesToRoutes), mirroring the
+         * prefix-key migration pattern — the raw SQL here stays purely
+         * schema-level so it needs no in-SQLite UUID generation. DDL matches
+         * Room's generated schema for NetworkRoute exactly (column order,
+         * NOT NULL flags, and the two indices).
+         */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `network_routes` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`type` TEXT NOT NULL, " +
+                        "`host` TEXT, " +
+                        "`port` INTEGER NOT NULL, " +
+                        "`username` TEXT, " +
+                        "`auth_type` TEXT, " +
+                        "`key_id` TEXT, " +
+                        "`connection_id` TEXT, " +
+                        "`built_in_tor` INTEGER NOT NULL, " +
+                        "`enabled` INTEGER NOT NULL, " +
+                        "`created_at` INTEGER NOT NULL, " +
+                        "`modified_at` INTEGER NOT NULL, " +
+                        "`sort_order` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_network_routes_connection_id` " +
+                        "ON `network_routes` (`connection_id`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_network_routes_key_id` " +
+                        "ON `network_routes` (`key_id`)"
+                )
+                db.execSQL("ALTER TABLE `connections` ADD COLUMN `route_id` TEXT")
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -385,7 +434,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
                 .build()
                 INSTANCE = instance
                 instance

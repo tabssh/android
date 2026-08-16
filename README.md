@@ -29,7 +29,8 @@ enterprise security, hypervisor management, and cloud provider integration.
 - 🔑 **Universal Key Support** — OpenSSH, PEM, PKCS#8, PuTTY; import or generate in-app
 - 🖥️ **Full Terminal Emulation** — Termux TerminalEmulator (VT100/ANSI, 256 colors, vim/htop/tmux fully functional)
 - 📁 **Integrated SFTP** — File manager with upload/download progress, remote editor, chmod
-- 🔌 **Port Forwarding** — Local, remote, and dynamic (SOCKS5) forwarding
+- 🧭 **Routing & Forwarding** — Reusable proxy / jump-host routes picked per-connection or set as a global default, plus local/remote/dynamic (SOCKS5) port forwards, all in one section
+- 🧅 **Tor** — Route SSH through Tor via an Orbot preset or a built-in bundled `tor` loopback SOCKS proxy (no separate app needed)
 - 🖼️ **X11 Forwarding** — Run graphical apps remotely via Termux:X11 or XServer XSDL
 - 🌐 **SSH Config Import** — `~/.ssh/config` with RemoteCommand, SendEnv, RequestTTY, ProxyJump
 - ❤️ **Always-on Keepalive** — 60s serverAliveInterval; idle sessions survive carrier NAT and Wi-Fi sleep
