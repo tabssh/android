@@ -5,8 +5,11 @@ import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
+import android.os.Handler
+import android.os.Looper
 import android.util.AttributeSet
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
@@ -30,6 +33,10 @@ class KeyboardRowView @JvmOverloads constructor(
         private const val KEY_MARGIN_DP = 4
         /** Fixed width (dp) for pinned anchor keys so they never shift position. */
         private const val KEY_PINNED_WIDTH_DP = 52
+        /** Delay before a held key starts auto-repeating (matches typical soft keyboards). */
+        private const val INITIAL_DELAY_MS = 400L
+        /** Interval between auto-repeat sends once repeating has begun (~18/sec). */
+        private const val REPEAT_INTERVAL_MS = 55L
     }
 
     private val keyContainer: LinearLayout
@@ -196,14 +203,28 @@ class KeyboardRowView @JvmOverloads constructor(
             else                             -> btn.alpha = 1.0f
         }
 
+        // Click listener stays on every key so TalkBack's ACTION_CLICK (double-tap)
+        // still activates it — for repeatable keys the physical-touch path is
+        // handled by KeyButton.onTouchEvent, which consumes the touch so this
+        // listener only fires via accessibility, never double-sending.
         btn.setOnClickListener { handleKeyClick(key) }
-        btn.setOnLongClickListener {
-            val listener = onKeyLongClickListener
-            if (listener != null) {
-                listener.invoke(key)
-                true
-            } else {
-                false
+
+        // MODIFIER and ACTION keys own the long-press gesture (modifier lock,
+        // PREFIX multiplexer picker), so they never auto-repeat. Every other key
+        // — arrows, symbols, function, and special keys — repeats while held.
+        val repeatable = key.category != KeyboardKey.KeyCategory.MODIFIER &&
+            key.category != KeyboardKey.KeyCategory.ACTION
+        if (repeatable) {
+            btn.enableKeyRepeat { handleKeyClick(key) }
+        } else {
+            btn.setOnLongClickListener {
+                val listener = onKeyLongClickListener
+                if (listener != null) {
+                    listener.invoke(key)
+                    true
+                } else {
+                    false
+                }
             }
         }
         return btn
@@ -306,9 +327,70 @@ class KeyboardRowView @JvmOverloads constructor(
         private var isActive = false   // true = latched modifier / active PREFIX
         private var isLocked = false   // true = modifier locked on (inner ring)
 
+        // Press-and-hold auto-repeat. Enabled per key via [enableKeyRepeat] for
+        // arrows/symbols/etc. so holding e.g. → keeps moving the cursor. When
+        // enabled, onTouchEvent drives sending and consumes the touch, so the
+        // View's own click never fires from touch (only from a11y ACTION_CLICK).
+        private var repeatEnabled = false
+        private var onRepeat: (() -> Unit)? = null
+        private val repeatHandler = Handler(Looper.getMainLooper())
+        private val repeatRunnable = object : Runnable {
+            override fun run() {
+                onRepeat?.invoke()
+                repeatHandler.postDelayed(this, REPEAT_INTERVAL_MS)
+            }
+        }
+
         init {
             isClickable = true
             isFocusable = true
+        }
+
+        /**
+         * Enable press-and-hold auto-repeat for this key. [callback] is invoked
+         * once immediately on touch-down, then repeatedly after an initial delay
+         * until the finger lifts or slides off the key.
+         */
+        fun enableKeyRepeat(callback: () -> Unit) {
+            repeatEnabled = true
+            onRepeat = callback
+        }
+
+        private fun stopRepeat() {
+            repeatHandler.removeCallbacks(repeatRunnable)
+        }
+
+        @Suppress("ClickableViewAccessibility")
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            if (!repeatEnabled) return super.onTouchEvent(event)
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    isPressed = true
+                    onRepeat?.invoke()
+                    repeatHandler.postDelayed(repeatRunnable, INITIAL_DELAY_MS)
+                    return true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val inside = event.x >= 0f && event.y >= 0f &&
+                        event.x <= width && event.y <= height
+                    if (!inside) {
+                        stopRepeat()
+                        isPressed = false
+                    }
+                    return true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    stopRepeat()
+                    isPressed = false
+                    return true
+                }
+            }
+            return super.onTouchEvent(event)
+        }
+
+        override fun onDetachedFromWindow() {
+            stopRepeat()
+            super.onDetachedFromWindow()
         }
 
         /**
