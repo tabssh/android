@@ -42,6 +42,11 @@ object MoshNativeClient {
     private const val TAG = "MoshNativeClient"
     private const val BINARY_FILE_NAME = "libmosh-client.so"
 
+    // Pinned to match mosh/Dockerfile and mosh/build-android.sh — the bundled
+    // binary has no cheap runtime version query, so the About dialog reports
+    // this build-time constant. Update here and in both build files together.
+    const val MOSH_VERSION = "1.4.0"
+
     /**
      * @return absolute path to the bundled mosh-client for this device's
      *         primary ABI, or null if no binary is bundled.
@@ -64,6 +69,9 @@ object MoshNativeClient {
         }
         return candidate
     }
+
+    /** True when a bundled, runnable mosh-client binary exists for this device's ABI. */
+    fun isAvailable(context: Context): Boolean = resolveBinary(context) != null
 
     /**
      * Launch mosh-client. Caller wires [Session.input] / [Session.output] to

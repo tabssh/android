@@ -36,6 +36,15 @@ object TorNativeClient {
     private const val BINARY_FILE_NAME = "libtor.so"
     private const val BOOTSTRAP_MARKER = "Bootstrapped 100%"
 
+    // Pinned versions of the statically-linked native stack. These MUST track
+    // the pins in tor/Dockerfile and tor/build-android.sh — the bundled binary
+    // has no cheap runtime version query, so the About dialog reports these
+    // build-time constants. Update here and in both build files together.
+    const val TOR_VERSION = "0.4.9.11"
+    const val OPENSSL_VERSION = "3.0.13"
+    const val LIBEVENT_VERSION = "2.1.13"
+    const val ZLIB_VERSION = "1.3.1"
+
     /**
      * @return absolute path to the bundled tor binary for this device's primary
      *         ABI, or null if no binary is bundled in this APK build.

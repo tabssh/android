@@ -14,6 +14,11 @@ plugins {
     id 'org.cyclonedx.bom' version '3.4.1'
 }
 
+// Termux terminal-emulator version — single source shared by the runtime
+// dependency (see dependencies{}) and the TERMINAL_EMULATOR_VERSION BuildConfig
+// field the About dialog reports. Change in one place.
+def termuxTerminalVersion = 'v0.118.1'
+
 // Resolve a build-time identifier for the current source. Preference:
 //   1. `git rev-parse --short HEAD` — works on dev machines AND F-Droid's
 //      builder (fdroidserver clones via git and checks out the recipe's
@@ -129,6 +134,9 @@ android {
         buildConfigField "long", "BUILD_EPOCH", "${resolveBuildEpochSeconds()}L"
         // Development-channel marker — true only in the devel build type
         buildConfigField "boolean", "DEVEL", "false"
+        // Termux terminal-emulator version, surfaced in the About dialog's
+        // bundled-components list. Sourced from termuxTerminalVersion above.
+        buildConfigField "String", "TERMINAL_EMULATOR_VERSION", "\"${termuxTerminalVersion}\""
     }
 
     signingConfigs {
@@ -410,7 +418,7 @@ dependencies {
     // Using only terminal-emulator (not terminal-view)
     // We render using our own TerminalView, just need the emulation engine
     // JitPack format: com.github.termux.termux-app:module:version
-    implementation('com.github.termux.termux-app:terminal-emulator:v0.118.1') {
+    implementation("com.github.termux.termux-app:terminal-emulator:${termuxTerminalVersion}") {
         // Exclude terminal-view as we use our own TerminalView and it requires minSdk 24
         exclude group: 'com.github.termux.termux-app', module: 'terminal-view'
     }

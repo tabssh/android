@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **The About dialog now lists the bundled native components and their versions** — it reports whether the native Tor and Mosh client binaries are included in your build (they are cross-compiled per ABI, so it depends on your device's architecture and whether the binaries were published when the app was built), plus the pinned versions of Tor, its statically linked crypto stack (OpenSSL, libevent, zlib), and the Termux terminal engine. Previously About showed only the app version and a fixed "Built with" list, so there was no way to tell from inside the app whether native Tor/Mosh actually shipped in your APK
+
 ### Changed
 
 - **Release channels reworked** — the rolling development prerelease is now built by `development.yml` (daily + every push to main) from a new `devel` build variant: full release configuration (R8, resource shrinking, signed, **not debuggable** — debuggable sideloaded APKs trip Play Protect) with the Debug Log force-enabled. A new `beta.yml` channel builds prereleases from `*beta` tags. Every channel now ships the same asset set: APK splits, `mapping.txt`, `version.txt`, a source archive, a CycloneDX SBOM (`tabssh-sbom.cdx.json`), aggregate `sha256.txt`/`sha512.txt`, and GitHub build-provenance attestations. Asset filenames are identical across channels — the tag and `version.txt` carry the channel identity

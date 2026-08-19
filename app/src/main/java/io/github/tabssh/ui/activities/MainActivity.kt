@@ -330,6 +330,22 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         val versionCode = io.github.tabssh.BuildConfig.VERSION_CODE
         val commit = io.github.tabssh.BuildConfig.GIT_COMMIT_ID ?: "unknown"
         val flavor = io.github.tabssh.BuildConfig.BUILD_TYPE
+        // Native components are cross-compiled per ABI and bundled as
+        // jniLibs/<abi>/lib*.so; whether they made it into THIS build depends on
+        // the device ABI and whether the binaries workflow had published them at
+        // build time, so report their live availability rather than assuming.
+        val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"
+        val torIncluded = io.github.tabssh.protocols.tor.TorNativeClient.isAvailable(this)
+        val moshIncluded = io.github.tabssh.protocols.mosh.MoshNativeClient.isAvailable(this)
+        val torState = if (torIncluded) "included" else "not bundled"
+        val moshState = if (moshIncluded) "included" else "not bundled"
+        val nativeComponents = """
+        Native components ($abi):
+        • Tor ${io.github.tabssh.protocols.tor.TorNativeClient.TOR_VERSION} — $torState
+        • Mosh ${io.github.tabssh.protocols.mosh.MoshNativeClient.MOSH_VERSION} — $moshState
+        • Tor crypto: OpenSSL ${io.github.tabssh.protocols.tor.TorNativeClient.OPENSSL_VERSION}, libevent ${io.github.tabssh.protocols.tor.TorNativeClient.LIBEVENT_VERSION}, zlib ${io.github.tabssh.protocols.tor.TorNativeClient.ZLIB_VERSION}
+        • Terminal: Termux ${io.github.tabssh.BuildConfig.TERMINAL_EMULATOR_VERSION}
+        """.trimIndent()
         val aboutText = """
         TabSSH
         Version $versionName (Build $versionCode)
@@ -345,6 +361,8 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         • JSch (SSH library)
         • Material Design Components
         • MPAndroidChart
+
+        $nativeComponents
 
         Credits:
         • Development: TabSSH Team
