@@ -57,6 +57,16 @@ class TerminalBuffer(
 
     private var cursorX = 0
     private var cursorY = 0
+
+    // Deferred auto-wrap (xterm/VT "pending wrap" state). When a printable
+    // character lands in the last column with DECAWM on, the cursor stays put
+    // and this flag is raised instead of wrapping immediately. The wrap only
+    // happens if another printable character arrives; any cursor movement
+    // (CR, LF, BS, TAB, positioning, resize, clear) cancels it. Without this,
+    // a CR/LF right after the final column produced a phantom blank row and
+    // falsely marked the filled row as soft-wrapped.
+    private var pendingWrap = false
+
     private var title = "Terminal"
 
     /**
@@ -97,6 +107,7 @@ class TerminalBuffer(
     fun setCursorPosition(x: Int, y: Int) {
         cursorX = x.coerceIn(0, cols - 1)
         cursorY = y.coerceIn(0, rows - 1)
+        pendingWrap = false
     }
 
     /**
@@ -109,6 +120,7 @@ class TerminalBuffer(
         if (originMode) {
             cursorX = x.coerceIn(0, cols - 1)
             cursorY = (scrollTop + y).coerceIn(scrollTop, scrollBottom)
+            pendingWrap = false
         } else {
             setCursorPosition(x, y)
         }
@@ -183,6 +195,7 @@ class TerminalBuffer(
         rowWrapped.fill(false)
         cursorX = 0
         cursorY = 0
+        pendingWrap = false
     }
 
     fun getLine(row: Int): Array<TerminalChar>? {
@@ -370,6 +383,7 @@ class TerminalBuffer(
     fun restoreCursor() {
         cursorX = savedCursorX
         cursorY = savedCursorY
+        pendingWrap = false
     }
 
     fun clearScreen() {
@@ -410,6 +424,7 @@ class TerminalBuffer(
         // Adjust cursor position and the scrolling region to the new geometry
         cursorX = cursorX.coerceIn(0, cols - 1)
         cursorY = cursorY.coerceIn(0, rows - 1)
+        pendingWrap = false
         scrollTop = scrollTop.coerceIn(0, rows - 1)
         scrollBottom = scrollBottom.coerceIn(scrollTop, rows - 1)
     }
@@ -448,6 +463,7 @@ class TerminalBuffer(
     fun moveCursor(deltaX: Int, deltaY: Int) {
         cursorX = (cursorX + deltaX).coerceIn(0, cols - 1)
         cursorY = (cursorY + deltaY).coerceIn(0, rows - 1)
+        pendingWrap = false
     }
 
     fun clearToEndOfScreen() {
@@ -512,6 +528,7 @@ class TerminalBuffer(
             alternateScreenBuffer = screen
             screen = mainScreen
             alternateScreen = false
+            pendingWrap = false
         }
     }
 
@@ -533,21 +550,36 @@ class TerminalBuffer(
         when (ch) {
             '\n' -> {
                 // Hard newline — the current row is NOT soft-wrapped
+                pendingWrap = false
                 rowWrapped[cursorY] = false
                 advanceLine()
             }
-            '\r' -> cursorX = 0
+            '\r' -> {
+                pendingWrap = false
+                cursorX = 0
+            }
             '\t' -> {
                 // Move to next tab stop (every 8 columns)
+                pendingWrap = false
                 cursorX = ((cursorX / 8) + 1) * 8
                 if (cursorX >= cols) {
                     cursorX = cols - 1
                 }
             }
             '\b' -> {
+                pendingWrap = false
                 if (cursorX > 0) cursorX--
             }
             else -> {
+                // Deferred auto-wrap: the previous character filled the last
+                // column, so the wrap it owed is performed now that another
+                // printable character has actually arrived.
+                if (pendingWrap) {
+                    pendingWrap = false
+                    rowWrapped[cursorY] = true
+                    cursorX = 0
+                    advanceLine()
+                }
                 if (cursorX < cols && cursorY < rows) {
                     // IRM (ESC[4h): the character is inserted, so everything from
                     // the cursor rightwards shifts one cell and the last cell of
@@ -568,12 +600,12 @@ class TerminalBuffer(
                         currentAttrs.reverse,
                         currentLinkUrl
                     )
-                    cursorX++
-                    if (cursorX >= cols && wrapMode) {
-                        // Mark this row as soft-wrapped before advancing to the next
-                        rowWrapped[cursorY] = true
-                        cursorX = 0
-                        advanceLine()
+                    if (cursorX == cols - 1 && wrapMode) {
+                        // Last column with DECAWM on: hold the cursor here and
+                        // defer the wrap until the next printable character.
+                        pendingWrap = true
+                    } else {
+                        cursorX++
                     }
                 }
             }

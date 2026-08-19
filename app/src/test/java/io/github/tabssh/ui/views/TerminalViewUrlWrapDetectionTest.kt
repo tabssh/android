@@ -36,11 +36,11 @@ class TerminalViewUrlWrapDetectionTest {
     }
 
     /**
-     * A view backed by the Termux emulator — the SSH path. Unlike the local
-     * emulator, Termux implements deferred auto-wrap, so a CR/LF arriving right
-     * after the last column stays on the same row instead of creating a phantom
-     * blank line. That is what makes a program's own hard line breaks at the
-     * width boundary expressible here.
+     * A view backed by the Termux emulator — the SSH path. Both emulators
+     * implement deferred auto-wrap, so a CR/LF arriving right after the last
+     * column stays on the same row instead of creating a phantom blank line.
+     * That is what makes a program's own hard line breaks at the width
+     * boundary expressible here.
      */
     private fun newTermuxView(rows: Int, data: String): TerminalView {
         val context = ApplicationProvider.getApplicationContext<Application>()

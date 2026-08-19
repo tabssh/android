@@ -4,17 +4,6 @@ Task tracking (AI-owned). Items are ordered by priority, highest first.
 Complete each item fully before removing; never clear an item while its work
 is in progress.
 
-## Open — 2026-08-19 local emulator auto-wraps eagerly (no deferred wrap)
-
-1. `TerminalBuffer.writeChar()` advances to the next row the moment the
-   last column is written, instead of holding the pending-wrap state until
-   the next printable character arrives (xterm/VT behavior, which Termux
-   implements as `mAboutToAutoWrap`). A CR/LF arriving right after the
-   final column therefore produces a phantom blank row, and the row that
-   was just filled is marked soft-wrapped when it was not. Affects only
-   the local (non-SSH) emulator path. Fix: add a pending-wrap flag,
-   consume it on the next printable char, and clear it on CR/LF.
-
 ## Open — 2026-08-14 Play Protect false positive (user action required)
 
 1. Google Play Protect flags dev-build APKs as "Harmful app blocked —

@@ -80,18 +80,59 @@ class TerminalBufferTest {
 
     @Test
     fun `test line wrapping`() {
-        // Fill a line completely; the buffer wraps eagerly on the 80th column.
+        // Fill a line completely. Auto-wrap is deferred (xterm/VT behavior):
+        // the cursor stays on the last column until another printable char.
         buffer.write("A".repeat(80))
 
         assertEquals('A', buffer.getChar(0, 79)?.char)
-        assertEquals(1, buffer.getCursorRow())
-        assertEquals(0, buffer.getCursorCol())
+        assertEquals(0, buffer.getCursorRow())
+        assertEquals(79, buffer.getCursorCol())
+        assertFalse(buffer.isRowWrapped(0))
 
-        // Next character lands at the start of the wrapped row.
+        // The next printable character consumes the pending wrap.
         buffer.writeChar('B')
         assertEquals('B', buffer.getChar(1, 0)?.char)
         assertEquals(1, buffer.getCursorRow())
         assertEquals(1, buffer.getCursorCol())
+        assertTrue(buffer.isRowWrapped(0))
+    }
+
+    @Test
+    fun `pending wrap is cancelled by a hard newline`() {
+        // A program that hard-breaks its own output at the screen width emits
+        // exactly cols characters then CRLF. That must not produce a phantom
+        // blank row, and the filled row must not be marked soft-wrapped.
+        buffer.write("A".repeat(80))
+        buffer.write("\r\n")
+        buffer.write("B")
+
+        assertEquals('B', buffer.getChar(1, 0)?.char)
+        assertEquals(1, buffer.getCursorRow())
+        assertEquals(1, buffer.getCursorCol())
+        assertFalse(buffer.isRowWrapped(0))
+    }
+
+    @Test
+    fun `pending wrap is cancelled by carriage return alone`() {
+        buffer.write("A".repeat(80))
+        buffer.writeChar('\r')
+        buffer.writeChar('Z')
+
+        // The overwrite lands on the same row, not on a wrapped one.
+        assertEquals('Z', buffer.getChar(0, 0)?.char)
+        assertEquals(0, buffer.getCursorRow())
+        assertFalse(buffer.isRowWrapped(0))
+    }
+
+    @Test
+    fun `pending wrap is cancelled by cursor positioning`() {
+        buffer.write("A".repeat(80))
+        buffer.setCursorPosition(3, 5)
+        buffer.writeChar('X')
+
+        assertEquals('X', buffer.getChar(5, 3)?.char)
+        assertEquals(5, buffer.getCursorRow())
+        assertFalse(buffer.isRowWrapped(0))
     }
 
     @Test
