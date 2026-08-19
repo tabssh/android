@@ -130,7 +130,11 @@ cd tor-0.4.9.11
 # --enable-android sets the Android-specific configure defaults so the many
 # run-time feature probes don't have to execute on the cross host.
 # --enable-static-* + --with-*-dir link our just-built deps statically.
-LDFLAGS="-static-libstdc++ -L$PREFIX/lib" \
+# -ldl: openssl 3.x's DSO layer (crypto/dso/dso_dlfcn.c) references
+# dlopen/dlsym/dlclose/dlerror even in a no-shared static build. On Android
+# these live in libc, but the static link still needs -ldl to resolve them
+# or ld.lld fails with "undefined symbol: dlopen".
+LDFLAGS="-static-libstdc++ -L$PREFIX/lib -ldl" \
 CPPFLAGS="-I$PREFIX/include" \
 ./configure \
     --host="$BIN_PREFIX" \
