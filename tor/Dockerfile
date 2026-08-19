@@ -50,8 +50,11 @@ RUN wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-
 # Pre-cache source tarballs so repeat builds don't re-download.
 # openssl 3.0.13 matches the version the mosh build pins, keeping one audited
 # crypto source across both native binaries.
+# zlib.net serves only the current release at the root and moves older
+# versions to fossils/, so 1.3.1 is pinned from the fossils path (the root
+# URL 404s once a newer zlib ships).
 WORKDIR /opt/sources
-RUN wget -q https://zlib.net/zlib-1.3.1.tar.gz && \
+RUN wget -q https://zlib.net/fossils/zlib-1.3.1.tar.gz && \
     wget -q https://www.openssl.org/source/openssl-3.0.13.tar.gz && \
     wget -q https://github.com/libevent/libevent/releases/download/release-2.1.13-stable/libevent-2.1.13-stable.tar.gz && \
     wget -q https://dist.torproject.org/tor-0.4.9.11.tar.gz
