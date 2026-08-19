@@ -2983,13 +2983,25 @@ class TerminalView @JvmOverloads constructor(
         val scrollRows = if (cellHeight > 0f) (scrollYInt / cellHeight).toInt() else 0
         val extStartRow = startRow - scrollRows
         val extEndRow = endRow - scrollRows
+        // Mosh repaints the screen with absolute cursor positioning instead of
+        // relying on the terminal's autowrap, so the emulator's per-row wrap
+        // flag (mLineWrap) is never set for mosh-rendered content. Without it,
+        // getSelectedText inserts a '\n' at every full row and a copied
+        // soft-wrapped line comes out broken across several lines. Passing
+        // joinFullLines=true makes a completely full row count as soft-wrapped
+        // (joined, no '\n') — the standard way to recover wrapping when the
+        // flag is unavailable. Enable it only under mosh; on the SSH path the
+        // real mLineWrap flag is accurate, so joinFullLines stays false there
+        // to avoid falsely joining a hard line that happens to fill the width.
+        val joinFullLines = termuxBridge?.isMoshSessionAlive() == true
         return try {
             // Termux's getSelectedText takes (col1, row1, col2, row2) and
             // reads line-by-line through the rectangle. We pass through
             // the user-visible cells; +1 on the trailing column / row
             // would over-include, so use the same inclusive convention
-            // the existing scrollback-extraction path uses.
-            buffer.getSelectedText(startCol, extStartRow, endCol, extEndRow)
+            // the existing scrollback-extraction path uses. joinBackLines=true
+            // honours the emulator's soft-wrap flag (join wrapped rows).
+            buffer.getSelectedText(startCol, extStartRow, endCol, extEndRow, true, joinFullLines)
         } catch (e: Exception) {
             Logger.w("TerminalView", "getSelectedText failed: ${e.message}")
             null
@@ -3656,8 +3668,21 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
         // finishComposingText().
         composingText = ""
         text?.let {
+            val raw = it.toString()
+            // Multiline commits — e.g. an IME (Gboard, etc.) delivering a
+            // clipboard paste through commitText() — must go through the
+            // bracketed-paste path. sendText() would emit each line break as a
+            // bare CR, which the remote shell reads as an Enter keypress and so
+            // executes only the first line. pasteText() wraps the payload in
+            // ESC[200~…ESC[201~ when the remote enabled ?2004 and normalizes
+            // newlines itself, so all lines arrive as one paste.
+            if (raw.contains('\n') || raw.contains('\r')) {
+                terminalView.consumePendingPrefix()
+                terminalView.pasteText(raw)
+                return true
+            }
             // Convert newline to carriage return for SSH compatibility
-            val converted = it.toString().replace("\n", "\r")
+            val converted = raw.replace("\n", "\r")
             // Fire any armed PREFIX latch before this text arrives at the terminal.
             // This makes the PRE bar key work for soft-keyboard and hardware-key
             // input, not just for custom-bar taps.
