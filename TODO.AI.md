@@ -4,19 +4,6 @@ Task tracking (AI-owned). Items are ordered by priority, highest first.
 Complete each item fully before removing; never clear an item while its work
 is in progress.
 
-## Open — 2026-08-19 native Tor never ships in CI-built APKs
-
-1. `development.yml`, `beta.yml`, and `release.yml` all run
-   `fetch-mosh-binaries.sh`, `fetch-spice-libs.sh`, and `fetch-fonts.sh`
-   before `assembleRelease`, but none of them runs
-   `fetch-tor-binaries.sh`.
-   `make build`/`make release` do fetch it, so only local builds can ever
-   contain `jniLibs/<abi>/libtor.so`; every published APK has
-   `TorNativeClient.isAvailable() == false` and the built-in Tor route is
-   silently unavailable. The `tor-0.4.9.11` release with all four ABI
-   assets now exists, so adding the step is all that is missing. Decide
-   with the user whether built-in Tor ships before wiring it in.
-
 ## Open — 2026-08-19 local emulator auto-wraps eagerly (no deferred wrap)
 
 1. `TerminalBuffer.writeChar()` advances to the next row the moment the

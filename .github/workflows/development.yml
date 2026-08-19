@@ -175,19 +175,31 @@ jobs:
         chmod +x scripts/fetch-spice-libs.sh
         TABSSH_REPO="${{ github.repository }}" scripts/fetch-spice-libs.sh
 
+    - name: Fetch latest tor binaries
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Pulls latest tor-X.Y.Z.W release assets and drops them into
+        # app/src/main/jniLibs/<abi>/libtor.so. Won't fail the build if no
+        # release exists yet — TorNativeClient.isAvailable() gates the built-in
+        # Tor route out at runtime (workflow `tor-binaries.yml` publishes them
+        # on a monthly cadence).
+        chmod +x scripts/fetch-tor-binaries.sh
+        TABSSH_REPO="${{ github.repository }}" scripts/fetch-tor-binaries.sh
+
     - name: Fetch Nerd Fonts
       run: |
         chmod +x scripts/fetch-fonts.sh
         scripts/fetch-fonts.sh
 
-    # Published builds must never silently ship without mosh, SPICE, or the
-    # bundled fonts — the fetch steps above soft-fail by design, so gate here.
-    - name: Verify bundled mosh/SPICE/fonts are present
+    # Published builds must never silently ship without mosh, SPICE, Tor, or
+    # the bundled fonts — the fetch steps above soft-fail by design, so gate here.
+    - name: Verify bundled mosh/SPICE/Tor/fonts are present
       run: |
         for abi in arm64-v8a armeabi-v7a x86_64 x86; do
-          for lib in libmosh-client.so libtabssh_native.so; do
+          for lib in libmosh-client.so libtabssh_native.so libtor.so; do
             if [ ! -f "app/src/main/jniLibs/$abi/$lib" ]; then
-              echo "::error::$lib missing for $abi — every published build must bundle mosh and SPICE for all ABIs" >&2
+              echo "::error::$lib missing for $abi — every published build must bundle mosh, SPICE and Tor for all ABIs" >&2
               exit 1
             fi
           done
