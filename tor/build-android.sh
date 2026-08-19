@@ -151,7 +151,10 @@ CPPFLAGS="-I$PREFIX/include" \
     --disable-module-dirauth \
     ac_cv_func_getentropy=no \
     >&2
-make -j"$(nproc)" tor >&2
+# tor 0.4.9.x has no `tor` convenience target — `make tor` fails with
+# "No rule to make target 'tor'". Build the binary by its real file target,
+# which pulls in only its library prerequisites (no manpages, no unit tests).
+make -j"$(nproc)" src/app/tor >&2
 # Modern tor emits the client binary at src/app/tor.
 cp src/app/tor "$OUT/tor"
 "$STRIP" "$OUT/tor" 2>&2 || true
