@@ -2,6 +2,8 @@ package io.github.tabssh.ui.views
 
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
+import com.termux.terminal.TerminalEmulator
+import com.termux.terminal.TerminalOutput
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -31,6 +33,41 @@ class TerminalViewUrlWrapDetectionTest {
         val view = TerminalView(context)
         view.initialize(rows, cols)
         return view
+    }
+
+    /**
+     * A view backed by the Termux emulator — the SSH path. Unlike the local
+     * emulator, Termux implements deferred auto-wrap, so a CR/LF arriving right
+     * after the last column stays on the same row instead of creating a phantom
+     * blank line. That is what makes a program's own hard line breaks at the
+     * width boundary expressible here.
+     */
+    private fun newTermuxView(rows: Int, data: String): TerminalView {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val view = TerminalView(context)
+        view.initialize(rows, cols)
+
+        val output = object : TerminalOutput() {
+            override fun write(data: ByteArray?, offset: Int, count: Int) = Unit
+            override fun titleChanged(oldTitle: String?, newTitle: String?) = Unit
+            override fun onCopyTextToClipboard(text: String?) = Unit
+            override fun onPasteTextFromClipboard() = Unit
+            override fun onBell() = Unit
+            override fun onColorsChanged() = Unit
+        }
+        val emulator = TerminalEmulator(output, cols, rows, 200, null)
+        val bytes = data.toByteArray(Charsets.US_ASCII)
+        emulator.append(bytes, bytes.size)
+
+        setField(view, "termuxBuffer", emulator.screen)
+        setField(view, "terminalBuffer", null)
+        return view
+    }
+
+    private fun setField(view: TerminalView, name: String, value: Any?) {
+        val field = TerminalView::class.java.getDeclaredField(name)
+        field.isAccessible = true
+        field.set(view, value)
     }
 
     private fun cellSize(view: TerminalView): Pair<Float, Float> {
@@ -77,6 +114,26 @@ class TerminalViewUrlWrapDetectionTest {
 
         val detected = detectUrlAt(view, row = 0, col = 6)
         assertEquals(url, detected)
+    }
+
+    @Test
+    fun `long URL hard-broken by the remote program is detected in full`() {
+        // Full-screen programs (Ink, ncurses) wrap their own output and emit a
+        // real CR/LF at the width boundary, so no soft-wrap flag is ever set.
+        // Detection used to stop at that boundary and return only the first row.
+        val url = "https://claude.com/cai/oauth/authorize?code=true&client_id=" +
+            "9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&scope=user%3Aprofile" +
+            "&code_challenge_method=S256&state=ZqBWPztLnrXCGgGqSen4"
+
+        val hardBroken = url.chunked(cols).joinToString("\r\n")
+        val rowsUsed = (url.length + cols - 1) / cols
+
+        val view = newTermuxView(rows = rowsUsed + 4, data = hardBroken)
+
+        for (tapRow in 0 until rowsUsed) {
+            val detected = detectUrlAt(view, tapRow, col = 5)
+            assertEquals(url, detected, "tap on row $tapRow should resolve the full hard-broken URL")
+        }
     }
 
     @Test

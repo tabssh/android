@@ -1493,7 +1493,7 @@ class TerminalView @JvmOverloads constructor(
         if (urlUnderlineDirty || urlKey != urlUnderlineKey) {
             urlUnderlineKey = urlKey
             urlUnderlineDirty = false
-            rebuildUrlUnderlines(rows, cols)
+            rebuildUrlUnderlines(rows)
         }
         val urlUnderlineByRow = urlUnderlineCache
 
@@ -1913,7 +1913,7 @@ class TerminalView @JvmOverloads constructor(
      * running the URL regex over the whole screen on every frame made every
      * cursor-blink tick as expensive as a full repaint.
      */
-    private fun rebuildUrlUnderlines(rows: Int, cols: Int) {
+    private fun rebuildUrlUnderlines(rows: Int) {
         val urlUnderlineByRow = urlUnderlineCache
         urlUnderlineByRow.clear()
         var r = 0
@@ -1922,15 +1922,16 @@ class TerminalView @JvmOverloads constructor(
             while (segEnd < rows - 1 && isRowSoftWrapped(segEnd)) segEnd++
             val combined = buildWrappedWindowText(r, segEnd) ?: ""
             if (combined.isNotEmpty()) {
-                // Per-row char lengths inside `combined`. Soft-wrapped rows
-                // contribute exactly `cols` chars (getSelectedText joins them
-                // without '\n'); the terminating row contributes its trimmed
-                // length. Sum must equal combined.length or offset math drifts.
+                // Per-row char lengths inside `combined`, computed with the same
+                // joinRowText() that built it — the sum must equal combined.length
+                // (plus one per hard '\n') or the underline offsets drift. Wide
+                // glyphs make a full row's char count differ from `cols`, so the
+                // row text length is measured, never assumed.
                 val nRows = segEnd - r + 1
                 val perRowLen = IntArray(nRows)
                 for (i in 0 until nRows) {
                     val rr = r + i
-                    perRowLen[i] = if (rr < segEnd) cols else getRowText(rr).trimEnd().length
+                    perRowLen[i] = joinRowText(rr, rr == segEnd).length
                 }
                 for (match in urlPattern.findAll(combined)) {
                     val mStart = match.range.first
@@ -1974,43 +1975,65 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
-     * Returns true when row [r] is a soft-wrapped row that continues into row r+1.
+     * Returns true when row [r] continues into row r+1 for URL-reassembly purposes.
      *
-     * For the local TerminalBuffer: use its isRowWrapped() flag directly.
-     * For the Termux TerminalBuffer (SSH path): approximate via row text length —
-     * a soft-wrapped row fills the full terminal width; a hard-newline row is shorter.
+     * Two independent signals, either of which is sufficient:
+     *
+     * 1. The emulator's own soft-wrap flag — `TerminalBuffer.isRowWrapped()` locally,
+     *    `com.termux.terminal.TerminalBuffer.getLineWrap()` on the SSH path. This is
+     *    authoritative whenever the terminal itself performed the wrap (DECAWM).
+     * 2. The row fills the full terminal width. Full-screen remote programs wrap
+     *    their own output and emit a hard CR/LF at the width boundary (Ink, ncurses,
+     *    and anything that renders its own layout — Claude Code's OAuth URL is the
+     *    case that exposed this). No wrap flag is set for those rows, so flag-only
+     *    logic cut every such URL at the first row boundary and handed the dialog a
+     *    one-row-wide fragment.
+     *
+     * The width heuristic can join two genuinely separate full-width lines, but the
+     * only consumer is the URL regex and a URL never contains a space — the worst
+     * case is a longer candidate string, not a wrong link.
      */
     private fun isRowSoftWrapped(r: Int): Boolean {
-        terminalBuffer?.let { return it.isRowWrapped(r) }
+        terminalBuffer?.let { if (it.isRowWrapped(r)) return true }
+        termuxBuffer?.let { buf ->
+            val flagged = try { buf.getLineWrap(r) } catch (_: Exception) { false }
+            if (flagged) return true
+        }
         return getRowText(r).trimEnd().length >= terminalCols
     }
 
     /**
-     * Build a wrap-aware combined string for rows startRow to endRow (inclusive).
+     * The exact text row [r] contributes to a wrapped-window join.
      *
-     * Termux TerminalBuffer.getSelectedText() natively omits '\n' between soft-wrapped
-     * rows and inserts '\n' only at hard line breaks.  The local TerminalBuffer path
-     * uses isRowWrapped() to replicate the same behaviour manually.
+     * Continuation rows keep their trailing spaces so offsets inside the joined
+     * string stay aligned with screen columns; the last row of a segment is
+     * trimmed because its padding is not content. Every consumer of the joined
+     * string (tap-offset math in detectUrlAtPosition, per-row lengths in
+     * rebuildUrlUnderlines) must use this function or the offsets drift.
+     */
+    private fun joinRowText(r: Int, isLastRow: Boolean): String {
+        val text = getRowText(r)
+        return if (!isLastRow && isRowSoftWrapped(r)) text else text.trimEnd()
+    }
+
+    /**
+     * Build a wrap-aware combined string for rows startRow to endRow (inclusive),
+     * inserting '\n' only where [isRowSoftWrapped] says the line actually ended.
+     *
+     * The join happens here rather than in Termux's getSelectedText() because that
+     * method decides the newline purely from the emulator's wrap flag: a row the
+     * remote program hard-broke at the width boundary gets a '\n', which terminates
+     * the URL regex mid-link and desynchronises the per-row offset math that assumes
+     * no separator between joined rows.
      */
     private fun buildWrappedWindowText(startRow: Int, endRow: Int): String? {
-        termuxBuffer?.let { buf ->
-            return try {
-                buf.getSelectedText(0, startRow, terminalCols, endRow)
-            } catch (e: Exception) {
-                null
-            }
+        if (termuxBuffer == null && terminalBuffer == null) return null
+        val sb = StringBuilder()
+        for (r in startRow..endRow) {
+            sb.append(joinRowText(r, r == endRow))
+            if (r < endRow && !isRowSoftWrapped(r)) sb.append('\n')
         }
-        terminalBuffer?.let { buf ->
-            val sb = StringBuilder()
-            for (r in startRow..endRow) {
-                val lineChars = buf.getLine(r)
-                val text = lineChars?.map { it.char }?.joinToString("") ?: ""
-                sb.append(text.trimEnd())
-                if (!buf.isRowWrapped(r) && r < endRow) sb.append('\n')
-            }
-            return sb.toString()
-        }
-        return null
+        return sb.toString()
     }
 
     /**
@@ -2084,8 +2107,7 @@ class TerminalView @JvmOverloads constructor(
         // add 1 extra for the '\n' separator that appears in the combined string.
         var tapOffset = col
         for (r in winStart until row) {
-            val rTrimmed = getRowText(r).trimEnd()
-            tapOffset += rTrimmed.length
+            tapOffset += joinRowText(r, false).length
             if (!isRowSoftWrapped(r)) tapOffset++
         }
         tapOffset = tapOffset.coerceIn(0, combined.length)
