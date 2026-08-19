@@ -50,6 +50,15 @@ use_ndk_toolchain() {
 export STRIP="$NDK_STRIP"  # for the final strip step at the end
 export PATH="$TOOLCHAIN/bin:$PATH"
 
+# tor's configure prints a summary banner whose width probe runs
+# `test "$(tput cols)" -ge 80`. In CI $TERM is unset, so `tput cols` emits
+# nothing and the probe becomes `test "" -ge 80` → "unary operator expected",
+# returning non-zero. config.status has already written the Makefile by then, so
+# this is purely cosmetic — but `set -e` treats configure's non-zero exit as
+# fatal and aborts before `make`. TERM=dumb gives tput a terminfo entry
+# (cols#80) so the probe evaluates cleanly and configure exits 0.
+export TERM=dumb
+
 PREFIX="/tmp/build-${ABI}/prefix"
 SRC_CACHE="/opt/sources"
 BUILD="/tmp/build-${ABI}"
