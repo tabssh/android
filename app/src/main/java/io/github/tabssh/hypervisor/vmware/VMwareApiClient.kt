@@ -126,7 +126,8 @@ class VMwareApiClient(
         val powerState: String,
         val cpuCount: Int,
         val memoryMB: Long,
-        val ipAddress: String? = null // IP from guest info
+        // IP from guest info
+        val ipAddress: String? = null
     )
 
     init {

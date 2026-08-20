@@ -12,8 +12,31 @@ import android.view.MenuItem
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
+import android.annotation.SuppressLint
+import android.content.ClipboardManager
+import android.content.res.ColorStateList
+import android.content.res.Configuration
+import android.graphics.Typeface
+import android.net.Uri
+import android.os.Build
+import android.text.InputType
+import android.text.TextUtils
+import android.view.ActionMode
+import android.view.Gravity
+import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
+import android.view.ViewConfiguration
+import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
+import android.widget.AutoCompleteTextView
+import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.ImageButton
+import android.widget.ImageView
+import android.widget.LinearLayout
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -21,6 +44,12 @@ import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.textfield.TextInputEditText
+import kotlin.math.abs
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flowOn
@@ -51,11 +80,49 @@ import io.github.tabssh.ui.tabs.shortTitle
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import io.github.tabssh.utils.showError
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.themes.definitions.BuiltInThemes
 import io.github.tabssh.terminal.search.ScrollbackSearchController
+import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.preference.PreferenceManager
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import io.github.tabssh.hypervisor.vnc.VncDirectConnector
+import io.github.tabssh.protocols.mosh.MoshHandoff
+import io.github.tabssh.protocols.mosh.MoshNativeClient
+import io.github.tabssh.protocols.mosh.TermuxMoshLauncher
+import io.github.tabssh.services.SSHConnectionService
+import io.github.tabssh.sftp.RemoteFileOpener
+import io.github.tabssh.sftp.SFTPManager
+import io.github.tabssh.ssh.HistoryFetcher
+import io.github.tabssh.ssh.connection.SSHConnectionErrorInfo
+import io.github.tabssh.ssh.connection.TelnetConnection
+import io.github.tabssh.storage.database.entities.Macro
+import io.github.tabssh.storage.database.entities.Snippet
+import io.github.tabssh.storage.database.entities.Workspace
+import io.github.tabssh.terminal.TermuxBridge
+import io.github.tabssh.terminal.gestures.GestureCommandMapper
+import io.github.tabssh.terminal.gestures.PrefixParser
+import io.github.tabssh.terminal.recording.SessionRecorder
+import io.github.tabssh.ui.dialogs.DialogFields
+import io.github.tabssh.ui.keyboard.KeyboardKey
+import io.github.tabssh.ui.keyboard.KeyboardLayoutManager
+import io.github.tabssh.ui.keyboard.MultiRowKeyboardView
+import io.github.tabssh.ui.tabs.VncTab
+import io.github.tabssh.ui.views.PaletteDialog
+import io.github.tabssh.ui.views.PerformanceOverlayView
+import io.github.tabssh.utils.ClipboardHelper
+import io.github.tabssh.utils.NotificationHelper
+import io.github.tabssh.utils.TerminalLinkClassifier
+import java.util.Collections
+import java.util.UUID
 
 /**
  * Main terminal activity with tabbed SSH sessions
@@ -64,7 +131,7 @@ import io.github.tabssh.terminal.search.ScrollbackSearchController
 // `cont.resume(value, onCancellation)` (used in promptForPassword) is
 // flagged @ExperimentalCoroutinesApi. Rather than tag every transitive
 // caller, opt-in once at the class level.
-@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class)
 class TabTerminalActivity : AppCompatActivity() {
     
     companion object {
@@ -104,7 +171,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 putExtra(EXTRA_CONNECTION_PROFILE_ID, profile.id)
                 // Also embed the full profile as JSON so unsaved (quick-connect) profiles work
                 putExtra(EXTRA_CONNECTION_PROFILE,
-                    kotlinx.serialization.json.Json.encodeToString(ConnectionProfile.serializer(), profile))
+                    Json.encodeToString(ConnectionProfile.serializer(), profile))
                 putExtra(EXTRA_AUTO_CONNECT, autoConnect)
                 if (forceNew) putExtra(EXTRA_FORCE_NEW, true)
             }
@@ -119,7 +186,7 @@ class TabTerminalActivity : AppCompatActivity() {
     // showRemoteFileDialog). Constructed here, before onCreate finishes, so
     // it can observe this activity's lifecycle for the post-edit resume
     // check.
-    private val remoteFileOpener = io.github.tabssh.sftp.RemoteFileOpener(this) {
+    private val remoteFileOpener = RemoteFileOpener(this) {
         (application as TabSSHApplication).preferencesManager.getFileOpenSizeLimitMb()
     }
 
@@ -148,7 +215,7 @@ class TabTerminalActivity : AppCompatActivity() {
      * In-memory only: a fresh activity (or app restart) gets a clean slate
      * so the user can retry mosh later (e.g. after switching networks).
      */
-    private val moshFallbackAttempted: MutableSet<String> = java.util.Collections.synchronizedSet(mutableSetOf())
+    private val moshFallbackAttempted: MutableSet<String> = Collections.synchronizedSet(mutableSetOf())
 
     // True when this onCreate invocation is a config-change recreation (e.g. rotation).
     // Used to suppress "Reattached" toasts that would fire on every rotate.
@@ -192,13 +259,13 @@ class TabTerminalActivity : AppCompatActivity() {
     private var isUpdatingAdapter = false
     
     // Performance overlay
-    private var performanceOverlay: io.github.tabssh.ui.views.PerformanceOverlayView? = null
+    private var performanceOverlay: PerformanceOverlayView? = null
     private var performanceUpdateJob: Job? = null
     
     // Custom keyboard
     private var customKeyboardVisible: Boolean = true
     /** Coroutine that mirrors the active tab's multiplexer StateFlow to the PREFIX key visual state. */
-    private var multiplexerObserverJob: kotlinx.coroutines.Job? = null
+    private var multiplexerObserverJob: Job? = null
     /**
      * True while the PREFIX key is "armed" — user tapped it once and is about
      * to tap the tmux/screen command key. A second tap on PRE cancels (disarms)
@@ -242,13 +309,15 @@ class TabTerminalActivity : AppCompatActivity() {
         setupTabManager()
         setupTabLayout()
         setupTerminalView()
-        setupTerminalGestures()  // NEW: Edge tap gestures for menu/toolbar
+        // NEW: Edge tap gestures for menu/toolbar
+        setupTerminalGestures()
         setupFunctionKeys()
         setupCustomKeyboard()
         setupPerformanceOverlay()
         setupBackPressHandler()
         setupMenuFab()
-        setupBottomActionBar()  // NEW: Bottom toolbar setup
+        // NEW: Bottom toolbar setup
+        setupBottomActionBar()
         setupSearchOverlay()
         applyTerminalUiPrefs()
         // Host-key verification dialogs are wired application-wide via
@@ -309,15 +378,15 @@ class TabTerminalActivity : AppCompatActivity() {
         }
 
         val terminalView = getActiveTerminalView()
-        val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
-            as android.view.inputmethod.InputMethodManager
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE)
+            as InputMethodManager
         // Snapshot the mutable terminalView ref so a concurrent assignment
         // (tab swap on a different thread) cannot null it between the IME
         // visibility check and hideSoftInputFromWindow().
         val tv = terminalView
         if (tv != null) {
-            val imeShown = androidx.core.view.ViewCompat.getRootWindowInsets(tv)
-                ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+            val imeShown = ViewCompat.getRootWindowInsets(tv)
+                ?.isVisible(WindowInsetsCompat.Type.ime()) == true
             if (imeShown) {
                 imm.hideSoftInputFromWindow(tv.windowToken, 0)
                 Logger.d("TabTerminalActivity", "BACK: hid IME, staying in terminal")
@@ -416,7 +485,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
             }
 
-            override fun onGraphicalTabClosed(tab: io.github.tabssh.ui.tabs.Tab, index: Int) {
+            override fun onGraphicalTabClosed(tab: Tab, index: Int) {
                 // Vnc/Console counterpart of onTabClosed: rebuild the pager
                 // and finish when the last tab is gone. Centralised here so a
                 // close initiated OUTSIDE this activity (the notification-shade
@@ -533,13 +602,13 @@ class TabTerminalActivity : AppCompatActivity() {
      * we delegate via `v.performClick()` inside the listener instead,
      * which is the framework-recommended fallback.
      */
-    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    @SuppressLint("ClickableViewAccessibility")
     private fun setupTerminalGestures() {
         // Get the root view
         val rootView = binding.root
         
         rootView.setOnTouchListener { v, event ->
-            if (event.action == android.view.MotionEvent.ACTION_DOWN) {
+            if (event.action == MotionEvent.ACTION_DOWN) {
                 val x = event.x
                 val y = event.y
                 val width = rootView.width
@@ -604,7 +673,7 @@ class TabTerminalActivity : AppCompatActivity() {
     }
     
     private fun showTerminalMenu() {
-        val bottomSheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
+        val bottomSheet = BottomSheetDialog(this)
         val view = layoutInflater.inflate(R.layout.bottom_sheet_terminal_menu, null)
 
         // Snapshot tab state at open time so the list is stable while the sheet is open.
@@ -612,62 +681,62 @@ class TabTerminalActivity : AppCompatActivity() {
         val activeIndex = tabManager.getActiveTabIndex()
 
         // Build the tab rows programmatically inside the RecyclerView.
-        val tabsRecyclerView = view.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.tabs_recycler_view)
-        tabsRecyclerView.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
+        val tabsRecyclerView = view.findViewById<RecyclerView>(R.id.tabs_recycler_view)
+        tabsRecyclerView.layoutManager = LinearLayoutManager(this)
         tabsRecyclerView.isNestedScrollingEnabled = false
 
-        val tabAdapter = object : androidx.recyclerview.widget.RecyclerView.Adapter<androidx.recyclerview.widget.RecyclerView.ViewHolder>() {
+        val tabAdapter = object : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
-            inner class TabRowHolder(val row: android.widget.LinearLayout) :
-                androidx.recyclerview.widget.RecyclerView.ViewHolder(row)
+            inner class TabRowHolder(val row: LinearLayout) :
+                RecyclerView.ViewHolder(row)
 
             override fun onCreateViewHolder(
-                parent: android.view.ViewGroup,
+                parent: ViewGroup,
                 viewType: Int
-            ): androidx.recyclerview.widget.RecyclerView.ViewHolder {
+            ): RecyclerView.ViewHolder {
                 val ctx = parent.context
                 val dp = ctx.resources.displayMetrics.density
 
                 // Outer row: horizontal LinearLayout, 48dp min height, 16dp horizontal padding.
-                val row = android.widget.LinearLayout(ctx).apply {
-                    orientation = android.widget.LinearLayout.HORIZONTAL
+                val row = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
                     minimumHeight = (48 * dp).toInt()
                     setPadding((16 * dp).toInt(), 0, (16 * dp).toInt(), 0)
-                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    gravity = Gravity.CENTER_VERTICAL
                     isClickable = true
                     isFocusable = true
                     val rippleAttrs = intArrayOf(android.R.attr.selectableItemBackground)
                     val typedArray = ctx.obtainStyledAttributes(rippleAttrs)
                     background = typedArray.getDrawable(0)
                     typedArray.recycle()
-                    layoutParams = android.view.ViewGroup.LayoutParams(
-                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                        android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
                     )
                 }
 
                 // State dot icon: 20×20dp.
-                val stateIcon = android.widget.ImageView(ctx).apply {
-                    id = android.view.View.generateViewId()
-                    layoutParams = android.widget.LinearLayout.LayoutParams(
+                val stateIcon = ImageView(ctx).apply {
+                    id = View.generateViewId()
+                    layoutParams = LinearLayout.LayoutParams(
                         (20 * dp).toInt(),
                         (20 * dp).toInt()
                     ).also { it.marginEnd = (12 * dp).toInt() }
-                    scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
-                    importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
                 }
 
                 // Tab name label: takes all remaining horizontal space.
-                val nameLabel = android.widget.TextView(ctx).apply {
-                    id = android.view.View.generateViewId()
-                    layoutParams = android.widget.LinearLayout.LayoutParams(
+                val nameLabel = TextView(ctx).apply {
+                    id = View.generateViewId()
+                    layoutParams = LinearLayout.LayoutParams(
                         0,
-                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
                         1f
                     )
                     textSize = 16f
                     maxLines = 1
-                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    ellipsize = TextUtils.TruncateAt.END
                     val textColorAttrs = intArrayOf(android.R.attr.textColorPrimary)
                     val ta = ctx.obtainStyledAttributes(textColorAttrs)
                     setTextColor(ta.getColorStateList(0))
@@ -675,13 +744,13 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
 
                 // Right-side status icon: 16×16dp, visible only to distinguish active vs navigable.
-                val rightIcon = android.widget.ImageView(ctx).apply {
-                    id = android.view.View.generateViewId()
-                    layoutParams = android.widget.LinearLayout.LayoutParams(
+                val rightIcon = ImageView(ctx).apply {
+                    id = View.generateViewId()
+                    layoutParams = LinearLayout.LayoutParams(
                         (16 * dp).toInt(),
                         (16 * dp).toInt()
                     ).also { it.marginStart = (8 * dp).toInt() }
-                    scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                    scaleType = ImageView.ScaleType.FIT_CENTER
                 }
 
                 row.addView(stateIcon)
@@ -694,16 +763,16 @@ class TabTerminalActivity : AppCompatActivity() {
             }
 
             override fun onBindViewHolder(
-                holder: androidx.recyclerview.widget.RecyclerView.ViewHolder,
+                holder: RecyclerView.ViewHolder,
                 position: Int
             ) {
                 val tab = tabs[position]
                 val rowHolder = holder as TabRowHolder
                 val ctx = rowHolder.row.context
                 val (stateIcon, nameLabel, rightIcon) = rowHolder.row.tag as Triple<*, *, *>
-                val stateView = stateIcon as android.widget.ImageView
-                val nameView = nameLabel as android.widget.TextView
-                val rightView = rightIcon as android.widget.ImageView
+                val stateView = stateIcon as ImageView
+                val nameView = nameLabel as TextView
+                val rightView = rightIcon as ImageView
                 val isActive = position == activeIndex
 
                 // Connection-state dot with semantic tint.
@@ -711,29 +780,29 @@ class TabTerminalActivity : AppCompatActivity() {
                 when (connectionState) {
                     ConnectionState.CONNECTED -> {
                         stateView.setImageResource(R.drawable.ic_connected)
-                        stateView.imageTintList = android.content.res.ColorStateList.valueOf(
-                            androidx.core.content.ContextCompat.getColor(ctx, R.color.connected)
+                        stateView.imageTintList = ColorStateList.valueOf(
+                            ContextCompat.getColor(ctx, R.color.connected)
                         )
                         stateView.contentDescription = "Connected"
                     }
                     ConnectionState.CONNECTING -> {
                         stateView.setImageResource(R.drawable.ic_connecting)
-                        stateView.imageTintList = android.content.res.ColorStateList.valueOf(
-                            androidx.core.content.ContextCompat.getColor(ctx, R.color.connecting)
+                        stateView.imageTintList = ColorStateList.valueOf(
+                            ContextCompat.getColor(ctx, R.color.connecting)
                         )
                         stateView.contentDescription = "Connecting"
                     }
                     ConnectionState.AUTHENTICATING -> {
                         stateView.setImageResource(R.drawable.ic_connecting)
-                        stateView.imageTintList = android.content.res.ColorStateList.valueOf(
-                            androidx.core.content.ContextCompat.getColor(ctx, R.color.connecting)
+                        stateView.imageTintList = ColorStateList.valueOf(
+                            ContextCompat.getColor(ctx, R.color.connecting)
                         )
                         stateView.contentDescription = "Authenticating"
                     }
                     ConnectionState.ERROR -> {
                         stateView.setImageResource(R.drawable.ic_error)
-                        stateView.imageTintList = android.content.res.ColorStateList.valueOf(
-                            androidx.core.content.ContextCompat.getColor(ctx, R.color.connection_error)
+                        stateView.imageTintList = ColorStateList.valueOf(
+                            ContextCompat.getColor(ctx, R.color.connection_error)
                         )
                         stateView.contentDescription = "Connection error"
                     }
@@ -751,7 +820,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 nameView.text = tab.profile.getDisplayName()
                 nameView.setTypeface(
                     nameView.typeface,
-                    if (isActive) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL
+                    if (isActive) Typeface.BOLD else Typeface.NORMAL
                 )
                 // Content description for the whole row assists TalkBack.
                 val stateDesc = stateView.contentDescription
@@ -761,10 +830,10 @@ class TabTerminalActivity : AppCompatActivity() {
                 // Right icon: filled checkmark for active row, chevron for others.
                 if (isActive) {
                     rightView.setImageResource(R.drawable.ic_connected)
-                    rightView.imageTintList = android.content.res.ColorStateList.valueOf(
-                        androidx.core.content.ContextCompat.getColor(ctx, R.color.connected)
+                    rightView.imageTintList = ColorStateList.valueOf(
+                        ContextCompat.getColor(ctx, R.color.connected)
                     )
-                    rightView.visibility = android.view.View.VISIBLE
+                    rightView.visibility = View.VISIBLE
                     rightView.contentDescription = "Active"
                 } else {
                     rightView.setImageResource(R.drawable.ic_forward)
@@ -772,7 +841,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     val ta = ctx.obtainStyledAttributes(onSurfaceVariantAttrs)
                     rightView.imageTintList = ta.getColorStateList(0)
                     ta.recycle()
-                    rightView.visibility = android.view.View.VISIBLE
+                    rightView.visibility = View.VISIBLE
                     rightView.contentDescription = null
                 }
 
@@ -798,39 +867,39 @@ class TabTerminalActivity : AppCompatActivity() {
         tabsRecyclerView.adapter = tabAdapter
 
         // Primary action — new tab.
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_new_tab)
+        view.findViewById<MaterialButton>(R.id.btn_new_tab)
             ?.setOnClickListener {
                 bottomSheet.dismiss()
                 showConnectionSelector()
             }
 
         // Terminal section.
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_toggle_system_keyboard)
+        view.findViewById<MaterialButton>(R.id.btn_toggle_system_keyboard)
             ?.setOnClickListener {
                 bottomSheet.dismiss()
                 toggleKeyboard()
             }
 
-        val keyBarBtn = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_toggle_key_bar)
+        val keyBarBtn = view.findViewById<MaterialButton>(R.id.btn_toggle_key_bar)
         keyBarBtn?.text = if (customKeyboardVisible) "Hide Key Bar" else "Show Key Bar"
         keyBarBtn?.setOnClickListener {
             bottomSheet.dismiss()
             if (customKeyboardVisible) hideCustomKeyboardBar() else showCustomKeyboardBar()
         }
 
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_find_in_scrollback)
+        view.findViewById<MaterialButton>(R.id.btn_find_in_scrollback)
             ?.setOnClickListener {
                 bottomSheet.dismiss()
                 showSearchOverlay()
             }
 
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_snippets)
+        view.findViewById<MaterialButton>(R.id.btn_snippets)
             ?.setOnClickListener {
                 bottomSheet.dismiss()
                 showSnippetsDialog()
             }
 
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_toggle_recording)
+        view.findViewById<MaterialButton>(R.id.btn_toggle_recording)
             ?.apply {
                 text = if (tabManager.getActiveTab()?.sessionRecorder?.isRecording() == true) {
                     "Stop Recording"
@@ -844,38 +913,38 @@ class TabTerminalActivity : AppCompatActivity() {
             }
 
         // Session section.
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_cluster_broadcast)
+        view.findViewById<MaterialButton>(R.id.btn_cluster_broadcast)
             ?.setOnClickListener {
                 bottomSheet.dismiss()
                 showClusterBroadcastDialog()
             }
 
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_port_forwarding)
+        view.findViewById<MaterialButton>(R.id.btn_port_forwarding)
             ?.setOnClickListener {
                 bottomSheet.dismiss()
                 openPortForwarding()
             }
 
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_share_session)
+        view.findViewById<MaterialButton>(R.id.btn_share_session)
             ?.setOnClickListener {
                 bottomSheet.dismiss()
                 shareSession()
             }
 
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_close_tab)
+        view.findViewById<MaterialButton>(R.id.btn_close_tab)
             ?.setOnClickListener {
                 bottomSheet.dismiss()
                 closeCurrentTab()
             }
 
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_disconnect_all)
+        view.findViewById<MaterialButton>(R.id.btn_disconnect_all)
             ?.setOnClickListener {
                 bottomSheet.dismiss()
                 disconnectAllTabs()
             }
 
         // Settings.
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_settings)
+        view.findViewById<MaterialButton>(R.id.btn_settings)
             ?.setOnClickListener {
                 bottomSheet.dismiss()
                 startActivity(Intent(this, SettingsActivity::class.java))
@@ -917,7 +986,7 @@ class TabTerminalActivity : AppCompatActivity() {
     // ACTION_DOWN, the listener stopped receiving events entirely (including
     // the ACTION_UP that was supposed to reset the flag) and tab swiping
     // stayed permanently dead after the first mid-screen touch.
-    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         applyEdgeSwipeGate(ev)
         return super.dispatchTouchEvent(ev)
     }
@@ -927,11 +996,11 @@ class TabTerminalActivity : AppCompatActivity() {
     // of the left/right edge strip (strip width = tabSwipeEdgePx from the
     // tab_swipe_edge_dp preference; 0 = swipe from anywhere) — then toggle
     // ViewPager2.isUserInputEnabled accordingly and reset it on UP/CANCEL.
-    private fun applyEdgeSwipeGate(ev: android.view.MotionEvent) {
+    private fun applyEdgeSwipeGate(ev: MotionEvent) {
         val pager = viewPager ?: return
         if (!swipeEnabled || pager.visibility != View.VISIBLE) return
         when (ev.actionMasked) {
-            android.view.MotionEvent.ACTION_DOWN -> {
+            MotionEvent.ACTION_DOWN -> {
                 // Activity-dispatch coordinates are window-relative; convert
                 // to pager-local via the pager's on-screen position so the
                 // edge math is exact regardless of toolbar/tab-bar height.
@@ -986,7 +1055,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 edgeGateFeedbackFiredForGesture = false
                 Logger.d("TabTerminalActivity", "edgeSwipeGate ACTION_DOWN — swipeSuspendedForSelection=$swipeSuspendedForSelection, isUserInputEnabled=$allowed")
             }
-            android.view.MotionEvent.ACTION_MOVE -> {
+            MotionEvent.ACTION_MOVE -> {
                 // Fire the reject-feedback cue at most once per gesture,
                 // and only once the touch has actually become a real
                 // horizontal drag (not a tap or a vertical scroll) —
@@ -994,8 +1063,8 @@ class TabTerminalActivity : AppCompatActivity() {
                 if (edgeGateRejectedForGesture && !edgeGateFeedbackFiredForGesture) {
                     val dx = ev.rawX - edgeGateDownX
                     val dy = ev.rawY - edgeGateDownY
-                    val touchSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop
-                    if (kotlin.math.abs(dx) > touchSlop && kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
+                    val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+                    if (abs(dx) > touchSlop && abs(dx) > abs(dy)) {
                         edgeGateFeedbackFiredForGesture = true
                         val loc = IntArray(2)
                         pager.getLocationOnScreen(loc)
@@ -1003,8 +1072,8 @@ class TabTerminalActivity : AppCompatActivity() {
                     }
                 }
             }
-            android.view.MotionEvent.ACTION_UP,
-            android.view.MotionEvent.ACTION_CANCEL -> {
+            MotionEvent.ACTION_UP,
+            MotionEvent.ACTION_CANCEL -> {
                 // Reset to enabled so programmatic paging and the next
                 // gesture's own DOWN check start from a known state —
                 // unless a text selection is actively suspending swipe.
@@ -1026,8 +1095,8 @@ class TabTerminalActivity : AppCompatActivity() {
     // API 30+ and this app's minSdk is 21.
     private fun showSwipeEdgeRejectionFeedback(downX: Float, containerWidth: Int) {
         binding.viewPager.performHapticFeedback(
-            android.view.HapticFeedbackConstants.CLOCK_TICK,
-            android.view.HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING
+            HapticFeedbackConstants.CLOCK_TICK,
+            HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING
         )
         val nearStart = downX <= containerWidth - downX
         val glow = if (nearStart) binding.swipeEdgeGlowStart else binding.swipeEdgeGlowEnd
@@ -1139,10 +1208,10 @@ class TabTerminalActivity : AppCompatActivity() {
                 if (gesturesEnabled) {
                     val multiplexerTypeStr = app.preferencesManager.getString("gesture_multiplexer_type", "tmux")
                     val multiplexerType = when (multiplexerTypeStr) {
-                        "tmux" -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.TMUX
-                        "screen" -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.SCREEN
-                        "zellij" -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.ZELLIJ
-                        else -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.TMUX
+                        "tmux" -> GestureCommandMapper.MultiplexerType.TMUX
+                        "screen" -> GestureCommandMapper.MultiplexerType.SCREEN
+                        "zellij" -> GestureCommandMapper.MultiplexerType.ZELLIJ
+                        else -> GestureCommandMapper.MultiplexerType.TMUX
                     }
                     
                     val customPrefix = app.preferencesManager.getMultiplexerPrefix(multiplexerTypeStr)
@@ -1153,10 +1222,10 @@ class TabTerminalActivity : AppCompatActivity() {
                         // Send command to active terminal
                         tabManager.getActiveTab()?.let { tab ->
                             tab.termuxBridge.sendText(String(command, Charsets.UTF_8))
-                            android.widget.Toast.makeText(
+                            Toast.makeText(
                                 this@TabTerminalActivity,
                                 "Gesture command sent",
-                                android.widget.Toast.LENGTH_SHORT
+                                Toast.LENGTH_SHORT
                             ).show()
                         }
                     }
@@ -1185,7 +1254,7 @@ class TabTerminalActivity : AppCompatActivity() {
         // foreground/background pair is swapped. Cheap, predictable,
         // honest implementation that doesn't pretend to do AAA contrast
         // tuning.
-        val prefs = androidx.preference.PreferenceManager
+        val prefs = PreferenceManager
             .getDefaultSharedPreferences(this)
         if (prefs.getBoolean("accessibility_high_contrast", false)) {
             theme = theme.copy(
@@ -1210,18 +1279,18 @@ class TabTerminalActivity : AppCompatActivity() {
      */
     private fun showUrlDialog(url: String) {
         if (isFinishing || isDestroyed) return
-        when (val action = io.github.tabssh.utils.TerminalLinkClassifier.classify(url)) {
-            is io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Ssh ->
+        when (val action = TerminalLinkClassifier.classify(url)) {
+            is TerminalLinkClassifier.LinkAction.Ssh ->
                 showSshLinkDialog(action)
-            is io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Sftp ->
+            is TerminalLinkClassifier.LinkAction.Sftp ->
                 showSftpLinkDialog(action)
-            is io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.RemoteFile ->
+            is TerminalLinkClassifier.LinkAction.RemoteFile ->
                 showRemoteFileDialog(action)
-            is io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.ExternalScheme ->
+            is TerminalLinkClassifier.LinkAction.ExternalScheme ->
                 showExternalSchemeDialog(action)
-            is io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Browser ->
+            is TerminalLinkClassifier.LinkAction.Browser ->
                 showBrowserLinkDialog(action.url)
-            is io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.NotALink ->
+            is TerminalLinkClassifier.LinkAction.NotALink ->
                 // Non-allowlisted remote-supplied scheme (intent:, javascript:,
                 // content:, …) — reject outright: no dialog, no Intent. Redact
                 // before logging; the URL may carry userinfo.
@@ -1233,7 +1302,7 @@ class TabTerminalActivity : AppCompatActivity() {
      * http(s)/www. links — unchanged flow: opens in the device's browser.
      */
     private fun showBrowserLinkDialog(url: String) {
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_open_url_title)
             .setMessage(getString(R.string.terminal_open_url_message, url))
             .setPositiveButton(R.string.docker_option_open) { _, _ ->
@@ -1251,10 +1320,10 @@ class TabTerminalActivity : AppCompatActivity() {
      * Connect starts a new tab against a transient (unsaved) ConnectionProfile,
      * the same "quick connect" path MainActivity uses for ad-hoc connections.
      */
-    private fun showSshLinkDialog(action: io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Ssh) {
+    private fun showSshLinkDialog(action: TerminalLinkClassifier.LinkAction.Ssh) {
         val display = (action.username?.let { "$it@" } ?: "") + action.host +
             if (action.port != 22) ":${action.port}" else ""
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_ssh_link_title)
             .setMessage(getString(R.string.terminal_ssh_link_message, display))
             .setPositiveButton(R.string.connect_button) { _, _ ->
@@ -1273,12 +1342,12 @@ class TabTerminalActivity : AppCompatActivity() {
      * No stored password/key exists for it, so KEYBOARD_INTERACTIVE auth
      * makes connectToProfile() prompt for a password like any quick connect.
      */
-    private fun connectSshLink(action: io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Ssh) {
+    private fun connectSshLink(action: TerminalLinkClassifier.LinkAction.Ssh) {
         val username = action.username?.takeIf { it.isNotBlank() }
             ?: app.preferencesManager.getDefaultUsername().trim().takeIf { it.isNotBlank() }
             ?: "root"
-        val profile = io.github.tabssh.storage.database.entities.ConnectionProfile(
-            id = java.util.UUID.randomUUID().toString(),
+        val profile = ConnectionProfile(
+            id = UUID.randomUUID().toString(),
             name = "$username@${action.host}",
             host = action.host,
             port = action.port,
@@ -1297,10 +1366,10 @@ class TabTerminalActivity : AppCompatActivity() {
      * as ssh:// links, but the new session opens straight into the SFTP
      * browser at the link's path instead of landing on the terminal.
      */
-    private fun showSftpLinkDialog(action: io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Sftp) {
+    private fun showSftpLinkDialog(action: TerminalLinkClassifier.LinkAction.Sftp) {
         val display = (action.username?.let { "$it@" } ?: "") + action.host +
             if (action.port != 22) ":${action.port}" else ""
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_sftp_link_title)
             .setMessage(getString(R.string.terminal_sftp_link_message, display, action.path))
             .setPositiveButton(R.string.connect_button) { _, _ ->
@@ -1319,12 +1388,12 @@ class TabTerminalActivity : AppCompatActivity() {
      * EXTRA_OPEN_SFTP_PATH so handleIntent() opens SFTPActivity once the
      * connection comes up instead of just landing on the terminal.
      */
-    private fun connectSftpLink(action: io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.Sftp) {
+    private fun connectSftpLink(action: TerminalLinkClassifier.LinkAction.Sftp) {
         val username = action.username?.takeIf { it.isNotBlank() }
             ?: app.preferencesManager.getDefaultUsername().trim().takeIf { it.isNotBlank() }
             ?: "root"
-        val profile = io.github.tabssh.storage.database.entities.ConnectionProfile(
-            id = java.util.UUID.randomUUID().toString(),
+        val profile = ConnectionProfile(
+            id = UUID.randomUUID().toString(),
             name = "$username@${action.host}",
             host = action.host,
             port = action.port,
@@ -1346,7 +1415,7 @@ class TabTerminalActivity : AppCompatActivity() {
      * "Open in SFTP" only appear when the active tab has a live connection
      * to fetch the file over.
      */
-    private fun showRemoteFileDialog(action: io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.RemoteFile) {
+    private fun showRemoteFileDialog(action: TerminalLinkClassifier.LinkAction.RemoteFile) {
         val activeTab = tabManager.getActiveTab()
         val canBrowse = activeTab != null && activeTab.isConnected()
         val items = if (canBrowse) {
@@ -1354,7 +1423,7 @@ class TabTerminalActivity : AppCompatActivity() {
         } else {
             arrayOf("Copy path")
         }
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_remote_file_title)
             .setMessage(getString(R.string.terminal_remote_file_message, action.path))
             .setItems(items) { _, which ->
@@ -1379,14 +1448,14 @@ class TabTerminalActivity : AppCompatActivity() {
     private fun openRemoteFileExternally(tab: SSHTab, path: String) {
         val ssh = app.sshSessionManager.getConnection(tab.profile.id)
         if (ssh == null) {
-            android.widget.Toast.makeText(this, "Connection not active", android.widget.Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Connection not active", Toast.LENGTH_SHORT).show()
             return
         }
         lifecycleScope.launch {
-            val sftp = io.github.tabssh.sftp.SFTPManager(ssh)
+            val sftp = SFTPManager(ssh)
             val connected = withContext(Dispatchers.IO) { sftp.connect() }
             if (!connected) {
-                android.widget.Toast.makeText(this@TabTerminalActivity, "SFTP failed to open", android.widget.Toast.LENGTH_LONG).show()
+                Toast.makeText(this@TabTerminalActivity, "SFTP failed to open", Toast.LENGTH_LONG).show()
                 return@launch
             }
             remoteFileOpener.open(sftp, path, path.substringAfterLast('/'))
@@ -1408,9 +1477,9 @@ class TabTerminalActivity : AppCompatActivity() {
      * as the sftp:// link handoff in handleIntent(), use this).
      */
     private fun openSftpAt(tab: SSHTab, dirPath: String) {
-        val intent = Intent(this, io.github.tabssh.ui.activities.SFTPActivity::class.java).apply {
-            putExtra(io.github.tabssh.ui.activities.SFTPActivity.EXTRA_CONNECTION_ID, tab.profile.id)
-            putExtra(io.github.tabssh.ui.activities.SFTPActivity.EXTRA_INITIAL_REMOTE_PATH, dirPath)
+        val intent = Intent(this, SFTPActivity::class.java).apply {
+            putExtra(SFTPActivity.EXTRA_CONNECTION_ID, tab.profile.id)
+            putExtra(SFTPActivity.EXTRA_INITIAL_REMOTE_PATH, dirPath)
         }
         startActivity(intent)
         Logger.d("TabTerminalActivity", "Opening SFTP at path: $dirPath")
@@ -1422,10 +1491,10 @@ class TabTerminalActivity : AppCompatActivity() {
      * visibility requires the matching <queries> entry in AndroidManifest.xml);
      * otherwise the dialog offers only Copy.
      */
-    private fun showExternalSchemeDialog(action: io.github.tabssh.utils.TerminalLinkClassifier.LinkAction.ExternalScheme) {
+    private fun showExternalSchemeDialog(action: TerminalLinkClassifier.LinkAction.ExternalScheme) {
         val url = action.url
         val hasHandler = try {
-            Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)).resolveActivity(packageManager) != null
+            Intent(Intent.ACTION_VIEW, Uri.parse(url)).resolveActivity(packageManager) != null
         } catch (e: Exception) {
             false
         }
@@ -1434,7 +1503,7 @@ class TabTerminalActivity : AppCompatActivity() {
         } else {
             getString(R.string.terminal_open_link_no_handler_message, url, action.scheme)
         }
-        val builder = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        val builder = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_open_link_title)
             .setMessage(message)
             .setNeutralButton(R.string.copy) { _, _ ->
@@ -1454,7 +1523,7 @@ class TabTerminalActivity : AppCompatActivity() {
      */
     private fun openUrl(url: String) {
         try {
-            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
             startActivity(intent)
             Logger.d("TabTerminalActivity", "Opening URL: $url")
         } catch (e: Exception) {
@@ -1469,7 +1538,7 @@ class TabTerminalActivity : AppCompatActivity() {
     private fun copyToClipboard(label: String, text: String) {
         // Terminal links aren't usually secret; mark non-sensitive so they
         // don't get hidden behind the system clipboard preview shield.
-        io.github.tabssh.utils.ClipboardHelper.copy(this, label, text, sensitive = false)
+        ClipboardHelper.copy(this, label, text, sensitive = false)
         Toast.makeText(this, "$label copied to clipboard", Toast.LENGTH_SHORT).show()
         // Log label + length only — the copied text may be a path or link
         // that reveals private infrastructure details, never the contents.
@@ -1480,8 +1549,8 @@ class TabTerminalActivity : AppCompatActivity() {
      * Show comprehensive SSH connection error dialog
      */
     private fun showSSHConnectionErrorDialog(
-        profile: io.github.tabssh.storage.database.entities.ConnectionProfile,
-        errorInfo: io.github.tabssh.ssh.connection.SSHConnectionErrorInfo
+        profile: ConnectionProfile,
+        errorInfo: SSHConnectionErrorInfo
     ) {
         // Bail if the activity is already gone — the connect coroutine can
         // resume after onDestroy/finish (back press during connect, or an
@@ -1528,14 +1597,14 @@ class TabTerminalActivity : AppCompatActivity() {
             }
         }
         
-        val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.terminal_ssh_failed_title, errorInfo.errorType))
             .setView(dialogView)
             .setOnCancelListener { finish() }
             .create()
         
         // Copy Error button
-        dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.button_copy_error)
+        dialogView.findViewById<MaterialButton>(R.id.button_copy_error)
             ?.setOnClickListener {
                 val fullError = buildString {
                     appendLine("=== SSH Connection Error ===")
@@ -1559,23 +1628,24 @@ class TabTerminalActivity : AppCompatActivity() {
                     }
                 }
                 
-                io.github.tabssh.utils.ClipboardHelper.copy(this, "SSH Error", fullError, sensitive = false)
+                ClipboardHelper.copy(this, "SSH Error", fullError, sensitive = false)
                 Toast.makeText(this, "Error details copied to clipboard", Toast.LENGTH_SHORT).show()
             }
         
         // Edit Connection button
-        dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.button_edit_connection)
+        dialogView.findViewById<MaterialButton>(R.id.button_edit_connection)
             ?.setOnClickListener {
                 dialog.dismiss()
-                val intent = Intent(this, io.github.tabssh.ui.activities.ConnectionEditActivity::class.java).apply {
-                    putExtra(io.github.tabssh.ui.activities.ConnectionEditActivity.EXTRA_CONNECTION_ID, profile.id)
+                val intent = Intent(this, ConnectionEditActivity::class.java).apply {
+                    putExtra(ConnectionEditActivity.EXTRA_CONNECTION_ID, profile.id)
                 }
                 startActivity(intent)
-                finish() // Close TabTerminalActivity
+                // Close TabTerminalActivity
+                finish()
             }
-        
+
         // Retry button
-        dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.button_retry)
+        dialogView.findViewById<MaterialButton>(R.id.button_retry)
             ?.setOnClickListener {
                 dialog.dismiss()
                 lifecycleScope.launch {
@@ -1585,10 +1655,11 @@ class TabTerminalActivity : AppCompatActivity() {
             }
         
         // Close button
-        dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.button_close)
+        dialogView.findViewById<MaterialButton>(R.id.button_close)
             ?.setOnClickListener {
                 dialog.dismiss()
-                finish() // Close TabTerminalActivity
+                // Close TabTerminalActivity
+                finish()
             }
         
         dialog.show()
@@ -1608,15 +1679,15 @@ class TabTerminalActivity : AppCompatActivity() {
         }
         // setMessage and setView both occupy the dialog body — using both silently
         // drops the message. Count is in the title; hint on the field adds context.
-        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
-        val input = io.github.tabssh.ui.dialogs.DialogFields.addText(
+        val form = DialogFields.form(this)
+        val input = DialogFields.addText(
             form,
             hint = getString(R.string.cluster_broadcast_command_hint, tabs.size),
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS,
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS,
             monospace = true
         )
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.terminal_cluster_broadcast_title, tabs.size))
             .setView(form.root)
             .setNegativeButton(R.string.cancel, null)
@@ -1630,7 +1701,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 // the host names so a slip ("did I really pick prod?") is
                 // catchable before the keys hit the wire.
                 val hostList = tabs.joinToString("\n") { "• ${it.profile.getDisplayName()}" }
-                com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                MaterialAlertDialogBuilder(this)
                     .setTitle(R.string.terminal_confirm_broadcast_title)
                     .setMessage(
                         "Send to ${tabs.size} session(s)?\n\n" +
@@ -1705,7 +1776,7 @@ class TabTerminalActivity : AppCompatActivity() {
             Toast.makeText(this, "Nothing on screen to copy", Toast.LENGTH_SHORT).show()
             return
         }
-        io.github.tabssh.utils.ClipboardHelper.copy(this, "Terminal", visible, sensitive = false)
+        ClipboardHelper.copy(this, "Terminal", visible, sensitive = false)
         Toast.makeText(this, "Terminal screen copied", Toast.LENGTH_SHORT).show()
     }
 
@@ -1718,7 +1789,7 @@ class TabTerminalActivity : AppCompatActivity() {
      * the bar from any code path (tap-outside, tab switch, activity
      * teardown).
      */
-    private var selectionActionMode: android.view.ActionMode? = null
+    private var selectionActionMode: ActionMode? = null
 
     private fun beginSelection(x: Float, y: Float) {
         val view = getActiveTerminalView() ?: run {
@@ -1742,8 +1813,8 @@ class TabTerminalActivity : AppCompatActivity() {
         // (e.g. switching tabs while a bar is still up).
         selectionActionMode?.finish()
 
-        val callback = object : android.view.ActionMode.Callback {
-            override fun onCreateActionMode(mode: android.view.ActionMode, menu: Menu): Boolean {
+        val callback = object : ActionMode.Callback {
+            override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
                 mode.title = null
                 menu.add(0, 1, 0, "Copy")
                     .setIcon(android.R.drawable.ic_menu_set_as)
@@ -1757,15 +1828,15 @@ class TabTerminalActivity : AppCompatActivity() {
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
                 return true
             }
-            override fun onPrepareActionMode(mode: android.view.ActionMode, menu: Menu) = false
-            override fun onActionItemClicked(mode: android.view.ActionMode, item: MenuItem): Boolean {
+            override fun onPrepareActionMode(mode: ActionMode, menu: Menu) = false
+            override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
                 when (item.itemId) {
                     1 -> {
                         val text = view.getSelectedText()
                         if (text.isNullOrEmpty()) {
                             Toast.makeText(this@TabTerminalActivity, "Nothing selected", Toast.LENGTH_SHORT).show()
                         } else {
-                            io.github.tabssh.utils.ClipboardHelper.copy(this@TabTerminalActivity, "Terminal selection", text, sensitive = false)
+                            ClipboardHelper.copy(this@TabTerminalActivity, "Terminal selection", text, sensitive = false)
                             Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
                         }
                         mode.finish()
@@ -1783,7 +1854,7 @@ class TabTerminalActivity : AppCompatActivity() {
                         // causing a silent no-op. `view` is captured in this closure
                         // and is always the correct TerminalView to paste into.
                         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE)
-                            as android.content.ClipboardManager
+                            as ClipboardManager
                         val text = clipboard.primaryClip?.getItemAt(0)
                             ?.coerceToText(this@TabTerminalActivity)?.toString()
                         if (text.isNullOrEmpty()) {
@@ -1801,7 +1872,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
                 return false
             }
-            override fun onDestroyActionMode(mode: android.view.ActionMode) {
+            override fun onDestroyActionMode(mode: ActionMode) {
                 // Null out BEFORE exitSelectionMode() — it fires
                 // onSelectionEnded, which calls selectionActionMode?.finish().
                 // Nulling first makes that a no-op instead of a re-entrant
@@ -1814,8 +1885,8 @@ class TabTerminalActivity : AppCompatActivity() {
                 Logger.d("TabTerminalActivity", "onDestroyActionMode — swipeSuspendedForSelection=false, isUserInputEnabled=true")
             }
         }
-        selectionActionMode = if (android.os.Build.VERSION.SDK_INT >= 23) {
-            view.startActionMode(callback, android.view.ActionMode.TYPE_FLOATING)
+        selectionActionMode = if (Build.VERSION.SDK_INT >= 23) {
+            view.startActionMode(callback, ActionMode.TYPE_FLOATING)
         } else {
             view.startActionMode(callback)
         }
@@ -1852,19 +1923,19 @@ class TabTerminalActivity : AppCompatActivity() {
         // older versions. Android 16 (API 36) requires the modern API.
         if (prefs.getBoolean("ui_fullscreen_mode", false)) {
             try {
-                val controller = androidx.core.view.WindowCompat
+                val controller = WindowCompat
                     .getInsetsController(window, window.decorView)
-                controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat
+                controller.systemBarsBehavior = WindowInsetsControllerCompat
                     .BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                controller.hide(WindowInsetsCompat.Type.systemBars())
             } catch (e: Exception) {
                 Logger.w("TabTerminalActivity", "Fullscreen apply failed: ${e.message}")
             }
         } else {
             try {
-                val controller = androidx.core.view.WindowCompat
+                val controller = WindowCompat
                     .getInsetsController(window, window.decorView)
-                controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                controller.show(WindowInsetsCompat.Type.systemBars())
             } catch (e: Exception) {
                 // best effort
             }
@@ -1920,15 +1991,15 @@ class TabTerminalActivity : AppCompatActivity() {
         }
     }
 
-    private fun applyLargeTouchTargets(view: android.view.View, minPx: Int) {
+    private fun applyLargeTouchTargets(view: View, minPx: Int) {
         // Buttons / image buttons / FABs → bump min height + width.
-        if (view is android.widget.Button ||
-            view is android.widget.ImageButton ||
-            view is com.google.android.material.floatingactionbutton.FloatingActionButton) {
+        if (view is Button ||
+            view is ImageButton ||
+            view is FloatingActionButton) {
             view.minimumHeight = minPx
             view.minimumWidth = minPx
         }
-        if (view is android.view.ViewGroup) {
+        if (view is ViewGroup) {
             for (i in 0 until view.childCount) {
                 applyLargeTouchTargets(view.getChildAt(i), minPx)
             }
@@ -1966,7 +2037,7 @@ class TabTerminalActivity : AppCompatActivity() {
         
         if (showOverlay) {
             // Create overlay view
-            performanceOverlay = io.github.tabssh.ui.views.PerformanceOverlayView(this)
+            performanceOverlay = PerformanceOverlayView(this)
             
             // Add to root view
             binding.root.addView(performanceOverlay)
@@ -2053,7 +2124,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 // If not in DB, try embedded JSON (for quick-connect)
                 if (profile == null && connectionProfileJson != null) {
                     try {
-                        profile = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                        profile = Json { ignoreUnknownKeys = true }
                             .decodeFromString(ConnectionProfile.serializer(), connectionProfileJson)
                         Logger.d("TabTerminalActivity", "Using embedded profile (quick-connect)")
                     } catch (e: Exception) {
@@ -2145,10 +2216,10 @@ class TabTerminalActivity : AppCompatActivity() {
                                 if (idx >= 0) switchToTab(idx)
                             }
                             if (!isRecreated) {
-                                android.widget.Toast.makeText(
+                                Toast.makeText(
                                     this,
                                     "Reattached to ${profile.name}",
-                                    android.widget.Toast.LENGTH_SHORT
+                                    Toast.LENGTH_SHORT
                                 ).show()
                             }
                         }
@@ -2156,12 +2227,12 @@ class TabTerminalActivity : AppCompatActivity() {
                     }
                     // Multiple live tabs for the same profile — ask the user which one to surface.
                     // "Open new" dismisses the dialog and falls through to create another session.
-                    val chosen = kotlinx.coroutines.suspendCancellableCoroutine<SSHTab?> { cont ->
+                    val chosen = suspendCancellableCoroutine<SSHTab?> { cont ->
                         runOnUiThread {
                             val labels = liveTabs.mapIndexed { i, tab ->
                                 "Session ${i + 1}: ${tab.getShortTitle()}"
                             }.toTypedArray()
-                            com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                            MaterialAlertDialogBuilder(this)
                                 .setTitle(getString(R.string.terminal_multiple_sessions_title, profile.name))
                                 .setItems(labels) { _, which -> cont.resumeWith(Result.success(liveTabs[which])) }
                                 .setNegativeButton(R.string.terminal_open_new) { _, _ -> cont.resumeWith(Result.success(null)) }
@@ -2188,12 +2259,12 @@ class TabTerminalActivity : AppCompatActivity() {
 
             Logger.i("TabTerminalActivity", "🚀 Starting connection to ${profile.getDisplayName()}")
             runOnUiThread {
-                android.widget.Toast.makeText(this, "Connecting to ${profile.name}...", android.widget.Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Connecting to ${profile.name}...", Toast.LENGTH_SHORT).show()
             }
 
             // Resolve linked identity if set (for effective credentials)
             val linkedIdentity = if (profile.identityId != null) {
-                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                withContext(Dispatchers.IO) {
                     try {
                         app.database.identityDao().getIdentityById(profile.identityId!!)?.also {
                             Logger.i("TabTerminalActivity", "Using identity '${it.name}' for connection")
@@ -2211,7 +2282,7 @@ class TabTerminalActivity : AppCompatActivity() {
             val effectiveKeyId = linkedIdentity?.keyId ?: profile.keyId
 
             // Check authentication requirements and prompt for password if needed
-            val hasStoredPassword = withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val hasStoredPassword = withContext(Dispatchers.IO) {
                 // Check identity password first, then profile password
                 val identityPw = linkedIdentity?.let {
                     app.securePasswordManager.retrievePassword("identity_${it.id}") ?: it.password
@@ -2221,7 +2292,7 @@ class TabTerminalActivity : AppCompatActivity() {
 
             // Check if SSH key is available when PUBLIC_KEY auth is configured
             val keyAvailable = if (effectiveKeyId != null) {
-                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                withContext(Dispatchers.IO) {
                     val keyExists = app.database.keyDao().getKeyById(effectiveKeyId) != null
                     val jschBytes = app.keyStorage.retrieveJSchBytes(effectiveKeyId)
                     val privateKey = if (jschBytes == null) {
@@ -2258,7 +2329,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     finish()
                     return
                 }
-                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                withContext(Dispatchers.IO) {
                     // Store password for the profile (SSHConnection will look it up)
                     app.securePasswordManager.storePassword(
                         profile.id, enteredPassword, SecurePasswordManager.StorageLevel.SESSION_ONLY
@@ -2289,7 +2360,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     // Auto-start recording if enabled
                     if (app.preferencesManager.getBoolean("auto_record_sessions", false)) {
                         Logger.d("TabTerminalActivity", "Starting session recording")
-                        tab.sessionRecorder = io.github.tabssh.terminal.recording.SessionRecorder(
+                        tab.sessionRecorder = SessionRecorder(
                             this,
                             profile.getDisplayName()
                         )
@@ -2301,7 +2372,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     // queued by onTabCreated() runs before we call tab.connect(). Both
                     // are posted to the same main looper — onTabCreated's post was
                     // enqueued first, so it executes before our withContext(Main) body.
-                    withContext(kotlinx.coroutines.Dispatchers.Main) {}
+                    withContext(Dispatchers.Main) {}
 
                     // Connect the tab's terminal to SSH streams.
                     // For mosh modes ("auto"/"on"): bootstrap mosh-server FIRST
@@ -2316,7 +2387,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     // land the user in a plain shell (docker exec tabs, forced-command
                     // jails, SFTP-only accounts). Those profiles stay on the SSH channel.
                     val moshMode = if (!profile.remoteCommand.isNullOrBlank()) "off" else profile.moshMode
-                    val binaryAvailable = io.github.tabssh.protocols.mosh.MoshNativeClient.resolveBinary(this) != null
+                    val binaryAvailable = MoshNativeClient.resolveBinary(this) != null
                     val connected: Boolean
                     if (moshMode != "off" && binaryAvailable) {
                         // Mosh path: init connection tracking, bootstrap, then decide.
@@ -2327,11 +2398,11 @@ class TabTerminalActivity : AppCompatActivity() {
                             catch (_: Exception) { null }
                         }
                         showToast("Connecting… (trying Mosh)")
-                        val handoff = io.github.tabssh.protocols.mosh.MoshHandoff.bootstrap(
+                        val handoff = MoshHandoff.bootstrap(
                             sshConnection, profile.username, profile.host,
                             commandOverride = moshCmd
                         )
-                        if (handoff is io.github.tabssh.protocols.mosh.MoshHandoff.Result.Success) {
+                        if (handoff is MoshHandoff.Result.Success) {
                             val moshOk = tab.connectMosh(
                                 this, handoff.info.host, handoff.info.port, handoff.info.keyBase64
                             )
@@ -2346,14 +2417,14 @@ class TabTerminalActivity : AppCompatActivity() {
                                 // network timeout; reap it now while the SSH
                                 // session is still open (best-effort).
                                 Logger.w("TabTerminalActivity", "Mosh attach failed; falling back to SSH")
-                                io.github.tabssh.protocols.mosh.MoshHandoff.reapServer(
+                                MoshHandoff.reapServer(
                                     sshConnection, handoff.info.serverPid, handoff.info.port
                                 )
                                 connected = tab.connect(sshConnection)
                                 showToast(if (moshMode == "on") "Mosh failed — using SSH" else "Connected to ${profile.getDisplayName()}")
                             }
                         } else {
-                            val errMsg = (handoff as? io.github.tabssh.protocols.mosh.MoshHandoff.Result.Error)?.message
+                            val errMsg = (handoff as? MoshHandoff.Result.Error)?.message
                             Logger.w("TabTerminalActivity", "Mosh bootstrap failed: $errMsg")
                             connected = tab.connect(sshConnection)
                             showToast(when {
@@ -2432,7 +2503,7 @@ class TabTerminalActivity : AppCompatActivity() {
                             }
                             
                             // Show error notification
-                            io.github.tabssh.utils.NotificationHelper.showConnectionError(
+                            NotificationHelper.showConnectionError(
                                 this,
                                 profile.getDisplayName(),
                                 errorInfo.userMessage
@@ -2470,7 +2541,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     }
 
                     // Show error notification
-                    io.github.tabssh.utils.NotificationHelper.showConnectionError(
+                    NotificationHelper.showConnectionError(
                         this,
                         profile.getDisplayName(),
                         errorInfo.userMessage
@@ -2480,7 +2551,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     showError("Connection failed: ssh ${profile.username}@${profile.host}:${profile.port}", "Error")
 
                     // Show generic error notification
-                    io.github.tabssh.utils.NotificationHelper.showConnectionError(
+                    NotificationHelper.showConnectionError(
                         this,
                         profile.getDisplayName(),
                         "Connection failed: ssh ${profile.username}@${profile.host}:${profile.port}"
@@ -2493,7 +2564,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
             }
             
-        } catch (e: kotlinx.coroutines.CancellationException) {
+        } catch (e: CancellationException) {
             // Activity is going away mid-connect. Make sure we don't leave a
             // half-authenticated SSH session orphan in SSHSessionManager —
             // closeConnection is idempotent. Re-throw cancellation so the
@@ -2505,7 +2576,7 @@ class TabTerminalActivity : AppCompatActivity() {
             Logger.e("TabTerminalActivity", "Error connecting to ${profile.getDisplayName()}", e)
 
             // Try to create a detailed error info from the exception
-            val errorInfo = io.github.tabssh.ssh.connection.SSHConnectionErrorInfo(
+            val errorInfo = SSHConnectionErrorInfo(
                 errorType = "Connection Error",
                 userMessage = e.message ?: "Unknown error occurred",
                 technicalDetails = buildString {
@@ -2528,7 +2599,7 @@ class TabTerminalActivity : AppCompatActivity() {
             }
             
             // Show error notification
-            io.github.tabssh.utils.NotificationHelper.showConnectionError(
+            NotificationHelper.showConnectionError(
                 this,
                 profile.getDisplayName(),
                 errorInfo.userMessage
@@ -2541,7 +2612,7 @@ class TabTerminalActivity : AppCompatActivity() {
      */
     private suspend fun connectTelnetProfile(profile: ConnectionProfile) {
         Logger.i("TabTerminalActivity", "Telnet connect to ${profile.getDisplayName()}")
-        val telnet = io.github.tabssh.ssh.connection.TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23)
+        val telnet = TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23)
 
         val cursorStyle = app.preferencesManager.getCursorStyleInt()
         val tab = tabManager.createTab(profile, cursorStyle, app.preferencesManager.getTranscriptRows())
@@ -2551,7 +2622,7 @@ class TabTerminalActivity : AppCompatActivity() {
             finish()
             return
         }
-        withContext(kotlinx.coroutines.Dispatchers.Main) {}
+        withContext(Dispatchers.Main) {}
 
         val ok = tab.connect(telnet)
         if (ok) {
@@ -2566,7 +2637,7 @@ class TabTerminalActivity : AppCompatActivity() {
             // legacy showConnectionSuccess here.
         } else {
             showError("Telnet connection to ${profile.host}:${profile.port} failed", "Connection Error")
-            io.github.tabssh.utils.NotificationHelper.showConnectionError(
+            NotificationHelper.showConnectionError(
                 this, profile.getDisplayName(), "Connection failed: telnet ${profile.host}:${profile.port.takeIf { it > 0 } ?: 23}"
             )
             finish()
@@ -2627,10 +2698,10 @@ class TabTerminalActivity : AppCompatActivity() {
         val gesturesEnabled = app.preferencesManager.getBoolean("enable_custom_gestures", false)
         val multiplexerTypeStr = app.preferencesManager.getString("gesture_multiplexer_type", "tmux")
         val multiplexerType = when (multiplexerTypeStr) {
-            "tmux" -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.TMUX
-            "screen" -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.SCREEN
-            "zellij" -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.ZELLIJ
-            else -> io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.TMUX
+            "tmux" -> GestureCommandMapper.MultiplexerType.TMUX
+            "screen" -> GestureCommandMapper.MultiplexerType.SCREEN
+            "zellij" -> GestureCommandMapper.MultiplexerType.ZELLIJ
+            else -> GestureCommandMapper.MultiplexerType.TMUX
         }
         val customPrefix = app.preferencesManager.getMultiplexerPrefix(multiplexerTypeStr)
 
@@ -2639,10 +2710,10 @@ class TabTerminalActivity : AppCompatActivity() {
             { command ->
                 tabManager.getActiveTab()?.let { tab ->
                     tab.termuxBridge.sendText(String(command, Charsets.UTF_8))
-                    android.widget.Toast.makeText(
+                    Toast.makeText(
                         this,
                         "Gesture command sent",
-                        android.widget.Toast.LENGTH_SHORT
+                        Toast.LENGTH_SHORT
                     ).show()
                 }
             }
@@ -2793,8 +2864,8 @@ class TabTerminalActivity : AppCompatActivity() {
      * switch, and cancels the previous job before launching — exactly one
      * collector exists at any time.
      */
-    @android.annotation.SuppressLint("RepeatOnLifecycleWrongUsage")
-    private fun observeMultiplexerState(tab: io.github.tabssh.ui.tabs.SSHTab?) {
+    @SuppressLint("RepeatOnLifecycleWrongUsage")
+    private fun observeMultiplexerState(tab: SSHTab?) {
         multiplexerObserverJob?.cancel()
         // The picker's item lambda captures the tab it was built for, so a
         // dialog left over from the previous tab would drive a session the
@@ -2830,11 +2901,11 @@ class TabTerminalActivity : AppCompatActivity() {
 
     // Tracks the visible ASK-mode picker so a re-emission (tab switch,
     // config change re-collect) never stacks a second dialog.
-    private var multiplexerAskDialog: androidx.appcompat.app.AlertDialog? = null
+    private var multiplexerAskDialog: AlertDialog? = null
 
     // The follow-up name prompt is tracked for the same reason, and because
     // both must be torn down before the window they are attached to.
-    private var multiplexerCreateDialog: androidx.appcompat.app.AlertDialog? = null
+    private var multiplexerCreateDialog: AlertDialog? = null
 
     /** Tears down any visible ASK-mode dialog; safe to call repeatedly. */
     private fun dismissMultiplexerDialogs() {
@@ -2850,12 +2921,12 @@ class TabTerminalActivity : AppCompatActivity() {
      * the plain shell (the tab clears its request so the dialog won't recur).
      */
     private fun showMultiplexerAskDialog(
-        tab: io.github.tabssh.ui.tabs.SSHTab,
-        req: io.github.tabssh.ui.tabs.SSHTab.MultiplexerAskRequest
+        tab: SSHTab,
+        req: SSHTab.MultiplexerAskRequest
     ) {
         if (multiplexerAskDialog?.isShowing == true || multiplexerCreateDialog?.isShowing == true) return
         val labels = req.sessions.map { "Attach: $it" } + "Create new session"
-        multiplexerAskDialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        multiplexerAskDialog = MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.terminal_multiplexer_sessions_title, req.type, tab.profile.host))
             .setItems(labels.toTypedArray()) { _, which ->
                 // setItems auto-dismisses, so drop the reference before the
@@ -2877,17 +2948,17 @@ class TabTerminalActivity : AppCompatActivity() {
      * with the profile's default session name.
      */
     private fun showMultiplexerCreateDialog(
-        tab: io.github.tabssh.ui.tabs.SSHTab,
-        req: io.github.tabssh.ui.tabs.SSHTab.MultiplexerAskRequest
+        tab: SSHTab,
+        req: SSHTab.MultiplexerAskRequest
     ) {
-        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
-        val input = io.github.tabssh.ui.dialogs.DialogFields.addText(
+        val form = DialogFields.form(this)
+        val input = DialogFields.addText(
             form,
             hint = getString(R.string.multiplexer_session_name_hint),
             initial = req.defaultSessionName
         )
         input.setSelection(input.text?.length ?: 0)
-        multiplexerCreateDialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        multiplexerCreateDialog = MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.terminal_new_multiplexer_session_title, req.type))
             .setMessage(R.string.terminal_new_multiplexer_session_message)
             .setView(form.root)
@@ -2922,7 +2993,7 @@ class TabTerminalActivity : AppCompatActivity() {
         //   3. No mux                         → default grey — nothing to send
         // The active=true solid fill is reserved for the armed state only so the user
         // can tell the difference between "mux running" and "about to send prefix".
-        val MUX_GREEN = androidx.core.content.ContextCompat.getColor(this, R.color.status_success)
+        val MUX_GREEN = ContextCompat.getColor(this, R.color.status_success)
         val activeTab = tabManager.getActiveTab()
         when {
             activeTab != null && !activeTab.isPrefixKeyEnabled ->
@@ -2990,7 +3061,7 @@ class TabTerminalActivity : AppCompatActivity() {
         val keys = arrayOf("auto", "tmux", "zellij", "screen", "toggle_off")
         // setMessage and setItems both occupy the dialog body — using both silently
         // hides the item list. Move the hint into the title so the list renders.
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_pre_key_multiplexer_title)
             .setItems(types) { _, which ->
                 // "auto" means no override — stored as NULL. The last row is
@@ -3196,7 +3267,7 @@ class TabTerminalActivity : AppCompatActivity() {
             return
         }
 
-        val builder = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        val builder = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_connection_closed_title)
             .setMessage(getString(R.string.terminal_disconnected_diagnosing, profile.getDisplayName()))
             .setCancelable(false)
@@ -3277,7 +3348,7 @@ class TabTerminalActivity : AppCompatActivity() {
     // Per-tab connectionState observers for Vnc/Console tabs, keyed by tabId.
     // The SSH equivalent lives in TabManager (SSH-typed listener); these are
     // activity-scoped so they die with the UI that would show the dialog.
-    private val consoleGateObservers = mutableMapOf<String, kotlinx.coroutines.Job>()
+    private val consoleGateObservers = mutableMapOf<String, Job>()
 
     /**
      * VNC/SPICE close policy — mirrors the SSH exit-code gate in
@@ -3314,7 +3385,7 @@ class TabTerminalActivity : AppCompatActivity() {
                                 // notification (with its Disconnect action) is
                                 // posted — the SSH path starts it from
                                 // SSHSessionManager, which VNC/SPICE never touch.
-                                io.github.tabssh.services.SSHConnectionService.startService(applicationContext)
+                                SSHConnectionService.startService(applicationContext)
                             } else if (state == ConnectionState.DISCONNECTED && hasBeenConnected) {
                                 hasBeenConnected = false
                                 handleConsoleTabDisconnected(tab)
@@ -3389,7 +3460,7 @@ class TabTerminalActivity : AppCompatActivity() {
             append(title).append(" disconnected.")
             if (!detail.isNullOrBlank()) append("\n\n").append(detail)
         }
-        val builder = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        val builder = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_connection_closed_title)
             .setMessage(body)
             .setCancelable(false)
@@ -3414,7 +3485,7 @@ class TabTerminalActivity : AppCompatActivity() {
      * (the rfbClient setter rewires the close-policy hook), and rebind the
      * page so VncViewHolder attaches + starts the new client.
      */
-    private fun reconnectVncTab(vncTab: io.github.tabssh.ui.tabs.VncTab) {
+    private fun reconnectVncTab(vncTab: VncTab) {
         val host = vncTab.vncHost ?: return
         lifecycleScope.launch {
             try {
@@ -3446,12 +3517,12 @@ class TabTerminalActivity : AppCompatActivity() {
                     }
                 }
                 val (rfbClient, _) = withContext(Dispatchers.IO) {
-                    io.github.tabssh.hypervisor.vnc.VncDirectConnector.connect(
+                    VncDirectConnector.connect(
                         host, password, username, this@TabTerminalActivity)
                 }
                 // Drop whatever dead session is still parked under this tab's
                 // key so the rebind below can't reclaim the old client.
-                io.github.tabssh.hypervisor.vnc.VncBackgroundSessionStore.discard(vncTab.storeKey)
+                VncBackgroundSessionStore.discard(vncTab.storeKey)
                 vncTab.rfbClient = rfbClient
                 vncTab.setConnectionState(ConnectionState.CONNECTED)
                 withContext(Dispatchers.IO) {
@@ -3546,7 +3617,7 @@ class TabTerminalActivity : AppCompatActivity() {
         }
         Toast.makeText(this, "Fetching history…", Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
-            val hist = io.github.tabssh.ssh.HistoryFetcher(ssh).fetch()
+            val hist = HistoryFetcher(ssh).fetch()
             historyCache[active.tabId] = hist
             runOnUiThread {
                 if (hist.isEmpty()) {
@@ -3560,12 +3631,12 @@ class TabTerminalActivity : AppCompatActivity() {
 
     private fun showHistoryDialog(history: List<String>) {
         val items = history.map { line ->
-            io.github.tabssh.ui.views.PaletteDialog.Item(
+            PaletteDialog.Item(
                 title = line,
                 subtitle = null
             ) { getActiveTerminalView()?.sendText(line) }
         }
-        io.github.tabssh.ui.views.PaletteDialog.show(this, "Remote history (${history.size})", items)
+        PaletteDialog.show(this, "Remote history (${history.size})", items)
     }
 
     /**
@@ -3592,7 +3663,7 @@ class TabTerminalActivity : AppCompatActivity() {
         val labels = others.map { it.profile.getDisplayName() }.toTypedArray()
         val checked = BooleanArray(others.size) { i -> broadcastTargetIds.contains(others[i].tabId) }
 
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_broadcast_input_title)
             .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
                 val tabId = others[which].tabId
@@ -3635,11 +3706,11 @@ class TabTerminalActivity : AppCompatActivity() {
             Toast.makeText(this, "No open tabs", Toast.LENGTH_SHORT).show()
             return
         }
-        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
-        val edit = io.github.tabssh.ui.dialogs.DialogFields.addText(
+        val form = DialogFields.form(this)
+        val edit = DialogFields.addText(
             form, hint = getString(R.string.save_workspace_name_hint)
         )
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(resources.getQuantityString(R.plurals.terminal_save_workspace_title, tabs.size, tabs.size))
             .setView(form.root)
             .setPositiveButton(R.string.save) { _, _ ->
@@ -3650,7 +3721,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     try {
                         withContext(Dispatchers.IO) {
                             app.database.workspaceDao().upsert(
-                                io.github.tabssh.storage.database.entities.Workspace(
+                                Workspace(
                                     name = name,
                                     connectionIdsJson = json
                                 )
@@ -3685,7 +3756,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     val n = try { org.json.JSONArray(ws.connectionIdsJson).length() } catch (_: Exception) { 0 }
                     "${ws.name} ($n tab${if (n == 1) "" else "s"})"
                 }.toTypedArray()
-                com.google.android.material.dialog.MaterialAlertDialogBuilder(this@TabTerminalActivity)
+                MaterialAlertDialogBuilder(this@TabTerminalActivity)
                     .setTitle(R.string.terminal_open_workspace_title)
                     .setItems(labels) { _, which -> openWorkspace(all[which]) }
                     .setNeutralButton(R.string.terminal_delete_workspace_action) { _, _ -> showDeleteWorkspaceDialog(all) }
@@ -3695,7 +3766,7 @@ class TabTerminalActivity : AppCompatActivity() {
         }
     }
 
-    private fun openWorkspace(ws: io.github.tabssh.storage.database.entities.Workspace) {
+    private fun openWorkspace(ws: Workspace) {
         val ids: List<String> = try {
             val arr = org.json.JSONArray(ws.connectionIdsJson)
             (0 until arr.length()).map { arr.getString(it) }
@@ -3716,7 +3787,8 @@ class TabTerminalActivity : AppCompatActivity() {
                 // forceNew=true: workspace restore always opens a fresh tab per entry.
                 connectToProfile(profile, forceNew = true)
                 opened++
-                kotlinx.coroutines.delay(400) // gentle stagger
+                // Gentle stagger
+                delay(400)
             }
             runOnUiThread {
                 Toast.makeText(
@@ -3728,9 +3800,9 @@ class TabTerminalActivity : AppCompatActivity() {
         }
     }
 
-    private fun showDeleteWorkspaceDialog(all: List<io.github.tabssh.storage.database.entities.Workspace>) {
+    private fun showDeleteWorkspaceDialog(all: List<Workspace>) {
         val labels = all.map { it.name }.toTypedArray()
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_delete_workspace_title)
             .setItems(labels) { _, which ->
                 val ws = all[which]
@@ -3794,7 +3866,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     return@runOnUiThread
                 }
                 val labels = recent.map { it.getDisplayName() }.toTypedArray()
-                com.google.android.material.dialog.MaterialAlertDialogBuilder(this@TabTerminalActivity)
+                MaterialAlertDialogBuilder(this@TabTerminalActivity)
                     .setTitle(R.string.terminal_split_bottom_pane_title)
                     .setItems(labels) { _, which -> openSplitWithProfile(recent[which]) }
                     .setNegativeButton(R.string.cancel, null)
@@ -3804,7 +3876,7 @@ class TabTerminalActivity : AppCompatActivity() {
     }
 
     private fun openSplitWithProfile(profile: ConnectionProfile) {
-        val pane = findViewById<android.widget.FrameLayout>(R.id.split_bottom_pane)
+        val pane = findViewById<FrameLayout>(R.id.split_bottom_pane)
         val term = findViewById<TerminalView>(R.id.split_bottom_terminal)
         bottomTerminalView = term
         pane.visibility = View.VISIBLE
@@ -3820,17 +3892,17 @@ class TabTerminalActivity : AppCompatActivity() {
                 else app.sshSessionManager.connectToServer(profile)
             // Telnet branch (separate path)
             if (profile.protocol.equals("telnet", ignoreCase = true)) {
-                val telnet = io.github.tabssh.ssh.connection.TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23)
+                val telnet = TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23)
                 val newTab = SSHTab(
                     profile,
-                    io.github.tabssh.terminal.TermuxBridge(
+                    TermuxBridge(
                         transcriptRows = app.preferencesManager.getTranscriptRows(),
                         cursorStyle = app.preferencesManager.getCursorStyleInt()
                     )
                 )
                 term.attachTerminalEmulator(newTab.termuxBridge)
                 try {
-                    kotlinx.coroutines.delay(150)
+                    delay(150)
                     if (newTab.connect(telnet)) {
                         splitTab = newTab
                         runOnUiThread { Toast.makeText(this@TabTerminalActivity, "Split (telnet) ready", Toast.LENGTH_SHORT).show() }
@@ -3840,7 +3912,7 @@ class TabTerminalActivity : AppCompatActivity() {
                             Toast.makeText(this@TabTerminalActivity, "Split failed: telnet ${profile.host}:${profile.port.takeIf { it > 0 } ?: 23}", Toast.LENGTH_LONG).show()
                         }
                     }
-                } catch (e: kotlinx.coroutines.CancellationException) {
+                } catch (e: CancellationException) {
                     // Coroutine cancelled mid-attach (activity destroyed while waiting):
                     // disconnect the partial tab so the TelnetConnection socket is closed
                     // and the pane is not left visible with a stale bridge.
@@ -3859,14 +3931,14 @@ class TabTerminalActivity : AppCompatActivity() {
             }
             val newTab = SSHTab(
                     profile,
-                    io.github.tabssh.terminal.TermuxBridge(
+                    TermuxBridge(
                         transcriptRows = app.preferencesManager.getTranscriptRows(),
                         cursorStyle = app.preferencesManager.getCursorStyleInt()
                     )
                 )
             term.attachTerminalEmulator(newTab.termuxBridge)
             try {
-                kotlinx.coroutines.delay(150)
+                delay(150)
                 if (newTab.connect(ssh)) {
                     splitTab = newTab
                     runOnUiThread {
@@ -3878,7 +3950,7 @@ class TabTerminalActivity : AppCompatActivity() {
                         Toast.makeText(this@TabTerminalActivity, "Split failed: ssh ${profile.username}@${profile.host}:${profile.port}", Toast.LENGTH_LONG).show()
                     }
                 }
-            } catch (e: kotlinx.coroutines.CancellationException) {
+            } catch (e: CancellationException) {
                 // Coroutine cancelled mid-attach (activity destroyed while waiting):
                 // disconnect the SSH channel and release the session from
                 // sshSessionManager so the foreground-service session count stays
@@ -3949,11 +4021,11 @@ class TabTerminalActivity : AppCompatActivity() {
             Toast.makeText(this, "No keystrokes recorded", Toast.LENGTH_SHORT).show()
             return
         }
-        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
-        val input = io.github.tabssh.ui.dialogs.DialogFields.addText(
+        val form = DialogFields.form(this)
+        val input = DialogFields.addText(
             form, hint = getString(R.string.macro_name_hint)
         )
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.terminal_save_macro_title, bytes.size))
             .setView(form.root)
             .setPositiveButton(R.string.save) { _, _ ->
@@ -3962,7 +4034,7 @@ class TabTerminalActivity : AppCompatActivity() {
                     try {
                         withContext(Dispatchers.IO) {
                             app.database.macroDao().insertMacro(
-                                io.github.tabssh.storage.database.entities.Macro.fromBytes(name, bytes)
+                                Macro.fromBytes(name, bytes)
                             )
                         }
                         Toast.makeText(this@TabTerminalActivity, "Saved \"$name\"", Toast.LENGTH_SHORT).show()
@@ -3997,7 +4069,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 return@launch
             }
             val labels = macros.map { "${it.name} (${it.decodedSequence().size}b)" }.toTypedArray()
-            com.google.android.material.dialog.MaterialAlertDialogBuilder(this@TabTerminalActivity)
+            MaterialAlertDialogBuilder(this@TabTerminalActivity)
                 .setTitle(R.string.terminal_replay_macro_title)
                 .setItems(labels) { _, which ->
                     val m = macros[which]
@@ -4034,28 +4106,28 @@ class TabTerminalActivity : AppCompatActivity() {
         }
         Toast.makeText(this, "Bootstrapping mosh-server…", Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
-            val res = io.github.tabssh.protocols.mosh.MoshHandoff.bootstrap(
+            val res = MoshHandoff.bootstrap(
                 ssh,
                 username = active.profile.username,
                 host = active.profile.host
             )
             runOnUiThread {
                 when (res) {
-                    is io.github.tabssh.protocols.mosh.MoshHandoff.Result.Success -> {
+                    is MoshHandoff.Result.Success -> {
                         val info = res.info
                         val cmd = info.toClientCommand()
-                        val termuxLauncher = io.github.tabssh.protocols.mosh.TermuxMoshLauncher
+                        val termuxLauncher = TermuxMoshLauncher
                         val termuxStatus = termuxLauncher.status(this@TabTerminalActivity)
-                        val builder = com.google.android.material.dialog.MaterialAlertDialogBuilder(this@TabTerminalActivity)
+                        val builder = MaterialAlertDialogBuilder(this@TabTerminalActivity)
                             .setTitle(R.string.terminal_mosh_handoff_ready_title)
                         when (termuxStatus) {
-                            is io.github.tabssh.protocols.mosh.TermuxMoshLauncher.Status.Ready,
-                            is io.github.tabssh.protocols.mosh.TermuxMoshLauncher.Status.Unknown -> {
+                            is TermuxMoshLauncher.Status.Ready,
+                            is TermuxMoshLauncher.Status.Unknown -> {
                                 builder.setMessage(
                                     getString(
                                         R.string.terminal_mosh_termux_ready_message,
                                         info.port,
-                                        io.github.tabssh.protocols.mosh.TermuxMoshLauncher.TERMUX_PROPS_HINT
+                                        TermuxMoshLauncher.TERMUX_PROPS_HINT
                                     )
                                 )
                                 .setPositiveButton(R.string.terminal_open_in_termux) { _, _ ->
@@ -4069,22 +4141,22 @@ class TabTerminalActivity : AppCompatActivity() {
                                     }
                                 }
                                 .setNeutralButton(R.string.terminal_copy_command) { _, _ ->
-                                    io.github.tabssh.utils.ClipboardHelper.copy(this@TabTerminalActivity, "mosh handoff", cmd, sensitive = false)
+                                    ClipboardHelper.copy(this@TabTerminalActivity, "mosh handoff", cmd, sensitive = false)
                                     Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
                                 }
                                 .setNegativeButton(R.string.close, null)
                             }
-                            io.github.tabssh.protocols.mosh.TermuxMoshLauncher.Status.MoshNotInstalled -> {
+                            TermuxMoshLauncher.Status.MoshNotInstalled -> {
                                 builder.setMessage(
                                     getString(R.string.terminal_mosh_termux_no_mosh_message, info.port, cmd)
                                 )
                                 .setPositiveButton(R.string.terminal_copy_command) { _, _ ->
-                                    io.github.tabssh.utils.ClipboardHelper.copy(this@TabTerminalActivity, "mosh handoff", cmd, sensitive = false)
+                                    ClipboardHelper.copy(this@TabTerminalActivity, "mosh handoff", cmd, sensitive = false)
                                     Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
                                 }
                                 .setNegativeButton(R.string.close, null)
                             }
-                            io.github.tabssh.protocols.mosh.TermuxMoshLauncher.Status.TermuxMissing -> {
+                            TermuxMoshLauncher.Status.TermuxMissing -> {
                                 builder.setMessage(
                                     getString(R.string.terminal_mosh_no_termux_message, info.port, cmd)
                                 )
@@ -4092,7 +4164,7 @@ class TabTerminalActivity : AppCompatActivity() {
                                     termuxLauncher.openTermuxListing(this@TabTerminalActivity)
                                 }
                                 .setNeutralButton(R.string.terminal_copy_command) { _, _ ->
-                                    io.github.tabssh.utils.ClipboardHelper.copy(this@TabTerminalActivity, "mosh handoff", cmd, sensitive = false)
+                                    ClipboardHelper.copy(this@TabTerminalActivity, "mosh handoff", cmd, sensitive = false)
                                     Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
                                 }
                                 .setNegativeButton(R.string.close, null)
@@ -4100,7 +4172,7 @@ class TabTerminalActivity : AppCompatActivity() {
                         }
                         builder.show()
                     }
-                    is io.github.tabssh.protocols.mosh.MoshHandoff.Result.Error -> {
+                    is MoshHandoff.Result.Error -> {
                         showError(res.message, "Mosh handoff failed")
                     }
                 }
@@ -4131,7 +4203,7 @@ class TabTerminalActivity : AppCompatActivity() {
         } else {
             // Start recording
             if (activeTab.sessionRecorder == null) {
-                activeTab.sessionRecorder = io.github.tabssh.terminal.recording.SessionRecorder(
+                activeTab.sessionRecorder = SessionRecorder(
                     this,
                     activeTab.profile.getDisplayName()
                 )
@@ -4264,7 +4336,7 @@ class TabTerminalActivity : AppCompatActivity() {
         return if (swipeEnabled) {
             // Get the currently visible page in ViewPager2
             val currentItem = viewPager?.currentItem ?: return null
-            val holder = (viewPager?.getChildAt(0) as? androidx.recyclerview.widget.RecyclerView)
+            val holder = (viewPager?.getChildAt(0) as? RecyclerView)
                 ?.findViewHolderForAdapterPosition(currentItem) as? TerminalPagerAdapter.TerminalViewHolder
             holder?.terminalView
         } else {
@@ -4286,7 +4358,7 @@ class TabTerminalActivity : AppCompatActivity() {
         if (bottomPaneFocused && bottomTerminalView != null) return bottomTerminalView
         if (!swipeEnabled) return terminalView
         val currentItem = viewPager?.currentItem ?: return null
-        val holder = (viewPager?.getChildAt(0) as? androidx.recyclerview.widget.RecyclerView)
+        val holder = (viewPager?.getChildAt(0) as? RecyclerView)
             ?.findViewHolderForAdapterPosition(currentItem)
         return when (holder) {
             is TerminalPagerAdapter.TerminalViewHolder -> holder.terminalView
@@ -4319,7 +4391,7 @@ class TabTerminalActivity : AppCompatActivity() {
      * highlight) — mirroring TerminalView's pending-modifier contract. Keys
      * with no console mapping are logged at debug and dropped; never crash.
      */
-    private fun sendConsoleKeyPress(consoleTab: ConsoleTab, key: io.github.tabssh.ui.keyboard.KeyboardKey) {
+    private fun sendConsoleKeyPress(consoleTab: ConsoleTab, key: KeyboardKey) {
         val inputView = getActiveInputView()
         val modifier = consolePendingModifier
         // When LOCKED, keep the modifier armed for the next console key; otherwise
@@ -4396,42 +4468,42 @@ class TabTerminalActivity : AppCompatActivity() {
      * + tab/connection actions; fuzzy-filterable from the search box.
      */
     private fun showCommandPalette() {
-        val items = mutableListOf<io.github.tabssh.ui.views.PaletteDialog.Item>()
-        items += io.github.tabssh.ui.views.PaletteDialog.Item("Settings", "Open settings") {
+        val items = mutableListOf<PaletteDialog.Item>()
+        items += PaletteDialog.Item("Settings", "Open settings") {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
-        items += io.github.tabssh.ui.views.PaletteDialog.Item("Theme Editor", "Create or edit a custom terminal theme") {
+        items += PaletteDialog.Item("Theme Editor", "Create or edit a custom terminal theme") {
             startActivity(ThemeEditorActivity.createIntent(this))
         }
-        items += io.github.tabssh.ui.views.PaletteDialog.Item("SSH Keys", "Manage SSH private keys & certificates") {
+        items += PaletteDialog.Item("SSH Keys", "Manage SSH private keys & certificates") {
             val intent = Intent(this, MainActivity::class.java)
             intent.putExtra("start_tab", 2)
             intent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             startActivity(intent)
         }
-        items += io.github.tabssh.ui.views.PaletteDialog.Item("Snippets", "Reusable command snippets") {
+        items += PaletteDialog.Item("Snippets", "Reusable command snippets") {
             startActivity(Intent(this, SnippetManagerActivity::class.java))
         }
-        items += io.github.tabssh.ui.views.PaletteDialog.Item("Port Forwarding", "Local / Remote / SOCKS tunnels") {
+        items += PaletteDialog.Item("Port Forwarding", "Local / Remote / SOCKS tunnels") {
             startActivity(Intent(this, PortForwardingActivity::class.java))
         }
-        items += io.github.tabssh.ui.views.PaletteDialog.Item("Find in scrollback", "Search current tab's history") {
+        items += PaletteDialog.Item("Find in scrollback", "Search current tab's history") {
             showSearchOverlay()
         }
-        items += io.github.tabssh.ui.views.PaletteDialog.Item("Close current tab", null) { closeCurrentTab() }
-        items += io.github.tabssh.ui.views.PaletteDialog.Item("Increase font size", "Ctrl+= (or Volume Up)") { adjustFontSize(+2) }
-        items += io.github.tabssh.ui.views.PaletteDialog.Item("Decrease font size", "Ctrl+- (or Volume Down)") { adjustFontSize(-2) }
-        items += io.github.tabssh.ui.views.PaletteDialog.Item("Reset font size", "Ctrl+0") { resetFontSize() }
-        items += io.github.tabssh.ui.views.PaletteDialog.Item("Toggle keyboard", null) { toggleKeyboard() }
+        items += PaletteDialog.Item("Close current tab", null) { closeCurrentTab() }
+        items += PaletteDialog.Item("Increase font size", "Ctrl+= (or Volume Up)") { adjustFontSize(+2) }
+        items += PaletteDialog.Item("Decrease font size", "Ctrl+- (or Volume Down)") { adjustFontSize(-2) }
+        items += PaletteDialog.Item("Reset font size", "Ctrl+0") { resetFontSize() }
+        items += PaletteDialog.Item("Toggle keyboard", null) { toggleKeyboard() }
         val barLabel = if (customKeyboardVisible) "Hide key bar" else "Show key bar"
-        items += io.github.tabssh.ui.views.PaletteDialog.Item(barLabel, "Show or hide the custom function-key bar") {
+        items += PaletteDialog.Item(barLabel, "Show or hide the custom function-key bar") {
             if (customKeyboardVisible) hideCustomKeyboardBar() else showCustomKeyboardBar()
         }
-        items += io.github.tabssh.ui.views.PaletteDialog.Item("Paste from clipboard", null) { pasteFromClipboard() }
-        items += io.github.tabssh.ui.views.PaletteDialog.Item("Copy screen", "Copy visible terminal output to clipboard") { copyTerminalScreen() }
-        items += io.github.tabssh.ui.views.PaletteDialog.Item("Cluster: send to all sessions…", "Broadcast a command to every open tab") { showClusterBroadcastDialog() }
-        items += io.github.tabssh.ui.views.PaletteDialog.Item("Share connection info", "Share host / user details") { shareSession() }
-        io.github.tabssh.ui.views.PaletteDialog.show(this, "Command Palette", items)
+        items += PaletteDialog.Item("Paste from clipboard", null) { pasteFromClipboard() }
+        items += PaletteDialog.Item("Copy screen", "Copy visible terminal output to clipboard") { copyTerminalScreen() }
+        items += PaletteDialog.Item("Cluster: send to all sessions…", "Broadcast a command to every open tab") { showClusterBroadcastDialog() }
+        items += PaletteDialog.Item("Share connection info", "Share host / user details") { shareSession() }
+        PaletteDialog.show(this, "Command Palette", items)
     }
 
     /**
@@ -4439,13 +4511,13 @@ class TabTerminalActivity : AppCompatActivity() {
      * connections — pick one to switch / open.
      */
     private fun showQuickSwitcher() {
-        val items = mutableListOf<io.github.tabssh.ui.views.PaletteDialog.Item>()
+        val items = mutableListOf<PaletteDialog.Item>()
         // Open tabs. Displayed number is this SSH-only list's 1-based
         // position, but the switch itself is by tabId — switchToTabNumber()
         // indexes the unified list, which is not the same position once
         // VNC/console tabs exist.
         tabManager.getAllTabs().forEachIndexed { index, tab ->
-            items += io.github.tabssh.ui.views.PaletteDialog.Item(
+            items += PaletteDialog.Item(
                 "Tab ${index + 1}: ${tab.profile.getDisplayName()}",
                 "Open · ${tab.connectionState.value}"
             ) { tabManager.switchToTabById(tab.tabId) }
@@ -4458,7 +4530,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 }
                 runOnUiThread {
                     recent.forEach { profile ->
-                        items += io.github.tabssh.ui.views.PaletteDialog.Item(
+                        items += PaletteDialog.Item(
                             profile.getDisplayName(),
                             "Connect · ${profile.username}@${profile.host}:${profile.port}"
                         ) {
@@ -4467,12 +4539,12 @@ class TabTerminalActivity : AppCompatActivity() {
                             lifecycleScope.launch { connectToProfile(profile, forceNew = true) }
                         }
                     }
-                    io.github.tabssh.ui.views.PaletteDialog.show(this@TabTerminalActivity, "Quick Switcher", items)
+                    PaletteDialog.show(this@TabTerminalActivity, "Quick Switcher", items)
                 }
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Failed to load recent connections for switcher", e)
                 runOnUiThread {
-                    io.github.tabssh.ui.views.PaletteDialog.show(this@TabTerminalActivity, "Quick Switcher", items)
+                    PaletteDialog.show(this@TabTerminalActivity, "Quick Switcher", items)
                 }
             }
         }
@@ -4512,8 +4584,8 @@ class TabTerminalActivity : AppCompatActivity() {
         // SpiceView both implement onCreateInputConnection so the IME
         // attaches to them exactly like it does to a TerminalView.
         val inputView = getActiveInputView() ?: return
-        val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
-            as android.view.inputmethod.InputMethodManager
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE)
+            as InputMethodManager
 
         // Always grab focus first so the IME has a target.
         inputView.requestFocus()
@@ -4522,10 +4594,10 @@ class TabTerminalActivity : AppCompatActivity() {
         // the framework hasn't seen us as the active input client yet (Issue
         // #39). Use WindowInsetsCompat to read actual IME visibility and
         // drive show/hide explicitly.
-        val rootInsets = androidx.core.view.ViewCompat
+        val rootInsets = ViewCompat
             .getRootWindowInsets(inputView)
         val imeVisible = rootInsets?.isVisible(
-            androidx.core.view.WindowInsetsCompat.Type.ime()
+            WindowInsetsCompat.Type.ime()
         ) == true
 
         if (imeVisible) {
@@ -4538,7 +4610,7 @@ class TabTerminalActivity : AppCompatActivity() {
             }
             imm.showSoftInput(
                 inputView,
-                android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT
+                InputMethodManager.SHOW_IMPLICIT
             )
             Logger.d("TabTerminalActivity", "IME shown")
         }
@@ -4552,8 +4624,8 @@ class TabTerminalActivity : AppCompatActivity() {
      */
     private fun hasHardwareKeyboard(): Boolean {
         val cfg = resources.configuration
-        return cfg.keyboard != android.content.res.Configuration.KEYBOARD_NOKEYS &&
-            cfg.hardKeyboardHidden == android.content.res.Configuration.HARDKEYBOARDHIDDEN_NO
+        return cfg.keyboard != Configuration.KEYBOARD_NOKEYS &&
+            cfg.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO
     }
 
     /**
@@ -4565,10 +4637,10 @@ class TabTerminalActivity : AppCompatActivity() {
     private fun applyHardwareKeyboardPolicy() {
         val hw = hasHardwareKeyboard()
         if (hw) {
-            binding.multiRowKeyboard.visibility = android.view.View.GONE
+            binding.multiRowKeyboard.visibility = View.GONE
         } else {
             binding.multiRowKeyboard.visibility =
-                if (customKeyboardVisible) android.view.View.VISIBLE else android.view.View.GONE
+                if (customKeyboardVisible) View.VISIBLE else View.GONE
         }
         Logger.d("TabTerminalActivity", "HW keyboard policy: hw=$hw pref=$customKeyboardVisible")
     }
@@ -4603,7 +4675,7 @@ class TabTerminalActivity : AppCompatActivity() {
         } else {
             arrayOf("Paste", "Select Text…", "Copy Screen")
         }
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(this)
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> pasteFromClipboard()
@@ -4625,7 +4697,7 @@ class TabTerminalActivity : AppCompatActivity() {
             Logger.w("TabTerminalActivity", "pasteFromClipboard: activity finishing/destroyed; ignoring")
             return
         }
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         // coerceToText() handles plain-text, HTML, and URI clipboard items; plain
         // .text only returns non-null for ClipData.newPlainText() clips, so it
         // silently drops everything else.
@@ -4668,7 +4740,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 val labels = connections.map { it.getDisplayName() }.toTypedArray()
                 val items = arrayOf(getString(R.string.terminal_add_new_connection)) + labels
 
-                com.google.android.material.dialog.MaterialAlertDialogBuilder(this@TabTerminalActivity)
+                MaterialAlertDialogBuilder(this@TabTerminalActivity)
                     .setTitle(R.string.terminal_open_new_tab_title)
                     .setItems(items) { _, which ->
                         if (which == 0) {
@@ -4711,7 +4783,7 @@ class TabTerminalActivity : AppCompatActivity() {
                 }.toTypedArray()
 
                 runOnUiThread {
-                    com.google.android.material.dialog.MaterialAlertDialogBuilder(this@TabTerminalActivity)
+                    MaterialAlertDialogBuilder(this@TabTerminalActivity)
                         .setTitle(R.string.terminal_insert_snippet_title)
                         .setItems(snippetNames) { _, which ->
                             val snippet = snippets[which]
@@ -4733,7 +4805,7 @@ class TabTerminalActivity : AppCompatActivity() {
     /**
      * Insert a snippet into the active terminal
      */
-    private fun insertSnippet(snippet: io.github.tabssh.storage.database.entities.Snippet) {
+    private fun insertSnippet(snippet: Snippet) {
         lifecycleScope.launch {
             try {
                 // Check if snippet has variables
@@ -4763,16 +4835,16 @@ class TabTerminalActivity : AppCompatActivity() {
      * variable name (per snippet) from SharedPreferences so users don't retype
      * the same hostnames / paths over and over.
      */
-    private fun showVariablesDialog(snippet: io.github.tabssh.storage.database.entities.Snippet) {
+    private fun showVariablesDialog(snippet: Snippet) {
         val specs = snippet.getVariableSpecs()
         if (specs.isEmpty()) {
             getActiveTerminalView()?.sendText(snippet.command)
             return
         }
-        val recallPrefs = getSharedPreferences("snippet_var_recall", android.content.Context.MODE_PRIVATE)
-        val inputs = mutableListOf<com.google.android.material.textfield.TextInputEditText>()
+        val recallPrefs = getSharedPreferences("snippet_var_recall", Context.MODE_PRIVATE)
+        val inputs = mutableListOf<TextInputEditText>()
 
-        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
+        val form = DialogFields.form(this)
 
         specs.forEach { spec ->
             // Pre-fill: last-used > declared default > blank.
@@ -4787,11 +4859,11 @@ class TabTerminalActivity : AppCompatActivity() {
             // secret fields replaces the old "(masked)" suffix in the label text.
             val helper = spec.hint ?: getString(R.string.snippet_variable_default_hint, spec.name)
             val input = if (spec.isPassword) {
-                io.github.tabssh.ui.dialogs.DialogFields.addSecret(
+                DialogFields.addSecret(
                     form, hint = spec.name, initial = initial, helper = helper
                 )
             } else {
-                io.github.tabssh.ui.dialogs.DialogFields.addText(
+                DialogFields.addText(
                     form, hint = spec.name, initial = initial, helper = helper
                 )
             }
@@ -4801,7 +4873,7 @@ class TabTerminalActivity : AppCompatActivity() {
             inputs.add(input)
         }
 
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_fill_variables_title)
             .setView(form.root)
             .setPositiveButton(R.string.terminal_insert) { _, _ ->
@@ -4837,7 +4909,7 @@ class TabTerminalActivity : AppCompatActivity() {
             getString(R.string.terminal_search_snippets_title)
         )
 
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_manage_snippets)
             .setItems(options) { _, which ->
                 when (which) {
@@ -4855,12 +4927,12 @@ class TabTerminalActivity : AppCompatActivity() {
      */
     private fun showCreateSnippetDialog() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_edit_snippet, null)
-        val inputName = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.edit_snippet_name)
-        val inputCommand = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.edit_snippet_command)
-        val inputDescription = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.edit_snippet_description)
-        val inputCategory = dialogView.findViewById<android.widget.AutoCompleteTextView>(R.id.edit_snippet_category)
+        val inputName = dialogView.findViewById<TextInputEditText>(R.id.edit_snippet_name)
+        val inputCommand = dialogView.findViewById<TextInputEditText>(R.id.edit_snippet_command)
+        val inputDescription = dialogView.findViewById<TextInputEditText>(R.id.edit_snippet_description)
+        val inputCategory = dialogView.findViewById<AutoCompleteTextView>(R.id.edit_snippet_category)
 
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_create_snippet_title)
             .setView(dialogView)
             .setPositiveButton(R.string.docker_create) { _, _ ->
@@ -4870,7 +4942,7 @@ class TabTerminalActivity : AppCompatActivity() {
 
                 if (name.isNotBlank() && command.isNotBlank()) {
                     lifecycleScope.launch {
-                        val snippet = io.github.tabssh.storage.database.entities.Snippet(
+                        val snippet = Snippet(
                             name = name,
                             command = command,
                             description = inputDescription.text.toString().trim(),
@@ -4901,7 +4973,7 @@ class TabTerminalActivity : AppCompatActivity() {
             val snippetNames = allSnippets.map { "${it.name} - ${it.category}" }.toTypedArray()
 
             runOnUiThread {
-                com.google.android.material.dialog.MaterialAlertDialogBuilder(this@TabTerminalActivity)
+                MaterialAlertDialogBuilder(this@TabTerminalActivity)
                     .setTitle(R.string.terminal_all_snippets_title)
                     .setItems(snippetNames) { _, which ->
                         insertSnippet(allSnippets[which])
@@ -4916,12 +4988,12 @@ class TabTerminalActivity : AppCompatActivity() {
      * Show search snippets dialog
      */
     private fun showSearchSnippetsDialog() {
-        val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
-        val input = io.github.tabssh.ui.dialogs.DialogFields.addText(
+        val form = DialogFields.form(this)
+        val input = DialogFields.addText(
             form, hint = getString(R.string.search_snippets_hint)
         )
 
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_search_snippets_title)
             .setView(form.root)
             .setPositiveButton(R.string.terminal_search) { _, _ ->
@@ -4958,7 +5030,7 @@ class TabTerminalActivity : AppCompatActivity() {
             }
             if (isFinishing || isDestroyed) return@launch
             val snippetNames = results.map { "${it.name} - ${it.category}" }.toTypedArray()
-            com.google.android.material.dialog.MaterialAlertDialogBuilder(this@TabTerminalActivity)
+            MaterialAlertDialogBuilder(this@TabTerminalActivity)
                 .setTitle(R.string.terminal_search_results_title)
                 .setItems(snippetNames) { _, which ->
                     insertSnippet(results[which])
@@ -5008,20 +5080,20 @@ class TabTerminalActivity : AppCompatActivity() {
      * Returns the entered password, or null if the user cancelled.
      */
     private suspend fun promptForPassword(message: String): String? =
-        kotlinx.coroutines.suspendCancellableCoroutine { cont ->
-            val form = io.github.tabssh.ui.dialogs.DialogFields.form(this)
+        suspendCancellableCoroutine { cont ->
+            val form = DialogFields.form(this)
             // setMessage and setView both own the dialog's content area — using both
             // silently drops the message on most ROMs. Show the message as a TextView
             // inside the same form column so both the prompt and the field are visible.
-            val promptLabel = android.widget.TextView(this).apply {
+            val promptLabel = TextView(this).apply {
                 text = message
                 setPadding(0, 0, 0, (8 * resources.displayMetrics.density).toInt())
             }
             form.column.addView(promptLabel, 0)
-            val editText = io.github.tabssh.ui.dialogs.DialogFields.addSecret(
+            val editText = DialogFields.addSecret(
                 form, hint = getString(R.string.password_hint)
             )
-            val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            val dialog = MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.terminal_auth_required_title)
                 .setView(form.root)
                 .setPositiveButton(R.string.connect_button) { _, _ ->
@@ -5036,7 +5108,7 @@ class TabTerminalActivity : AppCompatActivity() {
             dialog.show()
         }
     
-    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+    override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         binding.multiRowKeyboard.notifyConfigurationChanged(newConfig)
         // A HW keyboard being connected/disconnected fires
@@ -5048,8 +5120,8 @@ class TabTerminalActivity : AppCompatActivity() {
         if (hasHardwareKeyboard()) {
             val terminalView = getActiveTerminalView()
             if (terminalView != null) {
-                val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
-                    as android.view.inputmethod.InputMethodManager
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE)
+                    as InputMethodManager
                 imm.hideSoftInputFromWindow(terminalView.windowToken, 0)
             }
         }
@@ -5202,7 +5274,7 @@ class TabTerminalActivity : AppCompatActivity() {
         val barVisible = app.preferencesManager.getBoolean(PREF_KEY_BAR_VISIBLE, true)
         customKeyboardVisible = barVisible
         binding.multiRowKeyboard.visibility =
-            if (barVisible) android.view.View.VISIBLE else android.view.View.GONE
+            if (barVisible) View.VISIBLE else View.GONE
         // If a hardware keyboard is already attached at startup, override the
         // stored pref visually — the pref is preserved so the bar reappears
         // when the HW keyboard is disconnected.
@@ -5280,17 +5352,17 @@ class TabTerminalActivity : AppCompatActivity() {
                 // updated and the user has not explicitly customised their layout.
                 val storedVersion = app.preferencesManager.getKeyboardLayoutVersion()
                 val isCustomized  = app.preferencesManager.isKeyboardLayoutCustomized()
-                if (storedVersion < io.github.tabssh.ui.keyboard.MultiRowKeyboardView.CURRENT_DEFAULT_LAYOUT_VERSION && !isCustomized) {
-                    Logger.i("TabTerminalActivity", "Default layout updated (v$storedVersion → v${io.github.tabssh.ui.keyboard.MultiRowKeyboardView.CURRENT_DEFAULT_LAYOUT_VERSION}); clearing saved layout")
+                if (storedVersion < MultiRowKeyboardView.CURRENT_DEFAULT_LAYOUT_VERSION && !isCustomized) {
+                    Logger.i("TabTerminalActivity", "Default layout updated (v$storedVersion → v${MultiRowKeyboardView.CURRENT_DEFAULT_LAYOUT_VERSION}); clearing saved layout")
                     app.preferencesManager.setKeyboardLayoutJson(null)
-                    app.preferencesManager.setKeyboardLayoutVersion(io.github.tabssh.ui.keyboard.MultiRowKeyboardView.CURRENT_DEFAULT_LAYOUT_VERSION)
+                    app.preferencesManager.setKeyboardLayoutVersion(MultiRowKeyboardView.CURRENT_DEFAULT_LAYOUT_VERSION)
                 }
 
                 val layoutJson = app.preferencesManager.getKeyboardLayoutJson()
                 Logger.d("TabTerminalActivity", "Custom keyboard layout JSON length=${layoutJson?.length ?: 0}, rowCount=$rowCount")
                 if (layoutJson != null) {
                     try {
-                        val savedLayout = io.github.tabssh.ui.keyboard.KeyboardLayoutManager.parseLayoutJson(layoutJson)
+                        val savedLayout = KeyboardLayoutManager.parseLayoutJson(layoutJson)
                         binding.multiRowKeyboard.setLayout(savedLayout)
                         Logger.i("TabTerminalActivity", "Loaded custom keyboard layout: ${savedLayout.size} rows, ${savedLayout.sumOf { it.size }} keys")
                     } catch (e: Exception) {
@@ -5316,7 +5388,7 @@ class TabTerminalActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleCustomKeyPress(key: io.github.tabssh.ui.keyboard.KeyboardKey) {
+    private fun handleCustomKeyPress(key: KeyboardKey) {
         Logger.d("TabTerminalActivity", "Custom key pressed: ${key.label} id=${key.id} sequence=${key.keySequence.map { it.code }}")
 
         // Flush any composing IME text before this key's escape sequence
@@ -5421,7 +5493,7 @@ class TabTerminalActivity : AppCompatActivity() {
                         else     -> app.preferencesManager.getString(
                             "multiplexer_custom_prefix_tmux",   "C-b")
                     }
-                    val bytes = io.github.tabssh.terminal.gestures.PrefixParser.parse(prefixStr)
+                    val bytes = PrefixParser.parse(prefixStr)
                     if (bytes == null) {
                         Logger.w("TabTerminalActivity", "PREFIX key: failed to parse prefix '$prefixStr'")
                         return
@@ -5517,7 +5589,7 @@ class TabTerminalActivity : AppCompatActivity() {
                             "END"  -> "OF"
                             else   -> key.keySequence
                         }
-                    } else if (key.category == io.github.tabssh.ui.keyboard.KeyboardKey.KeyCategory.ARROW &&
+                    } else if (key.category == KeyboardKey.KeyCategory.ARROW &&
                         // ARROW keys must respect DECCKM: when application cursor key mode
                         // is active (\033[?1h), arrows use SS3 (\033OA) not CSI (\033[A).
                         terminal?.isApplicationCursorKeysMode() == true) {
@@ -5561,13 +5633,13 @@ class TabTerminalActivity : AppCompatActivity() {
 
     private fun hideCustomKeyboardBar() {
         customKeyboardVisible = false
-        binding.multiRowKeyboard.visibility = android.view.View.GONE
+        binding.multiRowKeyboard.visibility = View.GONE
         app.preferencesManager.setBoolean(PREF_KEY_BAR_VISIBLE, false)
     }
 
     private fun showCustomKeyboardBar() {
         customKeyboardVisible = true
-        binding.multiRowKeyboard.visibility = android.view.View.VISIBLE
+        binding.multiRowKeyboard.visibility = View.VISIBLE
         app.preferencesManager.setBoolean(PREF_KEY_BAR_VISIBLE, true)
     }
 

@@ -26,6 +26,7 @@ class CliExecTransport(
 ) : DockerTransport {
 
     private companion object {
+        private const val TAG = "CliExecTransport"
         private const val EXEC_TIMEOUT_MS = 60_000L
         private const val ACTION_TIMEOUT_MS = 120_000L
         private const val STATS_POLL_INTERVAL_MS = 2_000L
@@ -49,20 +50,27 @@ class CliExecTransport(
         timeoutMs: Long = EXEC_TIMEOUT_MS,
         transform: (String) -> T
     ): DockerResult<T> {
+        // Never log `args`/stdout/stderr verbatim — a container name, env var
+        // or --format expression can carry user-entered or daemon-echoed
+        // secrets. Only the context label, exit code and timing are safe.
+        val startedAt = System.currentTimeMillis()
         return try {
             val result = runner.run("$docker $args", timeoutMs)
+            val elapsedMs = System.currentTimeMillis() - startedAt
             if (!result.isSuccess) {
+                Logger.w(TAG, "$context: cli failed exit=${result.exitStatus} elapsedMs=$elapsedMs")
                 DockerCliParsers.classifyFailure(context, result.stderr, result.stdout)
             } else {
+                Logger.d(TAG, "$context: cli ok elapsedMs=$elapsedMs")
                 DockerResult.Success(transform(result.stdout))
             }
         } catch (e: TransportUnavailableException) {
-            Logger.w("CliExecTransport", "$context: transport unavailable: ${e.message}")
+            Logger.w(TAG, "$context: transport unavailable: ${e.message}")
             DockerResult.TransportUnavailable(e.message.orEmpty(), e.detail)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            Logger.w("CliExecTransport", "$context: ${e.message}")
+            Logger.w(TAG, "$context: ${e.message}")
             DockerResult.Error(context, e.message)
         }
     }
@@ -119,7 +127,7 @@ class CliExecTransport(
                         throw e
                     } catch (e: Exception) {
                         // Skip malformed samples; next poll retries.
-                        Logger.w("CliExecTransport", "streamStats: unparsable sample (${line.length} chars): ${e.message}")
+                        Logger.w(TAG, "streamStats: unparsable sample (${line.length} chars): ${e.message}")
                     }
                 }
             }

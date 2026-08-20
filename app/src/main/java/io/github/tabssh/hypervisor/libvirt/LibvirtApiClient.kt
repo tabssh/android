@@ -33,9 +33,16 @@ import java.io.OutputStream
  * The JSch [Session] is kept alive as a field; callers must call [disconnect]
  * when the console session ends.
  */
+/**
+ * @param passwordOverride password to authenticate with instead of the one
+ *   stored for [profile]. Set by the "Test connection" flow, which drives an
+ *   unsaved profile whose id has no Keystore entry yet; `null` everywhere
+ *   else, so saved profiles always resolve through [HypervisorPasswordStore].
+ */
 class LibvirtApiClient(
     private val context: Context,
-    private val profile: HypervisorProfile
+    private val profile: HypervisorProfile,
+    private val passwordOverride: String? = null
 ) {
     internal companion object {
         private const val TAG = "LibvirtApiClient"
@@ -109,10 +116,13 @@ class LibvirtApiClient(
      * loaded from [KeyStorage] and offered to the server first (publickey auth);
      * password is still tried as a fallback so existing setups keep working.
      * When no identity is configured, password-only auth is used as before.
+     *
+     * The password comes from `passwordOverride` when the caller supplied one,
+     * otherwise from the Keystore via [HypervisorPasswordStore.retrieve].
      */
     suspend fun connect() = withContext(Dispatchers.IO) {
         val app = context.applicationContext as TabSSHApplication
-        val password = HypervisorPasswordStore.retrieve(context, profile)
+        val password = passwordOverride ?: HypervisorPasswordStore.retrieve(context, profile)
 
         val keyId = profile.sshIdentityId
         // Validate credentials before attempting the SSH handshake so the
@@ -160,7 +170,8 @@ class LibvirtApiClient(
                     "tabssh-libvirt-$keyId",
                     jschBytes,
                     certBytes,
-                    null  // passphrase — LIBVIRT keys stored unencrypted in Keystore
+                    // passphrase — LIBVIRT keys stored unencrypted in Keystore
+                    null
                 )
                 config["PreferredAuthentications"] = "publickey,password"
                 Logger.i(TAG, "SSH key identity loaded for ${profile.host} (keyId=$keyId)")

@@ -825,10 +825,14 @@ class IdentitiesFragment : Fragment() {
             // Only write to Keystore when a new password was typed (not the
             // display mask) or when creating a new account.
             val shouldSavePassword = when {
-                password == PASSWORD_MASK -> false   // user left the mask unchanged
-                existing == null          -> true    // new account
-                password.isNotEmpty()     -> true    // user typed a replacement
-                else                      -> false   // edit + blank → keep existing
+                // user left the mask unchanged
+                password == PASSWORD_MASK -> false
+                // new account
+                existing == null          -> true
+                // user typed a replacement
+                password.isNotEmpty()     -> true
+                // edit + blank → keep existing
+                else                      -> false
             }
             if (shouldSavePassword) {
                 HypervisorPasswordStore.storeAccountPassword(requireContext(), savedId, password)
@@ -861,6 +865,11 @@ class IdentitiesFragment : Fragment() {
                         // H6 — Long PK is device-local; tombstone by natural key.
                         TombstoneRecorder.record(app, TombstoneRecorder.HYPERVISOR_ACCOUNT, TombstoneRecorder.naturalKey(account))
                         HypervisorPasswordStore.clearAccountPassword(requireContext(), account.id)
+                        // OCI accounts additionally own an API private key PEM and
+                        // (optionally) its passphrase under their own aliases. Drop
+                        // those too, or a reused account id would expose the previous
+                        // owner's private key.
+                        HypervisorPasswordStore.clearOciAccountSecrets(requireContext(), account.id)
                         Logger.i(TAG, "Deleted VM credential id=${account.id} (${account.name})")
                     }
                 }
@@ -1196,7 +1205,8 @@ class IdentitiesFragment : Fragment() {
 
     private fun showKeyGenerateDialog() {
         val keyTypes = arrayOf("RSA 2048", "RSA 4096", "ECDSA P-256", "ECDSA P-384", "Ed25519")
-        var selectedType = 4 // Default to Ed25519
+        // Default to Ed25519
+        var selectedType = 4
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Generate SSH Key")
             .setSingleChoiceItems(keyTypes, selectedType) { _, which -> selectedType = which }

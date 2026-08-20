@@ -724,10 +724,10 @@ class HypervisorEditActivity : AppCompatActivity() {
                                 host = host,
                                 port = port,
                                 username = username,
-                                password = password,
                                 verifySsl = verifySsl,
                                 sshIdentityId = selectedSshIdentityId
-                            )
+                            ),
+                            passwordOverride = password
                         )
                         client.connect()
                         client.disconnect()
@@ -787,10 +787,9 @@ class HypervisorEditActivity : AppCompatActivity() {
                 val apiTypeIndex = apiTypeEntries.indexOf(selectedApiType)
                 val apiTypeOverride = if (apiTypeIndex >= 0) apiTypeValues[apiTypeIndex] else "auto"
 
-                // P1 fix: NEVER write the password to the entity; route
-                // it through the Keystore-backed HypervisorPasswordStore
-                // instead. The entity's `password` column stays empty
-                // for any row this code touches.
+                // The entity has no password column (schema v14) — the secret
+                // is routed through the Keystore-backed HypervisorPasswordStore
+                // below.
                 //
                 // Account-aware: if the user picked a reusable
                 // HypervisorAccount from the dropdown, we store the
@@ -806,7 +805,6 @@ class HypervisorEditActivity : AppCompatActivity() {
                     host = editHost.text.toString(),
                     port = editPort.text.toString().toInt(),
                     username = if (accountId != null) "" else editUsername.text.toString(),
-                    password = "",
                     realm = if (accountId != null) {
                         // Account is the realm source-of-truth when set.
                         // Per-host realm override stays a future option.
@@ -822,7 +820,8 @@ class HypervisorEditActivity : AppCompatActivity() {
                     notes = editNotes.text.toString().takeIf { it.isNotBlank() },
                     lastConnected = editingHypervisor?.lastConnected ?: 0,
                     createdAt = editingHypervisor?.createdAt ?: System.currentTimeMillis(),
-                    sshIdentityId = if (type == HypervisorType.LIBVIRT) selectedSshIdentityId else null
+                    sshIdentityId = if (type == HypervisorType.LIBVIRT) selectedSshIdentityId else null,
+                    modifiedAt = System.currentTimeMillis()
                 )
 
                 val savedId = if (hypervisorId != null) {

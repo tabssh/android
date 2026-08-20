@@ -84,7 +84,8 @@ internal object Cbor {
                 7 -> when (ai) {
                     20 -> Value.False
                     21 -> Value.True
-                    22, 23 -> Value.Null   // null and undefined both map to Null for our schemas
+                    // null and undefined both map to Null for our schemas
+                    22, 23 -> Value.Null
                     else -> throw CborException("unsupported simple value ai=$ai at byte ${pos - 1}")
                 }
                 else -> throw CborException("unsupported major type $major at byte ${pos - 1}")

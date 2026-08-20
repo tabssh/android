@@ -166,6 +166,13 @@
             android:parentActivityName=".ui.activities.SettingsActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- Sync Log activity -->
+        <activity
+            android:name=".ui.activities.SyncLogActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.activities.SyncSettingsActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- Keyboard Customization activity -->
         <activity
             android:name=".ui.activities.KeyboardCustomizationActivity"

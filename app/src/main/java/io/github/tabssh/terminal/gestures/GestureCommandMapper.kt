@@ -52,7 +52,8 @@ object GestureCommandMapper {
         }
         
         if (prefix.isEmpty()) {
-            return null // NONE multiplexer
+            // NONE multiplexer
+            return null
         }
         
         return when (multiplexerType) {
@@ -68,9 +69,12 @@ object GestureCommandMapper {
      */
     private fun getDefaultPrefix(multiplexerType: MultiplexerType): ByteArray {
         return when (multiplexerType) {
-            MultiplexerType.TMUX -> byteArrayOf(0x02.toByte())    // Ctrl+B
-            MultiplexerType.SCREEN -> byteArrayOf(0x01.toByte())  // Ctrl+A
-            MultiplexerType.ZELLIJ -> byteArrayOf(0x07.toByte())  // Ctrl+G
+            // Ctrl+B
+            MultiplexerType.TMUX -> byteArrayOf(0x02.toByte())
+            // Ctrl+A
+            MultiplexerType.SCREEN -> byteArrayOf(0x01.toByte())
+            // Ctrl+G
+            MultiplexerType.ZELLIJ -> byteArrayOf(0x07.toByte())
             MultiplexerType.NONE -> byteArrayOf()
         }
     }
@@ -83,20 +87,30 @@ object GestureCommandMapper {
     private fun getTmuxCommand(gestureType: GestureType, prefix: ByteArray): ByteArray? {
         return when (gestureType) {
             // Window navigation
-            GestureType.TWO_FINGER_SWIPE_RIGHT -> prefix + byteArrayOf('n'.code.toByte()) // next window
-            GestureType.TWO_FINGER_SWIPE_LEFT -> prefix + byteArrayOf('p'.code.toByte()) // previous window
-            GestureType.TWO_FINGER_SWIPE_DOWN -> prefix + byteArrayOf('c'.code.toByte()) // create window
-            GestureType.TWO_FINGER_SWIPE_UP -> prefix + byteArrayOf('w'.code.toByte()) // list windows
+            // next window
+            GestureType.TWO_FINGER_SWIPE_RIGHT -> prefix + byteArrayOf('n'.code.toByte())
+            // previous window
+            GestureType.TWO_FINGER_SWIPE_LEFT -> prefix + byteArrayOf('p'.code.toByte())
+            // create window
+            GestureType.TWO_FINGER_SWIPE_DOWN -> prefix + byteArrayOf('c'.code.toByte())
+            // list windows
+            GestureType.TWO_FINGER_SWIPE_UP -> prefix + byteArrayOf('w'.code.toByte())
             
             // Pane operations
-            GestureType.THREE_FINGER_SWIPE_RIGHT -> prefix + byteArrayOf('o'.code.toByte()) // next pane
-            GestureType.THREE_FINGER_SWIPE_LEFT -> prefix + byteArrayOf(';'.code.toByte()) // last pane
-            GestureType.THREE_FINGER_SWIPE_DOWN -> prefix + byteArrayOf('"'.code.toByte()) // split horizontal
-            GestureType.THREE_FINGER_SWIPE_UP -> prefix + byteArrayOf('%'.code.toByte()) // split vertical
+            // next pane
+            GestureType.THREE_FINGER_SWIPE_RIGHT -> prefix + byteArrayOf('o'.code.toByte())
+            // last pane
+            GestureType.THREE_FINGER_SWIPE_LEFT -> prefix + byteArrayOf(';'.code.toByte())
+            // split horizontal
+            GestureType.THREE_FINGER_SWIPE_DOWN -> prefix + byteArrayOf('"'.code.toByte())
+            // split vertical
+            GestureType.THREE_FINGER_SWIPE_UP -> prefix + byteArrayOf('%'.code.toByte())
             
             // Zoom/detach
-            GestureType.PINCH_IN -> prefix + byteArrayOf('z'.code.toByte()) // zoom pane
-            GestureType.PINCH_OUT -> prefix + byteArrayOf('d'.code.toByte()) // detach
+            // zoom pane
+            GestureType.PINCH_IN -> prefix + byteArrayOf('z'.code.toByte())
+            // detach
+            GestureType.PINCH_OUT -> prefix + byteArrayOf('d'.code.toByte())
         }
     }
     
@@ -108,18 +122,26 @@ object GestureCommandMapper {
     private fun getScreenCommand(gestureType: GestureType, prefix: ByteArray): ByteArray? {
         return when (gestureType) {
             // Window navigation
-            GestureType.THREE_FINGER_SWIPE_RIGHT -> prefix + byteArrayOf('n'.code.toByte()) // next window
-            GestureType.THREE_FINGER_SWIPE_LEFT -> prefix + byteArrayOf('p'.code.toByte()) // previous window
-            GestureType.THREE_FINGER_SWIPE_DOWN -> prefix + byteArrayOf('c'.code.toByte()) // create window
-            GestureType.THREE_FINGER_SWIPE_UP -> prefix + byteArrayOf('w'.code.toByte()) // list windows
+            // next window
+            GestureType.THREE_FINGER_SWIPE_RIGHT -> prefix + byteArrayOf('n'.code.toByte())
+            // previous window
+            GestureType.THREE_FINGER_SWIPE_LEFT -> prefix + byteArrayOf('p'.code.toByte())
+            // create window
+            GestureType.THREE_FINGER_SWIPE_DOWN -> prefix + byteArrayOf('c'.code.toByte())
+            // list windows
+            GestureType.THREE_FINGER_SWIPE_UP -> prefix + byteArrayOf('w'.code.toByte())
             
             // Split operations
-            GestureType.TWO_FINGER_SWIPE_DOWN -> prefix + byteArrayOf('S'.code.toByte()) // split horizontal
-            GestureType.TWO_FINGER_SWIPE_RIGHT -> prefix + byteArrayOf('\t'.code.toByte()) // next region
-            GestureType.TWO_FINGER_SWIPE_LEFT -> prefix + byteArrayOf('\t'.code.toByte()) // next region (same)
+            // split horizontal
+            GestureType.TWO_FINGER_SWIPE_DOWN -> prefix + byteArrayOf('S'.code.toByte())
+            // next region
+            GestureType.TWO_FINGER_SWIPE_RIGHT -> prefix + byteArrayOf('\t'.code.toByte())
+            // next region (same)
+            GestureType.TWO_FINGER_SWIPE_LEFT -> prefix + byteArrayOf('\t'.code.toByte())
             
             // Detach
-            GestureType.PINCH_OUT -> prefix + byteArrayOf('d'.code.toByte()) // detach
+            // detach
+            GestureType.PINCH_OUT -> prefix + byteArrayOf('d'.code.toByte())
             
             // Not mapped
             GestureType.TWO_FINGER_SWIPE_UP,
@@ -135,20 +157,30 @@ object GestureCommandMapper {
     private fun getZellijCommand(gestureType: GestureType, prefix: ByteArray): ByteArray? {
         return when (gestureType) {
             // Tab navigation
-            GestureType.TWO_FINGER_SWIPE_RIGHT -> prefix + byteArrayOf('n'.code.toByte()) // next tab
-            GestureType.TWO_FINGER_SWIPE_LEFT -> prefix + byteArrayOf('p'.code.toByte()) // previous tab
-            GestureType.TWO_FINGER_SWIPE_DOWN -> prefix + byteArrayOf('t'.code.toByte()) // new tab
-            GestureType.TWO_FINGER_SWIPE_UP -> prefix + byteArrayOf('w'.code.toByte()) // close tab
+            // next tab
+            GestureType.TWO_FINGER_SWIPE_RIGHT -> prefix + byteArrayOf('n'.code.toByte())
+            // previous tab
+            GestureType.TWO_FINGER_SWIPE_LEFT -> prefix + byteArrayOf('p'.code.toByte())
+            // new tab
+            GestureType.TWO_FINGER_SWIPE_DOWN -> prefix + byteArrayOf('t'.code.toByte())
+            // close tab
+            GestureType.TWO_FINGER_SWIPE_UP -> prefix + byteArrayOf('w'.code.toByte())
             
             // Pane operations
-            GestureType.THREE_FINGER_SWIPE_RIGHT -> prefix + byteArrayOf('h'.code.toByte()) // next pane
-            GestureType.THREE_FINGER_SWIPE_LEFT -> prefix + byteArrayOf('l'.code.toByte()) // previous pane
-            GestureType.THREE_FINGER_SWIPE_DOWN -> prefix + byteArrayOf('s'.code.toByte()) // split horizontal
-            GestureType.THREE_FINGER_SWIPE_UP -> prefix + byteArrayOf('v'.code.toByte()) // split vertical
+            // next pane
+            GestureType.THREE_FINGER_SWIPE_RIGHT -> prefix + byteArrayOf('h'.code.toByte())
+            // previous pane
+            GestureType.THREE_FINGER_SWIPE_LEFT -> prefix + byteArrayOf('l'.code.toByte())
+            // split horizontal
+            GestureType.THREE_FINGER_SWIPE_DOWN -> prefix + byteArrayOf('s'.code.toByte())
+            // split vertical
+            GestureType.THREE_FINGER_SWIPE_UP -> prefix + byteArrayOf('v'.code.toByte())
             
             // Zoom/quit
-            GestureType.PINCH_IN -> prefix + byteArrayOf('z'.code.toByte()) // toggle fullscreen
-            GestureType.PINCH_OUT -> prefix + byteArrayOf('q'.code.toByte()) // quit
+            // toggle fullscreen
+            GestureType.PINCH_IN -> prefix + byteArrayOf('z'.code.toByte())
+            // quit
+            GestureType.PINCH_OUT -> prefix + byteArrayOf('q'.code.toByte())
         }
     }
     

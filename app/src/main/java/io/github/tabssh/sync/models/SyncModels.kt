@@ -7,6 +7,7 @@ import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.storage.database.entities.ThemeDefinition
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Counts of synced items
@@ -18,14 +19,22 @@ data class SyncItemCounts(
     val themes: Int = 0,
     val preferences: Int = 0,
     val hostKeys: Int = 0,
-    val workspaces: Int = 0,    // Wave 5.3
-    val snippets: Int = 0,       // Wave 5.4
-    val identities: Int = 0,     // Wave 5.4
-    val groups: Int = 0,         // Wave 5.4
-    val hypervisors: Int = 0,    // Wave 7.1
-    val certificates: Int = 0,   // Wave 7.1
-    val macros: Int = 0,         // Wave 11
-    val monitorSlots: Int = 0,   // Wave 11
+    // Wave 5.3
+    val workspaces: Int = 0,
+    // Wave 5.4
+    val snippets: Int = 0,
+    // Wave 5.4
+    val identities: Int = 0,
+    // Wave 5.4
+    val groups: Int = 0,
+    // Wave 7.1
+    val hypervisors: Int = 0,
+    // Wave 7.1
+    val certificates: Int = 0,
+    // Wave 11
+    val macros: Int = 0,
+    // Wave 11
+    val monitorSlots: Int = 0,
     /** Wave 12 (2026-05-16 audit) — reusable hypervisor credential metadata.
      *  Token/password remains Keystore-bound and is NOT synced. */
     val hypervisorAccounts: Int = 0,
@@ -112,9 +121,18 @@ data class SyncDataPackage(
     val cloudAccounts: List<CloudAccount> = emptyList(),
     /** Multi-host dashboard groups and host membership from the `multi_host_dashboard`
      *  SharedPreferences file.  Map keys are raw SharedPrefs keys (e.g.
-     *  `dash_groups_json`, `dash_hosts_<groupId>`); values are stored strings.
+     *  `dash_groups_json`, `dash_hosts_<groupId>`); values are type-tagged by
+     *  [io.github.tabssh.utils.SharedPrefsCodec] because the file mixes strings
+     *  with a Boolean.
      *  Empty when the sync_dashboard switch is off (per-device, the default). */
-    val dashboardConfig: Map<String, String> = emptyMap(),
+    val dashboardConfig: Map<String, JsonObject> = emptyMap(),
+    /** Named SharedPreferences files holding user data outside the Room DB:
+     *  `TabSSH` (host list sort orders), `cluster_commands` (saved cluster
+     *  command history), `snippet_var_recall` (last-used snippet variable
+     *  values). Outer key is the SharedPreferences file name, inner map is that
+     *  file's raw key → type-tagged value ([io.github.tabssh.utils.SharedPrefsCodec];
+     *  `cluster_commands` stores a Set<String>). Gated by the sync_settings toggle. */
+    val namedPreferenceFiles: Map<String, Map<String, JsonObject>> = emptyMap(),
     /** Saved SSH port-forward rules, last-write-wins REPLACE on UUID PK. */
     val portForwards: List<io.github.tabssh.storage.database.entities.PortForward> = emptyList(),
     /** Reusable network routes (proxies and SSH jump hosts), last-write-wins REPLACE on UUID PK. */
@@ -210,18 +228,40 @@ data class Conflict(
     val localValue: Any? = null,
     val remoteValue: Any? = null,
     val baseValue: Any? = null,
+    /** Full local entity, when available — [ConflictResolver] applies from
+     *  this rather than [localValue], which for FIELD_MODIFIED_BOTH_SIDES
+     *  conflicts holds only the raw scalar of the conflicting field. */
+    val localEntity: Any? = null,
+    /** Full remote entity, when available — see [localEntity]. */
+    val remoteEntity: Any? = null,
     val localTimestamp: Long = 0,
     val remoteTimestamp: Long = 0,
     val autoResolvable: Boolean = false,
     val description: String = ""
 ) {
+    /**
+     * Options offered by the picker for this conflict. Host keys can only
+     * ever have one trusted fingerprint per host, so — despite sharing
+     * FIELD_MODIFIED_BOTH_SIDES with connection/key/theme field conflicts —
+     * `host_key` never offers KEEP_BOTH. SKIP is dropped for
+     * FIELD_MODIFIED_BOTH_SIDES entirely: the picker always resolves to a
+     * definite outcome (keep local / keep remote / keep both) rather than
+     * leaving the field unresolved.
+     */
     fun getResolutionOptions(): List<ConflictResolutionOption> {
         return when (conflictType) {
-            ConflictType.FIELD_MODIFIED_BOTH_SIDES -> listOf(
-                ConflictResolutionOption.KEEP_LOCAL,
-                ConflictResolutionOption.KEEP_REMOTE,
-                ConflictResolutionOption.SKIP
-            )
+            ConflictType.FIELD_MODIFIED_BOTH_SIDES -> if (entityType == "host_key") {
+                listOf(
+                    ConflictResolutionOption.KEEP_LOCAL,
+                    ConflictResolutionOption.KEEP_REMOTE
+                )
+            } else {
+                listOf(
+                    ConflictResolutionOption.KEEP_LOCAL,
+                    ConflictResolutionOption.KEEP_REMOTE,
+                    ConflictResolutionOption.KEEP_BOTH
+                )
+            }
             ConflictType.DELETED_MODIFIED -> listOf(
                 ConflictResolutionOption.KEEP_LOCAL,
                 ConflictResolutionOption.KEEP_REMOTE
@@ -237,6 +277,20 @@ data class Conflict(
             )
         }
     }
+
+    /**
+     * LWW preselection: the side with the newer timestamp wins. Equal (or
+     * both-zero) timestamps default to keep-local — mirrors
+     * [io.github.tabssh.sync.merge.ConflictResolver.autoResolveConflicts]'s
+     * comparison exactly so the picker's default matches what auto-resolve
+     * would have chosen.
+     */
+    fun preselectedResolution(): ConflictResolutionOption =
+        if (remoteTimestamp > localTimestamp) {
+            ConflictResolutionOption.KEEP_REMOTE
+        } else {
+            ConflictResolutionOption.KEEP_LOCAL
+        }
 }
 
 /**

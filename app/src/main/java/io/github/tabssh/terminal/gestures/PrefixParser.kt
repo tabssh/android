@@ -34,7 +34,8 @@ object PrefixParser {
 
             // Ctrl+Space: C-Space, ^Space, Ctrl-Space, Ctrl+Space
             trimmed.matches(Regex("^(C-|\\^|Ctrl[-+])Space$", RegexOption.IGNORE_CASE)) -> {
-                byteArrayOf(0x00.toByte()) // Ctrl+Space is NUL
+                // Ctrl+Space is NUL
+                byteArrayOf(0x00.toByte())
             }
 
             // Alt+key variants: M-a, Alt-a, Alt+a
@@ -55,7 +56,8 @@ object PrefixParser {
                 parseHexKey(trimmed)
             }
 
-            else -> null // Invalid notation
+            // Invalid notation
+            else -> null
         }
     }
     

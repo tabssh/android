@@ -48,7 +48,8 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
     companion object {
         private const val ARG_LOG_CONTENT = "log_content"
         private const val ARG_LOG_TYPE    = "log_type"
-        private const val MAX_CONTENT_BYTES = 100 * 1024 // 100 KB
+        // 100 KB
+        private const val MAX_CONTENT_BYTES = 100 * 1024
 
         private val SERVICE_IDS     = listOf("stikked", "microbin", "lenpaste", "pastebin")
 
@@ -308,6 +309,9 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
                 val deviceInfo = buildString {
                     appendLine("- App: TabSSH ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
                     appendLine("- Commit: ${BuildConfig.GIT_COMMIT_ID}")
+                    // Matches the build_epoch line in the release's version.txt, so a
+                    // report can be tied to the exact build that produced it
+                    appendLine("- Build epoch: ${BuildConfig.BUILD_EPOCH}")
                     appendLine("- Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
                     appendLine("- Device: ${Build.MANUFACTURER} ${Build.MODEL}")
                     append("- Log type: $logType")

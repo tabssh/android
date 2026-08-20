@@ -278,8 +278,8 @@ Update these when their subject changes:
 ## Non-negotiables
 
 1. **`applicationId` never changes** after first release (see ⚠️ CRITICAL above).
-2. **Room schema changes always ship a numbered migration** (PART 5). SQLite < 3.35 has no `DROP COLUMN` — rename by adding a column, migrating data, and leaving the old column.
-3. **Credentials never touch the database.** DB password columns, where they exist for schema-compat reasons, are always empty strings. Storage: Android Keystore AES-GCM (PART 6).
+2. **Room schema changes always ship a numbered migration** (PART 5). SQLite < 3.35 has no `DROP COLUMN` — rename by adding a column, migrating data, and leaving the old column. A column that must genuinely disappear (rule 3) is removed by recreating the table: create the new table, copy every retained column, drop the old table, rename, recreate its indices — never a literal `DROP COLUMN`.
+3. **Credentials never touch the database.** A secret-bearing column is removed outright by the table-recreate migration in rule 2; where one still exists for schema-compat reasons it is always an empty string. Storage: Android Keystore AES-GCM (PART 6).
 4. **All builds run in Docker** (PART 4). The host has no SDK, no Gradle, no JDK. Never `sdkmanager`/`gradle` on the host.
 5. **First run works with zero config.** No mandatory sign-in, no required server, no feature gating. Telemetry is opt-in only — default OFF.
 6. **Dark mode is the default**; support dark/light/auto. Never hardcode colors — Material theme attributes and a central theme definition only.
@@ -655,7 +655,7 @@ The Room/database sections apply only if the IDEA.md `## Applicability` matrix d
 4. `make check` to trigger schema export.
 5. Commit the updated `app/schemas/` JSON in the same commit.
 
-**Never destructive-migrate.** No `fallbackToDestructiveMigration()` in any variant. SQLite < 3.35: no `DROP COLUMN` — add the new column, copy data, leave the old column in place.
+**Never destructive-migrate.** No `fallbackToDestructiveMigration()` in any variant. SQLite < 3.35: no `DROP COLUMN` — add the new column, copy data, leave the old column in place. When a column must actually be removed (a secret-bearing column, PART 0 rule 3), recreate the table instead: create the replacement, copy every retained column, drop the original, rename, recreate its indices.
 
 ## Preferences
 

@@ -21,12 +21,18 @@ data class PerformanceMetrics(
  * CPU usage metrics
  */
 data class CpuMetrics(
-    val userPercent: Float,      // User space CPU %
-    val systemPercent: Float,     // System/kernel CPU %
-    val idlePercent: Float,       // Idle CPU %
-    val iowaitPercent: Float,     // I/O wait %
-    val totalPercent: Float,      // Total usage % (100 - idle)
-    val coreCount: Int = 1        // Logical CPU core count (from nproc / /proc/cpuinfo)
+    // User space CPU %
+    val userPercent: Float,
+    // System/kernel CPU %
+    val systemPercent: Float,
+    // Idle CPU %
+    val idlePercent: Float,
+    // I/O wait %
+    val iowaitPercent: Float,
+    // Total usage % (100 - idle)
+    val totalPercent: Float,
+    // Logical CPU core count (from nproc / /proc/cpuinfo)
+    val coreCount: Int = 1
 ) {
     companion object {
         fun empty() = CpuMetrics(0f, 0f, 100f, 0f, 0f, coreCount = 1)
@@ -37,12 +43,18 @@ data class CpuMetrics(
  * Memory usage metrics
  */
 data class MemoryMetrics(
-    val totalMB: Long,            // Total RAM in MB
-    val usedMB: Long,             // Used RAM in MB
-    val freeMB: Long,             // Free RAM in MB
-    val availableMB: Long,        // Available RAM in MB (free + buffers + cache)
-    val buffersAndCacheMB: Long,  // Buffers + Cache in MB
-    val usedPercent: Float        // Used percentage
+    // Total RAM in MB
+    val totalMB: Long,
+    // Used RAM in MB
+    val usedMB: Long,
+    // Free RAM in MB
+    val freeMB: Long,
+    // Available RAM in MB (free + buffers + cache)
+    val availableMB: Long,
+    // Buffers + Cache in MB
+    val buffersAndCacheMB: Long,
+    // Used percentage
+    val usedPercent: Float
 ) {
     companion object {
         fun empty() = MemoryMetrics(0, 0, 0, 0, 0, 0f)
@@ -53,11 +65,16 @@ data class MemoryMetrics(
  * Disk usage metrics
  */
 data class DiskMetrics(
-    val totalGB: Float,           // Total disk space in GB
-    val usedGB: Float,            // Used disk space in GB
-    val availableGB: Float,       // Available disk space in GB
-    val usedPercent: Float,       // Used percentage
-    val mountPoint: String        // Mount point (usually "/")
+    // Total disk space in GB
+    val totalGB: Float,
+    // Used disk space in GB
+    val usedGB: Float,
+    // Available disk space in GB
+    val availableGB: Float,
+    // Used percentage
+    val usedPercent: Float,
+    // Mount point (usually "/")
+    val mountPoint: String
 ) {
     companion object {
         fun empty() = DiskMetrics(0f, 0f, 0f, 0f, "/")
@@ -68,12 +85,18 @@ data class DiskMetrics(
  * Network statistics
  */
 data class NetworkMetrics(
-    val rxBytesPerSec: Long,      // Receive bytes/sec
-    val txBytesPerSec: Long,      // Transmit bytes/sec
-    val rxPacketsPerSec: Long,    // Receive packets/sec
-    val txPacketsPerSec: Long,    // Transmit packets/sec
-    val totalRxMB: Float,         // Total received MB
-    val totalTxMB: Float          // Total transmitted MB
+    // Receive bytes/sec
+    val rxBytesPerSec: Long,
+    // Transmit bytes/sec
+    val txBytesPerSec: Long,
+    // Receive packets/sec
+    val rxPacketsPerSec: Long,
+    // Transmit packets/sec
+    val txPacketsPerSec: Long,
+    // Total received MB
+    val totalRxMB: Float,
+    // Total transmitted MB
+    val totalTxMB: Float
 ) {
     companion object {
         fun empty() = NetworkMetrics(0, 0, 0, 0, 0f, 0f)
@@ -84,12 +107,18 @@ data class NetworkMetrics(
  * System load average
  */
 data class LoadMetrics(
-    val load1min: Float,          // 1 minute load average
-    val load5min: Float,          // 5 minute load average
-    val load15min: Float,         // 15 minute load average
-    val runningProcesses: Int,    // Running processes
-    val totalProcesses: Int,      // Total processes
-    val uptime: Long              // System uptime in seconds
+    // 1 minute load average
+    val load1min: Float,
+    // 5 minute load average
+    val load5min: Float,
+    // 15 minute load average
+    val load15min: Float,
+    // Running processes
+    val runningProcesses: Int,
+    // Total processes
+    val totalProcesses: Int,
+    // System uptime in seconds
+    val uptime: Long
 ) {
     companion object {
         fun empty() = LoadMetrics(0f, 0f, 0f, 0, 0, 0)
@@ -100,14 +129,22 @@ data class LoadMetrics(
  * Platform/OS information
  */
 data class PlatformInfo(
-    val osName: String,           // e.g., "Linux", "FreeBSD"
-    val osVersion: String,        // Kernel version e.g., "5.15.0-91-generic"
-    val distro: String,           // e.g., "Ubuntu", "Debian", "CentOS"
-    val distroVersion: String,    // e.g., "22.04", "12", "8"
-    val distroCodename: String,   // e.g., "jammy", "bookworm"
-    val architecture: String,     // e.g., "x86_64", "aarch64"
-    val hostname: String,         // Server hostname
-    val kernelRelease: String     // Full kernel string
+    // e.g., "Linux", "FreeBSD"
+    val osName: String,
+    // Kernel version e.g., "5.15.0-91-generic"
+    val osVersion: String,
+    // e.g., "Ubuntu", "Debian", "CentOS"
+    val distro: String,
+    // e.g., "22.04", "12", "8"
+    val distroVersion: String,
+    // e.g., "jammy", "bookworm"
+    val distroCodename: String,
+    // e.g., "x86_64", "aarch64"
+    val architecture: String,
+    // Server hostname
+    val hostname: String,
+    // Full kernel string
+    val kernelRelease: String
 ) {
     companion object {
         fun empty() = PlatformInfo("", "", "", "", "", "", "", "")
@@ -152,7 +189,8 @@ data class PlatformInfo(
  * Historical metrics for charting
  */
 data class MetricsHistory(
-    val maxEntries: Int = 60,     // Keep last 60 data points (5 minutes at 5s interval)
+    // Keep last 60 data points (5 minutes at 5s interval)
+    val maxEntries: Int = 60,
     val cpuHistory: MutableList<Pair<Long, Float>> = mutableListOf(),
     val memoryHistory: MutableList<Pair<Long, Float>> = mutableListOf(),
     val networkRxHistory: MutableList<Pair<Long, Long>> = mutableListOf(),

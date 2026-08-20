@@ -191,7 +191,8 @@ class NetworkAwareReconnector(
                 if (!wasConnected && isNowConnected && paused && !cancelled) {
                     Logger.i(tag, "Network restored — reconnecting immediately (backoff reset)")
                     paused = false
-                    attempts = 0  // fresh start after a network outage
+                    // fresh start after a network outage
+                    attempts = 0
                     reconnectJob?.cancel()
                     reconnectJob = scope.launch {
                         if (!cancelled) reconnect()

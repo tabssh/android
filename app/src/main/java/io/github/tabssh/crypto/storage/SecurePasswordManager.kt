@@ -431,6 +431,30 @@ class SecurePasswordManager(private val context: Context) {
     }
     
     /**
+     * Every alias that currently has a Keystore-persisted secret.
+     *
+     * Derived from the ciphertext key namespace in SharedPreferences, so it
+     * never decrypts anything and never touches the Keystore HAL. Cheap
+     * enough for the sync layer to call on every collection pass when it
+     * needs the live secret-alias set for tombstone diffing.
+     */
+    fun storedAliases(): Set<String> =
+        sharedPrefs.all.keys
+            .asSequence()
+            .filter { it.startsWith(PREF_ENCRYPTED_DATA_PREFIX) }
+            .map { it.removePrefix(PREF_ENCRYPTED_DATA_PREFIX) }
+            .toSet()
+
+    /**
+     * Whether [alias] has a Keystore-persisted secret, decided without
+     * decrypting it. Session-only secrets are deliberately not counted —
+     * they do not survive process death and must never be treated as
+     * durable storage.
+     */
+    fun hasStoredPassword(alias: String): Boolean =
+        sharedPrefs.contains("$PREF_ENCRYPTED_DATA_PREFIX$alias")
+
+    /**
      * Clear all stored passwords
      */
     fun clearAllPasswords() {

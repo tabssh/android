@@ -103,22 +103,38 @@ object BuiltInThemes {
             selection = 0x4444475A.toInt(),
             highlight = 0xFF50FA7B.toInt(),
             ansiColors = intArrayOf(
-                0xFF21222C.toInt(), // Black
-                0xFFFF5555.toInt(), // Red
-                0xFF50FA7B.toInt(), // Green
-                0xFFF1FA8C.toInt(), // Yellow
-                0xFFBD93F9.toInt(), // Blue
-                0xFFFF79C6.toInt(), // Magenta
-                0xFF8BE9FD.toInt(), // Cyan
-                0xFFF8F8F2.toInt(), // White
-                0xFF6272A4.toInt(), // Bright Black
-                0xFFFF6E6E.toInt(), // Bright Red
-                0xFF69FF94.toInt(), // Bright Green
-                0xFFFFFFA5.toInt(), // Bright Yellow
-                0xFFD6ACFF.toInt(), // Bright Blue
-                0xFFFF92DF.toInt(), // Bright Magenta
-                0xFFA4FFFF.toInt(), // Bright Cyan
-                0xFFFFFFFF.toInt()  // Bright White
+                // Black
+                0xFF21222C.toInt(),
+                // Red
+                0xFFFF5555.toInt(),
+                // Green
+                0xFF50FA7B.toInt(),
+                // Yellow
+                0xFFF1FA8C.toInt(),
+                // Blue
+                0xFFBD93F9.toInt(),
+                // Magenta
+                0xFFFF79C6.toInt(),
+                // Cyan
+                0xFF8BE9FD.toInt(),
+                // White
+                0xFFF8F8F2.toInt(),
+                // Bright Black
+                0xFF6272A4.toInt(),
+                // Bright Red
+                0xFFFF6E6E.toInt(),
+                // Bright Green
+                0xFF69FF94.toInt(),
+                // Bright Yellow
+                0xFFFFFFA5.toInt(),
+                // Bright Blue
+                0xFFD6ACFF.toInt(),
+                // Bright Magenta
+                0xFFFF92DF.toInt(),
+                // Bright Cyan
+                0xFFA4FFFF.toInt(),
+                // Bright White
+                0xFFFFFFFF.toInt()
             )
         )
     }
@@ -136,22 +152,38 @@ object BuiltInThemes {
             selection = 0x44073642.toInt(),
             highlight = 0xFFB58900.toInt(),
             ansiColors = intArrayOf(
-                0xFF073642.toInt(), // Black
-                0xFFDC322F.toInt(), // Red
-                0xFF859900.toInt(), // Green
-                0xFFB58900.toInt(), // Yellow
-                0xFF268BD2.toInt(), // Blue
-                0xFFD33682.toInt(), // Magenta
-                0xFF2AA198.toInt(), // Cyan
-                0xFFEEE8D5.toInt(), // White
-                0xFF002B36.toInt(), // Bright Black
-                0xFFCB4B16.toInt(), // Bright Red
-                0xFF586E75.toInt(), // Bright Green
-                0xFF657B83.toInt(), // Bright Yellow
-                0xFF839496.toInt(), // Bright Blue
-                0xFF6C71C4.toInt(), // Bright Magenta
-                0xFF93A1A1.toInt(), // Bright Cyan
-                0xFFFDF6E3.toInt()  // Bright White
+                // Black
+                0xFF073642.toInt(),
+                // Red
+                0xFFDC322F.toInt(),
+                // Green
+                0xFF859900.toInt(),
+                // Yellow
+                0xFFB58900.toInt(),
+                // Blue
+                0xFF268BD2.toInt(),
+                // Magenta
+                0xFFD33682.toInt(),
+                // Cyan
+                0xFF2AA198.toInt(),
+                // White
+                0xFFEEE8D5.toInt(),
+                // Bright Black
+                0xFF002B36.toInt(),
+                // Bright Red
+                0xFFCB4B16.toInt(),
+                // Bright Green
+                0xFF586E75.toInt(),
+                // Bright Yellow
+                0xFF657B83.toInt(),
+                // Bright Blue
+                0xFF839496.toInt(),
+                // Bright Magenta
+                0xFF6C71C4.toInt(),
+                // Bright Cyan
+                0xFF93A1A1.toInt(),
+                // Bright White
+                0xFFFDF6E3.toInt()
             )
         )
     }
@@ -172,22 +204,38 @@ object BuiltInThemes {
             selection = 0x44EEE8D5.toInt(),
             highlight = 0xFFB58900.toInt(),
             ansiColors = intArrayOf(
-                0xFF073642.toInt(), // Black
-                0xFFDC322F.toInt(), // Red
-                0xFF859900.toInt(), // Green
-                0xFFB58900.toInt(), // Yellow
-                0xFF268BD2.toInt(), // Blue
-                0xFFD33682.toInt(), // Magenta
-                0xFF2AA198.toInt(), // Cyan
-                0xFFEEE8D5.toInt(), // White
-                0xFF002B36.toInt(), // Bright Black
-                0xFFCB4B16.toInt(), // Bright Red
-                0xFF586E75.toInt(), // Bright Green
-                0xFF657B83.toInt(), // Bright Yellow
-                0xFF839496.toInt(), // Bright Blue
-                0xFF6C71C4.toInt(), // Bright Magenta
-                0xFF93A1A1.toInt(), // Bright Cyan
-                0xFFFDF6E3.toInt()  // Bright White
+                // Black
+                0xFF073642.toInt(),
+                // Red
+                0xFFDC322F.toInt(),
+                // Green
+                0xFF859900.toInt(),
+                // Yellow
+                0xFFB58900.toInt(),
+                // Blue
+                0xFF268BD2.toInt(),
+                // Magenta
+                0xFFD33682.toInt(),
+                // Cyan
+                0xFF2AA198.toInt(),
+                // White
+                0xFFEEE8D5.toInt(),
+                // Bright Black
+                0xFF002B36.toInt(),
+                // Bright Red
+                0xFFCB4B16.toInt(),
+                // Bright Green
+                0xFF586E75.toInt(),
+                // Bright Yellow
+                0xFF657B83.toInt(),
+                // Bright Blue
+                0xFF839496.toInt(),
+                // Bright Magenta
+                0xFF6C71C4.toInt(),
+                // Bright Cyan
+                0xFF93A1A1.toInt(),
+                // Bright White
+                0xFFFDF6E3.toInt()
             )
         )
     }
@@ -205,22 +253,38 @@ object BuiltInThemes {
             selection = 0x44434C5E.toInt(),
             highlight = 0xFF88C0D0.toInt(),
             ansiColors = intArrayOf(
-                0xFF3B4252.toInt(), // Black
-                0xFFBF616A.toInt(), // Red
-                0xFFA3BE8C.toInt(), // Green
-                0xFFEBCB8B.toInt(), // Yellow
-                0xFF81A1C1.toInt(), // Blue
-                0xFFB48EAD.toInt(), // Magenta
-                0xFF88C0D0.toInt(), // Cyan
-                0xFFE5E9F0.toInt(), // White
-                0xFF4C566A.toInt(), // Bright Black
-                0xFFBF616A.toInt(), // Bright Red
-                0xFFA3BE8C.toInt(), // Bright Green
-                0xFFEBCB8B.toInt(), // Bright Yellow
-                0xFF81A1C1.toInt(), // Bright Blue
-                0xFFB48EAD.toInt(), // Bright Magenta
-                0xFF8FBCBB.toInt(), // Bright Cyan
-                0xFFECEFF4.toInt()  // Bright White
+                // Black
+                0xFF3B4252.toInt(),
+                // Red
+                0xFFBF616A.toInt(),
+                // Green
+                0xFFA3BE8C.toInt(),
+                // Yellow
+                0xFFEBCB8B.toInt(),
+                // Blue
+                0xFF81A1C1.toInt(),
+                // Magenta
+                0xFFB48EAD.toInt(),
+                // Cyan
+                0xFF88C0D0.toInt(),
+                // White
+                0xFFE5E9F0.toInt(),
+                // Bright Black
+                0xFF4C566A.toInt(),
+                // Bright Red
+                0xFFBF616A.toInt(),
+                // Bright Green
+                0xFFA3BE8C.toInt(),
+                // Bright Yellow
+                0xFFEBCB8B.toInt(),
+                // Bright Blue
+                0xFF81A1C1.toInt(),
+                // Bright Magenta
+                0xFFB48EAD.toInt(),
+                // Bright Cyan
+                0xFF8FBCBB.toInt(),
+                // Bright White
+                0xFFECEFF4.toInt()
             )
         )
     }
@@ -238,22 +302,38 @@ object BuiltInThemes {
             selection = 0x44404859.toInt(),
             highlight = 0xFFE5C07B.toInt(),
             ansiColors = intArrayOf(
-                0xFF282C34.toInt(), // Black
-                0xFFE06C75.toInt(), // Red
-                0xFF98C379.toInt(), // Green
-                0xFFE5C07B.toInt(), // Yellow
-                0xFF61AFEF.toInt(), // Blue
-                0xFFC678DD.toInt(), // Magenta
-                0xFF56B6C2.toInt(), // Cyan
-                0xFFABB2BF.toInt(), // White
-                0xFF3E4451.toInt(), // Bright Black
-                0xFFE06C75.toInt(), // Bright Red
-                0xFF98C379.toInt(), // Bright Green
-                0xFFE5C07B.toInt(), // Bright Yellow
-                0xFF61AFEF.toInt(), // Bright Blue
-                0xFFC678DD.toInt(), // Bright Magenta
-                0xFF56B6C2.toInt(), // Bright Cyan
-                0xFFFFFFFF.toInt()  // Bright White
+                // Black
+                0xFF282C34.toInt(),
+                // Red
+                0xFFE06C75.toInt(),
+                // Green
+                0xFF98C379.toInt(),
+                // Yellow
+                0xFFE5C07B.toInt(),
+                // Blue
+                0xFF61AFEF.toInt(),
+                // Magenta
+                0xFFC678DD.toInt(),
+                // Cyan
+                0xFF56B6C2.toInt(),
+                // White
+                0xFFABB2BF.toInt(),
+                // Bright Black
+                0xFF3E4451.toInt(),
+                // Bright Red
+                0xFFE06C75.toInt(),
+                // Bright Green
+                0xFF98C379.toInt(),
+                // Bright Yellow
+                0xFFE5C07B.toInt(),
+                // Bright Blue
+                0xFF61AFEF.toInt(),
+                // Bright Magenta
+                0xFFC678DD.toInt(),
+                // Bright Cyan
+                0xFF56B6C2.toInt(),
+                // Bright White
+                0xFFFFFFFF.toInt()
             )
         )
     }
@@ -271,22 +351,38 @@ object BuiltInThemes {
             selection = 0x4449483E.toInt(),
             highlight = 0xFFE6DB74.toInt(),
             ansiColors = intArrayOf(
-                0xFF272822.toInt(), // Black
-                0xFFF92672.toInt(), // Red
-                0xFFA6E22E.toInt(), // Green
-                0xFFE6DB74.toInt(), // Yellow
-                0xFF66D9EF.toInt(), // Blue
-                0xFFAE81FF.toInt(), // Magenta
-                0xFF2AA198.toInt(), // Cyan
-                0xFFF8F8F2.toInt(), // White
-                0xFF75715E.toInt(), // Bright Black
-                0xFFF92672.toInt(), // Bright Red
-                0xFFA6E22E.toInt(), // Bright Green
-                0xFFE6DB74.toInt(), // Bright Yellow
-                0xFF66D9EF.toInt(), // Bright Blue
-                0xFFAE81FF.toInt(), // Bright Magenta
-                0xFF2AA198.toInt(), // Bright Cyan
-                0xFFFFFFFF.toInt()  // Bright White
+                // Black
+                0xFF272822.toInt(),
+                // Red
+                0xFFF92672.toInt(),
+                // Green
+                0xFFA6E22E.toInt(),
+                // Yellow
+                0xFFE6DB74.toInt(),
+                // Blue
+                0xFF66D9EF.toInt(),
+                // Magenta
+                0xFFAE81FF.toInt(),
+                // Cyan
+                0xFF2AA198.toInt(),
+                // White
+                0xFFF8F8F2.toInt(),
+                // Bright Black
+                0xFF75715E.toInt(),
+                // Bright Red
+                0xFFF92672.toInt(),
+                // Bright Green
+                0xFFA6E22E.toInt(),
+                // Bright Yellow
+                0xFFE6DB74.toInt(),
+                // Bright Blue
+                0xFF66D9EF.toInt(),
+                // Bright Magenta
+                0xFFAE81FF.toInt(),
+                // Bright Cyan
+                0xFF2AA198.toInt(),
+                // Bright White
+                0xFFFFFFFF.toInt()
             )
         )
     }
@@ -304,22 +400,38 @@ object BuiltInThemes {
             selection = 0x443C3836.toInt(),
             highlight = 0xFFB8BB26.toInt(),
             ansiColors = intArrayOf(
-                0xFF282828.toInt(), // Black
-                0xFFCC241D.toInt(), // Red
-                0xFF98971A.toInt(), // Green
-                0xFFD79921.toInt(), // Yellow
-                0xFF458588.toInt(), // Blue
-                0xFFB16286.toInt(), // Magenta
-                0xFF689D6A.toInt(), // Cyan
-                0xFFA89984.toInt(), // White
-                0xFF928374.toInt(), // Bright Black
-                0xFFFB4934.toInt(), // Bright Red
-                0xFFB8BB26.toInt(), // Bright Green
-                0xFFFABD2F.toInt(), // Bright Yellow
-                0xFF83A598.toInt(), // Bright Blue
-                0xFFD3869B.toInt(), // Bright Magenta
-                0xFF8EC07C.toInt(), // Bright Cyan
-                0xFFEBDBB2.toInt()  // Bright White
+                // Black
+                0xFF282828.toInt(),
+                // Red
+                0xFFCC241D.toInt(),
+                // Green
+                0xFF98971A.toInt(),
+                // Yellow
+                0xFFD79921.toInt(),
+                // Blue
+                0xFF458588.toInt(),
+                // Magenta
+                0xFFB16286.toInt(),
+                // Cyan
+                0xFF689D6A.toInt(),
+                // White
+                0xFFA89984.toInt(),
+                // Bright Black
+                0xFF928374.toInt(),
+                // Bright Red
+                0xFFFB4934.toInt(),
+                // Bright Green
+                0xFFB8BB26.toInt(),
+                // Bright Yellow
+                0xFFFABD2F.toInt(),
+                // Bright Blue
+                0xFF83A598.toInt(),
+                // Bright Magenta
+                0xFFD3869B.toInt(),
+                // Bright Cyan
+                0xFF8EC07C.toInt(),
+                // Bright White
+                0xFFEBDBB2.toInt()
             )
         )
     }
@@ -337,22 +449,38 @@ object BuiltInThemes {
             selection = 0x44EBDBB2.toInt(),
             highlight = 0xFF98971A.toInt(),
             ansiColors = intArrayOf(
-                0xFFFBF1C7.toInt(), // Black
-                0xFFCC241D.toInt(), // Red
-                0xFF98971A.toInt(), // Green
-                0xFFD79921.toInt(), // Yellow
-                0xFF458588.toInt(), // Blue
-                0xFFB16286.toInt(), // Magenta
-                0xFF689D6A.toInt(), // Cyan
-                0xFF7C6F64.toInt(), // White
-                0xFF928374.toInt(), // Bright Black
-                0xFF9D0006.toInt(), // Bright Red
-                0xFF79740E.toInt(), // Bright Green
-                0xFFB57614.toInt(), // Bright Yellow
-                0xFF076678.toInt(), // Bright Blue
-                0xFF8F3F71.toInt(), // Bright Magenta
-                0xFF427B58.toInt(), // Bright Cyan
-                0xFF3C3836.toInt()  // Bright White
+                // Black
+                0xFFFBF1C7.toInt(),
+                // Red
+                0xFFCC241D.toInt(),
+                // Green
+                0xFF98971A.toInt(),
+                // Yellow
+                0xFFD79921.toInt(),
+                // Blue
+                0xFF458588.toInt(),
+                // Magenta
+                0xFFB16286.toInt(),
+                // Cyan
+                0xFF689D6A.toInt(),
+                // White
+                0xFF7C6F64.toInt(),
+                // Bright Black
+                0xFF928374.toInt(),
+                // Bright Red
+                0xFF9D0006.toInt(),
+                // Bright Green
+                0xFF79740E.toInt(),
+                // Bright Yellow
+                0xFFB57614.toInt(),
+                // Bright Blue
+                0xFF076678.toInt(),
+                // Bright Magenta
+                0xFF8F3F71.toInt(),
+                // Bright Cyan
+                0xFF427B58.toInt(),
+                // Bright White
+                0xFF3C3836.toInt()
             )
         )
     }
@@ -370,22 +498,38 @@ object BuiltInThemes {
             selection = 0x44373B41.toInt(),
             highlight = 0xFFF0C674.toInt(),
             ansiColors = intArrayOf(
-                0xFF1D1F21.toInt(), // Black
-                0xFFCC6666.toInt(), // Red
-                0xFFB5BD68.toInt(), // Green
-                0xFFF0C674.toInt(), // Yellow
-                0xFF81A2BE.toInt(), // Blue
-                0xFFB294BB.toInt(), // Magenta
-                0xFF8ABEB7.toInt(), // Cyan
-                0xFFC5C8C6.toInt(), // White
-                0xFF969896.toInt(), // Bright Black
-                0xFFCC6666.toInt(), // Bright Red
-                0xFFB5BD68.toInt(), // Bright Green
-                0xFFF0C674.toInt(), // Bright Yellow
-                0xFF81A2BE.toInt(), // Bright Blue
-                0xFFB294BB.toInt(), // Bright Magenta
-                0xFF8ABEB7.toInt(), // Bright Cyan
-                0xFFFFFFFF.toInt()  // Bright White
+                // Black
+                0xFF1D1F21.toInt(),
+                // Red
+                0xFFCC6666.toInt(),
+                // Green
+                0xFFB5BD68.toInt(),
+                // Yellow
+                0xFFF0C674.toInt(),
+                // Blue
+                0xFF81A2BE.toInt(),
+                // Magenta
+                0xFFB294BB.toInt(),
+                // Cyan
+                0xFF8ABEB7.toInt(),
+                // White
+                0xFFC5C8C6.toInt(),
+                // Bright Black
+                0xFF969896.toInt(),
+                // Bright Red
+                0xFFCC6666.toInt(),
+                // Bright Green
+                0xFFB5BD68.toInt(),
+                // Bright Yellow
+                0xFFF0C674.toInt(),
+                // Bright Blue
+                0xFF81A2BE.toInt(),
+                // Bright Magenta
+                0xFFB294BB.toInt(),
+                // Bright Cyan
+                0xFF8ABEB7.toInt(),
+                // Bright White
+                0xFFFFFFFF.toInt()
             )
         )
     }
@@ -403,22 +547,38 @@ object BuiltInThemes {
             selection = 0x44C6E2F1.toInt(),
             highlight = 0xFFFFF8DC.toInt(),
             ansiColors = intArrayOf(
-                0xFF24292E.toInt(), // Black
-                0xFFD73A49.toInt(), // Red
-                0xFF28A745.toInt(), // Green
-                0xFFFFAB00.toInt(), // Yellow
-                0xFF0366D6.toInt(), // Blue
-                0xFF5A32A3.toInt(), // Magenta
-                0xFF17A2B8.toInt(), // Cyan
-                0xFF6A737D.toInt(), // White
-                0xFF959DA5.toInt(), // Bright Black
-                0xFFD73A49.toInt(), // Bright Red
-                0xFF28A745.toInt(), // Bright Green
-                0xFFFFAB00.toInt(), // Bright Yellow
-                0xFF0366D6.toInt(), // Bright Blue
-                0xFF5A32A3.toInt(), // Bright Magenta
-                0xFF17A2B8.toInt(), // Bright Cyan
-                0xFF24292E.toInt()  // Bright White
+                // Black
+                0xFF24292E.toInt(),
+                // Red
+                0xFFD73A49.toInt(),
+                // Green
+                0xFF28A745.toInt(),
+                // Yellow
+                0xFFFFAB00.toInt(),
+                // Blue
+                0xFF0366D6.toInt(),
+                // Magenta
+                0xFF5A32A3.toInt(),
+                // Cyan
+                0xFF17A2B8.toInt(),
+                // White
+                0xFF6A737D.toInt(),
+                // Bright Black
+                0xFF959DA5.toInt(),
+                // Bright Red
+                0xFFD73A49.toInt(),
+                // Bright Green
+                0xFF28A745.toInt(),
+                // Bright Yellow
+                0xFFFFAB00.toInt(),
+                // Bright Blue
+                0xFF0366D6.toInt(),
+                // Bright Magenta
+                0xFF5A32A3.toInt(),
+                // Bright Cyan
+                0xFF17A2B8.toInt(),
+                // Bright White
+                0xFF24292E.toInt()
             )
         )
     }
@@ -436,22 +596,38 @@ object BuiltInThemes {
             selection = 0x443E4451.toInt(),
             highlight = 0xFFE5C07B.toInt(),
             ansiColors = intArrayOf(
-                0xFF282C34.toInt(), // Black
-                0xFFE06C75.toInt(), // Red
-                0xFF98C379.toInt(), // Green
-                0xFFE5C07B.toInt(), // Yellow
-                0xFF61AFEF.toInt(), // Blue
-                0xFFC678DD.toInt(), // Magenta
-                0xFF56B6C2.toInt(), // Cyan
-                0xFFABB2BF.toInt(), // White
-                0xFF5C6370.toInt(), // Bright Black
-                0xFFE06C75.toInt(), // Bright Red
-                0xFF98C379.toInt(), // Bright Green
-                0xFFE5C07B.toInt(), // Bright Yellow
-                0xFF61AFEF.toInt(), // Bright Blue
-                0xFFC678DD.toInt(), // Bright Magenta
-                0xFF56B6C2.toInt(), // Bright Cyan
-                0xFFFFFFFF.toInt()  // Bright White
+                // Black
+                0xFF282C34.toInt(),
+                // Red
+                0xFFE06C75.toInt(),
+                // Green
+                0xFF98C379.toInt(),
+                // Yellow
+                0xFFE5C07B.toInt(),
+                // Blue
+                0xFF61AFEF.toInt(),
+                // Magenta
+                0xFFC678DD.toInt(),
+                // Cyan
+                0xFF56B6C2.toInt(),
+                // White
+                0xFFABB2BF.toInt(),
+                // Bright Black
+                0xFF5C6370.toInt(),
+                // Bright Red
+                0xFFE06C75.toInt(),
+                // Bright Green
+                0xFF98C379.toInt(),
+                // Bright Yellow
+                0xFFE5C07B.toInt(),
+                // Bright Blue
+                0xFF61AFEF.toInt(),
+                // Bright Magenta
+                0xFFC678DD.toInt(),
+                // Bright Cyan
+                0xFF56B6C2.toInt(),
+                // Bright White
+                0xFFFFFFFF.toInt()
             )
         )
     }
@@ -469,22 +645,38 @@ object BuiltInThemes {
             selection = 0x44BB86FC.toInt(),
             highlight = 0xFFBB86FC.toInt(),
             ansiColors = intArrayOf(
-                0xFF000000.toInt(), // Black
-                0xFFF44336.toInt(), // Red
-                0xFF4CAF50.toInt(), // Green
-                0xFFFFEB3B.toInt(), // Yellow
-                0xFF2196F3.toInt(), // Blue
-                0xFF9C27B0.toInt(), // Magenta
-                0xFF00BCD4.toInt(), // Cyan
-                0xFFFFFFFF.toInt(), // White
-                0xFF757575.toInt(), // Bright Black
-                0xFFEF5350.toInt(), // Bright Red
-                0xFF66BB6A.toInt(), // Bright Green
-                0xFFFFEE58.toInt(), // Bright Yellow
-                0xFF42A5F5.toInt(), // Bright Blue
-                0xFFAB47BC.toInt(), // Bright Magenta
-                0xFF26C6DA.toInt(), // Bright Cyan
-                0xFFFFFFFF.toInt()  // Bright White
+                // Black
+                0xFF000000.toInt(),
+                // Red
+                0xFFF44336.toInt(),
+                // Green
+                0xFF4CAF50.toInt(),
+                // Yellow
+                0xFFFFEB3B.toInt(),
+                // Blue
+                0xFF2196F3.toInt(),
+                // Magenta
+                0xFF9C27B0.toInt(),
+                // Cyan
+                0xFF00BCD4.toInt(),
+                // White
+                0xFFFFFFFF.toInt(),
+                // Bright Black
+                0xFF757575.toInt(),
+                // Bright Red
+                0xFFEF5350.toInt(),
+                // Bright Green
+                0xFF66BB6A.toInt(),
+                // Bright Yellow
+                0xFFFFEE58.toInt(),
+                // Bright Blue
+                0xFF42A5F5.toInt(),
+                // Bright Magenta
+                0xFFAB47BC.toInt(),
+                // Bright Cyan
+                0xFF26C6DA.toInt(),
+                // Bright White
+                0xFFFFFFFF.toInt()
             )
         )
     }
@@ -504,22 +696,38 @@ object BuiltInThemes {
             selection = 0x44283457.toInt(),
             highlight = 0xFF7AA2F7.toInt(),
             ansiColors = intArrayOf(
-                0xFF1A1B26.toInt(), // Black
-                0xFFF7768E.toInt(), // Red
-                0xFF9ECE6A.toInt(), // Green
-                0xFFE0AF68.toInt(), // Yellow
-                0xFF7AA2F7.toInt(), // Blue
-                0xFFBB9AF7.toInt(), // Magenta
-                0xFF7DCFFF.toInt(), // Cyan
-                0xFFA9B1D6.toInt(), // White
-                0xFF414868.toInt(), // Bright Black
-                0xFFF7768E.toInt(), // Bright Red
-                0xFF9ECE6A.toInt(), // Bright Green
-                0xFFE0AF68.toInt(), // Bright Yellow
-                0xFF7AA2F7.toInt(), // Bright Blue
-                0xFFBB9AF7.toInt(), // Bright Magenta
-                0xFF7DCFFF.toInt(), // Bright Cyan
-                0xFFC0CAF5.toInt()  // Bright White
+                // Black
+                0xFF1A1B26.toInt(),
+                // Red
+                0xFFF7768E.toInt(),
+                // Green
+                0xFF9ECE6A.toInt(),
+                // Yellow
+                0xFFE0AF68.toInt(),
+                // Blue
+                0xFF7AA2F7.toInt(),
+                // Magenta
+                0xFFBB9AF7.toInt(),
+                // Cyan
+                0xFF7DCFFF.toInt(),
+                // White
+                0xFFA9B1D6.toInt(),
+                // Bright Black
+                0xFF414868.toInt(),
+                // Bright Red
+                0xFFF7768E.toInt(),
+                // Bright Green
+                0xFF9ECE6A.toInt(),
+                // Bright Yellow
+                0xFFE0AF68.toInt(),
+                // Bright Blue
+                0xFF7AA2F7.toInt(),
+                // Bright Magenta
+                0xFFBB9AF7.toInt(),
+                // Bright Cyan
+                0xFF7DCFFF.toInt(),
+                // Bright White
+                0xFFC0CAF5.toInt()
             )
         )
     }
@@ -537,22 +745,38 @@ object BuiltInThemes {
             selection = 0x44C4C8DA.toInt(),
             highlight = 0xFF2E7DE9.toInt(),
             ansiColors = intArrayOf(
-                0xFFD5D6DB.toInt(), // Black
-                0xFFF52A65.toInt(), // Red
-                0xFF587539.toInt(), // Green
-                0xFF8C6C3E.toInt(), // Yellow
-                0xFF2E7DE9.toInt(), // Blue
-                0xFF9854F1.toInt(), // Magenta
-                0xFF007197.toInt(), // Cyan
-                0xFF565A6E.toInt(), // White
-                0xFF9699A3.toInt(), // Bright Black
-                0xFFF52A65.toInt(), // Bright Red
-                0xFF587539.toInt(), // Bright Green
-                0xFF8C6C3E.toInt(), // Bright Yellow
-                0xFF2E7DE9.toInt(), // Bright Blue
-                0xFF9854F1.toInt(), // Bright Magenta
-                0xFF007197.toInt(), // Bright Cyan
-                0xFF343B59.toInt()  // Bright White
+                // Black
+                0xFFD5D6DB.toInt(),
+                // Red
+                0xFFF52A65.toInt(),
+                // Green
+                0xFF587539.toInt(),
+                // Yellow
+                0xFF8C6C3E.toInt(),
+                // Blue
+                0xFF2E7DE9.toInt(),
+                // Magenta
+                0xFF9854F1.toInt(),
+                // Cyan
+                0xFF007197.toInt(),
+                // White
+                0xFF565A6E.toInt(),
+                // Bright Black
+                0xFF9699A3.toInt(),
+                // Bright Red
+                0xFFF52A65.toInt(),
+                // Bright Green
+                0xFF587539.toInt(),
+                // Bright Yellow
+                0xFF8C6C3E.toInt(),
+                // Bright Blue
+                0xFF2E7DE9.toInt(),
+                // Bright Magenta
+                0xFF9854F1.toInt(),
+                // Bright Cyan
+                0xFF007197.toInt(),
+                // Bright White
+                0xFF343B59.toInt()
             )
         )
     }
@@ -570,22 +794,38 @@ object BuiltInThemes {
             selection = 0x44585B70.toInt(),
             highlight = 0xFFF5C2E7.toInt(),
             ansiColors = intArrayOf(
-                0xFF45475A.toInt(), // Black
-                0xFFF38BA8.toInt(), // Red
-                0xFFA6E3A1.toInt(), // Green
-                0xFFF9E2AF.toInt(), // Yellow
-                0xFF89B4FA.toInt(), // Blue
-                0xFFF5C2E7.toInt(), // Magenta
-                0xFF94E2D5.toInt(), // Cyan
-                0xFFBAC2DE.toInt(), // White
-                0xFF585B70.toInt(), // Bright Black
-                0xFFF38BA8.toInt(), // Bright Red
-                0xFFA6E3A1.toInt(), // Bright Green
-                0xFFF9E2AF.toInt(), // Bright Yellow
-                0xFF89B4FA.toInt(), // Bright Blue
-                0xFFF5C2E7.toInt(), // Bright Magenta
-                0xFF94E2D5.toInt(), // Bright Cyan
-                0xFFA6ADC8.toInt()  // Bright White
+                // Black
+                0xFF45475A.toInt(),
+                // Red
+                0xFFF38BA8.toInt(),
+                // Green
+                0xFFA6E3A1.toInt(),
+                // Yellow
+                0xFFF9E2AF.toInt(),
+                // Blue
+                0xFF89B4FA.toInt(),
+                // Magenta
+                0xFFF5C2E7.toInt(),
+                // Cyan
+                0xFF94E2D5.toInt(),
+                // White
+                0xFFBAC2DE.toInt(),
+                // Bright Black
+                0xFF585B70.toInt(),
+                // Bright Red
+                0xFFF38BA8.toInt(),
+                // Bright Green
+                0xFFA6E3A1.toInt(),
+                // Bright Yellow
+                0xFFF9E2AF.toInt(),
+                // Bright Blue
+                0xFF89B4FA.toInt(),
+                // Bright Magenta
+                0xFFF5C2E7.toInt(),
+                // Bright Cyan
+                0xFF94E2D5.toInt(),
+                // Bright White
+                0xFFA6ADC8.toInt()
             )
         )
     }
@@ -607,22 +847,38 @@ object BuiltInThemes {
             selection = 0x442A2837.toInt(),
             highlight = 0xFFEBBCBA.toInt(),
             ansiColors = intArrayOf(
-                0xFF26233A.toInt(), // Black
-                0xFFEB6F92.toInt(), // Red
-                0xFF9CCFD8.toInt(), // Green
-                0xFFF6C177.toInt(), // Yellow
-                0xFF31748F.toInt(), // Blue
-                0xFFC4A7E7.toInt(), // Magenta
-                0xFFEBBCBA.toInt(), // Cyan
-                0xFFE0DEF4.toInt(), // White
-                0xFF6E6A86.toInt(), // Bright Black
-                0xFFEB6F92.toInt(), // Bright Red
-                0xFF9CCFD8.toInt(), // Bright Green
-                0xFFF6C177.toInt(), // Bright Yellow
-                0xFF31748F.toInt(), // Bright Blue
-                0xFFC4A7E7.toInt(), // Bright Magenta
-                0xFFEBBCBA.toInt(), // Bright Cyan
-                0xFFE0DEF4.toInt()  // Bright White
+                // Black
+                0xFF26233A.toInt(),
+                // Red
+                0xFFEB6F92.toInt(),
+                // Green
+                0xFF9CCFD8.toInt(),
+                // Yellow
+                0xFFF6C177.toInt(),
+                // Blue
+                0xFF31748F.toInt(),
+                // Magenta
+                0xFFC4A7E7.toInt(),
+                // Cyan
+                0xFFEBBCBA.toInt(),
+                // White
+                0xFFE0DEF4.toInt(),
+                // Bright Black
+                0xFF6E6A86.toInt(),
+                // Bright Red
+                0xFFEB6F92.toInt(),
+                // Bright Green
+                0xFF9CCFD8.toInt(),
+                // Bright Yellow
+                0xFFF6C177.toInt(),
+                // Bright Blue
+                0xFF31748F.toInt(),
+                // Bright Magenta
+                0xFFC4A7E7.toInt(),
+                // Bright Cyan
+                0xFFEBBCBA.toInt(),
+                // Bright White
+                0xFFE0DEF4.toInt()
             )
         )
     }
@@ -640,22 +896,38 @@ object BuiltInThemes {
             selection = 0x44475258.toInt(),
             highlight = 0xFFA7C080.toInt(),
             ansiColors = intArrayOf(
-                0xFF475258.toInt(), // Black
-                0xFFE67E80.toInt(), // Red
-                0xFFA7C080.toInt(), // Green
-                0xFFDBBC7F.toInt(), // Yellow
-                0xFF7FBBB3.toInt(), // Blue
-                0xFFD699B6.toInt(), // Magenta
-                0xFF83C092.toInt(), // Cyan
-                0xFFD3C6AA.toInt(), // White
-                0xFF859289.toInt(), // Bright Black
-                0xFFE67E80.toInt(), // Bright Red
-                0xFFA7C080.toInt(), // Bright Green
-                0xFFDBBC7F.toInt(), // Bright Yellow
-                0xFF7FBBB3.toInt(), // Bright Blue
-                0xFFD699B6.toInt(), // Bright Magenta
-                0xFF83C092.toInt(), // Bright Cyan
-                0xFFD3C6AA.toInt()  // Bright White
+                // Black
+                0xFF475258.toInt(),
+                // Red
+                0xFFE67E80.toInt(),
+                // Green
+                0xFFA7C080.toInt(),
+                // Yellow
+                0xFFDBBC7F.toInt(),
+                // Blue
+                0xFF7FBBB3.toInt(),
+                // Magenta
+                0xFFD699B6.toInt(),
+                // Cyan
+                0xFF83C092.toInt(),
+                // White
+                0xFFD3C6AA.toInt(),
+                // Bright Black
+                0xFF859289.toInt(),
+                // Bright Red
+                0xFFE67E80.toInt(),
+                // Bright Green
+                0xFFA7C080.toInt(),
+                // Bright Yellow
+                0xFFDBBC7F.toInt(),
+                // Bright Blue
+                0xFF7FBBB3.toInt(),
+                // Bright Magenta
+                0xFFD699B6.toInt(),
+                // Bright Cyan
+                0xFF83C092.toInt(),
+                // Bright White
+                0xFFD3C6AA.toInt()
             )
         )
     }
@@ -673,22 +945,38 @@ object BuiltInThemes {
             selection = 0x44223249.toInt(),
             highlight = 0xFF7E9CD8.toInt(),
             ansiColors = intArrayOf(
-                0xFF090618.toInt(), // Black
-                0xFFC34043.toInt(), // Red
-                0xFF76946A.toInt(), // Green
-                0xFFDCA561.toInt(), // Yellow
-                0xFF7E9CD8.toInt(), // Blue
-                0xFF957FB8.toInt(), // Magenta
-                0xFF6A9589.toInt(), // Cyan
-                0xFFC8C093.toInt(), // White
-                0xFF727169.toInt(), // Bright Black
-                0xFFE82424.toInt(), // Bright Red
-                0xFF98BB6C.toInt(), // Bright Green
-                0xFFE6C384.toInt(), // Bright Yellow
-                0xFF7FB4CA.toInt(), // Bright Blue
-                0xFF938AA9.toInt(), // Bright Magenta
-                0xFF7AA89F.toInt(), // Bright Cyan
-                0xFFDCD7BA.toInt()  // Bright White
+                // Black
+                0xFF090618.toInt(),
+                // Red
+                0xFFC34043.toInt(),
+                // Green
+                0xFF76946A.toInt(),
+                // Yellow
+                0xFFDCA561.toInt(),
+                // Blue
+                0xFF7E9CD8.toInt(),
+                // Magenta
+                0xFF957FB8.toInt(),
+                // Cyan
+                0xFF6A9589.toInt(),
+                // White
+                0xFFC8C093.toInt(),
+                // Bright Black
+                0xFF727169.toInt(),
+                // Bright Red
+                0xFFE82424.toInt(),
+                // Bright Green
+                0xFF98BB6C.toInt(),
+                // Bright Yellow
+                0xFFE6C384.toInt(),
+                // Bright Blue
+                0xFF7FB4CA.toInt(),
+                // Bright Magenta
+                0xFF938AA9.toInt(),
+                // Bright Cyan
+                0xFF7AA89F.toInt(),
+                // Bright White
+                0xFFDCD7BA.toInt()
             )
         )
     }
@@ -706,22 +994,38 @@ object BuiltInThemes {
             selection = 0x441D3B53.toInt(),
             highlight = 0xFF7FDBCA.toInt(),
             ansiColors = intArrayOf(
-                0xFF011627.toInt(), // Black
-                0xFFEF5350.toInt(), // Red
-                0xFF22DA6E.toInt(), // Green
-                0xFFADDB67.toInt(), // Yellow
-                0xFF82AAFF.toInt(), // Blue
-                0xFFC792EA.toInt(), // Magenta
-                0xFF7FDBCA.toInt(), // Cyan
-                0xFFFFFFFF.toInt(), // White
-                0xFF575656.toInt(), // Bright Black
-                0xFFEF5350.toInt(), // Bright Red
-                0xFF22DA6E.toInt(), // Bright Green
-                0xFFFFEB95.toInt(), // Bright Yellow
-                0xFF82AAFF.toInt(), // Bright Blue
-                0xFFC792EA.toInt(), // Bright Magenta
-                0xFF7FDBCA.toInt(), // Bright Cyan
-                0xFFFFFFFF.toInt()  // Bright White
+                // Black
+                0xFF011627.toInt(),
+                // Red
+                0xFFEF5350.toInt(),
+                // Green
+                0xFF22DA6E.toInt(),
+                // Yellow
+                0xFFADDB67.toInt(),
+                // Blue
+                0xFF82AAFF.toInt(),
+                // Magenta
+                0xFFC792EA.toInt(),
+                // Cyan
+                0xFF7FDBCA.toInt(),
+                // White
+                0xFFFFFFFF.toInt(),
+                // Bright Black
+                0xFF575656.toInt(),
+                // Bright Red
+                0xFFEF5350.toInt(),
+                // Bright Green
+                0xFF22DA6E.toInt(),
+                // Bright Yellow
+                0xFFFFEB95.toInt(),
+                // Bright Blue
+                0xFF82AAFF.toInt(),
+                // Bright Magenta
+                0xFFC792EA.toInt(),
+                // Bright Cyan
+                0xFF7FDBCA.toInt(),
+                // Bright White
+                0xFFFFFFFF.toInt()
             )
         )
     }
@@ -739,22 +1043,38 @@ object BuiltInThemes {
             selection = 0x440D3A58.toInt(),
             highlight = 0xFFFFC600.toInt(),
             ansiColors = intArrayOf(
-                0xFF000000.toInt(), // Black
-                0xFFFF0000.toInt(), // Red
-                0xFF38DE21.toInt(), // Green
-                0xFFFFC600.toInt(), // Yellow
-                0xFF0088FF.toInt(), // Blue
-                0xFFFF628C.toInt(), // Magenta
-                0xFF80FCFF.toInt(), // Cyan
-                0xFFFFFFFF.toInt(), // White
-                0xFF555555.toInt(), // Bright Black
-                0xFFFF0000.toInt(), // Bright Red
-                0xFF38DE21.toInt(), // Bright Green
-                0xFFFFC600.toInt(), // Bright Yellow
-                0xFF0088FF.toInt(), // Bright Blue
-                0xFFFF628C.toInt(), // Bright Magenta
-                0xFF80FCFF.toInt(), // Bright Cyan
-                0xFFFFFFFF.toInt()  // Bright White
+                // Black
+                0xFF000000.toInt(),
+                // Red
+                0xFFFF0000.toInt(),
+                // Green
+                0xFF38DE21.toInt(),
+                // Yellow
+                0xFFFFC600.toInt(),
+                // Blue
+                0xFF0088FF.toInt(),
+                // Magenta
+                0xFFFF628C.toInt(),
+                // Cyan
+                0xFF80FCFF.toInt(),
+                // White
+                0xFFFFFFFF.toInt(),
+                // Bright Black
+                0xFF555555.toInt(),
+                // Bright Red
+                0xFFFF0000.toInt(),
+                // Bright Green
+                0xFF38DE21.toInt(),
+                // Bright Yellow
+                0xFFFFC600.toInt(),
+                // Bright Blue
+                0xFF0088FF.toInt(),
+                // Bright Magenta
+                0xFFFF628C.toInt(),
+                // Bright Cyan
+                0xFF80FCFF.toInt(),
+                // Bright White
+                0xFFFFFFFF.toInt()
             )
         )
     }

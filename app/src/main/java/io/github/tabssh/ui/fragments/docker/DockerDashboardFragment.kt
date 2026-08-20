@@ -8,16 +8,17 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import androidx.lifecycle.lifecycleScope
 import com.google.android.material.card.MaterialCardView
 import io.github.tabssh.R
 import io.github.tabssh.docker.DockerSessionManager
 import io.github.tabssh.docker.transport.DockerDiskUsage
 import io.github.tabssh.docker.transport.DockerEngineInfo
+import io.github.tabssh.docker.transport.DockerResult
 import io.github.tabssh.docker.transport.DockerVersionInfo
 import io.github.tabssh.ui.dialogs.DockerErrorPresenter
 import io.github.tabssh.ui.utils.DockerText
-import kotlinx.coroutines.launch
+import io.github.tabssh.utils.coroutines.loadConcurrently
+import io.github.tabssh.utils.logging.Logger
 
 /** Cap for a single daemon-reported field inside a formatted dashboard line. */
 private const val MAX_FIELD = 64
@@ -26,10 +27,24 @@ private const val MAX_FIELD = 64
 private const val MAX_DISK_ROWS = 32
 
 /**
+ * Hard bound on the whole dashboard load (info + version + disk). The three
+ * calls run concurrently below, so this is the worst case of any ONE of
+ * them, not their sum — generous enough for a slow CLI-tier host, but it
+ * guarantees the spinner resolves into an error instead of spinning forever
+ * when a probe stalls (see AI.md PART 9 "every network error surfaces
+ * through the PART 2 error surfaces with a retry path").
+ */
+private const val DASHBOARD_LOAD_TIMEOUT_MS = 45_000L
+
+/**
  * Host dashboard destination: engine info, version, and
  * disk usage from the shared transport.
  */
 class DockerDashboardFragment : DockerPageFragment() {
+
+    companion object {
+        private const val TAG = "DockerDashboardFragment"
+    }
 
     private lateinit var progressBar: ProgressBar
     private lateinit var cardEngine: MaterialCardView
@@ -71,12 +86,35 @@ class DockerDashboardFragment : DockerPageFragment() {
 
     override fun onSessionReady(session: DockerSessionManager.DockerSession) {
         progressBar.visibility = View.VISIBLE
-        viewLifecycleOwner.lifecycleScope.launch {
-            val info = session.transport.engineInfo()
-            val version = session.transport.engineVersion()
-            val disk = session.transport.diskUsage()
-            if (!isAdded) return@launch
+        Logger.d(TAG, "load: start hostId=${session.host.id} mode=${session.mode}")
+        startLoad {
+            // Concurrent, not sequential: one slow call must not delay the
+            // other two, and the overall timeout bounds the worst case to
+            // one call's timeout instead of their sum.
+            val loaded = loadConcurrently(
+                DASHBOARD_LOAD_TIMEOUT_MS,
+                a = { session.transport.engineInfo() },
+                b = { session.transport.engineVersion() },
+                c = { session.transport.diskUsage() }
+            )
+            if (!isAdded) return@startLoad
             progressBar.visibility = View.GONE
+
+            if (loaded == null) {
+                Logger.w(TAG, "load: timed out after ${DASHBOARD_LOAD_TIMEOUT_MS}ms hostId=${session.host.id}")
+                DockerErrorPresenter.present(
+                    requireContext(),
+                    DockerResult.Error("dashboard", "Timed out loading engine status")
+                )
+                return@startLoad
+            }
+
+            val (info, version, disk) = loaded
+            Logger.d(
+                TAG,
+                "load: done hostId=${session.host.id} info=${info.outcome()} " +
+                    "version=${version.outcome()} disk=${disk.outcome()}"
+            )
 
             val infoValue = info.valueOrNull()
             if (infoValue != null) {
@@ -86,6 +124,15 @@ class DockerDashboardFragment : DockerPageFragment() {
             }
             disk.valueOrNull()?.let { bindDisk(it) }
         }
+    }
+
+    /** Short, credential-free outcome tag for a [DockerResult] — safe to log. */
+    private fun <T> DockerResult<T>.outcome(): String = when (this) {
+        is DockerResult.Success -> "ok"
+        is DockerResult.PermissionDenied -> "permission_denied"
+        is DockerResult.NotFound -> "not_found"
+        is DockerResult.TransportUnavailable -> "transport_unavailable"
+        is DockerResult.Error -> "error"
     }
 
     private fun bindEngine(info: DockerEngineInfo, version: DockerVersionInfo?) {

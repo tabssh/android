@@ -365,12 +365,7 @@ class SSHConnectionService : Service() {
 
     /** Detach the FG notification pin without stopping the service. */
     private fun detachForeground() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_DETACH)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(false)
-        }
+        stopForeground(STOP_FOREGROUND_DETACH)
         fgAnchorTabId = null
     }
 
@@ -660,7 +655,8 @@ class SSHConnectionService : Service() {
                     val conn = app.sshSessionManager.getConnection(profileId)
                     val isError = conn?.let {
                         val s = it.getShellExitStatus()
-                        s != 0  // -1 (drop) or non-zero (abnormal exit)
+                        // -1 (drop) or non-zero (abnormal exit)
+                        s != 0
                     } ?: true
                     if (conn != null) {
                         io.github.tabssh.utils.NotificationHelper.maybeAlertForHost(

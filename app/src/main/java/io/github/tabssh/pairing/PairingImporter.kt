@@ -67,7 +67,8 @@ object PairingImporter {
                 ConnectionGroup(
                     id = id,
                     name = exported.name,
-                    parentId = null,        // parent linkage by name is v2; v1 is flat
+                    // parent linkage by name is v2; v1 is flat
+                    parentId = null,
                     icon = exported.icon,
                     color = exported.color,
                     sortOrder = exported.sortOrder,
@@ -88,8 +89,10 @@ object PairingImporter {
                     name = exported.name,
                     username = exported.username,
                     authType = AuthType.fromString(exported.authType),
-                    keyId = null,            // user re-associates a key after import
-                    password = null,         // never carried over the wire
+                    // user re-associates a key after import
+                    keyId = null,
+                    // never carried over the wire
+                    password = null,
                     description = exported.description,
                 )
             }
@@ -109,7 +112,8 @@ object PairingImporter {
                         username = exported.username,
                         protocol = exported.protocol,
                         authType = AuthType.fromString(exported.authType).name,
-                        keyId = null,                        // user re-associates after import
+                        // user re-associates after import
+                        keyId = null,
                         savePassword = false,
                         terminalType = exported.terminalType,
                         encoding = exported.encoding,

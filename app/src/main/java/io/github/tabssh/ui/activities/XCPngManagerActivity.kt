@@ -92,7 +92,8 @@ class XCPngManagerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_xcpng_manager) // Use XCP-ng specific layout
+        // Use XCP-ng specific layout
+        setContentView(R.layout.activity_xcpng_manager)
         
         app = application as TabSSHApplication
         
@@ -781,7 +782,8 @@ class XCPngManagerActivity : AppCompatActivity() {
         val apiTypeHint = dialogView.findViewById<TextView>(R.id.api_type_hint)
 
         portInput.setText("443")
-        realmInput.visibility = View.GONE // XCP-ng doesn't use realm
+        // XCP-ng doesn't use realm
+        realmInput.visibility = View.GONE
 
         // Show API type dropdown for XCP-ng
         apiTypeLayout?.visibility = View.VISIBLE
@@ -791,7 +793,8 @@ class XCPngManagerActivity : AppCompatActivity() {
         val apiTypes = resources.getStringArray(R.array.api_type_entries)
         val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, apiTypes)
         apiTypeDropdown?.setAdapter(adapter)
-        apiTypeDropdown?.setText(apiTypes[0], false) // Default to auto-detect
+        // Default to auto-detect
+        apiTypeDropdown?.setText(apiTypes[0], false)
         
         MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.xcpng_add_server_title))
@@ -826,9 +829,9 @@ class XCPngManagerActivity : AppCompatActivity() {
                     host = serverHost,
                     port = rawPort,
                     username = usernameInput.text.toString().trim(),
-                    password = "",   // never persist plaintext — routed to Keystore below
                     verifySsl = false,
-                    apiTypeOverride = apiTypeOverride
+                    apiTypeOverride = apiTypeOverride,
+                    modifiedAt = System.currentTimeMillis()
                 )
 
                 lifecycleScope.launch {
@@ -1068,7 +1071,8 @@ class XCPngManagerActivity : AppCompatActivity() {
                         if (success) {
                             Toast.makeText(this@XCPngManagerActivity, getString(R.string.hypervisor_snapshot_created), Toast.LENGTH_SHORT).show()
                             parentDialog.dismiss()
-                            showSnapshotDialog(vm) // Refresh
+                            // Refresh
+                            showSnapshotDialog(vm)
                         } else {
                             showError(getString(R.string.xcpng_error_create_snapshot), getString(R.string.hypervisor_error_title))
                         }
@@ -1129,7 +1133,8 @@ class XCPngManagerActivity : AppCompatActivity() {
                                 if (success) {
                                     Toast.makeText(this@XCPngManagerActivity, getString(R.string.hypervisor_snapshot_deleted), Toast.LENGTH_SHORT).show()
                                     parentDialog.dismiss()
-                                    showSnapshotDialog(vm) // Refresh
+                                    // Refresh
+                                    showSnapshotDialog(vm)
                                 } else {
                                     showError(getString(R.string.xcpng_error_delete_snapshot), getString(R.string.hypervisor_error_title))
                                 }

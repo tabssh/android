@@ -104,10 +104,14 @@ class PerformanceManager(private val context: Context) {
                     
                     // Monitoring frequency based on optimization level
                     val monitoringInterval = when (_batteryOptimizationLevel.value) {
-                        BatteryOptimizationLevel.PERFORMANCE -> 5000L // 5 seconds
-                        BatteryOptimizationLevel.BALANCED -> 15000L // 15 seconds
-                        BatteryOptimizationLevel.CONSERVATIVE -> 30000L // 30 seconds
-                        BatteryOptimizationLevel.AGGRESSIVE -> 60000L // 60 seconds
+                        // 5 seconds
+                        BatteryOptimizationLevel.PERFORMANCE -> 5000L
+                        // 15 seconds
+                        BatteryOptimizationLevel.BALANCED -> 15000L
+                        // 30 seconds
+                        BatteryOptimizationLevel.CONSERVATIVE -> 30000L
+                        // 60 seconds
+                        BatteryOptimizationLevel.AGGRESSIVE -> 60000L
                     }
                     
                     delay(monitoringInterval)
@@ -240,15 +244,19 @@ class PerformanceManager(private val context: Context) {
             // Fields 14-17 contain: utime, stime, cutime, cstime (in clock ticks)
             if (stats.size < 17) return 0.0f
 
-            val utime = stats[13].toLongOrNull() ?: 0L // User mode time
-            val stime = stats[14].toLongOrNull() ?: 0L // Kernel mode time
+            // User mode time
+            val utime = stats[13].toLongOrNull() ?: 0L
+            // Kernel mode time
+            val stime = stats[14].toLongOrNull() ?: 0L
 
             // Use SystemClock instead of /proc/uptime (Android 16+ restricts /proc access)
             val uptimeMs = android.os.SystemClock.elapsedRealtime()
-            val uptime = uptimeMs / 1000.0f // Convert to seconds
+            // Convert to seconds
+            val uptime = uptimeMs / 1000.0f
 
             // Calculate CPU usage (simplified)
-            val processTime = (utime + stime) / 100.0f // Convert clock ticks to seconds
+            // Convert clock ticks to seconds
+            val processTime = (utime + stime) / 100.0f
             val cpuUsage = if (uptime > 0) (processTime / uptime) * 100.0f else 0f
 
             cpuUsage.coerceIn(0f, 100f)
@@ -273,7 +281,8 @@ class PerformanceManager(private val context: Context) {
         return try {
             batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
         } catch (e: Exception) {
-            100 // Default to full if can't read
+            // Default to full if can't read
+            100
         }
     }
     
@@ -322,10 +331,14 @@ class PerformanceManager(private val context: Context) {
  * Battery optimization levels
  */
 enum class BatteryOptimizationLevel {
-    PERFORMANCE,    // Maximum performance, minimal battery optimization
-    BALANCED,       // Balanced performance and battery life
-    CONSERVATIVE,   // Favor battery life over performance
-    AGGRESSIVE      // Maximum battery conservation
+    // Maximum performance, minimal battery optimization
+    PERFORMANCE,
+    // Balanced performance and battery life
+    BALANCED,
+    // Favor battery life over performance
+    CONSERVATIVE,
+    // Maximum battery conservation
+    AGGRESSIVE
 }
 
 /**
@@ -400,10 +413,14 @@ class NetworkOptimizer {
         
         // Adjust keep-alive intervals based on optimization level
         val keepAliveInterval = when (level) {
-            BatteryOptimizationLevel.PERFORMANCE -> 30 // 30 seconds
-            BatteryOptimizationLevel.BALANCED -> 60 // 60 seconds
-            BatteryOptimizationLevel.CONSERVATIVE -> 120 // 2 minutes
-            BatteryOptimizationLevel.AGGRESSIVE -> 300 // 5 minutes
+            // 30 seconds
+            BatteryOptimizationLevel.PERFORMANCE -> 30
+            // 60 seconds
+            BatteryOptimizationLevel.BALANCED -> 60
+            // 2 minutes
+            BatteryOptimizationLevel.CONSERVATIVE -> 120
+            // 5 minutes
+            BatteryOptimizationLevel.AGGRESSIVE -> 300
         }
         
         Logger.d("NetworkOptimizer", "Set keep-alive interval to ${keepAliveInterval}s for optimization level $level")
@@ -463,7 +480,8 @@ class RenderingOptimizer {
         emergencyMode = emergency
         
         if (emergency) {
-            targetFPS = 15f // Very low FPS for emergency battery saving
+            // Very low FPS for emergency battery saving
+            targetFPS = 15f
             Logger.w("RenderingOptimizer", "Emergency mode enabled - reducing FPS to $targetFPS")
         }
     }

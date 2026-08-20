@@ -18,7 +18,8 @@ object FontManager {
 
     // Map of font values to asset filenames
     private val fontAssetMap = mapOf(
-        "monospace" to null, // System default
+        // System default
+        "monospace" to null,
         "jetbrains_mono_nerd" to "JetBrainsMonoNerdFont-Regular.ttf",
         "fira_code_nerd" to "FiraCodeNerdFont-Regular.ttf",
         "hack_nerd" to "HackNerdFont-Regular.ttf",

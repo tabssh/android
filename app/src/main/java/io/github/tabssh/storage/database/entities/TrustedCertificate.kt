@@ -82,7 +82,11 @@ data class TrustedCertificate(
     val verificationStatus: String = "PENDING",
 
     @ColumnInfo(name = "notes")
-    val notes: String? = null
+    val notes: String? = null,
+
+    /** Last local modification time, used for sync last-write-wins comparisons. */
+    @ColumnInfo(name = "modified_at")
+    val modifiedAt: Long = 0
 ) {
     companion object {
         const val TRUST_LEVEL_SYSTEM = "SYSTEM"

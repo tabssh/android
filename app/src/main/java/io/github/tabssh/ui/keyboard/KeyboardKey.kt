@@ -12,12 +12,18 @@ data class KeyboardKey(
     val widthMultiplier: Float = 1f
 ) {
     enum class KeyCategory {
-        SPECIAL,      // ESC, TAB, etc.
-        ARROW,        // Arrow keys
-        FUNCTION,     // F1-F12
-        SYMBOL,       // /, \, |, etc.
-        MODIFIER,     // CTL, ALT, FN
-        ACTION        // Toggle, Paste
+        // ESC, TAB, etc.
+        SPECIAL,
+        // Arrow keys
+        ARROW,
+        // F1-F12
+        FUNCTION,
+        // /, \, |, etc.
+        SYMBOL,
+        // CTL, ALT, FN
+        MODIFIER,
+        // Toggle, Paste
+        ACTION
     }
 
     companion object {

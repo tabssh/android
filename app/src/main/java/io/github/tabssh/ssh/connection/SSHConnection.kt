@@ -191,8 +191,9 @@ class SSHConnection(
     // background after the activity has bailed.
     @Volatile
     private var hadSuccessfulConnect = false
+    // wall-clock ms at last successful connect
     @Volatile
-    private var sessionStartMs: Long = 0   // wall-clock ms at last successful connect
+    private var sessionStartMs: Long = 0
 
     // Network-aware reconnector — pauses when the device is offline, wakes
     // immediately when the link returns, falls back to a 5-minute poll.
@@ -1370,8 +1371,10 @@ class SSHConnection(
                                 jsch.addIdentity(
                                     jumpKeyId,
                                     jschBytes,
-                                    null, // public key (JSch can derive it)
-                                    null  // passphrase — keys stored unencrypted in Keystore
+                                    // public key (JSch can derive it)
+                                    null,
+                                    // passphrase — keys stored unencrypted in Keystore
+                                    null
                                 )
                             } finally {
                                 // Zero plaintext key bytes once JSch has parsed them.
@@ -1415,7 +1418,8 @@ class SSHConnection(
             // target through the jump host without authenticating to us.
             val localPort = jumpSession.setPortForwardingL(
                 "127.0.0.1",
-                0, // 0 = random available port
+                // 0 = random available port
+                0,
                 profile.host,
                 profile.port
             )
@@ -1452,7 +1456,8 @@ class SSHConnection(
                 Logger.i("SSHConnection", "Setting up HTTP proxy: $proxyHost:$proxyPort")
                 val proxy = ProxyHTTP(proxyHost, proxyPort)
                 proxyUsername?.let { username ->
-                    proxy.setUserPasswd(username, "") // Password not commonly used for HTTP proxies
+                    // Password not commonly used for HTTP proxies
+                    proxy.setUserPasswd(username, "")
                 }
                 session.setProxy(proxy)
             }
@@ -1517,7 +1522,8 @@ class SSHConnection(
         // Identity password: try SecurePasswordManager first, fall back to legacy plaintext in DB
         val identityPassword: String? = if (linkedIdentity != null) {
             app?.securePasswordManager?.retrievePassword("identity_${linkedIdentity.id}")
-                ?: linkedIdentity.password  // legacy plaintext fallback
+                // legacy plaintext fallback
+                ?: linkedIdentity.password
         } else null
         val effectivePassword: String? = identityPassword ?: getPasswordForAuthentication()
 
@@ -1611,7 +1617,8 @@ class SSHConnection(
 
         // Priority 2: Password (if stored)
         if (effectivePassword != null) {
-            cachedPassword = effectivePassword  // Cache for UserInfo callbacks
+            // Cache for UserInfo callbacks
+            cachedPassword = effectivePassword
             session.setPassword(effectivePassword)
             Logger.i("SSHConnection", "Auth: password set on session")
             return@withContext
@@ -1788,7 +1795,8 @@ class SSHConnection(
                     exec.setPty(true)
                     exec.setPtyType(profile.terminalType)
                 }
-                exec.setPtySize(80, 24, 0, 0) // Will be updated by terminal
+                // Will be updated by terminal
+                exec.setPtySize(80, 24, 0, 0)
                 applyEnvVarsTo(exec)
                 applyForwardingFlags(currentSession, exec)
                 // JSch requires getInputStream/getOutputStream to be called BEFORE
@@ -1818,7 +1826,8 @@ class SSHConnection(
             val shell = currentSession.openChannel("shell") as ChannelShell
             try {
                 shell.setPtyType(profile.terminalType)
-                shell.setPtySize(80, 24, 0, 0) // Will be updated by terminal
+                // Will be updated by terminal
+                shell.setPtySize(80, 24, 0, 0)
                 // Wave 1.2: per-host env vars before channel.connect()
                 applyEnvVarsTo(shell)
                 applyForwardingFlags(currentSession, shell)
@@ -1861,7 +1870,8 @@ class SSHConnection(
         when (val ch = shellChannel) {
             is ChannelShell -> ch.setPtySize(cols, rows, 0, 0)
             is ChannelExec -> ch.setPtySize(cols, rows, 0, 0)
-            else -> {} // null or some other channel kind we don't manage
+            // null or some other channel kind we don't manage
+            else -> {}
         }
     }
 

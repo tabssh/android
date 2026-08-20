@@ -101,8 +101,12 @@ interface HostKeyDao {
 }
 
 enum class HostKeyVerificationResult {
-    ACCEPTED,           // Key matches known host
-    NEW_HOST,          // First time connecting
-    CHANGED_KEY,       // Host key has changed (security risk)
-    INVALID_KEY        // Malformed key
+    // Key matches known host
+    ACCEPTED,
+    // First time connecting
+    NEW_HOST,
+    // Host key has changed (security risk)
+    CHANGED_KEY,
+    // Malformed key
+    INVALID_KEY
 }

@@ -470,13 +470,16 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
      */
     private fun keyTypeToInt(keyTypeStr: String): Int {
         return when (keyTypeStr) {
-            "ssh-rsa" -> 0  // HostKey.SSHRSA
-            "ssh-dss" -> 1  // HostKey.SSHDSS
+            // HostKey.SSHRSA
+            "ssh-rsa" -> 0
+            // HostKey.SSHDSS
+            "ssh-dss" -> 1
             "ecdsa-sha2-nistp256" -> 2
             "ecdsa-sha2-nistp384" -> 3
             "ecdsa-sha2-nistp521" -> 4
             "ssh-ed25519" -> 5
-            else -> 0 // Default to RSA
+            // Default to RSA
+            else -> 0
         }
     }
 
@@ -759,9 +762,12 @@ data class HostKeyChangedInfo(
  * Actions user can take when host key changes
  */
 enum class HostKeyAction {
-    ACCEPT_NEW_KEY,      // Replace old key with new key and continue
-    REJECT_CONNECTION,   // Abort connection for security
-    ACCEPT_ONCE          // Accept for this connection only, don't store
+    // Replace old key with new key and continue
+    ACCEPT_NEW_KEY,
+    // Abort connection for security
+    REJECT_CONNECTION,
+    // Accept for this connection only, don't store
+    ACCEPT_ONCE
 }
 
 /**

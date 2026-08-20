@@ -17,9 +17,12 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
 import io.github.tabssh.R
+import io.github.tabssh.storage.database.TabSSHDatabase
+import io.github.tabssh.storage.database.entities.PendingSyncConflictCodec
 import io.github.tabssh.sync.SAFSyncManager
 import io.github.tabssh.sync.SyncFileStatus
 import io.github.tabssh.sync.data.SyncDataCollector
+import io.github.tabssh.sync.merge.ConflictResolver
 import io.github.tabssh.sync.merge.SyncMergeCoordinator
 import io.github.tabssh.sync.models.Conflict
 import io.github.tabssh.sync.models.ConflictResolution
@@ -77,6 +80,7 @@ class SyncSettingsActivity : AppCompatActivity() {
     private lateinit var syncManager: SAFSyncManager
     private lateinit var workScheduler: SyncWorkScheduler
     private lateinit var prefs: android.content.SharedPreferences
+    private var resolvingDeferredConflicts = false
 
     private lateinit var createFileLauncher: ActivityResultLauncher<Intent>
     private lateinit var openFileLauncher: ActivityResultLauncher<Intent>
@@ -100,7 +104,8 @@ class SyncSettingsActivity : AppCompatActivity() {
     private lateinit var switchOnChange: MaterialSwitch
 
     // What-to-sync rows
-    private lateinit var syncItems: List<Triple<View, String, String>>  // (row, prefKey, subtitle)
+    // (row, prefKey, subtitle)
+    private lateinit var syncItems: List<Triple<View, String, String>>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -136,6 +141,38 @@ class SyncSettingsActivity : AppCompatActivity() {
         bindViews()
         wireListeners()
         refresh()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        checkDeferredConflicts()
+    }
+
+    /**
+     * A headless (WorkManager) sync may have deferred conflicts it couldn't
+     * resolve in the background — see [io.github.tabssh.sync.merge.SyncMergeCoordinator].
+     * Resurface them here on every foreground open until the user resolves them.
+     */
+    private fun checkDeferredConflicts() {
+        if (resolvingDeferredConflicts) return
+        lifecycleScope.launch {
+            val database = TabSSHDatabase.getDatabase(this@SyncSettingsActivity)
+            val pendingDao = database.pendingSyncConflictDao()
+            val rows = withContext(Dispatchers.IO) { pendingDao.getAll() }
+            if (rows.isEmpty()) return@launch
+
+            resolvingDeferredConflicts = true
+            val conflicts = rows.map { PendingSyncConflictCodec.toConflict(it) }
+            val resolutions = resolveConflictsInteractively(conflicts)
+            withContext(Dispatchers.IO) {
+                if (resolutions.isNotEmpty()) {
+                    ConflictResolver(this@SyncSettingsActivity, database).applyResolutions(resolutions)
+                }
+                pendingDao.deleteAll()
+            }
+            resolvingDeferredConflicts = false
+            toast("Deferred sync conflicts resolved")
+        }
     }
 
     private fun bindViews() {
@@ -269,6 +306,9 @@ class SyncSettingsActivity : AppCompatActivity() {
                 .setPositiveButton("Download") { _, _ -> performDownload() }
                 .setNegativeButton("Cancel", null)
                 .show()
+        }
+        findViewById<View>(R.id.btn_view_sync_log).setOnClickListener {
+            startActivity(Intent(this, SyncLogActivity::class.java))
         }
         findViewById<View>(R.id.btn_clear_config).setOnClickListener {
             MaterialAlertDialogBuilder(this)

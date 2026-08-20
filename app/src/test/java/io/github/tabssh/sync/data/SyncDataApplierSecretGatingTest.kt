@@ -7,7 +7,6 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.Mockito
 import org.mockito.MockitoAnnotations
-import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -72,7 +71,7 @@ class SyncDataApplierSecretGatingTest {
     }
 
     @Test
-    fun `hypervisor account secrets including legacy oci aliases are gated by sync_hypervisor_accounts`() {
+    fun `hypervisor account secrets including oci aliases are gated by sync_hypervisor_accounts`() {
         Mockito.`when`(preferenceManager.isSyncHypervisorAccountsEnabled()).thenReturn(false)
         assertFalse(isSecretAliasEnabled("hypervisor_account_abc123"))
         assertFalse(isSecretAliasEnabled("oci_private_key_account_abc123"))
@@ -85,7 +84,7 @@ class SyncDataApplierSecretGatingTest {
     }
 
     @Test
-    fun `legacy hypervisor secrets fall back to sync_hypervisors`() {
+    fun `hypervisor host secrets are gated by sync_hypervisors`() {
         Mockito.`when`(preferenceManager.isSyncHypervisorsEnabled()).thenReturn(false)
         assertFalse(isSecretAliasEnabled("hypervisor_abc123"))
 
@@ -127,7 +126,9 @@ class SyncDataApplierSecretGatingTest {
     }
 
     @Test
-    fun `unknown alias prefixes default to enabled`() {
-        assertEquals(true, isSecretAliasEnabled("some_unrelated_alias"))
+    fun `unknown alias prefixes are denied`() {
+        assertFalse(isSecretAliasEnabled("some_unrelated_alias"))
+        assertFalse(isSecretAliasEnabled(""))
+        assertFalse(isSecretAliasEnabled("password_abc123"))
     }
 }

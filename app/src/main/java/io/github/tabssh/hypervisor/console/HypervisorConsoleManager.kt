@@ -180,7 +180,8 @@ class HypervisorConsoleManager {
         node: String,
         vmid: Int,
         vmName: String,
-        type: String = "qemu", // "qemu" or "lxc"
+        // "qemu" or "lxc"
+        type: String = "qemu",
         verifySsl: Boolean = false,
         pinnedCertSha256: String? = null,
         displayHost: String = "",

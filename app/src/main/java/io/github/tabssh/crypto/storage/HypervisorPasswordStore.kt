@@ -1,7 +1,9 @@
 package io.github.tabssh.crypto.storage
 
 import android.content.Context
+import androidx.sqlite.db.SupportSQLiteDatabase
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
@@ -10,17 +12,17 @@ import kotlinx.coroutines.withContext
 /**
  * Single source of truth for hypervisor (Proxmox / XCP-ng / Xen Orchestra
  * / VMware) credentials — keeps them in `SecurePasswordManager` (Keystore-
- * backed prefs) instead of the plaintext `hypervisors.password` column
- * the entity inherited from earlier versions.
+ * backed prefs). The `hypervisors` table has no password column at all as
+ * of schema v14; nothing here ever writes a secret to the database.
  *
- * Migration policy is **lazy**:
- *   * `retrieve(profile)` checks the Keystore first. On hit → return.
- *   * On miss, falls back to `profile.password` and — if non-empty — copies
- *     it into the Keystore AND clears the DB column. Old rows therefore
- *     migrate the moment they're next read; new rows never carry plaintext.
- *   * `store(id, password)` writes to the Keystore and clears the DB
- *     column unconditionally; a partial failure leaves the user able to
- *     re-enter the password on a subsequent edit.
+ * The only legacy path left is the **carry-over table**. `MIGRATION_13_14`
+ * could not reach the Keystore from inside a Room migration, so instead of
+ * discarding the plaintext it moved every still-populated value into
+ * [TabSSHDatabase.HYPERVISOR_PASSWORD_CARRYOVER_TABLE]. [sweepLegacyPlaintext]
+ * runs at application startup and drains that table into the Keystore,
+ * dropping it once empty; [retrieve] drains the single row it needs on a
+ * Keystore miss in case a connect beats the sweep. A row whose Keystore
+ * write fails survives to the next attempt, so nothing is ever lost.
  *
  * Keystore alias namespace: `hypervisor_${id}`. Mirrors the cloud-account
  * pattern (`cloud_token_${id}`) so future audit greps find both with the
@@ -28,10 +30,11 @@ import kotlinx.coroutines.withContext
  */
 object HypervisorPasswordStore {
     private const val TAG = "HypervisorPwdStore"
+    private const val CARRYOVER = TabSSHDatabase.HYPERVISOR_PASSWORD_CARRYOVER_TABLE
     private const val KEY_PREFIX = "hypervisor_"
     private const val ACCOUNT_KEY_PREFIX = "hypervisor_account_"
-    private const val OCI_KEY_ACCOUNT_PREFIX  = "oci_private_key_account_"
-    private const val OCI_PASS_ACCOUNT_PREFIX = "oci_passphrase_account_"
+    const val OCI_KEY_ACCOUNT_PREFIX  = "oci_private_key_account_"
+    const val OCI_PASS_ACCOUNT_PREFIX = "oci_passphrase_account_"
 
     private fun aliasFor(id: Long): String = "$KEY_PREFIX$id"
     private fun accountAliasFor(id: Long): String = "$ACCOUNT_KEY_PREFIX$id"
@@ -59,13 +62,13 @@ object HypervisorPasswordStore {
      *     `hypervisor_account_${account.id}`. Realm: profile.realm wins
      *     if non-blank (per-host override), else account.realm.
      *
-     * Lazy migration of legacy plaintext on the per-host path is
-     * preserved — `retrieve(profile)` is still called in that branch.
+     * Carry-over draining on the per-host path is preserved —
+     * `retrieve(profile)` is still called in that branch.
      */
     suspend fun resolveCredentials(context: Context, profile: HypervisorProfile): Credentials =
         withContext(Dispatchers.IO) {
             val app = context.applicationContext as? TabSSHApplication
-                ?: return@withContext Credentials(profile.username, profile.password, profile.realm)
+                ?: return@withContext Credentials(profile.username, "", profile.realm)
             val accountId = profile.accountId
             if (accountId != null) {
                 val account = try {
@@ -156,54 +159,39 @@ object HypervisorPasswordStore {
 
     /**
      * Get the current password for this hypervisor. Always tries the
-     * Keystore first; falls back to the (legacy) DB column and lazily
-     * migrates if the Keystore was empty. Returns `""` if nothing is
-     * stored anywhere — caller decides whether to prompt.
+     * Keystore first; on a miss, drains this row's v13→v14 carry-over entry
+     * (if the startup sweep has not reached it yet) and returns that.
+     * Returns `""` if nothing is stored anywhere — caller decides whether
+     * to prompt.
      */
     suspend fun retrieve(context: Context, profile: HypervisorProfile): String =
         withContext(Dispatchers.IO) {
             val app = context.applicationContext as? TabSSHApplication
-                ?: return@withContext profile.password
+                ?: return@withContext ""
             val pm = app.securePasswordManager
             val alias = aliasFor(profile.id)
 
             // Keystore-first.
             val fromKeystore = try { pm.retrievePassword(alias) } catch (e: Exception) {
-                Logger.w(TAG, "retrievePassword($alias) threw — falling back to DB", e)
+                Logger.w(TAG, "retrievePassword($alias) threw — trying the carry-over table", e)
                 null
             }
             if (!fromKeystore.isNullOrEmpty()) return@withContext fromKeystore
 
-            // Legacy fallback. If the row still has plaintext, migrate it now.
-            val legacy = profile.password
-            if (legacy.isNotEmpty()) {
-                try {
-                    val ok = pm.storePassword(alias, legacy, SecurePasswordManager.StorageLevel.ENCRYPTED)
-                    if (ok) {
-                        // Clear the plaintext column on the same row so future
-                        // dumps of /data/data/.../databases/* don't reveal it.
-                        try {
-                            app.database.hypervisorDao().update(profile.copy(password = ""))
-                        } catch (e: Exception) {
-                            Logger.w(TAG, "Failed to clear legacy password column for id=${profile.id}", e)
-                        }
-                        Logger.i(TAG, "Migrated hypervisor password to Keystore for id=${profile.id}")
-                    } else {
-                        Logger.w(TAG, "storePassword($alias) returned false — leaving DB column intact for retry")
-                    }
-                } catch (e: Exception) {
-                    Logger.w(TAG, "Lazy-migration storePassword($alias) threw", e)
-                }
-                return@withContext legacy
+            val db = try {
+                app.database.openHelper.writableDatabase
+            } catch (e: Exception) {
+                Logger.w(TAG, "Could not open the database to drain the carry-over table", e)
+                return@withContext ""
             }
-
-            ""
+            drainCarryover(db, pm, profile.id)[profile.id] ?: ""
         }
 
     /**
-     * Persist a (possibly new) password for a hypervisor. Always writes
-     * to the Keystore; clears the DB column to avoid the on-disk plaintext
-     * exposure the audit flagged. Returns true if Keystore write succeeded.
+     * Persist a (possibly new) password for a hypervisor. Writes to the
+     * Keystore and discards any carry-over entry still held for this id,
+     * so a stale plaintext can never outlive the value the user just set.
+     * Returns true if the Keystore write succeeded.
      */
     suspend fun store(context: Context, id: Long, password: String): Boolean =
         withContext(Dispatchers.IO) {
@@ -217,97 +205,147 @@ object HypervisorPasswordStore {
                 Logger.w(TAG, "storePassword($alias) threw", e)
                 false
             }
-            // Whether Keystore succeeded or not, blank the DB column —
-            // the previous plaintext was the security concern, and a
-            // failed Keystore write means the user has to re-enter on
-            // the next edit, which is a recoverable UX issue.
-            try {
-                val current = app.database.hypervisorDao().getById(id)
-                if (current != null && current.password.isNotEmpty()) {
-                    app.database.hypervisorDao().update(current.copy(password = ""))
-                }
-            } catch (e: Exception) {
-                Logger.w(TAG, "Failed to clear DB password column for id=$id", e)
-            }
+            discardCarryover(app, id)
             ok
         }
 
     /**
-     * One-shot startup sweep: migrate EVERY row that still carries a legacy
-     * plaintext `hypervisors.password` value into the Keystore and blank the
-     * column, instead of waiting for the row's next [retrieve]. Runs on each
-     * cold start (cheap single SELECT when nothing is left to do) so rows
-     * reintroduced with plaintext by a backup restore are also caught.
+     * Startup sweep: drain the v13→v14 carry-over table into the Keystore
+     * instead of waiting for each row's next [retrieve], then drop the table
+     * once it is empty. Runs on every cold start; on a database that never
+     * carried plaintext across the upgrade the table does not exist and this
+     * costs one `sqlite_master` probe.
      *
      * Keystore wins: if an alias already holds a password (the user updated
-     * it since the plaintext was written), the DB value is discarded, not
-     * copied over the newer secret. A failed Keystore write leaves the row
-     * intact for the next sweep or lazy [retrieve].
+     * it since the plaintext was written), the carried-over value is dropped,
+     * not copied over the newer secret. A failed Keystore write leaves the
+     * row intact for the next sweep or for [retrieve].
      */
     suspend fun sweepLegacyPlaintext(context: Context) = withContext(Dispatchers.IO) {
         val app = context.applicationContext as? TabSSHApplication ?: return@withContext
-        val dao = app.database.hypervisorDao()
-        val pm = app.securePasswordManager
-        val stale = try {
-            dao.getAllList().filter { it.password.isNotEmpty() }
+        val db = try {
+            app.database.openHelper.writableDatabase
         } catch (e: Exception) {
-            Logger.w(TAG, "Legacy plaintext sweep could not list hypervisors", e)
+            Logger.w(TAG, "Legacy plaintext sweep could not open the database", e)
             return@withContext
         }
-        for (row in stale) {
-            val alias = aliasFor(row.id)
+        drainCarryover(db, app.securePasswordManager)
+        Unit
+    }
+
+    /**
+     * Move carried-over plaintext into the Keystore. With [onlyId] set, only
+     * that row is considered and the table is left in place; otherwise every
+     * row is drained and the table is dropped once empty.
+     *
+     * Returns the effective password for each id it successfully resolved, so
+     * [retrieve] can serve the value it just migrated without a second read.
+     * Rows that fail are left untouched for the next attempt.
+     */
+    internal suspend fun drainCarryover(
+        db: SupportSQLiteDatabase,
+        pm: SecurePasswordManager,
+        onlyId: Long? = null
+    ): Map<Long, String> {
+        val resolved = mutableMapOf<Long, String>()
+        if (!carryoverExists(db)) return resolved
+
+        val pending = mutableListOf<Pair<Long, String>>()
+        try {
+            val cursor = if (onlyId != null) {
+                db.query(
+                    "SELECT `id`, `password` FROM `$CARRYOVER` WHERE `id` = ?",
+                    arrayOf<Any>(onlyId)
+                )
+            } else {
+                db.query("SELECT `id`, `password` FROM `$CARRYOVER`")
+            }
+            cursor.use {
+                while (it.moveToNext()) {
+                    val password = it.getString(1) ?: ""
+                    if (password.isNotEmpty()) pending.add(it.getLong(0) to password)
+                }
+            }
+        } catch (e: Exception) {
+            Logger.w(TAG, "Could not read the carry-over table", e)
+            return resolved
+        }
+
+        for ((id, password) in pending) {
+            val alias = aliasFor(id)
             try {
                 val existing = try { pm.retrievePassword(alias) } catch (e: Exception) {
-                    Logger.w(TAG, "Sweep retrievePassword($alias) threw — skipping row", e)
+                    Logger.w(TAG, "Carry-over retrievePassword($alias) threw — leaving row for retry", e)
                     continue
                 }
-                val ok = if (existing.isNullOrEmpty()) {
-                    pm.storePassword(alias, row.password, SecurePasswordManager.StorageLevel.ENCRYPTED)
+                val effective = if (!existing.isNullOrEmpty()) {
+                    // Keystore already holds a newer secret — discard the carried value.
+                    existing
                 } else {
-                    // Keystore already has a (newer) secret — just drop the plaintext.
-                    true
+                    val ok = pm.storePassword(alias, password, SecurePasswordManager.StorageLevel.ENCRYPTED)
+                    if (!ok) {
+                        Logger.w(TAG, "Carry-over storePassword($alias) returned false — leaving row for retry")
+                        continue
+                    }
+                    password
                 }
-                if (ok) {
-                    dao.update(row.copy(password = ""))
-                    Logger.i(TAG, "Sweep migrated legacy plaintext password for hypervisor id=${row.id}")
-                } else {
-                    Logger.w(TAG, "Sweep storePassword($alias) returned false — leaving row for retry")
-                }
+                db.execSQL("DELETE FROM `$CARRYOVER` WHERE `id` = ?", arrayOf<Any>(id))
+                resolved[id] = effective
+                Logger.i(TAG, "Moved carried-over hypervisor password into the Keystore for id=$id")
             } catch (e: Exception) {
-                Logger.w(TAG, "Sweep failed for hypervisor id=${row.id} — leaving row for retry", e)
+                Logger.w(TAG, "Carry-over migration failed for hypervisor id=$id — leaving row for retry", e)
             }
+        }
+
+        if (onlyId == null) dropCarryoverIfEmpty(db)
+        return resolved
+    }
+
+    /** True when the v13→v14 carry-over table is still present on this database. */
+    private fun carryoverExists(db: SupportSQLiteDatabase): Boolean =
+        try {
+            db.query(
+                "SELECT `name` FROM `sqlite_master` WHERE `type` = 'table' AND `name` = ?",
+                arrayOf<Any>(CARRYOVER)
+            ).use { it.moveToFirst() }
+        } catch (e: Exception) {
+            Logger.w(TAG, "Carry-over table probe failed", e)
+            false
+        }
+
+    /** Drop the carry-over table once the last row has been migrated. */
+    private fun dropCarryoverIfEmpty(db: SupportSQLiteDatabase) {
+        try {
+            val remaining = db.query("SELECT COUNT(*) FROM `$CARRYOVER`").use {
+                if (it.moveToFirst()) it.getLong(0) else 0L
+            }
+            if (remaining == 0L) db.execSQL("DROP TABLE IF EXISTS `$CARRYOVER`")
+        } catch (e: Exception) {
+            Logger.w(TAG, "Could not drop the drained carry-over table", e)
+        }
+    }
+
+    /** Forget any carried-over plaintext for [id] without migrating it. */
+    private fun discardCarryover(app: TabSSHApplication, id: Long) {
+        try {
+            val db = app.database.openHelper.writableDatabase
+            if (!carryoverExists(db)) return
+            db.execSQL("DELETE FROM `$CARRYOVER` WHERE `id` = ?", arrayOf<Any>(id))
+            dropCarryoverIfEmpty(db)
+        } catch (e: Exception) {
+            Logger.w(TAG, "Failed to discard carried-over plaintext for id=$id", e)
         }
     }
 
     /** Delete the stored password — call from hypervisor delete paths. */
-    suspend fun clear(context: Context, id: Long) {
-        val app = context.applicationContext as? TabSSHApplication ?: return
+    suspend fun clear(context: Context, id: Long) = withContext(Dispatchers.IO) {
+        val app = context.applicationContext as? TabSSHApplication ?: return@withContext
         try {
             app.securePasswordManager.clearPassword(aliasFor(id))
         } catch (e: Exception) {
             Logger.w(TAG, "clearPassword threw", e)
         }
-    }
-
-    /**
-     * Drop the Keystore aliases an OCI hypervisor uses
-     * (`oci_private_key_${id}` and `oci_passphrase_${id}`). Mirror of
-     * [clear] for OCI's API-key auth — call from the delete path so a
-     * future row id collision can't leak the previous owner's PEM.
-     * No-op for missing aliases; logs (but does not throw) on Keystore
-     * exceptions.
-     */
-    suspend fun clearOciSecrets(context: Context, id: Long) {
-        val app = context.applicationContext as? TabSSHApplication ?: return
-        val pm = app.securePasswordManager
-        val aliases = listOf("oci_private_key_$id", "oci_passphrase_$id")
-        for (alias in aliases) {
-            try {
-                pm.clearPassword(alias)
-            } catch (e: Exception) {
-                Logger.w(TAG, "clearOciSecrets($alias) threw", e)
-            }
-        }
+        discardCarryover(app, id)
     }
 
     // ─── OCI account-keyed Keystore operations ───────────────────────────────
@@ -331,48 +369,23 @@ object HypervisorPasswordStore {
         }
 
     /**
-     * Retrieve an OCI API private key PEM for an account. Lazily migrates
-     * the legacy profile-keyed alias (`oci_private_key_${legacyProfileId}`)
-     * to the account alias on first hit so older installs upgrade silently.
+     * Retrieve an OCI API private key PEM for an account.
+     *
+     * The account alias is the only alias. Installs that still held the
+     * profile-keyed predecessor were moved forward once at startup by
+     * [LegacySecretMigrations.migrateProfileKeyedOciSecrets]; there is no
+     * legacy fallback here.
      */
-    suspend fun retrieveOciAccountKey(
-        context: Context,
-        accountId: Long,
-        legacyProfileId: Long? = null
-    ): String? = withContext(Dispatchers.IO) {
-        val app = context.applicationContext as? TabSSHApplication ?: return@withContext null
-        val pm = app.securePasswordManager
-        val current = try {
-            pm.retrievePassword("$OCI_KEY_ACCOUNT_PREFIX$accountId")
-        } catch (e: Exception) {
-            Logger.w(TAG, "retrieveOciAccountKey($accountId) threw", e)
-            null
-        }
-        if (!current.isNullOrBlank()) return@withContext current
-        // Lazy migration from legacy profile-keyed alias
-        if (legacyProfileId != null) {
-            val legacy = try {
-                pm.retrievePassword("oci_private_key_$legacyProfileId")
+    suspend fun retrieveOciAccountKey(context: Context, accountId: Long): String? =
+        withContext(Dispatchers.IO) {
+            val app = context.applicationContext as? TabSSHApplication ?: return@withContext null
+            try {
+                app.securePasswordManager.retrievePassword("$OCI_KEY_ACCOUNT_PREFIX$accountId")
             } catch (e: Exception) {
-                Logger.w(TAG, "retrieveOciAccountKey legacy read (profile $legacyProfileId) threw", e)
+                Logger.w(TAG, "retrieveOciAccountKey($accountId) threw", e)
                 null
             }
-            if (!legacy.isNullOrBlank()) {
-                try {
-                    pm.storePassword(
-                        "$OCI_KEY_ACCOUNT_PREFIX$accountId", legacy,
-                        SecurePasswordManager.StorageLevel.ENCRYPTED
-                    )
-                    pm.clearPassword("oci_private_key_$legacyProfileId")
-                    Logger.i(TAG, "Migrated OCI key profile $legacyProfileId → account $accountId")
-                } catch (e: Exception) {
-                    Logger.w(TAG, "OCI key lazy-migration threw for account $accountId", e)
-                }
-                return@withContext legacy
-            }
         }
-        null
-    }
 
     /** Persist an OCI API key passphrase for an account. */
     suspend fun storeOciAccountPassphrase(context: Context, accountId: Long, passphrase: String): Boolean =
@@ -389,46 +402,17 @@ object HypervisorPasswordStore {
             }
         }
 
-    /**
-     * Retrieve an OCI API key passphrase. Lazy-migrates from the legacy
-     * profile-keyed alias (`oci_passphrase_${legacyProfileId}`).
-     */
-    suspend fun retrieveOciAccountPassphrase(
-        context: Context,
-        accountId: Long,
-        legacyProfileId: Long? = null
-    ): String? = withContext(Dispatchers.IO) {
-        val app = context.applicationContext as? TabSSHApplication ?: return@withContext null
-        val pm = app.securePasswordManager
-        val current = try {
-            pm.retrievePassword("$OCI_PASS_ACCOUNT_PREFIX$accountId")
-        } catch (e: Exception) {
-            Logger.w(TAG, "retrieveOciAccountPassphrase($accountId) threw", e)
-            null
-        }
-        if (!current.isNullOrBlank()) return@withContext current
-        if (legacyProfileId != null) {
-            val legacy = try {
-                pm.retrievePassword("oci_passphrase_$legacyProfileId")
+    /** Retrieve an OCI API key passphrase for an account. */
+    suspend fun retrieveOciAccountPassphrase(context: Context, accountId: Long): String? =
+        withContext(Dispatchers.IO) {
+            val app = context.applicationContext as? TabSSHApplication ?: return@withContext null
+            try {
+                app.securePasswordManager.retrievePassword("$OCI_PASS_ACCOUNT_PREFIX$accountId")
             } catch (e: Exception) {
-                Logger.w(TAG, "retrieveOciAccountPassphrase legacy read (profile $legacyProfileId) threw", e)
+                Logger.w(TAG, "retrieveOciAccountPassphrase($accountId) threw", e)
                 null
             }
-            if (!legacy.isNullOrBlank()) {
-                try {
-                    pm.storePassword(
-                        "$OCI_PASS_ACCOUNT_PREFIX$accountId", legacy,
-                        SecurePasswordManager.StorageLevel.ENCRYPTED
-                    )
-                    pm.clearPassword("oci_passphrase_$legacyProfileId")
-                } catch (e: Exception) {
-                    Logger.w(TAG, "OCI passphrase lazy-migration threw for account $accountId", e)
-                }
-                return@withContext legacy
-            }
         }
-        null
-    }
 
     /** Delete all Keystore entries for an OCI account. Call from the delete path. */
     suspend fun clearOciAccountSecrets(context: Context, accountId: Long) {

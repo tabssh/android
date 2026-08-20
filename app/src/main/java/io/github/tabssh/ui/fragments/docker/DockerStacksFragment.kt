@@ -26,6 +26,7 @@ import io.github.tabssh.ui.adapters.StackListItem
 import io.github.tabssh.ui.dialogs.DockerActionSheet
 import io.github.tabssh.ui.dialogs.DockerErrorPresenter
 import io.github.tabssh.ui.dialogs.DockerInspectDialog
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 /**
@@ -99,20 +100,26 @@ class DockerStacksFragment : DockerPageFragment() {
     }
 
     override fun onSessionReady(session: DockerSessionManager.DockerSession) {
-        refreshStatuses(session)
-        discoverExternalStacks(session)
+        // refreshStatuses and discoverExternalStacks run concurrently, but
+        // both must be cancelled together when a fresher session/refresh
+        // tick supersedes this one — otherwise a stale composePs or
+        // composeLs result can land after the newer one and overwrite it.
+        startLoad {
+            coroutineScope {
+                launch { refreshStatuses(session) }
+                launch { discoverExternalStacks(session) }
+            }
+        }
     }
 
     /** `docker compose ls` — projects on the host with no Room row yet. */
-    private fun discoverExternalStacks(session: DockerSessionManager.DockerSession) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            // TransportUnavailable (no compose on the host) just means "no
-            // external stacks to show" — not a failure worth surfacing here.
-            val result = session.transport.composeLs()
-            if (!isAdded) return@launch
-            externalEntries = result.valueOrNull().orEmpty()
-            renderList()
-        }
+    private suspend fun discoverExternalStacks(session: DockerSessionManager.DockerSession) {
+        // TransportUnavailable (no compose on the host) just means "no
+        // external stacks to show" — not a failure worth surfacing here.
+        val result = session.transport.composeLs()
+        if (!isAdded) return
+        externalEntries = result.valueOrNull().orEmpty()
+        renderList()
     }
 
     /** Merge tracked + discovered stacks, excluding externals already tracked by name. */
@@ -127,30 +134,28 @@ class DockerStacksFragment : DockerPageFragment() {
     }
 
     /** Refresh each tracked stack's per-service status snapshot via compose ps. */
-    private fun refreshStatuses(session: DockerSessionManager.DockerSession) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            progressBar.visibility = View.VISIBLE
-            val dao = app.database.composeStackDao()
-            // Resources are resolved through the application context: the loop
-            // suspends on every compose ps, and Fragment.getResources() throws
-            // IllegalStateException once the fragment has detached mid-loop.
-            val res = app.resources
-            for (stack in dao.getStacksForHostList(manager.hostId)) {
-                val output = session.transport.composePs(stack.remotePath).valueOrNull()?.trim()
-                if (output != null) {
-                    val services = output.lines().drop(1).count { it.isNotBlank() }
-                    dao.updateLastKnownStatus(
-                        stack.id,
-                        res.getQuantityString(
-                            R.plurals.docker_stack_running_services, services, services
-                        ),
-                        System.currentTimeMillis()
-                    )
-                }
+    private suspend fun refreshStatuses(session: DockerSessionManager.DockerSession) {
+        progressBar.visibility = View.VISIBLE
+        val dao = app.database.composeStackDao()
+        // Resources are resolved through the application context: the loop
+        // suspends on every compose ps, and Fragment.getResources() throws
+        // IllegalStateException once the fragment has detached mid-loop.
+        val res = app.resources
+        for (stack in dao.getStacksForHostList(manager.hostId)) {
+            val output = session.transport.composePs(stack.remotePath).valueOrNull()?.trim()
+            if (output != null) {
+                val services = output.lines().drop(1).count { it.isNotBlank() }
+                dao.updateLastKnownStatus(
+                    stack.id,
+                    res.getQuantityString(
+                        R.plurals.docker_stack_running_services, services, services
+                    ),
+                    System.currentTimeMillis()
+                )
             }
-            if (!isAdded) return@launch
-            progressBar.visibility = View.GONE
         }
+        if (!isAdded) return
+        progressBar.visibility = View.GONE
     }
 
     private fun openEditor(item: StackListItem?) {

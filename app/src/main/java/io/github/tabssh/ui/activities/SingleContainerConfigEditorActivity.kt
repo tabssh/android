@@ -307,12 +307,13 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
             if (existing == null) {
                 configId = dao.insert(
                     SingleContainerConfig(
-                        dockerHostId = hostId, name = name, remotePath = remotePath
+                        dockerHostId = hostId, name = name, remotePath = remotePath,
+                        modifiedAt = System.currentTimeMillis()
                     )
                 )
                 config = dao.getById(configId)
             } else {
-                dao.update(existing.copy(updatedAt = System.currentTimeMillis()))
+                dao.update(existing.copy(updatedAt = System.currentTimeMillis(), modifiedAt = System.currentTimeMillis()))
             }
             // The DAO writes suspend as well — re-check before the toast.
             if (!isAlive()) return@launch

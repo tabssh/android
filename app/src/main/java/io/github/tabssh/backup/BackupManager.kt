@@ -2,10 +2,13 @@ package io.github.tabssh.backup
 
 import android.content.Context
 import android.net.Uri
+import androidx.core.content.pm.PackageInfoCompat
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.backup.export.BackupExporter
 import io.github.tabssh.backup.import.BackupImporter
 import io.github.tabssh.backup.validation.BackupValidator
+import io.github.tabssh.crypto.keys.KeyStorage
+import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.sync.encryption.SyncEncryptor
@@ -18,8 +21,17 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 /**
- * Main backup and restore manager
- * Handles full application backup including connections, keys, preferences, and themes
+ * Main backup and restore manager.
+ *
+ * Handles a full application backup — every entity, every preference and every
+ * Keystore-backed credential. There is exactly one wire format
+ * ([BACKUP_VERSION]); an archive that does not match it is rejected with an
+ * "unsupported backup format" error rather than parsed best-effort.
+ *
+ * Two output modes, both containing the same data:
+ *  - **Encrypted** (default): AES-256-GCM keyed from a user password.
+ *  - **Plaintext**: readable by anyone holding the file. Requires
+ *    `plaintextSecretsConfirmed` from a type-to-confirm dialog.
  */
 class BackupManager(private val context: Context) {
 
@@ -31,17 +43,35 @@ class BackupManager(private val context: Context) {
     // yet the exporter/importer will skip the secrets section gracefully.
     private val app: TabSSHApplication?
         get() = context.applicationContext as? TabSSHApplication
+    // Building either manager opens the AndroidKeyStore provider, which throws
+    // outright where that provider does not exist. Catching it here is what
+    // makes the "skip the secrets section" promise above true — otherwise the
+    // whole export fails instead of the secrets section being left empty.
+    private val securePasswordManager: SecurePasswordManager?
+        get() = try {
+            app?.securePasswordManager
+        } catch (e: Exception) {
+            Logger.w(TAG, "Keystore unavailable, backup will omit stored secrets: ${e.message}")
+            null
+        }
+    private val keyStorage: KeyStorage?
+        get() = try {
+            app?.keyStorage
+        } catch (e: Exception) {
+            Logger.w(TAG, "Keystore unavailable, backup will omit key material: ${e.message}")
+            null
+        }
     private val exporter by lazy {
         BackupExporter(context, database, preferenceManager,
-            app?.securePasswordManager, app?.keyStorage)
+            securePasswordManager, keyStorage)
     }
     private val importer by lazy {
         BackupImporter(context, database, preferenceManager,
-            app?.securePasswordManager, app?.keyStorage)
+            securePasswordManager, keyStorage)
     }
     private val validator = BackupValidator()
     // P0 fix: real password-based encryption for backups. Reuses the
-    // sync subsystem's SyncEncryptor (AES-256-GCM + PBKDF2 100k iter,
+    // sync subsystem's SyncEncryptor (AES-256-GCM + Argon2id key derivation,
     // see SyncEncryptor.kt) instead of the previous Base64-only stub
     // that silently failed to encrypt anything despite the
     // `encryptBackup=true` UI promise.
@@ -71,19 +101,40 @@ class BackupManager(private val context: Context) {
     )
 
     companion object {
-        private const val BACKUP_VERSION = 3
-        // Wire-format: single-JSON .tabssh file. Each entity file inside
-        // carries `{"v":2,"items":[...]}`. Restore is single-path; no ZIP
-        // legacy fallback.
+        /**
+         * The one and only backup wire version. There is exactly one current
+         * format: a single-JSON `.tabssh` file whose entity files each carry
+         * `{"v":BACKUP_VERSION,"items":[...]}`. Archives written in any other
+         * version are rejected outright — no legacy read path exists.
+         */
+        const val BACKUP_VERSION = 3
+
+        /** Magic prefix written by [SyncEncryptor] on an encrypted archive. */
+        private const val ENCRYPTED_MAGIC = "TABSSH_SYNC_V3"
+
+        private const val TAG = "BackupManager"
     }
 
     /**
-     * Create a full backup
+     * Create a full backup.
+     *
+     * A backup always contains absolutely everything, credentials included —
+     * encryption is a file-level option that never changes the contents.
+     *
+     * @param encryptBackup true writes an AES-256-GCM archive keyed from
+     *   [password]; [password] is then mandatory.
+     * @param plaintextSecretsConfirmed required when [encryptBackup] is false.
+     *   An unencrypted archive contains every SSH key passphrase and every
+     *   connection/Docker/registry/VNC password in readable form, so the caller
+     *   must have obtained an explicit type-to-confirm acknowledgement from the
+     *   user first. Without it the backup is refused before any bytes are
+     *   written to [outputUri].
      */
     suspend fun createBackup(
         outputUri: Uri,
         encryptBackup: Boolean = true,
-        password: String? = null
+        password: String? = null,
+        plaintextSecretsConfirmed: Boolean = false
     ): BackupResult = withContext(Dispatchers.IO) {
         try {
             Logger.i("BackupManager", "Creating backup...")
@@ -97,6 +148,17 @@ class BackupManager(private val context: Context) {
                 return@withContext BackupResult(
                     success = false,
                     message = "Encrypted backup requires a password"
+                )
+            }
+
+            // Refuse before opening the output stream so an unconfirmed
+            // plaintext export cannot even create a partial file on disk.
+            if (!encryptBackup && !plaintextSecretsConfirmed) {
+                Logger.e("BackupManager", "Unencrypted backup requested without explicit confirmation")
+                return@withContext BackupResult(
+                    success = false,
+                    message = "Unencrypted backup requires explicit confirmation " +
+                        "because it exposes every stored credential in readable form"
                 )
             }
 
@@ -176,13 +238,11 @@ class BackupManager(private val context: Context) {
 
             context.contentResolver.openInputStream(inputUri)?.use { inputStream ->
                 val allBytes = inputStream.readBytes()
-                // v3 single-JSON format (optionally AES-GCM encrypted).
-                // Detect the SyncEncryptor magic header so we can surface a
-                // clear "need password" error instead of a raw JSONException.
-                // Match the shared 13-byte prefix so both the legacy V2 and the
-                // current V3 magic ("TABSSH_SYNC_V2"/"...V3") are recognized.
-                val isEncrypted = allBytes.size >= 13 &&
-                    String(allBytes, 0, 13, Charsets.ISO_8859_1) == "TABSSH_SYNC_V"
+                // Single-JSON format, optionally AES-GCM encrypted. Detect the
+                // SyncEncryptor magic header so we can surface a clear
+                // "need password" error instead of a raw JSONException.
+                val isEncrypted = allBytes.size >= ENCRYPTED_MAGIC.length &&
+                    String(allBytes, 0, ENCRYPTED_MAGIC.length, Charsets.ISO_8859_1) == ENCRYPTED_MAGIC
                 if (isEncrypted && password == null) {
                     return@withContext RestoreResult(
                         success = false,
@@ -254,20 +314,14 @@ class BackupManager(private val context: Context) {
     private suspend fun createBackupMetadata(backupData: Map<String, String>): BackupMetadata {
         val itemCounts = mutableMapOf<String, Int>()
 
-        // Generic counter: every entity file the exporter writes uses
-        // either the v2 wrapper (`{"v":2,"items":[...]}`) or the legacy
-        // v1 `{"<plural>":[...]}` shape. Preferences are an object, not a
-        // list — skip those.
+        // Generic counter: every entity file the exporter writes uses the
+        // single current wrapper (`{"v":BACKUP_VERSION,"items":[...]}`).
+        // Preferences are an object, not a list — skip those.
         backupData.forEach { (filename, data) ->
             if (filename == "preferences.json") return@forEach
             val key = filename.removeSuffix(".json")
             val count = try {
-                val obj = JSONObject(data)
-                when {
-                    obj.has("items") -> obj.getJSONArray("items").length()
-                    obj.has(key) -> obj.getJSONArray(key).length()
-                    else -> 0
-                }
+                JSONObject(data).optJSONArray("items")?.length() ?: 0
             } catch (_: Exception) { 0 }
             itemCounts[key] = count
         }
@@ -286,8 +340,7 @@ class BackupManager(private val context: Context) {
     private fun getAppVersion(): String {
         return try {
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            @Suppress("DEPRECATION")
-            "${packageInfo.versionName} (${packageInfo.versionCode})"
+            "${packageInfo.versionName} (${PackageInfoCompat.getLongVersionCode(packageInfo)})"
         } catch (e: Exception) {
             "Unknown"
         }

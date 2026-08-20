@@ -3,7 +3,6 @@ package io.github.tabssh.background
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.os.Build
 import android.os.PowerManager
 import androidx.work.*
 import io.github.tabssh.TabSSHApplication
@@ -125,20 +124,14 @@ class HostAvailabilityWorker(
      * WorkManager's [NetworkType.CONNECTED] constraint fires whenever any
      * network interface is up — including captive-portal Wi-Fi and interfaces
      * with no upstream route.  [NetworkCapabilities.NET_CAPABILITY_VALIDATED]
-     * (API 23+) reflects Android's own internet validation probe result and is
-     * the correct signal to use here.  On API 21-22 we fall back to the legacy
-     * [ConnectivityManager.activeNetworkInfo].
+     * reflects Android's own internet validation probe result and is the
+     * correct signal to use here.
      */
-    @Suppress("DEPRECATION")
     private fun isInternetAvailable(): Boolean {
         val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val network = cm.activeNetwork ?: return false
-            val caps = cm.getNetworkCapabilities(network) ?: return false
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-        } else {
-            cm.activeNetworkInfo?.isConnected == true
-        }
+        val network = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(network) ?: return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
     override suspend fun doWork(): Result {

@@ -31,8 +31,10 @@ data class ExportedConnection(
     val host: String,
     val port: Int,
     val username: String,
-    val protocol: String,            // "ssh" | "telnet"
-    val authType: String,            // AuthType enum name
+    // "ssh" | "telnet"
+    val protocol: String,
+    // AuthType enum name
+    val authType: String,
     val terminalType: String,
     val encoding: String,
     val compression: Boolean,
@@ -42,8 +44,10 @@ data class ExportedConnection(
     val agentForwarding: Boolean,
     val theme: String,
     val colorTag: Int,
-    val groupName: String?,          // resolved to groupId at import time
-    val identityName: String?,       // resolved to identityId at import time
+    // resolved to groupId at import time
+    val groupName: String?,
+    // resolved to identityId at import time
+    val identityName: String?,
     val envVars: String?,
     val postConnectScript: String?,
     val proxyHost: String?,

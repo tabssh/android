@@ -1,8 +1,8 @@
 package io.github.tabssh.utils.logging
 
 import android.content.Context
-import android.os.Build
 import android.util.Log
+import androidx.core.content.pm.PackageInfoCompat
 import io.github.tabssh.BuildConfig
 import java.io.BufferedWriter
 import java.io.File
@@ -59,7 +59,8 @@ object Logger {
     private fun shouldLog(level: Int): Boolean = level >= minLevel
 
     private var logFile: File? = null
-    private var appLogFile: File? = null  // Always-on sanitized log for bug reports
+    // Always-on sanitized log for bug reports
+    private var appLogFile: File? = null
     private var appContext: Context? = null
 
     // Bounded, drop-oldest queue — an unbounded queue (the Executors.
@@ -84,7 +85,8 @@ object Logger {
 
     private const val TAG_PREFIX = "TabSSH"
     private const val LOG_FILE_NAME = "tabssh_debug.log"
-    private const val APP_LOG_FILE_NAME = "tabssh_app.log"  // Sanitized for public sharing
+    // Sanitized for public sharing
+    private const val APP_LOG_FILE_NAME = "tabssh_app.log"
 
     // Issue #36 — Cap log files at 1 MiB and keep up to N rotated copies.
     // Was: a single 10 MiB file with one `.old` backup → up to 20 MiB on
@@ -92,9 +94,12 @@ object Logger {
     // `.log + .log.1 .. .log.{N-1}` so each rotation is fast (just renames),
     // total on-disk is bounded at MAX_LOG_SIZE * MAX_LOG_FILES, and a
     // pathologically chatty session can't grow a single file forever.
-    private const val MAX_LOG_SIZE = 1 * 1024 * 1024            // 1 MiB per file
-    private const val MAX_APP_LOG_SIZE = 1 * 1024 * 1024        // 1 MiB per file
-    private const val MAX_LOG_FILES = 5                          // .log + .log.1..4
+    // 1 MiB per file
+    private const val MAX_LOG_SIZE = 1 * 1024 * 1024
+    // 1 MiB per file
+    private const val MAX_APP_LOG_SIZE = 1 * 1024 * 1024
+    // .log + .log.1..4
+    private const val MAX_LOG_FILES = 5
 
     // Counters for anonymizing hosts/users in app log
     private val hostMap = mutableMapOf<String, String>()
@@ -264,14 +269,7 @@ object Logger {
     private fun getAppVersion(context: Context): String {
         return try {
             val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            // PackageInfo#longVersionCode is API 28; fall back to the
-            // deprecated versionCode on older devices.
-            val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                pInfo.longVersionCode
-            } else {
-                @Suppress("DEPRECATION")
-                pInfo.versionCode.toLong()
-            }
+            val code = PackageInfoCompat.getLongVersionCode(pInfo)
             "${pInfo.versionName} ($code)"
         } catch (e: Exception) {
             "unknown"
@@ -701,7 +699,8 @@ object Logger {
         s = RE_USER_AT.replace(s) { match ->
             val host = match.groupValues[2]
             if (isSafeHost(host)) {
-                match.value  // algorithm name / public domain — keep as-is
+                // algorithm name / public domain — keep as-is
+                match.value
             } else {
                 val anonUser = userMap.getOrPut(match.groupValues[1]) { "user${++userCounter}" }
                 val anonHost = anonForHost(host) { hostMap.getOrPut(host) { "server${++hostCounter}" } }
@@ -1041,7 +1040,8 @@ object Logger {
      * Force enable debug mode (for troubleshooting without going to settings)
      */
     fun forceEnableDebugMode(context: Context) {
-        if (debugMode) return // Already enabled
+        // Already enabled
+        if (debugMode) return
 
         debugMode = true
         logToFile = true

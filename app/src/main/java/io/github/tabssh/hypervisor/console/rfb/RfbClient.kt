@@ -127,30 +127,45 @@ class RfbClient(
             // compressed bytes and leaving the entire payload in the stream →
             // stream desync → screen frozen. ZRLE is fully spec-compliant and
             // works correctly with both QEMU and TigerVNC.
-            RfbConstants.ENC_ZRLE,                     // preferred: works with QEMU and TigerVNC
-            RfbConstants.ENC_TIGHT,                    // TigerVNC / libvirt; QEMU uses ZRLE above
+            // preferred: works with QEMU and TigerVNC
+            RfbConstants.ENC_ZRLE,
+            // TigerVNC / libvirt; QEMU uses ZRLE above
+            RfbConstants.ENC_TIGHT,
             RfbConstants.ENC_ZLIB,
             RfbConstants.ENC_HEXTILE,
-            RfbConstants.ENC_CORRE,                    // compact RRE fallback
+            // compact RRE fallback
+            RfbConstants.ENC_CORRE,
             RfbConstants.ENC_COPY_RECT,
             RfbConstants.ENC_RRE,
             RfbConstants.ENC_RAW,
             // ── Desktop resize ────────────────────────────────────────────────
-            RfbConstants.ENC_EXTENDED_DESKTOP_SIZE,    // standard -308 (IANA)
-            RfbConstants.ENC_QEMU_EXTENDED_DESKTOP_SIZE, // QEMU alias -52
-            RfbConstants.ENC_DESKTOP_SIZE,             // legacy server-side resize
+            // standard -308 (IANA)
+            RfbConstants.ENC_EXTENDED_DESKTOP_SIZE,
+            // QEMU alias -52
+            RfbConstants.ENC_QEMU_EXTENDED_DESKTOP_SIZE,
+            // legacy server-side resize
+            RfbConstants.ENC_DESKTOP_SIZE,
             // ── Cursor ───────────────────────────────────────────────────────
-            RfbConstants.ENC_CURSOR_WITH_ALPHA,        // RGBA cursor
-            RfbConstants.ENC_CURSOR,                   // 1-bit-mask cursor
-            RfbConstants.ENC_XCURSOR,                  // X11 1-bit cursor (legacy)
-            RfbConstants.ENC_POINTER_POS,              // pointer position updates
+            // RGBA cursor
+            RfbConstants.ENC_CURSOR_WITH_ALPHA,
+            // 1-bit-mask cursor
+            RfbConstants.ENC_CURSOR,
+            // X11 1-bit cursor (legacy)
+            RfbConstants.ENC_XCURSOR,
+            // pointer position updates
+            RfbConstants.ENC_POINTER_POS,
             // ── Control flow / sync ──────────────────────────────────────────
-            RfbConstants.ENC_FENCE,                    // consume fence messages
-            RfbConstants.ENC_LAST_RECT,                // end-of-update marker
-            RfbConstants.ENC_CONTINUOUS_UPDATES,       // advertise CU support
+            // consume fence messages
+            RfbConstants.ENC_FENCE,
+            // end-of-update marker
+            RfbConstants.ENC_LAST_RECT,
+            // advertise CU support
+            RfbConstants.ENC_CONTINUOUS_UPDATES,
             // ── Metadata ─────────────────────────────────────────────────────
-            RfbConstants.ENC_DESKTOP_NAME,             // desktop name changes
-            RfbConstants.ENC_LED_STATE,                // QEMU LED state (pseudo-rect)
+            // desktop name changes
+            RfbConstants.ENC_DESKTOP_NAME,
+            // QEMU LED state (pseudo-rect)
+            RfbConstants.ENC_LED_STATE,
         )
     }
 
@@ -233,7 +248,8 @@ class RfbClient(
 
     private var din = DataInputStream(inputStream.buffered(65536))
     private var dout = DataOutputStream(outputStream)
-    private val outLock = Any()        // guards all writes to dout
+    // guards all writes to dout
+    private val outLock = Any()
 
     private val running = AtomicBoolean(false)
     private var readerThread: Thread? = null
@@ -514,7 +530,8 @@ class RfbClient(
         synchronized(outLock) { dout.writeByte(chosen); dout.flush() }
 
         when (chosen) {
-            RfbConstants.SECURITY_NONE -> Unit // SecurityResult follows (see below)
+            // SecurityResult follows (see below)
+            RfbConstants.SECURITY_NONE -> Unit
 
             RfbConstants.SECURITY_VNC_AUTH -> {
                 // Read 16-byte DES challenge, encrypt with bit-reversed password key.
@@ -922,7 +939,8 @@ class RfbClient(
     private fun sendSetPixelFormat() {
         synchronized(outLock) {
             dout.writeByte(RfbConstants.C2S_SET_PIXEL_FORMAT)
-            dout.write(ByteArray(3))                       // 3 bytes padding
+            // 3 bytes padding
+            dout.write(ByteArray(3))
             dout.write(PixelFormat.PREFERRED.toBytes())
             dout.flush()
         }
@@ -932,7 +950,8 @@ class RfbClient(
         val encodings = PREFERRED_ENCODINGS
         synchronized(outLock) {
             dout.writeByte(RfbConstants.C2S_SET_ENCODINGS)
-            dout.writeByte(0)                              // padding
+            // padding
+            dout.writeByte(0)
             dout.writeShort(encodings.size)
             for (enc in encodings) dout.writeInt(enc)
             dout.flush()
@@ -961,8 +980,10 @@ class RfbClient(
             return
         }
         synchronized(outLock) {
-            dout.writeByte(251)        // SetDesktopSize message type
-            dout.writeByte(0)          // padding
+            // SetDesktopSize message type
+            dout.writeByte(251)
+            // padding
+            dout.writeByte(0)
             dout.writeShort(width)
             dout.writeShort(height)
             // number-of-screens and its padding are ONE byte each, not two.
@@ -1171,7 +1192,8 @@ class RfbClient(
     private fun handleFramebufferUpdate() {
         // Reset the keepalive timer: the server is alive and responding.
         lastUpdateTimeMs.set(System.currentTimeMillis())
-        skipFully(1) // padding
+        // padding
+        skipFully(1)
         val numRects = din.readUnsignedShort()
         Logger.d(TAG, "FBU: numRects=${if (numRects == 0xFFFF) "unlimited(0xFFFF)" else "$numRects"}")
 
@@ -1185,7 +1207,8 @@ class RfbClient(
             val encoding = din.readInt()
 
             when (encoding) {
-                RfbConstants.ENC_LAST_RECT -> break // no data; update is complete
+                // no data; update is complete
+                RfbConstants.ENC_LAST_RECT -> break
                 RfbConstants.ENC_DESKTOP_SIZE -> {
                     // Server-side resize. rfbproto: the new framebuffer size is
                     // carried in the pseudo-rectangle's WIDTH and HEIGHT fields;
@@ -1214,8 +1237,10 @@ class RfbClient(
                     // The old U16 read accidentally consumed 2 bytes (num+1 padding byte),
                     // misreading the screen count and leaving the stream mis-aligned.
                     val numScreens = din.readUnsignedByte()
-                    skipFully(3)               // 3 bytes padding (total 4 incl. numScreens)
-                    skipFully(numScreens * 16) // screen descriptors: U32 id + U16 x + U16 y + U16 w + U16 h + U32 flags
+                    // 3 bytes padding (total 4 incl. numScreens)
+                    skipFully(3)
+                    // screen descriptors: U32 id + U16 x + U16 y + U16 w + U16 h + U32 flags
+                    skipFully(numScreens * 16)
                     if (ry == 0) {
                         pendingResizeRejection = false
                         if (rw > 0 && rh > 0) {
@@ -1266,10 +1291,13 @@ class RfbClient(
                     // Legacy X11 XCursor: 6-byte color header + two 1-bit masks.
                     // Obsolete format; consume the data but do not render.
                     if (rw > 0 && rh > 0) {
-                        skipFully(6) // primary + secondary colors (2×RGB)
+                        // primary + secondary colors (2×RGB)
+                        skipFully(6)
                         val maskBytes = ((rw + 7) / 8) * rh
-                        skipFully(maskBytes) // AND mask
-                        skipFully(maskBytes) // XOR mask
+                        // AND mask
+                        skipFully(maskBytes)
+                        // XOR mask
+                        skipFully(maskBytes)
                     }
                     Logger.d(TAG, "XCursor ${rw}×$rh (not rendered)")
                 }
@@ -1374,7 +1402,8 @@ class RfbClient(
         // server goes quiet and the reader thread blocks harmlessly on read;
         // resume() re-primes the loop with a full request.
         if (running.get() && !paused.get()) {
-            Thread.sleep(16) // ~60 FPS ceiling
+            // ~60 FPS ceiling
+            Thread.sleep(16)
             sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = true)
         }
     }
@@ -1413,14 +1442,18 @@ class RfbClient(
     }
 
     private fun skipColourMap() {
-        skipFully(1) // padding
-        skipFully(2) // first colour
+        // padding
+        skipFully(1)
+        // first colour
+        skipFully(2)
         val numColors = din.readUnsignedShort()
-        skipFully(numColors * 6) // 3 × u16 per colour
+        // 3 × u16 per colour
+        skipFully(numColors * 6)
     }
 
     private fun handleServerCutText() {
-        skipFully(3) // padding
+        // padding
+        skipFully(3)
         val len = din.readInt()
         when {
             len > 0 -> {
@@ -1465,7 +1498,8 @@ class RfbClient(
      * consumed the first byte of the audio op field, desyncing the stream.
      */
     private fun handleQemuExt() {
-        val subType = din.readUnsignedByte() // U8, not U16
+        // U8, not U16
+        val subType = din.readUnsignedByte()
         when (subType) {
             RfbConstants.QEMU_EXT_AUDIO -> {
                 // Audio stream control.
@@ -1479,9 +1513,12 @@ class RfbClient(
                         /* stream end — no extra payload */
                     }
                     RfbConstants.QEMU_AUDIO_BEGIN -> {
-                        skipFully(1) // U8: sample format
-                        skipFully(1) // U8: number of channels
-                        skipFully(4) // U32: frequency (Hz)
+                        // U8: sample format
+                        skipFully(1)
+                        // U8: number of channels
+                        skipFully(1)
+                        // U32: frequency (Hz)
+                        skipFully(4)
                     }
                     RfbConstants.QEMU_AUDIO_DATA -> {
                         val len = din.readInt()
@@ -1528,7 +1565,8 @@ class RfbClient(
      * as a valid acknowledgement and keeps the update queue blocked forever.
      */
     private fun handleServerFence() {
-        skipFully(3) // padding
+        // padding
+        skipFully(3)
         val flags = din.readInt()
         val len = din.readUnsignedByte()
         val data = if (len > 0) ByteArray(len).also { din.readFully(it) } else ByteArray(0)
@@ -1542,7 +1580,8 @@ class RfbClient(
         val replyFlags = flags and 0x7FFFFFFF
         synchronized(outLock) {
             dout.writeByte(RfbConstants.C2S_CLIENT_FENCE)
-            dout.writeByte(0); dout.writeByte(0); dout.writeByte(0) // padding
+            // padding
+            dout.writeByte(0); dout.writeByte(0); dout.writeByte(0)
             dout.writeInt(replyFlags)
             dout.writeByte(len)
             if (len > 0) dout.write(data)
@@ -1567,7 +1606,8 @@ class RfbClient(
         val data = if (len > 0) ByteArray(len).also { din.readFully(it) } else ByteArray(0)
         Logger.d(TAG, "Inline Fence pseudo-rect flags=0x${flags.toString(16).uppercase()} len=$len")
 
-        val replyFlags = flags and 0x7FFFFFFF // clear Request bit only
+        // clear Request bit only
+        val replyFlags = flags and 0x7FFFFFFF
         synchronized(outLock) {
             dout.writeByte(RfbConstants.C2S_CLIENT_FENCE)
             dout.writeByte(0); dout.writeByte(0); dout.writeByte(0)
@@ -1640,7 +1680,8 @@ class RfbClient(
      *   U8 padding · U16 width · U16 height
      */
     private fun handleUltraVncResize() {
-        skipFully(1) // padding
+        // padding
+        skipFully(1)
         val w = din.readUnsignedShort()
         val h = din.readUnsignedShort()
         if (w > 0 && h > 0) {
@@ -1675,7 +1716,8 @@ class RfbClient(
      * We log and discard — power-control responses do not affect the display.
      */
     private fun handleXvp() {
-        skipFully(1) // padding
+        // padding
+        skipFully(1)
         val version = din.readUnsignedByte()
         val code    = din.readUnsignedByte()
         Logger.d(TAG, "xvp message: version=$version code=$code (power control, not handled)")
@@ -1737,7 +1779,8 @@ class RfbClient(
         synchronized(outLock) {
             dout.writeByte(RfbConstants.C2S_KEY_EVENT)
             dout.writeByte(if (down) 1 else 0)
-            dout.writeShort(0)                            // padding
+            // padding
+            dout.writeShort(0)
             dout.writeInt(keysym.toInt())
             dout.flush()
         }
@@ -1755,7 +1798,8 @@ class RfbClient(
             .toByteArray(Charsets.ISO_8859_1)
         synchronized(outLock) {
             dout.writeByte(RfbConstants.C2S_CLIENT_CUT_TEXT)
-            dout.write(ByteArray(3))                      // padding
+            // padding
+            dout.write(ByteArray(3))
             dout.writeInt(bytes.size)
             dout.write(bytes)
             dout.flush()

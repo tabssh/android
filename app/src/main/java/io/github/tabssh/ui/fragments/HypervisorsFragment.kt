@@ -247,18 +247,10 @@ class HypervisorsFragment : Fragment() {
                             TombstoneRecorder.record(app, TombstoneRecorder.HYPERVISOR, TombstoneRecorder.naturalKey(hypervisor))
                             // P1: also drop the Keystore-backed password so the
                             // alias doesn't dangle if the row id ever gets reused.
-                            // clear() / clearOciSecrets() do Keystore operations — must be on IO.
+                            // clear() does Keystore operations — must be on IO.
                             // ctx captured before IO switch — requireContext() is unsafe on IO thread.
                             io.github.tabssh.crypto.storage.HypervisorPasswordStore
                                 .clear(ctx, hypervisor.id)
-                            // OCI rows store the PEM + (optional) passphrase
-                            // under their own Keystore aliases — drop those too
-                            // so a row-id collision can't leak the prior owner's
-                            // private key.
-                            if (hypervisor.type == HypervisorType.OCI) {
-                                io.github.tabssh.crypto.storage.HypervisorPasswordStore
-                                    .clearOciSecrets(ctx, hypervisor.id)
-                            }
                         }
                         if (!isAdded) return@launch
                         Toast.makeText(

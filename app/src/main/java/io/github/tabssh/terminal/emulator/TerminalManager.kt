@@ -204,14 +204,16 @@ class TerminalManager(private val context: Context) {
         Logger.d("TerminalManager", "Terminal stats: ${terminals.size} total, $activeTerminals active, ${memoryUsageBytes / 1024}KB memory")
 
         // Clean up inactive terminals if memory usage is high
-        if (memoryUsageBytes > 50 * 1024 * 1024) { // 50MB threshold
+        // 50MB threshold
+        if (memoryUsageBytes > 50 * 1024 * 1024) {
             Logger.w("TerminalManager", "High memory usage (${memoryUsageBytes / 1024 / 1024}MB), trimming terminals")
             trimInactiveTerminals()
         }
         
         // Cleanup terminals that have been inactive for too long
         val currentTime = System.currentTimeMillis()
-        val inactiveThreshold = 30 * 60 * 1000L // 30 minutes
+        // 30 minutes
+        val inactiveThreshold = 30 * 60 * 1000L
         
         terminals.entries.removeAll { (id, terminal) ->
             if (!terminal.isActive.value && currentTime - getLastActivityTime(terminal) > inactiveThreshold) {

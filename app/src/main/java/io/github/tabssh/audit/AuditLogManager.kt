@@ -67,9 +67,12 @@ class AuditLogManager(
 
         // RFC 5424 priority = facility * 8 + severity.
         // AUTHPRIV (facility 10) × 8 = 80. Severity: info=6, warn=4, err=3.
-        private const val SYSLOG_PRI_INFO = 86   // 80 + 6
-        private const val SYSLOG_PRI_WARN = 84   // 80 + 4
-        private const val SYSLOG_PRI_ERR  = 83   // 80 + 3
+        // 80 + 6
+        private const val SYSLOG_PRI_INFO = 86
+        // 80 + 4
+        private const val SYSLOG_PRI_WARN = 84
+        // 80 + 3
+        private const val SYSLOG_PRI_ERR  = 83
     }
 
     // ── MDM ──────────────────────────────────────────────────────────────────

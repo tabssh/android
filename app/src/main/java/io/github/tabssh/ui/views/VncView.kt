@@ -48,8 +48,10 @@ class VncView @JvmOverloads constructor(
         private const val TAG = "VncView"
         private const val MIN_SCALE = 0.5f
         private const val MAX_SCALE = 4.0f
-        private const val SCROLL_STEPS = 3        // pointer events per scroll fling step
-        private const val CLICK_TIMEOUT_MS = 200L // tap → click if released within
+        // pointer events per scroll fling step
+        private const val SCROLL_STEPS = 3
+        // tap → click if released within
+        private const val CLICK_TIMEOUT_MS = 200L
         // Longer than GestureDetector's own long-press timeout so the existing
         // hold-to-right-click gesture fires first; only a hold past this point
         // opens the shared session context menu (same menu TerminalView opens).
@@ -190,7 +192,8 @@ class VncView @JvmOverloads constructor(
             distX: Float,
             distY: Float
         ): Boolean {
-            if (e2.pointerCount > 1) return false // handled by ScaleGestureDetector
+            // handled by ScaleGestureDetector
+            if (e2.pointerCount > 1) return false
             if (userScale > 1.05f) {
                 // Pan the viewport
                 // Same symmetric bounds as focalPan — the rendering origin

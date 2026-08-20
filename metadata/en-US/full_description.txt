@@ -21,7 +21,7 @@ TabSSH is a comprehensive, open-source SSH client for Android that provides a tr
 ☁️ SYNC & BACKUP:
 • SAF-based sync — works with any provider (Google Drive, Dropbox, Nextcloud, local)
 • No Google Play Services dependency — runs on de-Googled ROMs
-• AES-256-GCM encryption with PBKDF2 key derivation
+• AES-256-GCM encryption with Argon2id key derivation
 • 3-way merge with conflict resolution UI
 • Multi-device synchronization
 • Import/Export connections as encrypted ZIP backups

@@ -29,5 +29,9 @@ data class RegistryCredential(
 
     /** "anonymous", "basic", "token" - TEXT so future auth styles need no schema change. */
     @ColumnInfo(name = "auth_type")
-    val authType: String = "basic"
+    val authType: String = "basic",
+
+    /** Last local modification time, used for sync last-write-wins comparisons. */
+    @ColumnInfo(name = "modified_at")
+    val modifiedAt: Long = 0
 )

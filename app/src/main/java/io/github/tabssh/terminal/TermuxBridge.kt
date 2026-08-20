@@ -38,7 +38,8 @@ class TermuxBridge(
     private val columns: Int = 80,
     private val rows: Int = 24,
     private val transcriptRows: Int = 2000,
-    private val cursorStyle: Int = 2 // 0=block, 1=underline, 2=bar (I-beam default)
+    // 0=block, 1=underline, 2=bar (I-beam default)
+    private val cursorStyle: Int = 2
 ) {
     companion object {
         private const val TAG = "TermuxBridge"
@@ -429,7 +430,7 @@ class TermuxBridge(
     // Groups: 1=params, 2=url, 3=anchor
     // DOT_MATCHES_ALL so anchor can contain any byte (including LF).
     private val osc8Pattern = Regex(
-        "]8;([^;]*);([^]*)\\\\(.*?)]8;;\\\\",
+        "\u001b]8;([^;]*);([^\u001b]*)\u001b\\\\(.*?)\u001b]8;;\u001b\\\\",
         RegexOption.DOT_MATCHES_ALL
     )
 
@@ -541,8 +542,8 @@ class TermuxBridge(
 
         // Track DEC private mode ?2004 (bracketed paste).  When both enable and
         // disable appear in the same buffer, the later occurrence wins.
-        val lastEnable  = text.lastIndexOf("[?2004h")
-        val lastDisable = text.lastIndexOf("[?2004l")
+        val lastEnable  = text.lastIndexOf("\u001b[?2004h")
+        val lastDisable = text.lastIndexOf("\u001b[?2004l")
         if (lastEnable >= 0 || lastDisable >= 0) {
             bracketedPasteActive = lastEnable > lastDisable
         }
@@ -796,7 +797,8 @@ class TermuxBridge(
         }
 
         override fun getTerminalCursorStyle(): Int {
-            return cursorStyle // Use configured style (default: I-beam)
+            // Use configured style (default: I-beam)
+            return cursorStyle
         }
 
         // Note: setTerminalShellPid may not exist in all Termux versions
@@ -1018,14 +1020,14 @@ class TermuxBridge(
     fun pasteText(text: String) {
         val normalized = text.replace("\r\n", "\r").replace('\n', '\r')
         val bracketed = bracketedPasteActive
-        if (bracketed) writeString("[200~")
+        if (bracketed) writeString("\u001b[200~")
         var offset = 0
         while (offset < normalized.length) {
             val end = minOf(offset + PASTE_CHUNK_SIZE, normalized.length)
             writeString(normalized.substring(offset, end))
             offset = end
         }
-        if (bracketed) writeString("[201~")
+        if (bracketed) writeString("\u001b[201~")
         Logger.d(TAG, "Pasted ${normalized.length} chars (bracketed=$bracketed)")
     }
 
@@ -1392,7 +1394,8 @@ class TermuxBridge(
             arrayOf(binary.absolutePath, host, port.toString()),
             envList,
             transcriptRows,
-            sessionClient   // wire our callbacks immediately — no race
+            // wire our callbacks immediately — no race
+            sessionClient
         )
 
         connectSession(session)

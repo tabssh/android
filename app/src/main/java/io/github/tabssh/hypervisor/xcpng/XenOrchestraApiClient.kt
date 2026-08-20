@@ -216,7 +216,8 @@ class XenOrchestraApiClient(
 
             val request = Request.Builder()
                 .url("$baseUrl$version/users/me/authentication_tokens")
-                .post("".toRequestBody()) // Empty body for token creation
+                // Empty body for token creation
+                .post("".toRequestBody())
                 .addHeader("Authorization", "Basic $encodedCredentials")
                 .build()
 
@@ -1281,10 +1282,14 @@ class XenOrchestraApiClient(
      * WebSocket event types
      */
     data class XoEvent(
-        val type: String,          // "vm.started", "vm.stopped", "vm.restarted", "snapshot.created", etc.
-        val vmId: String?,         // VM UUID (if applicable)
-        val timestamp: Long,       // Event timestamp
-        val data: JSONObject?      // Additional event data
+        // "vm.started", "vm.stopped", "vm.restarted", "snapshot.created", etc.
+        val type: String,
+        // VM UUID (if applicable)
+        val vmId: String?,
+        // Event timestamp
+        val timestamp: Long,
+        // Additional event data
+        val data: JSONObject?
     )
     
     /**

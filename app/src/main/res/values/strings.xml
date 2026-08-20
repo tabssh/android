@@ -218,6 +218,56 @@
     <string name="sync_network_routes">Network Routes</string>
     <string name="sync_network_routes_summary">Reusable proxies and SSH jump hosts</string>
 
+    <!-- Sync conflict resolution dialog -->
+    <string name="conflict_dialog_default_title">Sync Conflict Detected</string>
+    <string name="conflict_dialog_title_format">Resolve Conflict (%1$d/%2$d)</string>
+    <string name="conflict_type_field_modified">Changed on both devices</string>
+    <string name="conflict_type_deleted_modified">Deleted on one device, changed on the other</string>
+    <string name="conflict_type_created_duplicate">Created independently on both devices</string>
+    <string name="conflict_type_preference_diverged">Preference set differently on both devices</string>
+    <string name="conflict_entity_connection">Connection: %s</string>
+    <string name="conflict_entity_key">SSH Key: %s</string>
+    <string name="conflict_entity_theme">Theme: %s</string>
+    <string name="conflict_entity_host_key">Host Key: %s</string>
+    <string name="conflict_entity_other">Item: %s</string>
+    <string name="conflict_field_named">Field: %s</string>
+    <string name="conflict_field_multiple">Field: Multiple fields</string>
+    <string name="conflict_local_value">Local: %1$s (%2$s)</string>
+    <string name="conflict_remote_value">Remote: %1$s (%2$s)</string>
+    <string name="conflict_choose_resolution">Choose resolution:</string>
+    <string name="conflict_value_null">none</string>
+    <string name="conflict_timestamp_unknown">unknown</string>
+    <string name="conflict_timestamp_just_now">just now</string>
+    <string name="conflict_timestamp_minutes_ago">%dm ago</string>
+    <string name="conflict_timestamp_hours_ago">%dh ago</string>
+    <string name="conflict_timestamp_days_ago">%dd ago</string>
+    <string name="conflict_option_keep_local">Keep Local Version</string>
+    <string name="conflict_option_keep_remote">Keep Remote Version</string>
+    <string name="conflict_option_keep_both">Keep Both (Duplicate)</string>
+    <string name="conflict_option_skip">Skip This Item</string>
+    <string name="conflict_button_apply">Apply</string>
+    <string name="conflict_button_keep_all_local">Keep All Local</string>
+    <string name="conflict_button_keep_all_remote">Keep All Remote</string>
+
+    <!-- Sync Log -->
+    <string name="sync_view_log">View Sync Log</string>
+    <string name="sync_log_title">Sync Log</string>
+    <string name="sync_log_empty">📋 No sync activity yet\n\nConflicts and their resolutions will appear here</string>
+    <string name="sync_log_entity_and_device">%1$s · %2$s</string>
+    <string name="sync_log_action_copy">Copy All</string>
+    <string name="sync_log_action_refresh">Refresh</string>
+    <string name="sync_log_action_clear">Clear Log</string>
+    <string name="sync_log_clear_title">Clear Sync Log</string>
+    <string name="sync_log_clear_message">Remove all sync log history. This cannot be undone.</string>
+    <string name="sync_log_copied">Copied %1$d sync log entries to clipboard</string>
+    <string name="sync_log_no_entries_to_copy">No sync log entries to copy</string>
+    <string name="sync_log_resolution_auto_merged">Auto-merged</string>
+    <string name="sync_log_resolution_kept_local">Kept Local</string>
+    <string name="sync_log_resolution_kept_remote">Kept Remote</string>
+    <string name="sync_log_resolution_kept_both">Kept Both</string>
+    <string name="sync_log_resolution_skipped">Skipped</string>
+    <string name="sync_log_resolution_deferred">Deferred</string>
+
     <!-- MDM / Managed App Configuration descriptions (app_restrictions.xml) -->
     <string name="mdm_desc_audit_enabled">Force audit logging on or off. When set, overrides the user\'s in-app preference.</string>
     <string name="mdm_desc_audit_log_commands">Record every command typed in a terminal session.</string>
@@ -874,7 +924,10 @@
     <string name="import_export_option_encrypted">Export with password protection</string>
     <string name="import_export_options_title">Export Options</string>
     <string name="import_export_unencrypted_warning_title">⚠️ Unencrypted Backup</string>
-    <string name="import_export_unencrypted_warning_message">This backup will be saved as plain, unencrypted JSON.\n\nA backup always contains everything — including your saved passwords and private keys — so that a restore reproduces the exact state of the app.\n\nBecause this file is unencrypted, anyone who can read it will see all of that. Store it somewhere only you can access.\n\nFor protection at rest, use an encrypted backup with a strong password instead.</string>
+    <string name="import_export_unencrypted_warning_message">This backup will be saved as plain, unencrypted JSON.\n\nA backup always contains everything, so this file will expose in readable form:\n\n• SSH private keys and their passphrases\n• Connection passwords\n• Docker and container-registry credentials\n• VNC passwords\n• Cloud and hypervisor API tokens\n\nAnyone who obtains this file can read every one of them. There is no password on it and no way to revoke it after it leaves your device.\n\nFor protection at rest, cancel and use an encrypted backup instead.\n\nTo continue, type CONFIRM below.</string>
+    <string name="import_export_unencrypted_confirm_word">CONFIRM</string>
+    <string name="import_export_unencrypted_confirm_hint">Type CONFIRM to continue</string>
+    <string name="import_export_unencrypted_confirm_required">Type CONFIRM exactly to export an unencrypted backup</string>
     <string name="import_export_export_without_encryption">Export Without Encryption</string>
     <string name="import_export_password_hint">Enter password</string>
     <string name="import_export_confirm_password_hint">Confirm password</string>

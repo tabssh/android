@@ -565,7 +565,8 @@ object NotificationHelper {
             .setSilent(true)
             .setShowWhen(false)
             .setOngoing(true)
-            .setTimeoutAfter(20 * 60 * 1000L)  // same safety-net as child notifications
+            // same safety-net as child notifications
+            .setTimeoutAfter(20 * 60 * 1000L)
             .build()
         nm.notify(NOTIFICATION_ID_SSH_GROUP, summary)
     }
@@ -640,7 +641,8 @@ object NotificationHelper {
             }
         val pendingIntent = PendingIntent.getActivity(
             context,
-            profile.id.hashCode() xor 0x5A,  // distinct request code from the silent variant
+            // distinct request code from the silent variant
+            profile.id.hashCode() xor 0x5A,
             tapTarget,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

@@ -28,8 +28,9 @@ data class Snippet(
     @ColumnInfo(name = "category")
     val category: String = "General",
 
+    // Comma-separated tags
     @ColumnInfo(name = "tags")
-    val tags: String = "", // Comma-separated tags
+    val tags: String = "",
 
     @ColumnInfo(name = "usage_count")
     val usageCount: Int = 0,
@@ -149,7 +150,8 @@ data class Snippet(
         val re = Regex("""\{(\?)?([^}:|]+)(?::([^}|]*))?(?:\|([^}]*))?\}""")
         return re.replace(command) { m ->
             val name = m.groupValues[2].trim()
-            values[name] ?: m.groupValues[3] // fall back to declared default
+            // fall back to declared default
+            values[name] ?: m.groupValues[3]
         }
     }
 

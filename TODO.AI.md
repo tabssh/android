@@ -4,6 +4,151 @@ Task tracking (AI-owned). Items are ordered by priority, highest first.
 Complete each item fully before removing; never clear an item while its work
 is in progress.
 
+## Open — 2026-08-19 user batch of 10 (decisions locked via wizard)
+
+Commit cadence (user instruction, overrides the per-finding default):
+THREE commits total — (A) all bug fixes, (B) all container work,
+(C) all UI/UX/Settings. Each gated on a green `make check`.
+
+### Commit A — bug fixes
+
+A1. Sync is incomplete. Bring sync to FULL PARITY with backup (every
+    entity, prefs, themes, macros, tab sessions), keeping the existing
+    per-category toggles. AUDIT DONE 2026-08-19 — gap list:
+    - Backup-only SharedPreferences never synced: `TabSSH` (sort order),
+      `cluster_commands`, `snippet_var_recall`.
+    - Legacy OCI aliases `oci_private_key_{profileId}` /
+      `oci_passphrase_{profileId}` exported by backup
+      (BackupExporter.kt:459-468) but absent from sync collectSecrets —
+      an unmigrated device loses its OCI key on sync-restore.
+    - `syncDocker` toggle: SyncDataApplier.applySyncPreferences knows how
+      to apply it, SyncDataCollector.collectSyncPreferences never emits
+      it — dead receive-side branch, toggle never propagates.
+    - `syncNetworkRoutes` toggle: reverse asymmetry — synced but missing
+      from BackupExporter.exportPreferences.
+    - NETWORK_ROUTE missing from SyncDataCollector.snapshotState()
+      allTypes (:673-683) — the backstop delete detector never sees route
+      deletions.
+    - Preference keys in neither path: the audit-log group
+      (audit_log_enabled/max_size_mb/max_age_days/commands/output), the
+      Tasker group (tasker_enabled/require_unlock/allowed_connections/
+      include_output/log_events/command_timeout), debug/host logging
+      keys, file_open_size_limit_mb, docker_update_check_enabled,
+      default_route_id. Audit-log + Tasker are user policy → must sync.
+    - TabSession and AuditLogEntry are backup-only; decide explicitly
+      (per-device state is a legitimate reason NOT to sync — record the
+      reason rather than leaving the asymmetry undocumented).
+    - Secret DELETION is not tombstoned in either path; and
+      SyncDataApplier.isSecretAliasEnabled falls through `else -> true`,
+      so an unknown-prefix alias bypasses every category toggle.
+    - getItemCounts() omits all five Docker entities (under-reports).
+    - Stale KDoc to correct: BackupExporter.kt:45-77 (claims tab_sessions
+      /audit_log excluded — they are exported), SyncDataCollector.kt:671
+      ("ALL 16 types" — 23), TombstoneRecorder.kt:32 ("14" — 16).
+
+A1b. SECURITY, found during the audit: PreferenceManager.kt:593-599
+    stores legacy connection passwords as PLAINTEXT
+    `password_{connectionId}` in default SharedPreferences. Neither
+    backup nor sync enumerates them, so they are also silently lost.
+    Migrate them into the Keystore and delete the plaintext keys.
+A2. Sync conflict handling. Sync pauses on a conflict and shows a
+    per-row picker (keep local / keep remote / keep both) with
+    last-write-wins preselected. Every conflict and its resolution goes
+    to a DEDICATED Sync Log screen only — never the app/debug log
+    (which keeps carrying genuine app errors, including sync code
+    faults as opposed to data conflicts). Audit findings that shape it:
+    - Only 4 types three-way merge (connections, keys, themes,
+      hostKeys — SyncMergeCoordinator.kt:72-77); the other 20+ are blind
+      upserts with no field comparison. Timestamps alone will not fix
+      them — they must be routed through MergeEngine or at minimum get a
+      timestamp guard in SyncDataApplier.applyAll().
+    - The base snapshot is loaded only when `password != null`
+      (SyncMergeCoordinator.kt:82), so headless sync degrades to
+      two-way last-write-wins even for the merged four.
+    - Deferred conflicts are discarded today: SyncMergeCoordinator.kt:
+      144-145 sets a pending flag and logs a COUNT; the Conflict/
+      FieldConflict objects carry entity id, field, local and remote
+      values — all dropped. The Sync Log has that detail available with
+      no new plumbing in the merge engine.
+    - Six entities need an additive `modifiedAt` migration (DB is at
+      version 12): HypervisorProfile, TrustedCertificate, MonitorSlot,
+      DockerHost, RegistryCredential, ContainerAutoUpdatePolicy. Seed
+      from `createdAt` where one exists, else the migration timestamp —
+      never a bare DEFAULT 0, which would make every existing row lose
+      its first post-upgrade tie.
+    - No Sync Log exists today; all 275 Logger calls in sync/backup go
+      to the shared app log. Move progress/conflict chatter there and
+      leave genuine failures (SyncEncryptor crypto errors, SAF I/O) in
+      the app log.
+A3. Backup must cover absolutely everything, encrypted (password set)
+    and unencrypted (no password). Unencrypted archives INCLUDE the
+    Keystore secrets as plaintext and require a hard, explicit
+    type-to-confirm warning dialog naming the exposure. IDEA.md line
+    "portable encrypted archive" must be updated to match (user
+    approved the spec change).
+A4. Per-host Docker dashboard never loads (spinner forever). Debug log
+    from build c7e21db1 shows ZERO Docker-tag lines for the whole
+    session: one `SshExecRunner: run: exit=0 cmdLen=37` then 34 s of
+    silence. Fix the stall AND the diagnosability gap — the dashboard
+    path must log its transport tier, each probe, and every failure.
+
+A5. Remove every legacy code path (user instruction 2026-08-19: only the
+    development build has ever shipped, so nothing needs back-compat —
+    make it all modern). Delete versioned format shims, deprecated
+    pinned transport modes, dead fallbacks, superseded preference keys
+    and alias families, and legacy read paths. Forward-migrate stored
+    data once where a dev-build user would otherwise lose it (passwords,
+    keys), then delete the legacy path — never keep it as a fallback.
+    Known entries so far: legacy plaintext `password_{connectionId}`
+    (A1b), legacy `oci_*_{profileId}` alias family, backup old-format
+    import shims, the pinned `api_socat` docker transport mode. A full
+    inventory pass is required — each entry deleted or listed with a
+    concrete reason it must stay.
+
+### Commit B — containers (engine-agnostic)
+
+B1. Rename Infra ▸ Docker to Infra ▸ Containers. Supported engines:
+    Docker, Incus, Podman, LXC/LXD (dropdown order exactly that,
+    Docker preselected).
+B2. Add-host flow mirrors the hypervisor add UI/UX (manual new host or
+    pick an existing connection) but uses SSH-based auth, never
+    hypervisor auth.
+B3. Engine-adaptive UI: tabs and actions light up per engine; Stacks is
+    hidden for engines with no compose concept.
+B4. Tab order: Dashboard, Containers, Stacks, Images, Volumes,
+    Networks. Dashboard shows stack count, container count, network
+    count, host + engine info, disk usage.
+B5. Dedup: containers belonging to a stack are hidden from the
+    Containers list, but STILL COUNTED on the dashboard. User's
+    example: 3 standalone + 2 stacks × 2 containers → stacks 2,
+    containers 7.
+B6. Fail early: probe the engine once at host open; on failure show a
+    blocking error card naming the reason (not installed / not running
+    / socket permission denied) with a Retest action, and do not load
+    the tabs.
+B7. Socket location: auto-detected per engine and overridable per host;
+    the override field also accepts tcp:// and ssh:// endpoints. The
+    default probe list is engine-dependent. Applies to both the API
+    forward and the CLI (DOCKER_HOST=unix://… and the equivalent).
+B8. Incus/LXC/LXD full parity where the concept exists — instances
+    (list/start/stop/restart/delete/rename), exec shell, live
+    logs/stats, images, storage volumes, networks, snapshots — PLUS
+    profiles and projects as their own tabs. Transport mirrors the
+    Docker hybrid model: REST API over a forwarded unix socket when
+    sshd permits, CLI over SSH exec as fallback.
+
+### Commit C — UI/UX + Settings
+
+C1. Unified Settings: one place to change everything, with intuitive
+    categories. The existing main UI and Settings UI are the design
+    base (user instruction).
+C2. Nav drawer available on every screen via a hamburger toggle,
+    EXCEPT terminal/VNC/SPICE session tabs, which get the drawer from
+    the toolbar button only so edge gestures stay with the session.
+C3. App-wide interface uniformity: one back-button / toolbar / menu
+    pattern everywhere. Current inconsistency example from the user —
+    groups/snippets screens vs the routing screens' back buttons.
+
 ## Open — 2026-08-14 Play Protect false positive (user action required)
 
 1. Google Play Protect flags dev-build APKs as "Harmful app blocked —

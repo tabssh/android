@@ -76,7 +76,8 @@ class SAFSyncManager(private val context: Context) {
                 )
                 if (success) {
                     prefs.edit().putBoolean(KEY_SYNC_PASSWORD_SET, true).apply()
-                    inMemoryPassword = password  // Also keep in memory as backup
+                    // Also keep in memory as backup
+                    inMemoryPassword = password
                     Logger.i(TAG, "Sync password stored securely")
                     return true
                 } else {
@@ -119,7 +120,8 @@ class SAFSyncManager(private val context: Context) {
             if (secureManager != null) {
                 val password = secureManager.retrievePassword(SYNC_PASSWORD_KEY)
                 if (password != null) {
-                    inMemoryPassword = password  // Cache for next time
+                    // Cache for next time
+                    inMemoryPassword = password
                     Logger.d(TAG, "Retrieved sync password from secure storage")
                     return password
                 }
@@ -160,7 +162,8 @@ class SAFSyncManager(private val context: Context) {
     fun getOpenFileIntent(): Intent {
         return Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
-            type = "*/*"  // Allow any file type since cloud providers may change mime
+            // Allow any file type since cloud providers may change mime
+            type = "*/*"
         }
     }
 
@@ -255,7 +258,7 @@ class SAFSyncManager(private val context: Context) {
             Logger.d(TAG, "upload: compressed to ${compressed.size} bytes")
 
             // Encrypt
-            Logger.d(TAG, "upload: starting AES-GCM encrypt (PBKDF2 100k iters)")
+            Logger.d(TAG, "upload: starting AES-GCM encrypt (Argon2id key derivation)")
             val encrypted = encryptor.encrypt(compressed, password)
             Logger.d(TAG, "upload: encrypted to ${encrypted.size} bytes")
 

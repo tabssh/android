@@ -25,20 +25,25 @@ data class ConnectionGroup(
     @ColumnInfo(name = "name")
     val name: String,
 
+    // For nested folders (optional, can be null for root level)
     @ColumnInfo(name = "parent_id")
-    val parentId: String? = null, // For nested folders (optional, can be null for root level)
+    val parentId: String? = null,
 
+    // Icon identifier (e.g., "folder", "server", "cloud")
     @ColumnInfo(name = "icon")
-    val icon: String? = null, // Icon identifier (e.g., "folder", "server", "cloud")
+    val icon: String? = null,
 
+    // Hex color code for visual distinction (e.g., "#FF5722")
     @ColumnInfo(name = "color")
-    val color: String? = null, // Hex color code for visual distinction (e.g., "#FF5722")
+    val color: String? = null,
 
+    // Display order in list
     @ColumnInfo(name = "sort_order")
-    val sortOrder: Int = 0, // Display order in list
+    val sortOrder: Int = 0,
 
+    // Expansion state (true = collapsed, false = expanded)
     @ColumnInfo(name = "is_collapsed")
-    val isCollapsed: Boolean = false, // Expansion state (true = collapsed, false = expanded)
+    val isCollapsed: Boolean = false,
 
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
@@ -56,8 +61,9 @@ data class ConnectionGroup(
     @ColumnInfo(name = "sync_device_id")
     val syncDeviceId: String = "",
 
+    // "" = normal user group, "vm_hosts" = VM Hosts system group, "cloud" = Cloud Instances system group
     @ColumnInfo(name = "group_type")
-    val groupType: String = "" // "" = normal user group, "vm_hosts" = VM Hosts system group, "cloud" = Cloud Instances system group
+    val groupType: String = ""
 ) {
     /**
      * Check if this is a root-level group (no parent)

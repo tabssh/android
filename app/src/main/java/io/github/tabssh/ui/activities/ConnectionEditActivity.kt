@@ -345,7 +345,8 @@ class ConnectionEditActivity : AppCompatActivity() {
                 binding.editVncPassword.text?.clear()
                 autoSetPort("23", setOf("22", "5900"))
             }
-            else -> { // "ssh"
+            // "ssh"
+            else -> {
                 // bug-22: ensure auth card is visible on protocol switch back to SSH;
                 // selectedIdentityId was just reset above, so user must enter creds.
                 if (selectedIdentityId == null) {
@@ -773,9 +774,10 @@ class ConnectionEditActivity : AppCompatActivity() {
 
     private fun setupGroupSpinner() {
         lifecycleScope.launch {
+            // Only user groups in the spinner
             val groups = withContext(Dispatchers.IO) {
                 app.database.connectionGroupDao().getAllGroups().first()
-            }.filter { it.groupType.isEmpty() } // only user groups in the spinner
+            }.filter { it.groupType.isEmpty() }
             val groupsList = mutableListOf("No Group")
             groups.forEach { group -> groupsList.add(group.name) }
 
@@ -2275,7 +2277,8 @@ class ConnectionEditActivity : AppCompatActivity() {
         )
         binding.spinnerMoshMode.setText("Auto (default)", false)
         binding.spinnerMoshMode.setOnItemClickListener { _, _, position, _ ->
-            val isActive = position > 0  // Auto or On
+            // Auto or On
+            val isActive = position > 0
             binding.layoutMoshCommand.visibility = if (isActive) View.VISIBLE else View.GONE
             if (!isActive) {
                 binding.layoutMoshCustomCommand.visibility = View.GONE
@@ -2364,7 +2367,8 @@ class ConnectionEditActivity : AppCompatActivity() {
             preset == null || preset.isCustom -> {
                 binding.editMoshCustomCommand.text.toString().trim().takeIf { it.isNotBlank() }
             }
-            preset.command == MOSH_PRESETS.first().command -> null // Default — no override
+            // Default — no override
+            preset.command == MOSH_PRESETS.first().command -> null
             else -> preset.command
         }
     }

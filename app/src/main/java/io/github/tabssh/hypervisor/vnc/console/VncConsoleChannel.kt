@@ -423,7 +423,7 @@ class VncConsoleChannel internal constructor(
             seq.isEmpty()               -> sendKeyDirect(RfbConstants.KEY_ESCAPE)
             seq == "\t"                 -> sendKeyDirect(RfbConstants.KEY_TAB)
             seq == "\r" || seq == "\n"  -> sendKeyDirect(RfbConstants.KEY_RETURN)
-            seq.startsWith("")    -> parseEscapeSequenceDirect(seq.removePrefix(""))
+            seq.startsWith("\u001b")    -> parseEscapeSequenceDirect(seq.removePrefix("\u001b"))
             seq.length == 1             -> sendCharDirect(seq[0])
             else                        -> seq.forEach { sendCharDirect(it) }
         }
@@ -531,7 +531,8 @@ class VncConsoleChannel internal constructor(
 
     /** Expand a VT220 modifier number into the corresponding list of modifier keysyms. */
     private fun vt220ModifierKeysyms(n: Int): List<Long> {
-        val m = n - 1 // bit 0=Shift, bit 1=Alt, bit 2=Ctrl
+        // bit 0=Shift, bit 1=Alt, bit 2=Ctrl
+        val m = n - 1
         return buildList {
             if (m and 1 != 0) add(RfbConstants.KEY_SHIFT_L)
             if (m and 2 != 0) add(RfbConstants.KEY_ALT_L)

@@ -252,10 +252,10 @@ class TaskerWorker(
     private fun parseKeySequence(keys: String): String = when (keys.uppercase()) {
         "ENTER" -> "\n"
         "TAB" -> "\t"
-        "ESC", "ESCAPE" -> ""
-        "CTRL+C" -> ""
-        "CTRL+D" -> ""
-        "CTRL+Z" -> ""
+        "ESC", "ESCAPE" -> "\u001b"
+        "CTRL+C" -> "\u0003"
+        "CTRL+D" -> "\u0004"
+        "CTRL+Z" -> "\u001a"
         else -> keys
     }
 

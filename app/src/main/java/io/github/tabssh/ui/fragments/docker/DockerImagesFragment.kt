@@ -99,9 +99,9 @@ class DockerImagesFragment : DockerPageFragment() {
     override fun onSessionReady(session: DockerSessionManager.DockerSession) {
         progressBar.visibility = View.VISIBLE
         errorState.visibility = View.GONE
-        viewLifecycleOwner.lifecycleScope.launch {
+        startLoad {
             val result = session.transport.listImages()
-            if (!isAdded) return@launch
+            if (!isAdded) return@startLoad
             progressBar.visibility = View.GONE
             when (result) {
                 is DockerResult.Success -> {

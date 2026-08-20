@@ -87,10 +87,12 @@ version_code_scheme: manual
 
 ### Sync and backup
 - Cross-device sync via SAF — user supplies any DocumentsProvider (Google Drive, Dropbox, OneDrive, Nextcloud, local); app embeds no cloud SDKs
-- Cross-device merge with per-entity conflict resolution
+- Cross-device merge with per-entity conflict resolution — a conflicting row pauses sync and offers keep local / keep remote / keep both, with last-write-wins preselected
+- Every conflict and its resolution is recorded in a dedicated Sync Log, viewable in the app; conflicts never go to the application or debug log, which stay reserved for genuine app faults
 - Reusable network routes (proxies and SSH jump hosts) sync device-to-device like port-forward rules — full row, last-write-wins, and no secrets to keep Keystore-bound
 - End-to-end encrypted sync — a user passphrase is required, there are no server-side keys, and sync data is never readable by the storage provider
-- Backup and restore as a portable encrypted archive — backups made by older app versions must always import into newer versions
+- Backup and restore as a portable archive covering everything the app stores — encrypted when the user sets a password, plaintext when they do not; backups made by older app versions must always import into newer versions
+- A plaintext backup includes the stored secrets (SSH key passphrases, connection, Docker, registry and VNC passwords) in the clear and is reachable only behind an explicit type-to-confirm warning naming that exposure
 
 ### Hypervisor management
 - Proxmox, XCP-ng (and Xen Orchestra), VMware, QEMU/libvirt (KVM) — list VMs/instances, start, stop, shutdown, reboot, snapshot

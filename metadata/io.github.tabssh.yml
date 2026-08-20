@@ -21,6 +21,19 @@ Description: |
     tabbed interface for multiple SSH sessions while maintaining enterprise-grade
     security and accessibility standards.
 
+    ℹ️ F-DROID BUILD NOTE: F-Droid builds this app entirely from source, so this
+    build excludes three optional features that ship as prebuilt native binaries
+    (libmosh-client.so, the SPICE console library, and libtor.so) in the GitHub
+    Releases build. Everything else — including SSH, SFTP, port forwarding, X11
+    forwarding, and hypervisor/cloud management over SSH — is unaffected:
+    * Mosh protocol support is unavailable; TabSSH falls back to a prompt to
+      install Termux + mosh.
+    * VM serial console viewing for Proxmox VE/XCP-ng/Xen Orchestra/VMware falls
+      back to VNC (SPICE unavailable); managing those hypervisors over SSH/API
+      still works normally.
+    * The built-in Tor route is unavailable (external Tor/Orbot proxy routing
+      still works).
+
     🚀 COMPLETE FEATURE SET - Everything included in 1.0.0:
 
     ⭐ CORE SSH FEATURES:

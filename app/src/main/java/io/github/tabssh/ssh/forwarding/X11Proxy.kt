@@ -104,7 +104,8 @@ class X11Proxy(
      * Throws [java.io.IOException] if the socket cannot be bound.
      */
     fun start() {
-        val ss = ServerSocket(0)  // port 0 = OS assigns
+        // port 0 = OS assigns
+        val ss = ServerSocket(0)
         serverSocket = ss
         port = ss.localPort
         running = true

@@ -3,13 +3,13 @@ package io.github.tabssh.sync.merge
 import android.content.Context
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.ConnectionGroup
+import io.github.tabssh.storage.database.entities.PendingSyncConflictCodec
 import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.sync.data.SyncDataApplier
+import io.github.tabssh.sync.log.SyncLogManager
 import io.github.tabssh.sync.models.Conflict
 import io.github.tabssh.sync.models.ConflictResolution
-import io.github.tabssh.sync.models.ConflictResolutionOption
 import io.github.tabssh.sync.models.SyncDataPackage
-import io.github.tabssh.utils.logging.Logger
 
 /**
  * Orchestrates the full §9.6 three-way merge on top of the existing apply path.
@@ -28,16 +28,14 @@ import io.github.tabssh.utils.logging.Logger
  */
 class SyncMergeCoordinator(private val context: Context) {
 
-    companion object {
-        private const val TAG = "SyncMergeCoordinator"
-    }
-
     private val database = TabSSHDatabase.getDatabase(context)
     private val applier = SyncDataApplier(context)
     private val mergeEngine = MergeEngine()
-    private val resolver = ConflictResolver(context, database)
+    private val syncLogManager = SyncLogManager(context)
+    private val resolver = ConflictResolver(context, database, syncLogManager)
     private val snapshotStore = SyncBaseSnapshotStore(context)
     private val preferenceManager = PreferenceManager(context)
+    private val pendingSyncConflictDao = database.pendingSyncConflictDao()
 
     /**
      * Result of a merge pass, for logging/telemetry by the caller.
@@ -129,25 +127,34 @@ class SyncMergeCoordinator(private val context: Context) {
             themeResult.conflicts + hostKeyResult.conflicts
         var deferredConflicts = 0
         if (conflicts.isNotEmpty()) {
-            val resolutions = when {
-                // Foreground: ask the user.
-                resolveConflicts != null -> resolveConflicts(conflicts)
+            when {
+                // Foreground: ask the user, then apply their explicit choices.
+                resolveConflicts != null -> {
+                    val resolutions = resolveConflicts(conflicts)
+                    if (resolutions.isNotEmpty()) {
+                        resolver.applyResolutions(resolutions)
+                    }
+                }
                 // Headless with auto-resolve on: timestamp-based auto resolution.
-                preferenceManager.isAutoResolveConflictsEnabled() ->
-                    resolver.autoResolveConflicts(conflicts)
-                // Headless with auto-resolve off: never destroy local data in the
-                // background. Keep local for every conflict and flag the divergence
-                // so a foreground sync can reconcile. The peer re-detects on its
-                // side, so no change is lost — it is deferred, not dropped.
+                preferenceManager.isAutoResolveConflictsEnabled() -> {
+                    val resolutions = resolver.autoResolveConflicts(conflicts)
+                    if (resolutions.isNotEmpty()) {
+                        resolver.applyResolutions(resolutions, auto = true)
+                    }
+                }
+                // Headless with auto-resolve off: never force-resolve in the
+                // background. Persist each conflict durably (survives process
+                // death) and defer it to the next foreground open — neither
+                // side is applied, so no data is destroyed or silently kept.
+                // The peer re-detects the same divergence on its side, so
+                // nothing is lost, only postponed until a human can choose.
                 else -> {
                     deferredConflicts = conflicts.size
-                    preferenceManager.setPendingSyncConflicts(true)
-                    Logger.w(TAG, "Headless sync deferred ${conflicts.size} conflict(s); kept local")
-                    conflicts.map { ConflictResolution(it, ConflictResolutionOption.KEEP_LOCAL) }
+                    pendingSyncConflictDao.insertAll(conflicts.map { PendingSyncConflictCodec.fromConflict(it) })
+                    for (conflict in conflicts) {
+                        syncLogManager.recordDeferred(conflict)
+                    }
                 }
-            }
-            if (resolutions.isNotEmpty()) {
-                resolver.applyResolutions(resolutions)
             }
         }
 

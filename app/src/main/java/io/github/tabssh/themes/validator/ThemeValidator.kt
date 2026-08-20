@@ -443,7 +443,10 @@ data class ValidationIssue(
  * Severity levels for validation issues
  */
 enum class IssueSeverity {
-    INFO,    // Informational
-    WARNING, // May cause usability issues
-    ERROR    // Violates accessibility standards
+    // Informational
+    INFO,
+    // May cause usability issues
+    WARNING,
+    // Violates accessibility standards
+    ERROR
 }

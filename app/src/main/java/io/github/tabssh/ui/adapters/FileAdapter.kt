@@ -314,7 +314,8 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
                 append(if (file.canRead()) "r" else "-")
                 append(if (file.canWrite()) "w" else "-")
                 append(if (file.canExecute()) "x" else "-")
-                append("------") // Other permissions not available in Java
+                // Other permissions not available in Java
+                append("------")
             }
         }
     }

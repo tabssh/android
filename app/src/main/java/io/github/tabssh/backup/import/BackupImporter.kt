@@ -47,7 +47,9 @@ import org.json.JSONObject
 /**
  * Handles importing data from backup.
  *
- * Reads the v2 entity-serialised format emitted by [BackupExporter].
+ * Reads the entity-serialised format emitted by [BackupExporter] — the one and
+ * only backup format. Archives that are not that format are rejected upstream
+ * by [io.github.tabssh.backup.BackupManager]; there is no legacy read path.
  */
 class BackupImporter(
     private val context: Context,
@@ -270,24 +272,18 @@ class BackupImporter(
         val root = json.parseToJsonElement(data).jsonObject
         var count = 0
         val itemsArr = root["items"] as? JsonArray ?: run {
-            Logger.w(TAG, "v2 backup missing 'items' in connections section")
+            Logger.w(TAG, "backup missing 'items' in connections section")
             return 0
         }
         val items = json.decodeFromJsonElement(
             ListSerializer(ConnectionProfile.serializer()), itemsArr
         )
-        val passwords: Map<String, String> = (root["passwords"] as? JsonObject)?.let { obj ->
-            obj.mapValues { it.value.jsonPrimitive.content }
-        } ?: emptyMap()
+        // Connection passwords arrive via secrets.json (conn_pw_{id}), not a
+        // sidecar on this file — one restore path for every secret.
         for (c in items) {
             val existing = database.connectionDao().getConnectionById(c.id)
             if (existing != null && !overwriteExisting) continue
             database.connectionDao().insertConnection(c)
-            passwords[c.id]?.let { b64 ->
-                val pw = String(android.util.Base64.decode(b64, android.util.Base64.NO_WRAP),
-                    Charsets.UTF_8)
-                preferenceManager.setConnectionPassword(c.id, pw)
-            }
             count++
         }
         return count
@@ -299,7 +295,7 @@ class BackupImporter(
         val root = json.parseToJsonElement(data).jsonObject
         var count = 0
         val itemsArr = root["items"] as? JsonArray ?: run {
-            Logger.w(TAG, "v2 backup missing 'items' in keys section")
+            Logger.w(TAG, "backup missing 'items' in keys section")
             return 0
         }
         val items = json.decodeFromJsonElement(
@@ -320,7 +316,7 @@ class BackupImporter(
         val root = json.parseToJsonElement(data).jsonObject
         var count = 0
         val itemsArr = root["items"] as? JsonArray ?: run {
-            Logger.w(TAG, "v2 backup missing 'items' in themes section")
+            Logger.w(TAG, "backup missing 'items' in themes section")
             return 0
         }
         val items = json.decodeFromJsonElement(
@@ -341,7 +337,7 @@ class BackupImporter(
         val root = json.parseToJsonElement(data).jsonObject
         var count = 0
         val itemsArr = root["items"] as? JsonArray ?: run {
-            Logger.w(TAG, "v2 backup missing 'items' in certificates section")
+            Logger.w(TAG, "backup missing 'items' in certificates section")
             return 0
         }
         val items = json.decodeFromJsonElement(
@@ -362,7 +358,7 @@ class BackupImporter(
         val root = json.parseToJsonElement(data).jsonObject
         var count = 0
         val itemsArr = root["items"] as? JsonArray ?: run {
-            Logger.w(TAG, "v2 backup missing 'items' in host keys section")
+            Logger.w(TAG, "backup missing 'items' in host keys section")
             return 0
         }
         val items = json.decodeFromJsonElement(
@@ -383,7 +379,7 @@ class BackupImporter(
         val root = json.parseToJsonElement(data).jsonObject
         var count = 0
         val itemsArr = root["items"] as? JsonArray ?: run {
-            Logger.w(TAG, "v2 backup missing 'items' in identities section")
+            Logger.w(TAG, "backup missing 'items' in identities section")
             return 0
         }
         val items = json.decodeFromJsonElement(
@@ -401,89 +397,89 @@ class BackupImporter(
         return count
     }
 
-    // ── v2-only tables ───────────────────────────────────────────────────────
+    // ── Entity tables ───────────────────────────────────────────────────────
 
     private suspend fun restoreGroups(data: String, overwriteExisting: Boolean): Int =
-        restoreV2List(data, ListSerializer(ConnectionGroup.serializer())) { g ->
+        restoreEntityList(data, ListSerializer(ConnectionGroup.serializer())) { g ->
             val existing = database.connectionGroupDao().getGroupById(g.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             database.connectionGroupDao().insertGroup(g); true
         }
 
     private suspend fun restoreSnippets(data: String, overwriteExisting: Boolean): Int =
-        restoreV2List(data, ListSerializer(Snippet.serializer())) { s ->
+        restoreEntityList(data, ListSerializer(Snippet.serializer())) { s ->
             val existing = database.snippetDao().getSnippetById(s.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             database.snippetDao().insertSnippet(s); true
         }
 
     private suspend fun restoreHypervisors(data: String, overwriteExisting: Boolean): Int =
-        // password column is blank in the backup row (Keystore-bound; not portable).
-        // Restored from the secrets file (hypervisor_{id} or hypervisor_account_{id})
-        // when present in the backup. All other config lands immediately.
-        restoreV2List(data, ListSerializer(HypervisorProfile.serializer())) { h ->
+        // The row carries no password — the secret is restored from the secrets
+        // file (hypervisor_{id} or hypervisor_account_{id}) when present in the
+        // backup. All other config lands immediately.
+        restoreEntityList(data, ListSerializer(HypervisorProfile.serializer())) { h ->
             val existing = database.hypervisorDao().getById(h.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             database.hypervisorDao().upsertForSync(h); true
         }
 
     private suspend fun restoreHypervisorAccounts(data: String, overwriteExisting: Boolean): Int =
-        restoreV2List(data, ListSerializer(HypervisorAccount.serializer())) { a ->
+        restoreEntityList(data, ListSerializer(HypervisorAccount.serializer())) { a ->
             val existing = database.hypervisorAccountDao().getById(a.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             database.hypervisorAccountDao().insert(a); true
         }
 
     private suspend fun restoreWorkspaces(data: String, overwriteExisting: Boolean): Int =
-        restoreV2List(data, ListSerializer(Workspace.serializer())) { w ->
+        restoreEntityList(data, ListSerializer(Workspace.serializer())) { w ->
             val existing = database.workspaceDao().getById(w.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             database.workspaceDao().upsert(w); true
         }
 
     private suspend fun restoreCloudAccounts(data: String, overwriteExisting: Boolean): Int =
         // Cloud API token is NOT in this entity row — it lives in SecurePasswordManager
         // under cloud_token_{id} and is restored from the secrets file when present.
-        restoreV2List(data, ListSerializer(CloudAccount.serializer())) { c ->
+        restoreEntityList(data, ListSerializer(CloudAccount.serializer())) { c ->
             val existing = database.cloudAccountDao().getById(c.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             database.cloudAccountDao().upsert(c); true
         }
 
     private suspend fun restoreMacros(data: String, overwriteExisting: Boolean): Int =
-        restoreV2List(data, ListSerializer(Macro.serializer())) { m ->
+        restoreEntityList(data, ListSerializer(Macro.serializer())) { m ->
             val existing = database.macroDao().getMacroById(m.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             database.macroDao().insertMacro(m); true
         }
 
     private suspend fun restoreMonitorSlots(data: String, overwriteExisting: Boolean): Int =
-        restoreV2List(data, ListSerializer(MonitorSlot.serializer())) { s ->
+        restoreEntityList(data, ListSerializer(MonitorSlot.serializer())) { s ->
             val existing = database.monitorSlotDao().getById(s.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             database.monitorSlotDao().insertOrReplace(s); true
         }
 
     private suspend fun restoreVncHosts(data: String, overwriteExisting: Boolean): Int =
-        restoreV2List(data, ListSerializer(VncHost.serializer())) { h ->
+        restoreEntityList(data, ListSerializer(VncHost.serializer())) { h ->
             val existing = database.vncHostDao().getById(h.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             database.vncHostDao().insert(h); true
         }
 
     private suspend fun restoreVncIdentities(data: String, overwriteExisting: Boolean): Int =
         // Password is NOT in this entity (it lives in SecurePasswordManager under
         // vnc_identity_{id}); restored from the secrets file when present in the backup.
-        restoreV2List(data, ListSerializer(VncIdentity.serializer())) { vi ->
+        restoreEntityList(data, ListSerializer(VncIdentity.serializer())) { vi ->
             val existing = database.vncIdentityDao().getById(vi.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             database.vncIdentityDao().insert(vi); true
         }
 
     private suspend fun restorePortForwards(data: String, overwriteExisting: Boolean): Int =
-        restoreV2List(data, ListSerializer(PortForward.serializer())) { pf ->
+        restoreEntityList(data, ListSerializer(PortForward.serializer())) { pf ->
             val existing = database.portForwardDao().getById(pf.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             database.portForwardDao().insert(pf); true
         }
 
@@ -491,9 +487,9 @@ class BackupImporter(
         // Non-secret routing metadata only — a route carries no password
         // (proxies auth by username; jump hosts reuse the connection's own
         // credentials at connect time), so nothing is restored from secrets.
-        restoreV2List(data, ListSerializer(NetworkRoute.serializer())) { route ->
+        restoreEntityList(data, ListSerializer(NetworkRoute.serializer())) { route ->
             val existing = database.networkRouteDao().getById(route.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             if (existing == null) database.networkRouteDao().insert(route)
             else database.networkRouteDao().update(route)
             true
@@ -505,9 +501,9 @@ class BackupImporter(
         // Custom-endpoint SSH password is NOT in this entity (it lives in
         // SecurePasswordManager under docker_host_{id}); restored from the
         // secrets file when present in the backup.
-        restoreV2List(data, ListSerializer(DockerHost.serializer())) { h ->
+        restoreEntityList(data, ListSerializer(DockerHost.serializer())) { h ->
             val existing = database.dockerHostDao().getById(h.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             if (existing == null) database.dockerHostDao().insert(h)
             else database.dockerHostDao().update(h)
             true
@@ -516,36 +512,36 @@ class BackupImporter(
     private suspend fun restoreRegistryCredentials(data: String, overwriteExisting: Boolean): Int =
         // Credential secret is NOT in this entity (it lives in SecurePasswordManager
         // under registry_credential_{id}); restored from the secrets file when present.
-        restoreV2List(data, ListSerializer(RegistryCredential.serializer())) { c ->
+        restoreEntityList(data, ListSerializer(RegistryCredential.serializer())) { c ->
             val existing = database.registryCredentialDao().getById(c.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             if (existing == null) database.registryCredentialDao().insert(c)
             else database.registryCredentialDao().update(c)
             true
         }
 
     private suspend fun restoreComposeStacks(data: String, overwriteExisting: Boolean): Int =
-        restoreV2List(data, ListSerializer(ComposeStack.serializer())) { s ->
+        restoreEntityList(data, ListSerializer(ComposeStack.serializer())) { s ->
             val existing = database.composeStackDao().getById(s.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             if (existing == null) database.composeStackDao().insert(s)
             else database.composeStackDao().update(s)
             true
         }
 
     private suspend fun restoreSingleContainerConfigs(data: String, overwriteExisting: Boolean): Int =
-        restoreV2List(data, ListSerializer(SingleContainerConfig.serializer())) { c ->
+        restoreEntityList(data, ListSerializer(SingleContainerConfig.serializer())) { c ->
             val existing = database.singleContainerConfigDao().getById(c.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             if (existing == null) database.singleContainerConfigDao().insert(c)
             else database.singleContainerConfigDao().update(c)
             true
         }
 
     private suspend fun restoreContainerAutoUpdatePolicies(data: String, overwriteExisting: Boolean): Int =
-        restoreV2List(data, ListSerializer(ContainerAutoUpdatePolicy.serializer())) { p ->
+        restoreEntityList(data, ListSerializer(ContainerAutoUpdatePolicy.serializer())) { p ->
             val existing = database.containerAutoUpdatePolicyDao().getById(p.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             if (existing == null) database.containerAutoUpdatePolicyDao().insert(p)
             else database.containerAutoUpdatePolicyDao().update(p)
             true
@@ -554,27 +550,27 @@ class BackupImporter(
     // ── Tab sessions / audit log (backup-only, never synced) ────────────────
 
     private suspend fun restoreTabSessions(data: String, overwriteExisting: Boolean): Int =
-        restoreV2List(data, ListSerializer(TabSession.serializer())) { s ->
+        restoreEntityList(data, ListSerializer(TabSession.serializer())) { s ->
             val existing = database.tabSessionDao().getSessionByTabId(s.tabId)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             database.tabSessionDao().insertSession(s); true
         }
 
     private suspend fun restoreAuditLog(data: String, overwriteExisting: Boolean): Int =
-        restoreV2List(data, ListSerializer(AuditLogEntry.serializer())) { a ->
+        restoreEntityList(data, ListSerializer(AuditLogEntry.serializer())) { a ->
             val existing = database.auditLogDao().getById(a.id)
-            if (existing != null && !overwriteExisting) return@restoreV2List false
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
             database.auditLogDao().insert(a); true
         }
 
-    private suspend fun <T> restoreV2List(
+    private suspend fun <T> restoreEntityList(
         data: String,
         serializer: kotlinx.serialization.KSerializer<List<T>>,
         applyOne: suspend (T) -> Boolean
     ): Int {
         val root = json.parseToJsonElement(data).jsonObject
         val items = (root["items"] as? JsonArray) ?: run {
-            Logger.w(TAG, "v2 list root missing 'items' key")
+            Logger.w(TAG, "entity list root missing 'items' key")
             return 0
         }
         val list = json.decodeFromJsonElement(serializer, items)
@@ -583,7 +579,7 @@ class BackupImporter(
             try {
                 if (applyOne(item)) count++
             } catch (e: Exception) {
-                Logger.w(TAG, "Failed to restore item from v2 list: ${e.message}")
+                Logger.w(TAG, "Failed to restore item from entity list: ${e.message}")
             }
         }
         return count
@@ -615,10 +611,11 @@ class BackupImporter(
                 if (value.isEmpty()) return@forEach
                 try {
                     if (alias.startsWith("conn_pw_")) {
-                        // Connection passwords live in PreferenceManager SharedPreferences,
-                        // not SecurePasswordManager — route them to the correct store.
+                        // Wire alias is conn_pw_{id}; the Keystore alias is the
+                        // bare connection id, which is what the SSH path reads.
                         val connId = alias.removePrefix("conn_pw_")
-                        preferenceManager.setConnectionPassword(connId, value)
+                        pm?.storePassword(connId, value,
+                            SecurePasswordManager.StorageLevel.ENCRYPTED)
                         Logger.d(TAG, "Restored connection password: $connId")
                     } else if (pm != null) {
                         pm.storePassword(alias, value,
@@ -743,6 +740,11 @@ class BackupImporter(
             preferenceManager.setServerAliveIntervalSec(c.optInt("serverAliveIntervalSec", 60))
             preferenceManager.setX11ForwardingDefault(c.optBoolean("x11ForwardingDefault", false))
             preferenceManager.setAgentForwardingDefault(c.optBoolean("agentForwardingDefault", false))
+            preferenceManager.setFileOpenSizeLimitMb(
+                c.optInt("fileOpenSizeLimitMb", io.github.tabssh.utils.FileOpenPolicy.DEFAULT_SIZE_LIMIT_MB)
+            )
+            // Empty string means "no default route".
+            preferenceManager.setDefaultRouteId(c.optString("defaultRouteId", "").takeIf { it.isNotBlank() })
         }
         root.optJSONObject("sync")?.let { s ->
             preferenceManager.setSyncFrequency(s.optString("frequency", "hourly"))
@@ -768,6 +770,7 @@ class BackupImporter(
             preferenceManager.setSyncDashboardEnabled(s.optBoolean("syncDashboard", false))
             preferenceManager.setSyncDockerEnabled(s.optBoolean("syncDocker", true))
             preferenceManager.setSyncPortForwardsEnabled(s.optBoolean("syncPortForwards", true))
+            preferenceManager.setSyncNetworkRoutesEnabled(s.optBoolean("syncNetworkRoutes", true))
             preferenceManager.setAutoResolveConflicts(s.optBoolean("autoResolve", true))
         }
         root.optJSONObject("multiplexer")?.let { m ->
@@ -791,23 +794,39 @@ class BackupImporter(
             preferenceManager.setPasteStikkedUrl(p.optString("stikkedUrl", "https://pste.us"))
             preferenceManager.setPastebinApiKey(p.optString("pastebinApiKey", ""))
         }
-        root.optJSONObject("proxy")?.let { p ->
-            preferenceManager.setProxyEnabled(p.optBoolean("enabled", false))
-            preferenceManager.setProxyType(p.optString("type", "SOCKS5"))
-            preferenceManager.setProxyHost(p.optString("host", ""))
-            preferenceManager.setProxyPort(p.optInt("port", 1080))
-            val proxyUser = p.optString("username", "")
-            preferenceManager.setProxyUsername(proxyUser.takeIf { it.isNotEmpty() })
-            val proxyPass = p.optString("password", "")
-            preferenceManager.setProxyPassword(proxyPass.takeIf { it.isNotEmpty() })
-            val bypass = p.optString("bypassHosts", "")
-            if (bypass.isNotEmpty()) {
-                // Separator is "\n" (set by BackupExporter). Accept "," too for
-                // backward-compat with backups written before this fix.
-                val sep = if ('\n' in bypass) "\n" else ","
-                preferenceManager.setProxyBypassHosts(bypass.split(sep).filter { it.isNotEmpty() })
+        root.optJSONObject("audit")?.let { a ->
+            preferenceManager.setAuditLogEnabled(a.optBoolean("enabled", false))
+            preferenceManager.setAuditLogMaxSizeMb(a.optInt("maxSizeMb", 100))
+            preferenceManager.setAuditLogMaxAgeDays(a.optInt("maxAgeDays", 30))
+            preferenceManager.setAuditLogCommandsEnabled(a.optBoolean("logCommands", true))
+            preferenceManager.setAuditLogOutputEnabled(a.optBoolean("logOutput", false))
+        }
+        root.optJSONObject("tasker")?.let { t ->
+            preferenceManager.setTaskerEnabled(t.optBoolean("enabled", false))
+            preferenceManager.setTaskerRequireUnlockEnabled(t.optBoolean("requireUnlock", false))
+            preferenceManager.setTaskerIncludeOutputEnabled(t.optBoolean("includeOutput", false))
+            preferenceManager.setTaskerLogEventsEnabled(t.optBoolean("logEvents", true))
+            preferenceManager.setTaskerCommandTimeoutMs(t.optInt("commandTimeoutMs", 30000))
+            val allowed = t.optJSONArray("allowedConnections")
+            if (allowed != null) {
+                preferenceManager.setTaskerAllowedConnections(
+                    (0 until allowed.length()).map { allowed.getString(it) }.toSet()
+                )
             }
         }
+        root.optJSONObject("logging")?.let { l ->
+            preferenceManager.setDebugLoggingEnabled(l.optBoolean("debugLogging", false))
+            preferenceManager.setDebugLogLevel(l.optString("debugLogLevel", "debug"))
+            preferenceManager.setLogKeystrokeBytesEnabled(l.optBoolean("logKeystrokeBytes", false))
+            preferenceManager.setHostLoggingEnabled(l.optBoolean("hostLogging", false))
+            preferenceManager.setHostLogMaxSizeMb(l.optInt("hostLogMaxSizeMb", 1))
+        }
+        root.optJSONObject("docker")?.let { d ->
+            preferenceManager.setDockerUpdateCheckEnabled(d.optBoolean("updateCheckEnabled", true))
+        }
+
+        // Proxy configuration lives on NetworkRoute rows, which are restored as
+        // entities; there is no separate global-proxy preference group.
     }
 
     // ── Dashboard config ──────────────────────────────────────────────────────
@@ -816,7 +835,7 @@ class BackupImporter(
      * Restore multi-host dashboard groups and host membership from the flat
      * key→value JSON blob written by [BackupExporter.exportDashboardConfig].
      *
-     * All values are strings (JSON blobs or comma-separated ID lists); the
+     * Values are type-tagged by [io.github.tabssh.utils.SharedPrefsCodec]; the
      * "v" version key is silently skipped.  When [overwriteExisting] is false,
      * keys that already exist in the SharedPreferences are left untouched so
      * a partial restore does not clobber a user's current dashboard layout.
@@ -830,8 +849,7 @@ class BackupImporter(
             for ((k, v) in root) {
                 if (k == "v") continue
                 if (!overwriteExisting && dashPrefs.contains(k)) continue
-                editor.putString(k, v.jsonPrimitive.content)
-                count++
+                if (io.github.tabssh.utils.SharedPrefsCodec.decodeInto(editor, k, v)) count++
             }
             editor.apply()
             count
@@ -857,8 +875,7 @@ class BackupImporter(
             for ((k, v) in root) {
                 if (k == "v") continue
                 if (!overwriteExisting && prefs.contains(k)) continue
-                editor.putString(k, v.jsonPrimitive.content)
-                count++
+                if (io.github.tabssh.utils.SharedPrefsCodec.decodeInto(editor, k, v)) count++
             }
             editor.apply()
             count

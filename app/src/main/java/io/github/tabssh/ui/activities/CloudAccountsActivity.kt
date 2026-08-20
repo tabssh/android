@@ -63,14 +63,14 @@ class CloudAccountsActivity : AppCompatActivity() {
         private val ROW_FORMATTER = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
 
         fun providerIcon(tag: String) = when (tag) {
-            "digitalocean" -> "🌊"  // 🌊
-            "hetzner"      -> "🖥️"  // 🖥️
-            "linode"       -> "🟠"  // 🟠
-            "vultr"        -> "🦅"  // 🦅
-            "aws"          -> "🟡"  // 🟡
-            "gcp"          -> "🔵"  // 🔵
-            "azure"        -> "🔷"  // 🔷
-            else           -> "☁️"  // ☁️
+            "digitalocean" -> "🌊"
+            "hetzner"      -> "🖥️"
+            "linode"       -> "🟠"
+            "vultr"        -> "🦅"
+            "aws"          -> "🟡"
+            "gcp"          -> "🔵"
+            "azure"        -> "🔷"
+            else           -> "☁️"
         }
     }
 

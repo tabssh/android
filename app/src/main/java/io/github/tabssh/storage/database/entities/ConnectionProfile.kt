@@ -81,11 +81,13 @@ data class ConnectionProfile(
     @ColumnInfo(name = "mosh_mode")
     val moshMode: String = "auto",
 
+    // OFF, AUTO_ATTACH, CREATE_NEW, ASK
     @ColumnInfo(name = "multiplexer_mode")
-    val multiplexerMode: String = "OFF", // OFF, AUTO_ATTACH, CREATE_NEW, ASK
+    val multiplexerMode: String = "OFF",
 
+    // Custom session name (e.g., "main", "dev")
     @ColumnInfo(name = "multiplexer_session_name")
-    val multiplexerSessionName: String? = null, // Custom session name (e.g., "main", "dev")
+    val multiplexerSessionName: String? = null,
 
     /**
      * Per-connection PRE-key multiplexer override, set via the long-press
@@ -98,8 +100,9 @@ data class ConnectionProfile(
     @ColumnInfo(name = "multiplexer_override")
     val multiplexerOverride: String? = null,
 
+    // null = use global default, true/false = override
     @ColumnInfo(name = "port_knock_enabled")
-    val portKnockEnabled: Boolean? = null, // null = use global default, true/false = override
+    val portKnockEnabled: Boolean? = null,
     
     /**
      * JSON-serialized knock sequence: `[{"port":7000,"protocol":"TCP"},...]`.
@@ -113,8 +116,9 @@ data class ConnectionProfile(
     @ColumnInfo(name = "port_knock_sequence")
     val portKnockSequence: String? = null,
 
+    // Delay between knocks in milliseconds
     @ColumnInfo(name = "port_knock_delay_ms")
-    val portKnockDelayMs: Int = 100, // Delay between knocks in milliseconds
+    val portKnockDelayMs: Int = 100,
     
     @ColumnInfo(name = "connect_timeout")
     val connectTimeout: Int = 15,
@@ -140,26 +144,31 @@ data class ConnectionProfile(
     @ColumnInfo(name = "proxy_port")
     val proxyPort: Int? = null,
 
+    // "HTTP", "SOCKS4", "SOCKS5", "SSH"
     @ColumnInfo(name = "proxy_type")
-    val proxyType: String? = null, // "HTTP", "SOCKS4", "SOCKS5", "SSH"
+    val proxyType: String? = null,
 
     @ColumnInfo(name = "proxy_username")
     val proxyUsername: String? = null,
 
+    // For SSH jump host
     @ColumnInfo(name = "proxy_auth_type")
-    val proxyAuthType: String? = null, // For SSH jump host
+    val proxyAuthType: String? = null,
 
+    // For SSH jump host with key auth
     @ColumnInfo(name = "proxy_key_id")
-    val proxyKeyId: String? = null, // For SSH jump host with key auth
+    val proxyKeyId: String? = null,
     
+    // Link to reusable identity
     @ColumnInfo(name = "identity_id")
-    val identityId: String? = null, // Link to reusable identity
+    val identityId: String? = null,
     
     @ColumnInfo(name = "theme")
     val theme: String = "dracula",
 
+    // Commands to run after connection (one per line)
     @ColumnInfo(name = "post_connect_script")
-    val postConnectScript: String? = null, // Commands to run after connection (one per line)
+    val postConnectScript: String? = null,
 
     /**
      * Wave 1.2 — per-host environment variables. Multi-line "KEY=value"
@@ -198,8 +207,9 @@ data class ConnectionProfile(
     @ColumnInfo(name = "ip_mode")
     val ipMode: String = "auto",
 
+    // null = use global default, otherwise override
     @ColumnInfo(name = "font_size_override")
-    val fontSizeOverride: Int? = null, // null = use global default, otherwise override
+    val fontSizeOverride: Int? = null,
 
     /**
      * Wave 3.1 — Per-host color tag. ARGB int (e.g. 0xFFE53935 = red).
@@ -299,7 +309,8 @@ data class ConnectionProfile(
     fun isActive(): Boolean {
         // Determine if this connection profile is currently active
         // by checking if it has been recently connected
-        val recentThreshold = System.currentTimeMillis() - (5 * 60 * 1000) // 5 minutes
+        // 5 minutes
+        val recentThreshold = System.currentTimeMillis() - (5 * 60 * 1000)
         return lastConnected > 0 && lastConnected > recentThreshold
     }
 }

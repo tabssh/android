@@ -17,6 +17,7 @@ import io.github.tabssh.sync.models.MergeResult
 import io.github.tabssh.sync.tombstone.TombstoneRecorder
 import io.github.tabssh.sync.models.MergeStrategy
 import io.github.tabssh.sync.models.SyncDataPackage
+import io.github.tabssh.utils.SharedPrefsCodec
 import io.github.tabssh.utils.logging.Logger
 import androidx.room.withTransaction
 import kotlinx.coroutines.CancellationException
@@ -248,7 +249,7 @@ class SyncDataApplier {
             if (preferenceManager.isSyncHypervisorsEnabled()) {
                 data.hypervisors.forEach { h ->
                     try {
-                        if (suppressed(TombstoneRecorder.HYPERVISOR, TombstoneRecorder.naturalKey(h), null)) return@forEach
+                        if (suppressed(TombstoneRecorder.HYPERVISOR, TombstoneRecorder.naturalKey(h), h.modifiedAt)) return@forEach
                         database.hypervisorDao().upsertForSync(h)
                         appliedCount++
                     } catch (e: Exception) {
@@ -259,7 +260,7 @@ class SyncDataApplier {
             if (preferenceManager.isSyncCertificatesEnabled()) {
                 data.certificates.forEach { c ->
                     try {
-                        if (suppressed(TombstoneRecorder.CERTIFICATE, c.id, null)) return@forEach
+                        if (suppressed(TombstoneRecorder.CERTIFICATE, c.id, c.modifiedAt)) return@forEach
                         database.certificateDao().insertCertificate(c)
                         appliedCount++
                     } catch (e: Exception) {
@@ -283,7 +284,7 @@ class SyncDataApplier {
             if (preferenceManager.isSyncMonitorSlotsEnabled()) {
                 data.monitorSlots.forEach { slot ->
                     try {
-                        if (suppressed(TombstoneRecorder.MONITOR_SLOT, slot.id, null)) return@forEach
+                        if (suppressed(TombstoneRecorder.MONITOR_SLOT, slot.id, slot.modifiedAt)) return@forEach
                         database.monitorSlotDao().insertOrReplace(slot)
                         appliedCount++
                     } catch (e: Exception) {
@@ -383,7 +384,7 @@ class SyncDataApplier {
             if (preferenceManager.isSyncDockerEnabled()) {
                 data.dockerHosts.forEach { h ->
                     try {
-                        if (suppressed(TombstoneRecorder.DOCKER_HOST, TombstoneRecorder.naturalKey(h), null)) return@forEach
+                        if (suppressed(TombstoneRecorder.DOCKER_HOST, TombstoneRecorder.naturalKey(h), h.modifiedAt)) return@forEach
                         val existing = database.dockerHostDao().getById(h.id)
                         if (existing == null) database.dockerHostDao().insert(h)
                         else database.dockerHostDao().update(h)
@@ -394,7 +395,7 @@ class SyncDataApplier {
                 }
                 data.registryCredentials.forEach { c ->
                     try {
-                        if (suppressed(TombstoneRecorder.REGISTRY_CREDENTIAL, TombstoneRecorder.naturalKey(c), null)) return@forEach
+                        if (suppressed(TombstoneRecorder.REGISTRY_CREDENTIAL, TombstoneRecorder.naturalKey(c), c.modifiedAt)) return@forEach
                         val existing = database.registryCredentialDao().getById(c.id)
                         if (existing == null) database.registryCredentialDao().insert(c)
                         else database.registryCredentialDao().update(c)
@@ -405,7 +406,7 @@ class SyncDataApplier {
                 }
                 data.composeStacks.forEach { s ->
                     try {
-                        if (suppressed(TombstoneRecorder.COMPOSE_STACK, TombstoneRecorder.naturalKey(s), s.updatedAt)) return@forEach
+                        if (suppressed(TombstoneRecorder.COMPOSE_STACK, TombstoneRecorder.naturalKey(s), s.modifiedAt)) return@forEach
                         val existing = database.composeStackDao().getById(s.id)
                         if (existing == null) database.composeStackDao().insert(s)
                         else database.composeStackDao().update(s)
@@ -416,7 +417,7 @@ class SyncDataApplier {
                 }
                 data.singleContainerConfigs.forEach { c ->
                     try {
-                        if (suppressed(TombstoneRecorder.SINGLE_CONTAINER_CONFIG, TombstoneRecorder.naturalKey(c), c.updatedAt)) return@forEach
+                        if (suppressed(TombstoneRecorder.SINGLE_CONTAINER_CONFIG, TombstoneRecorder.naturalKey(c), c.modifiedAt)) return@forEach
                         val existing = database.singleContainerConfigDao().getById(c.id)
                         if (existing == null) database.singleContainerConfigDao().insert(c)
                         else database.singleContainerConfigDao().update(c)
@@ -427,7 +428,7 @@ class SyncDataApplier {
                 }
                 data.containerAutoUpdatePolicies.forEach { p ->
                     try {
-                        if (suppressed(TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY, TombstoneRecorder.naturalKey(p), null)) return@forEach
+                        if (suppressed(TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY, TombstoneRecorder.naturalKey(p), p.modifiedAt)) return@forEach
                         val existing = database.containerAutoUpdatePolicyDao().getById(p.id)
                         if (existing == null) database.containerAutoUpdatePolicyDao().insert(p)
                         else database.containerAutoUpdatePolicyDao().update(p)
@@ -452,12 +453,18 @@ class SyncDataApplier {
             if (data.secrets.isNotEmpty()) {
                 applySecrets(data.secrets)
             } else {
-                Logger.d(TAG, "No secrets in sync payload (pre-v14 or empty device)")
+                Logger.d(TAG, "No secrets in sync payload (empty device)")
             }
 
             // Dashboard config lives in SharedPreferences outside the Room DB.
             if (data.dashboardConfig.isNotEmpty() && preferenceManager.isSyncDashboardEnabled()) {
                 appliedCount += applyDashboardConfig(data.dashboardConfig)
+            }
+
+            // Named SharedPreferences files (sort orders, cluster command
+            // history, snippet variable recall) — user data outside the Room DB.
+            if (data.namedPreferenceFiles.isNotEmpty() && preferenceManager.isSyncSettingsEnabled()) {
+                appliedCount += applyNamedPreferenceFiles(data.namedPreferenceFiles)
             }
 
             Logger.i(TAG, "Applied $appliedCount items from sync data")
@@ -488,6 +495,14 @@ class SyncDataApplier {
     private suspend fun applyTombstones(tombstones: List<SyncTombstone>): Int {
         if (tombstones.isEmpty()) return 0
         val dao = database.syncTombstoneDao()
+
+        // Secret tombstones touch the Keystore rather than Room, so they are
+        // applied outside the database transaction — Keystore crypto must never
+        // hold a write lock.
+        val (secretTombstones, entityTombstones) =
+            tombstones.partition { it.entityType == TombstoneRecorder.SECRET }
+        val secretsDeleted = applySecretTombstones(secretTombstones)
+        if (entityTombstones.isEmpty()) return secretsDeleted
 
         // Natural-key lookup maps for the two Long-PK entities — built once and
         // only when the payload actually carries such a tombstone.
@@ -528,9 +543,9 @@ class SyncDataApplier {
                     .associateBy { TombstoneRecorder.naturalKey(it) }
             else emptyMap()
 
-        var deleted = 0
+        var deleted = secretsDeleted
         database.withTransaction {
-            tombstones.forEach { t ->
+            entityTombstones.forEach { t ->
                 try {
                     // localWins == a strictly-newer local copy survives the
                     // delete; otherwise the row (if any) is removed here.
@@ -675,6 +690,42 @@ class SyncDataApplier {
     }
 
     /**
+     * Apply secret tombstones: a credential removed on one device must be
+     * removed here too, or the upload-only union resurrects it on the next
+     * cycle.
+     *
+     * Secrets carry no modification timestamp, so there is no last-write-wins
+     * comparison to make — a delete always wins. Each alias is still filtered
+     * through [isSecretAliasEnabled], so a category the user excluded from sync
+     * cannot have its credentials deleted by a peer either.
+     */
+    private suspend fun applySecretTombstones(tombstones: List<SyncTombstone>): Int {
+        if (tombstones.isEmpty()) return 0
+        val dao = database.syncTombstoneDao()
+        val pm: SecurePasswordManager? = app?.securePasswordManager
+        val ks: KeyStorage? = app?.keyStorage
+        var deleted = 0
+        tombstones.forEach { t ->
+            val alias = t.entityKey
+            if (!isSecretAliasEnabled(alias)) return@forEach
+            try {
+                when {
+                    alias.startsWith("ssh_key_") -> ks?.deleteKey(alias.removePrefix("ssh_key_"))
+                    // Wire alias is conn_pw_{id}; the Keystore alias is the bare id.
+                    alias.startsWith("conn_pw_") -> pm?.clearPassword(alias.removePrefix("conn_pw_"))
+                    else -> pm?.clearPassword(alias)
+                }
+                // Persist for transitive propagation to a third device.
+                dao.recordIfAbsent(t)
+                deleted++
+            } catch (e: Exception) {
+                Logger.w(TAG, "Failed to apply secret tombstone for alias $alias: ${e.message}")
+            }
+        }
+        return deleted
+    }
+
+    /**
      * Restore Keystore-backed credentials from the sync secrets map.
      *
      * Entries whose key starts with "ssh_key_" are base64-encoded JSch bytes
@@ -704,11 +755,13 @@ class SyncDataApplier {
                         keyCount++
                     }
                 } else if (alias.startsWith("conn_pw_")) {
-                    // Connection passwords live in PreferenceManager SharedPreferences,
-                    // not SecurePasswordManager — route them to the correct store.
-                    val connId = alias.removePrefix("conn_pw_")
-                    preferenceManager.setConnectionPassword(connId, value)
-                    passwordCount++
+                    // Wire alias is conn_pw_{id}; the Keystore alias is the bare
+                    // connection id, which is what the SSH path reads.
+                    if (pm != null) {
+                        pm.storePassword(alias.removePrefix("conn_pw_"), value,
+                            SecurePasswordManager.StorageLevel.ENCRYPTED)
+                        passwordCount++
+                    }
                 } else {
                     if (pm != null) {
                         pm.storePassword(alias, value,
@@ -725,8 +778,11 @@ class SyncDataApplier {
 
     /**
      * Maps a secret alias to the local sync toggle that owns its category.
-     * Aliases with no owning toggle (unrecognised prefix) are allowed
-     * through unchanged for forward compatibility.
+     *
+     * Deny-by-default: an alias whose prefix this build does not recognise has
+     * no owning toggle, so honouring it would silently write a credential the
+     * user never consented to sync. Adding a new alias family therefore
+     * requires adding its branch here.
      */
     private fun isSecretAliasEnabled(alias: String): Boolean = when {
         alias.startsWith("identity_") -> preferenceManager.isSyncIdentitiesEnabled()
@@ -742,7 +798,7 @@ class SyncDataApplier {
         alias.startsWith("cloud_token_") -> preferenceManager.isSyncCloudAccountsEnabled()
         alias.startsWith("docker_host_") || alias.startsWith("registry_credential_") ->
             preferenceManager.isSyncDockerEnabled()
-        else -> true
+        else -> false
     }
 
     /**
@@ -1021,9 +1077,21 @@ class SyncDataApplier {
             paste?.let {
                 count += applyPastePreferences(it)
             }
-            val proxy = (preferences["proxy"] as? JsonObject)?.toAnyMap()
-            proxy?.let {
-                count += applyProxyPreferences(it)
+            val audit = (preferences["audit"] as? JsonObject)?.toAnyMap()
+            audit?.let {
+                count += applyAuditPreferences(it)
+            }
+            val tasker = (preferences["tasker"] as? JsonObject)?.toAnyMap()
+            tasker?.let {
+                count += applyTaskerPreferences(it)
+            }
+            val logging = (preferences["logging"] as? JsonObject)?.toAnyMap()
+            logging?.let {
+                count += applyLoggingPreferences(it)
+            }
+            val docker = (preferences["docker"] as? JsonObject)?.toAnyMap()
+            docker?.let {
+                count += applyDockerPreferences(it)
             }
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to apply preferences", e)
@@ -1143,34 +1211,80 @@ class SyncDataApplier {
         return count
     }
 
-    private fun applyProxyPreferences(prefs: Map<String, Any>): Int {
+    private fun applyAuditPreferences(prefs: Map<String, Any>): Int {
         var count = 0
         prefs.forEach { (key, value) ->
             try {
                 when (key) {
-                    "enabled"     -> preferenceManager.setProxyEnabled(value as Boolean)
-                    "type"        -> preferenceManager.setProxyType(value as String)
-                    "host"        -> preferenceManager.setProxyHost(value as String)
-                    "port"        -> preferenceManager.setProxyPort((value as Number).toInt())
-                    "username"    -> preferenceManager.setProxyUsername(value as String)
-                    "password"    -> preferenceManager.setProxyPassword(value as String)
-                    "bypassHosts" -> {
-                        val raw = when (value) {
-                            is String -> value
-                            is Number -> value.toString()
-                            else      -> ""
-                        }
-                        if (raw.isNotEmpty()) {
-                            val sep = if ('\n' in raw) "\n" else ","
-                            preferenceManager.setProxyBypassHosts(
-                                raw.split(sep).filter { it.isNotEmpty() }
-                            )
-                        }
+                    "enabled"     -> preferenceManager.setAuditLogEnabled(value as Boolean)
+                    "maxSizeMb"   -> preferenceManager.setAuditLogMaxSizeMb((value as Number).toInt())
+                    "maxAgeDays"  -> preferenceManager.setAuditLogMaxAgeDays((value as Number).toInt())
+                    "logCommands" -> preferenceManager.setAuditLogCommandsEnabled(value as Boolean)
+                    "logOutput"   -> preferenceManager.setAuditLogOutputEnabled(value as Boolean)
+                }
+                count++
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to apply audit preference: $key", e)
+            }
+        }
+        return count
+    }
+
+    private fun applyTaskerPreferences(prefs: Map<String, Any>): Int {
+        var count = 0
+        prefs.forEach { (key, value) ->
+            try {
+                when (key) {
+                    "enabled"          -> preferenceManager.setTaskerEnabled(value as Boolean)
+                    "requireUnlock"    -> preferenceManager.setTaskerRequireUnlockEnabled(value as Boolean)
+                    "includeOutput"    -> preferenceManager.setTaskerIncludeOutputEnabled(value as Boolean)
+                    "logEvents"        -> preferenceManager.setTaskerLogEventsEnabled(value as Boolean)
+                    "commandTimeoutMs" -> preferenceManager.setTaskerCommandTimeoutMs((value as Number).toInt())
+                    "allowedConnections" -> {
+                        // Newline-joined on the wire; empty means "all allowed".
+                        val raw = value as? String ?: ""
+                        preferenceManager.setTaskerAllowedConnections(
+                            raw.split("\n").filter { it.isNotEmpty() }.toSet()
+                        )
                     }
                 }
                 count++
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to apply proxy preference: $key", e)
+                Logger.e(TAG, "Failed to apply tasker preference: $key", e)
+            }
+        }
+        return count
+    }
+
+    private fun applyLoggingPreferences(prefs: Map<String, Any>): Int {
+        var count = 0
+        prefs.forEach { (key, value) ->
+            try {
+                when (key) {
+                    "debugLogging"      -> preferenceManager.setDebugLoggingEnabled(value as Boolean)
+                    "debugLogLevel"     -> preferenceManager.setDebugLogLevel(value as String)
+                    "logKeystrokeBytes" -> preferenceManager.setLogKeystrokeBytesEnabled(value as Boolean)
+                    "hostLogging"       -> preferenceManager.setHostLoggingEnabled(value as Boolean)
+                    "hostLogMaxSizeMb"  -> preferenceManager.setHostLogMaxSizeMb((value as Number).toInt())
+                }
+                count++
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to apply logging preference: $key", e)
+            }
+        }
+        return count
+    }
+
+    private fun applyDockerPreferences(prefs: Map<String, Any>): Int {
+        var count = 0
+        prefs.forEach { (key, value) ->
+            try {
+                when (key) {
+                    "updateCheckEnabled" -> preferenceManager.setDockerUpdateCheckEnabled(value as Boolean)
+                }
+                count++
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to apply docker preference: $key", e)
             }
         }
         return count
@@ -1368,6 +1482,11 @@ class SyncDataApplier {
                     }
                     "x11ForwardingDefault"   -> preferenceManager.setX11ForwardingDefault(value as Boolean)
                     "agentForwardingDefault" -> preferenceManager.setAgentForwardingDefault(value as Boolean)
+                    "fileOpenSizeLimitMb"    -> preferenceManager.setFileOpenSizeLimitMb((value as Number).toInt())
+                    // Empty string means "no default route".
+                    "defaultRouteId"         -> preferenceManager.setDefaultRouteId(
+                        (value as? String)?.takeIf { it.isNotBlank() }
+                    )
                 }
                 count++
             } catch (e: Exception) {
@@ -1472,19 +1591,46 @@ class SyncDataApplier {
     }
 
     /**
+     * Merge named SharedPreferences files from a peer. Only the files the
+     * collector is allowed to send are accepted — an unexpected file name in
+     * the payload must never be able to write into an arbitrary preference
+     * store on this device.
+     */
+    private fun applyNamedPreferenceFiles(files: Map<String, Map<String, JsonObject>>): Int {
+        var applied = 0
+        files.forEach { (name, values) ->
+            if (name !in SyncDataCollector.NAMED_PREF_FILES) {
+                Logger.w(TAG, "Ignoring unexpected SharedPreferences file in sync payload: $name")
+                return@forEach
+            }
+            try {
+                val sp = context.getSharedPreferences(name, android.content.Context.MODE_PRIVATE)
+                val editor = sp.edit()
+                values.forEach { (k, v) -> if (SharedPrefsCodec.decodeInto(editor, k, v)) applied++ }
+                editor.apply()
+            } catch (e: Exception) {
+                Logger.w(TAG, "Failed to apply SharedPreferences file $name: ${e.message}")
+            }
+        }
+        if (applied > 0) Logger.d(TAG, "Applied $applied named SharedPreferences keys")
+        return applied
+    }
+
+    /**
      * Write dashboard groups/host-membership keys into the `multi_host_dashboard`
      * SharedPreferences file.  Existing keys are overwritten (last-write-wins,
      * matching the behaviour of every other sync entity).  Returns the count of
      * keys written.
      */
-    private fun applyDashboardConfig(config: Map<String, String>): Int {
+    private fun applyDashboardConfig(config: Map<String, JsonObject>): Int {
         return try {
             val sp = context.getSharedPreferences("multi_host_dashboard", android.content.Context.MODE_PRIVATE)
             val editor = sp.edit()
-            config.forEach { (k, v) -> editor.putString(k, v) }
+            var applied = 0
+            config.forEach { (k, v) -> if (SharedPrefsCodec.decodeInto(editor, k, v)) applied++ }
             editor.apply()
-            Logger.d(TAG, "Applied ${config.size} dashboard config keys")
-            config.size
+            Logger.d(TAG, "Applied $applied dashboard config keys")
+            applied
         } catch (e: Exception) {
             Logger.w(TAG, "Failed to apply dashboard config: ${e.message}")
             0

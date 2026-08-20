@@ -41,11 +41,13 @@ data class ThemeDefinition(
     @ColumnInfo(name = "selection_color")
     val selectionColor: Int,
     
+    // JSON array of 16 colors
     @ColumnInfo(name = "ansi_colors")
-    val ansiColors: String, // JSON array of 16 colors
+    val ansiColors: String,
     
+    // JSON object with UI color overrides
     @ColumnInfo(name = "ui_colors")
-    val uiColors: String? = null, // JSON object with UI color overrides
+    val uiColors: String? = null,
     
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),

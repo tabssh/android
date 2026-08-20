@@ -72,7 +72,8 @@ class XCPngApiClient(
         val memory: Long,
         val vcpus: Int,
         val isTemplate: Boolean,
-        val ipAddress: String? = null // IP from guest metrics
+        // IP from guest metrics
+        val ipAddress: String? = null
     )
 
     data class XenHost(

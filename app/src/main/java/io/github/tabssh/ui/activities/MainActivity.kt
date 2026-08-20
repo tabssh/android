@@ -98,9 +98,11 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         // activity (e.g. the command palette) navigates here to a specific tab.
         val explicitTab = intent.getIntExtra("start_tab", -1).takeIf { it in 0..4 }
         val initialTabIndex = explicitTab ?: when (startup) {
-            "frequent"    -> 0  // Frequent tab in MainPagerAdapter
+            // Frequent tab in MainPagerAdapter
+            "frequent"    -> 0
             "last_tab"    -> prefs.getInt("ui_last_main_tab_index", 1).coerceIn(0, 4)
-            else          -> 1  // Connections tab (default)
+            // Connections tab (default)
+            else          -> 1
         }
         viewPager.setCurrentItem(initialTabIndex, /* smoothScroll = */ false)
         Logger.d("MainActivity", "Startup behavior: $startup → tab $initialTabIndex")
@@ -694,7 +696,8 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle("Quick Connect")
             .setView(view)
-            .setPositiveButton("Connect", null) // set below to prevent auto-dismiss on error
+            // set below to prevent auto-dismiss on error
+            .setPositiveButton("Connect", null)
             .setNegativeButton("Cancel", null)
             .create()
 

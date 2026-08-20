@@ -28,7 +28,8 @@ class HistoryFetcher(private val sshConnection: SSHConnection) {
     companion object {
         private const val TAG = "HistoryFetcher"
         private const val MAX_LINES = 2000
-        private const val PER_FILE_CAP_BYTES = 512 * 1024 // 512 KiB
+        // 512 KiB
+        private const val PER_FILE_CAP_BYTES = 512 * 1024
     }
 
     /** Fetch + dedupe history. Most-recent first; safe to call from a coroutine. */
@@ -43,7 +44,8 @@ class HistoryFetcher(private val sshConnection: SSHConnection) {
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .map { stripZshPrefix(it) }
-            .filter { it.length in 1..400 } // reject pasted blobs
+            // reject pasted blobs
+            .filter { it.length in 1..400 }
             .toList()
             .asReversed()
         for (line in parsed) {
@@ -77,7 +79,8 @@ class HistoryFetcher(private val sshConnection: SSHConnection) {
                 val n = input.read(buf)
                 if (n < 0) break
                 sb.append(String(buf, 0, n, Charsets.UTF_8))
-                if (sb.length > PER_FILE_CAP_BYTES * 2) break // safety
+                // safety
+                if (sb.length > PER_FILE_CAP_BYTES * 2) break
             }
             sb.toString()
         } catch (e: Exception) {

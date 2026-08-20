@@ -89,7 +89,8 @@ class PortKnocker {
             return true
         } catch (e: Exception) {
             Logger.d("PortKnocker", "TCP knock on port $port: ${e.message}")
-            return true // Knock was sent even if connection failed
+            // Knock was sent even if connection failed
+            return true
         } finally {
             try {
                 socket?.close()

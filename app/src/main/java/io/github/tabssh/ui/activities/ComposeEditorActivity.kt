@@ -281,11 +281,16 @@ class ComposeEditorActivity : AppCompatActivity() {
             }
             if (existing == null) {
                 stackId = dao.insert(
-                    ComposeStack(dockerHostId = hostId, name = name, remotePath = remotePath)
+                    ComposeStack(
+                        dockerHostId = hostId,
+                        name = name,
+                        remotePath = remotePath,
+                        modifiedAt = System.currentTimeMillis()
+                    )
                 )
                 stack = dao.getById(stackId)
             } else {
-                dao.update(existing.copy(updatedAt = System.currentTimeMillis()))
+                dao.update(existing.copy(updatedAt = System.currentTimeMillis(), modifiedAt = System.currentTimeMillis()))
             }
             if (!isAlive()) return@launch
             progressBar.visibility = View.GONE

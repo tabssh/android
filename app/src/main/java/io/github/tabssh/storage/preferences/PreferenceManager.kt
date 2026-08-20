@@ -33,8 +33,10 @@ class PreferenceManager(private val context: Context) {
             if (intValue != -1) {
                 // Convert to String and save
                 preferences.edit()
-                    .remove(key) // Remove old Int value
-                    .putString(key, intValue.toString()) // Save as String
+                    // Remove old Int value
+                    .remove(key)
+                    // Save as String
+                    .putString(key, intValue.toString())
                     .apply()
                 Logger.d("PreferenceManager", "Migrated $key from Int to String: $intValue")
             }
@@ -147,6 +149,10 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_AUDIT_LOG_COMMANDS = "audit_log_commands"
         private const val KEY_AUDIT_LOG_OUTPUT = "audit_log_output"
 
+        // Sync Log retention — same String-backed EditTextPreference pattern as
+        // the audit log's max-age setting above.
+        private const val KEY_SYNC_LOG_MAX_AGE_DAYS = "sync_log_max_age_days"
+
         // Monitoring preferences — keys MUST match preferences_monitoring.xml.
         private const val KEY_MONITORING_ENABLED = "monitoring_enabled"
         private const val KEY_MONITORING_NOTIFY_DOWN = "monitoring_notify_down"
@@ -179,9 +185,12 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_HOST_LOG_MAX_SIZE_MB = "host_log_max_size_mb"
 
         // Defaults
-        const val DEFAULT_PREFIX_TMUX = "C-b"     // tmux default
-        const val DEFAULT_PREFIX_SCREEN = "C-a"   // screen default
-        const val DEFAULT_PREFIX_ZELLIJ = "C-g"   // zellij default
+        // tmux default
+        const val DEFAULT_PREFIX_TMUX = "C-b"
+        // screen default
+        const val DEFAULT_PREFIX_SCREEN = "C-a"
+        // zellij default
+        const val DEFAULT_PREFIX_ZELLIJ = "C-g"
         const val DEFAULT_STARTUP_BEHAVIOR = "last_session"
         const val DEFAULT_PASSWORD_STORAGE_LEVEL = "encrypted"
         const val DEFAULT_THEME = "dracula"
@@ -271,7 +280,8 @@ class PreferenceManager(private val context: Context) {
         .putInt(KEY_LINE_SPACING, (spacing.coerceIn(1.0f, 2.0f) * 100).toInt())
         .apply()
     
-    fun getCursorStyle(): String = getString(KEY_CURSOR_STYLE, "bar") // Default to I-beam
+    // Default to I-beam
+    fun getCursorStyle(): String = getString(KEY_CURSOR_STYLE, "bar")
     fun setCursorStyle(style: String) = setString(KEY_CURSOR_STYLE, style)
 
     /**
@@ -279,10 +289,14 @@ class PreferenceManager(private val context: Context) {
      * 0 = BLOCK, 1 = UNDERLINE, 2 = BAR (I-beam)
      */
     fun getCursorStyleInt(): Int = when (getCursorStyle()) {
-        "block" -> 0      // TERMINAL_CURSOR_STYLE_BLOCK
-        "underline" -> 1  // TERMINAL_CURSOR_STYLE_UNDERLINE
-        "bar" -> 2        // TERMINAL_CURSOR_STYLE_BAR (I-beam)
-        else -> 2         // Default to I-beam
+        // TERMINAL_CURSOR_STYLE_BLOCK
+        "block" -> 0
+        // TERMINAL_CURSOR_STYLE_UNDERLINE
+        "underline" -> 1
+        // TERMINAL_CURSOR_STYLE_BAR (I-beam)
+        "bar" -> 2
+        // Default to I-beam
+        else -> 2
     }
     
     fun isCursorBlinkEnabled(): Boolean = getBoolean(KEY_CURSOR_BLINK, true)
@@ -339,7 +353,8 @@ class PreferenceManager(private val context: Context) {
             try {
                 getString(KEY_KEYBOARD_ROW_COUNT, "3").toIntOrNull()?.coerceIn(1, 5) ?: 3
             } catch (e2: Exception) {
-                3 // Default to 3 rows
+                // Default to 3 rows
+                3
             }
         }
     }
@@ -572,14 +587,6 @@ class PreferenceManager(private val context: Context) {
         Logger.i("PreferenceManager", "All preferences cleared")
     }
     
-    /**
-     * Export preferences as JSON for backup
-     */
-    fun exportPreferences(): String {
-        val allPrefs = preferences.all
-        return org.json.JSONObject(allPrefs as Map<*, *>).toString()
-    }
-
     // Additional missing methods from compilation errors
     fun getBackupFrequency(): String = getString(KEY_BACKUP_FREQUENCY, "weekly")
     fun setAutoBackup(enabled: Boolean) = setBoolean(KEY_AUTO_BACKUP, enabled)
@@ -590,33 +597,6 @@ class PreferenceManager(private val context: Context) {
 
     fun setCursorBlink(enabled: Boolean) = setBoolean(KEY_CURSOR_BLINK, enabled)
 
-    fun getConnectionPassword(connectionId: String): String? {
-        return getString("password_$connectionId", "")
-    }
-
-    fun setConnectionPassword(connectionId: String, password: String) {
-        setString("password_$connectionId", password)
-    }
-
-    // Proxy settings
-    fun isProxyEnabled(): Boolean = getBoolean("proxy_enabled", false)
-    fun setProxyEnabled(enabled: Boolean) = setBoolean("proxy_enabled", enabled)
-
-    fun getProxyType(): String = getString("proxy_type", "SOCKS5")
-    fun setProxyType(type: String) = setString("proxy_type", type)
-
-    fun getProxyHost(): String = getString("proxy_host", "")
-    fun setProxyHost(host: String) = setString("proxy_host", host)
-
-    fun getProxyPort(): Int = getInt("proxy_port", 1080)
-    fun setProxyPort(port: Int) = setInt("proxy_port", port)
-
-    fun getProxyUsername(): String? = getString("proxy_username", "")
-    fun setProxyUsername(username: String?) = setString("proxy_username", username ?: "")
-
-    fun getProxyPassword(): String? = getString("proxy_password", "")
-    fun setProxyPassword(password: String?) = setString("proxy_password", password ?: "")
-
     /**
      * Routing & Forwarding — the global default NetworkRoute id applied to any
      * connection whose own `route_id` is null (inherit). Empty = no default
@@ -625,19 +605,6 @@ class PreferenceManager(private val context: Context) {
      */
     fun getDefaultRouteId(): String? = getString("default_route_id", "").takeIf { it.isNotBlank() }
     fun setDefaultRouteId(routeId: String?) = setString("default_route_id", routeId ?: "")
-
-    fun getProxyBypassHosts(): List<String> {
-        val hosts = getString("proxy_bypass_hosts", "")
-        return if (hosts.isNotEmpty()) hosts.split(",") else emptyList()
-    }
-    fun setProxyBypassHosts(hosts: List<String>) = setString("proxy_bypass_hosts", hosts.joinToString(","))
-
-    fun getHostProxyConfiguration(host: String): String? {
-        return getString("proxy_host_$host", "")
-    }
-    fun setHostProxyConfiguration(host: String, config: String) {
-        setString("proxy_host_$host", config)
-    }
 
     // Sync preferences
     fun isSyncEnabled(): Boolean = getBoolean("sync_enabled", false)
@@ -726,12 +693,6 @@ class PreferenceManager(private val context: Context) {
     fun isAutoResolveConflictsEnabled(): Boolean = getBoolean("sync_auto_resolve", true)
     fun setAutoResolveConflicts(enabled: Boolean) = setBoolean("sync_auto_resolve", enabled)
 
-    // Set when a headless (WorkManager) sync hits conflicts it could not resolve
-    // interactively and had to keep the local side (§9.6). The user can review
-    // and reconcile from a foreground sync; cleared once acknowledged.
-    fun hasPendingSyncConflicts(): Boolean = getBoolean("sync_pending_conflicts", false)
-    fun setPendingSyncConflicts(pending: Boolean) = setBoolean("sync_pending_conflicts", pending)
-
     // Note: SAF sync settings (file URI, password) are stored in SAFSyncManager's own SharedPreferences
     // The settings above are used by SyncWorkScheduler for scheduling decisions
 
@@ -768,6 +729,11 @@ class PreferenceManager(private val context: Context) {
 
     fun isAuditLogCommandsEnabled(): Boolean = getBoolean(KEY_AUDIT_LOG_COMMANDS, true)
     fun setAuditLogCommandsEnabled(enabled: Boolean) = setBoolean(KEY_AUDIT_LOG_COMMANDS, enabled)
+
+    // --- Sync Log ---
+
+    fun getSyncLogMaxAgeDays(): Int = getStringAsInt(KEY_SYNC_LOG_MAX_AGE_DAYS, 30)
+    fun setSyncLogMaxAgeDays(days: Int) = setString(KEY_SYNC_LOG_MAX_AGE_DAYS, days.toString())
 
     fun isAuditLogOutputEnabled(): Boolean = getBoolean(KEY_AUDIT_LOG_OUTPUT, false)
     fun setAuditLogOutputEnabled(enabled: Boolean) = setBoolean(KEY_AUDIT_LOG_OUTPUT, enabled)
@@ -829,6 +795,8 @@ class PreferenceManager(private val context: Context) {
     // Default OFF: COMMAND_RESULT broadcasts are readable by every installed app,
     // so terminal screen content is only included when the user opts in.
     fun isTaskerIncludeOutputEnabled(): Boolean = getBoolean(KEY_TASKER_INCLUDE_OUTPUT, false)
+    fun setTaskerIncludeOutputEnabled(enabled: Boolean) = setBoolean(KEY_TASKER_INCLUDE_OUTPUT, enabled)
+
     fun setTaskerLogEventsEnabled(enabled: Boolean) = setBoolean(KEY_TASKER_LOG_EVENTS, enabled)
 
     fun getTaskerCommandTimeoutMs(): Int = getStringAsInt(KEY_TASKER_COMMAND_TIMEOUT, 30000)

@@ -25,8 +25,9 @@ import kotlinx.serialization.Serializable
     ]
 )
 data class HostKeyEntry(
+    // host:port format
     @PrimaryKey
-    val id: String, // host:port format
+    val id: String,
     
     @ColumnInfo(name = "hostname")
     val hostname: String,
@@ -34,11 +35,13 @@ data class HostKeyEntry(
     @ColumnInfo(name = "port")
     val port: Int,
     
+    // ssh-rsa, ssh-ed25519, etc.
     @ColumnInfo(name = "key_type")
-    val keyType: String, // ssh-rsa, ssh-ed25519, etc.
+    val keyType: String,
     
+    // Base64 encoded public key
     @ColumnInfo(name = "public_key")
-    val publicKey: String, // Base64 encoded public key
+    val publicKey: String,
     
     @ColumnInfo(name = "fingerprint")
     val fingerprint: String,
@@ -49,8 +52,9 @@ data class HostKeyEntry(
     @ColumnInfo(name = "last_verified")
     val lastVerified: Long = System.currentTimeMillis(),
 
+    // UNKNOWN, ACCEPTED, VERIFIED
     @ColumnInfo(name = "trust_level")
-    val trustLevel: String = "UNKNOWN", // UNKNOWN, ACCEPTED, VERIFIED
+    val trustLevel: String = "UNKNOWN",
 
     // Sync metadata fields
     @ColumnInfo(name = "last_synced_at")

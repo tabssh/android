@@ -46,7 +46,8 @@ class SFTPManager(private val sshConnection: SSHConnection) {
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
     
     // Settings
-    private var bufferSize = 32768 // 32KB
+    // 32KB
+    private var bufferSize = 32768
     private var maxConcurrentTransfers = 3
     private var preservePermissions = true
     private var preserveTimestamps = true
@@ -529,7 +530,8 @@ class SFTPManager(private val sshConnection: SSHConnection) {
                 
                 // Update progress periodically (not on every chunk for performance)
                 val now = System.currentTimeMillis()
-                if (now - lastProgressUpdate > 100) { // Update every 100ms
+                // Update every 100ms
+                if (now - lastProgressUpdate > 100) {
                     task.notifyProgress()
                     lastProgressUpdate = now
                 }
@@ -750,15 +752,20 @@ class SFTPManager(private val sshConnection: SSHConnection) {
     private fun getLocalFilePermissions(file: File): Int {
         // Convert Java file permissions to Unix octal format
         var permissions = 0
-        if (file.canRead()) permissions = permissions or 0x100  // 0400 in octal
-        if (file.canWrite()) permissions = permissions or 0x80   // 0200 in octal
-        if (file.canExecute()) permissions = permissions or 0x40 // 0100 in octal
-        
+        // 0400 in octal
+        if (file.canRead()) permissions = permissions or 0x100
+        // 0200 in octal
+        if (file.canWrite()) permissions = permissions or 0x80
+        // 0100 in octal
+        if (file.canExecute()) permissions = permissions or 0x40
+
         // Default to 644 for files, 755 for directories if no specific permissions
         return if (permissions == 0) {
-            if (file.isDirectory) 0x1ed else 0x1a4  // 0755 and 0644 in hexadecimal
+            // 0755 and 0644 in hexadecimal
+            if (file.isDirectory) 0x1ed else 0x1a4
         } else {
-            permissions or 0x24 // Add group/other read permissions (044 in octal)
+            // Add group/other read permissions (044 in octal)
+            permissions or 0x24
         }
     }
     
@@ -781,7 +788,8 @@ class SFTPManager(private val sshConnection: SSHConnection) {
     // Configuration
     
     fun setBufferSize(size: Int) {
-        bufferSize = size.coerceIn(1024, 1024 * 1024) // 1KB to 1MB
+        // 1KB to 1MB
+        bufferSize = size.coerceIn(1024, 1024 * 1024)
         Logger.d("SFTPManager", "Set buffer size to $bufferSize bytes")
     }
     

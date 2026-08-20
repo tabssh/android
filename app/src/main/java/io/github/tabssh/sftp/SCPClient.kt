@@ -163,7 +163,8 @@ class SCPClient(private val sshConnection: SSHConnection) {
                 sb.append(c.toChar())
             } while (true)
             Logger.w(TAG, "SCP server ${if (b == 1) "warning" else "error"}: $sb")
-            return b == 1 // warning is recoverable; error is fatal
+            // warning is recoverable; error is fatal
+            return b == 1
         }
         return false
     }

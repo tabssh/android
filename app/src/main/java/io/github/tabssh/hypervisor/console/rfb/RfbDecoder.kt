@@ -32,8 +32,10 @@ class RfbDecoder(private val fmt: PixelFormat) {
 
     companion object {
         private const val TAG = "RfbDecoder"
-        private const val ZRLE_TILE = 64          // ZRLE tile size in pixels
-        private const val ZRLE_BUF = 512 * 1024   // initial inflate buffer
+        // ZRLE tile size in pixels
+        private const val ZRLE_TILE = 64
+        // Initial inflate buffer
+        private const val ZRLE_BUF = 512 * 1024
 
         /**
          * Maximum uncompressed bytes for a single rectangle.
@@ -672,8 +674,10 @@ class RfbDecoder(private val fmt: PixelFormat) {
                             val dataSize = safeRectBytes(w, h, cp)
                             val data = readTightData(din, streamIdx, dataSize)
 
-                            val prevRow = ByteArray(w * cp)  // previous decoded row
-                            val currRow = ByteArray(w * cp)  // current row being decoded
+                            // Previous decoded row
+                            val prevRow = ByteArray(w * cp)
+                            // Current row being decoded
+                            val currRow = ByteArray(w * cp)
 
                             for (row in 0 until h) {
                                 val srcOff = row * w * cp

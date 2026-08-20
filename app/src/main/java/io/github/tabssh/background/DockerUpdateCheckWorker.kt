@@ -3,7 +3,6 @@ package io.github.tabssh.background
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.os.Build
 import android.os.PowerManager
 import androidx.work.*
 import io.github.tabssh.TabSSHApplication
@@ -118,16 +117,11 @@ class DockerUpdateCheckWorker(
      * True only when the active network passed Android's own internet
      * validation probe — same rationale as [HostAvailabilityWorker].
      */
-    @Suppress("DEPRECATION")
     private fun isInternetAvailable(): Boolean {
         val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val network = cm.activeNetwork ?: return false
-            val caps = cm.getNetworkCapabilities(network) ?: return false
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-        } else {
-            cm.activeNetworkInfo?.isConnected == true
-        }
+        val network = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(network) ?: return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
     override suspend fun doWork(): Result {

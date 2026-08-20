@@ -5,12 +5,19 @@ import io.github.tabssh.utils.logging.Logger
 import org.json.JSONObject
 
 /**
- * Validates backup data integrity and format
+ * Validates backup data integrity and format.
+ *
+ * There is exactly one wire format ([BackupManager.BACKUP_VERSION]). Any other
+ * version is an unsupported archive and is rejected — this validator has no
+ * legacy read path and never attempts a best-effort parse of an older shape.
  */
 class BackupValidator {
 
     private companion object {
         private const val TAG = "BackupValidator"
+
+        /** Magic prefix written by SyncEncryptor on an encrypted archive. */
+        private const val ENCRYPTED_MAGIC = "TABSSH_SYNC_V3"
     }
 
     data class ValidationResult(
@@ -33,11 +40,13 @@ class BackupValidator {
         if (metadata == null) {
             errors.add("Missing backup metadata")
         } else {
-            // Wire formats supported: v2 (entity-serialised) and v3
-            // (single-JSON .tabssh). Anything newer means the backup was
-            // produced by a future build we don't know yet.
-            if (metadata.version > 3) {
-                errors.add("Unsupported backup version: ${metadata.version}")
+            // One writer, one reader, one version. Anything else — older or
+            // newer — is not a format this build can read.
+            if (metadata.version != BackupManager.BACKUP_VERSION) {
+                errors.add(
+                    "Unsupported backup format: version ${metadata.version} " +
+                        "(this build reads version ${BackupManager.BACKUP_VERSION} only)"
+                )
             }
         }
 
@@ -82,14 +91,10 @@ class BackupValidator {
 
         try {
             val json = JSONObject(data)
-            // v2 wraps every entity list under "items"; v1 used the table-plural
-            // key ("connections"). Accept either.
-            val arr = when {
-                json.has("items") -> json.getJSONArray("items")
-                json.has("connections") -> json.getJSONArray("connections")
-                else -> { errors.add("Missing items array in connections.json"); null }
-            }
-            if (arr != null) {
+            val arr = json.optJSONArray("items")
+            if (arr == null) {
+                errors.add("Missing items array in connections.json")
+            } else {
                 for (i in 0 until arr.length()) {
                     val connection = arr.getJSONObject(i)
                     if (!connection.has("id")) errors.add("Connection at index $i missing id")
@@ -97,21 +102,15 @@ class BackupValidator {
                     if (!connection.has("host")) errors.add("Connection at index $i missing host")
                     if (!connection.has("port")) errors.add("Connection at index $i missing port")
                     if (!connection.has("username")) errors.add("Connection at index $i missing username")
-                    if (!connection.has("authType") && !connection.has("auth_type"))
-                        errors.add("Connection at index $i missing authType")
+                    if (!connection.has("authType")) errors.add("Connection at index $i missing authType")
 
                     val port = connection.optInt("port", -1)
                     if (port < 1 || port > 65535) {
                         errors.add("Connection at index $i has invalid port: $port")
                     }
-                    // v2 ConnectionProfile.authType stores AuthType.name
-                    // (PASSWORD/PUBLIC_KEY/...); v1 used SSH wire names.
-                    val authType = connection.optString("authType",
-                        connection.optString("auth_type", ""))
-                    val ok = authType in listOf(
-                        "password", "publickey", "keyboard-interactive",
-                        "PASSWORD", "PUBLIC_KEY", "KEYBOARD_INTERACTIVE"
-                    )
+                    // ConnectionProfile.authType stores AuthType.name.
+                    val authType = connection.optString("authType", "")
+                    val ok = authType in io.github.tabssh.ssh.auth.AuthType.entries.map { it.name }
                     if (!ok) warnings.add("Connection at index $i has unknown authType: $authType")
                 }
             }
@@ -129,12 +128,10 @@ class BackupValidator {
 
         try {
             val json = JSONObject(data)
-            val arr = when {
-                json.has("items") -> json.getJSONArray("items")
-                json.has("keys") -> json.getJSONArray("keys")
-                else -> { errors.add("Missing items array in keys.json"); null }
-            }
-            if (arr != null) {
+            val arr = json.optJSONArray("items")
+            if (arr == null) {
+                errors.add("Missing items array in keys.json")
+            } else {
                 for (i in 0 until arr.length()) {
                     val key = arr.getJSONObject(i)
                     if (!key.has("keyId")) errors.add("Key at index $i missing keyId")
@@ -203,22 +200,16 @@ class BackupValidator {
 
         try {
             val json = JSONObject(data)
-            val arr = when {
-                json.has("items") -> json.getJSONArray("items")
-                json.has("themes") -> json.getJSONArray("themes")
-                else -> { warnings.add("No themes found in backup"); null }
-            }
-            if (arr != null) {
+            val arr = json.optJSONArray("items")
+            if (arr == null) {
+                warnings.add("No themes found in backup")
+            } else {
                 for (i in 0 until arr.length()) {
                     val theme = arr.getJSONObject(i)
-                    // v2 entity uses `themeId`; v1 hand-rolled used `id`.
-                    if (!theme.has("themeId") && !theme.has("id"))
-                        errors.add("Theme at index $i missing themeId")
+                    if (!theme.has("themeId")) errors.add("Theme at index $i missing themeId")
                     if (!theme.has("name")) errors.add("Theme at index $i missing name")
                     if (!theme.has("isDark")) errors.add("Theme at index $i missing isDark")
-                    // v2 carries ansiColors directly; v1 used themeData.
-                    if (!theme.has("ansiColors") && !theme.has("themeData"))
-                        warnings.add("Theme at index $i missing ansiColors")
+                    if (!theme.has("ansiColors")) warnings.add("Theme at index $i missing ansiColors")
                 }
             }
         } catch (e: Exception) {
@@ -230,25 +221,17 @@ class BackupValidator {
     }
 
     /**
-     * Check whether a v3 backup file is encrypted.
+     * Check whether a backup file is encrypted.
      *
-     * v3 backups produced by [BackupManager] are either plain UTF-8 JSON or
-     * an AES-GCM ciphertext with a `TABSSH_SYNC_V*` magic header — `V2` for
-     * legacy files, `V3` for current ones (see
-     * [io.github.tabssh.sync.encryption.SyncEncryptor]). The previous
-     * heuristic — "fails to parse as JSON and matches a base64 regex" —
-     * never matched because SyncEncryptor's output is raw binary, not
-     * base64, so any encrypted backup was misreported as plaintext.
-     * Accepts both the raw byte form (preferred) and the legacy
-     * String-decoded form for callers that still pass a `String` view.
+     * A backup produced by [BackupManager] is either plain UTF-8 JSON or an
+     * AES-GCM ciphertext carrying the [ENCRYPTED_MAGIC] header written by
+     * [io.github.tabssh.sync.encryption.SyncEncryptor]. That output is raw
+     * binary, so the check must be made on the bytes — a String view would
+     * mangle them.
      */
     fun isBackupEncrypted(data: ByteArray): Boolean {
-        if (data.size < 13) return false
-        return String(data, 0, 13, Charsets.ISO_8859_1) == "TABSSH_SYNC_V"
-    }
-
-    fun isBackupEncrypted(data: String): Boolean {
-        return isBackupEncrypted(data.toByteArray(Charsets.ISO_8859_1))
+        if (data.size < ENCRYPTED_MAGIC.length) return false
+        return String(data, 0, ENCRYPTED_MAGIC.length, Charsets.ISO_8859_1) == ENCRYPTED_MAGIC
     }
 
     /**

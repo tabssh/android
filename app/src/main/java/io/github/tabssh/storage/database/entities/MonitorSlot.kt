@@ -131,7 +131,11 @@ data class MonitorSlot(
     /** Number of consecutive failed probes since the last success.
      *  Resets to 0 on the first successful probe. */
     @ColumnInfo(name = "consecutive_failures")
-    val consecutiveFailures: Int = 0
+    val consecutiveFailures: Int = 0,
+
+    /** Last local modification time, used for sync last-write-wins comparisons. */
+    @ColumnInfo(name = "modified_at")
+    val modifiedAt: Long = 0
 ) {
     /** Interval clamped to the range Android WorkManager will actually honour.
      *  Minimum 15 min (system PeriodicWork floor for background work);

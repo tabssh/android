@@ -75,11 +75,13 @@ class ConnectionsFragment : Fragment() {
     private var currentSearchQuery = ""
     private var currentSortOption = SortOption.NAME_ASC
     private var currentGroupSortOption = GroupSortOption.NAME_ASC
-    private var useGroupedView = true // Default to grouped view
+    // Default to grouped view
+    private var useGroupedView = true
 
     // Multi-select mode
     private var isSelectionMode = false
-    private val selectedConnections = mutableSetOf<String>() // Connection IDs
+    // Connection IDs
+    private val selectedConnections = mutableSetOf<String>()
 
     enum class SortOption(val displayName: String) {
         NAME_ASC("Name (A-Z)"),

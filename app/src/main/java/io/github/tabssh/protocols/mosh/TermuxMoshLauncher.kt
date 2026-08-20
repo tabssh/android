@@ -72,8 +72,10 @@ object TermuxMoshLauncher {
         val moshFile = File(MOSH_CLIENT_PATH)
         return when {
             moshFile.canExecute() -> Status.Ready
-            moshFile.exists() -> Status.Ready // exists but not executable from our UID — Termux can still run it
-            else -> Status.Unknown // most likely; SELinux blocks the existence check
+            // exists but not executable from our UID — Termux can still run it
+            moshFile.exists() -> Status.Ready
+            // most likely; SELinux blocks the existence check
+            else -> Status.Unknown
         }
     }
 
@@ -115,7 +117,8 @@ object TermuxMoshLauncher {
             )
             putExtra(
                 "com.termux.RUN_COMMAND_BACKGROUND",
-                false // foreground — show in Termux's terminal
+                // foreground — show in Termux's terminal
+                false
             )
             // SESSION_ACTION 0 = open new session and switch to it.
             putExtra("com.termux.RUN_COMMAND_SESSION_ACTION", "0")

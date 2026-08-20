@@ -47,5 +47,10 @@ data class ComposeStack(
     val createdAt: Long = System.currentTimeMillis(),
 
     @ColumnInfo(name = "updated_at")
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+
+    /** Last local modification time, used for sync last-write-wins comparisons.
+     *  Distinct from [updatedAt], which tracks the last-fetched status cache. */
+    @ColumnInfo(name = "modified_at")
+    val modifiedAt: Long = 0
 )

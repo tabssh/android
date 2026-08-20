@@ -328,7 +328,8 @@ class ThemeEditorActivity : AppCompatActivity() {
             return
         }
         val theme = Theme(
-            id = "",  // ThemeManager.saveCustomTheme assigns
+            // ThemeManager.saveCustomTheme assigns
+            id = "",
             name = name,
             author = "user",
             isDark = isDark,

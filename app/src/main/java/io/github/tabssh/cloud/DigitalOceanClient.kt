@@ -62,7 +62,8 @@ class DigitalOceanClient : CloudProvider {
                         name = name,
                         host = ip,
                         port = 22,
-                        username = "root", // DO defaults to root; user can edit
+                        // DO defaults to root; user can edit
+                        username = "root",
                         authType = "password",
                         groupId = null,
                         advancedSettings = """{"cloud_source":"digitalocean:$accountName","cloud_region":"$region"}""",

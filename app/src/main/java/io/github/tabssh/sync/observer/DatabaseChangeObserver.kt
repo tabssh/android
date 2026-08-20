@@ -18,7 +18,8 @@ class DatabaseChangeObserver(private val context: Context) {
 
     companion object {
         private const val TAG = "DatabaseChangeObserver"
-        private const val DEBOUNCE_DELAY = 30_000L // 30 seconds
+        // 30 seconds
+        private const val DEBOUNCE_DELAY = 30_000L
     }
 
     private val database = TabSSHDatabase.getDatabase(context)

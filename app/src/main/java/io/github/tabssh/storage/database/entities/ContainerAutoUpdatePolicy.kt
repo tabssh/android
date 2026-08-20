@@ -59,5 +59,9 @@ data class ContainerAutoUpdatePolicy(
 
     /** Digest of a newer image seen upstream but not yet applied. NULL = up to date. */
     @ColumnInfo(name = "pending_update_digest")
-    val pendingUpdateDigest: String? = null
+    val pendingUpdateDigest: String? = null,
+
+    /** Last local modification time, used for sync last-write-wins comparisons. */
+    @ColumnInfo(name = "modified_at")
+    val modifiedAt: Long = 0
 )

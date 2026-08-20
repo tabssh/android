@@ -48,7 +48,8 @@ class ConsoleWebSocketClient(
         // app-layer Proxmox keepalive every 5 s — see startKeepalive().
         private const val PING_INTERVAL_SECONDS = 10L
         private const val CONNECT_TIMEOUT_SECONDS = 30L
-        private const val READ_TIMEOUT_SECONDS = 0L // No timeout for console
+        // No timeout for console
+        private const val READ_TIMEOUT_SECONDS = 0L
         private const val PROXMOX_KEEPALIVE_INTERVAL_MS = 5_000L
 
         /**
@@ -71,11 +72,16 @@ class ConsoleWebSocketClient(
     }
 
     enum class ConsoleProtocol {
-        PROXMOX_TERM,  // Proxmox termproxy - uses "0:LENGTH:MSG" format
-        PROXMOX_VNC,   // Proxmox vncproxy - RFB protocol
-        XCPNG,         // XCP-ng console - raw bytes
-        XO,            // Xen Orchestra - raw bytes
-        VMWARE,        // VMware VMRC - raw bytes
+        // Proxmox termproxy - uses "0:LENGTH:MSG" format
+        PROXMOX_TERM,
+        // Proxmox vncproxy - RFB protocol
+        PROXMOX_VNC,
+        // XCP-ng console - raw bytes
+        XCPNG,
+        // Xen Orchestra - raw bytes
+        XO,
+        // VMware VMRC - raw bytes
+        VMWARE,
         // Generic RFB tunnelled over a plain WebSocket (e.g. websockify,
         // noVNC-style ws://host:port/websockify, or any VNC server fronted
         // by a binary WS upgrader). Identical wire semantics to PROXMOX_VNC
@@ -342,7 +348,8 @@ class ConsoleWebSocketClient(
                                 Logger.d(TAG, "$protocol: ignoring text frame, RFB is binary-only (${text.length} chars)")
                                 return@onMessage
                             }
-                            else -> text // Raw text for other protocols
+                            // Raw text for other protocols
+                            else -> text
                         }
 
                         val bytesWritten = actualData.toByteArray(Charsets.UTF_8)

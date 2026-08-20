@@ -552,9 +552,11 @@ class KeyStorage(private val context: Context) {
         return when (keyType) {
             KeyType.ED25519 -> {
                 val pkInfo = PrivateKeyInfo.getInstance(privateKey.encoded)
-                val seed   = (pkInfo.parsePrivateKey() as ASN1OctetString).octets // 32 bytes
+                // 32 bytes
+                val seed   = (pkInfo.parsePrivateKey() as ASN1OctetString).octets
                 val spki   = SubjectPublicKeyInfo.getInstance(publicKey.encoded)
-                val pubPt  = spki.publicKeyData.bytes // 32 bytes
+                // 32 bytes
+                val pubPt  = spki.publicKeyData.bytes
                 buildOpenSSHEd25519(seed, pubPt)
             }
             else -> {
@@ -589,15 +591,18 @@ class KeyStorage(private val context: Context) {
 
         // Private section (no encryption → cipher=none, block_size=8)
         val checkInt = (System.nanoTime() and 0xFFFFFFFFL).toInt()
-        var priv = u32(checkInt) + u32(checkInt)     // check1 + check2
+        // check1 + check2
+        var priv = u32(checkInt) + u32(checkInt)
         priv += sshStr("ssh-ed25519") + sshBytes(pubPt) + sshBytes(seed + pubPt) + sshStr("")
         // Padding: 0x01 0x02 … until length % 8 == 0
         var pad = 1; while (priv.size % 8 != 0) { priv += byteArrayOf(pad++.toByte()) }
 
         // Assemble the file
         var out = "openssh-key-v1\u0000".toByteArray(Charsets.US_ASCII)
-        out += sshStr("none") + sshStr("none") + u32(0) // cipher / kdf / kdf_options
-        out += u32(1)                                    // number of keys
+        // cipher / kdf / kdf_options
+        out += sshStr("none") + sshStr("none") + u32(0)
+        // number of keys
+        out += u32(1)
         out += sshBytes(pubBlob)
         out += sshBytes(priv)
 
@@ -621,7 +626,8 @@ class KeyStorage(private val context: Context) {
      */
     fun importKeyFromBackup(keyId: String, jschBytes: ByteArray): Boolean {
         return try {
-            createKeyEncryptionKey(keyId)   // idempotent — returns existing key if present
+            // Idempotent — returns existing key if present
+            createKeyEncryptionKey(keyId)
             storeJSchBytes(keyId, jschBytes)
             Logger.i("KeyStorage", "Restored key material from backup: $keyId")
             true
@@ -834,7 +840,7 @@ class KeyStorage(private val context: Context) {
                     "RSA" -> KeyType.RSA
                     "DSA" -> KeyType.DSA
                     "EC" -> KeyType.ECDSA
-                    else -> KeyType.RSA // Default fallback
+                    else -> KeyType.RSA
                 }
             }
         }
@@ -1191,7 +1197,8 @@ Error: ${e.javaClass.simpleName}: ${e.message}"""
     }
 
     private fun opensshWireMPInt(n: java.math.BigInteger): ByteArray {
-        val b = n.toByteArray()   // two's-complement big-endian, with sign byte if needed
+        // Two's-complement big-endian, with sign byte if needed
+        val b = n.toByteArray()
         return java.nio.ByteBuffer.allocate(4 + b.size).putInt(b.size).put(b).array()
     }
 
@@ -1230,7 +1237,8 @@ Error: ${e.javaClass.simpleName}: ${e.message}"""
             val raw = n.toByteArray()
             return when {
                 raw.size == fieldLen     -> raw
-                raw.size == fieldLen + 1 -> raw.copyOfRange(1, raw.size)  // strip sign byte
+                // Strip sign byte
+                raw.size == fieldLen + 1 -> raw.copyOfRange(1, raw.size)
                 else                     -> ByteArray(fieldLen - raw.size) + raw
             }
         }

@@ -1,11 +1,19 @@
 package io.github.tabssh.ui.tabs
 
+import android.content.Context
+import androidx.preference.PreferenceManager
+import com.jcraft.jsch.Channel
+import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.protocols.mosh.MoshNativeClient.Session
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.ssh.connection.ConnectionState
+import io.github.tabssh.ssh.connection.TelnetConnection
 import io.github.tabssh.terminal.TermuxBridge
 import io.github.tabssh.terminal.TermuxBridgeListener
+import io.github.tabssh.terminal.recording.SessionRecorder
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -17,6 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Represents a single SSH tab with its connection, terminal, and UI state.
@@ -53,18 +62,18 @@ class SSHTab(
     // (resize/PTY size), and cleared from disconnect() that may be invoked
     // from either thread.
     @Volatile
-    private var ownChannel: com.jcraft.jsch.Channel? = null
+    private var ownChannel: Channel? = null
 
     // Wave 2.3 — telnet alternative. Only one of `connection` / `telnetConnection`
     // is set; gesture command sending and clean disconnect both check both.
     @Volatile
-    var telnetConnection: io.github.tabssh.ssh.connection.TelnetConnection? = null
+    var telnetConnection: TelnetConnection? = null
 
     // Wave 9.2 — bundled native mosh-client session. Lives in parallel to
     // (or in place of) the SSH session; mosh-server detaches from its
     // bootstrap SSH and roams independently after start.
     @Volatile
-    var moshSession: io.github.tabssh.protocols.mosh.MoshNativeClient.Session? = null
+    var moshSession: Session? = null
 
     // Mosh only carries terminal I/O over its own UDP transport, never X11.
     // When the profile requests X11 forwarding on a mosh tab, connectMosh()
@@ -118,13 +127,13 @@ class SSHTab(
     // volatile fields — a volatile Long makes ++ no safer than a plain field.
     @Volatile
     private var sessionStartTime: Long = 0
-    private val bytesReceived = java.util.concurrent.atomic.AtomicLong(0)
-    private val bytesSent = java.util.concurrent.atomic.AtomicLong(0)
+    private val bytesReceived = AtomicLong(0)
+    private val bytesSent = AtomicLong(0)
 
     // Session recording. Assigning a recorder installs the bridge's raw-output
     // sink; without this the recorder wrote only its header and footer because
     // nothing ever fed it session output.
-    var sessionRecorder: io.github.tabssh.terminal.recording.SessionRecorder? = null
+    var sessionRecorder: SessionRecorder? = null
         set(value) {
             field = value
             termuxBridge.outputRecorder = if (value == null) {
@@ -148,8 +157,8 @@ class SSHTab(
      * Also writable by the host activity when the user explicitly selects a
      * multiplexer type via the PREFIX-key picker dialog.
      */
-    private val _activeMultiplexerType = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
-    val activeMultiplexerTypeFlow: kotlinx.coroutines.flow.StateFlow<String?> =
+    private val _activeMultiplexerType = MutableStateFlow<String?>(null)
+    val activeMultiplexerTypeFlow: StateFlow<String?> =
         _activeMultiplexerType.asStateFlow()
 
     /** Convenience getter for cases that don't need the flow. */
@@ -219,8 +228,8 @@ class SSHTab(
     )
 
     private val _multiplexerAskRequest =
-        kotlinx.coroutines.flow.MutableStateFlow<MultiplexerAskRequest?>(null)
-    val multiplexerAskRequestFlow: kotlinx.coroutines.flow.StateFlow<MultiplexerAskRequest?> =
+        MutableStateFlow<MultiplexerAskRequest?>(null)
+    val multiplexerAskRequestFlow: StateFlow<MultiplexerAskRequest?> =
         _multiplexerAskRequest.asStateFlow()
 
     init {
@@ -297,7 +306,7 @@ class SSHTab(
                                 } else {
                                     Logger.e("SSHTab", "SourceForge reconnect: failed to open shell channel")
                                 }
-                            } catch (e: kotlinx.coroutines.CancellationException) {
+                            } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
                                 _hasError.value = true
@@ -482,7 +491,7 @@ class SSHTab(
                             "Session reconnected — opening fresh shell channel for ${profile.getDisplayName()}")
                         try {
                             rewireShellChannel(sshConnection)
-                        } catch (e: kotlinx.coroutines.CancellationException) {
+                        } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
                             Logger.w("SSHTab", "Auto-recovery shell open failed: ${e.message}")
@@ -534,9 +543,9 @@ class SSHTab(
                 // greeting/PS1 before we inject anything.
                 connectionScope.launch {
                     try {
-                        kotlinx.coroutines.delay(500)
+                        delay(500)
                         runPostConnectCommands()
-                    } catch (e: kotlinx.coroutines.CancellationException) {
+                    } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         Logger.w("SSHTab", "post-connect script failed: ${e.message}")
@@ -550,7 +559,7 @@ class SSHTab(
                 false
             }
 
-        } catch (e: kotlinx.coroutines.CancellationException) {
+        } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Logger.e("SSHTab", "ERROR connecting tab ${profile.getDisplayName()}", e)
@@ -601,9 +610,9 @@ class SSHTab(
         // we inject commands.
         connectionScope.launch {
             try {
-                kotlinx.coroutines.delay(500)
+                delay(500)
                 runPostConnectCommands()
-            } catch (e: kotlinx.coroutines.CancellationException) {
+            } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Logger.w("SSHTab", "post-connect script failed on rewire: ${e.message}")
@@ -619,7 +628,7 @@ class SSHTab(
      * directly into TermuxBridge and drive state manually (Telnet has no
      * fine-grained CONNECTED/AUTHENTICATING phases — it's just connected).
      */
-    suspend fun connect(telnet: io.github.tabssh.ssh.connection.TelnetConnection): Boolean {
+    suspend fun connect(telnet: TelnetConnection): Boolean {
         return try {
             Logger.i("SSHTab", "=== CONNECTING TELNET TAB for ${profile.getDisplayName()} ===")
             telnetConnection = telnet
@@ -637,7 +646,7 @@ class SSHTab(
             telnet.setWindowSize(termuxBridge.getCols(), termuxBridge.getRows())
             Logger.i("SSHTab", "=== TELNET TAB WIRED for ${profile.getDisplayName()} ===")
             true
-        } catch (e: kotlinx.coroutines.CancellationException) {
+        } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Logger.e("SSHTab", "ERROR connecting telnet tab ${profile.getDisplayName()}", e)
@@ -658,7 +667,7 @@ class SSHTab(
      * immediately and listens on UDP independently.
      */
     suspend fun connectMosh(
-        context: android.content.Context,
+        context: Context,
         host: String,
         port: Int,
         moshKeyBase64: String
@@ -718,7 +727,7 @@ class SSHTab(
             updateTitleWithStatus(ConnectionState.CONNECTED)
             Logger.i("SSHTab", "=== MOSH TAB WIRED (PTY) for ${profile.getDisplayName()} ===")
             true
-        } catch (e: kotlinx.coroutines.CancellationException) {
+        } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Logger.e("SSHTab", "ERROR connecting mosh tab ${profile.getDisplayName()}", e)
@@ -741,11 +750,11 @@ class SSHTab(
      * so the disconnect survives connectionScope.cancel() in cleanup().
      */
     private fun disconnectBootstrapSession(bootstrap: SSHConnection) {
-        val appScope = (bootstrap.context.applicationContext as? io.github.tabssh.TabSSHApplication)?.applicationScope
+        val appScope = (bootstrap.context.applicationContext as? TabSSHApplication)?.applicationScope
         val block: suspend () -> Unit = {
             try {
                 bootstrap.disconnect()
-            } catch (e: kotlinx.coroutines.CancellationException) {
+            } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Logger.d("SSHTab", "mosh bootstrap disconnect suppressed: ${e.message}")
@@ -977,12 +986,12 @@ class SSHTab(
         }
 
         if (profile.multiplexerMode != "OFF") {
-            val app = try { io.github.tabssh.TabSSHApplication.get() } catch (_: Exception) { null }
+            val app = try { TabSSHApplication.get() } catch (_: Exception) { null }
             // A pinned per-connection type also drives auto-launch; "off"
             // only disables the PRE key, not the profile's auto-launch mode.
             val type = multiplexerOverride?.takeIf { it != "off" }
                 ?: app?.let {
-                    androidx.preference.PreferenceManager
+                    PreferenceManager
                         .getDefaultSharedPreferences(it)
                         .getString("gesture_multiplexer_type", "tmux")
                 } ?: "tmux"
@@ -1168,7 +1177,7 @@ class SSHTab(
                     Logger.i("SSHTab", "Multiplexer detached (none found in env)")
             }
             detected
-        } catch (e: kotlinx.coroutines.CancellationException) {
+        } catch (e: CancellationException) {
             // Cancelling the detection loop must not be reported as a probe
             // failure, or the job stays alive past stopMultiplexerDetection().
             throw e
@@ -1201,7 +1210,7 @@ class SSHTab(
         return try {
             val raw = conn.executeCommand(cmd, timeoutMs = 5000L)
             parseMultiplexerSessions(type, raw)
-        } catch (e: kotlinx.coroutines.CancellationException) {
+        } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
             emptyList()
@@ -1440,7 +1449,8 @@ class SSHTab(
         sessionRecorder?.stopRecording()
         sessionRecorder = null
         termuxBridge.cleanup()
-        connectionScope.cancel() // Cancel all coroutines
+        // Cancel all coroutines
+        connectionScope.cancel()
     }
 
     override fun equals(other: Any?): Boolean {

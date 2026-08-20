@@ -420,20 +420,20 @@ class MultiRowKeyboardView @JvmOverloads constructor(
         val backKey = KeyboardKey("FN", "← Back", "", KeyboardKey.KeyCategory.MODIFIER)
         val fnRow1 = listOf(
             backKey,
-            KeyboardKey("F1", "F1", "OP", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F2", "F2", "OQ", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F3", "F3", "OR", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F4", "F4", "OS", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F5", "F5", "[15~", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F6", "F6", "[17~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F1", "F1", "\u001bOP", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F2", "F2", "\u001bOQ", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F3", "F3", "\u001bOR", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F4", "F4", "\u001bOS", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F5", "F5", "\u001b[15~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F6", "F6", "\u001b[17~", KeyboardKey.KeyCategory.FUNCTION),
         )
         val fnRow2 = listOf(
-            KeyboardKey("F7", "F7", "[18~", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F8", "F8", "[19~", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F9", "F9", "[20~", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F10", "F10", "[21~", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F11", "F11", "[23~", KeyboardKey.KeyCategory.FUNCTION),
-            KeyboardKey("F12", "F12", "[24~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F7", "F7", "\u001b[18~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F8", "F8", "\u001b[19~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F9", "F9", "\u001b[20~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F10", "F10", "\u001b[21~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F11", "F11", "\u001b[23~", KeyboardKey.KeyCategory.FUNCTION),
+            KeyboardKey("F12", "F12", "\u001b[24~", KeyboardKey.KeyCategory.FUNCTION),
         )
 
         // Show first two rows of F-keys, blank any extras.
@@ -579,20 +579,20 @@ class MultiRowKeyboardView @JvmOverloads constructor(
             val ctl   = KeyboardKey("CTL",   "CTL",  "", KeyboardKey.KeyCategory.MODIFIER, 1.5f)
             val tab   = KeyboardKey("TAB",   "TAB",  "\t", widthMultiplier = 1.5f)
             val ent   = KeyboardKey("ENTER", "ENT",  "\r", widthMultiplier = 1.5f)
-            val esc   = KeyboardKey("ESC",   "ESC",  "", widthMultiplier = 1.5f)
+            val esc   = KeyboardKey("ESC",   "ESC",  "\u001b", widthMultiplier = 1.5f)
             val alt   = KeyboardKey("ALT",   "ALT",  "", KeyboardKey.KeyCategory.MODIFIER)
             val sft   = KeyboardKey("SFT",   "SFT",  "", KeyboardKey.KeyCategory.MODIFIER)
             val fn    = KeyboardKey("FN",    "FN",   "", KeyboardKey.KeyCategory.MODIFIER)
-            val up    = KeyboardKey("UP",    "↑",    "[A", KeyboardKey.KeyCategory.ARROW)
-            val down  = KeyboardKey("DOWN",  "↓",    "[B", KeyboardKey.KeyCategory.ARROW)
-            val left  = KeyboardKey("LEFT",  "←",    "[D", KeyboardKey.KeyCategory.ARROW)
-            val right = KeyboardKey("RIGHT", "→",    "[C", KeyboardKey.KeyCategory.ARROW)
+            val up    = KeyboardKey("UP",    "↑",    "\u001b[A", KeyboardKey.KeyCategory.ARROW)
+            val down  = KeyboardKey("DOWN",  "↓",    "\u001b[B", KeyboardKey.KeyCategory.ARROW)
+            val left  = KeyboardKey("LEFT",  "←",    "\u001b[D", KeyboardKey.KeyCategory.ARROW)
+            val right = KeyboardKey("RIGHT", "→",    "\u001b[C", KeyboardKey.KeyCategory.ARROW)
             val colon = KeyboardKey("COLON", ":",    ":",          KeyboardKey.KeyCategory.SYMBOL)
             val slash = KeyboardKey("SLASH", "/",    "/",          KeyboardKey.KeyCategory.SYMBOL)
-            val home  = KeyboardKey("HOME",  "HOME", "[1~")
-            val end   = KeyboardKey("END",   "END",  "[4~")
-            val pgup  = KeyboardKey("PGUP",  "PGUP", "[5~")
-            val pgdn  = KeyboardKey("PGDN",  "PGDN", "[6~")
+            val home  = KeyboardKey("HOME",  "HOME", "\u001b[1~")
+            val end   = KeyboardKey("END",   "END",  "\u001b[4~")
+            val pgup  = KeyboardKey("PGUP",  "PGUP", "\u001b[5~")
+            val pgdn  = KeyboardKey("PGDN",  "PGDN", "\u001b[6~")
             val clip   = KeyboardKey("CLIPBOARD", "📋", "", KeyboardKey.KeyCategory.ACTION)
             // PREFIX(2×): sends the current multiplexer prefix (C-b / C-a / C-g).
             // Placed at the start of row3 so it sits directly under ENT on row2,
@@ -625,22 +625,22 @@ class MultiRowKeyboardView @JvmOverloads constructor(
 
             // Row 4 (layouts ≥ 4): F1-F6
             val row4 = listOf(
-                KeyboardKey("F1",  "F1",  "OP",   KeyboardKey.KeyCategory.FUNCTION),
-                KeyboardKey("F2",  "F2",  "OQ",   KeyboardKey.KeyCategory.FUNCTION),
-                KeyboardKey("F3",  "F3",  "OR",   KeyboardKey.KeyCategory.FUNCTION),
-                KeyboardKey("F4",  "F4",  "OS",   KeyboardKey.KeyCategory.FUNCTION),
-                KeyboardKey("F5",  "F5",  "[15~", KeyboardKey.KeyCategory.FUNCTION),
-                KeyboardKey("F6",  "F6",  "[17~", KeyboardKey.KeyCategory.FUNCTION)
+                KeyboardKey("F1",  "F1",  "\u001bOP",   KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F2",  "F2",  "\u001bOQ",   KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F3",  "F3",  "\u001bOR",   KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F4",  "F4",  "\u001bOS",   KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F5",  "F5",  "\u001b[15~", KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F6",  "F6",  "\u001b[17~", KeyboardKey.KeyCategory.FUNCTION)
             )
 
             // Row 5 (layout 5 only): F7-F12
             val row5 = listOf(
-                KeyboardKey("F7",  "F7",  "[18~", KeyboardKey.KeyCategory.FUNCTION),
-                KeyboardKey("F8",  "F8",  "[19~", KeyboardKey.KeyCategory.FUNCTION),
-                KeyboardKey("F9",  "F9",  "[20~", KeyboardKey.KeyCategory.FUNCTION),
-                KeyboardKey("F10", "F10", "[21~", KeyboardKey.KeyCategory.FUNCTION),
-                KeyboardKey("F11", "F11", "[23~", KeyboardKey.KeyCategory.FUNCTION),
-                KeyboardKey("F12", "F12", "[24~", KeyboardKey.KeyCategory.FUNCTION)
+                KeyboardKey("F7",  "F7",  "\u001b[18~", KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F8",  "F8",  "\u001b[19~", KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F9",  "F9",  "\u001b[20~", KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F10", "F10", "\u001b[21~", KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F11", "F11", "\u001b[23~", KeyboardKey.KeyCategory.FUNCTION),
+                KeyboardKey("F12", "F12", "\u001b[24~", KeyboardKey.KeyCategory.FUNCTION)
             )
 
             return when (rowCount) {

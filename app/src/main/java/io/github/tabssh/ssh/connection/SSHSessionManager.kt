@@ -308,7 +308,8 @@ class SSHSessionManager(private val context: Context) {
                 Logger.w("SSHSessionManager", "disconnect() threw for $profileId — continuing cleanup", e)
             }
             activeConnections.remove(profileId)
-            connectionPool.remove(profileId) // Also remove from pool
+            // Also remove from pool
+            connectionPool.remove(profileId)
             updateConnectionStates()
 
             Logger.i("SSHSessionManager", "Closed connection: $profileId")

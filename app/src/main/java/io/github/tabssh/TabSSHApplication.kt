@@ -37,6 +37,8 @@ class TabSSHApplication : Application() {
         // "Enable PRE Key" toggle — see migrateLegacyPrefixKeyPref().
         private const val KEY_PRE_KEY_GLOBAL_MIGRATED = "pre_key_global_migrated"
         private const val KEY_INLINE_PROXY_ROUTE_MIGRATED = "inline_proxy_route_migrated"
+        private const val KEY_CONNECTION_PASSWORDS_MIGRATED = "connection_passwords_keystore_migrated"
+        private const val KEY_OCI_ACCOUNT_SECRETS_MIGRATED = "oci_account_secrets_migrated"
         private const val LEGACY_KEY_PREFIX_KEY_ENABLED = "terminal_prefix_key_enabled"
 
         // Intent extras used to pass crash data directly to CrashReportActivity.
@@ -59,9 +61,14 @@ class TabSSHApplication : Application() {
     // Core components - initialized lazily
     val database by lazy { TabSSHDatabase.getDatabase(this) }
     val preferencesManager by lazy { PreferenceManager(this) }
-    val securePasswordManager by lazy { SecurePasswordManager(this) }
+    // Held as an explicit Lazy so teardown can ask whether it was ever built:
+    // touching it from onTerminate() would otherwise open the Android Keystore
+    // just to clear data that was never created
+    private val securePasswordManagerLazy = lazy { SecurePasswordManager(this) }
+    val securePasswordManager: SecurePasswordManager by securePasswordManagerLazy
     val keyStorage by lazy { KeyStorage(this) }
-    val sshSessionManager by lazy { SSHSessionManager(this) }
+    private val sshSessionManagerLazy = lazy { SSHSessionManager(this) }
+    val sshSessionManager: SSHSessionManager by sshSessionManagerLazy
     val terminalManager by lazy { TerminalManager(this) }
     val themeManager by lazy { ThemeManager(this) }
     val performanceManager by lazy { PerformanceManager(this) }
@@ -72,9 +79,11 @@ class TabSSHApplication : Application() {
     }
     val auditLogManager by lazy { io.github.tabssh.audit.AuditLogManager(this, database, preferencesManager) }
     val tabManager by lazy { io.github.tabssh.ui.tabs.TabManager(database) }
-    val sessionPersistenceManager by lazy {
+    private val sessionPersistenceManagerLazy = lazy {
         io.github.tabssh.background.SessionPersistenceManager(this, tabManager)
     }
+    val sessionPersistenceManager: io.github.tabssh.background.SessionPersistenceManager
+        by sessionPersistenceManagerLazy
     /** App-wide network state observer. Single instance so every connection
      *  type (SSH, VNC, Telnet) shares one [ConnectivityManager] callback. */
     val networkDetector by lazy { io.github.tabssh.network.detection.NetworkDetector(this) }
@@ -267,12 +276,15 @@ class TabSSHApplication : Application() {
             // port-forward, multi-host dashboard, SFTP, performance.
             wireGlobalHostKeyCallbacks()
             wireGlobalNotifications()
-            // One-shot sweep: blank any legacy plaintext hypervisors.password
-            // rows now instead of waiting for each row's next retrieve().
+            // Drain the v13->v14 hypervisor password carry-over table into the
+            // Keystore now instead of waiting for each row's next retrieve(),
+            // and drop the table once it is empty.
             io.github.tabssh.crypto.storage.HypervisorPasswordStore
                 .sweepLegacyPlaintext(this@TabSSHApplication)
             migrateLegacyPrefixKeyPref()
             migrateInlineProxiesToRoutes()
+            migratePlaintextConnectionPasswords()
+            migrateProfileKeyedOciSecrets()
             // Re-register periodic sync work on every cold start. WorkManager's
             // DB survives process death but can be wiped by reinstall or system
             // maintenance. Re-registering is idempotent when
@@ -334,6 +346,54 @@ class TabSSHApplication : Application() {
             return
         }
         prefs.edit().putBoolean(KEY_INLINE_PROXY_ROUTE_MIGRATED, true).apply()
+    }
+
+    /**
+     * One-time secret migration: move every plaintext
+     * `password_{connectionId}` value the old backup/sync layer wrote into
+     * the default SharedPreferences file over to the Keystore, then delete
+     * the plaintext key. The runtime SSH path has always read the Keystore
+     * under the bare connection id, so this only reunites the two copies —
+     * it never changes which password authenticates.
+     *
+     * The done-flag is only set once every legacy key is gone, so a Keystore
+     * failure defers the affected entries to the next launch rather than
+     * dropping them.
+     */
+    private suspend fun migratePlaintextConnectionPasswords() {
+        val prefs = getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_CONNECTION_PASSWORDS_MIGRATED, false)) return
+        val complete = try {
+            io.github.tabssh.crypto.storage.LegacySecretMigrations
+                .migratePlaintextConnectionPasswords(
+                    androidx.preference.PreferenceManager.getDefaultSharedPreferences(this),
+                    securePasswordManager
+                )
+        } catch (e: Exception) {
+            Logger.e("TabSSHApplication", "Plaintext connection password migration failed", e)
+            false
+        }
+        if (complete) prefs.edit().putBoolean(KEY_CONNECTION_PASSWORDS_MIGRATED, true).apply()
+    }
+
+    /**
+     * One-time secret migration: move profile-keyed OCI API-key secrets onto
+     * the account-scoped aliases, creating and linking the HypervisorAccount
+     * when the profile has none. Nothing writes the profile-keyed aliases any
+     * more and no read path is left for them, so this is the only way a
+     * dev-build install keeps its OCI key.
+     */
+    private suspend fun migrateProfileKeyedOciSecrets() {
+        val prefs = getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_OCI_ACCOUNT_SECRETS_MIGRATED, false)) return
+        val complete = try {
+            io.github.tabssh.crypto.storage.LegacySecretMigrations
+                .migrateProfileKeyedOciSecrets(database, securePasswordManager)
+        } catch (e: Exception) {
+            Logger.e("TabSSHApplication", "Profile-keyed OCI secret migration failed", e)
+            false
+        }
+        if (complete) prefs.edit().putBoolean(KEY_OCI_ACCOUNT_SECRETS_MIGRATED, true).apply()
     }
 
     private fun wireGlobalNotifications() {
@@ -648,7 +708,8 @@ class TabSSHApplication : Application() {
                         .putString(KEY_LAST_CRASH,   Logger.sanitize(trace))
                         .putString(KEY_CRASH_THREAD, thread.name)
                         .putLong(KEY_CRASH_TIME,     crashTime)
-                        .commit() // synchronous; ignore return value — Intent extras are primary
+                        // synchronous; ignore return value — Intent extras are primary
+                        .commit()
 
                     startActivity(
                         android.content.Intent(
@@ -685,9 +746,18 @@ class TabSSHApplication : Application() {
     override fun onTerminate() {
         Logger.d("TabSSHApplication", "Application terminating...")
 
-        sessionPersistenceManager.cleanup()
-        runBlocking { sshSessionManager.closeAllConnections() }
-        securePasswordManager.clearSensitiveData()
+        // Only tear down what this process actually built — instantiating a
+        // component here would do real work (open the Keystore, start a
+        // persistence worker) on the way out and can fail outright
+        if (sessionPersistenceManagerLazy.isInitialized()) {
+            sessionPersistenceManager.cleanup()
+        }
+        if (sshSessionManagerLazy.isInitialized()) {
+            runBlocking { sshSessionManager.closeAllConnections() }
+        }
+        if (securePasswordManagerLazy.isInitialized()) {
+            securePasswordManager.clearSensitiveData()
+        }
 
         super.onTerminate()
     }

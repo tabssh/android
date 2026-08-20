@@ -372,12 +372,18 @@ object SSHKeyGenerator {
             // Private-section order: n e d iqmp p q  (n BEFORE e, unlike the
             // public-section order which is e n).
             publicKey is RSAPublicKey && privateKey is java.security.interfaces.RSAPrivateCrtKey -> {
-                writeMPInt(buffer, publicKey.modulus)               // n
-                writeMPInt(buffer, publicKey.publicExponent)        // e
-                writeMPInt(buffer, privateKey.privateExponent)      // d
-                writeMPInt(buffer, privateKey.crtCoefficient)       // iqmp
-                writeMPInt(buffer, privateKey.primeP)               // p
-                writeMPInt(buffer, privateKey.primeQ)               // q
+                // n
+                writeMPInt(buffer, publicKey.modulus)
+                // e
+                writeMPInt(buffer, publicKey.publicExponent)
+                // d
+                writeMPInt(buffer, privateKey.privateExponent)
+                // iqmp
+                writeMPInt(buffer, privateKey.crtCoefficient)
+                // p
+                writeMPInt(buffer, privateKey.primeP)
+                // q
+                writeMPInt(buffer, privateKey.primeQ)
             }
             // ── ECDSA ─────────────────────────────────────────────────────────
             // Private-section order: curvename Q d
@@ -391,7 +397,8 @@ object SSHKeyGenerator {
                 writeString(buffer, curveNameSSH.toByteArray(StandardCharsets.UTF_8))
                 val pointBytes = encodeECPoint(publicKey.w, publicKey.params.order.bitLength())
                 writeString(buffer, pointBytes)
-                writeMPInt(buffer, privateKey.s)                    // d (private scalar)
+                // d (private scalar)
+                writeMPInt(buffer, privateKey.s)
             }
             // ── Ed25519 ───────────────────────────────────────────────────────
             // Private-section order: pk  sk
@@ -431,7 +438,8 @@ object SSHKeyGenerator {
         val y = point.affineY.toByteArray()
 
         val result = ByteArray(1 + 2 * coordLength)
-        result[0] = 0x04 // Uncompressed point
+        // Uncompressed point
+        result[0] = 0x04
 
         // Copy X coordinate
         System.arraycopy(

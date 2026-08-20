@@ -112,7 +112,8 @@ class ProxmoxApiClient(
         val mem: Long,
         val maxmem: Long,
         val uptime: Long,
-        val ipAddress: String? = null // IP address from guest agent
+        // IP address from guest agent
+        val ipAddress: String? = null
     )
 
     init {
@@ -289,7 +290,8 @@ class ProxmoxApiClient(
                         val iface = data.getJSONObject(i)
                         val inet = iface.optString("inet").takeIf { it.isNotEmpty() }
                         if (inet != null && !inet.startsWith("127.")) {
-                            return@withContext inet.split("/")[0] // Remove CIDR notation
+                            // Remove CIDR notation
+                            return@withContext inet.split("/")[0]
                         }
                     }
                 }

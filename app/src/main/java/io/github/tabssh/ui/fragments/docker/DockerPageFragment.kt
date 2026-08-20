@@ -10,6 +10,9 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.docker.DockerSessionManager
 import io.github.tabssh.ui.activities.DockerHostManagerActivity
+import io.github.tabssh.utils.coroutines.SingleFlightLoader
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 
@@ -32,6 +35,22 @@ abstract class DockerPageFragment : Fragment() {
 
     /** Called with a ready session on first emission and on every refresh tick. */
     protected abstract fun onSessionReady(session: DockerSessionManager.DockerSession)
+
+    // sessionFlow and refreshFlow can both fire in quick succession (initial
+    // sessionFlow emission racing a refreshFlow tick, or a forced
+    // re-acquire re-emitting) — without tracking the in-flight load, two
+    // concurrent onSessionReady loads race and whichever DockerResult lands
+    // last wins, even if it is the stale one.
+    private val loader = SingleFlightLoader()
+
+    /**
+     * Cancels any load already started through this helper, then runs
+     * [block] as the new one — a subclass's onSessionReady should route its
+     * whole load through this instead of calling
+     * `viewLifecycleOwner.lifecycleScope.launch` directly.
+     */
+    protected fun startLoad(block: suspend CoroutineScope.() -> Unit): Job =
+        loader.launchIn(viewLifecycleOwner.lifecycleScope, block)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)

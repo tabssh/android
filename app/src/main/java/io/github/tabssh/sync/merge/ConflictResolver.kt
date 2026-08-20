@@ -6,29 +6,33 @@ import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HostKeyEntry
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.storage.database.entities.ThemeDefinition
+import io.github.tabssh.sync.log.SyncLogManager
 import io.github.tabssh.sync.models.Conflict
 import io.github.tabssh.sync.models.ConflictResolution
 import io.github.tabssh.sync.models.ConflictResolutionOption
-import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Resolves merge conflicts based on user decisions
+ * Resolves merge conflicts based on user decisions. Every applied resolution
+ * is recorded in the dedicated Sync Log ([SyncLogManager]) — conflict detail
+ * (entity type/id, description) must never reach [io.github.tabssh.utils.logging.Logger].
  */
 class ConflictResolver(
     private val context: Context,
-    private val database: TabSSHDatabase
+    private val database: TabSSHDatabase,
+    private val syncLogManager: SyncLogManager = SyncLogManager(context)
 ) {
 
-    companion object {
-        private const val TAG = "ConflictResolver"
-    }
-
     /**
-     * Apply conflict resolutions
+     * Apply conflict resolutions.
+     *
+     * @param auto true when these resolutions were chosen by the headless
+     *        timestamp-based auto-resolver rather than an explicit user
+     *        choice; recorded as "auto-merged" in the Sync Log instead of
+     *        the specific option, since no human decided it.
      */
-    suspend fun applyResolutions(resolutions: List<ConflictResolution>): ApplyResolutionsResult =
+    suspend fun applyResolutions(resolutions: List<ConflictResolution>, auto: Boolean = false): ApplyResolutionsResult =
         withContext(Dispatchers.IO) {
             var successCount = 0
             val errors = mutableListOf<String>()
@@ -37,15 +41,15 @@ class ConflictResolver(
                 try {
                     applyResolution(resolution)
                     successCount++
-                    Logger.d(TAG, "Applied resolution for ${resolution.conflict.entityType}:${resolution.conflict.entityId}")
+                    if (auto) {
+                        syncLogManager.recordAutoMerged(resolution.conflict)
+                    } else {
+                        syncLogManager.recordResolution(resolution.conflict, resolution.resolution)
+                    }
                 } catch (e: Exception) {
-                    val error = "Failed to apply resolution for ${resolution.conflict.entityType}:${resolution.conflict.entityId}: ${e.message}"
-                    errors.add(error)
-                    Logger.e(TAG, error, e)
+                    errors.add("${resolution.conflict.entityType}: ${e.message}")
                 }
             }
-
-            Logger.d(TAG, "Applied $successCount/${resolutions.size} resolutions")
 
             ApplyResolutionsResult(
                 successCount = successCount,
@@ -66,7 +70,7 @@ class ConflictResolver(
             "theme" -> applyThemeResolution(conflict, resolution.resolution)
             "host_key" -> applyHostKeyResolution(conflict, resolution.resolution)
             "preference" -> applyPreferenceResolution(conflict, resolution.resolution)
-            else -> Logger.w(TAG, "Unknown entity type: ${conflict.entityType}")
+            else -> Unit
         }
     }
 
@@ -79,20 +83,20 @@ class ConflictResolver(
     ) {
         when (option) {
             ConflictResolutionOption.KEEP_LOCAL -> {
-                val local = conflict.localValue as? ConnectionProfile
+                val local = conflict.localEntity as? ConnectionProfile
                 if (local != null) {
                     database.connectionDao().updateConnection(local)
                 }
             }
             ConflictResolutionOption.KEEP_REMOTE -> {
-                val remote = conflict.remoteValue as? ConnectionProfile
+                val remote = conflict.remoteEntity as? ConnectionProfile
                 if (remote != null) {
                     database.connectionDao().updateConnection(remote)
                 }
             }
             ConflictResolutionOption.KEEP_BOTH -> {
-                val local = conflict.localValue as? ConnectionProfile
-                val remote = conflict.remoteValue as? ConnectionProfile
+                val local = conflict.localEntity as? ConnectionProfile
+                val remote = conflict.remoteEntity as? ConnectionProfile
                 if (local != null && remote != null) {
                     val duplicateRemote = remote.copy(
                         id = java.util.UUID.randomUUID().toString(),
@@ -116,20 +120,20 @@ class ConflictResolver(
     ) {
         when (option) {
             ConflictResolutionOption.KEEP_LOCAL -> {
-                val local = conflict.localValue as? StoredKey
+                val local = conflict.localEntity as? StoredKey
                 if (local != null) {
                     database.keyDao().updateKey(local)
                 }
             }
             ConflictResolutionOption.KEEP_REMOTE -> {
-                val remote = conflict.remoteValue as? StoredKey
+                val remote = conflict.remoteEntity as? StoredKey
                 if (remote != null) {
                     database.keyDao().updateKey(remote)
                 }
             }
             ConflictResolutionOption.KEEP_BOTH -> {
-                val local = conflict.localValue as? StoredKey
-                val remote = conflict.remoteValue as? StoredKey
+                val local = conflict.localEntity as? StoredKey
+                val remote = conflict.remoteEntity as? StoredKey
                 if (local != null && remote != null) {
                     val duplicateRemote = remote.copy(
                         keyId = java.util.UUID.randomUUID().toString(),
@@ -153,20 +157,20 @@ class ConflictResolver(
     ) {
         when (option) {
             ConflictResolutionOption.KEEP_LOCAL -> {
-                val local = conflict.localValue as? ThemeDefinition
+                val local = conflict.localEntity as? ThemeDefinition
                 if (local != null) {
                     database.themeDao().updateTheme(local)
                 }
             }
             ConflictResolutionOption.KEEP_REMOTE -> {
-                val remote = conflict.remoteValue as? ThemeDefinition
+                val remote = conflict.remoteEntity as? ThemeDefinition
                 if (remote != null) {
                     database.themeDao().updateTheme(remote)
                 }
             }
             ConflictResolutionOption.KEEP_BOTH -> {
-                val local = conflict.localValue as? ThemeDefinition
-                val remote = conflict.remoteValue as? ThemeDefinition
+                val local = conflict.localEntity as? ThemeDefinition
+                val remote = conflict.remoteEntity as? ThemeDefinition
                 if (local != null && remote != null) {
                     val duplicateRemote = remote.copy(
                         themeId = "${remote.themeId}_remote",
@@ -190,25 +194,22 @@ class ConflictResolver(
     ) {
         when (option) {
             ConflictResolutionOption.KEEP_LOCAL -> {
-                val local = conflict.localValue as? HostKeyEntry
+                val local = conflict.localEntity as? HostKeyEntry
                 if (local != null) {
                     database.hostKeyDao().updateHostKey(local)
                 }
             }
             ConflictResolutionOption.KEEP_REMOTE -> {
-                val remote = conflict.remoteValue as? HostKeyEntry
+                val remote = conflict.remoteEntity as? HostKeyEntry
                 if (remote != null) {
                     database.hostKeyDao().updateHostKey(remote)
                 }
             }
             ConflictResolutionOption.KEEP_BOTH -> {
-                // Not applicable for host keys - use newer
-                val local = conflict.localValue as? HostKeyEntry
-                val remote = conflict.remoteValue as? HostKeyEntry
-                if (local != null && remote != null) {
-                    val newer = if (local.modifiedAt >= remote.modifiedAt) local else remote
-                    database.hostKeyDao().updateHostKey(newer)
-                }
+                // A host can only have one trusted fingerprint — the picker
+                // never offers KEEP_BOTH for host_key (see
+                // Conflict.getResolutionOptions()). Defensive no-op in case a
+                // stale resolution object reaches this path anyway.
             }
             ConflictResolutionOption.SKIP -> {
                 // Do nothing
@@ -223,9 +224,11 @@ class ConflictResolver(
         conflict: Conflict,
         option: ConflictResolutionOption
     ) {
-        // Preferences handled via PreferenceManager
-        // Resolution applied during sync data application
-        Logger.d(TAG, "Preference resolution: ${conflict.field} -> $option")
+        // Preferences handled via PreferenceManager; resolution applied
+        // during sync data application. This branch is currently
+        // unreachable — MergeEngine.mergePreferences() has no caller — kept
+        // as a defensive no-op since Conflict.getResolutionOptions() still
+        // models PREFERENCE_DIVERGED as part of the public conflict surface.
     }
 
     /**

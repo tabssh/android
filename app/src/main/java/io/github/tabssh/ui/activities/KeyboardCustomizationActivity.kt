@@ -234,7 +234,8 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
                             val dy = ev.rawY - state.y0
                             if (sqrt(dx * dx + dy * dy) > touchSlop) {
                                 state.dragging = true
-                                v.alpha = 0.25f   // dim the original slot during drag
+                                // dim the original slot during drag
+                                v.alpha = 0.25f
                                 v.startDragAndDrop(
                                     ClipData.newPlainText("key", key.id),
                                     View.DragShadowBuilder(v),
@@ -243,10 +244,12 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
                                 )
                             }
                         }
-                        state.dragging   // consume only while dragging
+                        // consume only while dragging
+                        state.dragging
                     }
                     MotionEvent.ACTION_UP -> {
-                        if (!state.dragging) removeKey(rowIdx, key)   // tap = remove
+                        // tap = remove
+                        if (!state.dragging) removeKey(rowIdx, key)
                         state.dragging = false
                         v.alpha = 1f
                         false
@@ -327,7 +330,8 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
             val kv = rowView.getChildAt(ci)
             if (localX <= (kv.left + kv.right) / 2f) return Pair(bestRow, ci)
         }
-        return Pair(bestRow, rowData.size)   // past last key → append
+        // past last key → append
+        return Pair(bestRow, rowData.size)
     }
 
     private fun commitDrop(p: DragPayload, toRow: Int, toCol: Int) {

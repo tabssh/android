@@ -551,7 +551,8 @@ object SSHKeyParser {
         val privBuffer = ByteBuffer.wrap(privateBlob)
 
         // Public key
-        readString(pubBuffer) // algorithm name
+        // algorithm name
+        readString(pubBuffer)
         val e = readMPInt(pubBuffer)
         val n = readMPInt(pubBuffer)
 
@@ -584,7 +585,8 @@ object SSHKeyParser {
         val privBuffer = ByteBuffer.wrap(privateBlob)
 
         // Public key
-        readString(pubBuffer) // algorithm name
+        // algorithm name
+        readString(pubBuffer)
         val p = readMPInt(pubBuffer)
         val q = readMPInt(pubBuffer)
         val g = readMPInt(pubBuffer)
@@ -657,8 +659,10 @@ object SSHKeyParser {
 
             // Derive key and IV using bcrypt KDF
             val keyIvLength = when (cipherName) {
-                "aes128-cbc", "aes128-ctr" -> 16 + 16 // 128-bit key + 128-bit IV
-                "aes256-cbc", "aes256-ctr" -> 32 + 16 // 256-bit key + 128-bit IV
+                // 128-bit key + 128-bit IV
+                "aes128-cbc", "aes128-ctr" -> 16 + 16
+                // 256-bit key + 128-bit IV
+                "aes256-cbc", "aes256-ctr" -> 32 + 16
                 else -> throw IllegalArgumentException("Unsupported cipher: $cipherName")
             }
 

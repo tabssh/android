@@ -150,25 +150,23 @@ class OciManagerActivity : AppCompatActivity() {
                 val region      = account?.ociRegion        ?: profile.ociRegion
                 val fingerprint = account?.ociFingerprint   ?: profile.ociFingerprint
 
+                // OCI API keys are account-scoped only. A profile with no
+                // account link has no key to authenticate with — the user
+                // must attach a VM credential in the profile's edit screen.
+                if (accountId == null) {
+                    showError(getString(R.string.oci_error_no_private_key))
+                    return@launch
+                }
                 val pem = withContext(Dispatchers.IO) {
-                    if (accountId != null) {
-                        HypervisorPasswordStore.retrieveOciAccountKey(applicationContext, accountId, profile.id)
-                    } else {
-                        app.securePasswordManager.retrievePassword("oci_private_key_${profile.id}")
-                    }
+                    HypervisorPasswordStore.retrieveOciAccountKey(applicationContext, accountId)
                 }
                 if (pem.isNullOrBlank()) {
                     showError(getString(R.string.oci_error_no_private_key))
                     return@launch
                 }
                 val passphrase = withContext(Dispatchers.IO) {
-                    if (accountId != null) {
-                        HypervisorPasswordStore.retrieveOciAccountPassphrase(applicationContext, accountId, profile.id)
-                            ?.takeIf { it.isNotEmpty() }
-                    } else {
-                        app.securePasswordManager.retrievePassword("oci_passphrase_${profile.id}")
-                            ?.takeIf { it.isNotEmpty() }
-                    }
+                    HypervisorPasswordStore.retrieveOciAccountPassphrase(applicationContext, accountId)
+                        ?.takeIf { it.isNotEmpty() }
                 }
                 if (tenancy.isNullOrBlank() || user.isNullOrBlank() ||
                     region.isNullOrBlank() || fingerprint.isNullOrBlank()

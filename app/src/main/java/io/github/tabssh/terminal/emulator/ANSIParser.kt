@@ -323,47 +323,57 @@ class ANSIParser(private val buffer: TerminalBuffer) {
             // moveCursor takes (deltaX, deltaY) — X is the column. These four
             // passed the count on the opposite axis, so Up/Down moved sideways
             // and Left/Right moved vertically in every full-screen program.
-            'A' -> { // Cursor Up
+            // Cursor Up
+            'A' -> {
                 val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
                 buffer.moveCursor(0, -n)
             }
-            'B' -> { // Cursor Down
+            // Cursor Down
+            'B' -> {
                 val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
                 buffer.moveCursor(0, n)
             }
-            'C' -> { // Cursor Forward
+            // Cursor Forward
+            'C' -> {
                 val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
                 buffer.moveCursor(n, 0)
             }
-            'D' -> { // Cursor Back
+            // Cursor Back
+            'D' -> {
                 val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
                 buffer.moveCursor(-n, 0)
             }
-            'E' -> { // Cursor Next Line
+            // Cursor Next Line
+            'E' -> {
                 val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
                 buffer.setCursorPosition(0, buffer.getCursorRow() + n)
             }
-            'F' -> { // Cursor Previous Line
+            // Cursor Previous Line
+            'F' -> {
                 val n = parameters.getOrElse(0) { 1 }.coerceAtLeast(1)
                 buffer.setCursorPosition(0, buffer.getCursorRow() - n)
             }
-            'G' -> { // Cursor Horizontal Absolute
+            // Cursor Horizontal Absolute
+            'G' -> {
                 val col = parameters.getOrElse(0) { 1 } - 1
                 buffer.setCursorPosition(col, buffer.getCursorRow())
             }
-            'H', 'f' -> { // Cursor Position
+            // Cursor Position
+            'H', 'f' -> {
                 val row = (parameters.getOrElse(0) { 1 } - 1).coerceAtLeast(0)
                 val col = (parameters.getOrElse(1) { 1 } - 1).coerceAtLeast(0)
                 buffer.setCursorPositionAbsolute(col, row)
             }
-            'J' -> { // Erase Display
+            // Erase Display
+            'J' -> {
                 when (parameters.getOrElse(0) { 0 }) {
                     0 -> buffer.clearToEndOfScreen()
                     1 -> buffer.clearToBeginningOfScreen()
                     2, 3 -> buffer.clearScreen()
                 }
             }
-            'K' -> { // Erase Line
+            // Erase Line
+            'K' -> {
                 when (parameters.getOrElse(0) { 0 }) {
                     0 -> {
                         // Clear from cursor to end of line
@@ -387,7 +397,8 @@ class ANSIParser(private val buffer: TerminalBuffer) {
             // IL/DL shift lines from the cursor row down, leaving everything above
             // the cursor untouched. Routing them through scrollDown()/scrollUp()
             // scrolled the whole screen and pulled stale scrollback rows back in.
-            'L' -> { // Insert Lines
+            // Insert Lines
+            'L' -> {
                 // Clamped to the screen height: a server may send ESC[999999999L,
                 // and inserting more than one screen has no additional effect.
                 val n = parameters.getOrElse(0) { 1 }.coerceIn(1, buffer.getRows())
@@ -395,13 +406,15 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                     buffer.insertLine(buffer.getCursorRow())
                 }
             }
-            'M' -> { // Delete Lines
+            // Delete Lines
+            'M' -> {
                 val n = parameters.getOrElse(0) { 1 }.coerceIn(1, buffer.getRows())
                 repeat(n) {
                     buffer.deleteLine(buffer.getCursorRow())
                 }
             }
-            'P' -> { // Delete Characters
+            // Delete Characters
+            'P' -> {
                 // n is clamped to the line width: an unclamped count produced a
                 // negative range start below and crashed on a hostile ESC[999P.
                 val cols = buffer.getCols()
@@ -415,32 +428,40 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                     }
                 }
             }
-            'S' -> { // Scroll Up
+            // Scroll Up
+            'S' -> {
                 val n = parameters.getOrElse(0) { 1 }.coerceIn(1, buffer.getRows())
                 buffer.scrollUp(n)
             }
-            'T' -> { // Scroll Down
+            // Scroll Down
+            'T' -> {
                 val n = parameters.getOrElse(0) { 1 }.coerceIn(1, buffer.getRows())
                 buffer.scrollDown(n)
             }
-            'm' -> { // Select Graphic Rendition (SGR)
+            // Select Graphic Rendition (SGR)
+            'm' -> {
                 handleSGRSequence()
             }
-            'r' -> { // Set Scrolling Region
+            // Set Scrolling Region
+            'r' -> {
                 val top = (parameters.getOrElse(0) { 1 } - 1).coerceAtLeast(0)
                 val bottom = (parameters.getOrElse(1) { buffer.getRows() } - 1).coerceAtMost(buffer.getRows() - 1)
                 buffer.setScrollRegion(top, bottom)
             }
-            's' -> { // Save Cursor Position
+            // Save Cursor Position
+            's' -> {
                 buffer.saveCursor()
             }
-            'u' -> { // Restore Cursor Position
+            // Restore Cursor Position
+            'u' -> {
                 buffer.restoreCursor()
             }
-            'h' -> { // Set Mode
+            // Set Mode
+            'h' -> {
                 handleSetMode(true)
             }
-            'l' -> { // Reset Mode
+            // Reset Mode
+            'l' -> {
                 handleSetMode(false)
             }
             else -> {
@@ -451,44 +472,56 @@ class ANSIParser(private val buffer: TerminalBuffer) {
     
     private fun handleSGRSequence() {
         if (parameters.isEmpty()) {
-            parameters.add(0) // Default to reset
+            // Default to reset
+            parameters.add(0)
         }
         
         var i = 0
         while (i < parameters.size) {
             when (val param = parameters[i]) {
-                0 -> buffer.resetCharacterAttributes() // Reset
-                1 -> buffer.setCharacterAttributes(bold = true) // Bold
-                2 -> buffer.setCharacterAttributes(bold = false) // Dim (treat as non-bold)
-                3 -> buffer.setCharacterAttributes() // Italic (not widely supported)
-                4 -> buffer.setCharacterAttributes(underline = true) // Underline
-                5, 6 -> buffer.setCharacterAttributes(blink = true) // Blink
-                7 -> buffer.setCharacterAttributes(reverse = true) // Reverse
+                0 -> buffer.resetCharacterAttributes()
+                1 -> buffer.setCharacterAttributes(bold = true)
+                // Dim (treat as non-bold)
+                2 -> buffer.setCharacterAttributes(bold = false)
+                // Italic (not widely supported)
+                3 -> buffer.setCharacterAttributes()
+                4 -> buffer.setCharacterAttributes(underline = true)
+                5, 6 -> buffer.setCharacterAttributes(blink = true)
+                7 -> buffer.setCharacterAttributes(reverse = true)
                 8 -> { /* Conceal/hidden text - not supported */ }
                 9 -> { /* Strikethrough - not supported */ }
-                22 -> buffer.setCharacterAttributes(bold = false) // Normal intensity
+                // Normal intensity
+                22 -> buffer.setCharacterAttributes(bold = false)
                 23 -> { /* Not italic */ }
-                24 -> buffer.setCharacterAttributes(underline = false) // Not underlined
-                25 -> buffer.setCharacterAttributes(blink = false) // Not blinking
-                27 -> buffer.setCharacterAttributes(reverse = false) // Not reversed
-                in 30..37 -> { // Foreground colors
+                24 -> buffer.setCharacterAttributes(underline = false)
+                25 -> buffer.setCharacterAttributes(blink = false)
+                27 -> buffer.setCharacterAttributes(reverse = false)
+                // Foreground colors
+                in 30..37 -> {
                     buffer.setCharacterAttributes(fgColor = param - 30)
                 }
-                38 -> { // Extended foreground color
+                // Extended foreground color
+                38 -> {
                     i = handleExtendedColor(i, true)
                 }
-                39 -> buffer.setCharacterAttributes(fgColor = 7) // Default foreground
-                in 40..47 -> { // Background colors
+                // Default foreground
+                39 -> buffer.setCharacterAttributes(fgColor = 7)
+                // Background colors
+                in 40..47 -> {
                     buffer.setCharacterAttributes(bgColor = param - 40)
                 }
-                48 -> { // Extended background color
+                // Extended background color
+                48 -> {
                     i = handleExtendedColor(i, false)
                 }
-                49 -> buffer.setCharacterAttributes(bgColor = 0) // Default background
-                in 90..97 -> { // Bright foreground colors
+                // Default background
+                49 -> buffer.setCharacterAttributes(bgColor = 0)
+                // Bright foreground colors
+                in 90..97 -> {
                     buffer.setCharacterAttributes(fgColor = param - 90 + 8)
                 }
-                in 100..107 -> { // Bright background colors
+                // Bright background colors
+                in 100..107 -> {
                     buffer.setCharacterAttributes(bgColor = param - 100 + 8)
                 }
                 else -> {
@@ -503,7 +536,8 @@ class ANSIParser(private val buffer: TerminalBuffer) {
         // Handle 256-color and RGB color sequences
         if (index + 1 < parameters.size) {
             when (parameters[index + 1]) {
-                5 -> { // 256-color mode
+                // 256-color mode
+                5 -> {
                     if (index + 2 < parameters.size) {
                         val colorIndex = parameters[index + 2]
                         // Convert 256-color index to 16-color (simplified)
@@ -518,17 +552,26 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                                 val b = adjusted % 6
                                 // Simple mapping to 16 colors
                                 when {
-                                    r > 3 && g <= 3 && b <= 3 -> 1 // Red
-                                    r <= 3 && g > 3 && b <= 3 -> 2 // Green
-                                    r <= 3 && g <= 3 && b > 3 -> 4 // Blue
-                                    r > 3 && g > 3 && b <= 3 -> 3 // Yellow
-                                    r > 3 && g <= 3 && b > 3 -> 5 // Magenta
-                                    r <= 3 && g > 3 && b > 3 -> 6 // Cyan
-                                    r > 3 && g > 3 && b > 3 -> 7 // White
-                                    else -> 0 // Black
+                                    // Red
+                                    r > 3 && g <= 3 && b <= 3 -> 1
+                                    // Green
+                                    r <= 3 && g > 3 && b <= 3 -> 2
+                                    // Blue
+                                    r <= 3 && g <= 3 && b > 3 -> 4
+                                    // Yellow
+                                    r > 3 && g > 3 && b <= 3 -> 3
+                                    // Magenta
+                                    r > 3 && g <= 3 && b > 3 -> 5
+                                    // Cyan
+                                    r <= 3 && g > 3 && b > 3 -> 6
+                                    // White
+                                    r > 3 && g > 3 && b > 3 -> 7
+                                    // Black
+                                    else -> 0
                                 }
                             }
-                            else -> { // Grayscale
+                            // Grayscale
+                            else -> {
                                 if (colorIndex < 244) 0 else 7
                             }
                         }
@@ -541,7 +584,8 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                         return index + 2
                     }
                 }
-                2 -> { // RGB mode
+                // RGB mode
+                2 -> {
                     if (index + 4 < parameters.size) {
                         val r = parameters[index + 2]
                         val g = parameters[index + 3]
@@ -549,14 +593,22 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                         
                         // Convert RGB to nearest 16-color (simplified)
                         val color16 = when {
-                            r > 128 && g <= 128 && b <= 128 -> 1 // Red
-                            r <= 128 && g > 128 && b <= 128 -> 2 // Green
-                            r <= 128 && g <= 128 && b > 128 -> 4 // Blue
-                            r > 128 && g > 128 && b <= 128 -> 3 // Yellow
-                            r > 128 && g <= 128 && b > 128 -> 5 // Magenta
-                            r <= 128 && g > 128 && b > 128 -> 6 // Cyan
-                            r > 128 && g > 128 && b > 128 -> 7 // White
-                            else -> 0 // Black
+                            // Red
+                            r > 128 && g <= 128 && b <= 128 -> 1
+                            // Green
+                            r <= 128 && g > 128 && b <= 128 -> 2
+                            // Blue
+                            r <= 128 && g <= 128 && b > 128 -> 4
+                            // Yellow
+                            r > 128 && g > 128 && b <= 128 -> 3
+                            // Magenta
+                            r > 128 && g <= 128 && b > 128 -> 5
+                            // Cyan
+                            r <= 128 && g > 128 && b > 128 -> 6
+                            // White
+                            r > 128 && g > 128 && b > 128 -> 7
+                            // Black
+                            else -> 0
                         }
                         
                         if (isForeground) {

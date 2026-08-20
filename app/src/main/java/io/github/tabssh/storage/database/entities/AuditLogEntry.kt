@@ -36,38 +36,47 @@ data class AuditLogEntry(
     @ColumnInfo(name = "connection_id")
     val connectionId: String,
     
+    // Groups entries by session
     @ColumnInfo(name = "session_id")
-    val sessionId: String, // Groups entries by session
+    val sessionId: String,
     
     @ColumnInfo(name = "timestamp")
     val timestamp: Long = System.currentTimeMillis(),
     
+    // "COMMAND", "CONNECT", "DISCONNECT", "AUTH_SUCCESS", "AUTH_FAILURE"
     @ColumnInfo(name = "event_type")
-    val eventType: String, // "COMMAND", "CONNECT", "DISCONNECT", "AUTH_SUCCESS", "AUTH_FAILURE"
+    val eventType: String,
     
+    // The actual command executed
     @ColumnInfo(name = "command")
-    val command: String? = null, // The actual command executed
+    val command: String? = null,
     
+    // Command output (optional, can be large)
     @ColumnInfo(name = "output")
-    val output: String? = null, // Command output (optional, can be large)
+    val output: String? = null,
     
+    // Command exit code if available
     @ColumnInfo(name = "exit_code")
-    val exitCode: Int? = null, // Command exit code if available
+    val exitCode: Int? = null,
     
+    // Username for the session
     @ColumnInfo(name = "user")
-    val user: String, // Username for the session
+    val user: String,
     
+    // Hostname
     @ColumnInfo(name = "host")
-    val host: String, // Hostname
+    val host: String,
     
     @ColumnInfo(name = "port")
     val port: Int,
     
+    // Entry size for cleanup calculations
     @ColumnInfo(name = "size_bytes")
-    val sizeBytes: Long = 0, // Entry size for cleanup calculations
+    val sizeBytes: Long = 0,
     
+    // JSON for additional context
     @ColumnInfo(name = "metadata")
-    val metadata: String? = null // JSON for additional context
+    val metadata: String? = null
 ) {
     companion object {
         // Session lifecycle
@@ -78,11 +87,13 @@ data class AuditLogEntry(
         // Auth
         const val EVENT_AUTH_SUCCESS    = "AUTH_SUCCESS"
         const val EVENT_AUTH_FAILURE    = "AUTH_FAILURE"
-        const val EVENT_KEY_USAGE       = "KEY_USAGE"      // SSH key used for auth
+        // SSH key used for auth
+        const val EVENT_KEY_USAGE       = "KEY_USAGE"
         // Host key trust
         const val EVENT_HOST_KEY_ACCEPTED = "HOST_KEY_ACCEPTED"
         const val EVENT_HOST_KEY_REJECTED = "HOST_KEY_REJECTED"
-        const val EVENT_HOST_KEY_CHANGED  = "HOST_KEY_CHANGED"  // TOFU mismatch
+        // TOFU mismatch
+        const val EVENT_HOST_KEY_CHANGED  = "HOST_KEY_CHANGED"
         // Commands and output
         const val EVENT_COMMAND         = "COMMAND"
         const val EVENT_OUTPUT          = "OUTPUT"
@@ -91,14 +102,13 @@ data class AuditLogEntry(
         const val EVENT_SFTP_DOWNLOAD   = "SFTP_DOWNLOAD"
         const val EVENT_SFTP_DELETE     = "SFTP_DELETE"
         const val EVENT_SFTP_MKDIR      = "SFTP_MKDIR"
-        const val EVENT_FILE_TRANSFER   = "FILE_TRANSFER"   // kept for back-compat
         // Forwarding
         const val EVENT_PORT_FORWARD_OPEN  = "PORT_FORWARD_OPEN"
         const val EVENT_PORT_FORWARD_CLOSE = "PORT_FORWARD_CLOSE"
-        const val EVENT_PORT_FORWARD       = "PORT_FORWARD"  // kept for back-compat
         const val EVENT_X11_FORWARD        = "X11_FORWARD"
         // Admin / configuration
-        const val EVENT_CONFIG_CHANGE   = "CONFIG_CHANGE"   // settings changed by MDM or user
+        // settings changed by MDM or user
+        const val EVENT_CONFIG_CHANGE   = "CONFIG_CHANGE"
     }
     
     fun getDisplayTimestamp(): String {
@@ -124,10 +134,8 @@ data class AuditLogEntry(
             EVENT_SFTP_DOWNLOAD      -> "SFTP download: ${metadata ?: ""}"
             EVENT_SFTP_DELETE        -> "SFTP delete: ${metadata ?: ""}"
             EVENT_SFTP_MKDIR         -> "SFTP mkdir: ${metadata ?: ""}"
-            EVENT_FILE_TRANSFER      -> "File transfer"
             EVENT_PORT_FORWARD_OPEN  -> "Port forward opened: ${metadata ?: ""}"
             EVENT_PORT_FORWARD_CLOSE -> "Port forward closed: ${metadata ?: ""}"
-            EVENT_PORT_FORWARD       -> "Port forwarding"
             EVENT_X11_FORWARD        -> "X11 forwarding"
             EVENT_CONFIG_CHANGE      -> "Config changed: ${metadata ?: ""}"
             else                     -> eventType

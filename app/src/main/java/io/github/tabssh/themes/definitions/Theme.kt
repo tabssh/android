@@ -17,10 +17,12 @@ data class Theme(
     val foreground: Int,
     val cursor: Int,
     val selection: Int,
-    val highlight: Int, // Search highlight
-    
+    // Search highlight
+    val highlight: Int,
+
     // ANSI colors (16-color palette)
-    val ansiColors: IntArray, // Must be exactly 16 colors (0-15)
+    // Must be exactly 16 colors (0-15)
+    val ansiColors: IntArray,
     
     // UI colors (Material Design 3 integration)
     val primary: Int? = null,
@@ -148,47 +150,81 @@ data class Theme(
             
             // Otherwise, adjust to meet AAA standards (7:1 ratio)
             return when {
-                backgroundColor == 0xFF000000.toInt() -> { // Dark background
+                // Dark background
+                backgroundColor == 0xFF000000.toInt() -> {
                     // Make colors brighter for dark backgrounds
                     when (ansiIndex) {
-                        0 -> 0xFF7F7F7F.toInt() // Bright black (gray)
-                        1 -> 0xFFFF5555.toInt() // Bright red
-                        2 -> 0xFF55FF55.toInt() // Bright green
-                        3 -> 0xFFFFFF55.toInt() // Bright yellow
-                        4 -> 0xFF5555FF.toInt() // Bright blue
-                        5 -> 0xFFFF55FF.toInt() // Bright magenta
-                        6 -> 0xFF55FFFF.toInt() // Bright cyan
-                        7 -> 0xFFFFFFFF.toInt() // White
-                        8 -> 0xFFAAAAAA.toInt() // Bright gray
-                        9 -> 0xFFFF7777.toInt() // Very bright red
-                        10 -> 0xFF77FF77.toInt() // Very bright green
-                        11 -> 0xFFFFFF77.toInt() // Very bright yellow
-                        12 -> 0xFF7777FF.toInt() // Very bright blue
-                        13 -> 0xFFFF77FF.toInt() // Very bright magenta
-                        14 -> 0xFF77FFFF.toInt() // Very bright cyan
-                        15 -> 0xFFFFFFFF.toInt() // Bright white
+                        // Bright black (gray)
+                        0 -> 0xFF7F7F7F.toInt()
+                        // Bright red
+                        1 -> 0xFFFF5555.toInt()
+                        // Bright green
+                        2 -> 0xFF55FF55.toInt()
+                        // Bright yellow
+                        3 -> 0xFFFFFF55.toInt()
+                        // Bright blue
+                        4 -> 0xFF5555FF.toInt()
+                        // Bright magenta
+                        5 -> 0xFFFF55FF.toInt()
+                        // Bright cyan
+                        6 -> 0xFF55FFFF.toInt()
+                        // White
+                        7 -> 0xFFFFFFFF.toInt()
+                        // Bright gray
+                        8 -> 0xFFAAAAAA.toInt()
+                        // Very bright red
+                        9 -> 0xFFFF7777.toInt()
+                        // Very bright green
+                        10 -> 0xFF77FF77.toInt()
+                        // Very bright yellow
+                        11 -> 0xFFFFFF77.toInt()
+                        // Very bright blue
+                        12 -> 0xFF7777FF.toInt()
+                        // Very bright magenta
+                        13 -> 0xFFFF77FF.toInt()
+                        // Very bright cyan
+                        14 -> 0xFF77FFFF.toInt()
+                        // Bright white
+                        15 -> 0xFFFFFFFF.toInt()
                         else -> color
                     }
                 }
-                else -> { // Light background
+                // Light background
+                else -> {
                     // Make colors darker for light backgrounds
                     when (ansiIndex) {
-                        0 -> 0xFF000000.toInt() // Black
-                        1 -> 0xFF800000.toInt() // Dark red
-                        2 -> 0xFF008000.toInt() // Dark green
-                        3 -> 0xFF808000.toInt() // Dark yellow
-                        4 -> 0xFF000080.toInt() // Dark blue
-                        5 -> 0xFF800080.toInt() // Dark magenta
-                        6 -> 0xFF008080.toInt() // Dark cyan
-                        7 -> 0xFF404040.toInt() // Dark gray
-                        8 -> 0xFF202020.toInt() // Very dark gray
-                        9 -> 0xFF600000.toInt() // Very dark red
-                        10 -> 0xFF006000.toInt() // Very dark green
-                        11 -> 0xFF606000.toInt() // Very dark yellow
-                        12 -> 0xFF000060.toInt() // Very dark blue
-                        13 -> 0xFF600060.toInt() // Very dark magenta
-                        14 -> 0xFF006060.toInt() // Very dark cyan
-                        15 -> 0xFF000000.toInt() // Black
+                        // Black
+                        0 -> 0xFF000000.toInt()
+                        // Dark red
+                        1 -> 0xFF800000.toInt()
+                        // Dark green
+                        2 -> 0xFF008000.toInt()
+                        // Dark yellow
+                        3 -> 0xFF808000.toInt()
+                        // Dark blue
+                        4 -> 0xFF000080.toInt()
+                        // Dark magenta
+                        5 -> 0xFF800080.toInt()
+                        // Dark cyan
+                        6 -> 0xFF008080.toInt()
+                        // Dark gray
+                        7 -> 0xFF404040.toInt()
+                        // Very dark gray
+                        8 -> 0xFF202020.toInt()
+                        // Very dark red
+                        9 -> 0xFF600000.toInt()
+                        // Very dark green
+                        10 -> 0xFF006000.toInt()
+                        // Very dark yellow
+                        11 -> 0xFF606000.toInt()
+                        // Very dark blue
+                        12 -> 0xFF000060.toInt()
+                        // Very dark magenta
+                        13 -> 0xFF600060.toInt()
+                        // Very dark cyan
+                        14 -> 0xFF006060.toInt()
+                        // Black
+                        15 -> 0xFF000000.toInt()
                         else -> color
                     }
                 }

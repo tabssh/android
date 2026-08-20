@@ -23,8 +23,6 @@ plugins {
 
 // Repositories are now managed in settings.gradle
 
-// layout.buildDirectory, not the deprecated Project.buildDir accessor —
-// the latter is removed in Gradle 9.
 tasks.register('clean', Delete) {
     delete rootProject.layout.buildDirectory
 }

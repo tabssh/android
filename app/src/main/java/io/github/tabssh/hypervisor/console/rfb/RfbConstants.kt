@@ -151,13 +151,17 @@ object RfbConstants {
 
     // CompressionLevel pseudo-encodings (-247 to -256 / 0xFFFFFF09 to 0xFFFFFF00).
     // No payload. Range encodes hint: -256=level0 … -247=level9.
-    const val ENC_COMPRESS_LEVEL_0: Int = -256  // lowest compression
-    const val ENC_COMPRESS_LEVEL_9: Int = -247  // highest compression
+    // lowest compression
+    const val ENC_COMPRESS_LEVEL_0: Int = -256
+    // highest compression
+    const val ENC_COMPRESS_LEVEL_9: Int = -247
 
     // QualityLevel pseudo-encodings (-23 to -32 / 0xFFFFFFE9 to 0xFFFFFFE0).
     // No payload. Range encodes hint: -32=level0 … -23=level9.
-    const val ENC_QUALITY_LEVEL_0: Int = -32    // lowest quality
-    const val ENC_QUALITY_LEVEL_9: Int = -23    // highest quality
+    // lowest quality
+    const val ENC_QUALITY_LEVEL_0: Int = -32
+    // highest quality
+    const val ENC_QUALITY_LEVEL_9: Int = -23
 
     /**
      * QEMU LED State pseudo-encoding (-261 / 0xFFFFFEFB).
@@ -220,7 +224,8 @@ object RfbConstants {
     // ── Tight compression control byte top nibble ────────────────────────────
     const val TIGHT_FILL: Int = 0x08
     const val TIGHT_JPEG: Int = 0x09
-    const val TIGHT_PNG: Int = 0x0A   // extended Tight (TightPng)
+    // extended Tight (TightPng)
+    const val TIGHT_PNG: Int = 0x0A
 
     // ── Tight filter IDs (BasicCompression) ─────────────────────────────────
     const val TIGHT_FILTER_COPY: Int = 0x00

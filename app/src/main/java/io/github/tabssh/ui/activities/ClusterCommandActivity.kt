@@ -142,7 +142,8 @@ class ClusterCommandActivity : AppCompatActivity() {
     private fun loadCommandHistory() {
         val historySet = prefs.getStringSet("command_history", emptySet()) ?: emptySet()
         commandHistory.clear()
-        commandHistory.addAll(historySet.take(10)) // Keep last 10 commands
+        // Keep last 10 commands
+        commandHistory.addAll(historySet.take(10))
         updateHistoryChips()
     }
 
@@ -166,7 +167,8 @@ class ClusterCommandActivity : AppCompatActivity() {
     private fun updateHistoryChips() {
         commandHistoryChips.removeAllViews()
 
-        for (command in commandHistory.take(5)) { // Show only 5 most recent
+        // Show only 5 most recent
+        for (command in commandHistory.take(5)) {
             val chip = Chip(this).apply {
                 text = if (command.length > 20) command.take(20) + "..." else command
                 isClickable = true

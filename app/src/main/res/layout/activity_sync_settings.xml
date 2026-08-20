@@ -639,6 +639,19 @@
                         <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="16dp" android:background="?attr/colorOutlineVariant" />
 
                         <TextView
+                            android:id="@+id/btn_view_sync_log"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:padding="16dp"
+                            android:text="@string/sync_view_log"
+                            android:textAppearance="?attr/textAppearanceBodyLarge"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true" />
+
+                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="16dp" android:background="?attr/colorOutlineVariant" />
+
+                        <TextView
                             android:id="@+id/btn_clear_config"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"

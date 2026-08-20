@@ -41,8 +41,10 @@ class SessionPersistenceManager(
     
     // Session preservation settings
     private var preserveSessionsOnBackground = true
-    private var maxBackgroundTime = 24 * 60 * 60 * 1000L // 24 hours
-    private var autoSaveInterval = 30000L // 30 seconds
+    // 24 hours
+    private var maxBackgroundTime = 24 * 60 * 60 * 1000L
+    // 30 seconds
+    private var autoSaveInterval = 30000L
     
     // Background monitoring
     private var backgroundMonitoringJob: Job? = null
@@ -154,7 +156,8 @@ class SessionPersistenceManager(
                         monitorBackgroundConnections()
                     }
                     
-                    delay(60000) // Check every minute
+                    // Check every minute
+                    delay(60000)
                     
                 } catch (e: CancellationException) {
                     // Normal coroutine cancellation (job replaced by startBackgroundMonitoring
@@ -164,7 +167,8 @@ class SessionPersistenceManager(
                     throw e
                 } catch (e: Exception) {
                     Logger.e("SessionPersistenceManager", "Error in background monitoring", e)
-                    delay(60000) // Wait longer on error
+                    // Wait longer on error
+                    delay(60000)
                 }
             }
         }
@@ -458,7 +462,8 @@ class SessionPersistenceManager(
             )
         } catch (e: Exception) {
             Logger.w("SessionPersistenceManager", "Failed to compress terminal content", e)
-            content // Return uncompressed if compression fails
+            // Return uncompressed if compression fails
+            content
         }
     }
     
@@ -472,7 +477,8 @@ class SessionPersistenceManager(
             }
         } catch (e: Exception) {
             Logger.w("SessionPersistenceManager", "Failed to decompress terminal content", e)
-            compressedContent // Return as-is if decompression fails
+            // Return as-is if decompression fails
+            compressedContent
         }
     }
     

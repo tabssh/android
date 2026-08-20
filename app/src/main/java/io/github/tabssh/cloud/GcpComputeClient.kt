@@ -346,7 +346,8 @@ class GcpComputeClient : CloudProvider {
                         name = name,
                         host = natIp,
                         port = 22,
-                        username = "",  // GCP per-instance metadata; user fills
+                        // GCP per-instance metadata; user fills
+                        username = "",
                         authType = "publickey",
                         advancedSettings = """{"cloud_source":"gcp:$accountName","cloud_region":"$zone","cloud_id":"${inst.optString("id")}"}""",
                         createdAt = System.currentTimeMillis()

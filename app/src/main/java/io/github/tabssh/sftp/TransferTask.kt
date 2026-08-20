@@ -27,10 +27,12 @@ class TransferTask(
     private val _bytesTransferred = AtomicLong(0)
     val bytesTransferred: Long get() = _bytesTransferred.get()
     
-    private val _speed = MutableStateFlow(0L) // bytes per second
+    // bytes per second
+    private val _speed = MutableStateFlow(0L)
     val speed: StateFlow<Long> = _speed.asStateFlow()
-    
-    private val _eta = MutableStateFlow(0L) // estimated time remaining in milliseconds
+
+    // estimated time remaining in milliseconds
+    private val _eta = MutableStateFlow(0L)
     val eta: StateFlow<Long> = _eta.asStateFlow()
     
     private val cancelled = AtomicBoolean(false)
@@ -86,7 +88,8 @@ class TransferTask(
         
         // Calculate transfer speed
         val timeDiff = currentTime - lastProgressTime
-        if (timeDiff > 1000) { // Update speed every second
+        // Update speed every second
+        if (timeDiff > 1000) {
             val bytesDiff = currentBytes - lastBytesTransferred
             val speedBps = if (timeDiff > 0) (bytesDiff * 1000) / timeDiff else 0
             _speed.value = speedBps
@@ -256,12 +259,18 @@ enum class TransferType {
  * Transfer states
  */
 enum class TransferState {
-    PENDING,    // Queued but not started
-    ACTIVE,     // Currently transferring
-    PAUSED,     // Paused by user
-    COMPLETED,  // Finished successfully
-    ERROR,      // Failed with error
-    CANCELLED   // Cancelled by user
+    // Queued but not started
+    PENDING,
+    // Currently transferring
+    ACTIVE,
+    // Paused by user
+    PAUSED,
+    // Finished successfully
+    COMPLETED,
+    // Failed with error
+    ERROR,
+    // Cancelled by user
+    CANCELLED
 }
 
 /**

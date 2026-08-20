@@ -240,13 +240,15 @@ object RegistryCredentialDialog {
                 val id = if (existing == null) {
                     dao.insert(
                         RegistryCredential(
-                            registryHost = host, username = username, authType = authType
+                            registryHost = host, username = username, authType = authType,
+                            modifiedAt = System.currentTimeMillis()
                         )
                     )
                 } else {
                     dao.update(
                         existing.copy(
-                            registryHost = host, username = username, authType = authType
+                            registryHost = host, username = username, authType = authType,
+                            modifiedAt = System.currentTimeMillis()
                         )
                     )
                     existing.id

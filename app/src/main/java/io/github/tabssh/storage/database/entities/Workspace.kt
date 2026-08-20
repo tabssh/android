@@ -25,8 +25,9 @@ data class Workspace(
     @ColumnInfo(name = "name")
     val name: String,
 
+    // JSON array of ConnectionProfile.id
     @ColumnInfo(name = "connection_ids")
-    val connectionIdsJson: String, // JSON array of ConnectionProfile.id
+    val connectionIdsJson: String,
 
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),

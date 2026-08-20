@@ -46,20 +46,11 @@ class NetworkDetector(private val context: Context) {
     }
 
     /**
-     * Check current network state. Uses [NetworkCapabilities] on every API
-     * level — `activeNetwork` is API 23+, so on 21–22 we walk
-     * `allNetworks` (deprecated since API 31, but the only path on
-     * pre-M devices) and take the first internet-capable one.
+     * Check current network state using [NetworkCapabilities] of the active network.
      */
-    @Suppress("DEPRECATION") // allNetworks: only used on API < 23
     private fun checkCurrentNetworkState() {
-        val capabilities: NetworkCapabilities? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val capabilities: NetworkCapabilities? =
             connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
-        } else {
-            connectivityManager.allNetworks
-                .mapNotNull { connectivityManager.getNetworkCapabilities(it) }
-                .firstOrNull { it.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) }
-        }
         if (capabilities != null) {
             updateNetworkState(capabilities)
         } else {
@@ -113,7 +104,8 @@ class NetworkDetector(private val context: Context) {
         }
 
         val isHighSpeed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            capabilities.linkDownstreamBandwidthKbps > 1000 // > 1 Mbps
+            // > 1 Mbps
+            capabilities.linkDownstreamBandwidthKbps > 1000
         } else {
             networkType == NetworkType.WIFI || networkType == NetworkType.ETHERNET
         }
@@ -154,10 +146,14 @@ class NetworkDetector(private val context: Context) {
     fun getRecommendedBufferSize(): Int {
         val state = _networkState.value
         return when {
-            state.isHighSpeed && !state.isMetered -> 65536  // 64KB for high-speed
-            state.isConnected && !state.isMetered -> 32768  // 32KB for normal
-            state.isMetered -> 16384                         // 16KB for metered
-            else -> 8192                                     // 8KB for poor/no connection
+            // 64KB for high-speed
+            state.isHighSpeed && !state.isMetered -> 65536
+            // 32KB for normal
+            state.isConnected && !state.isMetered -> 32768
+            // 16KB for metered
+            state.isMetered -> 16384
+            // 8KB for poor/no connection
+            else -> 8192
         }
     }
 
@@ -177,17 +173,11 @@ class NetworkDetector(private val context: Context) {
         /**
          * Static helper to check if high speed network is available
          */
-        @Suppress("DEPRECATION") // allNetworks: only used on API < 23
         fun isHighSpeed(context: Context): Boolean {
             val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-            val capabilities = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
-            } else {
-                connectivityManager.allNetworks
-                    .mapNotNull { connectivityManager.getNetworkCapabilities(it) }
-                    .firstOrNull { it.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) }
-            } ?: return false
+            val capabilities = connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
+                ?: return false
 
             return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
                 capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)

@@ -62,7 +62,8 @@ class SFTPActivity : AppCompatActivity() {
     private lateinit var transferAdapter: TransferAdapter
     
     // Current directories
-    private var currentLocalPath = "/storage/emulated/0" // Default to external storage
+    // Default to external storage
+    private var currentLocalPath = "/storage/emulated/0"
     private var currentRemotePath = "/"
 
     /**
@@ -652,7 +653,8 @@ class SFTPActivity : AppCompatActivity() {
                 
                 if (created) {
                     showToast("Folder created: $folderName")
-                    loadRemoteDirectory(currentRemotePath) // Refresh
+                    // Refresh
+                    loadRemoteDirectory(currentRemotePath)
                 } else {
                     showError("Failed to create folder", "Error")
                 }
@@ -848,8 +850,10 @@ class SFTPActivity : AppCompatActivity() {
 
     private fun parseInitialMode(perms: String?, isDirectory: Boolean): Int {
         // Kotlin has no octal literal; use String.toInt(8) for clarity.
-        val defaultDir = "755".toInt(8)   // 0o755
-        val defaultFile = "644".toInt(8)  // 0o644
+        // 0o755
+        val defaultDir = "755".toInt(8)
+        // 0o644
+        val defaultFile = "644".toInt(8)
         if (perms.isNullOrBlank()) return if (isDirectory) defaultDir else defaultFile
         perms.trim().toIntOrNull(8)?.let { return it }
         val s = if (perms.length == 10) perms.substring(1) else perms
@@ -915,7 +919,8 @@ class SFTPActivity : AppCompatActivity() {
                             override fun onCompleted(transfer: TransferTask, result: io.github.tabssh.sftp.TransferResult) {
                                 runOnUiThread {
                                     handleTransferCompleted(transfer, result)
-                                    loadRemoteDirectory(currentRemotePath) // Refresh remote files
+                                    // Refresh remote files
+                                    loadRemoteDirectory(currentRemotePath)
 
                                     // Show completion notification
                                     when (result) {
@@ -990,7 +995,8 @@ class SFTPActivity : AppCompatActivity() {
                             override fun onCompleted(transfer: TransferTask, result: io.github.tabssh.sftp.TransferResult) {
                                 runOnUiThread {
                                     handleTransferCompleted(transfer, result)
-                                    loadLocalDirectory(currentLocalPath) // Refresh local files
+                                    // Refresh local files
+                                    loadLocalDirectory(currentLocalPath)
 
                                     // Show completion notification
                                     when (result) {
@@ -1106,7 +1112,8 @@ class SFTPActivity : AppCompatActivity() {
                 
                 if (success) {
                     showToast("Renamed to $newName")
-                    loadRemoteDirectory(currentRemotePath) // Refresh
+                    // Refresh
+                    loadRemoteDirectory(currentRemotePath)
                 } else {
                     showError("Failed to rename file", "Error")
                 }
@@ -1136,7 +1143,8 @@ class SFTPActivity : AppCompatActivity() {
                 
                 if (success) {
                     showToast("Deleted ${file.name}")
-                    loadRemoteDirectory(currentRemotePath) // Refresh
+                    // Refresh
+                    loadRemoteDirectory(currentRemotePath)
                 } else {
                     showError("Failed to delete ${file.name}", "Error")
                 }
@@ -1155,7 +1163,8 @@ class SFTPActivity : AppCompatActivity() {
             .setPositiveButton("Delete") { _, _ ->
                 if (file.delete()) {
                     showToast("Deleted ${file.name}")
-                    loadLocalDirectory(currentLocalPath) // Refresh
+                    // Refresh
+                    loadLocalDirectory(currentLocalPath)
                 } else {
                     showError("Failed to delete ${file.name}", "Error")
                 }

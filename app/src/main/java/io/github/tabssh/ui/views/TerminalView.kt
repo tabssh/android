@@ -175,22 +175,30 @@ class TerminalView @JvmOverloads constructor(
     private var currentTheme: Theme? = null
     private val defaultColors = IntArray(16) {
         when (it) {
-            0 -> Color.BLACK       // Black
-            1 -> Color.RED         // Red
-            2 -> Color.GREEN       // Green
-            3 -> Color.YELLOW      // Yellow
-            4 -> Color.BLUE        // Blue
-            5 -> Color.MAGENTA     // Magenta
-            6 -> Color.CYAN        // Cyan
-            7 -> Color.WHITE       // White
-            8 -> Color.GRAY        // Bright Black
-            9 -> Color.RED         // Bright Red
-            10 -> Color.GREEN      // Bright Green
-            11 -> Color.YELLOW     // Bright Yellow
-            12 -> Color.BLUE       // Bright Blue
-            13 -> Color.MAGENTA    // Bright Magenta
-            14 -> Color.CYAN       // Bright Cyan
-            15 -> Color.WHITE      // Bright White
+            0 -> Color.BLACK
+            1 -> Color.RED
+            2 -> Color.GREEN
+            3 -> Color.YELLOW
+            4 -> Color.BLUE
+            5 -> Color.MAGENTA
+            6 -> Color.CYAN
+            7 -> Color.WHITE
+            // Bright Black
+            8 -> Color.GRAY
+            // Bright Red
+            9 -> Color.RED
+            // Bright Green
+            10 -> Color.GREEN
+            // Bright Yellow
+            11 -> Color.YELLOW
+            // Bright Blue
+            12 -> Color.BLUE
+            // Bright Magenta
+            13 -> Color.MAGENTA
+            // Bright Cyan
+            14 -> Color.CYAN
+            // Bright White
+            15 -> Color.WHITE
             else -> Color.WHITE
         }
     }
@@ -356,12 +364,14 @@ class TerminalView @JvmOverloads constructor(
         return selectionMagnifier ?: magnifierFactory(this).also { selectionMagnifier = it }
     }
     private val selectionPaint = Paint().apply {
-        color = 0x55_4FC3F7.toInt()        // translucent light-blue
+        // translucent light-blue
+        color = 0x55_4FC3F7.toInt()
         style = Paint.Style.FILL
         isAntiAlias = false
     }
     private val selectionHandlePaint = Paint().apply {
-        color = 0xFF_4FC3F7.toInt()        // solid light-blue
+        // solid light-blue
+        color = 0xFF_4FC3F7.toInt()
         style = Paint.Style.FILL
         isAntiAlias = true
     }
@@ -1266,7 +1276,8 @@ class TerminalView @JvmOverloads constructor(
     private fun calculateCellDimensions() {
         val fontMetrics = textPaint.fontMetrics
         cellHeight = (fontMetrics.bottom - fontMetrics.top) * lineSpacingMultiplier
-        cellWidth = textPaint.measureText("M") // Use 'M' as reference for monospace
+        // Use 'M' as reference for monospace
+        cellWidth = textPaint.measureText("M")
     }
 
     /**
@@ -1742,19 +1753,23 @@ class TerminalView @JvmOverloads constructor(
             cursorPaint.alpha = 200
 
             when (bridge.getCursorStyle()) {
-                0 -> { // Block cursor - filled rectangle
+                // Block cursor - filled rectangle
+                0 -> {
                     cursorPaint.alpha = 128
                     canvas.drawRect(cursorX, cursorY, cursorX + cellWidth, cursorY + cellHeight, cursorPaint)
                 }
-                1 -> { // Underline cursor - thin line at bottom
+                // Underline cursor - thin line at bottom
+                1 -> {
                     val underlineHeight = maxOf(2f, cellHeight * 0.15f)
                     canvas.drawRect(cursorX, cursorY + cellHeight - underlineHeight, cursorX + cellWidth, cursorY + cellHeight, cursorPaint)
                 }
-                2 -> { // Bar/I-beam cursor - thin vertical line
+                // Bar/I-beam cursor - thin vertical line
+                2 -> {
                     val barWidth = maxOf(2f, cellWidth * 0.15f)
                     canvas.drawRect(cursorX, cursorY, cursorX + barWidth, cursorY + cellHeight, cursorPaint)
                 }
-                else -> { // Default to bar
+                // Default to bar
+                else -> {
                     val barWidth = maxOf(2f, cellWidth * 0.15f)
                     canvas.drawRect(cursorX, cursorY, cursorX + barWidth, cursorY + cellHeight, cursorPaint)
                 }
@@ -2144,7 +2159,8 @@ class TerminalView @JvmOverloads constructor(
             val r = Runnable {
                 selectionArmRunnable = null
                 enterSelectionMode(ex, ey)
-                selectionDragHandle = 1  // pre-grab focus handle
+                // pre-grab focus handle
+                selectionDragHandle = 1
             }
             selectionArmRunnable = r
             postDelayed(r, android.view.ViewConfiguration.getDoubleTapTimeout().toLong() / 4)
@@ -2514,10 +2530,14 @@ class TerminalView @JvmOverloads constructor(
             KeyEvent.KEYCODE_X -> "\u0018"
             KeyEvent.KEYCODE_Y -> "\u0019"
             KeyEvent.KEYCODE_Z -> "\u001A"
-            KeyEvent.KEYCODE_SPACE -> "\u0000"  // Ctrl+Space = NUL
-            KeyEvent.KEYCODE_LEFT_BRACKET -> "\u001B"  // Ctrl+[ = ESC
-            KeyEvent.KEYCODE_BACKSLASH -> "\u001C"  // Ctrl+\
-            KeyEvent.KEYCODE_RIGHT_BRACKET -> "\u001D"  // Ctrl+]
+            // Ctrl+Space = NUL
+            KeyEvent.KEYCODE_SPACE -> "\u0000"
+            // Ctrl+[ = ESC
+            KeyEvent.KEYCODE_LEFT_BRACKET -> "\u001B"
+            // Ctrl+\
+            KeyEvent.KEYCODE_BACKSLASH -> "\u001C"
+            // Ctrl+]
+            KeyEvent.KEYCODE_RIGHT_BRACKET -> "\u001D"
             else -> null
         }
     }
@@ -3251,7 +3271,8 @@ class TerminalView @JvmOverloads constructor(
     private fun selectWordAtPosition(x: Float, y: Float) {
         // Get text at touch position using existing method
         val result = getTextAtPosition(x, y) ?: return
-        val text = result.second  // Extract string from Pair<Int, String>
+        // Extract string from Pair<Int, String>
+        val text = result.second
 
         // Guard against empty text
         if (text.isEmpty()) return
@@ -3563,7 +3584,8 @@ class TerminalView @JvmOverloads constructor(
 
     private fun stopCursorBlink() {
         cursorBlinkHandler.removeCallbacks(cursorBlinkRunnable)
-        cursorBlinkPhase = true   // leave cursor visible when blink stops
+        // leave cursor visible when blink stops
+        cursorBlinkPhase = true
     }
 
     companion object {

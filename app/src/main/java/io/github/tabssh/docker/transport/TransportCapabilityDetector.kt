@@ -24,10 +24,12 @@ import java.util.concurrent.TimeUnit
  * never short-circuits: the full ladder re-runs on every detect so the host
  * auto-upgrades the moment a better tier starts working, and the per-tier
  * failure reasons are logged each time instead of being hidden behind the
- * pin. The legacy pinned mode "api_socat" (the removed socat/nc bridge tier)
- * is treated as [MODE_AUTO] so an old pin falls through to full detection
- * instead of failing outright; the freshly detected tier is persisted over
- * it.
+ * pin. Pinning is an allowlist, not an exclusion list: only [PINNABLE_MODES]
+ * (the two API tiers) ever short-circuit detection, so any stored value that
+ * is not one of the currently-supported tiers — a removed legacy tier name,
+ * a corrupt value, anything unrecognised — falls through to full detection
+ * exactly like [MODE_AUTO] instead of reaching [openTier] as a real pin; the
+ * freshly detected tier is persisted over it.
  *
  * A socket-permission probe runs before the socket tiers: "permission denied"
  * is surfaced as [DockerResult.PermissionDenied] carrying the docker-group
@@ -50,16 +52,17 @@ class TransportCapabilityDetector(
         private const val MODE_API_STDIO = "api_stdio"
         private const val MODE_CLI_EXEC = "cli_exec"
 
-        /** Removed socat/nc bridge tier — a stored pin of this value migrates to auto. */
-        private const val LEGACY_MODE_API_SOCAT = "api_socat"
-
         /**
-         * True when [mode] should be treated as [MODE_AUTO] — either the
-         * literal auto value, or the legacy socat-bridge pin left over from
-         * before the dial-stdio migration.
+         * Modes that can short-circuit detection as a stored pin. cli_exec
+         * is deliberately excluded (see class doc — it always re-runs the
+         * ladder), and this is an allowlist rather than an "everything but
+         * auto/cli_exec" exclusion so an unrecognised stored value can never
+         * be mistaken for a real pin.
          */
-        internal fun isAutoOrLegacy(mode: String): Boolean =
-            mode == MODE_AUTO || mode == LEGACY_MODE_API_SOCAT
+        private val PINNABLE_MODES = setOf(MODE_API_STREAMLOCAL, MODE_API_STDIO)
+
+        /** Every mode this detector currently understands, pinnable or not. */
+        private val KNOWN_MODES = PINNABLE_MODES + MODE_AUTO + MODE_CLI_EXEC
     }
 
     /** Outcome of a successful detection. */
@@ -101,9 +104,18 @@ class TransportCapabilityDetector(
         // A stored cli_exec is the bottom tier — never fast-path it, or the
         // host stays pinned there forever and the API-tier failure reasons
         // are never logged. Re-running the ladder is what auto-upgrades it.
-        val pinned = host.transportMode
-            .takeIf { !isAutoOrLegacy(it) && it != MODE_CLI_EXEC && !force }
+        val storedMode = host.transportMode
+        Logger.d(TAG, "detect: host=${host.id} storedMode=$storedMode force=$force")
+        if (storedMode !in KNOWN_MODES) {
+            Logger.w(
+                TAG,
+                "detect: host=${host.id} unrecognised stored mode '$storedMode' — " +
+                    "treating as $MODE_AUTO and running full detection"
+            )
+        }
+        val pinned = storedMode.takeIf { it in PINNABLE_MODES && !force }
         if (pinned != null) {
+            Logger.d(TAG, "detect: host=${host.id} using pinned tier $pinned")
             return@withContext openTier(pinned, host, runner)
         }
 
@@ -300,10 +312,12 @@ class TransportCapabilityDetector(
                     result.stdout.trim().take(200))
             }
         } catch (e: TransportUnavailableException) {
+            Logger.w(TAG, "socket probe: transport unavailable: ${e.message}")
             DockerResult.TransportUnavailable(e.message.orEmpty(), e.detail)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            Logger.w(TAG, "socket probe failed: ${e.message}")
             DockerResult.Error("Socket probe failed", e.message)
         }
     }

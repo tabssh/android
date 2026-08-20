@@ -17,14 +17,16 @@ import javax.crypto.spec.SecretKeySpec
  *  - 128-bit AES-GCM authentication tag — standard.
  *  - 32-byte symmetric key (AES-256).
  *
- * BouncyCastle is already a TabSSH dependency (`bcprov-jdk18on:1.77`) — no new
+ * BouncyCastle is already a TabSSH dependency (`bcprov-jdk18on:1.79`) — no new
  * crypto deps needed.
  */
 object PairingDecryptor {
 
-    private const val KEY_SIZE_BYTES = 32           // AES-256
+    // AES-256
+    private const val KEY_SIZE_BYTES = 32
     private const val GCM_TAG_BITS = 128
-    private const val ARGON2_MEMORY_KIB = 64 * 1024 // 64 MiB
+    // 64 MiB
+    private const val ARGON2_MEMORY_KIB = 64 * 1024
     private const val ARGON2_ITERATIONS = 3
     private const val ARGON2_PARALLELISM = 1
 
@@ -44,10 +46,19 @@ object PairingDecryptor {
         val gen = Argon2BytesGenerator()
         gen.init(params)
         val out = ByteArray(KEY_SIZE_BYTES)
-        // generateBytes(char[], byte[]) — char-array variant gives BC the
-        // password as Unicode code points, matching Rust's argon2 crate
-        // behaviour when fed `code.as_bytes()` from a UTF-8 string of digits.
-        gen.generateBytes(code.toCharArray(), out)
+        try {
+            // generateBytes(char[], byte[]) — char-array variant gives BC the
+            // password as Unicode code points, matching Rust's argon2 crate
+            // behaviour when fed `code.as_bytes()` from a UTF-8 string of digits.
+            gen.generateBytes(code.toCharArray(), out)
+        } catch (e: OutOfMemoryError) {
+            // BouncyCastle allocates the whole 64 MiB cost on the Java heap, which a
+            // low-RAM device can refuse; an Error is not an Exception, so without this
+            // the process dies instead of the caller reporting a recoverable failure
+            throw IllegalStateException(
+                "Key derivation needs $ARGON2_MEMORY_KIB KiB of memory and this device could not spare it"
+            )
+        }
         return out
     }
 

@@ -146,11 +146,14 @@ class KeyboardRowView @JvmOverloads constructor(
         // colour would fight with looking disabled.
         if (!active) btn.setHighlight(if (dimmed) 0 else accentColor)
         btn.alpha = when {
-            dimmed           -> 0.25f  // Forced dim: feature disabled by the user
+            // Forced dim: feature disabled by the user
+            dimmed           -> 0.25f
             active           -> 1.0f
-            accentColor != 0 -> 0.95f  // mux detected, not armed — slightly dim
+            // mux detected, not armed — slightly dim
+            accentColor != 0 -> 0.95f
             enabled          -> 0.7f
-            else             -> 0.25f  // Very dim: "nothing to send"
+            // Very dim: "nothing to send"
+            else             -> 0.25f
         }
     }
 
@@ -324,8 +327,10 @@ class KeyboardRowView @JvmOverloads constructor(
         private val rectF = RectF()
         private val lockRectF = RectF()
         private val cornerR = 4f * density
-        private var isActive = false   // true = latched modifier / active PREFIX
-        private var isLocked = false   // true = modifier locked on (inner ring)
+        // true = latched modifier / active PREFIX
+        private var isActive = false
+        // true = modifier locked on (inner ring)
+        private var isLocked = false
 
         // Press-and-hold auto-repeat. Enabled per key via [enableKeyRepeat] for
         // arrows/symbols/etc. so holding e.g. → keeps moving the cursor. When
@@ -417,7 +422,8 @@ class KeyboardRowView @JvmOverloads constructor(
          * Pass 0 to reset to the default theme palette.
          */
         fun setHighlight(color: Int) {
-            if (isActive) return   // active fill state wins
+            // active fill state wins
+            if (isActive) return
             strokePaint.color = if (color != 0) color else defaultStrokeColor
             textPaint.color   = if (color != 0) color else defaultTextColor
             invalidate()

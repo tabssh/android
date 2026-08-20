@@ -17,6 +17,7 @@ import io.github.tabssh.sync.metadata.SyncMetadataManager
 import io.github.tabssh.sync.models.SyncDataPackage
 import io.github.tabssh.sync.models.SyncItemCounts
 import io.github.tabssh.sync.tombstone.TombstoneRecorder
+import io.github.tabssh.utils.SharedPrefsCodec
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -35,6 +36,12 @@ class SyncDataCollector {
 
     companion object {
         private const val TAG = "SyncDataCollector"
+
+        /**
+         * Named SharedPreferences files carrying user data outside the Room DB.
+         * Must stay in step with the equivalent list in BackupExporter.
+         */
+        val NAMED_PREF_FILES = listOf("TabSSH", "cluster_commands", "snippet_var_recall")
     }
 
     private val context: Context
@@ -123,6 +130,7 @@ class SyncDataCollector {
         val vncIdentities      = if (syncVncIdentities)      collectVncIdentities()      else emptyList()
         val cloudAccounts      = if (syncCloudAccounts)      collectCloudAccounts()      else emptyList()
         val dashboardConfig    = if (syncDashboard)          collectDashboardConfig()    else emptyMap()
+        val namedPrefFiles     = if (syncSettings)           collectNamedPreferenceFiles() else emptyMap()
         val portForwards       = if (syncPortForwards)       collectPortForwards()       else emptyList()
         val networkRoutes      = if (syncNetworkRoutes)      collectNetworkRoutes()      else emptyList()
         val dockerHosts                = if (syncDocker) collectDockerHosts()                else emptyList()
@@ -185,6 +193,7 @@ class SyncDataCollector {
             vncIdentities      = vncIdentities,
             cloudAccounts      = cloudAccounts,
             dashboardConfig    = dashboardConfig,
+            namedPreferenceFiles = namedPrefFiles,
             portForwards       = portForwards,
             networkRoutes      = networkRoutes,
             dockerHosts                 = dockerHosts,
@@ -381,13 +390,33 @@ class SyncDataCollector {
         }
     }
 
+    /**
+     * Named SharedPreferences files with user data that lives outside both the
+     * Room DB and the default preference store. Backed up already — they sync
+     * too, so a second device does not silently lose sort orders, saved cluster
+     * commands, or snippet variable recall.
+     */
+    private fun collectNamedPreferenceFiles(): Map<String, Map<String, JsonObject>> {
+        val out = mutableMapOf<String, Map<String, JsonObject>>()
+        NAMED_PREF_FILES.forEach { name ->
+            try {
+                val sp = context.getSharedPreferences(name, android.content.Context.MODE_PRIVATE)
+                val values = SharedPrefsCodec.encodeAll(sp)
+                if (values.isNotEmpty()) out[name] = values
+            } catch (e: Exception) {
+                Logger.w(TAG, "Failed to collect SharedPreferences file $name: ${e.message}")
+            }
+        }
+        return out
+    }
+
     /** Dashboard groups and host-membership keys from the `multi_host_dashboard`
-     *  SharedPreferences file.  Collected as a flat String→String map so it
-     *  round-trips through the sync payload without any schema change. */
-    private fun collectDashboardConfig(): Map<String, String> {
+     *  SharedPreferences file. Values are type-tagged because the file mixes
+     *  string blobs with a Boolean collapse flag. */
+    private fun collectDashboardConfig(): Map<String, JsonObject> {
         return try {
             val sp = context.getSharedPreferences("multi_host_dashboard", android.content.Context.MODE_PRIVATE)
-            sp.all.mapValues { (_, v) -> v?.toString() ?: "" }
+            SharedPrefsCodec.encodeAll(sp)
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to collect dashboard config", e)
             emptyMap()
@@ -481,6 +510,9 @@ class SyncDataCollector {
         } else {
             emptyMap()
         }
+        // Named SharedPreferences files have no per-key timestamp — include all
+        // keys whenever settings sync is on, same policy as the dashboard.
+        val namedPrefFiles = if (syncSettings) collectNamedPreferenceFiles() else emptyMap()
 
         val itemCounts = SyncItemCounts(
             connections        = connections.size,
@@ -539,6 +571,7 @@ class SyncDataCollector {
             vncIdentities      = vncIdentities,
             cloudAccounts      = cloudAccounts,
             dashboardConfig    = dashboardConfig,
+            namedPreferenceFiles = namedPrefFiles,
             portForwards       = portForwards,
             networkRoutes      = networkRoutes,
             dockerHosts                 = dockerHosts,
@@ -566,9 +599,12 @@ class SyncDataCollector {
     // successful apply, never mid-cycle.
     // ---------------------------------------------------------------------
 
-    /** All 16 tombstone-eligible entity types, paired with their sync toggle. */
+    /** Every tombstone-eligible entity type, paired with its sync toggle. */
     private fun enabledTombstoneTypes(): Set<String> {
         val out = mutableSetOf<String>()
+        // Secrets carry no category toggle of their own: each alias family is
+        // gated individually at apply time by SyncDataApplier.isSecretAliasEnabled.
+        out += TombstoneRecorder.SECRET
         if (preferenceManager.isSyncConnectionsEnabled())        out += TombstoneRecorder.CONNECTION
         if (preferenceManager.isSyncKeysEnabled())               out += TombstoneRecorder.KEY
         if (preferenceManager.isSyncThemesEnabled())             out += TombstoneRecorder.THEME
@@ -624,7 +660,41 @@ class SyncDataCollector {
         TombstoneRecorder.COMPOSE_STACK     -> collectComposeStacks().map { TombstoneRecorder.naturalKey(it) }
         TombstoneRecorder.SINGLE_CONTAINER_CONFIG -> collectSingleContainerConfigs().map { TombstoneRecorder.naturalKey(it) }
         TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY -> collectContainerAutoUpdatePolicies().map { TombstoneRecorder.naturalKey(it) }
+        TombstoneRecorder.SECRET            -> liveSecretAliases()
         else -> emptyList()
+    }
+
+    /**
+     * Every sync wire alias for which this device currently holds a secret,
+     * ungated — the per-family sync toggles decide what is *sent*, but the live
+     * set must reflect reality or the backstop would tombstone a credential
+     * merely because its category is switched off.
+     *
+     * Throws when the Keystore is unreachable so the caller skips the type
+     * rather than mistaking "cannot read" for "everything was deleted".
+     */
+    private suspend fun liveSecretAliases(): List<String> {
+        val pm = app?.securePasswordManager
+            ?: throw IllegalStateException("SecurePasswordManager unavailable — secret live set unknown")
+        val out = mutableListOf<String>()
+        // Alias families whose Keystore alias IS the wire alias.
+        val wirePrefixes = listOf(
+            "identity_", "hypervisor_", "hypervisor_account_",
+            "oci_private_key_account_", "oci_passphrase_account_",
+            "vnc_identity_", "vnc_host_", "cloud_token_",
+            "key_passphrase_", "docker_host_", "registry_credential_"
+        )
+        pm.storedAliases().forEach { alias ->
+            if (wirePrefixes.any { alias.startsWith(it) }) out += alias
+        }
+        // Connection passwords: Keystore alias is the bare connection id, so it
+        // is only recognisable by cross-referencing the connection table.
+        database.connectionDao().getAllConnections().first().forEach { c ->
+            if (pm.hasStoredPassword(c.id)) out += "conn_pw_${c.id}"
+        }
+        // SSH private key material lives in KeyStorage, not SecurePasswordManager.
+        database.keyDao().getAllKeys().first().forEach { key -> out += "ssh_key_${key.keyId}" }
+        return out
     }
 
     /** Backstop: for each enabled type, tombstone any key present in the shadow
@@ -665,9 +735,10 @@ class SyncDataCollector {
         }
     }
 
-    /** Refresh the shadow baseline to the current live keys for ALL 16 types.
-     *  MUST be called only AFTER a successful merge+apply, so the next backstop
-     *  diff is taken against post-apply reality. Never call mid-cycle. */
+    /** Refresh the shadow baseline to the current live keys for every
+     *  tombstone-eligible type. MUST be called only AFTER a successful
+     *  merge+apply, so the next backstop diff is taken against post-apply
+     *  reality. Never call mid-cycle. */
     suspend fun snapshotState() = withContext(Dispatchers.IO) {
         val shadowDao = database.syncShadowDao()
         val allTypes = listOf(
@@ -677,9 +748,11 @@ class SyncDataCollector {
             TombstoneRecorder.CERTIFICATE, TombstoneRecorder.MACRO, TombstoneRecorder.MONITOR_SLOT,
             TombstoneRecorder.HYPERVISOR_ACCOUNT, TombstoneRecorder.VNC_HOST,
             TombstoneRecorder.VNC_IDENTITY, TombstoneRecorder.CLOUD_ACCOUNT,
-            TombstoneRecorder.PORT_FORWARD, TombstoneRecorder.DOCKER_HOST,
+            TombstoneRecorder.PORT_FORWARD, TombstoneRecorder.NETWORK_ROUTE,
+            TombstoneRecorder.DOCKER_HOST,
             TombstoneRecorder.REGISTRY_CREDENTIAL, TombstoneRecorder.COMPOSE_STACK,
-            TombstoneRecorder.SINGLE_CONTAINER_CONFIG, TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY
+            TombstoneRecorder.SINGLE_CONTAINER_CONFIG, TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY,
+            TombstoneRecorder.SECRET
         )
         for (type in allTypes) {
             try {
@@ -811,18 +884,18 @@ class SyncDataCollector {
                             ?.let { out["registry_credential_${c.id}"] = it }
                     }
                 }
-            }
 
-            // Connection passwords — stored in PreferenceManager SharedPreferences under
-            // "password_{connectionId}" (not SecurePasswordManager). Alias: conn_pw_{id}.
-            if (syncConnections) {
-                database.connectionDao().getAllConnections().first()
-                    .filter { c -> c.getAuthTypeEnum() == io.github.tabssh.ssh.auth.AuthType.PASSWORD }
-                    .forEach { c ->
-                        preferenceManager.getConnectionPassword(c.id)
-                            ?.takeIf { it.isNotEmpty() }
-                            ?.let { out["conn_pw_${c.id}"] = it }
-                    }
+                // Connection passwords — the Keystore alias is the bare connection
+                // id, which is what the SSH path reads. Wire alias: conn_pw_{id}.
+                if (syncConnections) {
+                    database.connectionDao().getAllConnections().first()
+                        .filter { c -> c.getAuthTypeEnum() == io.github.tabssh.ssh.auth.AuthType.PASSWORD }
+                        .forEach { c ->
+                            pm.retrievePassword(c.id)
+                                ?.takeIf { it.isNotEmpty() }
+                                ?.let { out["conn_pw_${c.id}"] = it }
+                        }
+                }
             }
 
             // SSH private key JSch bytes — stored as "ssh_key_{keyId}"
@@ -925,7 +998,10 @@ class SyncDataCollector {
             prefs["multiplexer"]    = anyMapToJsonObject(collectMultiplexerPreferences())
             prefs["accessibility"]  = anyMapToJsonObject(collectAccessibilityPreferences())
             prefs["paste"]          = anyMapToJsonObject(collectPastePreferences())
-            prefs["proxy"]          = anyMapToJsonObject(collectProxyPreferences())
+            prefs["audit"]          = anyMapToJsonObject(collectAuditPreferences())
+            prefs["tasker"]         = anyMapToJsonObject(collectTaskerPreferences())
+            prefs["logging"]        = anyMapToJsonObject(collectLoggingPreferences())
+            prefs["docker"]         = anyMapToJsonObject(collectDockerPreferences())
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to collect preferences", e)
         }
@@ -1004,7 +1080,10 @@ class SyncDataCollector {
             "compression" to preferenceManager.isCompressionEnabled(),
             "serverAliveIntervalSec" to preferenceManager.getServerAliveIntervalSec(),
             "x11ForwardingDefault" to preferenceManager.isX11ForwardingDefault(),
-            "agentForwardingDefault" to preferenceManager.isAgentForwardingDefault()
+            "agentForwardingDefault" to preferenceManager.isAgentForwardingDefault(),
+            "fileOpenSizeLimitMb" to preferenceManager.getFileOpenSizeLimitMb(),
+            // Empty string means "no default route".
+            "defaultRouteId" to (preferenceManager.getDefaultRouteId() ?: "")
         )
     }
 
@@ -1033,6 +1112,7 @@ class SyncDataCollector {
             "syncDashboard"         to preferenceManager.isSyncDashboardEnabled(),
             "syncPortForwards"      to preferenceManager.isSyncPortForwardsEnabled(),
             "syncNetworkRoutes"     to preferenceManager.isSyncNetworkRoutesEnabled(),
+            "syncDocker"            to preferenceManager.isSyncDockerEnabled(),
             "autoResolve"           to preferenceManager.isAutoResolveConflictsEnabled()
         )
     }
@@ -1123,20 +1203,43 @@ class SyncDataCollector {
         "pastebinApiKey" to preferenceManager.getPastebinApiKey()
     )
 
-    private fun collectProxyPreferences(): Map<String, Any> {
-        val out = mutableMapOf<String, Any>()
-        out["enabled"]     = preferenceManager.isProxyEnabled()
-        out["type"]        = preferenceManager.getProxyType()
-        out["host"]        = preferenceManager.getProxyHost()
-        out["port"]        = preferenceManager.getProxyPort()
-        val user = preferenceManager.getProxyUsername()
-        if (!user.isNullOrEmpty()) out["username"] = user
-        val pass = preferenceManager.getProxyPassword()
-        if (!pass.isNullOrEmpty()) out["password"] = pass
-        val bypass = preferenceManager.getProxyBypassHosts()
-        if (bypass.isNotEmpty()) out["bypassHosts"] = bypass.joinToString("\n")
-        return out
-    }
+    /** Audit-log policy (preferences_audit.xml) — user policy, so it syncs. */
+    private fun collectAuditPreferences(): Map<String, Any> = mapOf(
+        "enabled"     to preferenceManager.isAuditLogEnabled(),
+        "maxSizeMb"   to preferenceManager.getAuditLogMaxSizeMb(),
+        "maxAgeDays"  to preferenceManager.getAuditLogMaxAgeDays(),
+        "logCommands" to preferenceManager.isAuditLogCommandsEnabled(),
+        "logOutput"   to preferenceManager.isAuditLogOutputEnabled()
+    )
+
+    /**
+     * Tasker/Locale plugin policy (preferences_tasker.xml). These gate an
+     * exported receiver, so they are security policy and must stay identical
+     * across the user's devices.
+     */
+    private fun collectTaskerPreferences(): Map<String, Any> = mapOf(
+        "enabled"          to preferenceManager.isTaskerEnabled(),
+        "requireUnlock"    to preferenceManager.isTaskerRequireUnlockEnabled(),
+        "includeOutput"    to preferenceManager.isTaskerIncludeOutputEnabled(),
+        "logEvents"        to preferenceManager.isTaskerLogEventsEnabled(),
+        "commandTimeoutMs" to preferenceManager.getTaskerCommandTimeoutMs(),
+        // Empty list = all connections allowed. Newline-joined so the value
+        // stays a JSON primitive like every other entry in this map.
+        "allowedConnections" to preferenceManager.getTaskerAllowedConnections().joinToString("\n")
+    )
+
+    /** Diagnostics (preferences_logging.xml). */
+    private fun collectLoggingPreferences(): Map<String, Any> = mapOf(
+        "debugLogging"      to preferenceManager.isDebugLoggingEnabled(),
+        "debugLogLevel"     to preferenceManager.getDebugLogLevel(),
+        "logKeystrokeBytes" to preferenceManager.isLogKeystrokeBytesEnabled(),
+        "hostLogging"       to preferenceManager.isHostLoggingEnabled(),
+        "hostLogMaxSizeMb"  to preferenceManager.getHostLogMaxSizeMb()
+    )
+
+    private fun collectDockerPreferences(): Map<String, Any> = mapOf(
+        "updateCheckEnabled" to preferenceManager.isDockerUpdateCheckEnabled()
+    )
 
     /**
      * Check if preferences have changed since timestamp
@@ -1170,7 +1273,12 @@ class SyncDataCollector {
             cloudAccounts     = try { database.cloudAccountDao().getAll().size } catch (_: Exception) { 0 },
             dashboard         = try { collectDashboardConfig().size } catch (_: Exception) { 0 },
             portForwards      = try { database.portForwardDao().getAllList().size } catch (_: Exception) { 0 },
-            networkRoutes     = try { database.networkRouteDao().getAllList().size } catch (_: Exception) { 0 }
+            networkRoutes     = try { database.networkRouteDao().getAllList().size } catch (_: Exception) { 0 },
+            dockerHosts       = try { database.dockerHostDao().getAllList().size } catch (_: Exception) { 0 },
+            registryCredentials = try { database.registryCredentialDao().getAllList().size } catch (_: Exception) { 0 },
+            composeStacks     = try { database.composeStackDao().getAllList().size } catch (_: Exception) { 0 },
+            singleContainerConfigs = try { database.singleContainerConfigDao().getAllList().size } catch (_: Exception) { 0 },
+            containerAutoUpdatePolicies = try { database.containerAutoUpdatePolicyDao().getAllList().size } catch (_: Exception) { 0 }
         )
     }
 

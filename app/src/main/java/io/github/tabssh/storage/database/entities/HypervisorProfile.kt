@@ -40,11 +40,9 @@ data class HypervisorProfile(
     @ColumnInfo(name = "username")
     val username: String,
     
-    @ColumnInfo(name = "password")
-    val password: String,
-    
+    // Proxmox: pam/pve, XCP-ng: not used
     @ColumnInfo(name = "realm")
-    val realm: String? = null, // Proxmox: pam/pve, XCP-ng: not used
+    val realm: String? = null,
     
     /**
      * `false` is the correct default for Proxmox / XCP-ng / VMware / XO.
@@ -77,17 +75,20 @@ data class HypervisorProfile(
     @ColumnInfo(name = "pinned_cert_sha256")
     val pinnedCertSha256: String? = null,
     
+    // "auto", "direct", "centralized" - Override auto-detection
     @ColumnInfo(name = "api_type_override")
-    val apiTypeOverride: String = "auto", // "auto", "direct", "centralized" - Override auto-detection
+    val apiTypeOverride: String = "auto",
 
+    // Reference to existing SSH connection (ConnectionProfile.id)
     @ColumnInfo(name = "linked_connection_id")
-    val linkedConnectionId: String? = null, // Reference to existing SSH connection (ConnectionProfile.id)
+    val linkedConnectionId: String? = null,
 
     /**
      * Optional reference to a reusable `HypervisorAccount`. When set,
      * the host inherits username + (Keystore) password + (optional)
-     * realm from the account; the inline `username` / `password` /
-     * `realm` columns on this row become legacy fallbacks.
+     * realm from the account; the inline `username` / `realm` columns on
+     * this row become legacy fallbacks. There is no inline password
+     * column — the secret always lives in the Keystore.
      *
      * Resolution rules — see `HypervisorPasswordStore.resolveCredentials`:
      *   accountId == null: inline fields win.
@@ -151,24 +152,12 @@ data class HypervisorProfile(
      * to "publickey,password" so key auth is tried first.
      */
     @ColumnInfo(name = "ssh_identity_id")
-    val sshIdentityId: String? = null
-) {
-    /**
-     * Redacted rendering. The compiler-generated data-class `toString`
-     * would print `password` verbatim, and this entity reaches
-     * `Logger.d`/exception messages on several paths — so the password is
-     * replaced with a fixed marker while every other field is preserved.
-     */
-    override fun toString(): String =
-        "HypervisorProfile(id=$id, name=$name, type=$type, host=$host, port=$port, " +
-            "username=$username, password=${if (password.isEmpty()) "<none>" else "xxxxx"}, " +
-            "realm=$realm, verifySsl=$verifySsl, pinnedCertSha256=$pinnedCertSha256, " +
-            "apiTypeOverride=$apiTypeOverride, linkedConnectionId=$linkedConnectionId, " +
-            "accountId=$accountId, notes=$notes, lastConnected=$lastConnected, " +
-            "createdAt=$createdAt, authType=$authType, ociTenancyOcid=$ociTenancyOcid, " +
-            "ociUserOcid=$ociUserOcid, ociRegion=$ociRegion, ociFingerprint=$ociFingerprint, " +
-            "ociCompartmentOcid=$ociCompartmentOcid, sshIdentityId=$sshIdentityId)"
-}
+    val sshIdentityId: String? = null,
+
+    /** Last local modification time, used for sync last-write-wins comparisons. */
+    @ColumnInfo(name = "modified_at")
+    val modifiedAt: Long = 0
+)
 
 @Serializable
 enum class HypervisorType {

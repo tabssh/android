@@ -109,6 +109,7 @@ object DockerSessionManager {
             val existing = synchronized(lock) { sessions[hostId] }
             if (existing != null && !force && existing.connection.isConnected()) {
                 synchronized(lock) { lastUsed[hostId] = System.currentTimeMillis() }
+                Logger.d(TAG, "reusing cached docker session for host $hostId via ${existing.mode}")
                 return@withContext DockerResult.Success(existing)
             }
             if (existing != null) {

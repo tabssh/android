@@ -45,35 +45,44 @@ import org.json.JSONObject
 /**
  * Handles exporting data for backup.
  *
- * Wire format v2 — written by this class on every export:
+ * Per-entity wire shape — the only shape this class has ever written and the
+ * only one [io.github.tabssh.backup.import.BackupImporter] reads:
  *
  *     {
- *       "v": 2,
+ *       "v": <BackupManager.BACKUP_VERSION>,
  *       "items": [ <full entity JSON>, ... ]
  *     }
  *
  * Each entity in `items` is the kotlinx.serialization JSON of the Room
- * `@Entity` data class, so every column round-trips losslessly. This
- * replaces the v1 hand-rolled per-field JSON that silently dropped two
- * dozen ConnectionProfile fields and the colour columns of
- * ThemeDefinition on restore.
+ * `@Entity` data class, so every column round-trips losslessly. There is
+ * exactly one backup format; an archive that is not it is rejected rather
+ * than best-effort parsed.
  *
- * BackupImporter remains backward compatible with v1.
- *
- * Secrets policy (mirrors §9 sync coverage matrix):
+ * Secrets policy (mirrors §9 sync coverage matrix). A backup always contains
+ * every secret — encryption is a file-level choice, never a content one:
  *   - Connection password (per-host)              — exported in secrets.json (conn_pw_{id}).
  *   - SSH private key material                    — exported in secrets.json (ssh_keys map).
  *   - StoredKey.certificate (public OpenSSH cert) — included in keys.json; non-secret.
+ *   - SSH key passphrase                          — exported in secrets.json (key_passphrase_{keyId}).
  *   - Identity.password                           — exported in secrets.json (identity_{id});
  *                                                   the Identity row itself has password=null.
  *   - CloudAccount API token                      — exported in secrets.json (cloud_token_{id}).
- *   - HypervisorProfile.password                  — exported in secrets.json (hypervisor_{id}).
- *   - OCI PEM private key                         — exported in secrets.json (oci_private_key_{id}).
+ *   - Hypervisor per-host password                — exported in secrets.json (hypervisor_{id});
+ *                                                   the HypervisorProfile row has no password field.
+ *   - HypervisorAccount password                  — exported in secrets.json (hypervisor_account_{id}).
+ *   - OCI PEM private key + passphrase            — exported in secrets.json
+ *                                                   (oci_private_key_account_{id} /
+ *                                                   oci_passphrase_account_{id}).
+ *   - VNC host/identity passwords                 — exported in secrets.json (vnc_host_{id} / vnc_identity_{id}).
+ *   - Docker host + registry credentials          — exported in secrets.json (docker_host_{id} / registry_credential_{id}).
  *
  * Tables intentionally excluded from backup:
- *   - tab_sessions   — runtime state, regenerated on next open.
- *   - sync_state     — per-device sync bookkeeping; meaningless on another device.
- *   - audit_log      — device-local; can be large; user can export separately.
+ *   - sync_state — per-device sync bookkeeping; meaningless on another device
+ *     and rebuilt from scratch by the next sync pass.
+ *
+ * `tab_sessions` and `audit_log` ARE backed up (a backup restores one device
+ * to its exact prior state) but are deliberately NOT synced — see the
+ * exclusion comment in SyncDataCollector.
  */
 class BackupExporter(
     private val context: android.content.Context,
@@ -91,7 +100,12 @@ class BackupExporter(
     }
 
     companion object {
-        const val WIRE_VERSION = 2
+        /**
+         * One format, one version constant. [io.github.tabssh.backup.BackupManager]
+         * owns it; the per-entity `"v"` field and the archive's own `"v"` field
+         * are always the same number.
+         */
+        const val WIRE_VERSION = io.github.tabssh.backup.BackupManager.BACKUP_VERSION
 
         // File names — these are also referenced by BackupManager. Keep in sync.
         const val FILE_CONNECTIONS       = "connections.json"
@@ -141,7 +155,9 @@ class BackupExporter(
          * Non-default SharedPreferences files with user data outside the Room DB:
          * "TabSSH" (host list sort orders), "cluster_commands" (saved cluster
          * command history), "snippet_var_recall" (last-used snippet variable
-         * values). Same flat-string-map wire shape as [FILE_DASHBOARD].
+         * values). Values are type-tagged by
+         * [io.github.tabssh.utils.SharedPrefsCodec] because these files hold
+         * more than strings.
          */
         const val FILE_PREFS_TABSSH             = "prefs_tabssh.json"
         const val FILE_PREFS_CLUSTER_COMMANDS   = "prefs_cluster_commands.json"
@@ -176,7 +192,7 @@ class BackupExporter(
     suspend fun collectBackupData(): Map<String, String> = withContext(Dispatchers.IO) {
         val out = mutableMapOf<String, String>()
 
-        out[FILE_CONNECTIONS]      = exportConnections(includePasswords = true)
+        out[FILE_CONNECTIONS]      = exportConnections()
         out[FILE_KEYS]             = exportKeys()
         out[FILE_PREFERENCES]      = exportPreferences()
         out[FILE_THEMES]           = exportThemes()
@@ -213,29 +229,14 @@ class BackupExporter(
 
     // ── Per-entity helpers ───────────────────────────────────────────────────
 
-    private suspend fun exportConnections(includePasswords: Boolean): String {
+    /**
+     * Connection rows only. Connection passwords are carried by secrets.json
+     * under `conn_pw_{id}` — one home for every secret, so encryption and
+     * restore ordering apply to all of them uniformly.
+     */
+    private suspend fun exportConnections(): String {
         val list = database.connectionDao().getAllConnections().first()
-        // Most connections need no sidecar; only when includePasswords AND the
-        // host actually has a saved password do we attach a parallel passwords map.
-        val passwordSidecar: Map<String, String>? = if (includePasswords) {
-            list.filter { it.getAuthTypeEnum() == AuthType.PASSWORD }
-                .mapNotNull { p ->
-                    val pw = preferenceManager.getConnectionPassword(p.id) ?: return@mapNotNull null
-                    p.id to android.util.Base64.encodeToString(
-                        pw.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP
-                    )
-                }.toMap().takeIf { it.isNotEmpty() }
-        } else null
-
-        return encodeEntities(
-            ListSerializer(ConnectionProfile.serializer()),
-            list,
-            extras = passwordSidecar?.let { sidecar ->
-                buildJsonObject {
-                    put("passwords", JsonObject(sidecar.mapValues { JsonPrimitive(it.value) }))
-                }
-            }
-        )
+        return encodeEntities(ListSerializer(ConnectionProfile.serializer()), list)
     }
 
     private suspend fun exportKeys(): String =
@@ -271,14 +272,12 @@ class BackupExporter(
             database.snippetDao().getAllSnippets().first())
 
     private suspend fun exportHypervisors(): String =
-        // HypervisorProfile.password is the inline legacy fallback; with
-        // account_id introduced in v27 the live value lives in
-        // SecurePasswordManager under `hypervisor_${id}`/`hypervisor_account_${id}`.
-        // Either way, the in-table value is Keystore-encrypted-at-rest and
-        // not portable. Blank it on export.
+        // Metadata rows only — the password lives in SecurePasswordManager under
+        // `hypervisor_${id}` / `hypervisor_account_${id}` and is captured by
+        // exportSecrets(). The entity carries no password field to blank.
         encodeEntities(
             ListSerializer(HypervisorProfile.serializer()),
-            database.hypervisorDao().getAllList().map { it.copy(password = "") }
+            database.hypervisorDao().getAllList()
         )
 
     private suspend fun exportHypervisorAccounts(): String =
@@ -363,15 +362,16 @@ class BackupExporter(
      * Export the multi-host dashboard configuration — groups JSON and per-group
      * host membership — from the `multi_host_dashboard` SharedPreferences file.
      *
-     * All values are stored as strings (JSON blobs or comma-separated ID lists)
-     * so the flat key→value map round-trips without type ambiguity.
+     * Most values are strings (JSON blobs or comma-separated ID lists), but
+     * `dash_ungrouped_collapsed` is a Boolean, so values are type-tagged by
+     * [io.github.tabssh.utils.SharedPrefsCodec] rather than flattened.
      */
     private fun exportDashboardConfig(): String {
         val dashPrefs = context.getSharedPreferences("multi_host_dashboard", android.content.Context.MODE_PRIVATE)
         val obj = buildJsonObject {
             put("v", WIRE_VERSION)
-            dashPrefs.all.forEach { (k, v) ->
-                put(k, v?.toString() ?: "")
+            io.github.tabssh.utils.SharedPrefsCodec.encodeAll(dashPrefs).forEach { (k, v) ->
+                put(k, v)
             }
         }
         return json.encodeToString(JsonObject.serializer(), obj)
@@ -385,8 +385,11 @@ class BackupExporter(
         val prefs = context.getSharedPreferences(prefsName, android.content.Context.MODE_PRIVATE)
         val obj = buildJsonObject {
             put("v", WIRE_VERSION)
-            prefs.all.forEach { (k, v) ->
-                put(k, v?.toString() ?: "")
+            // Type-tagged: a SharedPreferences value is not always a String
+            // (cluster_commands holds a Set<String>), and a flattened value
+            // makes the next typed read throw ClassCastException.
+            io.github.tabssh.utils.SharedPrefsCodec.encodeAll(prefs).forEach { (k, v) ->
+                put(k, v)
             }
         }
         return json.encodeToString(JsonObject.serializer(), obj)
@@ -403,13 +406,12 @@ class BackupExporter(
      *   `hypervisor_account_{id}`        — hypervisor account password (SecurePasswordManager)
      *   `oci_private_key_account_{id}`   — OCI API private key PEM (SecurePasswordManager)
      *   `oci_passphrase_account_{id}`    — OCI API key passphrase (SecurePasswordManager)
-     *   `oci_private_key_{profileId}`    — legacy profile-keyed OCI private key PEM (SecurePasswordManager)
-     *   `oci_passphrase_{profileId}`     — legacy profile-keyed OCI key passphrase (SecurePasswordManager)
      *   `vnc_identity_{id}`              — VNC identity password (SecurePasswordManager)
      *   `vnc_host_{id}`                  — VNC host password (SecurePasswordManager)
      *   `cloud_token_{id}`               — cloud provider API token (SecurePasswordManager)
      *   `key_passphrase_{keyId}`         — SSH private key passphrase (SecurePasswordManager)
-     *   `conn_pw_{id}`                   — SSH connection password (PreferenceManager)
+     *   `conn_pw_{id}`                   — SSH connection password (SecurePasswordManager,
+     *                                      stored under the bare connection id)
      *   `docker_host_{id}`               — Docker host custom-endpoint SSH password (SecurePasswordManager)
      *   `registry_credential_{id}`       — private registry credential secret (SecurePasswordManager)
      *
@@ -456,17 +458,6 @@ class BackupExporter(
                     ?.let { passwords["oci_passphrase_account_${a.id}"] = it }
             }
 
-            // Legacy profile-keyed OCI secrets — alias: oci_private_key_{profileId} /
-            // oci_passphrase_{profileId} (predates the account-scoped variant above).
-            database.hypervisorDao().getAllList().forEach { h ->
-                pm.retrievePassword("oci_private_key_${h.id}")
-                    ?.takeIf { it.isNotEmpty() }
-                    ?.let { passwords["oci_private_key_${h.id}"] = it }
-                pm.retrievePassword("oci_passphrase_${h.id}")
-                    ?.takeIf { it.isNotEmpty() }
-                    ?.let { passwords["oci_passphrase_${h.id}"] = it }
-            }
-
             // VNC identity passwords — alias: vnc_identity_{id}
             database.vncIdentityDao().getAllIdentitiesList().forEach { vi ->
                 pm.retrievePassword("vnc_identity_${vi.id}")
@@ -510,17 +501,17 @@ class BackupExporter(
                     ?.takeIf { it.isNotEmpty() }
                     ?.let { passwords["registry_credential_${c.id}"] = it }
             }
-        }
 
-        // Connection passwords — stored in PreferenceManager SharedPreferences under
-        // "password_{connectionId}" (not SecurePasswordManager). Alias: conn_pw_{id}.
-        database.connectionDao().getAllConnections().first()
-            .filter { it.getAuthTypeEnum() == AuthType.PASSWORD }
-            .forEach { c ->
-                preferenceManager.getConnectionPassword(c.id)
-                    ?.takeIf { it.isNotEmpty() }
-                    ?.let { passwords["conn_pw_${c.id}"] = it }
-            }
+            // Connection passwords — Keystore alias is the bare connection id
+            // (what the runtime SSH path reads). Wire alias: conn_pw_{id}.
+            database.connectionDao().getAllConnections().first()
+                .filter { it.getAuthTypeEnum() == AuthType.PASSWORD }
+                .forEach { c ->
+                    pm.retrievePassword(c.id)
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { passwords["conn_pw_${c.id}"] = it }
+                }
+        }
 
         // SSH private key JSch bytes
         keyStorage?.let { ks ->
@@ -551,8 +542,9 @@ class BackupExporter(
     // ── Preferences ──────────────────────────────────────────────────────────
 
     private fun exportPreferences(): String {
-        // Preferences stay in v1 hand-rolled shape because they're not a Room
-        // entity. BackupImporter parses the same shape it always did.
+        // Preferences are grouped by settings screen rather than entity-serialised
+        // because they are not a Room entity. Every group here has a matching
+        // reader in BackupImporter.restorePreferences.
         val root = JSONObject()
         root.put("v", WIRE_VERSION)
 
@@ -645,6 +637,9 @@ class BackupExporter(
             put("serverAliveIntervalSec", preferenceManager.getServerAliveIntervalSec())
             put("x11ForwardingDefault",  preferenceManager.isX11ForwardingDefault())
             put("agentForwardingDefault", preferenceManager.isAgentForwardingDefault())
+            put("fileOpenSizeLimitMb",   preferenceManager.getFileOpenSizeLimitMb())
+            // Global default NetworkRoute id — empty string means "no default".
+            put("defaultRouteId",        preferenceManager.getDefaultRouteId() ?: "")
         })
 
         root.put("sync", JSONObject().apply {
@@ -671,7 +666,45 @@ class BackupExporter(
             put("syncDashboard",          preferenceManager.isSyncDashboardEnabled())
             put("syncDocker",             preferenceManager.isSyncDockerEnabled())
             put("syncPortForwards",       preferenceManager.isSyncPortForwardsEnabled())
+            put("syncNetworkRoutes",      preferenceManager.isSyncNetworkRoutesEnabled())
             put("autoResolve",            preferenceManager.isAutoResolveConflictsEnabled())
+        })
+
+        // Audit log policy (preferences_audit.xml). User policy, not per-device
+        // state — the log rows themselves are backed up separately in audit_log.
+        root.put("audit", JSONObject().apply {
+            put("enabled",       preferenceManager.isAuditLogEnabled())
+            put("maxSizeMb",     preferenceManager.getAuditLogMaxSizeMb())
+            put("maxAgeDays",    preferenceManager.getAuditLogMaxAgeDays())
+            put("logCommands",   preferenceManager.isAuditLogCommandsEnabled())
+            put("logOutput",     preferenceManager.isAuditLogOutputEnabled())
+        })
+
+        // Tasker/Locale plugin policy (preferences_tasker.xml). These gate an
+        // exported receiver, so losing them on restore would silently change the
+        // app's external attack surface.
+        root.put("tasker", JSONObject().apply {
+            put("enabled",            preferenceManager.isTaskerEnabled())
+            put("requireUnlock",      preferenceManager.isTaskerRequireUnlockEnabled())
+            put("includeOutput",      preferenceManager.isTaskerIncludeOutputEnabled())
+            put("logEvents",          preferenceManager.isTaskerLogEventsEnabled())
+            put("commandTimeoutMs",   preferenceManager.getTaskerCommandTimeoutMs())
+            // Empty set = all connections allowed.
+            put("allowedConnections",
+                org.json.JSONArray(preferenceManager.getTaskerAllowedConnections().toList()))
+        })
+
+        // Diagnostics (preferences_logging.xml).
+        root.put("logging", JSONObject().apply {
+            put("debugLogging",     preferenceManager.isDebugLoggingEnabled())
+            put("debugLogLevel",    preferenceManager.getDebugLogLevel())
+            put("logKeystrokeBytes", preferenceManager.isLogKeystrokeBytesEnabled())
+            put("hostLogging",      preferenceManager.isHostLoggingEnabled())
+            put("hostLogMaxSizeMb", preferenceManager.getHostLogMaxSizeMb())
+        })
+
+        root.put("docker", JSONObject().apply {
+            put("updateCheckEnabled", preferenceManager.isDockerUpdateCheckEnabled())
         })
 
         // Multiplexer key bindings: gesture type/enable in default SharedPreferences;
@@ -698,37 +731,24 @@ class BackupExporter(
             put("pastebinApiKey", preferenceManager.getPastebinApiKey())
         })
 
-        // Proxy configuration. Password is in plain SharedPreferences (not Keystore-
-        // backed) so it round-trips safely. Encrypted backups wrap the whole payload
-        // in AES-GCM, protecting it on disk.
-        root.put("proxy", JSONObject().apply {
-            put("enabled",     preferenceManager.isProxyEnabled())
-            put("type",        preferenceManager.getProxyType())
-            put("host",        preferenceManager.getProxyHost())
-            put("port",        preferenceManager.getProxyPort())
-            put("username",    preferenceManager.getProxyUsername() ?: "")
-            put("password",    preferenceManager.getProxyPassword() ?: "")
-            // Use "\n" as separator — commas are valid inside bypass-list entries
-            // (e.g. "*.example.com,10.0.0.0/8" stored as one item). Newlines cannot
-            // appear in a hostname or CIDR and survive JSON string serialisation.
-            put("bypassHosts", preferenceManager.getProxyBypassHosts().joinToString("\n"))
-        })
+        // No "proxy" group: the global proxy preferences were superseded by
+        // NetworkRoute rows (exported in network_routes.json) and no longer
+        // drive any connection. They are not exported, not synced, and the
+        // plaintext proxy_password key they carried is gone.
 
         return root.toString(2)
     }
 
-    // ── Generic v2 entity wrapper ────────────────────────────────────────────
+    // ── Generic entity wrapper ───────────────────────────────────────────────
 
     private fun <T> encodeEntities(
         serializer: kotlinx.serialization.KSerializer<List<T>>,
-        list: List<T>,
-        extras: JsonObject? = null
+        list: List<T>
     ): String {
         val itemsArray = json.encodeToJsonElement(serializer, list)
         val obj = buildJsonObject {
             put("v", WIRE_VERSION)
             put("items", itemsArray)
-            extras?.forEach { (k, v) -> put(k, v) }
         }
         return json.encodeToString(JsonObject.serializer(), obj)
     }

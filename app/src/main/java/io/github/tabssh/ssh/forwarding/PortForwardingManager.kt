@@ -122,8 +122,10 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
             type = TunnelType.DYNAMIC_FORWARD,
             localHost = "localhost",
             localPort = localPort,
-            remoteHost = "", // Not applicable for SOCKS
-            remotePort = 0,  // Not applicable for SOCKS
+            // Not applicable for SOCKS
+            remoteHost = "",
+            // Not applicable for SOCKS
+            remotePort = 0,
             autoStart = autoStart,
             manager = this@PortForwardingManager
         )
@@ -347,11 +349,13 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
      */
     suspend fun isPortAvailable(port: Int): Boolean = withContext(Dispatchers.IO) {
         return@withContext try {
-            java.net.ServerSocket(port).use { 
-                true // Port is available
+            java.net.ServerSocket(port).use {
+                // Port is available
+                true
             }
         } catch (e: Exception) {
-            false // Port is in use
+            // Port is in use
+            false
         }
     }
     
@@ -364,7 +368,8 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
                 return@withContext port
             }
         }
-        return@withContext -1 // No available ports found
+        // No available ports found
+        return@withContext -1
     }
     
     private fun getSSHSession(): Session? = sshConnection.jschSession()
@@ -466,7 +471,8 @@ class Tunnel(
     private val _state = MutableStateFlow(TunnelState.STOPPED)
     val state: TunnelState get() = _state.value
     
-    var actualLocalPort: Int? = null // Actual port assigned (may differ if port 0 was requested)
+    // Actual port assigned (may differ if port 0 was requested)
+    var actualLocalPort: Int? = null
     var startTime: Long = 0
     var stopTime: Long = 0
     var bytesTransferred: Long = 0

@@ -80,9 +80,11 @@ object SSHConfigExporter {
                     if (t.isEmpty()) continue
                     val eq = t.indexOf('=')
                     when {
-                        eq < 0 -> sb.append("    SendEnv $t\n")          // bare name
+                        // bare name
+                        eq < 0 -> sb.append("    SendEnv $t\n")
                         eq == t.length - 1 -> sb.append("    SendEnv ${t.substring(0, eq)}\n")
-                        else -> sb.append("    SetEnv $t\n")             // NAME=value
+                        // NAME=value
+                        else -> sb.append("    SetEnv $t\n")
                     }
                 }
             }

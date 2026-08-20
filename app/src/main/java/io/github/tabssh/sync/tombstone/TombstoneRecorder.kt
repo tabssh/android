@@ -30,9 +30,11 @@ import io.github.tabssh.utils.logging.Logger
  * lost, the backstop still tombstones the vanished row on the next collect.
  *
  * [entityKey] is the stable cross-device identity, NOT the raw Room PK. For the
- * 14 UUID-keyed entities pass the UUID. For the Long-autoincrement entities
+ * UUID-keyed entities pass the UUID. For the Long-autoincrement entities
  * (HypervisorProfile, HypervisorAccount, and the five Docker entities) pass
- * [naturalKey] — their Long id is meaningless across devices.
+ * [naturalKey] — their Long id is meaningless across devices. For [SECRET] the
+ * key is the sync wire alias (e.g. `conn_pw_{id}`, `ssh_key_{keyId}`), which is
+ * already device-independent.
  */
 object TombstoneRecorder {
 
@@ -59,6 +61,13 @@ object TombstoneRecorder {
     const val COMPOSE_STACK = "compose_stack"
     const val SINGLE_CONTAINER_CONFIG = "single_container_config"
     const val CONTAINER_AUTO_UPDATE_POLICY = "container_auto_update_policy"
+
+    /**
+     * Keystore/KeyStorage secrets, keyed by their sync wire alias. A removed
+     * credential must propagate as a delete; otherwise the upload-only union
+     * resurrects it on the next peer apply.
+     */
+    const val SECRET = "secret"
 
     /**
      * Stable cross-device key for the Long-PK [HypervisorProfile]: its id is a

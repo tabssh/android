@@ -174,7 +174,8 @@ class TelnetConnection(
     private fun handleIac(input: InputStream) {
         val cmd = input.read().also { if (it < 0) return }
         when (cmd) {
-            IAC -> pipeOut.write(IAC) // escaped literal 0xFF
+            // escaped literal 0xFF
+            IAC -> pipeOut.write(IAC)
             WILL -> {
                 val opt = input.read().also { if (it < 0) return }
                 val desired = acceptWill(opt)

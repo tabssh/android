@@ -268,7 +268,8 @@ class AwsEc2Client : CloudProvider {
 
         val out = mutableListOf<ImportCandidate>()
         for (block in instanceBlocks) {
-            val state = tagValue(block, "name")  // <instanceState><name>running</name></instanceState>
+            // <instanceState><name>running</name></instanceState>
+            val state = tagValue(block, "name")
             if (state != null && state != "running") continue
 
             val instanceId = tagValue(block, "instanceId").orEmpty()
@@ -288,7 +289,8 @@ class AwsEc2Client : CloudProvider {
                     name = name,
                     host = host,
                     port = 22,
-                    username = "ec2-user", // Amazon Linux default; user can edit
+                    // Amazon Linux default; user can edit
+                    username = "ec2-user",
                     authType = "publickey",
                     advancedSettings = """{"cloud_source":"aws:$accountName","cloud_region":"$region","cloud_id":"$instanceId"}""",
                     createdAt = System.currentTimeMillis()

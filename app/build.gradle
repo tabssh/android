@@ -28,10 +28,6 @@ def termuxTerminalVersion = 'v0.118.1'
 //   3. "unknown" — last-resort sentinel.
 // Short SHA only — avoid `--dirty` or timestamps which break F-Droid
 // reproducibility (a stray file in the build dir would diverge HEAD).
-//
-// Uses `providers.exec` (the configuration-cache-friendly API) — the
-// legacy `exec { }` block fails Gradle 8's config-cache validation with
-// "Starting an external process during configuration time is unsupported".
 def resolveGitCommit = {
     try {
         def execResult = providers.exec {
@@ -132,26 +128,24 @@ android {
         // Build epoch (seconds, UTC) captured once per build; the fdroidRelease
         // flavor resolves it to the last-commit epoch for reproducibility
         buildConfigField "long", "BUILD_EPOCH", "${resolveBuildEpochSeconds()}L"
-        // Development-channel marker — true only in the devel build type
-        buildConfigField "boolean", "DEVEL", "false"
         // Termux terminal-emulator version, surfaced in the About dialog's
         // bundled-components list. Sourced from termuxTerminalVersion above.
         buildConfigField "String", "TERMINAL_EMULATOR_VERSION", "\"${termuxTerminalVersion}\""
     }
 
     signingConfigs {
-        // Credentials are read from the environment first and only fall back to
-        // the legacy "tabssh123" when unset/empty (Groovy treats "" as falsy, so
-        // an empty CI secret also triggers the fallback). Migration path: add
-        // KEYSTORE_PASSWORD / KEY_PASSWORD as CI secrets and the env value takes
-        // over automatically with no code change. Until then the fallback keeps
-        // release.yml, beta.yml, and development.yml building against the
-        // current keystore.
+        // Credentials come from the environment only — no hardcoded fallback
+        // password. A literal password fallback in a public repo defeats the
+        // point of a "secret": anyone who reads this file can sign an update
+        // that Android will accept in place of the real release. When unset,
+        // storePassword/keyPassword resolve to null and the taskGraph check
+        // below fails the build by name before any signing task runs, instead
+        // of silently signing with a known password.
         release {
             storeFile file("../keystore.jks")
-            storePassword System.getenv("KEYSTORE_PASSWORD") ?: "tabssh123"
+            storePassword System.getenv("KEYSTORE_PASSWORD")
             keyAlias System.getenv("KEYSTORE_ALIAS") ?: "tabssh"
-            keyPassword System.getenv("KEY_PASSWORD") ?: "tabssh123"
+            keyPassword System.getenv("KEY_PASSWORD")
         }
     }
 
@@ -185,10 +179,10 @@ android {
         devel {
             initWith release
             // Development channel (AI.md PART 4/13): release configuration —
-            // R8, shrinkResources, signed, NOT debuggable — with devel/debug
-            // features and the Debug Log force-enabled via BuildConfig flags.
-            // Logger sanitation applies here exactly as in release.
-            buildConfigField "boolean", "DEVEL", "true"
+            // R8, shrinkResources, signed, NOT debuggable — with the Debug
+            // Log force-enabled via BuildConfig.DEBUG_LOG; BuildConfig.BUILD_TYPE
+            // ("devel") identifies the channel itself, so no separate DEVEL
+            // flag is needed. Logger sanitation applies here exactly as in release.
             buildConfigField "boolean", "DEBUG_LOG", "true"
             buildConfigField "String", "BUILD_TYPE", '"devel"'
             matchingFallbacks = ['release']
@@ -242,6 +236,27 @@ android {
             // "install termux/mosh" handoff. useLegacyPackaging=true forces
             // extraction to nativeLibraryDir so the built-in binary is usable.
             useLegacyPackaging = true
+
+            // F-Droid builds everything from source (no prebuilt binaries) —
+            // libmosh-client.so, libtabssh_native.so (SPICE), and libtor.so
+            // are cross-compiled out-of-tree and fetched over the network by
+            // scripts/fetch-{mosh,spice,tor}-binaries.sh in the other release
+            // channels, which F-Droid's build recipe never runs. Excluding
+            // them here too means the fdroidRelease flavor can never ship a
+            // prebuilt binary even if a local/CI smoke build already
+            // populated jniLibs/ before assembling this flavor. Each feature
+            // gates gracefully at runtime when its .so is absent — SpiceLoader
+            // falls back to VNC, MoshNativeClient falls back to the
+            // install-termux/mosh handoff, TorNativeClient.isAvailable()
+            // reports false — so the fdroid build is a real, working reduced
+            // feature set, not a broken one.
+            if (isFdroidBuild) {
+                excludes += [
+                    '**/libmosh-client.so',
+                    '**/libtabssh_native.so',
+                    '**/libtor.so',
+                ]
+            }
         }
         resources {
             excludes += [
@@ -305,6 +320,9 @@ android {
     testOptions {
         unitTests.includeAndroidResources = true
         unitTests.all {
+            // Argon2id derivations in the sync/backup tests each claim 64 MiB of
+            // Java heap; the default fork heap is too small to run them
+            maxHeapSize = '2g'
             jacoco {
                 includeNoLocationClasses = true
                 excludes = ['jdk.internal.*']
@@ -339,6 +357,42 @@ android {
         }
     }
 
+}
+
+// Fail fast — before any packaging task runs — when a variant that signs
+// with signingConfigs.release (debug, release, devel, and fdroidRelease's
+// CI smoke build) is requested but KEYSTORE_PASSWORD / KEY_PASSWORD are
+// missing, instead of letting AGP fail deep inside the packaging task with
+// an opaque keystore error. The real F-Droid builder sets fdroidBuild=true,
+// which nulls out fdroidRelease's signingConfig entirely (see
+// android.buildTypes.fdroidRelease above), so it never needs these
+// variables. Tasks that don't package an APK (compile, lint, unit tests —
+// `make check`) never touch signingConfigs.release and are unaffected.
+def isFdroidSigningCheckBuild = (findProperty('fdroidBuild') ?: 'false').toString().toBoolean()
+gradle.taskGraph.whenReady { graph ->
+    def needsReleaseSigning = !isFdroidSigningCheckBuild && graph.allTasks.any { task ->
+        // Match on task type, not task name. AGP names a lot of things
+        // "packageDebug*" that never sign anything — packageDebugResources,
+        // packageDebugAssets, packageDebugUnitTestForUnitTest — and any
+        // name-based match kept failing `make check` on a machine with no
+        // keystore passwords. PackageApplication is the task that signs an
+        // APK; FinalizeBundleTask is the one that signs an AAB.
+        def type = task.class.name
+        type.contains('PackageApplication') || type.contains('FinalizeBundleTask')
+    }
+    if (needsReleaseSigning) {
+        def missing = []
+        if (!System.getenv("KEYSTORE_PASSWORD")) missing << "KEYSTORE_PASSWORD"
+        if (!System.getenv("KEY_PASSWORD")) missing << "KEY_PASSWORD"
+        if (missing) {
+            throw new GradleException(
+                "Cannot sign this build: missing required environment " +
+                "variable(s) ${missing.join(', ')}. Set them (see " +
+                "scripts/generate-keystore.sh) before building a signed " +
+                "debug/release/devel APK."
+            )
+        }
+    }
 }
 
 ksp {
@@ -462,6 +516,10 @@ dependencies {
     testImplementation 'org.json:json:20240303'
     testImplementation 'org.mockito:mockito-core:5.7.0'
     testImplementation 'org.mockito:mockito-inline:5.2.0'
+    // Null-safe matchers and captors: plain Mockito's any()/capture() return
+    // Java null, which Kotlin rejects for a non-null parameter before the mock
+    // is ever reached ("capture(...) must not be null")
+    testImplementation 'org.mockito.kotlin:mockito-kotlin:5.4.0'
     testImplementation 'androidx.room:room-testing:2.8.4'
     testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0'
     // Robolectric + androidx.test provide an Android runtime for local JVM unit
@@ -522,12 +580,12 @@ tasks.register('jacocoTestReport', JacocoReport) {
         '**/androidx/databinding/**/*.*'
     ]
     
-    def debugTree = fileTree(dir: "$buildDir/tmp/kotlin-classes/debug", excludes: fileFilter)
+    def debugTree = fileTree(dir: "${layout.buildDirectory.get().asFile}/tmp/kotlin-classes/debug", excludes: fileFilter)
     def mainSrc = "$projectDir/src/main/java"
     
     sourceDirectories.setFrom(files([mainSrc]))
     classDirectories.setFrom(files([debugTree]))
-    executionData.setFrom(fileTree(dir: buildDir, includes: [
+    executionData.setFrom(fileTree(dir: layout.buildDirectory.get().asFile, includes: [
         'outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec',
         'jacoco/testDebugUnitTest.exec'
     ]))
@@ -554,10 +612,10 @@ tasks.register('jacocoTestCoverageVerification', JacocoCoverageVerification) {
         'android/**/*.*'
     ]
     
-    def debugTree = fileTree(dir: "$buildDir/tmp/kotlin-classes/debug", excludes: fileFilter)
+    def debugTree = fileTree(dir: "${layout.buildDirectory.get().asFile}/tmp/kotlin-classes/debug", excludes: fileFilter)
     
     classDirectories.setFrom(files([debugTree]))
-    executionData.setFrom(fileTree(dir: buildDir, includes: [
+    executionData.setFrom(fileTree(dir: layout.buildDirectory.get().asFile, includes: [
         'outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec',
         'jacoco/testDebugUnitTest.exec'
     ]))

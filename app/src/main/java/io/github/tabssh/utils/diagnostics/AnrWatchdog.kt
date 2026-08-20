@@ -74,7 +74,8 @@ class AnrWatchdog(
                             "ANR — main thread blocked for >${timeoutMs}ms\n$trace"
                         )
                     }
-                    Thread.sleep(cooldownMs)  // dedupe sustained blocks
+                    // dedupe sustained blocks
+                    Thread.sleep(cooldownMs)
                 }
             }
         } catch (_: InterruptedException) {

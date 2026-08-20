@@ -14,7 +14,7 @@ import io.github.tabssh.utils.logging.Logger
 /**
  * Main Room database for TabSSH.
  *
- * Current version: 12.
+ * Current version: 14.
  * Versions 1 and 2 never shipped to real users, so v3 is the effective schema
  * baseline and no fallback path exists for them. Every version bump from v3
  * onward MUST register a real Migration object via addMigrations(); destructive
@@ -49,9 +49,11 @@ import io.github.tabssh.utils.logging.Logger
         SingleContainerConfig::class,
         ContainerAutoUpdatePolicy::class,
         RegistryCredential::class,
-        NetworkRoute::class
+        NetworkRoute::class,
+        PendingSyncConflict::class,
+        SyncLogEntry::class
     ],
-    version = 12,
+    version = 14,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -85,6 +87,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun containerAutoUpdatePolicyDao(): ContainerAutoUpdatePolicyDao
     abstract fun registryCredentialDao(): RegistryCredentialDao
     abstract fun networkRouteDao(): NetworkRouteDao
+    abstract fun pendingSyncConflictDao(): PendingSyncConflictDao
+    abstract fun syncLogDao(): SyncLogDao
 
     companion object {
         @Volatile
@@ -425,6 +429,165 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v12 -> v13: adds `modified_at` (sync last-write-wins timestamp) to
+         * the eight entities that didn't already have one, plus the two new
+         * tables backing real conflict detection and a dedicated Sync Log
+         * (`pending_sync_conflicts`, `sync_log`). DDL for the new tables
+         * matches Room's generated schema for [PendingSyncConflict] and
+         * [SyncLogEntry] exactly (column order, NOT NULL flags, indices).
+         */
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `hypervisors` ADD COLUMN `modified_at` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `trusted_certificates` ADD COLUMN `modified_at` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `monitor_slots` ADD COLUMN `modified_at` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `docker_hosts` ADD COLUMN `modified_at` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `registry_credentials` ADD COLUMN `modified_at` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `compose_stacks` ADD COLUMN `modified_at` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `single_container_configs` ADD COLUMN `modified_at` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `container_auto_update_policies` ADD COLUMN `modified_at` INTEGER NOT NULL DEFAULT 0")
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `pending_sync_conflicts` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`entity_type` TEXT NOT NULL, " +
+                        "`entity_id` TEXT NOT NULL, " +
+                        "`conflict_type` TEXT NOT NULL, " +
+                        "`field` TEXT, " +
+                        "`local_value_text` TEXT, " +
+                        "`remote_value_text` TEXT, " +
+                        "`local_entity_json` TEXT, " +
+                        "`remote_entity_json` TEXT, " +
+                        "`local_timestamp` INTEGER NOT NULL, " +
+                        "`remote_timestamp` INTEGER NOT NULL, " +
+                        "`description` TEXT NOT NULL, " +
+                        "`created_at` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_pending_sync_conflicts_entity_type` " +
+                        "ON `pending_sync_conflicts` (`entity_type`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_pending_sync_conflicts_created_at` " +
+                        "ON `pending_sync_conflicts` (`created_at`)"
+                )
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sync_log` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`timestamp` INTEGER NOT NULL, " +
+                        "`device_id` TEXT NOT NULL, " +
+                        "`device_name` TEXT NOT NULL, " +
+                        "`entity_type` TEXT NOT NULL, " +
+                        "`entity_id` TEXT NOT NULL, " +
+                        "`description` TEXT NOT NULL, " +
+                        "`resolution` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_sync_log_timestamp` " +
+                        "ON `sync_log` (`timestamp`)"
+                )
+            }
+        }
+
+        /**
+         * Name of the transient staging table MIGRATION_13_14 hands the legacy
+         * `hypervisors.password` values to. Not a Room entity — it exists only
+         * on databases that actually carried plaintext across the v14 upgrade,
+         * and `HypervisorPasswordStore.sweepLegacyPlaintext` drops it as soon
+         * as the last row has been moved into the Keystore.
+         */
+        const val HYPERVISOR_PASSWORD_CARRYOVER_TABLE = "hypervisor_password_carryover"
+
+        /**
+         * v13 -> v14: removes the plaintext `hypervisors.password` column
+         * (PART 0/PART 6: "DB columns never hold secrets").
+         *
+         * SQLite before 3.35 has no `DROP COLUMN` and minSdk is 24, so the
+         * table is recreated: new table without the column, copy every other
+         * column verbatim, drop, rename, recreate both indices. The recreated
+         * DDL matches Room's generated schema for [HypervisorProfile] exactly.
+         *
+         * A Room migration cannot reach the Android Keystore (no Context, and
+         * a Keystore failure inside the migration transaction would leave the
+         * database unopenable). So the migration does not destroy the secrets
+         * it removes: every still-plaintext value is first copied into
+         * [HYPERVISOR_PASSWORD_CARRYOVER_TABLE], and
+         * `HypervisorPasswordStore.sweepLegacyPlaintext` — already invoked
+         * during application startup — moves each row into the Keystore and
+         * deletes it, dropping the table once empty. A row whose Keystore
+         * write fails simply survives to the next attempt, so no stored
+         * hypervisor password can be lost.
+         */
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `$HYPERVISOR_PASSWORD_CARRYOVER_TABLE` (" +
+                        "`id` INTEGER NOT NULL, " +
+                        "`password` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "INSERT OR REPLACE INTO `$HYPERVISOR_PASSWORD_CARRYOVER_TABLE` (`id`, `password`) " +
+                        "SELECT `id`, `password` FROM `hypervisors` " +
+                        "WHERE `password` IS NOT NULL AND `password` != ''"
+                )
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `hypervisors_new` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`type` TEXT NOT NULL, " +
+                        "`host` TEXT NOT NULL, " +
+                        "`port` INTEGER NOT NULL, " +
+                        "`username` TEXT NOT NULL, " +
+                        "`realm` TEXT, " +
+                        "`verify_ssl` INTEGER NOT NULL, " +
+                        "`pinned_cert_sha256` TEXT, " +
+                        "`api_type_override` TEXT NOT NULL, " +
+                        "`linked_connection_id` TEXT, " +
+                        "`account_id` INTEGER, " +
+                        "`notes` TEXT, " +
+                        "`last_connected` INTEGER NOT NULL, " +
+                        "`created_at` INTEGER NOT NULL, " +
+                        "`auth_type` TEXT NOT NULL, " +
+                        "`oci_tenancy_ocid` TEXT, " +
+                        "`oci_user_ocid` TEXT, " +
+                        "`oci_region` TEXT, " +
+                        "`oci_fingerprint` TEXT, " +
+                        "`oci_compartment_ocid` TEXT, " +
+                        "`ssh_identity_id` TEXT, " +
+                        "`modified_at` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "INSERT INTO `hypervisors_new` (" +
+                        "`id`, `name`, `type`, `host`, `port`, `username`, `realm`, `verify_ssl`, " +
+                        "`pinned_cert_sha256`, `api_type_override`, `linked_connection_id`, " +
+                        "`account_id`, `notes`, `last_connected`, `created_at`, `auth_type`, " +
+                        "`oci_tenancy_ocid`, `oci_user_ocid`, `oci_region`, `oci_fingerprint`, " +
+                        "`oci_compartment_ocid`, `ssh_identity_id`, `modified_at`) " +
+                        "SELECT `id`, `name`, `type`, `host`, `port`, `username`, `realm`, `verify_ssl`, " +
+                        "`pinned_cert_sha256`, `api_type_override`, `linked_connection_id`, " +
+                        "`account_id`, `notes`, `last_connected`, `created_at`, `auth_type`, " +
+                        "`oci_tenancy_ocid`, `oci_user_ocid`, `oci_region`, `oci_fingerprint`, " +
+                        "`oci_compartment_ocid`, `ssh_identity_id`, `modified_at` FROM `hypervisors`"
+                )
+                db.execSQL("DROP TABLE `hypervisors`")
+                db.execSQL("ALTER TABLE `hypervisors_new` RENAME TO `hypervisors`")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_hypervisors_account_id` " +
+                        "ON `hypervisors` (`account_id`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_hypervisors_linked_connection_id` " +
+                        "ON `hypervisors` (`linked_connection_id`)"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -434,7 +597,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
                 .build()
                 INSTANCE = instance
                 instance

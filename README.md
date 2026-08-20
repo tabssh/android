@@ -75,7 +75,7 @@ enterprise security, hypervisor management, and cloud provider integration.
 - 📡 **Background Monitoring** — Periodic TCP reachability probes; down/recovery notifications; CPU/memory/disk threshold alerts via SSH; configurable cooldown (15 min–12 h)
 - 📱 **Mosh Protocol** — Mobile shell for unstable connections with roaming support
 - 💾 **Backup & Restore** — Export/import all settings as encrypted ZIP
-- ☁️ **Cloud Sync** — Storage Access Framework (Google Drive, Dropbox, OneDrive, Nextcloud, local — no Google services dependency); AES-256-GCM + PBKDF2 + 3-way merge with conflict UI
+- ☁️ **Cloud Sync** — Storage Access Framework (Google Drive, Dropbox, OneDrive, Nextcloud, local — no Google services dependency); AES-256-GCM + Argon2id + 3-way merge with conflict UI
 - 🏠 **Home Screen Widgets** — Quick-connect from launcher
 - 📂 **Connection Groups** — Folders with expand/collapse; group badges in search
 - 🔍 **Search & Sort** — Real-time search, 8 sort options

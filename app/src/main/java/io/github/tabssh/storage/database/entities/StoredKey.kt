@@ -25,8 +25,9 @@ data class StoredKey(
     @ColumnInfo(name = "name")
     val name: String,
     
+    // RSA, DSA, ECDSA, Ed25519
     @ColumnInfo(name = "key_type")
-    val keyType: String, // RSA, DSA, ECDSA, Ed25519
+    val keyType: String,
     
     @ColumnInfo(name = "comment")
     val comment: String? = null,

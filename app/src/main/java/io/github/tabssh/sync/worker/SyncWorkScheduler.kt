@@ -38,7 +38,8 @@ class SyncWorkScheduler(private val context: Context) {
 
         val periodicWorkRequest = PeriodicWorkRequestBuilder<SyncWorker>(
             interval, TimeUnit.MINUTES,
-            15, TimeUnit.MINUTES // Flex interval
+            // Flex interval
+            15, TimeUnit.MINUTES
         )
             .setConstraints(constraints)
             .addTag(SyncWorker.WORK_NAME)

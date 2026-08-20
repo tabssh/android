@@ -72,10 +72,13 @@ object BulkImportParser {
         val host: String,
         val port: Int = 22,
         val username: String? = null,
-        val authType: String? = null,   // "password" / "publickey" / null = ask
-        val identityFile: String? = null, // for display only — keys must be imported separately
+        // "password" / "publickey" / null = ask
+        val authType: String? = null,
+        // for display only — keys must be imported separately
+        val identityFile: String? = null,
         val groupName: String? = null,
-        val source: String                // human-readable origin, e.g. "CSV row 4"
+        // human-readable origin, e.g. "CSV row 4"
+        val source: String
     ) {
         fun toConnectionProfile(): ConnectionProfile {
             val finalUser = username?.takeIf { it.isNotBlank() } ?: "root"

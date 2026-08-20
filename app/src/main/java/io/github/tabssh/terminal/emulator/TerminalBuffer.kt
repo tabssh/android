@@ -74,8 +74,10 @@ class TerminalBuffer(
      */
     fun setScrollbackLimit(lines: Int) {
         maxScrollbackLines = when {
-            lines == -1 -> -1 // unlimited
-            lines < 250 -> 250 // enforce minimum
+            // unlimited
+            lines == -1 -> -1
+            // enforce minimum
+            lines < 250 -> 250
             else -> lines
         }
         

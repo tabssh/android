@@ -239,7 +239,8 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
                 listOf(
                     (rxDiff / timeDiff).toLong(),
                     (txDiff / timeDiff).toLong(),
-                    0L, // We don't track packet rates in this simple version
+                    // We don't track packet rates in this simple version
+                    0L,
                     0L
                 )
             } else {

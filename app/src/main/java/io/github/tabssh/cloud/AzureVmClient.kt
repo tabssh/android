@@ -111,7 +111,8 @@ class AzureVmClient : CloudProvider {
                     name = name,
                     host = pubIp,
                     port = 22,
-                    username = "azureuser", // Azure CLI default; user can edit
+                    // Azure CLI default; user can edit
+                    username = "azureuser",
                     authType = "publickey",
                     advancedSettings = """{"cloud_source":"azure:$accountName","cloud_region":"$location"}""",
                     createdAt = System.currentTimeMillis()
@@ -278,7 +279,8 @@ class AzureVmClient : CloudProvider {
      *  `publicIPAddress.id` reference, fetches each public IP once. Two
      *  paginated list calls, then map. */
     private fun fetchPublicIpsByNicId(subscriptionId: String, token: String): Map<String, String> {
-        val nicById = mutableMapOf<String, String>() // nicId -> publicIpId
+        // nicId -> publicIpId
+        val nicById = mutableMapOf<String, String>()
         val nics = jsonGetAll(
             "https://management.azure.com/subscriptions/$subscriptionId/providers/Microsoft.Network/networkInterfaces?api-version=2023-09-01",
             token
@@ -295,7 +297,8 @@ class AzureVmClient : CloudProvider {
             }
         }
 
-        val ipById = mutableMapOf<String, String>() // publicIpId -> ipAddress
+        // publicIpId -> ipAddress
+        val ipById = mutableMapOf<String, String>()
         val pips = jsonGetAll(
             "https://management.azure.com/subscriptions/$subscriptionId/providers/Microsoft.Network/publicIPAddresses?api-version=2023-09-01",
             token

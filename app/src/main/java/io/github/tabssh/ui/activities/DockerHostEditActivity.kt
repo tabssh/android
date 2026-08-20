@@ -379,7 +379,8 @@ class DockerHostEditActivity : AppCompatActivity() {
             updateCheckEnabled = switchUpdateCheck.isChecked,
             updateCheckIntervalHours = editUpdateInterval.text?.toString()?.trim()
                 ?.toIntOrNull()?.takeIf { it > 0 },
-            notes = editNotes.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+            notes = editNotes.text?.toString()?.trim()?.takeIf { it.isNotEmpty() },
+            modifiedAt = System.currentTimeMillis()
         )
     }
 

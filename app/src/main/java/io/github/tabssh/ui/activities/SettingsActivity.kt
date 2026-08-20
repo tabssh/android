@@ -755,7 +755,8 @@ class AuditSettingsFragment : PreferenceFragmentCompat() {
             try {
                 val app = requireActivity().application as TabSSHApplication
                 val logs = withContext(Dispatchers.IO) {
-                    app.database.auditLogDao().getRecent(1000) // Get last 1000 logs
+                    // Get last 1000 logs
+                    app.database.auditLogDao().getRecent(1000)
                 }
 
                 val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)

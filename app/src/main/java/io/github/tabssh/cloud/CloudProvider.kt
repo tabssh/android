@@ -69,8 +69,10 @@ enum class CloudProviderType(val tag: String, val displayName: String, val token
  */
 data class ImportCandidate(
     val profile: ConnectionProfile,
-    val sourceLabel: String,    // e.g. "DigitalOcean / nyc3"
-    val skipped: String? = null // non-null = candidate skipped, with reason
+    // e.g. "DigitalOcean / nyc3"
+    val sourceLabel: String,
+    // non-null = candidate skipped, with reason
+    val skipped: String? = null
 )
 
 /**

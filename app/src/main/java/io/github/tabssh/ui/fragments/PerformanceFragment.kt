@@ -79,7 +79,8 @@ class PerformanceFragment : Fragment() {
     // Monitoring state
     private var isMonitoring = false
     private val handler = Handler(Looper.getMainLooper())
-    private val refreshInterval = 5000L // 5 seconds
+    // 5 seconds
+    private val refreshInterval = 5000L
     
     private val monitoringRunnable = object : Runnable {
         override fun run() {

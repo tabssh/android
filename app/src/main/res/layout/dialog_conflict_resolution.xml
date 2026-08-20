@@ -16,7 +16,7 @@
             android:id="@+id/conflict_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Sync Conflict Detected"
+            android:text="@string/conflict_dialog_default_title"
             android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary"
@@ -26,7 +26,6 @@
             android:id="@+id/conflict_entity_type"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Connection: example.com"
             android:textSize="16sp"
             android:textColor="?android:attr/textColorSecondary"
             android:layout_marginBottom="16dp" />
@@ -35,7 +34,6 @@
             android:id="@+id/field_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Field: hostname"
             android:textSize="14sp"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary"
@@ -45,7 +43,6 @@
             android:id="@+id/local_value"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Local: example.com (2h ago)"
             android:textSize="12sp"
             android:textColor="?android:attr/textColorSecondary"
             android:layout_marginBottom="4dp" />
@@ -54,7 +51,6 @@
             android:id="@+id/remote_value"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Remote: example.org (1h ago)"
             android:textSize="12sp"
             android:textColor="?android:attr/textColorSecondary"
             android:layout_marginBottom="16dp" />
@@ -62,7 +58,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Choose resolution:"
+            android:text="@string/conflict_choose_resolution"
             android:textSize="14sp"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary"
@@ -74,33 +70,38 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
+            <!-- Visibility of each option is set at runtime from
+                 Conflict.getResolutionOptions() — not every conflict type
+                 offers every resolution (e.g. host_key never offers
+                 keep-both, since a host can only have one trusted
+                 fingerprint). -->
+
             <RadioButton
                 android:id="@+id/radio_keep_local"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Keep Local Version"
-                android:checked="true"
+                android:text="@string/conflict_option_keep_local"
                 android:textSize="14sp" />
 
             <RadioButton
                 android:id="@+id/radio_keep_remote"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Keep Remote Version"
+                android:text="@string/conflict_option_keep_remote"
                 android:textSize="14sp" />
 
             <RadioButton
                 android:id="@+id/radio_keep_both"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Keep Both (Duplicate)"
+                android:text="@string/conflict_option_keep_both"
                 android:textSize="14sp" />
 
             <RadioButton
                 android:id="@+id/radio_skip"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Skip This Item"
+                android:text="@string/conflict_option_skip"
                 android:textSize="14sp" />
 
         </RadioGroup>

@@ -105,7 +105,11 @@ data class DockerHost(
     val lastConnected: Long = 0,
 
     @ColumnInfo(name = "created_at")
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+
+    /** Last local modification time, used for sync last-write-wins comparisons. */
+    @ColumnInfo(name = "modified_at")
+    val modifiedAt: Long = 0
 ) {
     /** True when this host connects via its own endpoint instead of a saved connection. */
     fun usesCustomEndpoint(): Boolean = linkedConnectionId == null && !customHost.isNullOrBlank()

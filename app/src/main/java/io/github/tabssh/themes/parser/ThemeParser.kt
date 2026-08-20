@@ -104,7 +104,8 @@ class ThemeParser {
                 val b = cleanHex[2]
                 hexToColor("#$r$r$g$g$b$b")
             }
-            else -> 0xFF000000.toInt() // Default to black
+            // Default to black
+            else -> 0xFF000000.toInt()
         }
     }
     

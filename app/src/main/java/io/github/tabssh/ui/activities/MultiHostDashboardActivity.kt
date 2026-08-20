@@ -300,7 +300,8 @@ class MultiHostDashboardActivity : AppCompatActivity() {
                         enablePerformanceChecks = cbPerf.isChecked,
                         cpuThreshold            = sbCpu.progress.takeIf { it > 0 },
                         memoryThreshold         = sbMem.progress.takeIf { it > 0 },
-                        diskThreshold           = sbDisk.progress.takeIf { it > 0 }
+                        diskThreshold           = sbDisk.progress.takeIf { it > 0 },
+                        modifiedAt              = System.currentTimeMillis()
                     )
                     app.applicationScope.launch(Dispatchers.IO) {
                         app.database.monitorSlotDao().insertOrReplace(updated)
@@ -760,7 +761,8 @@ class MultiHostDashboardActivity : AppCompatActivity() {
                             enablePerformanceChecks = perfChecks,
                             cpuThreshold            = cpuThr,
                             memoryThreshold         = memThr,
-                            diskThreshold           = diskThr
+                            diskThreshold           = diskThr,
+                            modifiedAt              = System.currentTimeMillis()
                         )
                         app.database.monitorSlotDao().insertOrReplace(updated)
                         monitorSlots[connId] = updated
@@ -964,7 +966,8 @@ class MultiHostDashboardActivity : AppCompatActivity() {
                         errorMap[profile.id] = "reconnecting…"
                         notifyHostCard(profile.id)
                     }
-                    break   // fall back to the outer reconnect loop
+                    // fall back to the outer reconnect loop
+                    break
                 }
                 val r = runCatching { collector.collectMetrics() }
                     .onFailure { e -> Logger.w("MultiHostDashboard", "Metrics collection threw for ${profile.name}", e) }
