@@ -244,7 +244,7 @@ class VirtViewerFileTest {
     fun `rejects hosts carrying separators or control characters`() {
         parseFails("[virt-viewer]\ntype=spice\nhost=evil.example.org/../x\nport=1")
         parseFails("[virt-viewer]\ntype=spice\nhost=user@evil.example.org\nport=1")
-        parseFails("[virt-viewer]\ntype=spice\nhost=evil .org\nport=1")
+        parseFails("[virt-viewer]\ntype=spice\nhost=evil\u0000.org\nport=1")
         parseFails("[virt-viewer]\ntype=spice\nhost=evil\\share\nport=1")
     }
 
