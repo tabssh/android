@@ -213,9 +213,10 @@ jobs:
       env:
         RELEASE_BUILD: true
         SOURCE_DATE_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
-        # Passed through so a future KEYSTORE_PASSWORD / KEY_PASSWORD secret is
-        # picked up automatically. When the secret is absent GitHub expands it to
-        # an empty string and build.gradle falls back to the current password.
+        # KEYSTORE_PASSWORD is required to sign. KEY_PASSWORD is optional —
+        # when the secret is absent GitHub expands it to an empty string and
+        # build.gradle uses the store password for the key, which is how this
+        # project's release keystore was generated.
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 

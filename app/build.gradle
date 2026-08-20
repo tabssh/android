@@ -145,7 +145,11 @@ android {
             storeFile file("../keystore.jks")
             storePassword System.getenv("KEYSTORE_PASSWORD")
             keyAlias System.getenv("KEYSTORE_ALIAS") ?: "tabssh"
-            keyPassword System.getenv("KEY_PASSWORD")
+            // A keystore created with -storepass and no separate -keypass
+            // gives the key the store's password, so KEY_PASSWORD is optional
+            // and falls back to KEYSTORE_PASSWORD. This is a fallback between
+            // two secrets, not to a literal, so the point above still holds.
+            keyPassword System.getenv("KEY_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD")
         }
     }
 
@@ -361,8 +365,8 @@ android {
 
 // Fail fast — before any packaging task runs — when a variant that signs
 // with signingConfigs.release (debug, release, devel, and fdroidRelease's
-// CI smoke build) is requested but KEYSTORE_PASSWORD / KEY_PASSWORD are
-// missing, instead of letting AGP fail deep inside the packaging task with
+// CI smoke build) is requested but KEYSTORE_PASSWORD is missing,
+// instead of letting AGP fail deep inside the packaging task with
 // an opaque keystore error. The real F-Droid builder sets fdroidBuild=true,
 // which nulls out fdroidRelease's signingConfig entirely (see
 // android.buildTypes.fdroidRelease above), so it never needs these
@@ -382,8 +386,9 @@ gradle.taskGraph.whenReady { graph ->
     }
     if (needsReleaseSigning) {
         def missing = []
+        // KEY_PASSWORD is deliberately not required — signingConfigs.release
+        // falls back to KEYSTORE_PASSWORD for it (see above).
         if (!System.getenv("KEYSTORE_PASSWORD")) missing << "KEYSTORE_PASSWORD"
-        if (!System.getenv("KEY_PASSWORD")) missing << "KEY_PASSWORD"
         if (missing) {
             throw new GradleException(
                 "Cannot sign this build: missing required environment " +

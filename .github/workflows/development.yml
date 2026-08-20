@@ -126,13 +126,18 @@ jobs:
         # claiming update compatibility that doesn't exist.
         if [ -n "$KEYSTORE_B64" ]; then
           echo "$KEYSTORE_B64" | base64 -d > keystore.jks
-          if [ -z "$KEYSTORE_PW" ] || [ -z "$KEY_PW" ]; then
-            echo "::error::KEYSTORE_BASE64 is set but KEYSTORE_PASSWORD/KEY_PASSWORD secret(s) are missing" >&2
+          if [ -z "$KEYSTORE_PW" ]; then
+            echo "::error::KEYSTORE_BASE64 is set but the KEYSTORE_PASSWORD secret is missing" >&2
             exit 1
           fi
+          # A keystore generated with -storepass and no separate -keypass
+          # gives the key the store's password, which is how this project's
+          # release keystore was made — so an absent KEY_PASSWORD secret is
+          # the normal case, not a misconfiguration. Only the store password
+          # is mandatory; KEY_PASSWORD overrides the fallback when present.
           {
             echo "KEYSTORE_PASSWORD=${KEYSTORE_PW}"
-            echo "KEY_PASSWORD=${KEY_PW}"
+            echo "KEY_PASSWORD=${KEY_PW:-$KEYSTORE_PW}"
           } >> "$GITHUB_ENV"
           echo "ephemeral=false" >> "$GITHUB_OUTPUT"
           echo "✅ Keystore decoded from KEYSTORE_BASE64 secret"
