@@ -3,7 +3,6 @@ package io.github.tabssh.ui.activities
 import android.os.Bundle
 import android.view.View
 import android.widget.ArrayAdapter
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -26,7 +25,7 @@ import kotlinx.coroutines.withContext
  * The visible forward fields depend on the selected [ForwardType], and the
  * SSH endpoint is entered either as a saved connection or a manual host + key.
  */
-class PortForwardEditActivity : AppCompatActivity() {
+class PortForwardEditActivity : TabSSHActivity() {
 
     private val app: TabSSHApplication
         get() = application as TabSSHApplication
@@ -116,7 +115,6 @@ class PortForwardEditActivity : AppCompatActivity() {
         val toolbar = findViewById<Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
         supportActionBar?.apply {
-            setDisplayHomeAsUpEnabled(true)
             title = getString(
                 if (editingId != null) R.string.port_forward_edit_title_edit
                 else R.string.port_forward_edit_title_new
@@ -449,11 +447,6 @@ class PortForwardEditActivity : AppCompatActivity() {
         editHostIp.error = null
         editRemotePort.error = null
         editLocalPort.error = null
-    }
-
-    override fun onSupportNavigateUp(): Boolean {
-        finish()
-        return true
     }
 
     companion object {

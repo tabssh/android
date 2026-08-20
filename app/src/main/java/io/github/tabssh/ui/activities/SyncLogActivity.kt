@@ -5,7 +5,6 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -22,7 +21,7 @@ import kotlinx.coroutines.launch
  * raw conflicting field values — only [io.github.tabssh.storage.database.entities.SyncLogEntry.description],
  * a pre-sanitized summary written at conflict-resolution time.
  */
-class SyncLogActivity : AppCompatActivity() {
+class SyncLogActivity : TabSSHActivity() {
 
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyView: TextView
@@ -33,10 +32,8 @@ class SyncLogActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_sync_log)
 
-        supportActionBar?.apply {
-            setDisplayHomeAsUpEnabled(true)
-            setTitle(R.string.sync_log_title)
-        }
+        setSupportActionBar(findViewById(R.id.toolbar))
+        supportActionBar?.setTitle(R.string.sync_log_title)
 
         recyclerView = findViewById(R.id.recycler_sync_log)
         emptyView = findViewById(R.id.text_empty_sync_log)
@@ -55,10 +52,6 @@ class SyncLogActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
-            android.R.id.home -> {
-                finish()
-                true
-            }
             R.id.action_copy -> {
                 copyLogToClipboard()
                 true

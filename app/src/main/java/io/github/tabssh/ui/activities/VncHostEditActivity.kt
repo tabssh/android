@@ -3,12 +3,10 @@ package io.github.tabssh.ui.activities
 import io.github.tabssh.sync.tombstone.TombstoneRecorder
 
 import android.os.Bundle
-import android.view.MenuItem
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
@@ -32,7 +30,7 @@ import java.util.UUID
  * Launch extras:
  *   [EXTRA_VNC_HOST_ID] — String UUID; omit for new host.
  */
-class VncHostEditActivity : AppCompatActivity() {
+class VncHostEditActivity : TabSSHActivity() {
 
     companion object {
         private const val TAG = "VncHostEditActivity"
@@ -112,8 +110,9 @@ class VncHostEditActivity : AppCompatActivity() {
         val isEditing = editingHostId != null
 
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = if (isEditing) "Edit VNC Host" else "Add VNC Host"
+        supportActionBar?.setTitle(
+            if (isEditing) R.string.vnc_host_edit_title_edit else R.string.vnc_host_edit_title_new
+        )
 
         if (isEditing) btnDelete.visibility = View.VISIBLE
 
@@ -128,11 +127,6 @@ class VncHostEditActivity : AppCompatActivity() {
         btnSave.setOnClickListener { saveHost() }
         btnCancel.setOnClickListener { finish() }
         btnDelete.setOnClickListener { confirmDelete() }
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == android.R.id.home) { finish(); return true }
-        return super.onOptionsItemSelected(item)
     }
 
     // ── Setup ────────────────────────────────────────────────────────────────

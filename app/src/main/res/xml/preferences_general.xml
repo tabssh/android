@@ -1,154 +1,162 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto">
+  xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory
-        android:title="Appearance"
-        android:key="category_appearance">
+  <PreferenceCategory
+    android:key="category_appearance"
+    android:title="@string/prefcat_general_appearance">
 
-        <ListPreference
-            android:key="app_theme"
-            android:title="App Theme"
-            android:summary="Choose light or dark theme"
-            android:entries="@array/theme_entries"
-            android:entryValues="@array/theme_values"
-            android:defaultValue="dark"
-            app:useSimpleSummaryProvider="true" />
+    <ListPreference
+      android:key="app_theme"
+      android:title="@string/prefs_app_theme_title"
+      android:summary="@string/prefs_app_theme_summary"
+      android:entries="@array/theme_entries"
+      android:entryValues="@array/theme_values"
+      android:defaultValue="dark"
+      app:useSimpleSummaryProvider="true" />
 
-        <ListPreference
-            android:key="app_language"
-            android:title="Language"
-            android:summary="Application language"
-            android:entries="@array/language_entries"
-            android:entryValues="@array/language_values"
-            android:defaultValue="en"
-            app:useSimpleSummaryProvider="true" />
+    <ListPreference
+      android:key="app_language"
+      android:title="@string/prefs_app_language_title"
+      android:summary="@string/prefs_app_language_summary"
+      android:entries="@array/language_entries"
+      android:entryValues="@array/language_values"
+      android:defaultValue="en"
+      app:useSimpleSummaryProvider="true" />
 
-        <Preference
-            android:key="open_theme_editor"
-            android:title="Theme Editor"
-            android:summary="Create and customize terminal color themes"
-            android:icon="@drawable/ic_settings" />
+    <Preference
+      android:key="open_theme_editor"
+      android:title="@string/prefs_open_theme_editor_title"
+      android:summary="@string/prefs_open_theme_editor_summary"
+      android:icon="@drawable/ic_settings" />
 
-    </PreferenceCategory>
+  </PreferenceCategory>
 
-    <PreferenceCategory
-        android:title="Behavior"
-        android:key="category_behavior">
+  <PreferenceCategory
+    android:key="category_startup"
+    android:title="@string/prefcat_general_startup">
 
-        <SwitchPreferenceCompat
-            android:key="swipe_between_tabs"
-            android:title="Swipe Between Tabs"
-            android:summary="Swipe left/right to switch between SSH sessions"
-            android:defaultValue="true" />
+    <ListPreference
+      android:key="general_startup_behavior"
+      android:title="@string/prefs_general_startup_behavior_title"
+      android:summary="@string/prefs_general_startup_behavior_summary"
+      android:entries="@array/startup_entries"
+      android:entryValues="@array/startup_values"
+      android:defaultValue="connections"
+      app:useSimpleSummaryProvider="true" />
 
-        <ListPreference
-            android:key="tab_swipe_edge_dp"
-            android:title="Tab Swipe Edge Zone"
-            android:summary="Restrict tab swiping to a strip along each side so mid-screen gestures reach the terminal (vim, tmux, text selection). %s"
-            android:dependency="swipe_between_tabs"
-            android:defaultValue="96"
-            android:entries="@array/tab_swipe_edge_entries"
-            android:entryValues="@array/tab_swipe_edge_values" />
+    <SwitchPreferenceCompat
+      android:key="confirm_exit"
+      android:title="@string/prefs_confirm_exit_title"
+      android:summary="@string/prefs_confirm_exit_summary"
+      android:defaultValue="false" />
 
-        <SwitchPreferenceCompat
-            android:key="confirm_exit"
-            android:title="Confirm on exit"
-            android:summary="Ask for confirmation before exiting"
-            android:defaultValue="false" />
+  </PreferenceCategory>
 
-        <ListPreference
-            android:key="general_startup_behavior"
-            android:title="Startup behavior"
-            android:summary="Which screen to show on app launch"
-            android:entries="@array/startup_entries"
-            android:entryValues="@array/startup_values"
-            android:defaultValue="connections"
-            app:useSimpleSummaryProvider="true" />
+  <!-- Everything that governs open session tabs. `keep_screen_on` lives here
+       rather than under Terminal because it also applies to VNC/SPICE tabs. -->
+  <PreferenceCategory
+    android:key="category_behavior"
+    android:title="@string/prefcat_general_tabs">
 
-        <SwitchPreferenceCompat
-            android:key="ui_confirm_tab_close"
-            android:title="Confirm tab close"
-            android:summary="Ask before closing a tab with an active connection"
-            android:defaultValue="true" />
+    <SwitchPreferenceCompat
+      android:key="swipe_between_tabs"
+      android:title="@string/prefs_swipe_between_tabs_title"
+      android:summary="@string/prefs_swipe_between_tabs_summary"
+      android:defaultValue="true" />
 
-        <EditTextPreference
-            android:key="ui_max_tabs"
-            android:title="Max open tabs"
-            android:summary="Refuse new tabs once this limit is reached"
-            android:defaultValue="20"
-            android:inputType="number"
-            app:useSimpleSummaryProvider="true" />
+    <ListPreference
+      android:key="tab_swipe_edge_dp"
+      android:title="@string/prefs_tab_swipe_edge_dp_title"
+      android:summary="@string/prefs_tab_swipe_edge_dp_summary"
+      android:dependency="swipe_between_tabs"
+      android:defaultValue="96"
+      android:entries="@array/tab_swipe_edge_entries"
+      android:entryValues="@array/tab_swipe_edge_values" />
 
-        <SwitchPreferenceCompat
-            android:key="keep_screen_on"
-            android:title="Keep screen on"
-            android:summary="Prevent the screen from sleeping in any connection (SSH, Mosh, or VNC)"
-            android:defaultValue="false" />
+    <SwitchPreferenceCompat
+      android:key="ui_confirm_tab_close"
+      android:title="@string/prefs_ui_confirm_tab_close_title"
+      android:summary="@string/prefs_ui_confirm_tab_close_summary"
+      android:defaultValue="true" />
 
-    </PreferenceCategory>
+    <EditTextPreference
+      android:key="ui_max_tabs"
+      android:title="@string/prefs_ui_max_tabs_title"
+      android:summary="@string/prefs_ui_max_tabs_summary"
+      android:defaultValue="20"
+      android:inputType="number"
+      app:useSimpleSummaryProvider="true" />
 
-    <PreferenceCategory
-        android:title="Accessibility"
-        android:key="category_accessibility">
+    <SwitchPreferenceCompat
+      android:key="keep_screen_on"
+      android:title="@string/prefs_keep_screen_on_title"
+      android:summary="@string/prefs_keep_screen_on_summary"
+      android:defaultValue="false" />
 
-        <SwitchPreferenceCompat
-            android:key="accessibility_high_contrast"
-            android:title="High contrast terminal"
-            android:summary="Force pure black background and white foreground in the terminal, overriding the selected color theme"
-            android:defaultValue="false" />
+  </PreferenceCategory>
 
-        <SwitchPreferenceCompat
-            android:key="accessibility_large_touch_targets"
-            android:title="Large touch targets"
-            android:summary="Increase the size of buttons and tap targets"
-            android:defaultValue="false" />
+  <PreferenceCategory
+    android:key="category_accessibility"
+    android:title="@string/prefcat_general_accessibility">
 
-    </PreferenceCategory>
+    <SwitchPreferenceCompat
+      android:key="accessibility_high_contrast"
+      android:title="@string/prefs_accessibility_high_contrast_title"
+      android:summary="@string/prefs_accessibility_high_contrast_summary"
+      android:defaultValue="false" />
 
-    <PreferenceCategory
-        android:title="Notifications"
-        android:key="category_notifications">
+    <SwitchPreferenceCompat
+      android:key="accessibility_large_touch_targets"
+      android:title="@string/prefs_accessibility_large_touch_targets_title"
+      android:summary="@string/prefs_accessibility_large_touch_targets_summary"
+      android:defaultValue="false" />
 
-        <SwitchPreferenceCompat
-            android:key="notifications_enabled"
-            android:title="Enable Notifications"
-            android:summary="Show notifications for connections, errors, and file transfers"
-            android:defaultValue="true" />
+  </PreferenceCategory>
 
-        <SwitchPreferenceCompat
-            android:key="show_connection_notifications"
-            android:title="Connection Notifications"
-            android:summary="Show when connecting/disconnecting"
-            android:defaultValue="true"
-            android:dependency="notifications_enabled" />
+  <PreferenceCategory
+    android:key="category_notifications"
+    android:title="@string/prefcat_general_notifications">
 
-        <SwitchPreferenceCompat
-            android:key="show_error_notifications"
-            android:title="Error Notifications"
-            android:summary="Show connection errors"
-            android:defaultValue="true"
-            android:dependency="notifications_enabled" />
+    <SwitchPreferenceCompat
+      android:key="notifications_enabled"
+      android:title="@string/prefs_notifications_enabled_title"
+      android:summary="@string/prefs_notifications_enabled_summary"
+      android:defaultValue="true" />
 
-        <SwitchPreferenceCompat
-            android:key="show_file_transfer_notifications"
-            android:title="File Transfer Notifications"
-            android:summary="Show SFTP upload/download progress"
-            android:defaultValue="true"
-            android:dependency="notifications_enabled" />
+    <SwitchPreferenceCompat
+      android:key="show_connection_notifications"
+      android:title="@string/prefs_show_connection_notifications_title"
+      android:summary="@string/prefs_show_connection_notifications_summary"
+      android:defaultValue="true"
+      android:dependency="notifications_enabled" />
 
-        <SwitchPreferenceCompat
-            android:key="notification_vibrate"
-            android:title="Vibrate"
-            android:summary="Vibrate for connection and error notifications"
-            android:defaultValue="true"
-            android:dependency="notifications_enabled" />
+    <SwitchPreferenceCompat
+      android:key="show_error_notifications"
+      android:title="@string/prefs_show_error_notifications_title"
+      android:summary="@string/prefs_show_error_notifications_summary"
+      android:defaultValue="true"
+      android:dependency="notifications_enabled" />
 
-        <Preference
-            android:key="open_system_notification_settings"
-            android:title="System Notification Settings"
-            android:summary="Configure channels, sounds, and priority in Android settings" />
+    <SwitchPreferenceCompat
+      android:key="show_file_transfer_notifications"
+      android:title="@string/prefs_show_file_transfer_notifications_title"
+      android:summary="@string/prefs_show_file_transfer_notifications_summary"
+      android:defaultValue="true"
+      android:dependency="notifications_enabled" />
 
-    </PreferenceCategory>
+    <SwitchPreferenceCompat
+      android:key="notification_vibrate"
+      android:title="@string/prefs_notification_vibrate_title"
+      android:summary="@string/prefs_notification_vibrate_summary"
+      android:defaultValue="true"
+      android:dependency="notifications_enabled" />
+
+    <Preference
+      android:key="open_system_notification_settings"
+      android:title="@string/prefs_open_system_notification_settings_title"
+      android:summary="@string/prefs_open_system_notification_settings_summary" />
+
+  </PreferenceCategory>
 
 </PreferenceScreen>

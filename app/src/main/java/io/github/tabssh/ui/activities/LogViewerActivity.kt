@@ -5,7 +5,6 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -21,7 +20,7 @@ import java.io.File
 /**
  * Activity to view application logs
  */
-class LogViewerActivity : AppCompatActivity() {
+class LogViewerActivity : TabSSHActivity() {
     
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyView: TextView
@@ -39,11 +38,8 @@ class LogViewerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_log_viewer)
         
-        // Setup toolbar
-        supportActionBar?.apply {
-            setDisplayHomeAsUpEnabled(true)
-            setTitle("Application Logs")
-        }
+        setSupportActionBar(findViewById(R.id.toolbar))
+        supportActionBar?.setTitle(R.string.log_viewer_title)
         
         // Initialize views
         recyclerView = findViewById(R.id.recycler_logs)
@@ -65,10 +61,6 @@ class LogViewerActivity : AppCompatActivity() {
     
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
-            android.R.id.home -> {
-                finish()
-                true
-            }
             R.id.action_copy -> {
                 copyLogsToClipboard()
                 true

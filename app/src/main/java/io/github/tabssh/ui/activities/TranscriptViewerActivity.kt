@@ -2,10 +2,10 @@ package io.github.tabssh.ui.activities
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import io.github.tabssh.R
 import io.github.tabssh.databinding.ActivityTranscriptViewerBinding
 import io.github.tabssh.terminal.recording.TranscriptManager
 import io.github.tabssh.ui.adapters.TranscriptAdapter
@@ -13,7 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class TranscriptViewerActivity : AppCompatActivity() {
+class TranscriptViewerActivity : TabSSHActivity() {
     
     private lateinit var binding: ActivityTranscriptViewerBinding
     private lateinit var adapter: TranscriptAdapter
@@ -30,11 +30,8 @@ class TranscriptViewerActivity : AppCompatActivity() {
     }
     
     private fun setupToolbar() {
-        setSupportActionBar(binding.toolbar)
-        supportActionBar?.apply {
-            setDisplayHomeAsUpEnabled(true)
-            title = "Session Transcripts"
-        }
+        setSupportActionBar(binding.appBar.toolbar)
+        supportActionBar?.setTitle(R.string.transcript_viewer_title)
     }
     
     private fun setupRecyclerView() {
@@ -68,7 +65,7 @@ class TranscriptViewerActivity : AppCompatActivity() {
     
     private fun viewTranscript(transcript: TranscriptManager.Transcript) {
         lifecycleScope.launch(Dispatchers.IO) {
-            val content = TranscriptManager.getTranscriptContent(transcript)
+            val content = TranscriptManager.getTranscriptContent(this@TranscriptViewerActivity, transcript)
             
             withContext(Dispatchers.Main) {
                 MaterialAlertDialogBuilder(this@TranscriptViewerActivity)
@@ -83,7 +80,7 @@ class TranscriptViewerActivity : AppCompatActivity() {
     
     private fun shareTranscript(transcript: TranscriptManager.Transcript) {
         lifecycleScope.launch(Dispatchers.IO) {
-            val content = TranscriptManager.getTranscriptContent(transcript)
+            val content = TranscriptManager.getTranscriptContent(this@TranscriptViewerActivity, transcript)
             withContext(Dispatchers.Main) {
                 val intent = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
@@ -126,8 +123,4 @@ class TranscriptViewerActivity : AppCompatActivity() {
             .show()
     }
     
-    override fun onSupportNavigateUp(): Boolean {
-        finish()
-        return true
-    }
 }

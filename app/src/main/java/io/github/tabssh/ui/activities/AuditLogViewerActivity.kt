@@ -5,7 +5,6 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -21,7 +20,7 @@ import kotlinx.coroutines.withContext
 /**
  * Activity to view audit log history
  */
-class AuditLogViewerActivity : AppCompatActivity() {
+class AuditLogViewerActivity : TabSSHActivity() {
     
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyView: TextView
@@ -32,11 +31,8 @@ class AuditLogViewerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_audit_log_viewer)
         
-        // Setup toolbar
-        supportActionBar?.apply {
-            setDisplayHomeAsUpEnabled(true)
-            setTitle("Audit Logs")
-        }
+        setSupportActionBar(findViewById(R.id.toolbar))
+        supportActionBar?.setTitle(R.string.audit_log_viewer_title)
         
         // Initialize views
         recyclerView = findViewById(R.id.recycler_audit_logs)
@@ -58,10 +54,6 @@ class AuditLogViewerActivity : AppCompatActivity() {
     
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
-            android.R.id.home -> {
-                finish()
-                true
-            }
             R.id.action_copy -> {
                 copyLogsToClipboard()
                 true

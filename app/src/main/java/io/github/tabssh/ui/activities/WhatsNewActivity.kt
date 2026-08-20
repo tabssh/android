@@ -3,14 +3,12 @@ package io.github.tabssh.ui.activities
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.view.MenuItem
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.setPadding
 import io.github.tabssh.R
@@ -26,7 +24,7 @@ import io.github.tabssh.utils.logging.Logger
  * No on-upgrade pop — user opens it explicitly from the drawer. (Some apps
  * shove this in your face on first launch after update; we don't.)
  */
-class WhatsNewActivity : AppCompatActivity() {
+class WhatsNewActivity : TabSSHActivity() {
 
     companion object {
         private const val TAG = "WhatsNew"
@@ -41,13 +39,12 @@ class WhatsNewActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
         }
-        val toolbar = Toolbar(this).apply {
-            title = "What's New"
-            setBackgroundResource(R.color.primary_500)
-            // Toolbar sits on the fixed primary_500 blue, so the title stays white in both modes
-            setTitleTextColor(androidx.core.content.ContextCompat.getColor(this@WhatsNewActivity, R.color.white))
-        }
-        root.addView(toolbar)
+        // Shared app bar, inflated rather than hand-built so this programmatic
+        // screen gets the same toolbar styling as every XML-defined screen.
+        val appBar = layoutInflater.inflate(R.layout.include_app_bar, root, false)
+        val toolbar = appBar.findViewById<Toolbar>(R.id.toolbar)
+        toolbar.setTitle(R.string.nav_item_whats_new)
+        root.addView(appBar)
 
         val scroll = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(MATCH, 0, 1f)
@@ -74,8 +71,6 @@ class WhatsNewActivity : AppCompatActivity() {
 
         setContentView(root)
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        toolbar.setNavigationOnClickListener { finish() }
 
         text.text = try {
             assets.open(ASSET).bufferedReader().use { it.readText() }
@@ -83,11 +78,6 @@ class WhatsNewActivity : AppCompatActivity() {
             Logger.e(TAG, "Failed to read $ASSET", e)
             "What's New asset is missing.\n\nSee $GH_HISTORY for full history."
         }
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
-        android.R.id.home -> { finish(); true }
-        else -> super.onOptionsItemSelected(item)
     }
 
     private fun dp(value: Int): Int =

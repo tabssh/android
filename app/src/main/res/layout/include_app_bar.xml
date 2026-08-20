@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Shared app bar. Every screen includes this rather than declaring its own
+  toolbar, so the height, style and navigation affordance are identical
+  app-wide. TabSSHActivity installs the hamburger icon and its click
+  handler; screens only supply the title (usually via android:label).
+-->
+<com.google.android.material.appbar.AppBarLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    app:liftOnScroll="true">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:minHeight="?attr/actionBarSize"
+        app:popupTheme="@style/ThemeOverlay.Material3.Light"
+        style="@style/Widget.TabSSH.Toolbar" />
+
+</com.google.android.material.appbar.AppBarLayout>

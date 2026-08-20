@@ -12,7 +12,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
@@ -56,7 +55,7 @@ import kotlinx.coroutines.withContext
  * The activity itself is a thin shell — most of the user-facing work
  * happens in modal dialogs.
  */
-class ImportFromQrActivity : AppCompatActivity() {
+class ImportFromQrActivity : TabSSHActivity() {
 
     companion object {
         private const val TAG = "ImportFromQrActivity"
@@ -72,14 +71,14 @@ class ImportFromQrActivity : AppCompatActivity() {
 
     private val cameraPermissionLauncher: ActivityResultLauncher<String> =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) launchScanner() else abortWith("Camera permission required to scan QR codes.")
+            if (granted) launchScanner() else abortWith(getString(R.string.import_qr_camera_permission_required))
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_import_from_qr)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = "Pair from Desktop"
+        setSupportActionBar(findViewById(R.id.toolbar))
+        supportActionBar?.setTitle(R.string.import_from_qr_title)
         statusText = findViewById(R.id.text_status)
 
         if (savedInstanceState == null) {
@@ -94,10 +93,10 @@ class ImportFromQrActivity : AppCompatActivity() {
     }
 
     private fun launchScanner() {
-        statusText.text = "Point your camera at the QR code on your desktop."
+        statusText.setText(R.string.import_qr_status_scan)
         val options = ScanOptions()
             .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-            .setPrompt("Scan the QR shown by TabSSH on your desktop")
+            .setPrompt(getString(R.string.import_qr_scanner_prompt))
             .setBeepEnabled(false)
             .setOrientationLocked(false)
             .setBarcodeImageEnabled(false)
@@ -117,7 +116,7 @@ class ImportFromQrActivity : AppCompatActivity() {
     }
 
     private fun promptForCode() {
-        statusText.text = "Enter the 6-digit code shown on your desktop."
+        statusText.setText(R.string.import_qr_status_enter_code)
 
         val form = DialogFields.form(this)
         val edit = DialogFields.addText(
@@ -129,30 +128,32 @@ class ImportFromQrActivity : AppCompatActivity() {
         }
 
         val attemptsHint = if (codeAttemptsRemaining < MAX_CODE_ATTEMPTS) {
-            "\n\n($codeAttemptsRemaining attempt${if (codeAttemptsRemaining == 1) "" else "s"} left)"
+            resources.getQuantityString(
+                R.plurals.import_qr_attempts_left, codeAttemptsRemaining, codeAttemptsRemaining
+            )
         } else ""
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("Enter pairing code")
-            .setMessage("Type the 6-digit code shown by TabSSH on your desktop.$attemptsHint")
+            .setTitle(R.string.import_qr_dialog_title)
+            .setMessage(getString(R.string.import_qr_dialog_message) + attemptsHint)
             .setView(form.root)
-            .setPositiveButton("Decrypt") { _, _ ->
+            .setPositiveButton(R.string.import_qr_decrypt) { _, _ ->
                 val code = edit.text.toString().trim()
                 if (code.length != 6 || !code.all { it.isDigit() }) {
-                    Toast.makeText(this, "Code must be 6 digits.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, R.string.import_qr_code_invalid, Toast.LENGTH_SHORT).show()
                     promptForCode()
                     return@setPositiveButton
                 }
                 runDecrypt(code)
             }
-            .setNegativeButton("Cancel") { _, _ -> finish() }
+            .setNegativeButton(R.string.cancel) { _, _ -> finish() }
             .setCancelable(false)
             .show()
     }
 
     private fun runDecrypt(code: String) {
-        val text = scannedText ?: return abortWith("No scanned data — try again.")
-        statusText.text = "Decrypting… (this takes about a second)"
+        val text = scannedText ?: return abortWith(getString(R.string.import_qr_no_scan_data))
+        statusText.setText(R.string.import_qr_status_decrypting)
 
         // Argon2id is intentionally slow (~1s on a phone). Do not run on main.
         lifecycleScope.launch(Dispatchers.Default) {
@@ -176,40 +177,63 @@ class ImportFromQrActivity : AppCompatActivity() {
                 if (codeAttemptsRemaining > 0) {
                     promptForCode()
                 } else {
-                    showFatalError("Too many wrong codes. Generate a new QR on the desktop and try again.")
+                    showFatalError(getString(R.string.import_qr_error_too_many_attempts))
                 }
             }
             FailureReason.EXPIRED ->
-                showFatalError("This QR has expired. Generate a new one on the desktop.")
+                showFatalError(getString(R.string.import_qr_error_expired))
             FailureReason.UNSUPPORTED_VERSION, FailureReason.UNSUPPORTED_PAYLOAD_VERSION ->
-                showFatalError("This QR was created by a newer TabSSH. Update your phone app and try again.")
+                showFatalError(getString(R.string.import_qr_error_unsupported_version))
             FailureReason.BAD_ENVELOPE, FailureReason.BAD_PAYLOAD ->
-                showFatalError("Couldn't read the QR. Make sure both apps are up to date.")
+                showFatalError(getString(R.string.import_qr_error_bad_payload))
             FailureReason.INTERNAL_ERROR ->
-                showFatalError("Something went wrong: ${failure.message}")
+                showFatalError(getString(R.string.import_qr_error_internal_fmt, failure.message))
         }
     }
 
     private fun showImportPreview(payload: PairingPayload) {
-        statusText.text = "Confirm import."
+        statusText.setText(R.string.import_qr_status_confirm)
 
-        val deviceLine = payload.deviceLabel?.let { "from $it" } ?: "from desktop"
-        val title = "Import ${payload.connections.size} connections $deviceLine?"
+        val separator = getString(R.string.import_qr_list_separator)
+        val deviceLine = payload.deviceLabel
+            ?.let { getString(R.string.import_qr_source_device_fmt, it) }
+            ?: getString(R.string.import_qr_source_desktop)
+        val title = resources.getQuantityString(
+            R.plurals.import_qr_preview_title,
+            payload.connections.size,
+            payload.connections.size,
+            deviceLine
+        )
 
         val body = StringBuilder()
         if (payload.connections.isNotEmpty()) {
-            body.append("Connections:\n")
+            body.append(getString(R.string.import_qr_preview_connections_header))
             payload.connections.forEach { c ->
-                body.append("  • ${c.name} — ${c.username}@${c.host}:${c.port}\n")
+                body.append(
+                    getString(
+                        R.string.import_qr_preview_connection_line_fmt,
+                        c.name, c.username, c.host, c.port
+                    )
+                )
             }
         }
         if (payload.groups.isNotEmpty()) {
-            body.append("\nGroups: ${payload.groups.joinToString(", ") { it.name }}\n")
+            body.append(
+                getString(
+                    R.string.import_qr_preview_groups_fmt,
+                    payload.groups.joinToString(separator) { it.name }
+                )
+            )
         }
         if (payload.identities.isNotEmpty()) {
-            body.append("\nIdentities: ${payload.identities.joinToString(", ") { it.name }}\n")
+            body.append(
+                getString(
+                    R.string.import_qr_preview_identities_fmt,
+                    payload.identities.joinToString(separator) { it.name }
+                )
+            )
         }
-        body.append("\nNo passwords or private keys are imported — you'll be prompted on first connect.")
+        body.append(getString(R.string.import_qr_preview_footer))
 
         // Wrap the body in a scrollable TextView so very large imports
         // don't push the dialog buttons off-screen.
@@ -226,14 +250,14 @@ class ImportFromQrActivity : AppCompatActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(title)
             .setView(container)
-            .setPositiveButton("Import") { _, _ -> runImport(payload) }
-            .setNegativeButton("Cancel") { _, _ -> finish() }
+            .setPositiveButton(R.string.import_qr_confirm) { _, _ -> runImport(payload) }
+            .setNegativeButton(R.string.cancel) { _, _ -> finish() }
             .setCancelable(false)
             .show()
     }
 
     private fun runImport(payload: PairingPayload) {
-        statusText.text = "Importing…"
+        statusText.setText(R.string.import_qr_status_importing)
         // Block any other interaction while DB inserts run.
         lifecycleScope.launch(Dispatchers.IO) {
             val summary = try {
@@ -241,7 +265,12 @@ class ImportFromQrActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Logger.e(TAG, "Import failed", e)
                 withContext(Dispatchers.Main) {
-                    showFatalError("Import failed: ${e.message ?: e::class.simpleName}")
+                    showFatalError(
+                        getString(
+                            R.string.import_qr_import_failed_fmt,
+                            e.message ?: e::class.simpleName.orEmpty()
+                        )
+                    )
                 }
                 return@launch
             }
@@ -252,12 +281,29 @@ class ImportFromQrActivity : AppCompatActivity() {
     }
 
     private fun showImportSuccess(summary: PairingImporter.ImportSummary) {
+        val separator = getString(R.string.import_qr_list_separator)
         val parts = buildList {
-            add("${summary.connections} connections")
-            if (summary.groups > 0) add("${summary.groups} groups")
-            if (summary.identities > 0) add("${summary.identities} identities")
+            add(
+                resources.getQuantityString(
+                    R.plurals.import_qr_summary_connections, summary.connections, summary.connections
+                )
+            )
+            if (summary.groups > 0) {
+                add(
+                    resources.getQuantityString(
+                        R.plurals.import_qr_summary_groups, summary.groups, summary.groups
+                    )
+                )
+            }
+            if (summary.identities > 0) {
+                add(
+                    resources.getQuantityString(
+                        R.plurals.import_qr_summary_identities, summary.identities, summary.identities
+                    )
+                )
+            }
         }
-        val msg = "Imported ${parts.joinToString(", ")}."
+        val msg = getString(R.string.import_qr_summary_fmt, parts.joinToString(separator))
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         if (summary.skipped.isNotEmpty()) {
             Logger.w(TAG, "Skipped: ${summary.skipped.joinToString(", ")}")
@@ -271,7 +317,7 @@ class ImportFromQrActivity : AppCompatActivity() {
         // Issue #167 — route through DialogUtils for the Copy button. Add a
         // dismiss callback so back/outside-tap still finish()s the activity.
         io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
-            this, "Pairing failed", message,
+            this, getString(R.string.import_qr_failed_title), message,
             onDismiss = { finish() }
         )
     }
@@ -281,8 +327,4 @@ class ImportFromQrActivity : AppCompatActivity() {
         finish()
     }
 
-    override fun onSupportNavigateUp(): Boolean {
-        finish()
-        return true
-    }
 }

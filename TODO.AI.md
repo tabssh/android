@@ -4,11 +4,15 @@ Task tracking (AI-owned). Items are ordered by priority, highest first.
 Complete each item fully before removing; never clear an item while its work
 is in progress.
 
-## Open — 2026-08-19 user batch of 10 (decisions locked via wizard)
+## Shipped — 2026-08-19 user batch of 10 (decisions locked via wizard)
 
 Commit cadence (user instruction, overrides the per-finding default):
 THREE commits total — (A) all bug fixes, (B) all container work,
 (C) all UI/UX/Settings. Each gated on a green `make check`.
+A shipped as de234add6626, B as fd85dfa569aa, C as the UI/UX pass
+(unified Settings IA, app-wide nav drawer, manifest label extraction).
+The A and B item detail below is kept as the durable record of what
+each commit was scoped to cover.
 
 ### Commit A — bug fixes
 
@@ -136,24 +140,6 @@ B8. Incus/LXC/LXD full parity where the concept exists — instances
     profiles and projects as their own tabs. Transport mirrors the
     Docker hybrid model: REST API over a forwarded unix socket when
     sshd permits, CLI over SSH exec as fallback.
-
-### Commit C — UI/UX + Settings
-
-C1. Unified Settings: one place to change everything, with intuitive
-    categories. The existing main UI and Settings UI are the design
-    base (user instruction).
-C2. Nav drawer available on every screen via a hamburger toggle,
-    EXCEPT terminal/VNC/SPICE session tabs, which get the drawer from
-    the toolbar button only so edge gestures stay with the session.
-C3. App-wide interface uniformity: one back-button / toolbar / menu
-    pattern everywhere. Current inconsistency example from the user —
-    groups/snippets screens vs the routing screens' back buttons.
-C4. AndroidManifest.xml hardcodes `android:label` on 12 activities
-    ("Cluster Commands", "Proxmox Manager", "Edit Hypervisor",
-    "Container Manager", …). AI.md PART 7 requires user-visible text to
-    live in strings.xml — move every one to a string resource. Found
-    during the commit-B container rename; not container-specific, so it
-    belongs with the app-wide UI pass.
 
 ## Open — 2026-08-14 Play Protect false positive (user action required)
 

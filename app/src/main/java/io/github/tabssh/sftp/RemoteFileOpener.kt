@@ -11,7 +11,9 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import io.github.tabssh.R
 import io.github.tabssh.utils.FileOpenPolicy
+import io.github.tabssh.utils.Format
 import io.github.tabssh.utils.NotificationHelper
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
@@ -70,16 +72,23 @@ class RemoteFileOpener(
         activity.lifecycleScope.launch {
             val stat = withContext(Dispatchers.IO) { sftpManager.getRemoteFileAttributes(remotePath) }
             if (stat == null) {
-                Toast.makeText(activity, "Could not read file info from server", Toast.LENGTH_LONG).show()
+                Toast.makeText(activity, R.string.fileopen_stat_failed, Toast.LENGTH_LONG).show()
                 return@launch
             }
             val limitMb = sizeLimitMbProvider()
             if (FileOpenPolicy.exceedsSizeGate(stat.size, limitMb)) {
                 MaterialAlertDialogBuilder(activity)
-                    .setTitle("Large file")
-                    .setMessage("$displayName is ${formatSize(stat.size)}, over the $limitMb MB open limit. Download anyway?")
-                    .setPositiveButton("Download") { _, _ -> downloadAndOpen(sftpManager, remotePath, displayName) }
-                    .setNegativeButton("Cancel", null)
+                    .setTitle(R.string.fileopen_large_title)
+                    .setMessage(
+                        activity.getString(
+                            R.string.fileopen_large_message_fmt,
+                            displayName,
+                            Format.size(activity, stat.size),
+                            limitMb
+                        )
+                    )
+                    .setPositiveButton(R.string.download_file) { _, _ -> downloadAndOpen(sftpManager, remotePath, displayName) }
+                    .setNegativeButton(R.string.cancel, null)
                     .show()
             } else {
                 downloadAndOpen(sftpManager, remotePath, displayName)
@@ -109,15 +118,24 @@ class RemoteFileOpener(
                 val result = awaitTransfer(task)
                 NotificationHelper.cancelNotification(activity, task.id.hashCode())
                 if (result !is TransferResult.Success) {
-                    val message = (result as? TransferResult.Error)?.message ?: "Download failed"
-                    Toast.makeText(activity, "Download failed: $message", Toast.LENGTH_LONG).show()
+                    val message = (result as? TransferResult.Error)?.message
+                        ?: activity.getString(R.string.fileopen_download_failed)
+                    Toast.makeText(
+                        activity,
+                        activity.getString(R.string.fileopen_download_failed_fmt, message),
+                        Toast.LENGTH_LONG
+                    ).show()
                     return@launch
                 }
                 withContext(Dispatchers.IO) { evictCache(cacheSubDir) }
                 launchViewer(sftpManager, remotePath, localFile)
             } catch (e: Exception) {
                 Logger.e(TAG, "Download failed for $remotePath", e)
-                Toast.makeText(activity, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    activity,
+                    activity.getString(R.string.fileopen_download_failed_fmt, e.message.orEmpty()),
+                    Toast.LENGTH_LONG
+                ).show()
             }
         }
     }
@@ -127,7 +145,8 @@ class RemoteFileOpener(
         while (true) {
             when (task.state.value) {
                 TransferState.COMPLETED, TransferState.ERROR, TransferState.CANCELLED ->
-                    return task.result.value ?: TransferResult.Error("Transfer ended without a result")
+                    return task.result.value
+                        ?: TransferResult.Error(activity.getString(R.string.fileopen_transfer_no_result))
                 else -> delay(100)
             }
         }
@@ -146,7 +165,7 @@ class RemoteFileOpener(
             FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", localFile)
         } catch (e: IllegalArgumentException) {
             Logger.e(TAG, "FileProvider could not create a URI for ${localFile.name}", e)
-            Toast.makeText(activity, "Could not open file", Toast.LENGTH_LONG).show()
+            Toast.makeText(activity, R.string.fileopen_open_failed, Toast.LENGTH_LONG).show()
             return
         }
         val extension = FileOpenPolicy.extensionOf(localFile.name)
@@ -162,11 +181,16 @@ class RemoteFileOpener(
             } else {
                 // Unknown type — force the resolver sheet instead of a single
                 // app silently claiming "*/*".
-                activity.startActivity(Intent.createChooser(intent, "Open ${localFile.name} with"))
+                activity.startActivity(
+                    Intent.createChooser(
+                        intent,
+                        activity.getString(R.string.fileopen_chooser_title_fmt, localFile.name)
+                    )
+                )
             }
             pendingEdit = PendingEdit(localFile, remotePath, sftpManager, localFile.lastModified(), localFile.length())
         } catch (e: ActivityNotFoundException) {
-            Toast.makeText(activity, "No app found to open this file", Toast.LENGTH_LONG).show()
+            Toast.makeText(activity, R.string.fileopen_no_app, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -187,10 +211,10 @@ class RemoteFileOpener(
 
     private fun promptUploadBack(edit: PendingEdit) {
         MaterialAlertDialogBuilder(activity)
-            .setTitle("File changed")
-            .setMessage("Upload back to ${edit.remotePath}?")
-            .setPositiveButton("Upload") { _, _ -> uploadBack(edit) }
-            .setNegativeButton("Not now", null)
+            .setTitle(R.string.fileopen_changed_title)
+            .setMessage(activity.getString(R.string.fileopen_upload_back_message_fmt, edit.remotePath))
+            .setPositiveButton(R.string.upload_file) { _, _ -> uploadBack(edit) }
+            .setNegativeButton(R.string.fileopen_not_now, null)
             .show()
     }
 
@@ -213,23 +237,26 @@ class RemoteFileOpener(
                 val result = awaitTransfer(task)
                 NotificationHelper.cancelNotification(activity, task.id.hashCode())
                 if (result is TransferResult.Success) {
-                    Toast.makeText(activity, "Uploaded to ${edit.remotePath}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        activity,
+                        activity.getString(R.string.fileopen_uploaded_fmt, edit.remotePath),
+                        Toast.LENGTH_SHORT
+                    ).show()
                 } else {
                     // Keep the local copy on disk — it already is, untouched —
                     // and re-prompt immediately so the user can retry or decline.
-                    Toast.makeText(activity, "Upload failed — local copy kept", Toast.LENGTH_LONG).show()
+                    Toast.makeText(activity, R.string.fileopen_upload_failed_kept, Toast.LENGTH_LONG).show()
                     promptUploadBack(edit)
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Upload back failed for ${edit.remotePath}", e)
-                Toast.makeText(activity, "Upload failed: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    activity,
+                    activity.getString(R.string.fileopen_upload_failed_fmt, e.message.orEmpty()),
+                    Toast.LENGTH_LONG
+                ).show()
                 promptUploadBack(edit)
             }
         }
-    }
-
-    private fun formatSize(bytes: Long): String {
-        val mb = bytes / (1024.0 * 1024.0)
-        return String.format(java.util.Locale.US, "%.1f MB", mb)
     }
 }

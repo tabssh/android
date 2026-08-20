@@ -1,10 +1,8 @@
 package io.github.tabssh.ui.activities
 
 import android.os.Bundle
-import android.view.MenuItem
 import android.view.View
 import android.widget.*
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
@@ -27,7 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import io.github.tabssh.utils.showError
 
-class HypervisorEditActivity : AppCompatActivity() {
+class HypervisorEditActivity : TabSSHActivity() {
 
     private lateinit var app: TabSSHApplication
     private lateinit var toolbar: MaterialToolbar
@@ -285,8 +283,10 @@ class HypervisorEditActivity : AppCompatActivity() {
 
     private fun setupToolbar() {
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = if (hypervisorId != null) "Edit Hypervisor" else "Add Hypervisor"
+        supportActionBar?.setTitle(
+            if (hypervisorId != null) R.string.hypervisor_edit_title_edit
+            else R.string.hypervisor_edit_title_new
+        )
     }
 
     private fun setupSpinner() {
@@ -927,16 +927,6 @@ class HypervisorEditActivity : AppCompatActivity() {
         }
 
         return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            android.R.id.home -> {
-                finish()
-                true
-            }
-            else -> super.onOptionsItemSelected(item)
-        }
     }
 
     // Companion-scoped and internal so the pure validation/redaction logic is

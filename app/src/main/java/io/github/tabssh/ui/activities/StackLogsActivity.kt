@@ -9,7 +9,6 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import io.github.tabssh.R
@@ -32,7 +31,7 @@ import kotlinx.coroutines.launch
  * mirroring [ContainerDetailActivity]'s log tab.
  * FLAG_SECURE because log output routinely contains secrets.
  */
-class StackLogsActivity : AppCompatActivity() {
+class StackLogsActivity : TabSSHActivity() {
 
     companion object {
         const val EXTRA_HOST_ID = "container_host_id"
@@ -103,11 +102,9 @@ class StackLogsActivity : AppCompatActivity() {
         textLogs = findViewById(R.id.text_logs)
 
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
         // The stack name reaches this screen from `docker compose ls` output —
         // sanitize before it becomes the toolbar title.
         toolbar.title = getString(R.string.container_stack_logs_title, ContainerText.display(stackName))
-        toolbar.setNavigationOnClickListener { finish() }
 
         spinnerService.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(

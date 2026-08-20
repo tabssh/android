@@ -9,7 +9,6 @@ import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
@@ -39,7 +38,7 @@ import kotlinx.coroutines.launch
  * translates the config to docker run argv and executes it over the
  * transport's exec runner. FLAG_SECURE because env values are secrets.
  */
-class SingleContainerConfigEditorActivity : AppCompatActivity() {
+class SingleContainerConfigEditorActivity : TabSSHActivity() {
 
     companion object {
         const val EXTRA_HOST_ID = "container_host_id"
@@ -93,11 +92,9 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
 
         bindViews()
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setTitle(
             if (configId == 0L) R.string.container_run_new_title else R.string.container_run_edit_title
         )
-        toolbar.setNavigationOnClickListener { finish() }
 
         switchAdvanced.setOnCheckedChangeListener { _, checked -> toggleAdvanced(checked) }
         buttonRun.setOnClickListener { runContainer() }

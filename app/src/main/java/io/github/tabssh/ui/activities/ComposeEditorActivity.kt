@@ -10,7 +10,6 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.ProgressBar
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
@@ -45,7 +44,7 @@ import java.io.StringReader
  *
  * FLAG_SECURE because .env content is typically secrets.
  */
-class ComposeEditorActivity : AppCompatActivity() {
+class ComposeEditorActivity : TabSSHActivity() {
 
     companion object {
         const val EXTRA_HOST_ID = "container_host_id"
@@ -108,12 +107,10 @@ class ComposeEditorActivity : AppCompatActivity() {
         buttonSave = findViewById(R.id.button_save)
 
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setTitle(
             if (stackId == 0L && !isExternal) R.string.container_stack_new_title
             else R.string.container_stack_edit_title
         )
-        toolbar.setNavigationOnClickListener { finish() }
 
         if (isExternal) {
             // No sibling .env path is known for an arbitrary discovered
@@ -341,10 +338,6 @@ class ComposeEditorActivity : AppCompatActivity() {
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == android.R.id.home) {
-            finish()
-            return true
-        }
         val current = session ?: return super.onOptionsItemSelected(item)
         if (item.itemId == R.id.action_logs) {
             openLogs()

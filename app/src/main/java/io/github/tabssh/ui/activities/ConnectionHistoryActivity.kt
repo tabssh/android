@@ -3,14 +3,12 @@ package io.github.tabssh.ui.activities
 import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
@@ -34,7 +32,7 @@ import java.util.Locale
  * Built from the existing `connections` table — no separate history table,
  * no audit-log dependency, so we don't pay for storage we don't need.
  */
-class ConnectionHistoryActivity : AppCompatActivity() {
+class ConnectionHistoryActivity : TabSSHActivity() {
 
     private val rowFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
 
@@ -46,12 +44,12 @@ class ConnectionHistoryActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
         }
-        val toolbar = Toolbar(this).apply {
-            title = "Connection History"
-            setBackgroundResource(R.color.primary_500)
-            setTitleTextColor(androidx.core.content.ContextCompat.getColor(this@ConnectionHistoryActivity, R.color.white))
-        }
-        root.addView(toolbar)
+        // Shared app bar, inflated rather than hand-built so this programmatic
+        // screen gets the same toolbar styling as every XML-defined screen.
+        val appBar = layoutInflater.inflate(R.layout.include_app_bar, root, false)
+        val toolbar = appBar.findViewById<Toolbar>(R.id.toolbar)
+        toolbar.setTitle(R.string.nav_item_connection_history)
+        root.addView(appBar)
 
         val scroll = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(MATCH, 0, 1f)
@@ -65,8 +63,6 @@ class ConnectionHistoryActivity : AppCompatActivity() {
 
         setContentView(root)
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        toolbar.setNavigationOnClickListener { finish() }
 
         lifecycleScope.launch {
             try {
@@ -132,11 +128,6 @@ class ConnectionHistoryActivity : AppCompatActivity() {
             )
         }
         return row
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
-        android.R.id.home -> { finish(); true }
-        else -> super.onOptionsItemSelected(item)
     }
 
     private fun dp(value: Int): Int =

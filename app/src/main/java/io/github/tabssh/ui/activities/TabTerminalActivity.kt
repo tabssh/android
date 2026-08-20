@@ -35,7 +35,6 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.activity.OnBackPressedCallback
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -132,8 +131,12 @@ import java.util.UUID
 // flagged @ExperimentalCoroutinesApi. Rather than tag every transitive
 // caller, opt-in once at the class level.
 @OptIn(ExperimentalCoroutinesApi::class)
-class TabTerminalActivity : AppCompatActivity() {
-    
+class TabTerminalActivity : TabSSHActivity() {
+
+    // Session screen: the drawer stays reachable from the toolbar hamburger but
+    // never from an edge swipe, because the terminal itself needs edge gestures.
+    override val drawerMode: DrawerMode = DrawerMode.TOOLBAR_ONLY
+
     companion object {
         const val EXTRA_CONNECTION_PROFILE_ID = "connection_profile_id"
         const val EXTRA_CONNECTION_PROFILE = "connection_profile"
@@ -408,7 +411,6 @@ class TabTerminalActivity : AppCompatActivity() {
     private fun setupToolbar() {
         setSupportActionBar(binding.toolbar)
         supportActionBar?.apply {
-            setDisplayHomeAsUpEnabled(true)
             title = getString(R.string.terminal_activity_title)
         }
     }
@@ -593,7 +595,6 @@ class TabTerminalActivity : AppCompatActivity() {
             if (!persistent) hideBottomActionBar()
         }
     }
-
 
     /**
      * Setup edge tap gestures for showing UI elements. Lint flags this
@@ -3544,10 +3545,6 @@ class TabTerminalActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
-            android.R.id.home -> {
-                onBackPressedDispatcher.onBackPressed()
-                true
-            }
             R.id.action_new_tab -> {
                 // Open connection selector for new tab
                 showConnectionSelector()

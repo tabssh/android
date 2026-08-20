@@ -8,7 +8,6 @@ import android.widget.ProgressBar
 import android.widget.RadioGroup
 import android.widget.Spinner
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
@@ -51,7 +50,7 @@ import kotlinx.coroutines.withContext
  * form values and presents the result (permission-denied failures get the
  * engine-group remediation dialog via ContainerErrorPresenter).
  */
-class ContainerHostEditActivity : AppCompatActivity() {
+class ContainerHostEditActivity : TabSSHActivity() {
 
     companion object {
         const val EXTRA_HOST_ID = "container_host_id"
@@ -234,16 +233,10 @@ class ContainerHostEditActivity : AppCompatActivity() {
 
     private fun setupToolbar() {
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setTitle(
             if (hostId != null) R.string.container_host_edit_title_edit
             else R.string.container_host_edit_title_add
         )
-    }
-
-    override fun onSupportNavigateUp(): Boolean {
-        finish()
-        return true
     }
 
     /** "password", "key", or "identity" for the auth-type spinner position. */

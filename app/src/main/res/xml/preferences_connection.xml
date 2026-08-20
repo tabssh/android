@@ -1,139 +1,96 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto">
+  xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory
-        android:title="SSH Defaults"
-        android:key="category_connection_defaults">
+  <PreferenceCategory
+    android:key="category_connection_defaults"
+    android:title="@string/prefcat_connection_defaults">
 
-        <EditTextPreference
-            android:key="default_username"
-            android:title="Default Username"
-            android:summary="Username for new SSH/Mosh connections and quick connect (not used for VNC)"
-            android:defaultValue="root"
-            app:useSimpleSummaryProvider="true" />
+    <EditTextPreference
+      android:key="default_username"
+      android:title="@string/prefs_default_username_title"
+      android:summary="@string/prefs_default_username_summary"
+      android:defaultValue="root"
+      app:useSimpleSummaryProvider="true" />
 
-        <EditTextPreference
-            android:key="default_port"
-            android:title="Default Port"
-            android:summary="Port number for new SSH/Mosh connections"
-            android:defaultValue="22"
-            android:inputType="number"
-            app:useSimpleSummaryProvider="true" />
+    <EditTextPreference
+      android:key="default_port"
+      android:title="@string/prefs_default_port_title"
+      android:summary="@string/prefs_default_port_summary"
+      android:defaultValue="22"
+      android:inputType="number"
+      app:useSimpleSummaryProvider="true" />
 
-        <EditTextPreference
-            android:key="connect_timeout"
-            android:title="Connection Timeout"
-            android:summary="Seconds to wait for a connection (SSH/Mosh)"
-            android:defaultValue="15"
-            android:inputType="number"
-            app:useSimpleSummaryProvider="true" />
+    <EditTextPreference
+      android:key="connect_timeout"
+      android:title="@string/prefs_connect_timeout_title"
+      android:summary="@string/prefs_connect_timeout_summary"
+      android:defaultValue="15"
+      android:inputType="number"
+      app:useSimpleSummaryProvider="true" />
 
-    </PreferenceCategory>
+  </PreferenceCategory>
 
-    <PreferenceCategory
-        android:title="File Open"
-        android:key="category_file_open">
+  <!-- Keep-alive is always on at the SSH layer (10s ServerAliveInterval,
+       3 missed before disconnect — see SSHConnection.configureSession).
+       The user-facing on/off toggle was removed to stop the appearance of a
+       setting that does nothing on mobile; the interval remains adjustable. -->
+  <PreferenceCategory
+    android:key="category_connection_behavior"
+    android:title="@string/prefcat_connection_session">
 
-        <EditTextPreference
-            android:key="file_open_size_limit_mb"
-            android:title="Open Size Limit (MB)"
-            android:summary="Prompt before downloading a file this large to open it externally or in the SFTP browser"
-            android:defaultValue="20"
-            android:inputType="number"
-            app:useSimpleSummaryProvider="true" />
+    <SwitchPreferenceCompat
+      android:key="compression_enabled"
+      android:title="@string/prefs_compression_enabled_title"
+      android:summary="@string/prefs_compression_enabled_summary"
+      android:defaultValue="true" />
 
-    </PreferenceCategory>
+    <SwitchPreferenceCompat
+      android:key="auto_reconnect"
+      android:title="@string/prefs_auto_reconnect_title"
+      android:summary="@string/prefs_auto_reconnect_summary"
+      android:defaultValue="false" />
 
-    <PreferenceCategory
-        android:title="SSH Behavior"
-        android:key="category_connection_behavior">
+    <EditTextPreference
+      android:key="server_alive_interval"
+      android:title="@string/prefs_server_alive_interval_title"
+      android:summary="@string/prefs_server_alive_interval_summary"
+      android:defaultValue="60"
+      android:inputType="number"
+      app:useSimpleSummaryProvider="true" />
 
-        <!-- Keep-alive is always on at the SSH layer (10s ServerAliveInterval,
-             3 missed before disconnect — see SSHConnection.configureSession).
-             User-facing toggle removed to stop the appearance of a setting
-             that does nothing on mobile. -->
+  </PreferenceCategory>
 
-        <SwitchPreferenceCompat
-            android:key="compression_enabled"
-            android:title="Compression"
-            android:summary="Enable SSH compression (default for new connections)"
-            android:defaultValue="true" />
+  <PreferenceCategory
+    android:key="category_connection_forwarding"
+    android:title="@string/prefcat_connection_forwarding">
 
-        <SwitchPreferenceCompat
-            android:key="auto_reconnect"
-            android:title="Auto Reconnect"
-            android:summary="Automatically reconnect on connection loss"
-            android:defaultValue="false" />
+    <SwitchPreferenceCompat
+      android:key="x11_forwarding_default"
+      android:title="@string/prefs_x11_forwarding_default_title"
+      android:summary="@string/prefs_x11_forwarding_default_summary"
+      android:defaultValue="false" />
 
-        <EditTextPreference
-            android:key="server_alive_interval"
-            android:title="Keepalive Interval"
-            android:summary="Seconds between server-alive pings (default 60)"
-            android:defaultValue="60"
-            android:inputType="number"
-            app:useSimpleSummaryProvider="true" />
+    <SwitchPreferenceCompat
+      android:key="agent_forwarding_default"
+      android:title="@string/prefs_agent_forwarding_default_title"
+      android:summary="@string/prefs_agent_forwarding_default_summary"
+      android:defaultValue="false" />
 
-        <SwitchPreferenceCompat
-            android:key="x11_forwarding_default"
-            android:title="X11 Forwarding"
-            android:summary="Forward X11 display by default for new connections"
-            android:defaultValue="false" />
+  </PreferenceCategory>
 
-        <SwitchPreferenceCompat
-            android:key="agent_forwarding_default"
-            android:title="SSH Agent Forwarding"
-            android:summary="Forward SSH agent by default for new connections"
-            android:defaultValue="false" />
+  <PreferenceCategory
+    android:key="category_file_open"
+    android:title="@string/prefcat_connection_files">
 
-    </PreferenceCategory>
+    <EditTextPreference
+      android:key="file_open_size_limit_mb"
+      android:title="@string/prefs_file_open_size_limit_mb_title"
+      android:summary="@string/prefs_file_open_size_limit_mb_summary"
+      android:defaultValue="20"
+      android:inputType="number"
+      app:useSimpleSummaryProvider="true" />
 
-    <PreferenceCategory
-        android:title="Multiplexer"
-        android:key="category_multiplexer_prefixes">
-
-        <SwitchPreferenceCompat
-            android:key="enable_custom_gestures"
-            android:title="Custom Gestures"
-            android:summary="Enable multi-touch gestures for multiplexer shortcuts (tmux/screen/zellij)"
-            android:defaultValue="false" />
-
-        <ListPreference
-            android:key="gesture_multiplexer_type"
-            android:title="Gesture Multiplexer Type"
-            android:entries="@array/multiplexer_type_entries"
-            android:entryValues="@array/multiplexer_type_values"
-            android:defaultValue="tmux"
-            android:dependency="enable_custom_gestures" />
-
-        <EditTextPreference
-            android:key="multiplexer_custom_prefix_tmux"
-            android:title="tmux prefix"
-            android:summary="Sent by the PRE key and gestures when tmux is active (default: C-b)"
-            android:dialogMessage="Enter the prefix key for tmux.\n\nExamples:\n• C-b or ^b → Ctrl+B (tmux default)\n• C-a or ^a → Ctrl+A\n• C-Space or ^Space → Ctrl+Space\n• M-b or Alt-b → Alt+B\n• 0x02 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-b)."
-            android:defaultValue="C-b"
-            android:inputType="text"
-            app:useSimpleSummaryProvider="true" />
-
-        <EditTextPreference
-            android:key="multiplexer_custom_prefix_zellij"
-            android:title="zellij prefix"
-            android:summary="Sent by the PRE key and gestures when zellij is active (default: C-g)"
-            android:dialogMessage="Enter the prefix key for zellij.\n\nExamples:\n• C-g or ^g → Ctrl+G (zellij default)\n• C-b or ^b → Ctrl+B\n• C-Space or ^Space → Ctrl+Space\n• M-b or Alt-b → Alt+B\n• 0x07 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-g)."
-            android:defaultValue="C-g"
-            android:inputType="text"
-            app:useSimpleSummaryProvider="true" />
-
-        <EditTextPreference
-            android:key="multiplexer_custom_prefix_screen"
-            android:title="screen prefix"
-            android:summary="Sent by the PRE key and gestures when screen is active (default: C-a)"
-            android:dialogMessage="Enter the prefix key for GNU screen.\n\nExamples:\n• C-a or ^a → Ctrl+A (screen default)\n• C-b or ^b → Ctrl+B\n• C-Space or ^Space → Ctrl+Space\n• M-b or Alt-b → Alt+B\n• 0x01 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-a)."
-            android:defaultValue="C-a"
-            android:inputType="text"
-            app:useSimpleSummaryProvider="true" />
-
-    </PreferenceCategory>
-
+  </PreferenceCategory>
 
 </PreferenceScreen>

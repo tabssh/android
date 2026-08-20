@@ -853,25 +853,7 @@ data class RemoteFileInfo(
     val modifiedTime: Long,
     val owner: Int,
     val group: Int
-) {
-    fun getFormattedSize(): String {
-        return when {
-            size < 1024 -> "$size B"
-            size < 1024 * 1024 -> "${size / 1024} KB"
-            size < 1024 * 1024 * 1024 -> "${size / (1024 * 1024)} MB"
-            else -> "${size / (1024 * 1024 * 1024)} GB"
-        }
-    }
-    
-    fun getFileType(): String = when {
-        isDirectory -> "Directory"
-        isSymlink -> "Symbolic Link"
-        name.endsWith(".txt") || name.endsWith(".log") -> "Text File"
-        name.endsWith(".jpg") || name.endsWith(".png") -> "Image"
-        name.endsWith(".zip") || name.endsWith(".tar.gz") -> "Archive"
-        else -> "File"
-    }
-}
+)
 
 /**
  * SFTP event listener interface

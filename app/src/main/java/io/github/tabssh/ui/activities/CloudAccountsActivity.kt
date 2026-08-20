@@ -4,14 +4,12 @@ import io.github.tabssh.sync.tombstone.TombstoneRecorder
 
 import android.os.Bundle
 import android.view.LayoutInflater
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -56,7 +54,7 @@ import java.util.Locale
  * account row can be dumped to logs/sync without leaking creds.
  */
 @Deprecated("Use CloudAccountsFragment via main navigation instead")
-class CloudAccountsActivity : AppCompatActivity() {
+class CloudAccountsActivity : TabSSHActivity() {
 
     private companion object {
         private const val TAG = "CloudAccounts"
@@ -85,9 +83,7 @@ class CloudAccountsActivity : AppCompatActivity() {
         binding = ActivityCloudAccountsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setSupportActionBar(binding.toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        binding.toolbar.setNavigationOnClickListener { finish() }
+        setSupportActionBar(binding.appBar.toolbar)
 
         adapter = CloudAccountAdapter(
             onRefresh   = { refreshAccount(it) },
@@ -435,8 +431,4 @@ class CloudAccountsActivity : AppCompatActivity() {
             .show()
     }
 
-    override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
-        android.R.id.home -> { finish(); true }
-        else -> super.onOptionsItemSelected(item)
-    }
 }

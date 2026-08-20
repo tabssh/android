@@ -1,111 +1,119 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <PreferenceCategory
-        android:title="App">
+  <PreferenceCategory
+    android:key="prefcat_main_app"
+    android:title="@string/prefcat_main_app">
 
-        <Preference
-            android:key="general_settings"
-            android:title="General"
-            android:summary="App theme, language, tab behavior, and notifications"
-            android:icon="@drawable/ic_settings_general"
-            android:fragment="io.github.tabssh.ui.activities.GeneralSettingsFragment" />
+    <Preference
+      android:key="general_settings"
+      android:title="@string/prefs_general_settings_title"
+      android:summary="@string/prefs_general_settings_summary"
+      android:icon="@drawable/ic_settings_general"
+      android:fragment="io.github.tabssh.ui.activities.GeneralSettingsFragment" />
 
-        <Preference
-            android:key="security_settings"
-            android:title="App Security"
-            android:summary="App lock, biometrics, and SSH/Mosh host-key security"
-            android:icon="@drawable/ic_security"
-            android:fragment="io.github.tabssh.ui.activities.SecuritySettingsFragment" />
+    <Preference
+      android:key="terminal_settings"
+      android:title="@string/prefs_terminal_settings_title"
+      android:summary="@string/prefs_terminal_settings_summary"
+      android:icon="@drawable/ic_terminal"
+      android:fragment="io.github.tabssh.ui.activities.TerminalSettingsFragment" />
 
-        <Preference
-            android:key="terminal_settings"
-            android:title="Terminal"
-            android:summary="Theme, font, and terminal behavior for SSH &amp; Mosh sessions — not used for VNC/console tabs"
-            android:icon="@drawable/ic_terminal"
-            android:fragment="io.github.tabssh.ui.activities.TerminalSettingsFragment" />
+    <Preference
+      android:key="security_settings"
+      android:title="@string/prefs_security_settings_title"
+      android:summary="@string/prefs_security_settings_summary"
+      android:icon="@drawable/ic_security"
+      android:fragment="io.github.tabssh.ui.activities.SecuritySettingsFragment" />
 
-    </PreferenceCategory>
+  </PreferenceCategory>
 
-    <PreferenceCategory
-        android:title="Connectivity">
+  <PreferenceCategory
+    android:key="prefcat_main_connections"
+    android:title="@string/prefcat_main_connections">
 
-        <Preference
-            android:key="connection_settings"
-            android:title="Connection"
-            android:summary="Default username/port/timeout for SSH &amp; Mosh, plus SSH-only options (compression, X11/agent forwarding)"
-            android:icon="@drawable/ic_connection"
-            android:fragment="io.github.tabssh.ui.activities.ConnectionSettingsFragment" />
+    <Preference
+      android:key="connection_settings"
+      android:title="@string/prefs_connection_settings_title"
+      android:summary="@string/prefs_connection_settings_summary"
+      android:icon="@drawable/ic_connection"
+      android:fragment="io.github.tabssh.ui.activities.ConnectionSettingsFragment" />
 
-        <Preference
-            android:key="monitoring_settings"
-            android:title="Monitoring"
-            android:summary="Background host availability checks and performance alerts"
-            android:icon="@drawable/ic_flash"
-            android:fragment="io.github.tabssh.ui.activities.MonitoringSettingsFragment" />
+    <Preference
+      android:key="monitoring_settings"
+      android:title="@string/prefs_monitoring_settings_title"
+      android:summary="@string/prefs_monitoring_settings_summary"
+      android:icon="@drawable/ic_flash"
+      android:fragment="io.github.tabssh.ui.activities.MonitoringSettingsFragment" />
 
-        <Preference
-            android:key="sync_settings"
-            android:title="Sync"
-            android:summary="Sync data across devices (Google Drive, WebDAV, Nextcloud)"
-            android:icon="@drawable/ic_refresh" />
+  </PreferenceCategory>
 
-    </PreferenceCategory>
+  <!-- Sync sits with Import/Export because both move the same data; it is not a
+       connectivity setting even though it talks to a remote service. -->
+  <PreferenceCategory
+    android:key="prefcat_main_data"
+    android:title="@string/prefcat_main_data">
 
-    <PreferenceCategory
-        android:title="Automation &amp; Data">
+    <Preference
+      android:key="sync_settings"
+      android:title="@string/prefs_sync_settings_title"
+      android:summary="@string/prefs_sync_settings_summary"
+      android:icon="@drawable/ic_refresh" />
 
-        <Preference
-            android:key="tasker_settings"
-            android:title="Tasker"
-            android:summary="Automate SSH connections with Tasker"
-            android:icon="@drawable/ic_settings"
-            android:fragment="io.github.tabssh.ui.activities.TaskerSettingsFragment" />
+    <Preference
+      android:key="import_export"
+      android:title="@string/prefs_import_export_title"
+      android:summary="@string/prefs_import_export_summary"
+      android:icon="@drawable/ic_import_export" />
 
-        <Preference
-            android:key="import_export"
-            android:title="Import / Export"
-            android:summary="Backup, restore, SSH config, and bulk import"
-            android:icon="@drawable/ic_import_export" />
+    <Preference
+      android:key="tasker_settings"
+      android:title="@string/prefs_tasker_settings_title"
+      android:summary="@string/prefs_tasker_settings_summary"
+      android:icon="@drawable/ic_settings"
+      android:fragment="io.github.tabssh.ui.activities.TaskerSettingsFragment" />
 
-    </PreferenceCategory>
+  </PreferenceCategory>
 
-    <PreferenceCategory
-        android:title="Diagnostics">
+  <PreferenceCategory
+    android:key="prefcat_main_diagnostics"
+    android:title="@string/prefcat_main_diagnostics">
 
-        <Preference
-            android:key="logging_settings"
-            android:title="Logging"
-            android:summary="Debug, host, and error logging"
-            android:icon="@drawable/ic_logs"
-            android:fragment="io.github.tabssh.ui.activities.LoggingSettingsFragment" />
+    <Preference
+      android:key="logging_settings"
+      android:title="@string/prefs_logging_settings_title"
+      android:summary="@string/prefs_logging_settings_summary"
+      android:icon="@drawable/ic_logs"
+      android:fragment="io.github.tabssh.ui.activities.LoggingSettingsFragment" />
 
-        <Preference
-            android:key="audit_settings"
-            android:title="Audit Log"
-            android:summary="Security audit trail — authentication, commands, file transfers"
-            android:icon="@drawable/ic_security"
-            android:fragment="io.github.tabssh.ui.activities.AuditSettingsFragment" />
+    <Preference
+      android:key="audit_settings"
+      android:title="@string/prefs_audit_settings_title"
+      android:summary="@string/prefs_audit_settings_summary"
+      android:icon="@drawable/ic_security"
+      android:fragment="io.github.tabssh.ui.activities.AuditSettingsFragment" />
 
-    </PreferenceCategory>
+  </PreferenceCategory>
 
-    <PreferenceCategory
-        android:title="About">
+  <!-- Summaries are replaced at runtime by SettingsMainFragment from BuildConfig. -->
+  <PreferenceCategory
+    android:key="prefcat_main_about"
+    android:title="@string/prefcat_main_about">
 
-        <Preference
-            android:key="about_version"
-            android:title="Version"
-            android:summary="Loading…"
-            android:icon="@drawable/ic_info"
-            android:selectable="false" />
+    <Preference
+      android:key="about_version"
+      android:title="@string/prefs_about_version_title"
+      android:summary="@string/prefs_about_loading_summary"
+      android:icon="@drawable/ic_info"
+      android:selectable="false" />
 
-        <Preference
-            android:key="about_build"
-            android:title="Build Information"
-            android:summary="Loading…"
-            android:icon="@drawable/ic_info"
-            android:selectable="false" />
+    <Preference
+      android:key="about_build"
+      android:title="@string/prefs_about_build_title"
+      android:summary="@string/prefs_about_loading_summary"
+      android:icon="@drawable/ic_info"
+      android:selectable="false" />
 
-    </PreferenceCategory>
+  </PreferenceCategory>
 
 </PreferenceScreen>

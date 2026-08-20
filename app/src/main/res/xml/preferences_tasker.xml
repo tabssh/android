@@ -1,74 +1,76 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto">
+  xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory
-        android:title="Tasker Integration"
-        android:summary="Automate SSH connections with Tasker">
+  <PreferenceCategory
+    android:key="category_tasker_integration"
+    android:title="@string/prefcat_tasker_integration">
 
-        <SwitchPreferenceCompat
-            android:key="tasker_enabled"
-            android:title="Enable Tasker Integration"
-            android:summary="Allow Tasker to control SSH connections"
-            android:defaultValue="false" />
+    <SwitchPreferenceCompat
+      android:key="tasker_enabled"
+      android:title="@string/prefs_tasker_enabled_title"
+      android:summary="@string/prefs_tasker_enabled_summary"
+      android:defaultValue="false" />
 
-        <Preference
-            android:key="tasker_actions_help"
-            android:title="Available Actions"
-            android:summary="Tap to view supported Tasker actions"
-            android:selectable="true" />
+    <Preference
+      android:key="tasker_actions_help"
+      android:title="@string/prefs_tasker_actions_help_title"
+      android:summary="@string/prefs_tasker_actions_help_summary"
+      android:selectable="true" />
 
-        <Preference
-            android:key="tasker_events_help"
-            android:title="Available Events"
-            android:summary="Tap to view broadcast events"
-            android:selectable="true" />
+    <Preference
+      android:key="tasker_events_help"
+      android:title="@string/prefs_tasker_events_help_title"
+      android:summary="@string/prefs_tasker_events_help_summary"
+      android:selectable="true" />
 
-    </PreferenceCategory>
+  </PreferenceCategory>
 
-    <PreferenceCategory
-        android:title="Security">
+  <PreferenceCategory
+    android:key="category_tasker_security"
+    android:title="@string/prefcat_tasker_security">
 
-        <SwitchPreferenceCompat
-            android:key="tasker_require_unlock"
-            android:title="Require App Unlock"
-            android:summary="Tasker actions require biometric/password"
-            android:defaultValue="false"
-            android:dependency="tasker_enabled" />
+    <SwitchPreferenceCompat
+      android:key="tasker_require_unlock"
+      android:title="@string/prefs_tasker_require_unlock_title"
+      android:summary="@string/prefs_tasker_require_unlock_summary"
+      android:defaultValue="false"
+      android:dependency="tasker_enabled" />
 
-        <SwitchPreferenceCompat
-            android:key="tasker_include_output"
-            android:title="Include Command Output in Broadcasts"
-            android:summary="COMMAND_RESULT carries status only when off; on includes terminal screen content, readable by any installed app"
-            android:defaultValue="false"
-            android:dependency="tasker_enabled" />
+    <SwitchPreferenceCompat
+      android:key="tasker_include_output"
+      android:title="@string/prefs_tasker_include_output_title"
+      android:summary="@string/prefs_tasker_include_output_summary"
+      android:defaultValue="false"
+      android:dependency="tasker_enabled" />
 
-        <MultiSelectListPreference
-            android:key="tasker_allowed_connections"
-            android:title="Allowed Connections"
-            android:summary="Restrict Tasker to specific connections (empty = all)"
-            android:dependency="tasker_enabled" />
+    <MultiSelectListPreference
+      android:key="tasker_allowed_connections"
+      android:title="@string/prefs_tasker_allowed_connections_title"
+      android:summary="@string/prefs_tasker_allowed_connections_summary"
+      android:dependency="tasker_enabled" />
 
-    </PreferenceCategory>
+  </PreferenceCategory>
 
-    <PreferenceCategory
-        android:title="Advanced">
+  <PreferenceCategory
+    android:key="category_tasker_advanced"
+    android:title="@string/prefcat_tasker_advanced">
 
-        <SwitchPreferenceCompat
-            android:key="tasker_log_events"
-            android:title="Log Tasker Events"
-            android:summary="Log all Tasker actions to audit log"
-            android:defaultValue="true"
-            android:dependency="tasker_enabled" />
+    <SwitchPreferenceCompat
+      android:key="tasker_log_events"
+      android:title="@string/prefs_tasker_log_events_title"
+      android:summary="@string/prefs_tasker_log_events_summary"
+      android:defaultValue="true"
+      android:dependency="tasker_enabled" />
 
-        <EditTextPreference
-            android:key="tasker_command_timeout"
-            android:title="Command Timeout"
-            android:summary="Default timeout for command execution (ms)"
-            android:defaultValue="30000"
-            android:inputType="number"
-            android:dependency="tasker_enabled" />
+    <EditTextPreference
+      android:key="tasker_command_timeout"
+      android:title="@string/prefs_tasker_command_timeout_title"
+      android:summary="@string/prefs_tasker_command_timeout_summary"
+      android:defaultValue="30000"
+      android:inputType="number"
+      android:dependency="tasker_enabled" />
 
-    </PreferenceCategory>
+  </PreferenceCategory>
 
 </PreferenceScreen>

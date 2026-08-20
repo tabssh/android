@@ -1,94 +1,100 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto">
+  xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory
-        android:title="App Security"
-        android:key="category_app_security">
+  <PreferenceCategory
+    android:key="category_app_security"
+    android:title="@string/prefcat_security_app_lock">
 
-        <SwitchPreferenceCompat
-            android:key="security_lock_enabled"
-            android:title="Security Lock"
-            android:summary="Lock app after period of inactivity"
-            android:defaultValue="false" />
+    <SwitchPreferenceCompat
+      android:key="security_lock_enabled"
+      android:title="@string/prefs_security_lock_enabled_title"
+      android:summary="@string/prefs_security_lock_enabled_summary"
+      android:defaultValue="false" />
 
-        <ListPreference
-            android:key="security_lock_timeout"
-            android:title="Lock Timeout"
-            android:summary="Time before app locks"
-            android:entries="@array/lock_timeout_entries"
-            android:entryValues="@array/lock_timeout_values"
-            android:defaultValue="300"
-            android:dependency="security_lock_enabled"
-            app:useSimpleSummaryProvider="true" />
+    <ListPreference
+      android:key="security_lock_timeout"
+      android:title="@string/prefs_security_lock_timeout_title"
+      android:summary="@string/prefs_security_lock_timeout_summary"
+      android:entries="@array/lock_timeout_entries"
+      android:entryValues="@array/lock_timeout_values"
+      android:defaultValue="300"
+      android:dependency="security_lock_enabled"
+      app:useSimpleSummaryProvider="true" />
 
-        <SwitchPreferenceCompat
-            android:key="biometric_auth"
-            android:title="Biometric Authentication"
-            android:summary="Use fingerprint or face unlock"
-            android:defaultValue="false"
-            android:dependency="security_lock_enabled" />
+    <SwitchPreferenceCompat
+      android:key="biometric_auth"
+      android:title="@string/prefs_biometric_auth_title"
+      android:summary="@string/prefs_biometric_auth_summary"
+      android:defaultValue="false"
+      android:dependency="security_lock_enabled" />
 
-        <!-- Wave 3.2 — PIN code app lock (independent of biometric/inactivity) -->
-        <Preference
-            android:key="app_lock_pin_setup"
-            android:title="App lock PIN"
-            android:summary="Prompt for PIN on app launch (set / change / disable)" />
+    <!-- PIN app lock is independent of the biometric/inactivity lock above. -->
+    <Preference
+      android:key="app_lock_pin_setup"
+      android:title="@string/prefs_app_lock_pin_setup_title"
+      android:summary="@string/prefs_app_lock_pin_setup_summary" />
 
-        <SwitchPreferenceCompat
-            android:key="security_prevent_screenshots"
-            android:title="Block Screenshots"
-            android:summary="Prevent screenshots and screen recording in the app"
-            android:defaultValue="false" />
+    <SwitchPreferenceCompat
+      android:key="security_auto_lock_background"
+      android:title="@string/prefs_security_auto_lock_background_title"
+      android:summary="@string/prefs_security_auto_lock_background_summary"
+      android:defaultValue="false" />
 
-        <SwitchPreferenceCompat
-            android:key="security_auto_lock_background"
-            android:title="Lock When Backgrounded"
-            android:summary="Require unlock after returning from background"
-            android:defaultValue="false" />
+    <ListPreference
+      android:key="security_auto_lock_timeout"
+      android:title="@string/prefs_security_auto_lock_timeout_title"
+      android:summary="@string/prefs_security_auto_lock_timeout_summary"
+      android:entries="@array/lock_timeout_entries"
+      android:entryValues="@array/lock_timeout_values"
+      android:defaultValue="300"
+      android:dependency="security_auto_lock_background"
+      app:useSimpleSummaryProvider="true" />
 
-        <ListPreference
-            android:key="security_auto_lock_timeout"
-            android:title="Background Lock Timeout"
-            android:summary="How long backgrounded before requiring unlock"
-            android:entries="@array/lock_timeout_entries"
-            android:entryValues="@array/lock_timeout_values"
-            android:defaultValue="300"
-            android:dependency="security_auto_lock_background"
-            app:useSimpleSummaryProvider="true" />
+  </PreferenceCategory>
 
-        <ListPreference
-            android:key="security_clear_clipboard_timeout"
-            android:title="Auto-Clear Clipboard"
-            android:summary="Clear clipboard after copying from terminal"
-            android:entries="@array/clipboard_timeout_entries"
-            android:entryValues="@array/clipboard_timeout_values"
-            android:defaultValue="0"
-            app:useSimpleSummaryProvider="true" />
+  <PreferenceCategory
+    android:key="category_security_privacy"
+    android:title="@string/prefcat_security_privacy">
 
-    </PreferenceCategory>
+    <SwitchPreferenceCompat
+      android:key="security_prevent_screenshots"
+      android:title="@string/prefs_security_prevent_screenshots_title"
+      android:summary="@string/prefs_security_prevent_screenshots_summary"
+      android:defaultValue="false" />
 
-    <PreferenceCategory
-        android:title="SSH &amp; Mosh Security"
-        android:key="category_ssh_security">
+    <ListPreference
+      android:key="security_clear_clipboard_timeout"
+      android:title="@string/prefs_security_clear_clipboard_timeout_title"
+      android:summary="@string/prefs_security_clear_clipboard_timeout_summary"
+      android:entries="@array/clipboard_timeout_entries"
+      android:entryValues="@array/clipboard_timeout_values"
+      android:defaultValue="0"
+      app:useSimpleSummaryProvider="true" />
 
-        <Preference
-            android:key="clear_known_hosts"
-            android:title="Clear known hosts"
-            android:summary="Wipe previously seen host keys/fingerprints (SSH and Mosh, which bootstraps over SSH)" />
+  </PreferenceCategory>
 
-        <SwitchPreferenceCompat
-            android:key="strict_host_key_checking"
-            android:title="Strict Host Key Checking"
-            android:summary="Always verify host keys — applies to Mosh too, since Mosh connects via SSH first"
-            android:defaultValue="true" />
+  <PreferenceCategory
+    android:key="category_ssh_security"
+    android:title="@string/prefcat_security_ssh">
 
-        <SwitchPreferenceCompat
-            android:key="port_knock_enabled_default"
-            android:title="Enable Port Knocking by Default"
-            android:summary="Execute port knock sequences for new SSH/Mosh connections (Default: OFF)"
-            android:defaultValue="false" />
+    <SwitchPreferenceCompat
+      android:key="strict_host_key_checking"
+      android:title="@string/prefs_strict_host_key_checking_title"
+      android:summary="@string/prefs_strict_host_key_checking_summary"
+      android:defaultValue="true" />
 
-    </PreferenceCategory>
+    <SwitchPreferenceCompat
+      android:key="port_knock_enabled_default"
+      android:title="@string/prefs_port_knock_enabled_default_title"
+      android:summary="@string/prefs_port_knock_enabled_default_summary"
+      android:defaultValue="false" />
+
+    <Preference
+      android:key="clear_known_hosts"
+      android:title="@string/prefs_clear_known_hosts_title"
+      android:summary="@string/prefs_clear_known_hosts_summary" />
+
+  </PreferenceCategory>
 
 </PreferenceScreen>

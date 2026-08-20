@@ -787,7 +787,14 @@ object NotificationHelper {
 
         val notification = NotificationCompat.Builder(context, CHANNEL_FILE_TRANSFER)
             .setContentTitle("$action $fileName")
-            .setContentText("$progress% complete (${formatBytes(bytesTransferred)} / ${formatBytes(totalBytes)})")
+            .setContentText(
+                context.getString(
+                    R.string.notification_transfer_progress_fmt,
+                    progress,
+                    Format.size(context, bytesTransferred),
+                    Format.size(context, totalBytes)
+                )
+            )
             .setSmallIcon(if (isUpload) R.drawable.ic_upload else R.drawable.ic_download)
             .setProgress(100, progress, false)
             .setOngoing(true)
@@ -800,18 +807,6 @@ object NotificationHelper {
         notificationManager.notify(notificationId, notification)
 
         return notification
-    }
-    
-    /**
-     * Format bytes to human-readable string
-     */
-    private fun formatBytes(bytes: Long): String {
-        return when {
-            bytes < 1024 -> "$bytes B"
-            bytes < 1024 * 1024 -> String.format("%.1f KB", bytes / 1024.0)
-            bytes < 1024 * 1024 * 1024 -> String.format("%.1f MB", bytes / (1024.0 * 1024))
-            else -> String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024))
-        }
     }
     
     /**

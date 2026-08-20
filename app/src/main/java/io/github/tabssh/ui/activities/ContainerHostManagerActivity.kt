@@ -49,7 +49,7 @@ import kotlinx.coroutines.launch
  * card naming the reason with a Retest action (IDEA.md § Container host
  * management).
  */
-class ContainerHostManagerActivity : AppCompatActivity() {
+class ContainerHostManagerActivity : TabSSHActivity() {
 
     companion object {
         const val EXTRA_HOST_ID = "container_host_id"
@@ -120,14 +120,8 @@ class ContainerHostManagerActivity : AppCompatActivity() {
         }
 
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
         acquireSession(force = false)
-    }
-
-    override fun onSupportNavigateUp(): Boolean {
-        finish()
-        return true
     }
 
     /**

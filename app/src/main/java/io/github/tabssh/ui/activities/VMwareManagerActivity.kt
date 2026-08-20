@@ -2,7 +2,6 @@ package io.github.tabssh.ui.activities
 
 import android.content.Intent
 import android.os.Bundle
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -10,7 +9,6 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -41,7 +39,7 @@ import kotlinx.coroutines.withContext
  * launches [TabTerminalActivity] — VMware's web-based VMRC is not supported
  * on Android; SSH to the guest is the practical alternative.
  */
-class VMwareManagerActivity : AppCompatActivity() {
+class VMwareManagerActivity : TabSSHActivity() {
 
     companion object {
         private const val TAG = "VMwareManager"
@@ -144,7 +142,6 @@ class VMwareManagerActivity : AppCompatActivity() {
         recyclerView = findViewById(R.id.vm_recycler_view)
 
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = "VMware"
 
         adapter = VmAdapter(vms)
@@ -159,11 +156,6 @@ class VMwareManagerActivity : AppCompatActivity() {
             return
         }
         connectAndRefresh(hypervisorId)
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == android.R.id.home) { finish(); return true }
-        return super.onOptionsItemSelected(item)
     }
 
     override fun onDestroy() {

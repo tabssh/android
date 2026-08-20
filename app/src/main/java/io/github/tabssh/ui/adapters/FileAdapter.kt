@@ -1,5 +1,6 @@
 package io.github.tabssh.ui.adapters
 
+import android.content.Context
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
@@ -7,9 +8,26 @@ import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
 import io.github.tabssh.databinding.ItemFileBinding
 import io.github.tabssh.sftp.RemoteFileInfo
+import io.github.tabssh.utils.Format
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+
+/**
+ * The localized name of a remote entry's kind, as shown in the file browser
+ * row and in the properties dialog. The kind is derived from the entry's
+ * metadata and name; the label itself only ever comes from strings.xml.
+ */
+fun RemoteFileInfo.typeLabel(context: Context): String = context.getString(
+    when {
+        isDirectory -> R.string.filerow_type_directory
+        isSymlink -> R.string.filerow_type_symlink
+        name.endsWith(".txt") || name.endsWith(".log") -> R.string.filerow_type_text
+        name.endsWith(".jpg") || name.endsWith(".png") -> R.string.filerow_type_image
+        name.endsWith(".zip") || name.endsWith(".tar.gz") -> R.string.filerow_type_archive
+        else -> R.string.filerow_type_file
+    }
+)
 
 /**
  * Adapter for displaying files in SFTP browser
@@ -208,9 +226,13 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
                 textFileName.text = file.name
                 textFileSize.text = if (file.isDirectory) {
                     val itemCount = file.listFiles()?.size ?: 0
-                    "$itemCount items"
+                    root.context.resources.getQuantityString(
+                        R.plurals.filerow_item_count,
+                        itemCount,
+                        Format.count(itemCount)
+                    )
                 } else {
-                    formatFileSize(file.length())
+                    Format.size(root.context, file.length())
                 }
                 textFileDate.text = dateFormat.format(Date(file.lastModified()))
                 textFilePermissions.text = getLocalFilePermissions(file)
@@ -227,11 +249,19 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
                 
                 // Accessibility
                 root.contentDescription = buildString {
-                    if (file.isDirectory) append("Folder ") else append("File ")
-                    append(file.name)
-                    append(". Size: ${textFileSize.text}")
-                    append(". Modified: ${textFileDate.text}")
-                    if (isSelected) append(". Selected")
+                    val kind = root.context.getString(
+                        if (file.isDirectory) R.string.filerow_type_folder else R.string.filerow_type_file
+                    )
+                    append(
+                        root.context.getString(
+                            R.string.filerow_a11y_local_fmt,
+                            kind,
+                            file.name,
+                            textFileSize.text,
+                            textFileDate.text
+                        )
+                    )
+                    if (isSelected) append(root.context.getString(R.string.filerow_a11y_selected))
                 }
             }
         }
@@ -247,9 +277,9 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
                 iconFile.setImageResource(getRemoteFileIcon(file))
                 textFileName.text = file.name
                 textFileSize.text = if (file.isDirectory) {
-                    "Directory"
+                    root.context.getString(R.string.filerow_type_directory)
                 } else {
-                    file.getFormattedSize()
+                    Format.size(root.context, file.size)
                 }
                 textFileDate.text = dateFormat.format(Date(file.modifiedTime))
                 textFilePermissions.text = file.permissions
@@ -266,12 +296,17 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
                 
                 // Accessibility
                 root.contentDescription = buildString {
-                    append(file.getFileType()).append(" ")
-                    append(file.name)
-                    append(". Size: ${file.getFormattedSize()}")
-                    append(". Permissions: ${file.permissions}")
-                    if (file.isSymlink) append(". Symbolic link")
-                    if (isSelected) append(". Selected")
+                    append(
+                        root.context.getString(
+                            R.string.filerow_a11y_remote_fmt,
+                            file.typeLabel(root.context),
+                            file.name,
+                            Format.size(root.context, file.size),
+                            file.permissions
+                        )
+                    )
+                    if (file.isSymlink) append(root.context.getString(R.string.filerow_a11y_symlink))
+                    if (isSelected) append(root.context.getString(R.string.filerow_a11y_selected))
                 }
             }
         }
@@ -296,15 +331,6 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
                 file.name.endsWith(".zip") || file.name.endsWith(".tar.gz") -> R.drawable.ic_file_archive
                 file.permissions.startsWith("-rwx") -> R.drawable.ic_file_executable
                 else -> R.drawable.ic_file_generic
-            }
-        }
-        
-        private fun formatFileSize(bytes: Long): String {
-            return when {
-                bytes < 1024 -> "$bytes B"
-                bytes < 1024 * 1024 -> String.format("%.1f KB", bytes / 1024.0)
-                bytes < 1024 * 1024 * 1024 -> String.format("%.1f MB", bytes / (1024.0 * 1024))
-                else -> String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024))
             }
         }
         

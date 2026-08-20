@@ -13,6 +13,7 @@ import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.annotation.StringRes
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SearchView
 import androidx.core.view.MenuProvider
@@ -83,21 +84,21 @@ class ConnectionsFragment : Fragment() {
     // Connection IDs
     private val selectedConnections = mutableSetOf<String>()
 
-    enum class SortOption(val displayName: String) {
-        NAME_ASC("Name (A-Z)"),
-        NAME_DESC("Name (Z-A)"),
-        HOST_ASC("Host (A-Z)"),
-        HOST_DESC("Host (Z-A)"),
-        MOST_USED("Most Used"),
-        LEAST_USED("Least Used"),
-        RECENTLY_CONNECTED("Recently Connected"),
-        OLDEST_CONNECTED("Oldest Connected")
+    enum class SortOption(@StringRes val displayNameRes: Int) {
+        NAME_ASC(R.string.connections_sort_name_asc),
+        NAME_DESC(R.string.connections_sort_name_desc),
+        HOST_ASC(R.string.connections_sort_host_asc),
+        HOST_DESC(R.string.connections_sort_host_desc),
+        MOST_USED(R.string.connections_sort_most_used),
+        LEAST_USED(R.string.connections_sort_least_used),
+        RECENTLY_CONNECTED(R.string.connections_sort_recently_connected),
+        OLDEST_CONNECTED(R.string.connections_sort_oldest_connected)
     }
 
-    enum class GroupSortOption(val displayName: String) {
-        NAME_ASC("Name (A-Z)"),
-        NAME_DESC("Name (Z-A)"),
-        CUSTOM("Custom (drag order)")
+    enum class GroupSortOption(@StringRes val displayNameRes: Int) {
+        NAME_ASC(R.string.connections_group_sort_name_asc),
+        NAME_DESC(R.string.connections_group_sort_name_desc),
+        CUSTOM(R.string.connections_group_sort_custom)
     }
 
     override fun onCreateView(
@@ -153,46 +154,51 @@ class ConnectionsFragment : Fragment() {
     
     private fun showSortDialog() {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Sort")
-            .setItems(arrayOf("Sort connections", "Sort groups")) { _, which ->
+            .setTitle(R.string.connections_sort_dialog_title)
+            .setItems(
+                arrayOf(
+                    getString(R.string.connections_sort_scope_connections),
+                    getString(R.string.connections_sort_scope_groups)
+                )
+            ) { _, which ->
                 when (which) {
                     0 -> showConnectionSortDialog()
                     1 -> showGroupSortDialog()
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
     private fun showConnectionSortDialog() {
-        val options = SortOption.values().map { it.displayName }.toTypedArray()
+        val options = SortOption.entries.map { getString(it.displayNameRes) }.toTypedArray()
         val currentIndex = currentSortOption.ordinal
 
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Sort Connections")
+            .setTitle(R.string.connections_sort_connections_title)
             .setSingleChoiceItems(options, currentIndex) { dialog, which ->
                 currentSortOption = SortOption.values()[which]
                 saveSortPreference()
                 applySortAndFilter()
                 dialog.dismiss()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
     private fun showGroupSortDialog() {
-        val options = GroupSortOption.values().map { it.displayName }.toTypedArray()
+        val options = GroupSortOption.entries.map { getString(it.displayNameRes) }.toTypedArray()
         val currentIndex = currentGroupSortOption.ordinal
 
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Sort Groups")
+            .setTitle(R.string.connections_sort_groups_title)
             .setSingleChoiceItems(options, currentIndex) { dialog, which ->
                 currentGroupSortOption = GroupSortOption.values()[which]
                 saveGroupSortPreference()
                 applySortAndFilter()
                 dialog.dismiss()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -365,7 +371,7 @@ class ConnectionsFragment : Fragment() {
             val label = if (total > 1) {
                 val n = (seen[display] ?: 0) + 1
                 seen[display] = n
-                "$display (#$n)"
+                getString(R.string.connections_session_duplicate_fmt, display, n)
             } else {
                 display
             }
@@ -421,7 +427,13 @@ class ConnectionsFragment : Fragment() {
         // it's a top-level action a user reaches for as often as Connect,
         // not a buried option. Renamed "Open" to "Connect" to match how
         // the rest of the app talks about starting an SSH session.
-        val items = arrayOf("Connect", "Browse Files (SFTP)", "Edit", "Duplicate", "Delete")
+        val items = arrayOf(
+            getString(R.string.connections_menu_connect),
+            getString(R.string.connections_menu_browse_files),
+            getString(R.string.edit),
+            getString(R.string.connections_menu_duplicate),
+            getString(R.string.delete)
+        )
 
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(connection.name)
@@ -456,7 +468,7 @@ class ConnectionsFragment : Fragment() {
             try {
                 val duplicate = connection.copy(
                     id = java.util.UUID.randomUUID().toString(),
-                    name = "${connection.name} (Copy)",
+                    name = getString(R.string.connections_duplicate_name_fmt, connection.name),
                     connectionCount = 0,
                     lastConnected = 0
                 )
@@ -470,9 +482,9 @@ class ConnectionsFragment : Fragment() {
     
     private fun deleteConnection(connection: ConnectionProfile) {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Delete Connection")
-            .setMessage("Are you sure you want to delete '${connection.name}'?")
-            .setPositiveButton("Delete") { _, _ ->
+            .setTitle(R.string.connections_delete_title)
+            .setMessage(getString(R.string.connections_delete_message_fmt, connection.name))
+            .setPositiveButton(R.string.delete) { _, _ ->
                 lifecycleScope.launch {
                     try {
                         withContext(Dispatchers.IO) {
@@ -491,16 +503,16 @@ class ConnectionsFragment : Fragment() {
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
     private fun showGroupMenu(groupHeader: ConnectionListItem.GroupHeader) {
         val items = arrayOf(
-            "Bulk edit all hosts in this group",
-            "Rename Group",
-            "Delete Group",
-            "Collapse All Groups"
+            getString(R.string.connections_group_menu_bulk_edit),
+            getString(R.string.connections_group_menu_rename),
+            getString(R.string.connections_group_menu_delete),
+            getString(R.string.connections_group_menu_collapse_all)
         )
 
         MaterialAlertDialogBuilder(requireContext())
@@ -510,7 +522,7 @@ class ConnectionsFragment : Fragment() {
                     0 -> {
                         val groupConnections = allConnections.filter { it.groupId == groupHeader.group.id }
                         if (groupConnections.isEmpty()) {
-                            Toast.makeText(requireContext(), "No connections in this group", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(requireContext(), R.string.connections_group_empty, Toast.LENGTH_SHORT).show()
                         } else {
                             showBulkEditDialog(groupConnections)
                         }
@@ -530,9 +542,9 @@ class ConnectionsFragment : Fragment() {
         )
 
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Rename Group")
+            .setTitle(R.string.connections_group_rename_title)
             .setView(form.root)
-            .setPositiveButton("Rename") { _, _ ->
+            .setPositiveButton(R.string.connections_group_rename_confirm) { _, _ ->
                 val newName = editText.text.toString().trim()
                 if (newName.isNotBlank() && newName != group.name) {
                     lifecycleScope.launch {
@@ -540,7 +552,11 @@ class ConnectionsFragment : Fragment() {
                             // Check for duplicate group name before renaming
                             val existing = app.database.connectionGroupDao().getGroupByName(newName)
                             if (existing != null && existing.id != group.id) {
-                                Toast.makeText(requireContext(), "A group named '$newName' already exists", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    requireContext(),
+                                    getString(R.string.connections_group_name_taken_fmt, newName),
+                                    Toast.LENGTH_SHORT
+                                ).show()
                                 return@launch
                             }
                             app.database.connectionGroupDao().updateGroup(
@@ -549,22 +565,26 @@ class ConnectionsFragment : Fragment() {
                                     modifiedAt = System.currentTimeMillis()
                                 )
                             )
-                            Toast.makeText(requireContext(), "Group renamed to '$newName'", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                requireContext(),
+                                getString(R.string.connections_group_renamed_fmt, newName),
+                                Toast.LENGTH_SHORT
+                            ).show()
                         } catch (e: Exception) {
                             Logger.e("ConnectionsFragment", "Failed to rename group", e)
                         }
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
     private fun deleteGroup(group: io.github.tabssh.storage.database.entities.ConnectionGroup) {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Delete Group")
-            .setMessage("Remove group '${group.name}'?\n\nConnections will not be deleted, just ungrouped.")
-            .setPositiveButton("Delete") { _, _ ->
+            .setTitle(R.string.connections_group_delete_title)
+            .setMessage(getString(R.string.connections_group_delete_message_fmt, group.name))
+            .setPositiveButton(R.string.delete) { _, _ ->
                 lifecycleScope.launch {
                     try {
                         app.database.withTransaction {
@@ -580,19 +600,23 @@ class ConnectionsFragment : Fragment() {
                             // H6 — record the deletion so it propagates and is not resurrected.
                             TombstoneRecorder.record(app, TombstoneRecorder.GROUP, group.id)
                         }
-                        Toast.makeText(requireContext(), "Group '${group.name}' deleted", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            requireContext(),
+                            getString(R.string.connections_group_deleted_fmt, group.name),
+                            Toast.LENGTH_SHORT
+                        ).show()
                     } catch (e: Exception) {
                         Logger.e("ConnectionsFragment", "Failed to delete group", e)
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
     private fun collapseAllGroups() {
         groupedAdapter?.collapseAll()
-        Toast.makeText(requireContext(), "All groups collapsed", Toast.LENGTH_SHORT).show()
+        Toast.makeText(requireContext(), R.string.connections_groups_collapsed, Toast.LENGTH_SHORT).show()
     }
 
     /**
@@ -602,14 +626,14 @@ class ConnectionsFragment : Fragment() {
      */
     private fun showBulkEditOptions() {
         val options = arrayOf(
-            "Edit all (${allConnections.size}) connections",
-            "Edit connections in a group…",
-            "Pick connections to edit…",
-            "Pick connections to delete…"
+            getString(R.string.connections_bulk_scope_all_fmt, allConnections.size),
+            getString(R.string.connections_bulk_scope_group),
+            getString(R.string.connections_bulk_scope_pick_edit),
+            getString(R.string.connections_bulk_scope_pick_delete)
         )
 
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Bulk edit")
+            .setTitle(R.string.connections_bulk_edit_title)
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> showBulkEditDialog(allConnections)
@@ -618,7 +642,7 @@ class ConnectionsFragment : Fragment() {
                     3 -> enterSelectionMode(deleteMode = true)
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -627,24 +651,24 @@ class ConnectionsFragment : Fragment() {
      */
     private fun showGroupSelectionForBulkEdit() {
         if (allGroups.isEmpty()) {
-            android.widget.Toast.makeText(requireContext(), "No groups available", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(requireContext(), R.string.connections_no_groups, android.widget.Toast.LENGTH_SHORT).show()
             return
         }
 
         val groupNames = allGroups.map { it.name }.toTypedArray()
 
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Select Group to Edit")
+            .setTitle(R.string.connections_select_group_title)
             .setItems(groupNames) { _, which ->
                 val selectedGroup = allGroups[which]
                 val groupConnections = allConnections.filter { it.groupId == selectedGroup.id }
                 if (groupConnections.isEmpty()) {
-                    android.widget.Toast.makeText(requireContext(), "No connections in this group", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(requireContext(), R.string.connections_group_empty, android.widget.Toast.LENGTH_SHORT).show()
                 } else {
                     showBulkEditDialog(groupConnections)
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -654,7 +678,10 @@ class ConnectionsFragment : Fragment() {
     private fun enterSelectionMode(deleteMode: Boolean = false) {
         isSelectionMode = true
         selectedConnections.clear()
-        toolbar.title = if (deleteMode) "Select to Delete" else "Select Connections"
+        toolbar.setTitle(
+            if (deleteMode) R.string.connections_selection_title_delete
+            else R.string.connections_selection_title_edit
+        )
         toolbar.setNavigationIcon(R.drawable.ic_close)
         toolbar.setNavigationOnClickListener { exitSelectionMode() }
 
@@ -662,16 +689,17 @@ class ConnectionsFragment : Fragment() {
         toolbar.menu.findItem(R.id.action_bulk_edit)?.isVisible = false
         toolbar.menu.findItem(R.id.action_sort)?.isVisible = false
 
-        val hint = if (deleteMode)
-            "Tap connections to select, long-press to delete selected"
-        else
-            "Tap connections to select, long-press to edit selected"
+        val hint = if (deleteMode) {
+            R.string.connections_selection_hint_delete
+        } else {
+            R.string.connections_selection_hint_edit
+        }
         android.widget.Toast.makeText(requireContext(), hint, android.widget.Toast.LENGTH_LONG).show()
 
         // Update adapter click behavior — long-press triggers the chosen action.
         adapter.setOnItemLongClickListener { _ ->
             if (selectedConnections.isEmpty()) {
-                android.widget.Toast.makeText(requireContext(), "Select at least one connection", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(requireContext(), R.string.connections_selection_none, android.widget.Toast.LENGTH_SHORT).show()
                 return@setOnItemLongClickListener true
             }
             val selectedList = allConnections.filter { selectedConnections.contains(it.id) }
@@ -690,9 +718,13 @@ class ConnectionsFragment : Fragment() {
      */
     private fun confirmAndBulkDelete(selected: List<ConnectionProfile>) {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Delete ${selected.size} connection(s)?")
-            .setMessage("This cannot be undone. Stored passwords for these connections will also be cleared.")
-            .setPositiveButton("Delete") { _, _ ->
+            .setTitle(
+                resources.getQuantityString(
+                    R.plurals.connections_bulk_delete_title, selected.size, selected.size
+                )
+            )
+            .setMessage(R.string.connections_bulk_delete_message)
+            .setPositiveButton(R.string.delete) { _, _ ->
                 lifecycleScope.launch {
                     var deleted = 0
                     val app = requireActivity().application as io.github.tabssh.TabSSHApplication
@@ -716,13 +748,15 @@ class ConnectionsFragment : Fragment() {
                     }
                     android.widget.Toast.makeText(
                         requireContext(),
-                        "Deleted $deleted connection(s)",
+                        resources.getQuantityString(
+                            R.plurals.connections_bulk_deleted, deleted, deleted
+                        ),
                         android.widget.Toast.LENGTH_SHORT
                     ).show()
                     exitSelectionMode()
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -732,7 +766,7 @@ class ConnectionsFragment : Fragment() {
     private fun exitSelectionMode() {
         isSelectionMode = false
         selectedConnections.clear()
-        toolbar.title = "Connections"
+        toolbar.setTitle(R.string.connections_tab_title)
         toolbar.navigationIcon = null
         toolbar.setNavigationOnClickListener(null)
 
@@ -764,7 +798,7 @@ class ConnectionsFragment : Fragment() {
      */
     private fun showBulkEditDialog(connections: List<ConnectionProfile>) {
         if (connections.isEmpty()) {
-            Toast.makeText(requireContext(), "No connections to edit", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), R.string.connections_bulk_no_connections, Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -775,7 +809,9 @@ class ConnectionsFragment : Fragment() {
         val textSelectedCount = dialogView.findViewById<TextView>(R.id.text_selected_count)
         val textApplySummary = dialogView.findViewById<TextView>(R.id.text_apply_summary)
         val buttonResetAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.button_reset_all)
-        textSelectedCount.text = "${connections.size} connection${if (connections.size == 1) "" else "s"} selected"
+        textSelectedCount.text = resources.getQuantityString(
+            R.plurals.connections_bulk_selected_count, connections.size, connections.size
+        )
 
         // Forward-declared so all the listeners we wire below close over
         // the final body. Assigned just before show().
@@ -820,9 +856,9 @@ class ConnectionsFragment : Fragment() {
         // notify summary on every selection change.
         data class TriRow(val getState: () -> TriState)
 
-        fun wireTriState(rowId: Int, label: String, iconRes: Int): TriRow {
+        fun wireTriState(rowId: Int, @StringRes labelRes: Int, iconRes: Int): TriRow {
             val rowView = dialogView.findViewById<View>(rowId)
-            rowView.findViewById<TextView>(R.id.tri_label).text = label
+            rowView.findViewById<TextView>(R.id.tri_label).setText(labelRes)
             rowView.findViewById<android.widget.ImageView>(R.id.tri_icon)
                 .setImageResource(iconRes)
             val triGroup = rowView.findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.tri_group)
@@ -837,20 +873,20 @@ class ConnectionsFragment : Fragment() {
             }
         }
 
-        val compression = wireTriState(R.id.row_compression, "Compression", R.drawable.ic_file_archive)
-        val agentFwd = wireTriState(R.id.row_agent_fwd, "Agent forwarding", R.drawable.ic_forward)
-        val x11 = wireTriState(R.id.row_x11, "X11 forwarding", R.drawable.ic_interface)
-        val mosh = wireTriState(R.id.row_mosh, "Mosh", R.drawable.ic_flash)
+        val compression = wireTriState(R.id.row_compression, R.string.connections_bulk_tri_compression, R.drawable.ic_file_archive)
+        val agentFwd = wireTriState(R.id.row_agent_fwd, R.string.connections_bulk_tri_agent_fwd, R.drawable.ic_forward)
+        val x11 = wireTriState(R.id.row_x11, R.string.connections_bulk_tri_x11, R.drawable.ic_interface)
+        val mosh = wireTriState(R.id.row_mosh, R.string.connections_bulk_tri_mosh, R.drawable.ic_flash)
 
         // ── Dropdown options ──
-        val terminalTypeOptions = arrayOf("xterm-256color", "xterm", "vt100", "vt220", "screen-256color", "tmux-256color")
+        val terminalTypeOptions = resources.getStringArray(R.array.connections_terminal_type_options)
         dropdownTerminalType.setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, terminalTypeOptions))
 
-        // colorTag indices map 1:1 to entry order — index 0 = "(none)" = no tag.
-        val colorTagOptions = arrayOf("(none)", "Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Pink")
+        // colorTag indices map 1:1 to entry order — index 0 is the "no tag" entry.
+        val colorTagOptions = resources.getStringArray(R.array.connections_color_tag_options)
         dropdownColorTag.setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, colorTagOptions))
 
-        val groupOptions = mutableListOf("(Clear group assignment)")
+        val groupOptions = mutableListOf(getString(R.string.connections_bulk_clear_group))
         groupOptions.addAll(allGroups.filter { it.groupType.isEmpty() }.map { it.name })
         dropdownGroup.setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, groupOptions))
 
@@ -863,7 +899,8 @@ class ConnectionsFragment : Fragment() {
             try {
                 val identities = app.database.identityDao().getAllIdentities().first()
                 allIdentities = identities
-                val opts = mutableListOf("(Clear identity)").also { it.addAll(identities.map { i -> i.name }) }
+                val opts = mutableListOf(getString(R.string.connections_bulk_clear_identity))
+                    .also { it.addAll(identities.map { i -> i.name }) }
                 dropdownIdentity.setAdapter(ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, opts))
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -895,13 +932,25 @@ class ConnectionsFragment : Fragment() {
             if (mosh.getState() != TriState.UNCHANGED) n++
 
             textApplySummary.text = if (n == 0) {
-                "No changes yet — fill in any field below to enqueue it"
+                getString(R.string.connections_bulk_summary_none)
             } else {
-                "$n field${if (n == 1) "" else "s"} will change on ${connections.size} connection${if (connections.size == 1) "" else "s"}"
+                getString(
+                    R.string.connections_bulk_summary_fmt,
+                    resources.getQuantityString(R.plurals.connections_bulk_summary_fields, n, n),
+                    resources.getQuantityString(
+                        R.plurals.connections_bulk_summary_connections,
+                        connections.size,
+                        connections.size
+                    )
+                )
             }
             dialogRef?.getButton(AlertDialog.BUTTON_POSITIVE)?.let { btn ->
                 btn.isEnabled = n > 0
-                btn.text = if (n == 0) "Apply" else "Apply ($n)"
+                btn.text = if (n == 0) {
+                    getString(R.string.connections_bulk_apply)
+                } else {
+                    getString(R.string.connections_bulk_apply_count_fmt, n)
+                }
             }
         }
 
@@ -925,9 +974,9 @@ class ConnectionsFragment : Fragment() {
         }
 
         dialogRef = MaterialAlertDialogBuilder(ctx)
-            .setTitle("Bulk edit")
+            .setTitle(R.string.connections_bulk_edit_title)
             .setView(dialogView)
-            .setPositiveButton("Apply") { _, _ ->
+            .setPositiveButton(R.string.connections_bulk_apply) { _, _ ->
                 applyBulkEdit(
                     connections = connections,
                     newUsername = editUsername.text?.toString()?.takeIf { it.isNotBlank() },
@@ -945,7 +994,7 @@ class ConnectionsFragment : Fragment() {
                     newPostConnect = editPostConnect.text?.toString()?.takeIf { it.isNotBlank() }
                 )
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .create()
         dialogRef.show()
         refreshApplySummary()
@@ -960,9 +1009,9 @@ class ConnectionsFragment : Fragment() {
      * case the connection's existing value is left alone. Tri-state
      * booleans are explicit: UNCHANGED skips, OFF/ON sets.
      *
-     * For dropdowns, a "(Clear …)" selection from the user is forwarded
-     * here as a non-null string starting with "(Clear" — we resolve that
-     * to writing null on the entity (explicit clear).
+     * For dropdowns, the localized "clear" entry is forwarded here as a
+     * non-null string equal to that entry's own string resource — we
+     * resolve that to writing null on the entity (explicit clear).
      */
     private fun applyBulkEdit(
         connections: List<ConnectionProfile>,
@@ -982,23 +1031,34 @@ class ConnectionsFragment : Fragment() {
     ) {
         lifecycleScope.launch {
             try {
+                // Two parallel lists: localized names for the toast the user
+                // reads, stable English keys for the log lines.
                 val changes = mutableListOf<String>()
+                val changeKeys = mutableListOf<String>()
+                fun addChange(@StringRes labelRes: Int, key: String) {
+                    changes.add(getString(labelRes))
+                    changeKeys.add(key)
+                }
 
-                if (newUsername != null) changes.add("username")
-                if (newPort != null) changes.add("port")
-                if (newGroupSelection != null) changes.add("group")
-                if (newIdentitySelection != null) changes.add("identity")
-                if (newTimeout != null) changes.add("timeout")
-                if (compression != TriState.UNCHANGED) changes.add("compression")
-                if (newTerminalType != null) changes.add("terminal type")
-                if (newColorTagSelection != null) changes.add("color tag")
-                if (x11 != TriState.UNCHANGED) changes.add("X11 forwarding")
-                if (mosh != TriState.UNCHANGED) changes.add("Mosh")
-                if (agentFwd != TriState.UNCHANGED) changes.add("agent forwarding")
-                if (newPostConnect != null) changes.add("post-connect script")
+                if (newUsername != null) addChange(R.string.connections_field_username, "username")
+                if (newPort != null) addChange(R.string.connections_field_port, "port")
+                if (newGroupSelection != null) addChange(R.string.connections_field_group, "group")
+                if (newIdentitySelection != null) addChange(R.string.connections_field_identity, "identity")
+                if (newTimeout != null) addChange(R.string.connections_field_timeout, "timeout")
+                if (compression != TriState.UNCHANGED) addChange(R.string.connections_field_compression, "compression")
+                if (newTerminalType != null) addChange(R.string.connections_field_terminal_type, "terminalType")
+                if (newColorTagSelection != null) addChange(R.string.connections_field_color_tag, "colorTag")
+                if (x11 != TriState.UNCHANGED) addChange(R.string.connections_field_x11, "x11Forwarding")
+                if (mosh != TriState.UNCHANGED) addChange(R.string.connections_field_mosh, "moshMode")
+                if (agentFwd != TriState.UNCHANGED) addChange(R.string.connections_field_agent_forwarding, "agentForwarding")
+                if (newPostConnect != null) addChange(R.string.connections_field_post_connect, "postConnectScript")
 
                 if (changes.isEmpty()) {
-                    android.widget.Toast.makeText(requireContext(), "No changes selected", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(
+                        requireContext(),
+                        R.string.connections_bulk_no_changes,
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
                     return@launch
                 }
 
@@ -1007,7 +1067,7 @@ class ConnectionsFragment : Fragment() {
                 // flow hasn't emitted yet (the previous bug). Read directly
                 // from the DB instead of trusting the in-memory caches.
                 val resolvedGroupId: String? = if (newGroupSelection != null) {
-                    if (newGroupSelection.startsWith("(Clear")) {
+                    if (newGroupSelection == getString(R.string.connections_bulk_clear_group)) {
                         null
                     } else {
                         val match = app.database.connectionGroupDao().getAllGroups().first()
@@ -1015,7 +1075,7 @@ class ConnectionsFragment : Fragment() {
                         if (match == null) {
                             android.widget.Toast.makeText(
                                 requireContext(),
-                                "Bulk edit aborted: group '$newGroupSelection' not found",
+                                getString(R.string.connections_bulk_group_missing_fmt, newGroupSelection),
                                 android.widget.Toast.LENGTH_LONG
                             ).show()
                             Logger.w("ConnectionsFragment", "Bulk edit: group '$newGroupSelection' did not resolve to a row")
@@ -1026,7 +1086,7 @@ class ConnectionsFragment : Fragment() {
                 } else null
 
                 val resolvedIdentityId: String? = if (newIdentitySelection != null) {
-                    if (newIdentitySelection.startsWith("(Clear")) {
+                    if (newIdentitySelection == getString(R.string.connections_bulk_clear_identity)) {
                         null
                     } else {
                         val match = app.database.identityDao().getAllIdentitiesList()
@@ -1034,7 +1094,7 @@ class ConnectionsFragment : Fragment() {
                         if (match == null) {
                             android.widget.Toast.makeText(
                                 requireContext(),
-                                "Bulk edit aborted: identity '$newIdentitySelection' not found",
+                                getString(R.string.connections_bulk_identity_missing_fmt, newIdentitySelection),
                                 android.widget.Toast.LENGTH_LONG
                             ).show()
                             Logger.w("ConnectionsFragment", "Bulk edit: identity '$newIdentitySelection' did not resolve to a row")
@@ -1044,7 +1104,7 @@ class ConnectionsFragment : Fragment() {
                     }
                 } else null
 
-                Logger.d("ConnectionsFragment", "Bulk edit: applying ${changes.joinToString(", ")} to ${connections.size} connections")
+                Logger.d("ConnectionsFragment", "Bulk edit: applying ${changeKeys.joinToString(", ")} to ${connections.size} connections")
 
                 // One transaction so Room emits the Flow once at the end
                 // instead of per-row (was producing 30+ redundant
@@ -1077,7 +1137,7 @@ class ConnectionsFragment : Fragment() {
                         }
                         if (newColorTagSelection != null) {
                             // colorTagOptions index maps 1:1 to ConnectionProfile.colorTag.
-                            // Index 0 = "(none)" which is correctly stored as 0 (no tag).
+                            // Index 0 is the "no tag" entry, correctly stored as 0.
                             val idx = colorTagOptions.indexOf(newColorTagSelection).coerceAtLeast(0)
                             updated = updated.copy(colorTag = idx)
                         }
@@ -1099,8 +1159,17 @@ class ConnectionsFragment : Fragment() {
                     }
                 }
 
-                Logger.d("ConnectionsFragment", "Bulk edit completed: $updatedCount connections updated (${changes.joinToString(", ")})")
-                android.widget.Toast.makeText(requireContext(), "Updated $updatedCount connections: ${changes.joinToString(", ")}", android.widget.Toast.LENGTH_SHORT).show()
+                Logger.d("ConnectionsFragment", "Bulk edit completed: $updatedCount connections updated (${changeKeys.joinToString(", ")})")
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    resources.getQuantityString(
+                        R.plurals.connections_bulk_updated,
+                        updatedCount,
+                        updatedCount,
+                        changes.joinToString(getString(R.string.connections_list_separator))
+                    ),
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
 
                 if (isSelectionMode) {
                     exitSelectionMode()
@@ -1108,7 +1177,11 @@ class ConnectionsFragment : Fragment() {
 
             } catch (e: Exception) {
                 Logger.e("ConnectionsFragment", "Bulk edit failed", e)
-                android.widget.Toast.makeText(requireContext(), "Bulk edit failed: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    getString(R.string.connections_bulk_failed_fmt, e.message.orEmpty()),
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
             }
         }
     }

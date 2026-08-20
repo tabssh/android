@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Wave 4.c — Tablet detection. sw>=720dp = ~7" tablet or larger.
-         Used by MainActivity to lock the drawer open as a permanent
-         sidebar instead of an off-canvas overlay. -->
+    <!-- sw>=720dp is a ~7" tablet or larger. TabSSHActivity reads this to lock
+         the navigation drawer open as a permanent sidebar instead of an
+         off-canvas overlay. Session screens (DrawerMode.TOOLBAR_ONLY) keep the
+         overlay so the terminal is not squeezed. -->
     <bool name="is_tablet">true</bool>
 </resources>

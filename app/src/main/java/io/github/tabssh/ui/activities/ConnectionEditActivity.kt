@@ -6,7 +6,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.ArrayAdapter
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
@@ -40,7 +39,7 @@ import java.util.UUID
  * Launch via [createIntent] (SSH/Telnet/ConnectionProfile) or
  * [createVncIntent] (VNC/VncHost).
  */
-class ConnectionEditActivity : AppCompatActivity() {
+class ConnectionEditActivity : TabSSHActivity() {
 
     /**
      * A preset entry in the mosh server command dropdown.
@@ -231,11 +230,10 @@ class ConnectionEditActivity : AppCompatActivity() {
     // -------------------------------------------------------------------------
 
     private fun setupToolbar() {
-        setSupportActionBar(binding.toolbar)
-        supportActionBar?.apply {
-            setDisplayHomeAsUpEnabled(true)
-            title = if (isEditMode) "Edit Connection" else "New Connection"
-        }
+        setSupportActionBar(binding.appBar.toolbar)
+        supportActionBar?.setTitle(
+            if (isEditMode) R.string.connection_edit_title_edit else R.string.connection_edit_title_new
+        )
     }
 
     override fun onCreateOptionsMenu(menu: android.view.Menu): Boolean {
@@ -2199,11 +2197,6 @@ class ConnectionEditActivity : AppCompatActivity() {
                 showToast("Group cleared")
             }
             .show()
-    }
-
-    override fun onSupportNavigateUp(): Boolean {
-        onBackPressedDispatcher.onBackPressed()
-        return true
     }
 
     private fun setupTerminalTypeSpinner() {

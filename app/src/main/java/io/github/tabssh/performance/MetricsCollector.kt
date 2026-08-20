@@ -130,19 +130,21 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
         val buffers = extractValue(lines, "Buffers")
         val cached = extractValue(lines, "Cached")
 
-        val totalMB = memTotal / 1024
-        val freeMB = memFree / 1024
-        val availableMB = memAvailable / 1024
-        val buffersAndCacheMB = (buffers + cached) / 1024
-        val usedMB = totalMB - availableMB
+        // /proc/meminfo reports kibibytes; the model carries base units so the
+        // presentation layer owns every conversion.
+        val totalBytes = memTotal * 1024
+        val freeBytes = memFree * 1024
+        val availableBytes = memAvailable * 1024
+        val buffersAndCacheBytes = (buffers + cached) * 1024
+        val usedBytes = totalBytes - availableBytes
 
         return MemoryMetrics(
-            totalMB = totalMB,
-            usedMB = usedMB,
-            freeMB = freeMB,
-            availableMB = availableMB,
-            buffersAndCacheMB = buffersAndCacheMB,
-            usedPercent = if (totalMB > 0) (usedMB * 100f / totalMB) else 0f
+            totalBytes = totalBytes,
+            usedBytes = usedBytes,
+            freeBytes = freeBytes,
+            availableBytes = availableBytes,
+            buffersAndCacheBytes = buffersAndCacheBytes,
+            usedPercent = if (totalBytes > 0) (usedBytes * 100f / totalBytes) else 0f
         )
     }
 
@@ -163,7 +165,7 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
      */
     private suspend fun collectDiskMetrics(): DiskMetrics {
         return try {
-            val output = sshConnection.executeCommand("df -BG / | tail -1")
+            val output = sshConnection.executeCommand("df -B1 / | tail -1")
             parseDiskUsage(output)
         } catch (e: Exception) {
             Logger.d("MetricsCollector", "Disk metrics unavailable: ${e.message}")
@@ -173,22 +175,22 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
 
     /**
      * Parse df output
-     * Format: Filesystem 1G-blocks Used Available Use% Mounted
+     * Format: Filesystem 1B-blocks Used Available Use% Mounted
      */
     private fun parseDiskUsage(output: String): DiskMetrics {
         val parts = output.trim().split("\\s+".toRegex())
         if (parts.size < 6) return DiskMetrics.empty()
 
-        val total = parts[1].removeSuffix("G").toFloatOrNull() ?: 0f
-        val used = parts[2].removeSuffix("G").toFloatOrNull() ?: 0f
-        val available = parts[3].removeSuffix("G").toFloatOrNull() ?: 0f
+        val total = parts[1].toLongOrNull() ?: 0L
+        val used = parts[2].toLongOrNull() ?: 0L
+        val available = parts[3].toLongOrNull() ?: 0L
         val usedPercent = parts[4].removeSuffix("%").toFloatOrNull() ?: 0f
         val mountPoint = parts.getOrNull(5) ?: "/"
 
         return DiskMetrics(
-            totalGB = total,
-            usedGB = used,
-            availableGB = available,
+            totalBytes = total,
+            usedBytes = used,
+            availableBytes = available,
             usedPercent = usedPercent,
             mountPoint = mountPoint
         )
@@ -259,8 +261,8 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
             txBytesPerSec = txBytesPerSec,
             rxPacketsPerSec = rxPacketsPerSec,
             txPacketsPerSec = txPacketsPerSec,
-            totalRxMB = rxBytes / 1024f / 1024f,
-            totalTxMB = txBytes / 1024f / 1024f
+            totalRxBytes = rxBytes,
+            totalTxBytes = txBytes
         )
     }
 

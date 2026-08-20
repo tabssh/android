@@ -7,7 +7,6 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -19,8 +18,10 @@ import io.github.tabssh.sftp.SFTPManager
 import io.github.tabssh.sftp.TransferTask
 import io.github.tabssh.sftp.TransferListener
 import io.github.tabssh.ui.adapters.FileAdapter
+import io.github.tabssh.ui.adapters.typeLabel
 import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.ui.adapters.TransferAdapter
+import io.github.tabssh.utils.Format
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +34,7 @@ import io.github.tabssh.utils.showError
  * SFTP file browser activity with dual-pane interface
  * Provides comprehensive file management capabilities
  */
-class SFTPActivity : AppCompatActivity() {
+class SFTPActivity : TabSSHActivity() {
     
     companion object {
         const val EXTRA_CONNECTION_ID = "connection_id"
@@ -44,6 +45,10 @@ class SFTPActivity : AppCompatActivity() {
          * instead of the default "/".
          */
         const val EXTRA_INITIAL_REMOTE_PATH = "initial_remote_path"
+
+        // Ceiling for the in-app text editor. Anything larger is a download,
+        // not an edit — the editor materialises the whole file in memory.
+        private const val MAX_INLINE_EDIT_BYTES = 1_048_576L
 
         fun createIntent(context: Context, connectionId: String): Intent {
             return Intent(context, SFTPActivity::class.java).apply {
@@ -121,9 +126,8 @@ class SFTPActivity : AppCompatActivity() {
     }
     
     private fun setupToolbar() {
-        setSupportActionBar(binding.toolbar)
+        setSupportActionBar(binding.appBar.toolbar)
         supportActionBar?.apply {
-            setDisplayHomeAsUpEnabled(true)
             title = getString(R.string.file_browser_title)
         }
     }
@@ -151,7 +155,7 @@ class SFTPActivity : AppCompatActivity() {
                     }
                     if (profile == null) {
                         Logger.e("SFTPActivity", "Connection profile not found: $connectionId")
-                        showError("This connection no longer exists", "Error")
+                        showError(getString(R.string.sftp_error_connection_gone))
                         finish()
                         return@launch
                     }
@@ -160,7 +164,7 @@ class SFTPActivity : AppCompatActivity() {
                         app.sshSessionManager.connectToServer(profile)
                     } ?: run {
                         Logger.e("SFTPActivity", "SSH connect failed for SFTP: ${profile.getDisplayName()}")
-                        showError("Could not connect to ${profile.getDisplayName()}", "Error")
+                        showError(getString(R.string.sftp_error_connect_failed_fmt, profile.getDisplayName()))
                         finish()
                         return@launch
                     }
@@ -183,13 +187,13 @@ class SFTPActivity : AppCompatActivity() {
                     loadRemoteDirectory(currentRemotePath)
                 } else {
                     Logger.e("SFTPActivity", "Failed to connect SFTP")
-                    showError("Failed to connect SFTP", "Error")
+                    showError(getString(R.string.sftp_error_connect_sftp_failed))
                     finish()
                 }
                 
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Error setting up SFTP", e)
-                showError("SFTP setup error: ${e.message}", "Error")
+                showError(getString(R.string.sftp_error_setup_fmt, e.message.orEmpty()))
                 finish()
             }
         }
@@ -215,7 +219,7 @@ class SFTPActivity : AppCompatActivity() {
             strip.addView(chip)
         }
         val addChip = com.google.android.material.chip.Chip(this).apply {
-            text = "+"
+            setText(R.string.sftp_tab_add_chip)
             isCheckable = false
             setOnClickListener { showAddSftpTabPicker() }
         }
@@ -260,14 +264,17 @@ class SFTPActivity : AppCompatActivity() {
             } catch (_: Exception) { emptyList() }
             runOnUiThread {
                 if (candidates.isEmpty()) {
-                    showError("Add a connection first, then return here to open it as an SFTP tab.", "No saved connections")
+                    showError(
+                        getString(R.string.sftp_no_saved_connections_message),
+                        getString(R.string.sftp_no_saved_connections_title)
+                    )
                     return@runOnUiThread
                 }
                 val labels = candidates.map { it.getDisplayName() }.toTypedArray()
                 MaterialAlertDialogBuilder(this@SFTPActivity)
-                    .setTitle("Add SFTP tab")
+                    .setTitle(R.string.sftp_add_tab_title)
                     .setItems(labels) { _, which -> openNewSftpTab(candidates[which]) }
-                    .setNegativeButton("Cancel", null)
+                    .setNegativeButton(R.string.cancel, null)
                     .show()
             }
         }
@@ -286,14 +293,16 @@ class SFTPActivity : AppCompatActivity() {
                 app.sshSessionManager.connectToServer(profile)
             }
             if (conn == null) {
-                runOnUiThread { showError("Could not connect to ${profile.getDisplayName()}", "Error") }
+                runOnUiThread {
+                    showError(getString(R.string.sftp_error_connect_failed_fmt, profile.getDisplayName()))
+                }
                 return@launch
             }
             val mgr = SFTPManager(conn)
             val ok = withContext(Dispatchers.IO) { mgr.connect() }
             runOnUiThread {
                 if (!ok) {
-                    showError("Failed to open SFTP for ${profile.getDisplayName()}", "Error")
+                    showError(getString(R.string.sftp_error_open_tab_failed_fmt, profile.getDisplayName()))
                     return@runOnUiThread
                 }
                 if (activeSftpTabIndex in sftpTabs.indices) {
@@ -418,7 +427,7 @@ class SFTPActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Failed to load local directory: $path", e)
-                showError("Failed to load local directory", "Error")
+                showError(getString(R.string.sftp_error_load_local))
             }
         }
     }
@@ -454,7 +463,7 @@ class SFTPActivity : AppCompatActivity() {
                 runOnUiThread {
                     binding.loadingRemote.visibility = View.GONE
                 }
-                showError("Failed to load remote directory", "Error")
+                showError(getString(R.string.sftp_error_load_remote))
             }
         }
     }
@@ -491,7 +500,7 @@ class SFTPActivity : AppCompatActivity() {
     private fun selectLocalFile(file: File) {
         // Highlight selected file and enable upload button
         binding.btnUpload.isEnabled = true
-        binding.btnUpload.text = "Upload ${file.name}"
+        binding.btnUpload.text = getString(R.string.sftp_btn_upload_file_fmt, file.name)
         
         Logger.d("SFTPActivity", "Selected local file: ${file.name}")
     }
@@ -499,20 +508,20 @@ class SFTPActivity : AppCompatActivity() {
     private fun selectRemoteFile(file: RemoteFileInfo) {
         // Highlight selected file and enable download button  
         binding.btnDownload.isEnabled = true
-        binding.btnDownload.text = "Download ${file.name}"
+        binding.btnDownload.text = getString(R.string.sftp_btn_download_file_fmt, file.name)
         
         Logger.d("SFTPActivity", "Selected remote file: ${file.name}")
     }
     
     private fun uploadSelectedFiles() {
         if (!::sftpManager.isInitialized) {
-            showToast("SFTP not connected yet")
+            showToast(getString(R.string.sftp_not_connected))
             return
         }
         val selectedFiles = localFileAdapter.getSelectedFiles()
 
         if (selectedFiles.isEmpty()) {
-            showToast("No files selected. Long-press files to select them.")
+            showToast(getString(R.string.sftp_no_files_selected))
             return
         }
 
@@ -530,12 +539,18 @@ class SFTPActivity : AppCompatActivity() {
                     }
                     count
                 }
-                showToast("✅ Uploaded $successCount file(s)")
+                showToast(
+                    resources.getQuantityString(
+                        R.plurals.sftp_uploaded_count,
+                        successCount,
+                        Format.count(successCount)
+                    )
+                )
                 localFileAdapter.clearSelection()
                 loadRemoteDirectory(currentRemotePath)
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Upload failed", e)
-                showError("❌ Upload failed: ${e.message}", "Error")
+                showError(getString(R.string.sftp_toast_upload_failed_fmt, e.message.orEmpty()))
             }
         }
     }
@@ -549,22 +564,21 @@ class SFTPActivity : AppCompatActivity() {
     private fun askScpModeAndUpload() {
         val selected = if (::localFileAdapter.isInitialized) localFileAdapter.getSelectedFiles() else emptyList()
         if (selected.isEmpty()) {
-            showToast("No files selected. Long-press files to select them.")
+            showToast(getString(R.string.sftp_no_files_selected))
             return
         }
         MaterialAlertDialogBuilder(this)
-            .setTitle("Upload via SCP")
-            .setMessage("SCP is the legacy fallback for servers without SFTP. " +
-                "Default Upload uses SFTP (recommended). Continue with SCP?")
-            .setPositiveButton("SCP") { _, _ -> uploadSelectedFilesViaScp() }
-            .setNegativeButton("Cancel", null)
+            .setTitle(R.string.sftp_scp_title)
+            .setMessage(R.string.sftp_scp_message)
+            .setPositiveButton(R.string.sftp_scp_confirm) { _, _ -> uploadSelectedFilesViaScp() }
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
     private fun uploadSelectedFilesViaScp() {
         val connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID) ?: return
         val ssh = app.sshSessionManager.getConnection(connectionId) ?: run {
-            showError("Connection not active", "Error")
+            showError(getString(R.string.sftp_error_connection_inactive))
             return
         }
         val client = io.github.tabssh.sftp.SCPClient(ssh)
@@ -582,7 +596,7 @@ class SFTPActivity : AppCompatActivity() {
                 okCount to failCount
             }
             runOnUiThread {
-                showToast("SCP: $ok ok, $fail failed")
+                showToast(getString(R.string.sftp_scp_result_fmt, Format.count(ok), Format.count(fail)))
                 localFileAdapter.clearSelection()
                 loadRemoteDirectory(currentRemotePath)
             }
@@ -591,13 +605,13 @@ class SFTPActivity : AppCompatActivity() {
 
     private fun downloadSelectedFiles() {
         if (!::sftpManager.isInitialized) {
-            showToast("SFTP not connected yet")
+            showToast(getString(R.string.sftp_not_connected))
             return
         }
         val selectedFiles = remoteFileAdapter.getSelectedRemoteFiles()
 
         if (selectedFiles.isEmpty()) {
-            showToast("No files selected. Long-press files to select them.")
+            showToast(getString(R.string.sftp_no_files_selected))
             return
         }
 
@@ -616,12 +630,18 @@ class SFTPActivity : AppCompatActivity() {
                     }
                     count
                 }
-                showToast("✅ Downloaded $successCount file(s)")
+                showToast(
+                    resources.getQuantityString(
+                        R.plurals.sftp_downloaded_count,
+                        successCount,
+                        Format.count(successCount)
+                    )
+                )
                 remoteFileAdapter.clearSelection()
                 loadLocalDirectory(currentLocalPath)
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Download failed", e)
-                showError("❌ Download failed: ${e.message}", "Error")
+                showError(getString(R.string.sftp_toast_download_failed_fmt, e.message.orEmpty()))
             }
         }
     }
@@ -631,18 +651,18 @@ class SFTPActivity : AppCompatActivity() {
         val form = DialogFields.form(this)
         val input = DialogFields.addText(form, getString(R.string.sftp_create_folder_hint))
 
-        builder.setTitle("Create Folder")
+        builder.setTitle(R.string.sftp_create_folder_title)
             .setView(form.root)
-            .setPositiveButton("Create") { _, _ ->
+            .setPositiveButton(R.string.sftp_create_folder_confirm) { _, _ ->
                 val folderName = input.text.toString().trim()
                 if (folderName.isNotEmpty()) {
                     createRemoteFolder(folderName)
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
-    
+
     private fun createRemoteFolder(folderName: String) {
         if (!::sftpManager.isInitialized) return
         
@@ -652,16 +672,16 @@ class SFTPActivity : AppCompatActivity() {
                 val created = withContext(Dispatchers.IO) { sftpManager.createRemoteDirectory(newPath) }
                 
                 if (created) {
-                    showToast("Folder created: $folderName")
+                    showToast(getString(R.string.sftp_folder_created_fmt, folderName))
                     // Refresh
                     loadRemoteDirectory(currentRemotePath)
                 } else {
-                    showError("Failed to create folder", "Error")
+                    showError(getString(R.string.sftp_error_create_folder))
                 }
                 
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Error creating folder", e)
-                showError("Error creating folder: ${e.message}", "Error")
+                showError(getString(R.string.sftp_error_create_folder_fmt, e.message.orEmpty()))
             }
         }
     }
@@ -694,54 +714,63 @@ class SFTPActivity : AppCompatActivity() {
         }
     }
     
-    private fun showLocalFileMenu(file: File) {
-        val items = if (file.isDirectory) {
-            arrayOf("Open", "Upload Folder", "Delete")
-        } else {
-            arrayOf("Upload", "Open", "Share", "Delete")
-        }
-        
+    /**
+     * Shows a long-press menu built from label-resource / action pairs and
+     * dispatches on the tapped position, so the visible labels can be
+     * translated without breaking which action runs.
+     */
+    private fun showFileActionMenu(title: String, entries: List<Pair<Int, () -> Unit>>) {
+        val labels = entries.map { getString(it.first) }.toTypedArray()
         MaterialAlertDialogBuilder(this)
-            .setTitle(file.name)
-            .setItems(items) { _, which ->
-                if (which < 0 || which >= items.size) return@setItems
-                when (items[which]) {
-                    "Open" -> handleLocalFileClick(file)
-                    "Upload", "Upload Folder" -> uploadFile(file)
-                    "Share" -> shareFile(file)
-                    "Delete" -> deleteLocalFile(file)
-                }
-            }
+            .setTitle(title)
+            .setItems(labels) { _, which -> entries.getOrNull(which)?.second?.invoke() }
             .show()
+    }
+
+    private fun showLocalFileMenu(file: File) {
+        val entries: List<Pair<Int, () -> Unit>> = if (file.isDirectory) {
+            listOf(
+                R.string.sftp_menu_open to { handleLocalFileClick(file) },
+                R.string.sftp_menu_upload_folder to { uploadFile(file) },
+                R.string.delete to { deleteLocalFile(file) }
+            )
+        } else {
+            listOf(
+                R.string.upload_file to { uploadFile(file) },
+                R.string.sftp_menu_open to { handleLocalFileClick(file) },
+                R.string.share to { shareFile(file) },
+                R.string.delete to { deleteLocalFile(file) }
+            )
+        }
+        showFileActionMenu(file.name, entries)
     }
 
     private fun showRemoteFileMenu(file: RemoteFileInfo) {
         // Wave 1.7 + 1.8 — added "Edit" (text-ish files) and "Permissions"
         // (chmod) to the per-file long-press menu.
-        val items = if (file.isDirectory) {
-            arrayOf("Open", "Download Folder", "Rename", "Permissions…", "Delete")
+        val entries: List<Pair<Int, () -> Unit>> = if (file.isDirectory) {
+            listOf(
+                R.string.sftp_menu_open to { handleRemoteFileClick(file) },
+                R.string.sftp_menu_download_folder to { downloadFile(file) },
+                R.string.rename_file to { renameRemoteFile(file) },
+                R.string.sftp_menu_permissions to { showPermissionsDialog(file) },
+                R.string.delete to { deleteRemoteFile(file) }
+            )
         } else {
             // "Open" downloads and hands the file to an external app (the
             // file:// round trip — RemoteFileOpener). "Open / Edit" is the
             // separate in-app text editor for small (<1 MiB) text files.
-            arrayOf("Open", "Open / Edit", "Download", "Rename", "Permissions…", "Properties", "Delete")
+            listOf(
+                R.string.sftp_menu_open to { openRemoteFileExternally(file) },
+                R.string.sftp_menu_open_edit to { openOrEditRemoteFile(file) },
+                R.string.download_file to { downloadFile(file) },
+                R.string.rename_file to { renameRemoteFile(file) },
+                R.string.sftp_menu_permissions to { showPermissionsDialog(file) },
+                R.string.file_properties to { showFileProperties(file) },
+                R.string.delete to { deleteRemoteFile(file) }
+            )
         }
-
-        MaterialAlertDialogBuilder(this)
-            .setTitle(file.name)
-            .setItems(items) { _, which ->
-                if (which < 0 || which >= items.size) return@setItems
-                when (items[which]) {
-                    "Open" -> if (file.isDirectory) handleRemoteFileClick(file) else openRemoteFileExternally(file)
-                    "Open / Edit" -> openOrEditRemoteFile(file)
-                    "Download", "Download Folder" -> downloadFile(file)
-                    "Rename" -> renameRemoteFile(file)
-                    "Permissions…" -> showPermissionsDialog(file)
-                    "Delete" -> deleteRemoteFile(file)
-                    "Properties" -> showFileProperties(file)
-                }
-            }
-            .show()
+        showFileActionMenu(file.name, entries)
     }
 
     /**
@@ -751,7 +780,7 @@ class SFTPActivity : AppCompatActivity() {
      */
     private fun openRemoteFileExternally(file: RemoteFileInfo) {
         if (!::sftpManager.isInitialized) {
-            showToast("SFTP not connected yet")
+            showToast(getString(R.string.sftp_not_connected))
             return
         }
         remoteFileOpener.open(sftpManager, file.path, file.name)
@@ -766,7 +795,6 @@ class SFTPActivity : AppCompatActivity() {
         // file.permissions might be a string like "rwxr-xr--" or "0644" — try octal first
         val initialMode = parseInitialMode(current, file.isDirectory)
 
-        val view = layoutInflater.inflate(android.R.layout.simple_list_item_1, null)
         // Build the dialog programmatically to avoid a new layout file.
         val container = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
@@ -775,18 +803,23 @@ class SFTPActivity : AppCompatActivity() {
 
         val mode = intArrayOf(initialMode)
 
-        fun makeRow(label: String, shift: Int): android.widget.LinearLayout {
+        fun makeRow(labelRes: Int, shift: Int): android.widget.LinearLayout {
             val row = android.widget.LinearLayout(this).apply {
                 orientation = android.widget.LinearLayout.HORIZONTAL
                 gravity = android.view.Gravity.CENTER_VERTICAL
             }
             row.addView(android.widget.TextView(this).apply {
-                text = label
+                setText(labelRes)
                 width = 220
             })
-            for ((bit, name) in listOf(4 to "r", 2 to "w", 1 to "x")) {
+            val flags = listOf(
+                4 to R.string.sftp_perm_flag_read,
+                2 to R.string.sftp_perm_flag_write,
+                1 to R.string.sftp_perm_flag_execute
+            )
+            for ((bit, flagRes) in flags) {
                 val cb = android.widget.CheckBox(this).apply {
-                    text = name
+                    setText(flagRes)
                     isChecked = (mode[0] shr shift) and bit != 0
                     setOnCheckedChangeListener { _, isChecked ->
                         mode[0] = if (isChecked) mode[0] or (bit shl shift)
@@ -799,40 +832,43 @@ class SFTPActivity : AppCompatActivity() {
             return row
         }
 
-        container.addView(makeRow("Owner", 6))
-        container.addView(makeRow("Group", 3))
-        container.addView(makeRow("Other", 0))
+        container.addView(makeRow(R.string.sftp_perm_owner, 6))
+        container.addView(makeRow(R.string.sftp_perm_group, 3))
+        container.addView(makeRow(R.string.sftp_perm_other, 0))
         container.addView(android.widget.TextView(this).apply {
             id = android.R.id.text1
-            text = "Mode: ${octalString(mode[0])}"
+            text = getString(R.string.sftp_perm_mode_fmt, octalString(mode[0]))
             textSize = 16f
             setPadding(0, 24, 0, 0)
         })
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("Permissions — ${file.name}")
+            .setTitle(getString(R.string.sftp_permissions_title_fmt, file.name))
             .setView(container)
-            .setPositiveButton("Apply") { _, _ ->
+            .setPositiveButton(R.string.sftp_permissions_apply) { _, _ ->
                 lifecycleScope.launch {
                     val ok = withContext(Dispatchers.IO) { sftpManager.changeRemotePermissions(file.path, mode[0]) }
                     runOnUiThread {
                         Toast.makeText(
                             this@SFTPActivity,
-                            if (ok) "Permissions set to ${octalString(mode[0])}"
-                            else "chmod failed",
+                            if (ok) {
+                                getString(R.string.sftp_permissions_set_fmt, octalString(mode[0]))
+                            } else {
+                                getString(R.string.sftp_permissions_failed)
+                            },
                             Toast.LENGTH_SHORT
                         ).show()
                         loadRemoteDirectory(currentRemotePath)
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
     private fun updatePermissionsLabel(container: android.view.ViewGroup, mode: Int) {
         container.findViewById<android.widget.TextView>(android.R.id.text1)?.text =
-            "Mode: ${octalString(mode)}"
+            getString(R.string.sftp_perm_mode_fmt, octalString(mode))
     }
 
     private fun octalString(mode: Int): String =
@@ -875,8 +911,15 @@ class SFTPActivity : AppCompatActivity() {
      * a binary file shows a warning but still proceeds (read-only).
      */
     private fun openOrEditRemoteFile(file: RemoteFileInfo) {
-        if (file.size > 1_048_576) {
-            Toast.makeText(this, "File too large (>1 MiB) — download instead", Toast.LENGTH_LONG).show()
+        if (file.size > MAX_INLINE_EDIT_BYTES) {
+            Toast.makeText(
+                this,
+                getString(
+                    R.string.sftp_error_file_too_large_fmt,
+                    Format.size(this, MAX_INLINE_EDIT_BYTES)
+                ),
+                Toast.LENGTH_LONG
+            ).show()
             return
         }
         val connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID) ?: return
@@ -936,7 +979,7 @@ class SFTPActivity : AppCompatActivity() {
                                             io.github.tabssh.utils.NotificationHelper.showConnectionError(
                                                 this@SFTPActivity,
                                                 localFile.name,
-                                                "Upload failed: ${result.message}"
+                                                getString(R.string.sftp_upload_failed_fmt, result.message)
                                             )
                                         }
                                         is io.github.tabssh.sftp.TransferResult.Cancelled -> {
@@ -961,7 +1004,7 @@ class SFTPActivity : AppCompatActivity() {
                 
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Failed to start upload", e)
-                showError("Upload failed: ${e.message}", "Error")
+                showError(getString(R.string.sftp_upload_failed_fmt, e.message.orEmpty()))
             }
         }
     }
@@ -1012,7 +1055,7 @@ class SFTPActivity : AppCompatActivity() {
                                             io.github.tabssh.utils.NotificationHelper.showConnectionError(
                                                 this@SFTPActivity,
                                                 remoteFile.name,
-                                                "Download failed: ${result.message}"
+                                                getString(R.string.sftp_download_failed_fmt, result.message)
                                             )
                                         }
                                         is io.github.tabssh.sftp.TransferResult.Cancelled -> {
@@ -1037,7 +1080,7 @@ class SFTPActivity : AppCompatActivity() {
                 
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Failed to start download", e)
-                showError("Download failed: ${e.message}", "Error")
+                showError(getString(R.string.sftp_download_failed_fmt, e.message.orEmpty()))
             }
         }
     }
@@ -1052,13 +1095,13 @@ class SFTPActivity : AppCompatActivity() {
     private fun handleTransferCompleted(transfer: TransferTask, result: io.github.tabssh.sftp.TransferResult) {
         when (result) {
             is io.github.tabssh.sftp.TransferResult.Success -> {
-                showToast("Transfer completed: ${transfer.getDisplayName()}")
+                showToast(getString(R.string.sftp_transfer_completed_fmt, transfer.getDisplayName(this@SFTPActivity)))
             }
             is io.github.tabssh.sftp.TransferResult.Error -> {
-                showError("Transfer failed: ${result.message}", "Error")
+                showError(getString(R.string.sftp_transfer_failed_fmt, result.message))
             }
             is io.github.tabssh.sftp.TransferResult.Cancelled -> {
-                showToast("Transfer cancelled")
+                showToast(getString(R.string.sftp_transfer_cancelled))
             }
         }
         
@@ -1092,15 +1135,15 @@ class SFTPActivity : AppCompatActivity() {
         )
         input.selectAll()
 
-        builder.setTitle("Rename ${file.name}")
+        builder.setTitle(getString(R.string.sftp_rename_title_fmt, file.name))
             .setView(form.root)
-            .setPositiveButton("Rename") { _, _ ->
+            .setPositiveButton(R.string.rename_file) { _, _ ->
                 val newName = input.text.toString().trim()
                 if (newName.isNotEmpty() && newName != file.name) {
                     performRemoteRename(file, newName)
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
     
@@ -1111,28 +1154,28 @@ class SFTPActivity : AppCompatActivity() {
                 val success = withContext(Dispatchers.IO) { sftpManager.renameRemoteFile(file.path, newPath) }
                 
                 if (success) {
-                    showToast("Renamed to $newName")
+                    showToast(getString(R.string.sftp_renamed_fmt, newName))
                     // Refresh
                     loadRemoteDirectory(currentRemotePath)
                 } else {
-                    showError("Failed to rename file", "Error")
+                    showError(getString(R.string.sftp_error_rename))
                 }
                 
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Error renaming file", e)
-                showError("Rename error: ${e.message}", "Error")
+                showError(getString(R.string.sftp_error_rename_fmt, e.message.orEmpty()))
             }
         }
     }
     
     private fun deleteRemoteFile(file: RemoteFileInfo) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Delete ${file.name}")
-            .setMessage("Are you sure you want to delete this ${if (file.isDirectory) "folder" else "file"}?")
-            .setPositiveButton("Delete") { _, _ ->
+            .setTitle(getString(R.string.sftp_delete_title_fmt, file.name))
+            .setMessage(deleteConfirmMessage(file.isDirectory))
+            .setPositiveButton(R.string.delete) { _, _ ->
                 performRemoteDelete(file)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
     
@@ -1142,36 +1185,41 @@ class SFTPActivity : AppCompatActivity() {
                 val success = withContext(Dispatchers.IO) { sftpManager.deleteRemoteFile(file.path, file.isDirectory) }
                 
                 if (success) {
-                    showToast("Deleted ${file.name}")
+                    showToast(getString(R.string.sftp_deleted_fmt, file.name))
                     // Refresh
                     loadRemoteDirectory(currentRemotePath)
                 } else {
-                    showError("Failed to delete ${file.name}", "Error")
+                    showError(getString(R.string.sftp_error_delete_fmt, file.name))
                 }
-                
+
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Error deleting file", e)
-                showError("Delete error: ${e.message}", "Error")
+                showError(getString(R.string.sftp_error_delete_generic_fmt, e.message.orEmpty()))
             }
         }
     }
     
     private fun deleteLocalFile(file: File) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Delete ${file.name}")
-            .setMessage("Are you sure you want to delete this ${if (file.isDirectory) "folder" else "file"}?")
-            .setPositiveButton("Delete") { _, _ ->
+            .setTitle(getString(R.string.sftp_delete_title_fmt, file.name))
+            .setMessage(deleteConfirmMessage(file.isDirectory))
+            .setPositiveButton(R.string.delete) { _, _ ->
                 if (file.delete()) {
-                    showToast("Deleted ${file.name}")
+                    showToast(getString(R.string.sftp_deleted_fmt, file.name))
                     // Refresh
                     loadLocalDirectory(currentLocalPath)
                 } else {
-                    showError("Failed to delete ${file.name}", "Error")
+                    showError(getString(R.string.sftp_error_delete_fmt, file.name))
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
+
+    /** Folder and file wordings are separate resources so translations can inflect both. */
+    private fun deleteConfirmMessage(isDirectory: Boolean): String = getString(
+        if (isDirectory) R.string.sftp_delete_message_folder else R.string.sftp_delete_message_file
+    )
     
     private fun shareFile(file: File) {
         try {
@@ -1185,30 +1233,34 @@ class SFTPActivity : AppCompatActivity() {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             
-            startActivity(Intent.createChooser(intent, "Share ${file.name}"))
-            
+            startActivity(
+                Intent.createChooser(intent, getString(R.string.sftp_share_chooser_fmt, file.name))
+            )
+
         } catch (e: Exception) {
             Logger.e("SFTPActivity", "Error sharing file", e)
-            showError("Failed to share file", "Error")
+            showError(getString(R.string.sftp_error_share))
         }
     }
     
     private fun showFileProperties(file: RemoteFileInfo) {
+        val modified = java.text.SimpleDateFormat("MMM dd, yyyy HH:mm", java.util.Locale.getDefault())
+            .format(java.util.Date(file.modifiedTime))
         val message = buildString {
-            appendLine("Name: ${file.name}")
-            appendLine("Size: ${file.getFormattedSize()}")
-            appendLine("Type: ${file.getFileType()}")
-            appendLine("Permissions: ${file.permissions}")
-            appendLine("Modified: ${java.text.SimpleDateFormat("MMM dd, yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(file.modifiedTime))}")
+            appendLine(getString(R.string.sftp_props_name_fmt, file.name))
+            appendLine(getString(R.string.sftp_props_size_fmt, Format.size(this@SFTPActivity, file.size)))
+            appendLine(getString(R.string.sftp_props_type_fmt, file.typeLabel(this@SFTPActivity)))
+            appendLine(getString(R.string.sftp_props_permissions_fmt, file.permissions))
+            appendLine(getString(R.string.sftp_props_modified_fmt, modified))
             if (file.isSymlink) {
-                appendLine("Symbolic link: Yes")
+                appendLine(getString(R.string.sftp_props_symlink))
             }
         }
-        
+
         MaterialAlertDialogBuilder(this)
-            .setTitle("Properties")
+            .setTitle(R.string.file_properties)
             .setMessage(message)
-            .setPositiveButton("OK", null)
+            .setPositiveButton(R.string.ok, null)
             .show()
     }
     
@@ -1219,20 +1271,32 @@ class SFTPActivity : AppCompatActivity() {
     
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
-            android.R.id.home -> {
-                finish()
-                true
-            }
             R.id.action_select_all_local -> {
                 localFileAdapter.selectAllLocal()
                 val count = localFileAdapter.getSelectedFiles().size
-                showToast(if (count > 0) "Selected $count local file(s)" else "No files to select")
+                showToast(
+                    if (count > 0) {
+                        resources.getQuantityString(
+                            R.plurals.sftp_selected_local_count, count, Format.count(count)
+                        )
+                    } else {
+                        getString(R.string.sftp_no_files_to_select)
+                    }
+                )
                 true
             }
             R.id.action_select_all_remote -> {
                 remoteFileAdapter.selectAllRemote()
                 val count = remoteFileAdapter.getSelectedRemoteFiles().size
-                showToast(if (count > 0) "Selected $count remote file(s)" else "No files to select")
+                showToast(
+                    if (count > 0) {
+                        resources.getQuantityString(
+                            R.plurals.sftp_selected_remote_count, count, Format.count(count)
+                        )
+                    } else {
+                        getString(R.string.sftp_no_files_to_select)
+                    }
+                )
                 true
             }
             R.id.action_clear_transfers -> {
@@ -1258,7 +1322,13 @@ class SFTPActivity : AppCompatActivity() {
             newItems = remaining,
             areItemsTheSame = { a, b -> a === b }
         )
-        showToast("Cleared $completedCount completed transfers")
+        showToast(
+            resources.getQuantityString(
+                R.plurals.sftp_cleared_transfers,
+                completedCount,
+                Format.count(completedCount)
+            )
+        )
     }
     
     private fun showToast(message: String) {

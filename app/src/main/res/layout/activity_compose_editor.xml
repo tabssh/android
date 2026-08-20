@@ -6,13 +6,11 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <!-- Toolbar -->
-    <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/toolbar"
+    <include
+        android:id="@+id/app_bar"
+        layout="@layout/include_app_bar"
         android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:elevation="4dp"
-        app:title="@string/container_stack_new_title" />
+        android:layout_height="wrap_content" />
 
     <!-- Scrollable Form -->
     <ScrollView

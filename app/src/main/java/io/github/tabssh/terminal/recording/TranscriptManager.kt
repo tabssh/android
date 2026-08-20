@@ -1,6 +1,8 @@
 package io.github.tabssh.terminal.recording
 
 import android.content.Context
+import io.github.tabssh.R
+import io.github.tabssh.utils.Format
 import io.github.tabssh.utils.logging.Logger
 import java.io.File
 import java.io.RandomAccessFile
@@ -60,7 +62,7 @@ object TranscriptManager {
      * truncated to their tail, which is the part of a session a user is
      * actually looking for.
      */
-    fun getTranscriptContent(transcript: Transcript): String {
+    fun getTranscriptContent(context: Context, transcript: Transcript): String {
         return try {
             val length = transcript.file.length()
             if (length <= MAX_VIEW_BYTES) {
@@ -74,21 +76,17 @@ object TranscriptManager {
                     // half of a split multi-byte UTF-8 character.
                     val text = String(bytes, Charsets.UTF_8)
                     val body = text.substringAfter('\n', text)
-                    "[Truncated: showing the last ${formatFileSize(MAX_VIEW_BYTES)} " +
-                        "of ${formatFileSize(length)}]\n\n" + body
+                    val banner = context.getString(
+                        R.string.transcript_truncated_banner_fmt,
+                        Format.size(context, MAX_VIEW_BYTES),
+                        Format.size(context, length)
+                    )
+                    "$banner\n\n$body"
                 }
             }
         } catch (e: Exception) {
             Logger.e("TranscriptManager", "Failed to read transcript", e)
-            "Error reading transcript"
-        }
-    }
-    
-    fun formatFileSize(bytes: Long): String {
-        return when {
-            bytes < 1024 -> "$bytes B"
-            bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-            else -> "${bytes / (1024 * 1024)} MB"
+            context.getString(R.string.transcript_read_error)
         }
     }
     

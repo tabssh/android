@@ -43,16 +43,16 @@ data class CpuMetrics(
  * Memory usage metrics
  */
 data class MemoryMetrics(
-    // Total RAM in MB
-    val totalMB: Long,
-    // Used RAM in MB
-    val usedMB: Long,
-    // Free RAM in MB
-    val freeMB: Long,
-    // Available RAM in MB (free + buffers + cache)
-    val availableMB: Long,
-    // Buffers + Cache in MB
-    val buffersAndCacheMB: Long,
+    // Total RAM in bytes
+    val totalBytes: Long,
+    // Used RAM in bytes
+    val usedBytes: Long,
+    // Free RAM in bytes
+    val freeBytes: Long,
+    // Available RAM in bytes (free + buffers + cache)
+    val availableBytes: Long,
+    // Buffers + Cache in bytes
+    val buffersAndCacheBytes: Long,
     // Used percentage
     val usedPercent: Float
 ) {
@@ -65,19 +65,19 @@ data class MemoryMetrics(
  * Disk usage metrics
  */
 data class DiskMetrics(
-    // Total disk space in GB
-    val totalGB: Float,
-    // Used disk space in GB
-    val usedGB: Float,
-    // Available disk space in GB
-    val availableGB: Float,
+    // Total disk space in bytes
+    val totalBytes: Long,
+    // Used disk space in bytes
+    val usedBytes: Long,
+    // Available disk space in bytes
+    val availableBytes: Long,
     // Used percentage
     val usedPercent: Float,
     // Mount point (usually "/")
     val mountPoint: String
 ) {
     companion object {
-        fun empty() = DiskMetrics(0f, 0f, 0f, 0f, "/")
+        fun empty() = DiskMetrics(0L, 0L, 0L, 0f, "/")
     }
 }
 
@@ -93,13 +93,13 @@ data class NetworkMetrics(
     val rxPacketsPerSec: Long,
     // Transmit packets/sec
     val txPacketsPerSec: Long,
-    // Total received MB
-    val totalRxMB: Float,
-    // Total transmitted MB
-    val totalTxMB: Float
+    // Total received bytes since boot
+    val totalRxBytes: Long,
+    // Total transmitted bytes since boot
+    val totalTxBytes: Long
 ) {
     companion object {
-        fun empty() = NetworkMetrics(0, 0, 0, 0, 0f, 0f)
+        fun empty() = NetworkMetrics(0, 0, 0, 0, 0L, 0L)
     }
 }
 

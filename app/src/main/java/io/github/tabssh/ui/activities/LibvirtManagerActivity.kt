@@ -2,7 +2,6 @@ package io.github.tabssh.ui.activities
 
 import android.content.Intent
 import android.os.Bundle
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -10,7 +9,6 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -47,7 +45,7 @@ import kotlinx.coroutines.withContext
  *
  * Receives [EXTRA_HYPERVISOR_ID] (Long) in its launch intent.
  */
-class LibvirtManagerActivity : AppCompatActivity() {
+class LibvirtManagerActivity : TabSSHActivity() {
 
     companion object {
         private const val TAG = "LibvirtManagerActivity"
@@ -112,7 +110,6 @@ class LibvirtManagerActivity : AppCompatActivity() {
         recyclerView = findViewById(R.id.vm_recycler_view)
 
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = getString(R.string.libvirt_manager_title)
 
         adapter = VmAdapter(vms)
@@ -127,11 +124,6 @@ class LibvirtManagerActivity : AppCompatActivity() {
             return
         }
         connectAndRefresh(hypervisorId)
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == android.R.id.home) { finish(); return true }
-        return super.onOptionsItemSelected(item)
     }
 
     override fun onDestroy() {
@@ -289,21 +281,19 @@ class LibvirtManagerActivity : AppCompatActivity() {
      *
      * VNC-tab-swipe integration step 6c: creates an ephemeral [io.github.tabssh.ui.tabs.VncTab]
      * directly on the shared, application-scoped `TabManager` (same pattern as
-     * [VncHostsActivity.openVncConsole]) instead of launching the retired
-     * per-console [VMConsoleActivity]. The [io.github.tabssh.hypervisor.console.rfb.RfbClient]
+     * [VncHostsActivity.openVncConsole]) rather than opening a dedicated
+     * per-console activity. The [io.github.tabssh.hypervisor.console.rfb.RfbClient]
      * is constructed here from the libvirt-provided streams but never started —
      * `TerminalPagerAdapter`'s `VncViewHolder` drives the handshake once the page renders.
      *
-     * Scope-down (documented per "Honesty over agreement", CLAUDE.md): the old
-     * [VMConsoleActivity] path auto-retried the connection with resize disabled
-     * when the server closed the socket after rejecting a SetDesktopSize request
-     * (see its `onDisconnected` handler and [consoleLauncher] above). That retry
-     * relaunched a fresh, dedicated activity — a model that doesn't fit
-     * [TabTerminalActivity], which is a shared, persistent multi-tab shell that
-     * may have unrelated tabs open when a resize rejection happens on this one;
-     * auto-relaunching it would disrupt those unrelated tabs. Libvirt/QEMU VNC
-     * displays are also the primary case that rejects resize at all, so this
-     * path now defaults `canRequestResize = false` unconditionally for ephemeral
+     * Resize handling: a dedicated per-console activity could afford to auto-retry
+     * the connection with resize disabled when the server closed the socket after
+     * rejecting a SetDesktopSize request, because the retry only relaunched that
+     * one console. [TabTerminalActivity] is instead a shared, persistent multi-tab
+     * shell that may have unrelated tabs open when a resize rejection happens on
+     * this one, so relaunching it would disrupt those unrelated tabs. Libvirt/QEMU
+     * VNC displays are also the primary case that rejects resize at all, so this
+     * path defaults `canRequestResize = false` unconditionally for ephemeral
      * libvirt consoles — trading away resize support on the rare display that
      * *would* honour it for a connection that never hits the rejection-disconnect
      * loop at all.

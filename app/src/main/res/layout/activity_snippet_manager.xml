@@ -5,10 +5,17 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <include
+        android:id="@+id/app_bar"
+        layout="@layout/include_app_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
         <!-- Category filter chips -->
         <HorizontalScrollView
@@ -44,26 +51,28 @@
         android:orientation="vertical"
         android:gravity="center"
         android:padding="32dp"
-        android:visibility="gone">
+        android:visibility="gone"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="💾"
+            android:text="@string/snippet_mgr_empty_icon"
             android:textSize="64sp"
+            android:importantForAccessibility="no"
             android:layout_marginBottom="16dp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="No Snippets Yet"
+            android:text="@string/snippet_mgr_empty_title"
             android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
             android:layout_marginBottom="8dp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Save your frequently used commands\nTap + to create your first snippet"
+            android:text="@string/snippet_mgr_empty_message"
             android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
             android:textColor="?android:attr/textColorSecondary"
             android:gravity="center"
@@ -73,7 +82,7 @@
             android:id="@+id/button_create_snippet"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Create Snippet"
+            android:text="@string/snippet_mgr_empty_action"
             style="@style/Widget.Material3.Button.TonalButton" />
 
     </LinearLayout>
@@ -85,7 +94,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_margin="16dp"
-        android:contentDescription="Create snippet"
+        android:contentDescription="@string/snippet_mgr_fab_content_description"
         app:srcCompat="@android:drawable/ic_input_add" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

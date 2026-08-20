@@ -249,6 +249,27 @@
     <string name="conflict_button_keep_all_local">Keep All Local</string>
     <string name="conflict_button_keep_all_remote">Keep All Remote</string>
 
+    <!-- Home-screen page toolbars -->
+    <string name="connections_tab_title">Connections</string>
+
+    <!-- QR pairing import -->
+    <string name="import_from_qr_title">Pair from Desktop</string>
+    <string name="import_from_qr_status_opening_camera">Opening camera…</string>
+
+    <!-- Screen titles for the shared app bar -->
+    <string name="theme_editor_title">Theme Editor</string>
+    <string name="host_detail_title">Host Detail</string>
+    <string name="hypervisor_edit_title_new">Add Hypervisor</string>
+    <string name="hypervisor_edit_title_edit">Edit Hypervisor</string>
+    <string name="vnc_host_edit_title_new">Add VNC Host</string>
+    <string name="vnc_host_edit_title_edit">Edit VNC Host</string>
+    <string name="audit_log_viewer_title">Audit Logs</string>
+    <string name="log_viewer_title">Application Logs</string>
+    <string name="transcript_viewer_title">Session Transcripts</string>
+    <string name="multi_host_dashboard_title">Multi-Host Dashboard</string>
+    <string name="connection_edit_title_new">New Connection</string>
+    <string name="connection_edit_title_edit">Edit Connection</string>
+
     <!-- Sync Log -->
     <string name="sync_view_log">View Sync Log</string>
     <string name="sync_log_title">Sync Log</string>
@@ -1221,7 +1242,7 @@
     <string name="xcpng_invalid_port">Port must be between 1 and 65535</string>
     <string name="xcpng_password_store_failed">Server saved but the password could not be stored</string>
     <string name="xcpng_save_server_failed_fmt">Failed to save server: %1$s</string>
-    <string name="xcpng_vm_info_fmt">CPUs: %1$d  ·  RAM: %2$dMB</string>
+    <string name="xcpng_vm_info_fmt">CPUs: %1$d  ·  RAM: %2$s</string>
     <string name="xcpng_snapshot_name_required">Snapshot name is required</string>
     <string name="xcpng_error_create_snapshot">Failed to create snapshot</string>
     <string name="xcpng_error_revert">Failed to revert</string>
@@ -1264,4 +1285,993 @@
     <string name="xcpng_infra_host_hostname_fmt">    %1$s</string>
     <string name="xcpng_infra_host_memory_fmt">    Memory: %1$dGB free / %2$dGB total</string>
     <string name="xcpng_infra_title">Xen Orchestra Infrastructure</string>
+
+    <!-- Activity and widget labels referenced from AndroidManifest.xml -->
+    <string name="activity_label_cluster_commands">Cluster Commands</string>
+    <string name="activity_label_proxmox_manager">Proxmox Manager</string>
+    <string name="activity_label_xcpng_manager">XCP-ng Manager</string>
+    <string name="activity_label_vmware_manager">VMware Manager</string>
+    <string name="activity_label_libvirt_manager">QEMU/libvirt Manager</string>
+    <string name="activity_label_edit_hypervisor">Edit Hypervisor</string>
+    <string name="activity_label_oci_manager">OCI Manager</string>
+    <string name="activity_label_edit_container_host">Edit Container Host</string>
+    <string name="activity_label_container_manager">Container Manager</string>
+    <string name="activity_label_container">Container</string>
+    <string name="activity_label_compose_stack">Compose Stack</string>
+    <string name="activity_label_container_config">Container Config</string>
+    <string name="activity_label_stack_logs">Stack Logs</string>
+    <string name="activity_label_theme_editor">Theme Editor</string>
+    <string name="activity_label_connection_history">Connection History</string>
+    <string name="activity_label_whats_new">What\'s New</string>
+    <string name="activity_label_app_lock">App Lock</string>
+    <string name="activity_label_multi_host_dashboard">Multi-host Dashboard</string>
+    <string name="activity_label_host_detail">Host Detail</string>
+    <string name="activity_label_cloud_accounts">Cloud Accounts</string>
+    <string name="activity_label_cloud_instances">Cloud Instances</string>
+    <string name="activity_label_pair_from_desktop">Pair from Desktop</string>
+    <string name="activity_label_tasker_action">TabSSH Action</string>
+    <string name="activity_label_session_transcripts">Session Transcripts</string>
+    <string name="activity_label_configure_widget">Configure Widget</string>
+    <string name="activity_label_vnc_host">VNC Host</string>
+    <string name="activity_label_manage_groups">Manage Groups</string>
+    <string name="activity_label_manage_snippets">Manage Snippets</string>
+    <string name="widget_label_1x1">TabSSH 1x1</string>
+    <string name="widget_label_2x1">TabSSH 2x1</string>
+    <string name="widget_label_4x2">TabSSH 4x2</string>
+    <string name="widget_label_4x4">TabSSH 4x4</string>
+
+    <!-- Navigation drawer: section headings -->
+    <string name="nav_group_accounts">Accounts</string>
+    <string name="nav_group_manage">Manage</string>
+    <string name="nav_group_connect">Connect</string>
+    <string name="nav_group_insights">Insights</string>
+    <string name="nav_group_diagnostics">Diagnostics</string>
+
+    <!-- Navigation drawer: destinations -->
+    <string name="nav_item_quick_connect">Quick Connect</string>
+    <string name="nav_item_vnc_hosts">VNC Hosts</string>
+    <string name="nav_item_snippets">Snippets</string>
+    <string name="nav_item_groups">Groups</string>
+    <string name="nav_item_cluster_commands">Cluster Commands</string>
+    <string name="nav_item_multi_host_dashboard">Multi-host Dashboard</string>
+    <string name="nav_item_connection_history">Connection History</string>
+    <string name="nav_item_settings">Settings</string>
+    <string name="nav_item_copy_app_log">Copy App Log (Safe to Share)</string>
+    <string name="nav_item_copy_debug_logs">Copy Debug Logs (Developer)</string>
+    <string name="nav_item_whats_new">What\'s New</string>
+    <string name="nav_item_help">Help</string>
+    <string name="nav_item_about">About</string>
+
+    <!-- Shared dialog actions -->
+    <string name="action_ok">OK</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_clear">Clear</string>
+    <string name="action_paste_issue">Paste / Issue</string>
+    <string name="action_visit_website">Visit Website</string>
+    <string name="action_github">GitHub</string>
+    <string name="action_license">License</string>
+
+    <!-- Help dialog -->
+    <string name="help_title">Help</string>
+    <string name="help_body">TabSSH — a modern SSH client for Android.\n\nGetting started:\n• Tap + to add a new connection\n• Long-press a connection for more options\n• Swipe left or right to move between tabs\n• Swipe in from the left edge, or tap the menu button, to open navigation\n\nFeatures:\n• Browser-style SSH tabs\n• SSH key management\n• Port forwarding\n• SFTP file transfer\n• Performance monitoring\n• Hypervisor and container management\n\nMore help is available on the project website.</string>
+
+    <!-- About dialog -->
+    <string name="about_title">About TabSSH</string>
+    <string name="about_commit_unknown">unknown</string>
+    <string name="about_abi_unknown">unknown</string>
+    <string name="about_component_included">included</string>
+    <string name="about_component_not_bundled">not bundled</string>
+    <string name="about_native_components">Native components (%1$s):\n• Tor %2$s — %3$s\n• Mosh %4$s — %5$s\n• Tor crypto: OpenSSL %6$s, libevent %7$s, zlib %8$s\n• Terminal: Termux %9$s</string>
+    <string name="about_body">TabSSH\nVersion %1$s (Build %2$d)\nCommit: %3$s (%4$s)\n\nA modern, open-source SSH client for Android with browser-style tabs, Material Design 3, and comprehensive security features.\n\n© 2024-2026 TabSSH Project\nLicensed under the MIT License\n\n%5$s</string>
+
+    <!-- Log capture dialogs -->
+    <string name="log_app_title">App Log</string>
+    <string name="log_app_clip_label">TabSSH App Log</string>
+    <string name="log_app_empty">No logs recorded yet.\n\nUse the app normally and logs will be captured automatically.</string>
+    <string name="log_app_cleared">App log cleared</string>
+    <string name="log_debug_title">Debug Logs</string>
+    <string name="log_debug_clip_label">TabSSH Debug Logs</string>
+    <string name="log_debug_cleared">Debug logs cleared</string>
+    <string name="log_debug_empty_title">No Debug Logs Yet</string>
+    <string name="log_debug_empty_debug_build">Debug logging is enabled (this is a development build) but no events have been captured yet.\n\nUse the app a bit — open a connection, navigate around — then try Copy Debug Logs again.</string>
+    <string name="log_debug_empty_release_build">Debug logging is not available in this release build.\n\nInstall a development build if you need to capture logs for a bug report.</string>
+    <string name="log_too_large_title">%1$s — too large to copy</string>
+    <string name="log_too_large_message">The log is %1$s, which is too large for the clipboard.\n\nUse "Paste / Issue" to upload it to a paste service — you can then copy the URL or open a pre-filled bug report.</string>
+    <string name="log_copied_message">%1$d characters copied to clipboard.\n\nTap "Paste / Issue" to upload the log — you can copy the URL or open a bug report.</string>
+    <string name="log_copy_failed_message">The clipboard write failed — the log may be too large. Use "Paste / Issue" to upload it directly.</string>
+    <string name="log_copied_title">%1$s Copied</string>
+
+    <!-- Exit confirmation -->
+    <string name="exit_confirm_message">Exit TabSSH?</string>
+    <string name="action_exit">Exit</string>
+
+    <!-- Settings: top-level category headers -->
+    <string name="prefcat_main_app">App</string>
+    <string name="prefcat_main_connections">Connections</string>
+    <string name="prefcat_main_data">Data &amp; automation</string>
+    <string name="prefcat_main_diagnostics">Diagnostics</string>
+    <string name="prefcat_main_about">About</string>
+
+    <!-- Settings: top-level entries -->
+    <string name="prefs_general_settings_title">General</string>
+    <string name="prefs_general_settings_summary">App theme, language, tab behavior, and notifications</string>
+    <string name="prefs_terminal_settings_title">Terminal</string>
+    <string name="prefs_terminal_settings_summary">Theme, font, and terminal behavior for SSH &amp; Mosh sessions — not used for VNC/console tabs</string>
+    <string name="prefs_security_settings_title">App Security</string>
+    <string name="prefs_security_settings_summary">App lock, biometrics, and SSH/Mosh host-key security</string>
+    <string name="prefs_connection_settings_title">Connection</string>
+    <string name="prefs_connection_settings_summary">Default username/port/timeout for SSH &amp; Mosh, plus SSH-only options (compression, X11/agent forwarding)</string>
+    <string name="prefs_monitoring_settings_title">Monitoring</string>
+    <string name="prefs_monitoring_settings_summary">Background host availability checks and performance alerts</string>
+    <string name="prefs_sync_settings_title">Sync</string>
+    <string name="prefs_sync_settings_summary">Sync data across devices (Google Drive, WebDAV, Nextcloud)</string>
+    <string name="prefs_import_export_title">Import / Export</string>
+    <string name="prefs_import_export_summary">Backup, restore, SSH config, and bulk import</string>
+    <string name="prefs_tasker_settings_title">Tasker</string>
+    <string name="prefs_tasker_settings_summary">Automate SSH connections with Tasker</string>
+    <string name="prefs_logging_settings_title">Logging</string>
+    <string name="prefs_logging_settings_summary">Debug, host, and error logging</string>
+    <string name="prefs_audit_settings_title">Audit Log</string>
+    <string name="prefs_audit_settings_summary">Security audit trail — authentication, commands, file transfers</string>
+    <string name="prefs_about_version_title">Version</string>
+    <string name="prefs_about_build_title">Build Information</string>
+    <string name="prefs_about_loading_summary">Loading…</string>
+
+    <!-- Settings: General screen -->
+    <string name="prefcat_general_appearance">Appearance</string>
+    <string name="prefcat_general_startup">Startup &amp; exit</string>
+    <string name="prefcat_general_tabs">Tabs &amp; sessions</string>
+    <string name="prefcat_general_accessibility">Accessibility</string>
+    <string name="prefcat_general_notifications">Notifications</string>
+    <string name="prefs_app_theme_title">App Theme</string>
+    <string name="prefs_app_theme_summary">Choose light or dark theme</string>
+    <string name="prefs_app_language_title">Language</string>
+    <string name="prefs_app_language_summary">Application language</string>
+    <string name="prefs_open_theme_editor_title">Theme Editor</string>
+    <string name="prefs_open_theme_editor_summary">Create and customize terminal color themes</string>
+    <string name="prefs_general_startup_behavior_title">Startup behavior</string>
+    <string name="prefs_general_startup_behavior_summary">Which screen to show on app launch</string>
+    <string name="prefs_confirm_exit_title">Confirm on exit</string>
+    <string name="prefs_confirm_exit_summary">Ask for confirmation before exiting</string>
+    <string name="prefs_swipe_between_tabs_title">Swipe Between Tabs</string>
+    <string name="prefs_swipe_between_tabs_summary">Swipe left/right to switch between SSH sessions</string>
+    <string name="prefs_tab_swipe_edge_dp_title">Tab Swipe Edge Zone</string>
+    <string name="prefs_tab_swipe_edge_dp_summary">Restrict tab swiping to a strip along each side so mid-screen gestures reach the terminal (vim, tmux, text selection). %s</string>
+    <string name="prefs_ui_confirm_tab_close_title">Confirm tab close</string>
+    <string name="prefs_ui_confirm_tab_close_summary">Ask before closing a tab with an active connection</string>
+    <string name="prefs_ui_max_tabs_title">Max open tabs</string>
+    <string name="prefs_ui_max_tabs_summary">Refuse new tabs once this limit is reached</string>
+    <string name="prefs_keep_screen_on_title">Keep screen on</string>
+    <string name="prefs_keep_screen_on_summary">Prevent the screen from sleeping in any connection (SSH, Mosh, or VNC)</string>
+    <string name="prefs_accessibility_high_contrast_title">High contrast terminal</string>
+    <string name="prefs_accessibility_high_contrast_summary">Force pure black background and white foreground in the terminal, overriding the selected color theme</string>
+    <string name="prefs_accessibility_large_touch_targets_title">Large touch targets</string>
+    <string name="prefs_accessibility_large_touch_targets_summary">Increase the size of buttons and tap targets</string>
+    <string name="prefs_notifications_enabled_title">Enable Notifications</string>
+    <string name="prefs_notifications_enabled_summary">Show notifications for connections, errors, and file transfers</string>
+    <string name="prefs_show_connection_notifications_title">Connection Notifications</string>
+    <string name="prefs_show_connection_notifications_summary">Show when connecting/disconnecting</string>
+    <string name="prefs_show_error_notifications_title">Error Notifications</string>
+    <string name="prefs_show_error_notifications_summary">Show connection errors</string>
+    <string name="prefs_show_file_transfer_notifications_title">File Transfer Notifications</string>
+    <string name="prefs_show_file_transfer_notifications_summary">Show SFTP upload/download progress</string>
+    <string name="prefs_notification_vibrate_title">Vibrate</string>
+    <string name="prefs_notification_vibrate_summary">Vibrate for connection and error notifications</string>
+    <string name="prefs_open_system_notification_settings_title">System Notification Settings</string>
+    <string name="prefs_open_system_notification_settings_summary">Configure channels, sounds, and priority in Android settings</string>
+
+    <!-- Settings: Terminal screen -->
+    <string name="prefcat_terminal_appearance">Appearance</string>
+    <string name="prefcat_terminal_cursor">Cursor</string>
+    <string name="prefcat_terminal_text">Text &amp; scrolling</string>
+    <string name="prefcat_terminal_input">Input &amp; selection</string>
+    <string name="prefcat_terminal_keyboard">Custom keyboard</string>
+    <string name="prefcat_terminal_bell">Bell &amp; alerts</string>
+    <string name="prefcat_terminal_display">Display</string>
+    <string name="prefcat_terminal_recording">Session recording</string>
+    <string name="prefs_terminal_theme_title">Theme / Colors</string>
+    <string name="prefs_terminal_theme_summary">Terminal color scheme</string>
+    <string name="prefs_import_custom_theme_title">Import Custom Theme</string>
+    <string name="prefs_import_custom_theme_summary">Load a JSON theme file</string>
+    <string name="prefs_export_current_theme_title">Export Current Theme</string>
+    <string name="prefs_export_current_theme_summary">Save current theme as JSON</string>
+    <string name="prefs_terminal_font_title">Font</string>
+    <string name="prefs_terminal_font_summary">Monospace font family</string>
+    <string name="prefs_terminal_font_size_title">Font Size</string>
+    <string name="prefs_terminal_font_size_summary">Terminal text size</string>
+    <string name="prefs_terminal_line_spacing_title">Line Spacing</string>
+    <string name="prefs_terminal_line_spacing_summary">Vertical spacing between lines (100%% = normal)</string>
+    <string name="prefs_terminal_cursor_style_title">Cursor Style</string>
+    <string name="prefs_terminal_cursor_style_summary">Cursor appearance</string>
+    <string name="prefs_terminal_cursor_blink_title">Cursor Blink</string>
+    <string name="prefs_terminal_cursor_blink_summary">Blinking cursor</string>
+    <string name="prefs_terminal_word_wrap_title">Word Wrap</string>
+    <string name="prefs_terminal_word_wrap_summary">Wrap long lines at the terminal width</string>
+    <string name="prefs_terminal_scrollback_title">Scrollback Buffer</string>
+    <string name="prefs_terminal_scrollback_summary">Lines in history (250 min, -1 unlimited)</string>
+    <string name="prefs_terminal_reverse_scroll_title">Reverse scroll direction</string>
+    <string name="prefs_terminal_reverse_scroll_summary">OFF: swipe up to see older output (standard, like JuiceSSH/Termux) · ON: swipe down to see older output (old TabSSH behaviour)</string>
+    <string name="prefs_volume_keys_action_title">Volume Key Action</string>
+    <string name="prefs_volume_keys_action_summary">What the volume buttons do inside a terminal session</string>
+    <string name="prefs_terminal_copy_on_select_title">Copy on Select</string>
+    <string name="prefs_terminal_copy_on_select_summary">Auto-copy selected text to clipboard</string>
+    <string name="prefs_detect_urls_title">Detect URLs</string>
+    <string name="prefs_detect_urls_summary">Enable clickable URLs in terminal (long press to open)</string>
+    <string name="prefs_show_bottom_nav_title">Show bottom nav bar</string>
+    <string name="prefs_show_bottom_nav_summary">Adds a 48dp Kbd · Snip · Files · Paste · Menu bar between the custom keyboard and the Android keyboard. Off by default — most actions live in the terminal long-press menu.</string>
+    <string name="prefs_keyboard_row_count_title">Keyboard Rows</string>
+    <string name="prefs_keyboard_row_count_summary">Number of rows in the custom keyboard (1-5)</string>
+    <string name="prefs_customize_keyboard_layout_title">Customize Keyboard Layout</string>
+    <string name="prefs_customize_keyboard_layout_summary">Add, remove, or reorder keyboard keys</string>
+    <string name="prefs_reset_keyboard_layout_title">Reset Keyboard Layout</string>
+    <string name="prefs_reset_keyboard_layout_summary">Restore default keyboard configuration</string>
+    <string name="prefs_terminal_bell_title">Terminal Bell</string>
+    <string name="prefs_terminal_bell_summary">Audible bell on BEL character</string>
+    <string name="prefs_terminal_bell_vibrate_title">Vibrate on Bell</string>
+    <string name="prefs_terminal_bell_vibrate_summary">Vibrate device when BEL character received</string>
+    <string name="prefs_terminal_bell_visual_title">Flash on Bell</string>
+    <string name="prefs_terminal_bell_visual_summary">Briefly invert terminal colors when BEL received</string>
+    <string name="prefs_ui_fullscreen_mode_title">Fullscreen Terminal</string>
+    <string name="prefs_ui_fullscreen_mode_summary">Hide status &amp; navigation bars while in a tab</string>
+    <string name="prefs_show_performance_overlay_title">Show Performance Overlay</string>
+    <string name="prefs_show_performance_overlay_summary">Display CPU, memory, battery, and network stats</string>
+    <string name="prefs_auto_record_sessions_title">Auto-Record Sessions</string>
+    <string name="prefs_auto_record_sessions_summary">Automatically record all SSH sessions to transcripts</string>
+
+    <!-- Settings: Connection screen -->
+    <string name="prefcat_connection_defaults">Defaults for new connections</string>
+    <string name="prefcat_connection_session">Session behaviour</string>
+    <string name="prefcat_connection_forwarding">Forwarding</string>
+    <string name="prefcat_connection_files">Files &amp; transfers</string>
+    <string name="prefcat_terminal_multiplexer">Multiplexer gestures</string>
+    <string name="prefs_default_username_title">Default Username</string>
+    <string name="prefs_default_username_summary">Username for new SSH/Mosh connections and quick connect (not used for VNC)</string>
+    <string name="prefs_default_port_title">Default Port</string>
+    <string name="prefs_default_port_summary">Port number for new SSH/Mosh connections</string>
+    <string name="prefs_connect_timeout_title">Connection Timeout</string>
+    <string name="prefs_connect_timeout_summary">Seconds to wait for a connection (SSH/Mosh)</string>
+    <string name="prefs_compression_enabled_title">Compression</string>
+    <string name="prefs_compression_enabled_summary">Enable SSH compression (default for new connections)</string>
+    <string name="prefs_auto_reconnect_title">Auto Reconnect</string>
+    <string name="prefs_auto_reconnect_summary">Automatically reconnect on connection loss</string>
+    <string name="prefs_server_alive_interval_title">Keepalive Interval</string>
+    <string name="prefs_server_alive_interval_summary">Seconds between server-alive pings (default 60)</string>
+    <string name="prefs_x11_forwarding_default_title">X11 Forwarding</string>
+    <string name="prefs_x11_forwarding_default_summary">Forward X11 display by default for new connections</string>
+    <string name="prefs_agent_forwarding_default_title">SSH Agent Forwarding</string>
+    <string name="prefs_agent_forwarding_default_summary">Forward SSH agent by default for new connections</string>
+    <string name="prefs_file_open_size_limit_mb_title">Open Size Limit (MB)</string>
+    <string name="prefs_file_open_size_limit_mb_summary">Prompt before downloading a file this large to open it externally or in the SFTP browser</string>
+    <string name="prefs_enable_custom_gestures_title">Custom Gestures</string>
+    <string name="prefs_enable_custom_gestures_summary">Enable multi-touch gestures for multiplexer shortcuts (tmux/screen/zellij)</string>
+    <string name="prefs_gesture_multiplexer_type_title">Gesture Multiplexer Type</string>
+    <string name="prefs_gesture_multiplexer_type_summary">Which multiplexer the gestures and the PRE key target</string>
+    <string name="prefs_multiplexer_custom_prefix_tmux_title">tmux prefix</string>
+    <string name="prefs_multiplexer_custom_prefix_tmux_summary">Sent by the PRE key and gestures when tmux is active (default: C-b)</string>
+    <string name="prefs_multiplexer_custom_prefix_tmux_dialog">Enter the prefix key for tmux.\n\nExamples:\n• C-b or ^b → Ctrl+B (tmux default)\n• C-a or ^a → Ctrl+A\n• C-Space or ^Space → Ctrl+Space\n• M-b or Alt-b → Alt+B\n• 0x02 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-b).</string>
+    <string name="prefs_multiplexer_custom_prefix_zellij_title">zellij prefix</string>
+    <string name="prefs_multiplexer_custom_prefix_zellij_summary">Sent by the PRE key and gestures when zellij is active (default: C-g)</string>
+    <string name="prefs_multiplexer_custom_prefix_zellij_dialog">Enter the prefix key for zellij.\n\nExamples:\n• C-g or ^g → Ctrl+G (zellij default)\n• C-b or ^b → Ctrl+B\n• C-Space or ^Space → Ctrl+Space\n• M-b or Alt-b → Alt+B\n• 0x07 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-g).</string>
+    <string name="prefs_multiplexer_custom_prefix_screen_title">screen prefix</string>
+    <string name="prefs_multiplexer_custom_prefix_screen_summary">Sent by the PRE key and gestures when screen is active (default: C-a)</string>
+    <string name="prefs_multiplexer_custom_prefix_screen_dialog">Enter the prefix key for GNU screen.\n\nExamples:\n• C-a or ^a → Ctrl+A (screen default)\n• C-b or ^b → Ctrl+B\n• C-Space or ^Space → Ctrl+Space\n• M-b or Alt-b → Alt+B\n• 0x01 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-a).</string>
+
+    <!-- Settings: App Security screen -->
+    <string name="prefcat_security_app_lock">App lock</string>
+    <string name="prefcat_security_privacy">Privacy</string>
+    <string name="prefcat_security_ssh">SSH &amp; Mosh security</string>
+    <string name="prefs_security_lock_enabled_title">Security Lock</string>
+    <string name="prefs_security_lock_enabled_summary">Lock app after period of inactivity</string>
+    <string name="prefs_security_lock_timeout_title">Lock Timeout</string>
+    <string name="prefs_security_lock_timeout_summary">Time before app locks</string>
+    <string name="prefs_biometric_auth_title">Biometric Authentication</string>
+    <string name="prefs_biometric_auth_summary">Use fingerprint or face unlock</string>
+    <string name="prefs_app_lock_pin_setup_title">App lock PIN</string>
+    <string name="prefs_app_lock_pin_setup_summary">Prompt for PIN on app launch (set / change / disable)</string>
+    <string name="prefs_security_auto_lock_background_title">Lock When Backgrounded</string>
+    <string name="prefs_security_auto_lock_background_summary">Require unlock after returning from background</string>
+    <string name="prefs_security_auto_lock_timeout_title">Background Lock Timeout</string>
+    <string name="prefs_security_auto_lock_timeout_summary">How long backgrounded before requiring unlock</string>
+    <string name="prefs_security_prevent_screenshots_title">Block Screenshots</string>
+    <string name="prefs_security_prevent_screenshots_summary">Prevent screenshots and screen recording in the app</string>
+    <string name="prefs_security_clear_clipboard_timeout_title">Auto-Clear Clipboard</string>
+    <string name="prefs_security_clear_clipboard_timeout_summary">Clear clipboard after copying from terminal</string>
+    <string name="prefs_strict_host_key_checking_title">Strict Host Key Checking</string>
+    <string name="prefs_strict_host_key_checking_summary">Always verify host keys — applies to Mosh too, since Mosh connects via SSH first</string>
+    <string name="prefs_port_knock_enabled_default_title">Enable Port Knocking by Default</string>
+    <string name="prefs_port_knock_enabled_default_summary">Execute port knock sequences for new SSH/Mosh connections (Default: OFF)</string>
+    <string name="prefs_clear_known_hosts_title">Clear known hosts</string>
+    <string name="prefs_clear_known_hosts_summary">Wipe previously seen host keys/fingerprints (SSH and Mosh, which bootstraps over SSH)</string>
+
+    <!-- Settings: Logging screen -->
+    <string name="prefcat_logging_app">Application log</string>
+    <string name="prefcat_logging_debug">Debug logging</string>
+    <string name="prefcat_logging_host">Host logs</string>
+    <string name="prefcat_logging_view">View logs</string>
+    <string name="prefcat_logging_management">Log management</string>
+    <string name="prefcat_logging_paste">Issue reporting</string>
+    <string name="prefs_app_log_info_title">Always-on sanitized log</string>
+    <string name="prefs_app_log_info_summary">Hostnames and usernames are anonymised before writing. Safe to share with support. Errors are included automatically — no separate error log needed.</string>
+    <string name="prefs_debug_logging_enabled_title">Enable Debug Logging</string>
+    <string name="prefs_debug_logging_enabled_summary">Full verbose log including real hostnames/usernames. Developer use only — disable when done.</string>
+    <string name="prefs_debug_log_level_title">Debug Log Level</string>
+    <string name="prefs_debug_log_level_summary">Set verbosity of debug logs</string>
+    <string name="prefs_log_keystroke_bytes_title">Log raw keystroke bytes (privacy risk)</string>
+    <string name="prefs_log_keystroke_bytes_summary">Off: only `Sent N bytes to SSH` is logged. On: also dumps the first 16 bytes of every keystroke — including sudo/ssh passwords typed at remote prompts. Useful for debugging protocol-level disconnects only.</string>
+    <string name="prefs_test_crash_title">Test crash dialog</string>
+    <string name="prefs_test_crash_summary">Throw a RuntimeException to verify crash reporting (debug only)</string>
+    <string name="prefs_host_logging_enabled_title">Enable Host Logs</string>
+    <string name="prefs_host_logging_enabled_summary">Record connect, auth, disconnect, and error events per SSH session. Files stay on this device — never sent anywhere unless you export manually.</string>
+    <string name="prefs_host_log_info_title">One log file per connection</string>
+    <string name="prefs_host_log_info_summary">Each connection profile gets its own log file. Share via View Host Logs → export.</string>
+    <string name="prefs_host_log_max_size_mb_title">Max Size per Host (MB)</string>
+    <string name="prefs_host_log_max_size_mb_summary">Rotate after this size. One backup copy kept.</string>
+    <string name="prefs_view_app_log_title">View Application Log</string>
+    <string name="prefs_view_app_log_summary">Sanitized log — info, warnings, and errors</string>
+    <string name="prefs_view_debug_log_title">View Debug Log</string>
+    <string name="prefs_view_debug_log_summary">Full verbose log (only available when debug logging is on)</string>
+    <string name="prefs_view_host_logs_title">View Host Logs</string>
+    <string name="prefs_view_host_logs_summary">Per-connection session logs</string>
+    <string name="prefs_view_audit_log_title">View Audit Log</string>
+    <string name="prefs_view_audit_log_summary">Security events — auth, commands, file transfers (requires audit logging enabled)</string>
+    <string name="prefs_export_logs_title">Export Logs</string>
+    <string name="prefs_export_logs_summary">Save app log and host logs to a ZIP for sharing</string>
+    <string name="prefs_clear_logs_title">Clear Logs</string>
+    <string name="prefs_clear_logs_summary">Delete app log and all host log files (cannot be undone)</string>
+    <string name="prefs_paste_service_title">Paste Service</string>
+    <string name="prefs_paste_service_summary">Service used to upload logs when reporting issues</string>
+    <string name="prefs_paste_stikked_url_title">Stikked Server</string>
+    <string name="prefs_paste_microbin_url_title">MicroBin Server</string>
+    <string name="prefs_paste_lenpaste_url_title">Lenpaste Server</string>
+    <string name="prefs_paste_pastebin_api_key_title">Pastebin API Key</string>
+    <string name="prefs_paste_pastebin_api_key_summary">Required only when paste service is set to pastebin.com</string>
+
+    <!-- Settings: Audit Log screen -->
+    <string name="prefcat_audit_logging">Audit logging</string>
+    <string name="prefcat_audit_events">What to record</string>
+    <string name="prefcat_audit_actions">Log actions</string>
+    <string name="prefs_audit_mdm_status_title">Managed by your organisation</string>
+    <string name="prefs_audit_mdm_status_summary">Audit logging is controlled by your IT administrator via MDM policy. Some settings below may be locked.</string>
+    <string name="prefs_audit_log_enabled_title">Enable Audit Logging</string>
+    <string name="prefs_audit_log_enabled_summary">Record security-relevant events: auth, commands, file transfers, port forwards. Default: OFF for privacy.</string>
+    <string name="prefs_audit_log_max_size_mb_title">Max Log Size (MB)</string>
+    <string name="prefs_audit_log_max_size_mb_summary">Oldest entries are pruned when this limit is reached</string>
+    <string name="prefs_audit_log_max_age_days_title">Retention (days)</string>
+    <string name="prefs_audit_log_max_age_days_summary">Entries older than this are deleted automatically. MDM policy overrides this value when set.</string>
+    <string name="prefs_audit_log_commands_title">Terminal Commands</string>
+    <string name="prefs_audit_log_commands_summary">Record every command typed in a session</string>
+    <string name="prefs_audit_log_output_title">Command Output</string>
+    <string name="prefs_audit_log_output_summary">Record terminal output — significantly increases log size</string>
+    <string name="prefs_audit_events_info_title">Authentication, host keys, SFTP, port forwards</string>
+    <string name="prefs_audit_events_info_summary">These security events are always recorded when audit logging is on</string>
+    <string name="prefs_audit_log_viewer_title">View Audit Log</string>
+    <string name="prefs_audit_log_viewer_summary">Browse and search audit history</string>
+    <string name="prefs_audit_log_export_title">Export Audit Log</string>
+    <string name="prefs_audit_log_export_summary">Save as CSV or JSON for external review</string>
+    <string name="prefs_audit_log_clear_title">Clear All Audit Entries</string>
+    <string name="prefs_audit_log_clear_summary">Delete all audit log entries — cannot be undone</string>
+
+    <!-- Settings: Monitoring screen -->
+    <string name="prefcat_monitoring_status">Status &amp; background activity</string>
+    <string name="prefcat_monitoring_alerts">Notification alerts</string>
+    <string name="prefcat_monitoring_thresholds">Default thresholds</string>
+    <string name="prefs_monitoring_enabled_title">Background monitoring</string>
+    <string name="prefs_monitoring_enabled_summary">Periodically probe all monitored hosts for reachability</string>
+    <string name="prefs_monitoring_battery_status_title">Battery optimization</string>
+    <string name="prefs_monitoring_battery_status_summary">Checking…</string>
+    <string name="prefs_monitoring_oem_battery_title">Device battery settings</string>
+    <string name="prefs_monitoring_oem_battery_summary">Open your device\'s battery management screen to allow background activity</string>
+    <string name="prefs_monitoring_run_in_battery_saver_title">Run in battery saver mode</string>
+    <string name="prefs_monitoring_run_in_battery_saver_summary">Continue probing hosts when Android Battery Saver is active (uses more power)</string>
+    <string name="prefs_monitoring_notify_down_title">Alert when host goes down</string>
+    <string name="prefs_monitoring_notify_down_summary">Notify as soon as a monitored host stops responding</string>
+    <string name="prefs_monitoring_notify_recovery_title">Alert when host recovers</string>
+    <string name="prefs_monitoring_notify_recovery_summary">Notify when a host that was down starts responding again</string>
+    <string name="prefs_monitoring_alert_cooldown_minutes_title">Alert cooldown</string>
+    <string name="prefs_monitoring_alert_cooldown_minutes_summary">Minimum time between repeat alerts for the same host</string>
+    <string name="prefs_monitoring_open_notification_channel_title">Notification channel settings</string>
+    <string name="prefs_monitoring_open_notification_channel_summary">Manage sound, vibration, and importance for monitoring alerts</string>
+    <string name="prefs_monitoring_default_cpu_threshold_title">CPU load alert threshold (%%)</string>
+    <string name="prefs_monitoring_default_cpu_threshold_summary">Alert when 5-minute load average exceeds this percentage</string>
+    <string name="prefs_monitoring_default_memory_threshold_title">Memory usage alert threshold (%%)</string>
+    <string name="prefs_monitoring_default_memory_threshold_summary">Alert when memory used exceeds this percentage</string>
+    <string name="prefs_monitoring_default_disk_threshold_title">Disk usage alert threshold (%%)</string>
+    <string name="prefs_monitoring_default_disk_threshold_summary">Alert when disk used exceeds this percentage</string>
+
+    <!-- Settings: Tasker screen -->
+    <string name="prefcat_tasker_integration">Tasker integration</string>
+    <string name="prefcat_tasker_security">Security</string>
+    <string name="prefcat_tasker_advanced">Advanced</string>
+    <string name="prefs_tasker_enabled_title">Enable Tasker Integration</string>
+    <string name="prefs_tasker_enabled_summary">Allow Tasker to control SSH connections</string>
+    <string name="prefs_tasker_actions_help_title">Available Actions</string>
+    <string name="prefs_tasker_actions_help_summary">Tap to view supported Tasker actions</string>
+    <string name="prefs_tasker_events_help_title">Available Events</string>
+    <string name="prefs_tasker_events_help_summary">Tap to view broadcast events</string>
+    <string name="prefs_tasker_require_unlock_title">Require App Unlock</string>
+    <string name="prefs_tasker_require_unlock_summary">Tasker actions require biometric/password</string>
+    <string name="prefs_tasker_include_output_title">Include Command Output in Broadcasts</string>
+    <string name="prefs_tasker_include_output_summary">COMMAND_RESULT carries status only when off; on includes terminal screen content, readable by any installed app</string>
+    <string name="prefs_tasker_allowed_connections_title">Allowed Connections</string>
+    <string name="prefs_tasker_allowed_connections_summary">Restrict Tasker to specific connections (empty = all)</string>
+    <string name="prefs_tasker_log_events_title">Log Tasker Events</string>
+    <string name="prefs_tasker_log_events_summary">Log all Tasker actions to audit log</string>
+    <string name="prefs_tasker_command_timeout_title">Command Timeout</string>
+    <string name="prefs_tasker_command_timeout_summary">Default timeout for command execution (ms)</string>
+    <!-- Host detail screen -->
+    <string name="host_detail_section_monitoring">Monitoring</string>
+    <string name="host_detail_section_live_metrics">Live metrics</string>
+    <string name="host_detail_section_platform">Platform</string>
+    <string name="host_detail_section_actions">Actions</string>
+    <string name="host_detail_label_status">Status</string>
+    <string name="host_detail_label_last_checked">Last checked</string>
+    <string name="host_detail_label_last_seen_up">Last seen up</string>
+    <string name="host_detail_label_cpu">CPU</string>
+    <string name="host_detail_label_memory">Memory</string>
+    <string name="host_detail_label_disk">Disk</string>
+    <string name="host_detail_label_load">Load avg</string>
+    <string name="host_detail_label_net_rx">Net RX</string>
+    <string name="host_detail_label_net_tx">Net TX</string>
+    <string name="host_detail_label_system">System</string>
+    <string name="host_detail_action_connect">Connect (open terminal)</string>
+    <string name="host_detail_action_monitor_settings">Monitor settings</string>
+    <string name="host_detail_value_unavailable">—</string>
+    <string name="host_detail_status_not_monitored">Not monitored</string>
+    <string name="host_detail_status_disabled">Disabled</string>
+    <string name="host_detail_status_up">UP</string>
+    <plurals name="host_detail_status_down">
+        <item quantity="one">DOWN — %d consecutive failure</item>
+        <item quantity="other">DOWN — %d consecutive failures</item>
+    </plurals>
+    <string name="host_detail_never_checked">Never</string>
+    <string name="host_detail_last_seen_unknown">Unknown</string>
+    <string name="host_detail_connect_failed">Could not connect</string>
+    <string name="host_detail_cpu_fmt">%1$.0f%%  (user %2$.0f%%  sys %3$.0f%%  iowait %4$.0f%%)</string>
+    <string name="host_detail_memory_fmt">%1$.0f%%  (%2$s used / %3$s total)</string>
+    <string name="host_detail_disk_fmt">%1$.0f%%  (%2$s free)</string>
+    <string name="host_detail_load_fmt">%1$.2f  %2$.2f  %3$.2f  (1/5/15 min)</string>
+
+    <!-- Remote file editor screen -->
+    <string name="remote_editor_title_dirty_fmt">%1$s *</string>
+    <string name="remote_editor_unsaved_title">Unsaved changes</string>
+    <string name="remote_editor_unsaved_message">Save before closing?</string>
+    <string name="remote_editor_missing_path">Missing file path</string>
+    <string name="remote_editor_no_connection">Connection not active — open the terminal first</string>
+    <string name="remote_editor_sftp_failed">SFTP failed to open</string>
+    <string name="remote_editor_download_failed">Download failed</string>
+    <string name="remote_editor_download_empty">Download produced no file</string>
+    <string name="remote_editor_save_in_progress">Save already in progress…</string>
+    <string name="remote_editor_saved">Saved</string>
+    <string name="remote_editor_upload_failed">Upload failed</string>
+    <string name="remote_editor_error_fmt">Error: %1$s</string>
+
+    <!-- Settings screens: toasts, dialogs, action buttons and dynamic summaries -->
+    <string name="settings_value_unknown">unknown</string>
+    <string name="settings_summary_version">%1$s (%2$d)</string>
+    <string name="settings_summary_version_unavailable">Version information unavailable</string>
+    <string name="settings_summary_build_info">Commit: %1$s\nBuilt: %2$s\nType: %3$s</string>
+    <string name="settings_summary_build_unavailable">Build information unavailable</string>
+    <string name="settings_action_clear">Clear</string>
+    <string name="settings_action_reset">Reset</string>
+    <string name="settings_action_close">Close</string>
+    <string name="settings_action_copy">Copy</string>
+    <string name="settings_action_report_issue">Paste / Issue</string>
+    <string name="settings_toast_max_tabs_range">Max tabs must be 1–200</string>
+    <string name="settings_toast_notification_settings_unavailable">Unable to open notification settings</string>
+    <string name="settings_dialog_clear_known_hosts_title">Clear Known Hosts</string>
+    <string name="settings_dialog_clear_known_hosts_message">This will remove all saved host keys and fingerprints. You will need to verify hosts again on next connection.\n\nContinue?</string>
+    <string name="settings_toast_security_lock_enabled">Security lock enabled</string>
+    <string name="settings_toast_security_lock_disabled">Security lock disabled</string>
+    <string name="settings_toast_biometric_enabled">Biometric authentication enabled</string>
+    <string name="settings_toast_biometric_disabled">Biometric authentication disabled</string>
+    <string name="settings_toast_biometric_no_hardware">No biometric hardware available</string>
+    <string name="settings_toast_biometric_hw_unavailable">Biometric hardware unavailable</string>
+    <string name="settings_toast_biometric_none_enrolled">No biometric enrolled. Please add fingerprint/face in device settings</string>
+    <string name="settings_toast_biometric_unavailable">Biometric authentication not available</string>
+    <plurals name="settings_toast_lock_timeout_minutes">
+        <item quantity="one">Lock timeout set to %1$d minute</item>
+        <item quantity="other">Lock timeout set to %1$d minutes</item>
+    </plurals>
+    <string name="settings_dialog_app_lock_pin_title">App lock PIN</string>
+    <string name="settings_item_set_pin">Set PIN</string>
+    <string name="settings_item_change_pin">Change PIN</string>
+    <string name="settings_item_disable_pin">Disable PIN lock</string>
+    <string name="settings_toast_pin_lock_disabled">PIN lock disabled</string>
+    <string name="settings_toast_app_unavailable">Error: Application not available</string>
+    <string name="settings_toast_known_hosts_cleared">Known hosts cleared</string>
+    <string name="settings_toast_known_hosts_clear_error">Error clearing known hosts</string>
+    <string name="settings_toast_known_hosts_clear_error_detail">Error clearing known hosts: %1$s</string>
+    <string name="settings_toast_terminal_theme_changed">Terminal theme changed to %1$s</string>
+    <string name="settings_toast_terminal_font_changed">Terminal font changed to %1$s</string>
+    <string name="settings_toast_font_size">Font size: %1$dsp</string>
+    <string name="settings_toast_cursor_style">Cursor style: %1$s</string>
+    <string name="settings_summary_scrollback_unlimited">Unlimited (capped at %1$s lines per tab)</string>
+    <plurals name="settings_summary_scrollback_lines">
+        <item quantity="one">%1$s line</item>
+        <item quantity="other">%1$s lines</item>
+    </plurals>
+    <string name="settings_toast_scrollback_min">Scrollback minimum is 250 lines (or -1 for unlimited)</string>
+    <string name="settings_toast_scrollback_max">Scrollback maximum is %1$s lines</string>
+    <string name="settings_toast_scrollback_unlimited">Scrollback: Unlimited</string>
+    <plurals name="settings_toast_scrollback_lines">
+        <item quantity="one">Scrollback: %1$s line</item>
+        <item quantity="other">Scrollback: %1$s lines</item>
+    </plurals>
+    <string name="settings_toast_invalid_number">Invalid number</string>
+    <string name="settings_dialog_reset_keyboard_title">Reset keyboard layout?</string>
+    <string name="settings_dialog_reset_keyboard_message">This restores the default 3-row layout (Esc/Tab/Ctl/Alt/Fn/Enter, arrows + Home/End/PgUp/PgDn, common symbols). Your current layout will be discarded.</string>
+    <string name="settings_toast_keyboard_layout_reset">Keyboard layout reset</string>
+    <string name="settings_toast_theme_file_empty">Empty or unreadable theme file</string>
+    <string name="settings_toast_theme_imported">Theme \"%1$s\" imported</string>
+    <string name="settings_toast_theme_import_failed">Import failed: %1$s</string>
+    <string name="settings_toast_theme_not_found">Theme not found</string>
+    <string name="settings_toast_theme_exported">Theme exported</string>
+    <string name="settings_toast_theme_export_failed">Export failed: %1$s</string>
+    <string name="settings_toast_username_empty">Username cannot be empty</string>
+    <string name="settings_toast_default_username">Default username: %1$s</string>
+    <string name="settings_toast_port_range">Port must be between 1-65535</string>
+    <string name="settings_toast_default_port">Default port: %1$d</string>
+    <string name="settings_toast_invalid_port">Invalid port number</string>
+    <string name="settings_toast_connect_timeout_range">Connection timeout must be 1–600 seconds</string>
+    <plurals name="settings_toast_connect_timeout_seconds">
+        <item quantity="one">Connection timeout: %1$d second</item>
+        <item quantity="other">Connection timeout: %1$d seconds</item>
+    </plurals>
+    <string name="settings_toast_keepalive_range">Keepalive must be 0–3600 seconds (0 disables)</string>
+    <string name="settings_toast_file_size_limit_range">Size limit must be 1–2000 MB</string>
+    <string name="settings_summary_multiplexer_type">%1$s (%2$s)</string>
+    <string name="settings_toast_audit_max_size_range">Max log size must be 1–10000 MB</string>
+    <string name="settings_toast_audit_retention_range">Retention must be 1–3650 days</string>
+    <string name="settings_dialog_clear_audit_logs_title">Clear Audit Logs</string>
+    <string name="settings_dialog_clear_audit_logs_message">Delete all audit log entries? This cannot be undone.</string>
+    <string name="settings_toast_audit_logs_cleared">Audit logs cleared</string>
+    <plurals name="settings_toast_audit_logs_exported">
+        <item quantity="one">✓ Exported %1$s log to %2$s</item>
+        <item quantity="other">✓ Exported %1$s logs to %2$s</item>
+    </plurals>
+    <string name="settings_toast_export_failed">Failed to export: %1$s</string>
+    <string name="settings_toast_tasker_timeout_range">Timeout must be 100–3600000 ms</string>
+    <string name="settings_dialog_tasker_actions_title">Tasker Actions</string>
+    <string name="settings_dialog_tasker_actions_message">Available Tasker Actions:\n\n📱 CONNECT\nConnect to SSH server\nExtras: connection_id or connection_name\n\n📴 DISCONNECT\nDisconnect from server\nExtras: connection_id or connection_name\n\n⌨️ SEND_COMMAND\nExecute command\nExtras: connection_id/name, command, wait_for_result, timeout_ms\n\n🔑 SEND_KEYS\nSend key sequence\nExtras: connection_id/name, keys\n\nExamples:\n- Keys: \"Enter\", \"Tab\", \"Ctrl+C\"\n- Command: \"ls -la\" with wait_for_result=true</string>
+    <string name="settings_dialog_tasker_events_title">Tasker Events</string>
+    <string name="settings_dialog_tasker_events_message">Broadcast Events:\n\n✅ CONNECTED\nBroadcast when connection established\nExtras: connection_id, connection_name\n\n❌ DISCONNECTED\nBroadcast when connection closed\nExtras: connection_id, connection_name\n\n📊 COMMAND_RESULT\nBroadcast when a command completes\nExtras: connection_id, connection_name, command, status, result\nresult carries terminal output only when \"Include Command Output in Broadcasts\" is enabled; otherwise it mirrors status\n\n⚠️ ERROR\nBroadcast when error occurs\nExtras: error\n\nUse these in Tasker with Event → Intent Received</string>
+    <string name="settings_dialog_debug_log_title">Debug Log</string>
+    <string name="settings_dialog_app_log_title">Application Log</string>
+    <string name="settings_log_none_available">No logs available</string>
+    <string name="settings_log_none_found">No logs found</string>
+    <string name="settings_log_no_content">No content</string>
+    <string name="settings_toast_log_copied">Log copied to clipboard</string>
+    <string name="settings_toast_log_load_error">Error loading logs: %1$s</string>
+    <string name="settings_toast_no_host_logs">No host logs found</string>
+    <string name="settings_dialog_select_host_log_title">Select Host Log</string>
+    <string name="settings_toast_host_logs_load_error">Error loading host logs: %1$s</string>
+    <string name="settings_toast_log_read_error">Error reading log: %1$s</string>
+    <plurals name="settings_toast_log_entries_exported">
+        <item quantity="one">✓ Exported %1$s log entry to %2$s</item>
+        <item quantity="other">✓ Exported %1$s log entries to %2$s</item>
+    </plurals>
+    <string name="settings_dialog_clear_logs_title">Clear Logs</string>
+    <string name="settings_dialog_clear_logs_message">Are you sure you want to delete all log files? This cannot be undone.</string>
+    <string name="settings_toast_all_logs_cleared">✓ All logs cleared</string>
+    <string name="settings_summary_not_set">Not set</string>
+    <string name="settings_summary_alert_cooldown">%1$s between repeated \'still down\' notifications</string>
+    <string name="settings_toast_battery_already_exempt">Battery optimization is already disabled for TabSSH.</string>
+    <string name="settings_toast_notification_channel_unavailable">Cannot open notification settings on this device.</string>
+    <string name="settings_toast_notification_channels_unsupported">Notification channels require Android 8.0+.</string>
+    <string name="settings_summary_battery_exempt">Exempt — background monitoring will run reliably</string>
+    <string name="settings_summary_battery_not_exempt">Not exempt — tap to disable battery optimization for reliable alerts</string>
+
+    <!-- Import from QR / desktop pairing -->
+    <string name="import_qr_camera_permission_required">Camera permission required to scan QR codes.</string>
+    <string name="import_qr_status_scan">Point your camera at the QR code on your desktop.</string>
+    <string name="import_qr_scanner_prompt">Scan the QR shown by TabSSH on your desktop</string>
+    <string name="import_qr_status_enter_code">Enter the 6-digit code shown on your desktop.</string>
+    <string name="import_qr_dialog_title">Enter pairing code</string>
+    <string name="import_qr_dialog_message">Type the 6-digit code shown by TabSSH on your desktop.</string>
+    <plurals name="import_qr_attempts_left">
+        <item quantity="one">\n\n(%d attempt left)</item>
+        <item quantity="other">\n\n(%d attempts left)</item>
+    </plurals>
+    <string name="import_qr_decrypt">Decrypt</string>
+    <string name="import_qr_code_invalid">Code must be 6 digits.</string>
+    <string name="import_qr_status_decrypting">Decrypting… (this takes about a second)</string>
+    <string name="import_qr_no_scan_data">No scanned data — try again.</string>
+    <string name="import_qr_failed_title">Pairing failed</string>
+    <string name="import_qr_error_too_many_attempts">Too many wrong codes. Generate a new QR on the desktop and try again.</string>
+    <string name="import_qr_error_expired">This QR has expired. Generate a new one on the desktop.</string>
+    <string name="import_qr_error_unsupported_version">This QR was created by a newer TabSSH. Update your phone app and try again.</string>
+    <string name="import_qr_error_bad_payload">Couldn\'t read the QR. Make sure both apps are up to date.</string>
+    <string name="import_qr_error_internal_fmt">Something went wrong: %1$s</string>
+    <string name="import_qr_status_confirm">Confirm import.</string>
+    <string name="import_qr_status_importing">Importing…</string>
+    <string name="import_qr_source_device_fmt">from %1$s</string>
+    <string name="import_qr_source_desktop">from desktop</string>
+    <plurals name="import_qr_preview_title">
+        <item quantity="one">Import %1$d connection %2$s?</item>
+        <item quantity="other">Import %1$d connections %2$s?</item>
+    </plurals>
+    <string name="import_qr_preview_connections_header">Connections:\n</string>
+    <string name="import_qr_preview_connection_line_fmt">"  • %1$s — %2$s@%3$s:%4$d\n"</string>
+    <string name="import_qr_preview_groups_fmt">\nGroups: %1$s\n</string>
+    <string name="import_qr_preview_identities_fmt">\nIdentities: %1$s\n</string>
+    <string name="import_qr_preview_footer">\nNo passwords or private keys are imported — you\'ll be prompted on first connect.</string>
+    <string name="import_qr_confirm">Import</string>
+    <string name="import_qr_list_separator">", "</string>
+    <plurals name="import_qr_summary_connections">
+        <item quantity="one">%d connection</item>
+        <item quantity="other">%d connections</item>
+    </plurals>
+    <plurals name="import_qr_summary_groups">
+        <item quantity="one">%d group</item>
+        <item quantity="other">%d groups</item>
+    </plurals>
+    <plurals name="import_qr_summary_identities">
+        <item quantity="one">%d identity</item>
+        <item quantity="other">%d identities</item>
+    </plurals>
+    <string name="import_qr_summary_fmt">Imported %1$s.</string>
+    <string name="import_qr_import_failed_fmt">Import failed: %1$s</string>
+
+    <!-- Group management empty state -->
+    <string name="group_mgmt_empty_icon">📁</string>
+    <string name="group_mgmt_empty_title">No Groups Yet</string>
+    <string name="group_mgmt_empty_message">Organize your connections into folders\nTap + to create your first group</string>
+    <string name="group_mgmt_empty_action">Create Group</string>
+    <string name="group_mgmt_fab_content_description">Create group</string>
+
+    <!-- Snippet manager empty state -->
+    <string name="snippet_mgr_empty_icon">💾</string>
+    <string name="snippet_mgr_empty_title">No Snippets Yet</string>
+    <string name="snippet_mgr_empty_message">Save your frequently used commands\nTap + to create your first snippet</string>
+    <string name="snippet_mgr_empty_action">Create Snippet</string>
+    <string name="snippet_mgr_fab_content_description">Create snippet</string>
+
+    <!-- Connections list: sorting -->
+    <string name="connections_sort_dialog_title">Sort</string>
+    <string name="connections_sort_scope_connections">Sort connections</string>
+    <string name="connections_sort_scope_groups">Sort groups</string>
+    <string name="connections_sort_connections_title">Sort Connections</string>
+    <string name="connections_sort_groups_title">Sort Groups</string>
+    <string name="connections_sort_name_asc">Name (A-Z)</string>
+    <string name="connections_sort_name_desc">Name (Z-A)</string>
+    <string name="connections_sort_host_asc">Host (A-Z)</string>
+    <string name="connections_sort_host_desc">Host (Z-A)</string>
+    <string name="connections_sort_most_used">Most Used</string>
+    <string name="connections_sort_least_used">Least Used</string>
+    <string name="connections_sort_recently_connected">Recently Connected</string>
+    <string name="connections_sort_oldest_connected">Oldest Connected</string>
+    <string name="connections_group_sort_name_asc">Name (A-Z)</string>
+    <string name="connections_group_sort_name_desc">Name (Z-A)</string>
+    <string name="connections_group_sort_custom">Custom (drag order)</string>
+
+    <!-- Connections list: active sessions strip -->
+    <string name="connections_session_duplicate_fmt">%1$s (#%2$d)</string>
+
+    <!-- Connections list: per-connection actions -->
+    <string name="connections_menu_connect">Connect</string>
+    <string name="connections_menu_browse_files">Browse Files (SFTP)</string>
+    <string name="connections_menu_duplicate">Duplicate</string>
+    <string name="connections_duplicate_name_fmt">%1$s (Copy)</string>
+    <string name="connections_delete_title">Delete Connection</string>
+    <string name="connections_delete_message_fmt">Are you sure you want to delete \'%1$s\'?</string>
+
+    <!-- Connections list: group actions -->
+    <string name="connections_group_menu_bulk_edit">Bulk edit all hosts in this group</string>
+    <string name="connections_group_menu_rename">Rename Group</string>
+    <string name="connections_group_menu_delete">Delete Group</string>
+    <string name="connections_group_menu_collapse_all">Collapse All Groups</string>
+    <string name="connections_group_empty">No connections in this group</string>
+    <string name="connections_group_rename_title">Rename Group</string>
+    <string name="connections_group_rename_confirm">Rename</string>
+    <string name="connections_group_name_taken_fmt">A group named \'%1$s\' already exists</string>
+    <string name="connections_group_renamed_fmt">Group renamed to \'%1$s\'</string>
+    <string name="connections_group_delete_title">Delete Group</string>
+    <string name="connections_group_delete_message_fmt">Remove group \'%1$s\'?\n\nConnections will not be deleted, just ungrouped.</string>
+    <string name="connections_group_deleted_fmt">Group \'%1$s\' deleted</string>
+    <string name="connections_groups_collapsed">All groups collapsed</string>
+    <string name="connections_no_groups">No groups available</string>
+    <string name="connections_select_group_title">Select Group to Edit</string>
+
+    <!-- Connections list: selection mode -->
+    <string name="connections_selection_title_delete">Select to Delete</string>
+    <string name="connections_selection_title_edit">Select Connections</string>
+    <string name="connections_selection_hint_delete">Tap connections to select, long-press to delete selected</string>
+    <string name="connections_selection_hint_edit">Tap connections to select, long-press to edit selected</string>
+    <string name="connections_selection_none">Select at least one connection</string>
+
+    <!-- Connections list: bulk delete -->
+    <plurals name="connections_bulk_delete_title">
+        <item quantity="one">Delete %d connection?</item>
+        <item quantity="other">Delete %d connections?</item>
+    </plurals>
+    <string name="connections_bulk_delete_message">This cannot be undone. Stored passwords for these connections will also be cleared.</string>
+    <plurals name="connections_bulk_deleted">
+        <item quantity="one">Deleted %d connection</item>
+        <item quantity="other">Deleted %d connections</item>
+    </plurals>
+
+    <!-- Connections list: bulk edit -->
+    <string name="connections_bulk_edit_title">Bulk edit</string>
+    <string name="connections_bulk_scope_all_fmt">Edit all (%1$d) connections</string>
+    <string name="connections_bulk_scope_group">Edit connections in a group…</string>
+    <string name="connections_bulk_scope_pick_edit">Pick connections to edit…</string>
+    <string name="connections_bulk_scope_pick_delete">Pick connections to delete…</string>
+    <string name="connections_bulk_no_connections">No connections to edit</string>
+    <plurals name="connections_bulk_selected_count">
+        <item quantity="one">%d connection selected</item>
+        <item quantity="other">%d connections selected</item>
+    </plurals>
+    <string name="connections_bulk_tri_compression">Compression</string>
+    <string name="connections_bulk_tri_agent_fwd">Agent forwarding</string>
+    <string name="connections_bulk_tri_x11">X11 forwarding</string>
+    <string name="connections_bulk_tri_mosh">Mosh</string>
+    <string name="connections_bulk_clear_group">(Clear group assignment)</string>
+    <string name="connections_bulk_clear_identity">(Clear identity)</string>
+    <string name="connections_bulk_summary_none">No changes yet — fill in any field below to enqueue it</string>
+    <string name="connections_bulk_summary_fmt">%1$s will change on %2$s</string>
+    <plurals name="connections_bulk_summary_fields">
+        <item quantity="one">%d field</item>
+        <item quantity="other">%d fields</item>
+    </plurals>
+    <plurals name="connections_bulk_summary_connections">
+        <item quantity="one">%d connection</item>
+        <item quantity="other">%d connections</item>
+    </plurals>
+    <string name="connections_bulk_apply">Apply</string>
+    <string name="connections_bulk_apply_count_fmt">Apply (%1$d)</string>
+    <string name="connections_bulk_no_changes">No changes selected</string>
+    <string name="connections_bulk_group_missing_fmt">Bulk edit aborted: group \'%1$s\' not found</string>
+    <string name="connections_bulk_identity_missing_fmt">Bulk edit aborted: identity \'%1$s\' not found</string>
+    <plurals name="connections_bulk_updated">
+        <item quantity="one">Updated %1$d connection: %2$s</item>
+        <item quantity="other">Updated %1$d connections: %2$s</item>
+    </plurals>
+    <string name="connections_bulk_failed_fmt">Bulk edit failed: %1$s</string>
+    <string name="connections_list_separator">", "</string>
+
+    <!-- Connections list: bulk-edit field names, listed in the result summary -->
+    <string name="connections_field_username">username</string>
+    <string name="connections_field_port">port</string>
+    <string name="connections_field_group">group</string>
+    <string name="connections_field_identity">identity</string>
+    <string name="connections_field_timeout">timeout</string>
+    <string name="connections_field_compression">compression</string>
+    <string name="connections_field_terminal_type">terminal type</string>
+    <string name="connections_field_color_tag">color tag</string>
+    <string name="connections_field_x11">X11 forwarding</string>
+    <string name="connections_field_mosh">Mosh</string>
+    <string name="connections_field_agent_forwarding">agent forwarding</string>
+    <string name="connections_field_post_connect">post-connect script</string>
+
+    <!-- Terminal TERM identifiers are protocol values, never translated -->
+    <string-array name="connections_terminal_type_options" translatable="false">
+        <item>xterm-256color</item>
+        <item>xterm</item>
+        <item>vt100</item>
+        <item>vt220</item>
+        <item>screen-256color</item>
+        <item>tmux-256color</item>
+    </string-array>
+
+    <!-- Order is load-bearing: index maps 1:1 to ConnectionProfile.colorTag -->
+    <string-array name="connections_color_tag_options">
+        <item>(none)</item>
+        <item>Red</item>
+        <item>Orange</item>
+        <item>Yellow</item>
+        <item>Green</item>
+        <item>Blue</item>
+        <item>Purple</item>
+        <item>Pink</item>
+    </string-array>
+
+    <!-- Human-readable value formatting (AI.md PART 7). Consumed only by Format.kt -->
+    <plurals name="format_size_bytes">
+        <item quantity="one">%1$s byte</item>
+        <item quantity="other">%1$s bytes</item>
+    </plurals>
+    <plurals name="format_size_kilobytes">
+        <item quantity="one">%1$s kilobyte</item>
+        <item quantity="other">%1$s kilobytes</item>
+    </plurals>
+    <plurals name="format_size_megabytes">
+        <item quantity="one">%1$s megabyte</item>
+        <item quantity="other">%1$s megabytes</item>
+    </plurals>
+    <plurals name="format_size_gigabytes">
+        <item quantity="one">%1$s gigabyte</item>
+        <item quantity="other">%1$s gigabytes</item>
+    </plurals>
+    <plurals name="format_size_terabytes">
+        <item quantity="one">%1$s terabyte</item>
+        <item quantity="other">%1$s terabytes</item>
+    </plurals>
+    <plurals name="format_duration_seconds">
+        <item quantity="one">%1$s second</item>
+        <item quantity="other">%1$s seconds</item>
+    </plurals>
+    <plurals name="format_duration_minutes">
+        <item quantity="one">%1$s minute</item>
+        <item quantity="other">%1$s minutes</item>
+    </plurals>
+    <plurals name="format_duration_hours">
+        <item quantity="one">%1$s hour</item>
+        <item quantity="other">%1$s hours</item>
+    </plurals>
+    <plurals name="format_duration_days">
+        <item quantity="one">%1$s day</item>
+        <item quantity="other">%1$s days</item>
+    </plurals>
+    <!-- Joins the two units of a duration; translations control the separator -->
+    <string name="format_duration_pair_fmt">%1$s %2$s</string>
+    <!-- Per-second suffix appended to an already-formatted size -->
+    <string name="format_rate_fmt">%1$s/s</string>
+
+    <!-- Formatted value host strings -->
+    <string name="perf_network_rx_fmt">↓ %1$s</string>
+    <string name="perf_network_tx_fmt">↑ %1$s</string>
+    <string name="dashboard_net_rx_tx_fmt">"↓ %1$s  ↑ %2$s"</string>
+    <string name="perf_uptime_fmt">up %1$s</string>
+    <string name="perf_uptime_unknown">uptime unknown</string>
+    <string name="dashboard_uptime_fmt">⏱ %1$s</string>
+    <string name="transfer_progress_fmt">%1$s / %2$s (%3$d%%)</string>
+    <string name="transfer_eta_unknown">Unknown</string>
+    <string name="notification_transfer_progress_fmt">%1$d%% complete (%2$s / %3$s)</string>
+
+    <!-- Session transcript viewer -->
+    <string name="transcript_truncated_banner_fmt">[Truncated: showing the last %1$s of %2$s]</string>
+    <string name="transcript_read_error">Error reading transcript</string>
+
+    <!-- Remote file open round trip (download, external viewer, upload back) -->
+    <string name="fileopen_stat_failed">Could not read file info from server</string>
+    <string name="fileopen_large_title">Large file</string>
+    <string name="fileopen_large_message_fmt">%1$s is %2$s, over the %3$d MB open limit. Download anyway?</string>
+    <string name="fileopen_download_failed">Download failed</string>
+    <string name="fileopen_download_failed_fmt">Download failed: %1$s</string>
+    <string name="fileopen_transfer_no_result">Transfer ended without a result</string>
+    <string name="fileopen_open_failed">Could not open file</string>
+    <string name="fileopen_chooser_title_fmt">Open %1$s with</string>
+    <string name="fileopen_no_app">No app found to open this file</string>
+    <string name="fileopen_changed_title">File changed</string>
+    <string name="fileopen_upload_back_message_fmt">Upload back to %1$s?</string>
+    <string name="fileopen_not_now">Not now</string>
+    <string name="fileopen_uploaded_fmt">Uploaded to %1$s</string>
+    <string name="fileopen_upload_failed_kept">Upload failed — local copy kept</string>
+    <string name="fileopen_upload_failed_fmt">Upload failed: %1$s</string>
+
+    <!-- File browser rows -->
+    <plurals name="filerow_item_count">
+        <item quantity="one">%1$s item</item>
+        <item quantity="other">%1$s items</item>
+    </plurals>
+    <string name="filerow_type_directory">Directory</string>
+    <string name="filerow_type_folder">Folder</string>
+    <string name="filerow_type_file">File</string>
+    <string name="filerow_type_symlink">Symbolic Link</string>
+    <string name="filerow_type_text">Text File</string>
+    <string name="filerow_type_image">Image</string>
+    <string name="filerow_type_archive">Archive</string>
+    <string name="filerow_a11y_local_fmt">%1$s %2$s. Size: %3$s. Modified: %4$s</string>
+    <string name="filerow_a11y_remote_fmt">%1$s %2$s. Size: %3$s. Permissions: %4$s</string>
+    <string name="filerow_a11y_symlink">. Symbolic link</string>
+    <string name="filerow_a11y_selected">. Selected</string>
+
+    <!-- Transfer progress rows -->
+    <string name="transferrow_action_pause">Pause</string>
+    <string name="transferrow_action_resume">Resume</string>
+    <string name="transferrow_status_pending">Pending</string>
+    <string name="transferrow_status_active">Transferring</string>
+    <string name="transferrow_status_paused">Paused</string>
+    <string name="transferrow_status_completed">Completed</string>
+    <string name="transferrow_status_error">Error</string>
+    <string name="transferrow_status_cancelled">Cancelled</string>
+    <string name="transferrow_type_upload">Upload</string>
+    <string name="transferrow_type_download">Download</string>
+    <string name="transferrow_a11y_fmt">%1$s transfer: %2$s. Status: %3$s. Progress: %4$d%%</string>
+    <string name="transferrow_a11y_active_fmt">. Speed: %1$s. ETA: %2$s</string>
+
+    <!-- SFTP browser -->
+    <string name="sftp_error_connection_gone">This connection no longer exists</string>
+    <string name="sftp_error_connect_failed_fmt">Could not connect to %1$s</string>
+    <string name="sftp_error_connect_sftp_failed">Failed to connect SFTP</string>
+    <string name="sftp_error_setup_fmt">SFTP setup error: %1$s</string>
+    <string name="sftp_tab_add_chip">+</string>
+    <string name="sftp_no_saved_connections_title">No saved connections</string>
+    <string name="sftp_no_saved_connections_message">Add a connection first, then return here to open it as an SFTP tab.</string>
+    <string name="sftp_add_tab_title">Add SFTP tab</string>
+    <string name="sftp_error_open_tab_failed_fmt">Failed to open SFTP for %1$s</string>
+    <string name="sftp_error_load_local">Failed to load local directory</string>
+    <string name="sftp_error_load_remote">Failed to load remote directory</string>
+    <string name="sftp_btn_upload_file_fmt">Upload %1$s</string>
+    <string name="sftp_btn_download_file_fmt">Download %1$s</string>
+    <string name="sftp_not_connected">SFTP not connected yet</string>
+    <string name="sftp_no_files_selected">No files selected. Long-press files to select them.</string>
+    <plurals name="sftp_uploaded_count">
+        <item quantity="one">✅ Uploaded %1$s file</item>
+        <item quantity="other">✅ Uploaded %1$s files</item>
+    </plurals>
+    <plurals name="sftp_downloaded_count">
+        <item quantity="one">✅ Downloaded %1$s file</item>
+        <item quantity="other">✅ Downloaded %1$s files</item>
+    </plurals>
+    <string name="sftp_toast_upload_failed_fmt">❌ Upload failed: %1$s</string>
+    <string name="sftp_toast_download_failed_fmt">❌ Download failed: %1$s</string>
+    <string name="sftp_upload_failed_fmt">Upload failed: %1$s</string>
+    <string name="sftp_download_failed_fmt">Download failed: %1$s</string>
+    <string name="sftp_scp_title">Upload via SCP</string>
+    <string name="sftp_scp_message">SCP is the legacy fallback for servers without SFTP. Default Upload uses SFTP (recommended). Continue with SCP?</string>
+    <string name="sftp_scp_confirm">SCP</string>
+    <string name="sftp_error_connection_inactive">Connection not active</string>
+    <string name="sftp_scp_result_fmt">SCP: %1$s ok, %2$s failed</string>
+    <string name="sftp_create_folder_title">Create Folder</string>
+    <string name="sftp_create_folder_confirm">Create</string>
+    <string name="sftp_folder_created_fmt">Folder created: %1$s</string>
+    <string name="sftp_error_create_folder">Failed to create folder</string>
+    <string name="sftp_error_create_folder_fmt">Error creating folder: %1$s</string>
+    <string name="sftp_menu_open">Open</string>
+    <string name="sftp_menu_upload_folder">Upload Folder</string>
+    <string name="sftp_menu_download_folder">Download Folder</string>
+    <string name="sftp_menu_permissions">Permissions…</string>
+    <string name="sftp_menu_open_edit">Open / Edit</string>
+    <string name="sftp_perm_owner">Owner</string>
+    <string name="sftp_perm_group">Group</string>
+    <string name="sftp_perm_other">Other</string>
+    <string name="sftp_perm_flag_read">r</string>
+    <string name="sftp_perm_flag_write">w</string>
+    <string name="sftp_perm_flag_execute">x</string>
+    <string name="sftp_perm_mode_fmt">Mode: %1$s</string>
+    <string name="sftp_permissions_title_fmt">Permissions — %1$s</string>
+    <string name="sftp_permissions_apply">Apply</string>
+    <string name="sftp_permissions_set_fmt">Permissions set to %1$s</string>
+    <string name="sftp_permissions_failed">chmod failed</string>
+    <string name="sftp_error_file_too_large_fmt">File too large (over %1$s) — download instead</string>
+    <string name="sftp_transfer_completed_fmt">Transfer completed: %1$s</string>
+    <string name="sftp_transfer_failed_fmt">Transfer failed: %1$s</string>
+    <string name="sftp_transfer_cancelled">Transfer cancelled</string>
+    <string name="sftp_rename_title_fmt">Rename %1$s</string>
+    <string name="sftp_renamed_fmt">Renamed to %1$s</string>
+    <string name="sftp_error_rename">Failed to rename file</string>
+    <string name="sftp_error_rename_fmt">Rename error: %1$s</string>
+    <string name="sftp_delete_title_fmt">Delete %1$s</string>
+    <string name="sftp_delete_message_folder">Are you sure you want to delete this folder?</string>
+    <string name="sftp_delete_message_file">Are you sure you want to delete this file?</string>
+    <string name="sftp_deleted_fmt">Deleted %1$s</string>
+    <string name="sftp_error_delete_fmt">Failed to delete %1$s</string>
+    <string name="sftp_error_delete_generic_fmt">Delete error: %1$s</string>
+    <string name="sftp_share_chooser_fmt">Share %1$s</string>
+    <string name="sftp_error_share">Failed to share file</string>
+    <string name="sftp_props_name_fmt">Name: %1$s</string>
+    <string name="sftp_props_size_fmt">Size: %1$s</string>
+    <string name="sftp_props_type_fmt">Type: %1$s</string>
+    <string name="sftp_props_permissions_fmt">Permissions: %1$s</string>
+    <string name="sftp_props_modified_fmt">Modified: %1$s</string>
+    <string name="sftp_props_symlink">Symbolic link: Yes</string>
+    <plurals name="sftp_selected_local_count">
+        <item quantity="one">Selected %1$s local file</item>
+        <item quantity="other">Selected %1$s local files</item>
+    </plurals>
+    <plurals name="sftp_selected_remote_count">
+        <item quantity="one">Selected %1$s remote file</item>
+        <item quantity="other">Selected %1$s remote files</item>
+    </plurals>
+    <string name="sftp_no_files_to_select">No files to select</string>
+    <plurals name="sftp_cleared_transfers">
+        <item quantity="one">Cleared %1$s completed transfer</item>
+        <item quantity="other">Cleared %1$s completed transfers</item>
+    </plurals>
+
+    <!-- Joins two already-formatted sizes into a used-of-total row -->
+    <string name="perf_used_of_total_fmt">%1$s / %2$s</string>
+    <string name="perf_network_total_fmt">Total: %1$s</string>
+    <string name="proxmox_vm_info_fmt">Node: %1$s  ·  VMID: %2$d  ·  CPU: %3$d%%  ·  RAM: %4$s</string>
+    <string name="dialog_title_error">Error</string>
+    <string name="dialog_title_success">Success</string>
+    <string name="transfer_display_name_fmt">%1$s → %2$s</string>
+
+    <!-- Sync settings: sync-file access failure and last-sync timestamps -->
+    <string name="sync_file_error_title">File error</string>
+    <string name="sync_file_error_message">Cannot access sync file: %1$s\n\nPlease reconfigure the location.</string>
+    <string name="sync_last_never">Never</string>
+    <string name="sync_last_just_now">Just now</string>
+
 </resources>

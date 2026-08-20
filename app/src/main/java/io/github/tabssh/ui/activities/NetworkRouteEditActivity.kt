@@ -5,7 +5,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.ArrayAdapter
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.chip.Chip
@@ -32,7 +31,7 @@ import kotlinx.coroutines.withContext
  * host authenticates with either a saved SSH key or the target's own password
  * supplied at connect time.
  */
-class NetworkRouteEditActivity : AppCompatActivity() {
+class NetworkRouteEditActivity : TabSSHActivity() {
 
     private val app: TabSSHApplication
         get() = application as TabSSHApplication
@@ -116,7 +115,6 @@ class NetworkRouteEditActivity : AppCompatActivity() {
         val toolbar = findViewById<Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
         supportActionBar?.apply {
-            setDisplayHomeAsUpEnabled(true)
             title = getString(
                 if (editingId != null) R.string.route_edit_title_edit
                 else R.string.route_edit_title_new
@@ -357,11 +355,6 @@ class NetworkRouteEditActivity : AppCompatActivity() {
         layoutPort.error = null
         layoutUsername.error = null
         layoutKey.error = null
-    }
-
-    override fun onSupportNavigateUp(): Boolean {
-        finish()
-        return true
     }
 
     companion object {

@@ -3,7 +3,6 @@ package io.github.tabssh.ui.activities
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.lifecycleScope
@@ -13,7 +12,6 @@ import androidx.preference.SwitchPreferenceCompat
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
-import io.github.tabssh.ui.activities.SyncSettingsActivity
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOn
@@ -21,18 +19,23 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class SettingsActivity :
-    AppCompatActivity(),
+    TabSSHActivity(),
     PreferenceFragmentCompat.OnPreferenceStartFragmentCallback {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
-        // Setup toolbar
-        val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
-        setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = "Settings"
+        setSupportActionBar(findViewById(R.id.toolbar))
+        supportActionBar?.setTitle(R.string.nav_item_settings)
+
+        // System back pops the preference back stack on its own; this listener
+        // only restores the root title once the stack is empty again.
+        supportFragmentManager.addOnBackStackChangedListener {
+            if (supportFragmentManager.backStackEntryCount == 0) {
+                supportActionBar?.setTitle(R.string.nav_item_settings)
+            }
+        }
 
         if (savedInstanceState == null) {
             supportFragmentManager
@@ -70,19 +73,6 @@ class SettingsActivity :
         supportActionBar?.title = pref.title
         return true
     }
-
-    override fun onSupportNavigateUp(): Boolean {
-        if (supportFragmentManager.backStackEntryCount > 0) {
-            supportFragmentManager.popBackStack()
-            // Restore main title when popping back to the root list.
-            if (supportFragmentManager.backStackEntryCount == 1) {
-                supportActionBar?.title = "Settings"
-            }
-            return true
-        }
-        finish()
-        return true
-    }
 }
 
 class SettingsMainFragment : PreferenceFragmentCompat() {
@@ -101,29 +91,30 @@ class SettingsMainFragment : PreferenceFragmentCompat() {
 
         findPreference<Preference>("about_version")?.apply {
             try {
-                val versionName = io.github.tabssh.BuildConfig.VERSION_NAME ?: "1.0.0"
+                val versionName = io.github.tabssh.BuildConfig.VERSION_NAME
                 val versionCode = io.github.tabssh.BuildConfig.VERSION_CODE
-                summary = "$versionName ($versionCode)"
+                summary = getString(R.string.settings_summary_version, versionName, versionCode)
             } catch (e: Exception) {
                 Logger.e("SettingsMainFragment", "Failed to load version info", e)
-                summary = "1.0.0 (1)"
+                summary = getString(R.string.settings_summary_version_unavailable)
             }
         }
 
         findPreference<Preference>("about_build")?.apply {
             try {
-                val commitId = io.github.tabssh.BuildConfig.GIT_COMMIT_ID ?: "unknown"
-                val buildDate = io.github.tabssh.BuildConfig.BUILD_DATE ?: "unknown"
-                val buildType = io.github.tabssh.BuildConfig.BUILD_TYPE ?: "debug"
-                val buildInfo = """
-                    Commit: $commitId
-                    Built: $buildDate
-                    Type: $buildType
-                """.trimIndent()
-                summary = buildInfo
+                val unknown = getString(R.string.settings_value_unknown)
+                val commitId = io.github.tabssh.BuildConfig.GIT_COMMIT_ID ?: unknown
+                val buildDate = io.github.tabssh.BuildConfig.BUILD_DATE ?: unknown
+                val buildType = io.github.tabssh.BuildConfig.BUILD_TYPE ?: unknown
+                summary = getString(
+                    R.string.settings_summary_build_info,
+                    commitId,
+                    buildDate,
+                    buildType
+                )
             } catch (e: Exception) {
                 Logger.e("SettingsMainFragment", "Failed to load build info", e)
-                summary = "Build information unavailable"
+                summary = getString(R.string.settings_summary_build_unavailable)
             }
         }
     }
@@ -172,7 +163,7 @@ class GeneralSettingsFragment : PreferenceFragmentCompat() {
             val raw = (newValue as? String).orEmpty().trim()
             val n = raw.toIntOrNull()
             if (n == null || n < 1 || n > 200) {
-                android.widget.Toast.makeText(requireContext(), "Max tabs must be 1–200", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_max_tabs_range), android.widget.Toast.LENGTH_SHORT).show()
                 return@setOnPreferenceChangeListener false
             }
             true
@@ -203,7 +194,7 @@ class GeneralSettingsFragment : PreferenceFragmentCompat() {
                 }
                 startActivity(intent)
             } catch (e2: Exception) {
-                android.widget.Toast.makeText(requireContext(), "Unable to open notification settings", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_notification_settings_unavailable), android.widget.Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -216,12 +207,12 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
         // Clear known hosts functionality
         findPreference<Preference>("clear_known_hosts")?.setOnPreferenceClickListener {
             MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Clear Known Hosts")
-                .setMessage("This will remove all saved host keys and fingerprints. You will need to verify hosts again on next connection.\n\nContinue?")
-                .setPositiveButton("Clear") { _, _ ->
+                .setTitle(R.string.settings_dialog_clear_known_hosts_title)
+                .setMessage(R.string.settings_dialog_clear_known_hosts_message)
+                .setPositiveButton(R.string.settings_action_clear) { _, _ ->
                     clearKnownHosts()
                 }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(android.R.string.cancel, null)
                 .show()
             true
         }
@@ -229,11 +220,12 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
         // Security lock - enable/disable biometric based on lock state
         findPreference<SwitchPreferenceCompat>("security_lock_enabled")?.setOnPreferenceChangeListener { _, newValue ->
             val enabled = newValue as Boolean
-            if (enabled) {
-                android.widget.Toast.makeText(requireContext(), "Security lock enabled", android.widget.Toast.LENGTH_SHORT).show()
+            val message = if (enabled) {
+                R.string.settings_toast_security_lock_enabled
             } else {
-                android.widget.Toast.makeText(requireContext(), "Security lock disabled", android.widget.Toast.LENGTH_SHORT).show()
+                R.string.settings_toast_security_lock_disabled
             }
+            android.widget.Toast.makeText(requireContext(), getString(message), android.widget.Toast.LENGTH_SHORT).show()
             true
         }
 
@@ -245,28 +237,28 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
                 val biometricManager = androidx.biometric.BiometricManager.from(requireContext())
                 when (biometricManager.canAuthenticate(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG)) {
                     androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS -> {
-                        android.widget.Toast.makeText(requireContext(), "Biometric authentication enabled", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_biometric_enabled), android.widget.Toast.LENGTH_SHORT).show()
                         true
                     }
                     androidx.biometric.BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> {
-                        android.widget.Toast.makeText(requireContext(), "No biometric hardware available", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_biometric_no_hardware), android.widget.Toast.LENGTH_SHORT).show()
                         false
                     }
                     androidx.biometric.BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> {
-                        android.widget.Toast.makeText(requireContext(), "Biometric hardware unavailable", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_biometric_hw_unavailable), android.widget.Toast.LENGTH_SHORT).show()
                         false
                     }
                     androidx.biometric.BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> {
-                        android.widget.Toast.makeText(requireContext(), "No biometric enrolled. Please add fingerprint/face in device settings", android.widget.Toast.LENGTH_LONG).show()
+                        android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_biometric_none_enrolled), android.widget.Toast.LENGTH_LONG).show()
                         false
                     }
                     else -> {
-                        android.widget.Toast.makeText(requireContext(), "Biometric authentication not available", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_biometric_unavailable), android.widget.Toast.LENGTH_SHORT).show()
                         false
                     }
                 }
             } else {
-                android.widget.Toast.makeText(requireContext(), "Biometric authentication disabled", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_biometric_disabled), android.widget.Toast.LENGTH_SHORT).show()
                 true
             }
         }
@@ -275,7 +267,12 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
         findPreference<Preference>("security_lock_timeout")?.setOnPreferenceChangeListener { _, newValue ->
             val timeout = newValue as String
             val minutes = timeout.toInt() / 60
-            android.widget.Toast.makeText(requireContext(), "Lock timeout set to $minutes minute(s)", android.widget.Toast.LENGTH_SHORT).show()
+            val message = resources.getQuantityString(
+                R.plurals.settings_toast_lock_timeout_minutes,
+                minutes,
+                minutes
+            )
+            android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
             true
         }
 
@@ -284,22 +281,30 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
             val app = requireActivity().application as TabSSHApplication
             val enabled = app.preferencesManager.getBoolean(io.github.tabssh.ui.activities.PinLockActivity.PREF_PIN_ENABLED, false)
             val ctx = requireContext()
-            val items = if (enabled) arrayOf("Change PIN", "Disable PIN lock") else arrayOf("Set PIN")
+            val items = if (enabled) {
+                arrayOf(
+                    getString(R.string.settings_item_change_pin),
+                    getString(R.string.settings_item_disable_pin)
+                )
+            } else {
+                arrayOf(getString(R.string.settings_item_set_pin))
+            }
             MaterialAlertDialogBuilder(ctx)
-                .setTitle("App lock PIN")
+                .setTitle(R.string.settings_dialog_app_lock_pin_title)
+                // Dispatch on the item index, never on the label — the labels are
+                // localized, so a string comparison would stop matching in every
+                // language but English. Index 1 exists only while a PIN is set and
+                // is always "Disable PIN lock"; index 0 always opens PIN setup.
                 .setItems(items) { _, which ->
-                    when {
-                        items[which] == "Set PIN" || items[which] == "Change PIN" -> {
-                            startActivity(io.github.tabssh.ui.activities.PinLockActivity.setupIntent(ctx))
-                        }
-                        items[which] == "Disable PIN lock" -> {
-                            app.preferencesManager.setBoolean(io.github.tabssh.ui.activities.PinLockActivity.PREF_PIN_ENABLED, false)
-                            app.preferencesManager.remove(io.github.tabssh.ui.activities.PinLockActivity.PREF_PIN_HASH)
-                            android.widget.Toast.makeText(ctx, "PIN lock disabled", android.widget.Toast.LENGTH_SHORT).show()
-                        }
+                    if (enabled && which == 1) {
+                        app.preferencesManager.setBoolean(io.github.tabssh.ui.activities.PinLockActivity.PREF_PIN_ENABLED, false)
+                        app.preferencesManager.remove(io.github.tabssh.ui.activities.PinLockActivity.PREF_PIN_HASH)
+                        android.widget.Toast.makeText(ctx, getString(R.string.settings_toast_pin_lock_disabled), android.widget.Toast.LENGTH_SHORT).show()
+                    } else {
+                        startActivity(io.github.tabssh.ui.activities.PinLockActivity.setupIntent(ctx))
                     }
                 }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(android.R.string.cancel, null)
                 .show()
             true
         }
@@ -310,7 +315,7 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
             val app = requireActivity().application as? TabSSHApplication
             if (app == null) {
                 Logger.e("Settings", "Failed to get TabSSHApplication instance")
-                android.widget.Toast.makeText(requireContext(), "Error: Application not available", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_app_unavailable), android.widget.Toast.LENGTH_SHORT).show()
                 return
             }
             
@@ -320,21 +325,30 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
                     withContext(Dispatchers.IO) {
                         app.database.hostKeyDao().deleteAllHostKeys()
                     }
-                    android.widget.Toast.makeText(requireContext(), "Known hosts cleared", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_known_hosts_cleared), android.widget.Toast.LENGTH_SHORT).show()
                     Logger.i("Settings", "Cleared all known hosts")
                 } catch (e: Exception) {
                     Logger.e("Settings", "Database error while clearing known hosts", e)
-                    android.widget.Toast.makeText(requireContext(), "Error clearing known hosts: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                    val message = getString(
+                        R.string.settings_toast_known_hosts_clear_error_detail,
+                        e.message.orEmpty()
+                    )
+                    android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
         } catch (e: Exception) {
             Logger.e("Settings", "Failed to clear known hosts", e)
-            android.widget.Toast.makeText(requireContext(), "Error clearing known hosts", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_known_hosts_clear_error), android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 }
 
 class TerminalSettingsFragment : PreferenceFragmentCompat() {
+
+    // Strong reference to the SharedPreferences listener — Android holds it
+    // via WeakReference, so without this field it would be garbage-collected
+    // and the Gesture Multiplexer Type summary would stop refreshing.
+    private var multiplexerPrefsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     private val themeImportLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.GetContent()
@@ -354,7 +368,8 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
         // Terminal theme change listener
         findPreference<Preference>("terminal_theme")?.setOnPreferenceChangeListener { _, newValue ->
             val themeName = newValue as String
-            android.widget.Toast.makeText(requireContext(), "Terminal theme changed to $themeName", android.widget.Toast.LENGTH_SHORT).show()
+            val message = getString(R.string.settings_toast_terminal_theme_changed, themeName)
+            android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
             Logger.i("Settings", "Terminal theme changed to: $themeName")
             true
         }
@@ -362,7 +377,8 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
         // Terminal font change listener
         findPreference<Preference>("terminal_font")?.setOnPreferenceChangeListener { _, newValue ->
             val fontName = newValue as String
-            android.widget.Toast.makeText(requireContext(), "Terminal font changed to $fontName", android.widget.Toast.LENGTH_SHORT).show()
+            val message = getString(R.string.settings_toast_terminal_font_changed, fontName)
+            android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
             Logger.i("Settings", "Terminal font changed to: $fontName")
             true
         }
@@ -370,7 +386,8 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
         // Font size change listener
         findPreference<Preference>("terminal_font_size")?.setOnPreferenceChangeListener { _, newValue ->
             val size = newValue as Int
-            android.widget.Toast.makeText(requireContext(), "Font size: ${size}sp", android.widget.Toast.LENGTH_SHORT).show()
+            val message = getString(R.string.settings_toast_font_size, size)
+            android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
             Logger.i("Settings", "Terminal font size changed to: $size")
             true
         }
@@ -378,7 +395,8 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
         // Cursor style change listener
         findPreference<Preference>("terminal_cursor_style")?.setOnPreferenceChangeListener { _, newValue ->
             val style = newValue as String
-            android.widget.Toast.makeText(requireContext(), "Cursor style: $style", android.widget.Toast.LENGTH_SHORT).show()
+            val message = getString(R.string.settings_toast_cursor_style, style)
+            android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
             Logger.i("Settings", "Cursor style changed to: $style")
             true
         }
@@ -387,9 +405,16 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
         // stored value, so the default read as a bare "-1" with no meaning.
         findPreference<androidx.preference.EditTextPreference>("terminal_scrollback")?.summaryProvider =
             androidx.preference.Preference.SummaryProvider<androidx.preference.EditTextPreference> { pref ->
-                when (val lines = pref.text?.toIntOrNull() ?: -1) {
-                    -1 -> "Unlimited (capped at 50,000 lines per tab)"
-                    else -> "$lines lines"
+                when (val lines = pref.text?.toIntOrNull() ?: SCROLLBACK_UNLIMITED) {
+                    SCROLLBACK_UNLIMITED -> getString(
+                        R.string.settings_summary_scrollback_unlimited,
+                        io.github.tabssh.utils.Format.count(SCROLLBACK_MAX_LINES)
+                    )
+                    else -> resources.getQuantityString(
+                        R.plurals.settings_summary_scrollback_lines,
+                        lines,
+                        io.github.tabssh.utils.Format.count(lines)
+                    )
                 }
             }
 
@@ -399,20 +424,32 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
             try {
                 val numLines = lines.toInt()
                 // -1 = unlimited, minimum 250 lines
-                if (numLines != -1 && numLines < 250) {
-                    android.widget.Toast.makeText(requireContext(), "Scrollback minimum is 250 lines (or -1 for unlimited)", android.widget.Toast.LENGTH_SHORT).show()
+                if (numLines != SCROLLBACK_UNLIMITED && numLines < SCROLLBACK_MIN_LINES) {
+                    android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_scrollback_min), android.widget.Toast.LENGTH_SHORT).show()
                     return@setOnPreferenceChangeListener false
                 }
-                if (numLines > 50000 && numLines != -1) {
-                    android.widget.Toast.makeText(requireContext(), "Scrollback maximum is 50,000 lines", android.widget.Toast.LENGTH_SHORT).show()
+                if (numLines > SCROLLBACK_MAX_LINES && numLines != SCROLLBACK_UNLIMITED) {
+                    val limit = getString(
+                        R.string.settings_toast_scrollback_max,
+                        io.github.tabssh.utils.Format.count(SCROLLBACK_MAX_LINES)
+                    )
+                    android.widget.Toast.makeText(requireContext(), limit, android.widget.Toast.LENGTH_SHORT).show()
                     return@setOnPreferenceChangeListener false
                 }
-                val message = if (numLines == -1) "Scrollback: Unlimited" else "Scrollback: $numLines lines"
+                val message = if (numLines == SCROLLBACK_UNLIMITED) {
+                    getString(R.string.settings_toast_scrollback_unlimited)
+                } else {
+                    resources.getQuantityString(
+                        R.plurals.settings_toast_scrollback_lines,
+                        numLines,
+                        io.github.tabssh.utils.Format.count(numLines)
+                    )
+                }
                 android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
                 Logger.i("Settings", "Scrollback buffer changed to: $numLines")
                 true
             } catch (e: NumberFormatException) {
-                android.widget.Toast.makeText(requireContext(), "Invalid number", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_invalid_number), android.widget.Toast.LENGTH_SHORT).show()
                 false
             }
         }
@@ -445,9 +482,9 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
         // arranging keys).
         findPreference<Preference>("reset_keyboard_layout")?.setOnPreferenceClickListener {
             MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Reset keyboard layout?")
-                .setMessage("This restores the default 3-row layout (Esc/Tab/Ctl/Alt/Fn/Enter, arrows + Home/End/PgUp/PgDn, common symbols). Your current layout will be discarded.")
-                .setPositiveButton("Reset") { _, _ ->
+                .setTitle(R.string.settings_dialog_reset_keyboard_title)
+                .setMessage(R.string.settings_dialog_reset_keyboard_message)
+                .setPositiveButton(R.string.settings_action_reset) { _, _ ->
                     app.preferencesManager.setKeyboardLayoutJson(null)
                     // Clear the customised flag so future default-layout updates
                     // propagate automatically — the user chose the default layout.
@@ -455,166 +492,24 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
                     app.preferencesManager.setKeyboardLayoutVersion(
                         io.github.tabssh.ui.keyboard.MultiRowKeyboardView.CURRENT_DEFAULT_LAYOUT_VERSION
                     )
-                    Toast.makeText(requireContext(), "Keyboard layout reset", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), getString(R.string.settings_toast_keyboard_layout_reset), Toast.LENGTH_SHORT).show()
                     Logger.i("Settings", "Keyboard layout reset to default")
                 }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(android.R.string.cancel, null)
                 .show()
             true
         }
+
+        wireMultiplexerPrefixSummary()
     }
 
-    private fun importThemeFromUri(uri: android.net.Uri) {
-        val app = requireActivity().application as TabSSHApplication
-        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                val json = requireContext().contentResolver
-                    .openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                if (json.isNullOrBlank()) {
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        Toast.makeText(requireContext(), "Empty or unreadable theme file", Toast.LENGTH_SHORT).show()
-                    }
-                    return@launch
-                }
-                val result = app.themeManager.importTheme(json)
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    when (result) {
-                        is io.github.tabssh.themes.definitions.ImportThemeResult.Success ->
-                            Toast.makeText(
-                                requireContext(),
-                                "Theme \"${result.theme.name}\" imported",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        is io.github.tabssh.themes.definitions.ImportThemeResult.Error ->
-                            Toast.makeText(requireContext(), "Import failed: ${result.message}", Toast.LENGTH_LONG).show()
-                    }
-                }
-            } catch (e: Exception) {
-                Logger.e("Settings", "Theme import failed", e)
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    Toast.makeText(requireContext(), "Import failed: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    }
-
-    private fun exportThemeToUri(uri: android.net.Uri) {
-        val app = requireActivity().application as TabSSHApplication
-        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                val themeId = app.preferencesManager.getString("terminal_theme", "dark")
-                val json = app.themeManager.exportTheme(themeId)
-                if (json == null) {
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        Toast.makeText(requireContext(), "Theme not found", Toast.LENGTH_SHORT).show()
-                    }
-                    return@launch
-                }
-                requireContext().contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
-                    it.write(json)
-                }
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    Toast.makeText(requireContext(), "Theme exported", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                Logger.e("Settings", "Theme export failed", e)
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    Toast.makeText(requireContext(), "Export failed: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    }
-}
-
-class ConnectionSettingsFragment : PreferenceFragmentCompat() {
-    // Strong reference to the SharedPreferences listener — Android holds it
-    // via WeakReference, so without this field it would be garbage-collected
-    // and the Gesture Multiplexer Type summary would stop refreshing.
-    private var multiplexerPrefsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
-
-    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-        setPreferencesFromResource(R.xml.preferences_connection, rootKey)
-
-        // Default username change listener
-        findPreference<Preference>("default_username")?.setOnPreferenceChangeListener { _, newValue ->
-            val username = newValue as String
-            if (username.isBlank()) {
-                android.widget.Toast.makeText(requireContext(), "Username cannot be empty", android.widget.Toast.LENGTH_SHORT).show()
-                return@setOnPreferenceChangeListener false
-            }
-            android.widget.Toast.makeText(requireContext(), "Default username: $username", android.widget.Toast.LENGTH_SHORT).show()
-            Logger.i("Settings", "Default username changed to: $username")
-            true
-        }
-
-        // Default port change listener
-        findPreference<Preference>("default_port")?.setOnPreferenceChangeListener { _, newValue ->
-            val port = newValue as String
-            try {
-                val portNum = port.toInt()
-                if (portNum < 1 || portNum > 65535) {
-                    android.widget.Toast.makeText(requireContext(), "Port must be between 1-65535", android.widget.Toast.LENGTH_SHORT).show()
-                    return@setOnPreferenceChangeListener false
-                }
-                android.widget.Toast.makeText(requireContext(), "Default port: $portNum", android.widget.Toast.LENGTH_SHORT).show()
-                Logger.i("Settings", "Default port changed to: $portNum")
-                true
-            } catch (e: NumberFormatException) {
-                android.widget.Toast.makeText(requireContext(), "Invalid port number", android.widget.Toast.LENGTH_SHORT).show()
-                false
-            }
-        }
-
-        // Connection timeout change listener.
-        // Bounds: 1..600 seconds. A 0 timeout would make connect() return
-        // immediately; >600s blocks the UI for ten minutes on a dead host.
-        findPreference<Preference>("connect_timeout")?.setOnPreferenceChangeListener { _, newValue ->
-            val raw = (newValue as? String).orEmpty().trim()
-            val seconds = raw.toIntOrNull()
-            if (seconds == null || seconds < 1 || seconds > 600) {
-                android.widget.Toast.makeText(requireContext(), "Connection timeout must be 1–600 seconds", android.widget.Toast.LENGTH_SHORT).show()
-                return@setOnPreferenceChangeListener false
-            }
-            android.widget.Toast.makeText(requireContext(), "Connection timeout: ${seconds}s", android.widget.Toast.LENGTH_SHORT).show()
-            Logger.i("Settings", "Connection timeout changed to: $seconds")
-            true
-        }
-
-        // Server alive interval bounds: 0 disables keepalive, max 3600s (1h).
-        // Negative values would be coerced to Int and rejected by JSch.
-        findPreference<Preference>("server_alive_interval")?.setOnPreferenceChangeListener { _, newValue ->
-            val raw = (newValue as? String).orEmpty().trim()
-            val seconds = raw.toIntOrNull()
-            if (seconds == null || seconds < 0 || seconds > 3600) {
-                android.widget.Toast.makeText(requireContext(), "Keepalive must be 0–3600 seconds (0 disables)", android.widget.Toast.LENGTH_SHORT).show()
-                return@setOnPreferenceChangeListener false
-            }
-            Logger.i("Settings", "Server alive interval changed to: $seconds")
-            true
-        }
-
-        // File open size limit bounds: 1..2000 MB. RemoteFileOpener reads
-        // this via PreferenceManager.getFileOpenSizeLimitMb() before every
-        // file:// / SFTP "Open" download.
-        findPreference<Preference>("file_open_size_limit_mb")?.setOnPreferenceChangeListener { _, newValue ->
-            val raw = (newValue as? String).orEmpty().trim()
-            val mb = raw.toIntOrNull()
-            if (mb == null || mb < 1 || mb > 2000) {
-                android.widget.Toast.makeText(requireContext(), "Size limit must be 1–2000 MB", android.widget.Toast.LENGTH_SHORT).show()
-                return@setOnPreferenceChangeListener false
-            }
-            true
-        }
-
-        // Keep-alive listener removed — the toggle and interval preferences
-        // are gone from preferences_connection.xml. SSH-layer keepalive is
-        // unconditionally on at the mobile-default 10s interval (see
-        // SSHConnection.configureSession).
-
-        // Gesture Multiplexer Type summary: show the *live* custom prefix
-        // (e.g. "tmux (C-Space)") instead of a hardcoded "(Ctrl+B)" — the
-        // displayed prefix must reflect what each multiplexer is actually
-        // configured to send, not the upstream default.
+    /**
+     * Gesture Multiplexer Type summary: show the *live* custom prefix
+     * (e.g. "tmux (C-Space)") instead of a hardcoded "(Ctrl+B)" — the
+     * displayed prefix must reflect what each multiplexer is actually
+     * configured to send, not the upstream default.
+     */
+    private fun wireMultiplexerPrefixSummary() {
         val multiplexerTypePref = findPreference<androidx.preference.ListPreference>("gesture_multiplexer_type")
         val prefixKeyFor: (String?) -> String = { type ->
             when (type) {
@@ -632,13 +527,15 @@ class ConnectionSettingsFragment : PreferenceFragmentCompat() {
         }
         // SummaryProvider re-runs on every bind, so the displayed prefix
         // always reflects the live custom value rather than the upstream
-        // default of the chosen multiplexer.
+        // default of the chosen multiplexer. The label comes from the entries
+        // array so the visible text is the localized name, not the raw value.
         multiplexerTypePref?.summaryProvider = androidx.preference.Preference.SummaryProvider<androidx.preference.ListPreference> { pref ->
             val type = pref.value ?: "tmux"
             val sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
             val custom = sp.getString(prefixKeyFor(type), null).orEmpty().trim()
             val effective = if (custom.isNotEmpty()) custom else defaultPrefixFor(type)
-            "$type ($effective)"
+            val label = pref.entry?.toString() ?: type
+            getString(R.string.settings_summary_multiplexer_type, label, effective)
         }
         // When the type changes OR any of the three custom prefixes change,
         // re-bind the type pref so its SummaryProvider runs again. SetSummary
@@ -672,6 +569,183 @@ class ConnectionSettingsFragment : PreferenceFragmentCompat() {
         multiplexerPrefsListener = null
         super.onDestroy()
     }
+
+    private fun importThemeFromUri(uri: android.net.Uri) {
+        val app = requireActivity().application as TabSSHApplication
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val json = requireContext().contentResolver
+                    .openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                if (json.isNullOrBlank()) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        Toast.makeText(requireContext(), getString(R.string.settings_toast_theme_file_empty), Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+                val result = app.themeManager.importTheme(json)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    when (result) {
+                        is io.github.tabssh.themes.definitions.ImportThemeResult.Success ->
+                            Toast.makeText(
+                                requireContext(),
+                                getString(R.string.settings_toast_theme_imported, result.theme.name),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        is io.github.tabssh.themes.definitions.ImportThemeResult.Error ->
+                            Toast.makeText(
+                                requireContext(),
+                                getString(R.string.settings_toast_theme_import_failed, result.message),
+                                Toast.LENGTH_LONG
+                            ).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e("Settings", "Theme import failed", e)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    Toast.makeText(
+                        requireContext(),
+                        getString(R.string.settings_toast_theme_import_failed, e.message.orEmpty()),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun exportThemeToUri(uri: android.net.Uri) {
+        val app = requireActivity().application as TabSSHApplication
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val themeId = app.preferencesManager.getString("terminal_theme", "dark")
+                val json = app.themeManager.exportTheme(themeId)
+                if (json == null) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        Toast.makeText(requireContext(), getString(R.string.settings_toast_theme_not_found), Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+                requireContext().contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
+                    it.write(json)
+                }
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    Toast.makeText(requireContext(), getString(R.string.settings_toast_theme_exported), Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Logger.e("Settings", "Theme export failed", e)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    Toast.makeText(
+                        requireContext(),
+                        getString(R.string.settings_toast_theme_export_failed, e.message.orEmpty()),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+    }
+
+    companion object {
+        // Sentinel stored in `terminal_scrollback` meaning "keep everything the
+        // per-tab cap allows".
+        private const val SCROLLBACK_UNLIMITED = -1
+
+        // Below this the buffer is too short to scroll back through a single
+        // `ls -la` on a busy directory.
+        private const val SCROLLBACK_MIN_LINES = 250
+
+        // Hard per-tab cap — every retained line holds a Termux row buffer, so
+        // more than this risks OOM on low-end devices.
+        private const val SCROLLBACK_MAX_LINES = 50_000
+    }
+}
+
+class ConnectionSettingsFragment : PreferenceFragmentCompat() {
+
+    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+        setPreferencesFromResource(R.xml.preferences_connection, rootKey)
+
+        // Default username change listener
+        findPreference<Preference>("default_username")?.setOnPreferenceChangeListener { _, newValue ->
+            val username = newValue as String
+            if (username.isBlank()) {
+                android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_username_empty), android.widget.Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceChangeListener false
+            }
+            val message = getString(R.string.settings_toast_default_username, username)
+            android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
+            Logger.i("Settings", "Default username changed to: $username")
+            true
+        }
+
+        // Default port change listener
+        findPreference<Preference>("default_port")?.setOnPreferenceChangeListener { _, newValue ->
+            val port = newValue as String
+            try {
+                val portNum = port.toInt()
+                if (portNum < 1 || portNum > 65535) {
+                    android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_port_range), android.widget.Toast.LENGTH_SHORT).show()
+                    return@setOnPreferenceChangeListener false
+                }
+                val message = getString(R.string.settings_toast_default_port, portNum)
+                android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
+                Logger.i("Settings", "Default port changed to: $portNum")
+                true
+            } catch (e: NumberFormatException) {
+                android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_invalid_port), android.widget.Toast.LENGTH_SHORT).show()
+                false
+            }
+        }
+
+        // Connection timeout change listener.
+        // Bounds: 1..600 seconds. A 0 timeout would make connect() return
+        // immediately; >600s blocks the UI for ten minutes on a dead host.
+        findPreference<Preference>("connect_timeout")?.setOnPreferenceChangeListener { _, newValue ->
+            val raw = (newValue as? String).orEmpty().trim()
+            val seconds = raw.toIntOrNull()
+            if (seconds == null || seconds < 1 || seconds > 600) {
+                android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_connect_timeout_range), android.widget.Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceChangeListener false
+            }
+            val message = resources.getQuantityString(
+                R.plurals.settings_toast_connect_timeout_seconds,
+                seconds,
+                seconds
+            )
+            android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
+            Logger.i("Settings", "Connection timeout changed to: $seconds")
+            true
+        }
+
+        // Server alive interval bounds: 0 disables keepalive, max 3600s (1h).
+        // Negative values would be coerced to Int and rejected by JSch.
+        findPreference<Preference>("server_alive_interval")?.setOnPreferenceChangeListener { _, newValue ->
+            val raw = (newValue as? String).orEmpty().trim()
+            val seconds = raw.toIntOrNull()
+            if (seconds == null || seconds < 0 || seconds > 3600) {
+                android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_keepalive_range), android.widget.Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceChangeListener false
+            }
+            Logger.i("Settings", "Server alive interval changed to: $seconds")
+            true
+        }
+
+        // File open size limit bounds: 1..2000 MB. RemoteFileOpener reads
+        // this via PreferenceManager.getFileOpenSizeLimitMb() before every
+        // file:// / SFTP "Open" download.
+        findPreference<Preference>("file_open_size_limit_mb")?.setOnPreferenceChangeListener { _, newValue ->
+            val raw = (newValue as? String).orEmpty().trim()
+            val mb = raw.toIntOrNull()
+            if (mb == null || mb < 1 || mb > 2000) {
+                android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_file_size_limit_range), android.widget.Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceChangeListener false
+            }
+            true
+        }
+
+        // Keep-alive listener removed — the toggle and interval preferences
+        // are gone from preferences_connection.xml. SSH-layer keepalive is
+        // unconditionally on at the mobile-default 10s interval (see
+        // SSHConnection.configureSession).
+    }
 }
 
 /**
@@ -699,7 +773,7 @@ class AuditSettingsFragment : PreferenceFragmentCompat() {
             val raw = (newValue as? String).orEmpty().trim()
             val n = raw.toIntOrNull()
             if (n == null || n < 1 || n > 10_000) {
-                android.widget.Toast.makeText(requireContext(), "Max log size must be 1–10000 MB", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_audit_max_size_range), android.widget.Toast.LENGTH_SHORT).show()
                 return@setOnPreferenceChangeListener false
             }
             true
@@ -711,7 +785,7 @@ class AuditSettingsFragment : PreferenceFragmentCompat() {
             val raw = (newValue as? String).orEmpty().trim()
             val n = raw.toIntOrNull()
             if (n == null || n < 1 || n > 3650) {
-                android.widget.Toast.makeText(requireContext(), "Retention must be 1–3650 days", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_audit_retention_range), android.widget.Toast.LENGTH_SHORT).show()
                 return@setOnPreferenceChangeListener false
             }
             true
@@ -732,17 +806,17 @@ class AuditSettingsFragment : PreferenceFragmentCompat() {
         // Clear logs button
         findPreference<Preference>("audit_log_clear")?.setOnPreferenceClickListener {
             MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Clear Audit Logs")
-                .setMessage("Delete all audit log entries? This cannot be undone.")
-                .setPositiveButton("Clear") { _, _ ->
+                .setTitle(R.string.settings_dialog_clear_audit_logs_title)
+                .setMessage(R.string.settings_dialog_clear_audit_logs_message)
+                .setPositiveButton(R.string.settings_action_clear) { _, _ ->
                     lifecycleScope.launch {
                         withContext(Dispatchers.IO) {
                             app.auditLogManager.deleteAllLogs()
                         }
-                        android.widget.Toast.makeText(requireContext(), "Audit logs cleared", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_audit_logs_cleared), android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(android.R.string.cancel, null)
                 .show()
             true
         }
@@ -777,14 +851,19 @@ class AuditSettingsFragment : PreferenceFragmentCompat() {
                 
                 android.widget.Toast.makeText(
                     requireContext(),
-                    "✓ Exported ${logs.size} logs to $filename",
+                    resources.getQuantityString(
+                        R.plurals.settings_toast_audit_logs_exported,
+                        logs.size,
+                        io.github.tabssh.utils.Format.count(logs.size),
+                        filename
+                    ),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
-                
+
             } catch (e: Exception) {
                 android.widget.Toast.makeText(
                     requireContext(),
-                    "Failed to export: ${e.message}",
+                    getString(R.string.settings_toast_export_failed, e.message.orEmpty()),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
             }
@@ -814,7 +893,7 @@ class TaskerSettingsFragment : PreferenceFragmentCompat() {
             val raw = (newValue as? String).orEmpty().trim()
             val n = raw.toLongOrNull()
             if (n == null || n < 100 || n > 3_600_000) {
-                android.widget.Toast.makeText(requireContext(), "Timeout must be 100–3600000 ms", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_tasker_timeout_range), android.widget.Toast.LENGTH_SHORT).show()
                 return@setOnPreferenceChangeListener false
             }
             true
@@ -838,65 +917,18 @@ class TaskerSettingsFragment : PreferenceFragmentCompat() {
     }
     
     private fun showActionsHelp() {
-        val message = """
-            Available Tasker Actions:
-            
-            📱 CONNECT
-            Connect to SSH server
-            Extras: connection_id or connection_name
-            
-            📴 DISCONNECT
-            Disconnect from server
-            Extras: connection_id or connection_name
-            
-            ⌨️ SEND_COMMAND
-            Execute command
-            Extras: connection_id/name, command, wait_for_result, timeout_ms
-            
-            🔑 SEND_KEYS
-            Send key sequence
-            Extras: connection_id/name, keys
-            
-            Examples:
-            - Keys: "Enter", "Tab", "Ctrl+C"
-            - Command: "ls -la" with wait_for_result=true
-        """.trimIndent()
-        
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Tasker Actions")
-            .setMessage(message)
-            .setPositiveButton("OK", null)
+            .setTitle(R.string.settings_dialog_tasker_actions_title)
+            .setMessage(R.string.settings_dialog_tasker_actions_message)
+            .setPositiveButton(android.R.string.ok, null)
             .show()
     }
-    
+
     private fun showEventsHelp() {
-        val message = """
-            Broadcast Events:
-            
-            ✅ CONNECTED
-            Broadcast when connection established
-            Extras: connection_id, connection_name
-            
-            ❌ DISCONNECTED
-            Broadcast when connection closed
-            Extras: connection_id, connection_name
-            
-            📊 COMMAND_RESULT
-            Broadcast when a command completes
-            Extras: connection_id, connection_name, command, status, result
-            result carries terminal output only when "Include Command Output in Broadcasts" is enabled; otherwise it mirrors status
-            
-            ⚠️ ERROR
-            Broadcast when error occurs
-            Extras: error
-            
-            Use these in Tasker with Event → Intent Received
-        """.trimIndent()
-        
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Tasker Events")
-            .setMessage(message)
-            .setPositiveButton("OK", null)
+            .setTitle(R.string.settings_dialog_tasker_events_title)
+            .setMessage(R.string.settings_dialog_tasker_events_message)
+            .setPositiveButton(android.R.string.ok, null)
             .show()
     }
 }
@@ -963,7 +995,7 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
 
         // View Debug Log
         findPreference<Preference>("view_debug_log")?.setOnPreferenceClickListener {
-            showLogViewer("Debug Log", "debug")
+            showLogViewer(R.string.settings_dialog_debug_log_title, "debug")
             true
         }
 
@@ -982,7 +1014,7 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
 
         // View Application Log
         findPreference<Preference>("view_app_log")?.setOnPreferenceClickListener {
-            showLogViewer("Application Log", "app")
+            showLogViewer(R.string.settings_dialog_app_log_title, "app")
             true
         }
 
@@ -1017,7 +1049,8 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
         }
     }
 
-    private fun showLogViewer(title: String, logType: String) {
+    private fun showLogViewer(@androidx.annotation.StringRes titleRes: Int, logType: String) {
+        val title = getString(titleRes)
         lifecycleScope.launch {
             try {
                 // Disk reads must be off Main — these log files can reach
@@ -1027,11 +1060,15 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                         "debug" -> io.github.tabssh.utils.logging.Logger.getDebugLogs()
                         "app" -> io.github.tabssh.utils.logging.Logger.getRecentLogs()
                             .joinToString("\n") { "${it.timestamp} [${it.level}] ${it.tag}: ${it.message}" }
-                        else -> "No logs available"
+                        else -> getString(R.string.settings_log_none_available)
                     }
                 }
 
-                val displayContent = if (logContent.isBlank()) "No logs found" else logContent
+                val displayContent = if (logContent.isBlank()) {
+                    getString(R.string.settings_log_none_found)
+                } else {
+                    logContent
+                }
 
                 // Create scrollable text view
                 val scrollView = android.widget.ScrollView(requireContext())
@@ -1047,12 +1084,12 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                 MaterialAlertDialogBuilder(requireContext())
                     .setTitle(title)
                     .setView(scrollView)
-                    .setPositiveButton("Close", null)
-                    .setNeutralButton("Copy") { _, _ ->
+                    .setPositiveButton(R.string.settings_action_close, null)
+                    .setNeutralButton(R.string.settings_action_copy) { _, _ ->
                         io.github.tabssh.utils.ClipboardHelper.copy(requireContext(), title, displayContent, sensitive = false)
-                        android.widget.Toast.makeText(requireContext(), "Log copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_log_copied), android.widget.Toast.LENGTH_SHORT).show()
                     }
-                    .setNegativeButton("Paste / Issue") { _, _ ->
+                    .setNegativeButton(R.string.settings_action_report_issue) { _, _ ->
                         io.github.tabssh.ui.dialogs.ReportIssueDialog
                             .create(displayContent, logType)
                             .show(parentFragmentManager, "report_issue")
@@ -1060,7 +1097,8 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                     .show()
 
             } catch (e: Exception) {
-                android.widget.Toast.makeText(requireContext(), "Error loading logs: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                val message = getString(R.string.settings_toast_log_load_error, e.message.orEmpty())
+                android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -1075,22 +1113,23 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                 }
 
                 if (hostLogs.isEmpty()) {
-                    android.widget.Toast.makeText(requireContext(), "No host logs found", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_no_host_logs), android.widget.Toast.LENGTH_SHORT).show()
                     return@launch
                 }
 
                 val hostNames = hostLogs.map { it.name }.toTypedArray()
 
                 MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Select Host Log")
+                    .setTitle(R.string.settings_dialog_select_host_log_title)
                     .setItems(hostNames) { _, which ->
                         showHostLogContent(hostLogs[which])
                     }
-                    .setNegativeButton("Cancel", null)
+                    .setNegativeButton(android.R.string.cancel, null)
                     .show()
 
             } catch (e: Exception) {
-                android.widget.Toast.makeText(requireContext(), "Error loading host logs: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                val message = getString(R.string.settings_toast_host_logs_load_error, e.message.orEmpty())
+                android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -1102,7 +1141,11 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                 // avoid blocking the UI thread (this is the same hazard
                 // documented in LogViewerActivity).
                 val content = withContext(Dispatchers.IO) { logFile.readText() }
-                val displayContent = if (content.isBlank()) "No content" else content
+                val displayContent = if (content.isBlank()) {
+                    getString(R.string.settings_log_no_content)
+                } else {
+                    content
+                }
 
                 val scrollView = android.widget.ScrollView(requireContext())
                 val textView = android.widget.TextView(requireContext()).apply {
@@ -1117,18 +1160,19 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                 MaterialAlertDialogBuilder(requireContext())
                     .setTitle(logFile.name)
                     .setView(scrollView)
-                    .setPositiveButton("Close", null)
-                    .setNeutralButton("Copy") { _, _ ->
+                    .setPositiveButton(R.string.settings_action_close, null)
+                    .setNeutralButton(R.string.settings_action_copy) { _, _ ->
                         // Host logs contain real hostnames/usernames (never sanitized —
                         // see Logger.logHostEvent) — mark sensitive so the clipboard
                         // auto-clear timeout applies.
                         io.github.tabssh.utils.ClipboardHelper.copy(requireContext(), logFile.name, displayContent, sensitive = true)
-                        android.widget.Toast.makeText(requireContext(), "Log copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_log_copied), android.widget.Toast.LENGTH_SHORT).show()
                     }
                     .show()
 
             } catch (e: Exception) {
-                android.widget.Toast.makeText(requireContext(), "Error reading log: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                val message = getString(R.string.settings_toast_log_read_error, e.message.orEmpty())
+                android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -1155,14 +1199,19 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                 
                 android.widget.Toast.makeText(
                     requireContext(),
-                    "✓ Exported ${logs.size} log entries to $filename",
+                    resources.getQuantityString(
+                        R.plurals.settings_toast_log_entries_exported,
+                        logs.size,
+                        io.github.tabssh.utils.Format.count(logs.size),
+                        filename
+                    ),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
-                
+
             } catch (e: Exception) {
                 android.widget.Toast.makeText(
                     requireContext(),
-                    "Failed to export: ${e.message}",
+                    getString(R.string.settings_toast_export_failed, e.message.orEmpty()),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
             }
@@ -1171,17 +1220,17 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
     
     private fun clearLogs() {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Clear Logs")
-            .setMessage("Are you sure you want to delete all log files? This cannot be undone.")
-            .setPositiveButton("Clear") { _, _ ->
+            .setTitle(R.string.settings_dialog_clear_logs_title)
+            .setMessage(R.string.settings_dialog_clear_logs_message)
+            .setPositiveButton(R.string.settings_action_clear) { _, _ ->
                 io.github.tabssh.utils.logging.Logger.clearLogs()
                 android.widget.Toast.makeText(
                     requireContext(),
-                    "✓ All logs cleared",
+                    getString(R.string.settings_toast_all_logs_cleared),
                     android.widget.Toast.LENGTH_SHORT
                 ).show()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
 }
@@ -1210,8 +1259,11 @@ class MonitoringSettingsFragment : androidx.preference.PreferenceFragmentCompat(
         findPreference<androidx.preference.ListPreference>("monitoring_alert_cooldown_minutes")
             ?.summaryProvider = androidx.preference.Preference.SummaryProvider<androidx.preference.ListPreference> { pref ->
                 val entry = pref.entry
-                if (entry.isNullOrEmpty()) "Not set"
-                else "$entry between repeated 'still down' notifications"
+                if (entry.isNullOrEmpty()) {
+                    getString(R.string.settings_summary_not_set)
+                } else {
+                    getString(R.string.settings_summary_alert_cooldown, entry)
+                }
             }
 
         // Master toggle — schedule or cancel the background worker.
@@ -1267,7 +1319,7 @@ class MonitoringSettingsFragment : androidx.preference.PreferenceFragmentCompat(
                 if (io.github.tabssh.background.BatteryOptimizationHelper.isExempt(ctx)) {
                     android.widget.Toast.makeText(
                         ctx,
-                        "Battery optimization is already disabled for TabSSH.",
+                        getString(R.string.settings_toast_battery_already_exempt),
                         android.widget.Toast.LENGTH_SHORT
                     ).show()
                 } else {
@@ -1306,14 +1358,14 @@ class MonitoringSettingsFragment : androidx.preference.PreferenceFragmentCompat(
                     } catch (e: android.content.ActivityNotFoundException) {
                         android.widget.Toast.makeText(
                             requireContext(),
-                            "Cannot open notification settings on this device.",
+                            getString(R.string.settings_toast_notification_channel_unavailable),
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
                     }
                 } else {
                     android.widget.Toast.makeText(
                         requireContext(),
-                        "Notification channels require Android 8.0+.",
+                        getString(R.string.settings_toast_notification_channels_unsupported),
                         android.widget.Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -1334,9 +1386,9 @@ class MonitoringSettingsFragment : androidx.preference.PreferenceFragmentCompat(
         val exempt = io.github.tabssh.background.BatteryOptimizationHelper.isExempt(ctx)
         findPreference<androidx.preference.Preference>("monitoring_battery_status")?.apply {
             summary = if (exempt) {
-                "Exempt — background monitoring will run reliably"
+                getString(R.string.settings_summary_battery_exempt)
             } else {
-                "Not exempt — tap to disable battery optimization for reliable alerts"
+                getString(R.string.settings_summary_battery_not_exempt)
             }
         }
     }

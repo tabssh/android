@@ -19,7 +19,6 @@ import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DiffUtil
@@ -39,6 +38,7 @@ import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.background.BatteryOptimizationHelper
 import io.github.tabssh.storage.database.entities.MonitorSlot
 import io.github.tabssh.ui.dialogs.DialogFields
+import io.github.tabssh.utils.Format
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.storage.preferences.PreferenceManager as TabPreferenceManager
 import android.text.Spannable
@@ -83,7 +83,7 @@ import java.util.UUID
  * running in [pumpScope].  Metrics update every 5 s while the activity is
  * visible; owned sessions are disconnected in [onDestroy].
  */
-class MultiHostDashboardActivity : AppCompatActivity() {
+class MultiHostDashboardActivity : TabSSHActivity() {
 
     // ── Data model ────────────────────────────────────────────────────────────
 
@@ -379,11 +379,7 @@ class MultiHostDashboardActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         setSupportActionBar(binding.toolbar)
-        supportActionBar?.apply {
-            title = "Multi-host Dashboard"
-            setDisplayHomeAsUpEnabled(true)
-        }
-        binding.toolbar.setNavigationOnClickListener { finish() }
+        supportActionBar?.setTitle(R.string.multi_host_dashboard_title)
 
         adapter = DashboardAdapter()
         binding.recycler.layoutManager = LinearLayoutManager(this)
@@ -412,7 +408,6 @@ class MultiHostDashboardActivity : AppCompatActivity() {
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
-        android.R.id.home    -> { finish(); true }
         R.id.menu_add_hosts  -> { showHostPicker(targetGroupId = UNGROUPED_ID); true }
         else                 -> super.onOptionsItemSelected(item)
     }
@@ -1323,10 +1318,17 @@ class MultiHostDashboardActivity : AppCompatActivity() {
             val l5    = (load.load5min  / cores * 100).toInt().coerceAtLeast(0)
             val l15   = (load.load15min / cores * 100).toInt().coerceAtLeast(0)
             b.tvLoad.text = "LOAD $l1%, $l5%, $l15%"
-            b.tvUptime.text = "⏱ " + formatUptime(load.uptime)
+            b.tvUptime.text = b.root.context.getString(
+                R.string.dashboard_uptime_fmt,
+                Format.duration(b.root.context, load.uptime * 1_000L)
+            )
 
             val net = metrics.networkStats
-            b.tvNet.text  = "↓ ${fmtBps(net.rxBytesPerSec.toFloat())}  ↑ ${fmtBps(net.txBytesPerSec.toFloat())}"
+            b.tvNet.text = b.root.context.getString(
+                R.string.dashboard_net_rx_tx_fmt,
+                Format.rate(b.root.context, net.rxBytesPerSec),
+                Format.rate(b.root.context, net.txBytesPerSec)
+            )
             b.tvProcs.text = "⚙ ${load.runningProcesses}/${load.totalProcesses}"
         }
 
@@ -1422,22 +1424,6 @@ class MultiHostDashboardActivity : AppCompatActivity() {
 
     // ── Utility ───────────────────────────────────────────────────────────────
 
-    private fun formatUptime(seconds: Long): String {
-        val d = seconds / 86400
-        val h = (seconds % 86400) / 3600
-        val m = (seconds % 3600) / 60
-        return when {
-            d > 0  -> "${d}d ${h}h"
-            h > 0  -> "${h}h ${m}m"
-            else   -> "${m}m"
-        }
-    }
-
-    private fun fmtBps(bytesPerSec: Float): String = when {
-        bytesPerSec >= 1_048_576 -> "%.1f MB/s".format(bytesPerSec / 1_048_576)
-        bytesPerSec >= 1_024     -> "%.0f KB/s".format(bytesPerSec / 1_024)
-        else                     -> "%.0f B/s".format(bytesPerSec)
-    }
 
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()

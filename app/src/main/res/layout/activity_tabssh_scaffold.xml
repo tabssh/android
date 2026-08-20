@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Shared chrome scaffold. TabSSHActivity wraps every screen's own content
+  view in this layout, so the navigation drawer exists once and behaves
+  identically everywhere instead of being re-declared per screen.
+
+  Session screens (terminal / VNC / SPICE) use DrawerMode.TOOLBAR_ONLY,
+  which locks the drawer closed to gestures so left-edge swipes stay with
+  the session; the toolbar hamburger still opens it.
+-->
+<androidx.drawerlayout.widget.DrawerLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/tabssh_drawer_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <FrameLayout
+        android:id="@+id/tabssh_content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <com.google.android.material.navigation.NavigationView
+        android:id="@+id/tabssh_nav_view"
+        android:layout_width="@dimen/nav_drawer_width"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        style="@style/Widget.TabSSH.NavigationView"
+        app:menu="@menu/drawer_menu"
+        app:headerLayout="@layout/nav_header" />
+
+</androidx.drawerlayout.widget.DrawerLayout>

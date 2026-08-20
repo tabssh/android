@@ -6,18 +6,11 @@
     android:layout_height="match_parent"
     android:background="?attr/colorSurface">
 
-    <com.google.android.material.appbar.AppBarLayout
+    <include
+        android:id="@+id/app_bar"
+        layout="@layout/include_app_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
-
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
-            android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
-            app:title="Keyboard Layout Editor"
-            app:navigationIcon="@drawable/ic_close" />
-
-    </com.google.android.material.appbar.AppBarLayout>
+        android:layout_height="wrap_content" />
 
     <!-- NestedScrollView is required for appbar_scrolling_view_behavior to
          correctly offset the content below the AppBar and to allow the whole

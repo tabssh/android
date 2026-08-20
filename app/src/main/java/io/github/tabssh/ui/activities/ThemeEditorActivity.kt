@@ -18,7 +18,6 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.setMargins
 import androidx.core.view.setPadding
@@ -45,7 +44,7 @@ import kotlinx.coroutines.withContext
  * opens an HSV slider dialog. This keeps the APK lean — a colour picker
  * lib was already considered overkill for one editor.
  */
-class ThemeEditorActivity : AppCompatActivity() {
+class ThemeEditorActivity : TabSSHActivity() {
 
     companion object {
         private const val TAG = "ThemeEditor"
@@ -84,13 +83,12 @@ class ThemeEditorActivity : AppCompatActivity() {
             layoutParams = ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)
         }
 
-        val toolbar = Toolbar(this).apply {
-            title = "Theme Editor"
-            setBackgroundResource(io.github.tabssh.R.color.primary_500)
-            // Toolbar sits on the fixed primary_500 blue, so the title stays white in both modes
-            setTitleTextColor(androidx.core.content.ContextCompat.getColor(this@ThemeEditorActivity, io.github.tabssh.R.color.white))
-        }
-        root.addView(toolbar)
+        // Shared app bar, inflated rather than hand-built so this programmatic
+        // screen gets the same toolbar styling as every XML-defined screen.
+        val appBar = layoutInflater.inflate(io.github.tabssh.R.layout.include_app_bar, root, false)
+        val toolbar = appBar.findViewById<Toolbar>(io.github.tabssh.R.id.toolbar)
+        toolbar.setTitle(io.github.tabssh.R.string.theme_editor_title)
+        root.addView(appBar)
 
         val scroll = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f)
@@ -157,8 +155,6 @@ class ThemeEditorActivity : AppCompatActivity() {
 
         setContentView(root)
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        toolbar.setNavigationOnClickListener { finish() }
 
         refreshPreview()
     }

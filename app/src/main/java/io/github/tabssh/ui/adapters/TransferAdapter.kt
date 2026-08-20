@@ -3,6 +3,7 @@ package io.github.tabssh.ui.adapters
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import io.github.tabssh.R
 import io.github.tabssh.databinding.ItemTransferBinding
 import io.github.tabssh.sftp.TransferTask
 import io.github.tabssh.sftp.TransferState
@@ -38,11 +39,11 @@ class TransferAdapter(
         fun bind(transfer: TransferTask) {
             binding.apply {
                 // Transfer info
-                textTransferName.text = transfer.getDisplayName()
-                textTransferStatus.text = getStatusText(transfer)
-                textTransferProgress.text = transfer.getProgressString()
-                textTransferSpeed.text = transfer.getSpeedString()
-                textTransferEta.text = transfer.getETAString()
+                textTransferName.text = transfer.getDisplayName(root.context)
+                textTransferStatus.text = root.context.getString(statusTextRes(transfer))
+                textTransferProgress.text = transfer.getProgressString(root.context)
+                textTransferSpeed.text = transfer.getSpeedString(root.context)
+                textTransferEta.text = transfer.getETAString(root.context)
                 
                 // Progress bar
                 progressTransfer.progress = transfer.getProgressPercentage()
@@ -73,13 +74,30 @@ class TransferAdapter(
                 
                 // Accessibility
                 root.contentDescription = buildString {
-                    append(if (transfer.type == TransferType.UPLOAD) "Upload" else "Download")
-                    append(" transfer: ${transfer.getDisplayName()}")
-                    append(". Status: ${getStatusText(transfer)}")
-                    append(". Progress: ${transfer.getProgressPercentage()}%")
+                    val kind = root.context.getString(
+                        if (transfer.type == TransferType.UPLOAD) {
+                            R.string.transferrow_type_upload
+                        } else {
+                            R.string.transferrow_type_download
+                        }
+                    )
+                    append(
+                        root.context.getString(
+                            R.string.transferrow_a11y_fmt,
+                            kind,
+                            transfer.getDisplayName(root.context),
+                            root.context.getString(statusTextRes(transfer)),
+                            transfer.getProgressPercentage()
+                        )
+                    )
                     if (transfer.isActive()) {
-                        append(". Speed: ${transfer.getSpeedString()}")
-                        append(". ETA: ${transfer.getETAString()}")
+                        append(
+                            root.context.getString(
+                                R.string.transferrow_a11y_active_fmt,
+                                transfer.getSpeedString(root.context),
+                                transfer.getETAString(root.context)
+                            )
+                        )
                     }
                 }
             }
@@ -89,7 +107,7 @@ class TransferAdapter(
             binding.apply {
                 when (transfer.state.value) {
                     TransferState.ACTIVE -> {
-                        btnTransferAction.text = "Pause"
+                        btnTransferAction.setText(R.string.transferrow_action_pause)
                         btnTransferAction.setOnClickListener { onTransferPause(transfer) }
                         btnTransferCancel.setOnClickListener { onTransferCancel(transfer) }
                         
@@ -97,7 +115,7 @@ class TransferAdapter(
                         btnTransferCancel.visibility = android.view.View.VISIBLE
                     }
                     TransferState.PAUSED -> {
-                        btnTransferAction.text = "Resume"
+                        btnTransferAction.setText(R.string.transferrow_action_resume)
                         btnTransferAction.setOnClickListener { onTransferResume(transfer) }
                         btnTransferCancel.setOnClickListener { onTransferCancel(transfer) }
                         
@@ -105,7 +123,7 @@ class TransferAdapter(
                         btnTransferCancel.visibility = android.view.View.VISIBLE
                     }
                     TransferState.PENDING -> {
-                        btnTransferAction.text = "Cancel"
+                        btnTransferAction.setText(R.string.cancel)
                         btnTransferAction.setOnClickListener { onTransferCancel(transfer) }
                         
                         btnTransferAction.visibility = android.view.View.VISIBLE
@@ -120,14 +138,14 @@ class TransferAdapter(
             }
         }
         
-        private fun getStatusText(transfer: TransferTask): String {
+        private fun statusTextRes(transfer: TransferTask): Int {
             return when (transfer.state.value) {
-                TransferState.PENDING -> "Pending"
-                TransferState.ACTIVE -> "Transferring"
-                TransferState.PAUSED -> "Paused"
-                TransferState.COMPLETED -> "Completed"
-                TransferState.ERROR -> "Error"
-                TransferState.CANCELLED -> "Cancelled"
+                TransferState.PENDING -> R.string.transferrow_status_pending
+                TransferState.ACTIVE -> R.string.transferrow_status_active
+                TransferState.PAUSED -> R.string.transferrow_status_paused
+                TransferState.COMPLETED -> R.string.transferrow_status_completed
+                TransferState.ERROR -> R.string.transferrow_status_error
+                TransferState.CANCELLED -> R.string.transferrow_status_cancelled
             }
         }
     }

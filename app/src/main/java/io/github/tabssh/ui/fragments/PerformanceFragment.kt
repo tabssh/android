@@ -27,6 +27,7 @@ import io.github.tabssh.performance.MetricsHistory
 import io.github.tabssh.performance.PerformanceMetrics
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.utils.Format
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -458,12 +459,21 @@ class PerformanceFragment : Fragment() {
             textPlatformName.text = platform.getDisplayName()
             textPlatformDetails.text = "${platform.osName} ${platform.osVersion} (${platform.architecture})"
             textHostname.text = platform.hostname
-            textUptime.text = formatUptime(metrics.loadAverage.uptime)
+            val uptimeSeconds = metrics.loadAverage.uptime
+            textUptime.text = if (uptimeSeconds > 0) {
+                getString(R.string.perf_uptime_fmt, Format.duration(requireContext(), uptimeSeconds * 1_000L))
+            } else {
+                getString(R.string.perf_uptime_unknown)
+            }
         }
 
         // Memory with color coding
         textMemoryPercent.text = "${metrics.memoryUsage.usedPercent.toInt()}%"
-        textMemoryDetails.text = "${metrics.memoryUsage.usedMB} MB / ${metrics.memoryUsage.totalMB} MB"
+        textMemoryDetails.text = getString(
+            R.string.perf_used_of_total_fmt,
+            Format.size(requireContext(), metrics.memoryUsage.usedBytes),
+            Format.size(requireContext(), metrics.memoryUsage.totalBytes)
+        )
         textMemoryPercent.setTextColor(when {
             metrics.memoryUsage.usedPercent >= 90 -> requireContext().getColor(R.color.status_error)
             metrics.memoryUsage.usedPercent >= 75 -> requireContext().getColor(R.color.status_warning)
@@ -472,8 +482,11 @@ class PerformanceFragment : Fragment() {
         
         // Disk with color coding
         textDiskPercent.text = "${metrics.diskUsage.usedPercent.toInt()}%"
-        textDiskDetails.text = String.format("%.1f GB / %.1f GB", 
-            metrics.diskUsage.usedGB, metrics.diskUsage.totalGB)
+        textDiskDetails.text = getString(
+            R.string.perf_used_of_total_fmt,
+            Format.size(requireContext(), metrics.diskUsage.usedBytes),
+            Format.size(requireContext(), metrics.diskUsage.totalBytes)
+        )
         textDiskPercent.setTextColor(when {
             metrics.diskUsage.usedPercent >= 90 -> requireContext().getColor(R.color.status_error)
             metrics.diskUsage.usedPercent >= 75 -> requireContext().getColor(R.color.status_warning)
@@ -481,10 +494,21 @@ class PerformanceFragment : Fragment() {
         })
         
         // Network
-        textNetworkRx.text = "↓ ${formatBytes(metrics.networkStats.rxBytesPerSec)}/s"
-        textNetworkTx.text = "↑ ${formatBytes(metrics.networkStats.txBytesPerSec)}/s"
-        textNetworkTotal.text = String.format("Total: %.1f MB", 
-            metrics.networkStats.totalRxMB + metrics.networkStats.totalTxMB)
+        textNetworkRx.text = getString(
+            R.string.perf_network_rx_fmt,
+            Format.rate(requireContext(), metrics.networkStats.rxBytesPerSec)
+        )
+        textNetworkTx.text = getString(
+            R.string.perf_network_tx_fmt,
+            Format.rate(requireContext(), metrics.networkStats.txBytesPerSec)
+        )
+        textNetworkTotal.text = getString(
+            R.string.perf_network_total_fmt,
+            Format.size(
+                requireContext(),
+                metrics.networkStats.totalRxBytes + metrics.networkStats.totalTxBytes
+            )
+        )
         
         // Load with color coding
         textLoad1min.text = String.format("1m: %.2f", metrics.loadAverage.load1min)
@@ -536,28 +560,6 @@ class PerformanceFragment : Fragment() {
         chartCpu.invalidate()
     }
 
-    private fun formatBytes(bytes: Long): String {
-        return when {
-            bytes >= 1024 * 1024 -> String.format("%.1f MB", bytes / 1024.0 / 1024.0)
-            bytes >= 1024 -> String.format("%.1f KB", bytes / 1024.0)
-            else -> "$bytes B"
-        }
-    }
-
-    private fun formatUptime(seconds: Long): String {
-        if (seconds <= 0) return "unknown"
-
-        val days = seconds / 86400
-        val hours = (seconds % 86400) / 3600
-        val minutes = (seconds % 3600) / 60
-
-        return when {
-            days > 0 -> "up ${days}d ${hours}h"
-            hours > 0 -> "up ${hours}h ${minutes}m"
-            minutes > 0 -> "up ${minutes}m"
-            else -> "up ${seconds}s"
-        }
-    }
 
     private fun showError(message: String) {
         // Simple toast for now - could be enhanced with Snackbar

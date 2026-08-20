@@ -10,7 +10,6 @@ import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -34,7 +33,7 @@ import io.github.tabssh.utils.showError
  * Activity for managing command snippets
  * Allows creating, editing, deleting snippets and organizing by category
  */
-class SnippetManagerActivity : AppCompatActivity() {
+class SnippetManagerActivity : TabSSHActivity() {
 
     private lateinit var app: TabSSHApplication
     private lateinit var recyclerView: RecyclerView
@@ -58,10 +57,8 @@ class SnippetManagerActivity : AppCompatActivity() {
     }
 
     private fun setupToolbar() {
-        supportActionBar?.apply {
-            setDisplayHomeAsUpEnabled(true)
-            title = "Manage Snippets"
-        }
+        setSupportActionBar(findViewById(R.id.toolbar))
+        supportActionBar?.setTitle(R.string.activity_label_manage_snippets)
     }
 
     private fun setupViews() {
@@ -373,11 +370,6 @@ class SnippetManagerActivity : AppCompatActivity() {
         
         // Route through ClipboardHelper so a snippet copy cancels any pending sensitive clear.
         io.github.tabssh.utils.ClipboardHelper.copy(this, label = "Snippet", text = snippet.command, sensitive = false)
-    }
-
-    override fun onSupportNavigateUp(): Boolean {
-        finish()
-        return true
     }
 
     /**

@@ -4,13 +4,13 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.text.format.DateUtils
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
@@ -29,13 +29,14 @@ import io.github.tabssh.sync.models.ConflictResolution
 import io.github.tabssh.sync.worker.SyncWorkScheduler
 import io.github.tabssh.ui.dialogs.ConflictResolutionDialog
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 
-class SyncSettingsActivity : AppCompatActivity() {
+class SyncSettingsActivity : TabSSHActivity() {
 
     companion object {
         private const val TAG = "SyncSettingsActivity"
@@ -117,7 +118,6 @@ class SyncSettingsActivity : AppCompatActivity() {
 
         // Toolbar
         setSupportActionBar(findViewById<Toolbar>(R.id.toolbar))
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
         // File picker launchers
         createFileLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -263,7 +263,10 @@ class SyncSettingsActivity : AppCompatActivity() {
                         } else {
                             switchEnabled.isChecked = false
                             prefs.edit().putBoolean(PREF_ENABLED, false).apply()
-                            showError("File error", "Cannot access sync file: $status\nPlease reconfigure the location.")
+                            showError(
+                                getString(R.string.sync_file_error_message, status.toString()),
+                                getString(R.string.sync_file_error_title)
+                            )
                         }
                     }
                 }
@@ -628,22 +631,16 @@ class SyncSettingsActivity : AppCompatActivity() {
         }
     }
 
+    // DateUtils renders the "N minutes/hours/days ago" phrasing in the device
+    // locale, so the relative time never has to be hand-assembled here.
     private fun formatLastSync(ts: Long): String {
-        if (ts == 0L) return "Never"
-        val diff = System.currentTimeMillis() - ts
-        return when {
-            diff < 60_000      -> "Just now"
-            diff < 3_600_000   -> "${diff / 60_000}m ago"
-            diff < 86_400_000  -> "${diff / 3_600_000}h ago"
-            else               -> "${diff / 86_400_000}d ago"
-        }
+        if (ts == 0L) return getString(R.string.sync_last_never)
+        val now = System.currentTimeMillis()
+        if (now - ts < DateUtils.MINUTE_IN_MILLIS) return getString(R.string.sync_last_just_now)
+        return DateUtils.getRelativeTimeSpanString(ts, now, DateUtils.MINUTE_IN_MILLIS).toString()
     }
-
-    private fun showError(title: String, msg: String) =
-        io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(this, title, msg)
 
     private fun toast(msg: String) =
         android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
 
-    override fun onSupportNavigateUp(): Boolean { finish(); return true }
 }

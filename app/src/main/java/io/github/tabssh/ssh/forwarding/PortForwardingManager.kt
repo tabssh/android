@@ -524,36 +524,6 @@ class Tunnel(
     }
     
     /**
-     * Get formatted uptime string
-     */
-    fun getUptimeString(): String {
-        val uptime = getUptime()
-        val seconds = uptime / 1000
-        val minutes = seconds / 60
-        val hours = minutes / 60
-        val days = hours / 24
-        
-        return when {
-            days > 0 -> "${days}d ${hours % 24}h"
-            hours > 0 -> "${hours}h ${minutes % 60}m"
-            minutes > 0 -> "${minutes}m ${seconds % 60}s"
-            else -> "${seconds}s"
-        }
-    }
-    
-    /**
-     * Get bytes transferred formatted
-     */
-    fun getFormattedBytesTransferred(): String {
-        return when {
-            bytesTransferred < 1024 -> "$bytesTransferred B"
-            bytesTransferred < 1024 * 1024 -> String.format("%.1f KB", bytesTransferred / 1024.0)
-            bytesTransferred < 1024 * 1024 * 1024 -> String.format("%.1f MB", bytesTransferred / (1024.0 * 1024))
-            else -> String.format("%.1f GB", bytesTransferred / (1024.0 * 1024 * 1024))
-        }
-    }
-    
-    /**
      * Check if tunnel is active
      */
     fun isActive(): Boolean = state == TunnelState.ACTIVE

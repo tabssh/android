@@ -9,7 +9,6 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -34,7 +33,7 @@ import org.json.JSONObject
  * full lifecycle action menu and the docker-exec terminal entry point.
  * FLAG_SECURE keeps env values and logs out of screenshots and recents.
  */
-class ContainerDetailActivity : AppCompatActivity() {
+class ContainerDetailActivity : TabSSHActivity() {
 
     companion object {
         const val EXTRA_HOST_ID = "container_host_id"
@@ -143,9 +142,7 @@ class ContainerDetailActivity : AppCompatActivity() {
 
     private fun setupToolbar() {
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = containerName
-        toolbar.setNavigationOnClickListener { finish() }
     }
 
     private fun setupTabs() {
@@ -397,10 +394,6 @@ class ContainerDetailActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
-            android.R.id.home -> {
-                finish()
-                true
-            }
             R.id.action_refresh -> {
                 loadInspect()
                 true

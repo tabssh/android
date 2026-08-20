@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.view.View
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -38,7 +37,7 @@ import kotlinx.coroutines.withContext
  * the saved [PortForward] rules. Both lists observe the database as Flows and
  * expose add / edit / delete.
  */
-class PortForwardingActivity : AppCompatActivity() {
+class PortForwardingActivity : TabSSHActivity() {
 
     private val app: TabSSHApplication
         get() = application as TabSSHApplication
@@ -89,7 +88,6 @@ class PortForwardingActivity : AppCompatActivity() {
         val toolbar = findViewById<Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
         supportActionBar?.apply {
-            setDisplayHomeAsUpEnabled(true)
             title = getString(R.string.port_forwarding_title)
         }
     }
@@ -334,11 +332,6 @@ class PortForwardingActivity : AppCompatActivity() {
 
     private fun showMessage(message: String) {
         Snackbar.make(recyclerView, message, Snackbar.LENGTH_SHORT).show()
-    }
-
-    override fun onSupportNavigateUp(): Boolean {
-        finish()
-        return true
     }
 
     companion object {

@@ -6,6 +6,9 @@
   Groups: Quick → Accounts → Manage → Connect → Insights → Settings → Diagnostics
   Tabs handle: Frequent | Hosts | Identities | Stats | VMs
   Import/Export moved to Settings screen.
+
+  TabSSHActivity hosts this menu on every screen, so every destination here
+  is reachable from anywhere in the app.
 -->
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -14,32 +17,32 @@
         <item
             android:id="@+id/nav_quick_connect"
             android:icon="@drawable/ic_flash"
-            android:title="Quick Connect" />
+            android:title="@string/nav_item_quick_connect" />
     </group>
 
-    <item android:title="Accounts">
+    <item android:title="@string/nav_group_accounts">
         <menu>
             <item
                 android:id="@+id/nav_vnc_hosts"
                 android:icon="@android:drawable/ic_menu_view"
-                android:title="VNC Hosts" />
+                android:title="@string/nav_item_vnc_hosts" />
         </menu>
     </item>
 
-    <item android:title="Manage">
+    <item android:title="@string/nav_group_manage">
         <menu>
             <item
                 android:id="@+id/nav_snippets"
                 android:icon="@drawable/ic_code"
-                android:title="Snippets" />
+                android:title="@string/nav_item_snippets" />
             <item
                 android:id="@+id/nav_manage_groups"
                 android:icon="@android:drawable/ic_menu_agenda"
-                android:title="Groups" />
+                android:title="@string/nav_item_groups" />
         </menu>
     </item>
 
-    <item android:title="Connect">
+    <item android:title="@string/nav_group_connect">
         <menu>
             <item
                 android:id="@+id/nav_port_forwarding"
@@ -48,20 +51,20 @@
             <item
                 android:id="@+id/nav_cluster_commands"
                 android:icon="@android:drawable/ic_menu_share"
-                android:title="Cluster Commands" />
+                android:title="@string/nav_item_cluster_commands" />
         </menu>
     </item>
 
-    <item android:title="Insights">
+    <item android:title="@string/nav_group_insights">
         <menu>
             <item
                 android:id="@+id/nav_multi_dashboard"
                 android:icon="@android:drawable/ic_menu_view"
-                android:title="Multi-host Dashboard" />
+                android:title="@string/nav_item_multi_host_dashboard" />
             <item
                 android:id="@+id/nav_connection_history"
                 android:icon="@android:drawable/ic_menu_recent_history"
-                android:title="Connection History" />
+                android:title="@string/nav_item_connection_history" />
         </menu>
     </item>
 
@@ -69,31 +72,31 @@
         <item
             android:id="@+id/nav_settings"
             android:icon="@drawable/ic_settings"
-            android:title="Settings" />
+            android:title="@string/nav_item_settings" />
     </group>
 
-    <item android:title="Diagnostics">
+    <item android:title="@string/nav_group_diagnostics">
         <menu>
             <item
                 android:id="@+id/nav_copy_app_log"
                 android:icon="@android:drawable/ic_menu_recent_history"
-                android:title="Copy App Log (Safe to Share)" />
+                android:title="@string/nav_item_copy_app_log" />
             <item
                 android:id="@+id/nav_copy_debug_logs"
                 android:icon="@android:drawable/ic_menu_info_details"
-                android:title="Copy Debug Logs (Developer)" />
+                android:title="@string/nav_item_copy_debug_logs" />
             <item
                 android:id="@+id/nav_whats_new"
                 android:icon="@drawable/ic_info"
-                android:title="What's New" />
+                android:title="@string/nav_item_whats_new" />
             <item
                 android:id="@+id/nav_help"
                 android:icon="@drawable/ic_help"
-                android:title="Help" />
+                android:title="@string/nav_item_help" />
             <item
                 android:id="@+id/nav_about"
                 android:icon="@drawable/ic_info"
-                android:title="About" />
+                android:title="@string/nav_item_about" />
         </menu>
     </item>
 

@@ -17,7 +17,7 @@
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             android:elevation="4dp"
-            app:title="Hypervisors" />
+            app:title="@string/infra_tab_hypervisors" />
 
         <!-- Hypervisor List -->
         <androidx.recyclerview.widget.RecyclerView

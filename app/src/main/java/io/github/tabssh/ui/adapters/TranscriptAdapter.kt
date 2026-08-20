@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
 import io.github.tabssh.terminal.recording.TranscriptManager
+import io.github.tabssh.utils.Format
 
 class TranscriptAdapter(
     private val onView: (TranscriptManager.Transcript) -> Unit,
@@ -41,7 +42,7 @@ class TranscriptAdapter(
         
         fun bind(transcript: TranscriptManager.Transcript) {
             textName.text = transcript.name
-            textInfo.text = "${TranscriptManager.formatFileSize(transcript.size)} • ${TranscriptManager.formatTimestamp(transcript.timestamp)}"
+            textInfo.text = "${Format.size(itemView.context, transcript.size)} • ${TranscriptManager.formatTimestamp(transcript.timestamp)}"
             
             itemView.setOnClickListener { onView(transcript) }
             btnView.setOnClickListener { onView(transcript) }

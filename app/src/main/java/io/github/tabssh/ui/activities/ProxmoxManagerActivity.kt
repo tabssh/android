@@ -2,14 +2,12 @@ package io.github.tabssh.ui.activities
 
 import android.content.Intent
 import android.os.Bundle
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -28,6 +26,7 @@ import io.github.tabssh.terminal.TermuxBridge
 import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.ui.tabs.ConsoleConnectParams
 import io.github.tabssh.ui.tabs.HypervisorConsoleType
+import io.github.tabssh.utils.Format
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
 import kotlinx.coroutines.CancellationException
@@ -43,7 +42,7 @@ import kotlinx.coroutines.withContext
  * Displays the list of VMs on a single Proxmox hypervisor. Launched by
  * [HypervisorsFragment] / [MainActivity] with [EXTRA_HYPERVISOR_ID] set.
  */
-class ProxmoxManagerActivity : AppCompatActivity() {
+class ProxmoxManagerActivity : TabSSHActivity() {
 
     companion object {
         private const val TAG = "ProxmoxManager"
@@ -131,7 +130,6 @@ class ProxmoxManagerActivity : AppCompatActivity() {
         recyclerView = findViewById(R.id.vm_recycler_view)
 
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = "Proxmox"
 
         adapter = VmAdapter(vms)
@@ -146,11 +144,6 @@ class ProxmoxManagerActivity : AppCompatActivity() {
             return
         }
         connectAndRefresh(hypervisorId)
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == android.R.id.home) { finish(); return true }
-        return super.onOptionsItemSelected(item)
     }
 
     override fun onDestroy() {
@@ -570,7 +563,13 @@ class ProxmoxManagerActivity : AppCompatActivity() {
             holder.name.text = "${safeName(vm.name)} (${vm.vmid})"
             holder.state.text = stateLabel(vm.status)
             holder.state.setTextColor(stateColor(vm.status))
-            holder.info.text = "Node: ${safeName(vm.node)}  ·  VMID: ${vm.vmid}  ·  CPU: ${(vm.cpu * 100).toInt()}%  ·  RAM: ${vm.mem / 1024 / 1024}MB"
+            holder.info.text = getString(
+                R.string.proxmox_vm_info_fmt,
+                safeName(vm.node),
+                vm.vmid,
+                (vm.cpu * 100).toInt(),
+                Format.size(this@ProxmoxManagerActivity, vm.mem)
+            )
             if (vm.ipAddress != null) {
                 holder.ip.text = "IP: ${safeName(vm.ipAddress)}"
                 holder.ip.visibility = View.VISIBLE

@@ -9,25 +9,28 @@
   flows; the empty-state text is what shows up while we're booting / waiting
   for the result.
 -->
-<androidx.constraintlayout.widget.ConstraintLayout
+<LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="24dp"
+    android:orientation="vertical"
     android:background="?android:attr/colorBackground">
+
+    <include
+        android:id="@+id/app_bar"
+        layout="@layout/include_app_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
 
     <TextView
         android:id="@+id/text_status"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="24dp"
         android:textSize="16sp"
         android:gravity="center"
         android:textColor="?android:attr/textColorSecondary"
-        android:text="Opening camera…"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        android:text="@string/import_from_qr_status_opening_camera" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+</LinearLayout>

@@ -13,7 +13,6 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -43,7 +42,7 @@ import io.github.tabssh.utils.logging.Logger
  *   2. Keyboard surface (the full interactive layout)
  *   3. Available keys (tap to add to the currently active row)
  */
-class KeyboardCustomizationActivity : AppCompatActivity() {
+class KeyboardCustomizationActivity : TabSSHActivity() {
 
     private lateinit var binding: ActivityKeyboardCustomizationBinding
     private lateinit var app: TabSSHApplication
@@ -86,9 +85,7 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
     }
 
     private fun setupToolbar() {
-        setSupportActionBar(binding.toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        binding.toolbar.setNavigationOnClickListener { finish() }
+        setSupportActionBar(binding.appBar.toolbar)
     }
 
     private fun initViews() {
@@ -439,15 +436,12 @@ class KeyboardCustomizationActivity : AppCompatActivity() {
 
     // ─── Navigation ──────────────────────────────────────────────────────────
 
-    override fun onSupportNavigateUp(): Boolean { finish(); return true }
-
     override fun onCreateOptionsMenu(menu: android.view.Menu): Boolean {
         menuInflater.inflate(R.menu.menu_keyboard_customization, menu)
         return true
     }
 
     override fun onOptionsItemSelected(item: android.view.MenuItem) = when (item.itemId) {
-        android.R.id.home -> { finish(); true }
         R.id.menu_reset_default -> { confirmResetToDefault(); true }
         else -> super.onOptionsItemSelected(item)
     }

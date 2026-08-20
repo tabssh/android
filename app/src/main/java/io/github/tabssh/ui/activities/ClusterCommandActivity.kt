@@ -14,7 +14,6 @@ import android.widget.*
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -31,7 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class ClusterCommandActivity : AppCompatActivity() {
+class ClusterCommandActivity : TabSSHActivity() {
 
     private lateinit var app: TabSSHApplication
     private lateinit var executor: ClusterCommandExecutor
@@ -79,7 +78,6 @@ class ClusterCommandActivity : AppCompatActivity() {
 
     private fun setupToolbar() {
         setSupportActionBar(findViewById(R.id.toolbar))
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = "Cluster Commands"
     }
 
@@ -361,11 +359,6 @@ class ClusterCommandActivity : AppCompatActivity() {
 
     private fun updateExecuteButton() {
         executeButton.isEnabled = selectedConnections.isNotEmpty()
-    }
-
-    override fun onSupportNavigateUp(): Boolean {
-        finish()
-        return true
     }
 
     // Adapter classes

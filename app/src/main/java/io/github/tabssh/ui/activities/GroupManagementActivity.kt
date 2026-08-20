@@ -7,7 +7,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -28,7 +27,7 @@ import io.github.tabssh.utils.showError
  * Activity for managing connection groups/folders
  * Allows creating, editing, deleting, and reordering groups
  */
-class GroupManagementActivity : AppCompatActivity() {
+class GroupManagementActivity : TabSSHActivity() {
 
     private lateinit var app: TabSSHApplication
     private lateinit var recyclerView: RecyclerView
@@ -49,10 +48,8 @@ class GroupManagementActivity : AppCompatActivity() {
     }
 
     private fun setupToolbar() {
-        supportActionBar?.apply {
-            setDisplayHomeAsUpEnabled(true)
-            title = "Manage Groups"
-        }
+        setSupportActionBar(findViewById(R.id.toolbar))
+        supportActionBar?.setTitle(R.string.activity_label_manage_groups)
     }
 
     private fun setupViews() {
@@ -329,11 +326,6 @@ class GroupManagementActivity : AppCompatActivity() {
                 Logger.e("GroupManagementActivity", "Failed to update sort orders", e)
             }
         }
-    }
-
-    override fun onSupportNavigateUp(): Boolean {
-        finish()
-        return true
     }
 
     /**

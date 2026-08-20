@@ -4,7 +4,6 @@ import io.github.tabssh.utils.logging.Logger
 import android.os.Bundle
 import android.view.View
 import android.widget.*
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -25,11 +24,12 @@ import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.ssh.config.BulkImportParser
 import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.utils.Format
 import io.github.tabssh.utils.replaceAllWithDiff
 import io.github.tabssh.utils.showError
 import kotlinx.coroutines.CancellationException
 
-class XCPngManagerActivity : AppCompatActivity() {
+class XCPngManagerActivity : TabSSHActivity() {
 
     companion object {
         private const val TAG = "XCPngManager"
@@ -104,7 +104,6 @@ class XCPngManagerActivity : AppCompatActivity() {
 
     private fun setupToolbar() {
         setSupportActionBar(findViewById(R.id.toolbar))
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = getString(R.string.xcpng_manager_title)
     }
 
@@ -871,11 +870,6 @@ class XCPngManagerActivity : AppCompatActivity() {
             .show()
     }
 
-    override fun onSupportNavigateUp(): Boolean {
-        finish()
-        return true
-    }
-
     // VM Adapter (using shared item_hypervisor_vm layout)
 
     private inner class VMAdapter(
@@ -911,7 +905,11 @@ class XCPngManagerActivity : AppCompatActivity() {
 
             holder.name.text = safeText(vm.name, 64)
             holder.state.text = stateLabel(vm.powerState)
-            holder.info.text = getString(R.string.xcpng_vm_info_fmt, vm.vcpus, vm.memory / 1024 / 1024)
+            holder.info.text = getString(
+                R.string.xcpng_vm_info_fmt,
+                vm.vcpus,
+                Format.size(this@XCPngManagerActivity, vm.memory)
+            )
             holder.ip.visibility = View.GONE
 
             holder.state.setTextColor(stateColor(vm.powerState))

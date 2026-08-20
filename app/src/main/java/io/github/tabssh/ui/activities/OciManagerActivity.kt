@@ -1,7 +1,6 @@
 package io.github.tabssh.ui.activities
 
 import android.os.Bundle
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
@@ -10,7 +9,6 @@ import android.widget.ProgressBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -46,7 +44,7 @@ import kotlinx.coroutines.withContext
  * [validateCredentials] ping surfaces configuration errors up-front.
  * There is no separate "Authenticate" call unlike Proxmox/VMware.
  */
-class OciManagerActivity : AppCompatActivity() {
+class OciManagerActivity : TabSSHActivity() {
 
     companion object {
         private const val TAG = "OciManager"
@@ -88,7 +86,6 @@ class OciManagerActivity : AppCompatActivity() {
         recyclerView = findViewById(R.id.vm_recycler_view)
 
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = getString(R.string.oci_manager_title)
 
         adapter = InstanceAdapter(instances)
@@ -103,11 +100,6 @@ class OciManagerActivity : AppCompatActivity() {
             return
         }
         connectAndRefresh(hypervisorId)
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == android.R.id.home) { finish(); return true }
-        return super.onOptionsItemSelected(item)
     }
 
     override fun onDestroy() {

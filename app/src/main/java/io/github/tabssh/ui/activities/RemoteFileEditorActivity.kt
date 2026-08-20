@@ -11,11 +11,11 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.sftp.SFTPManager
 import io.github.tabssh.utils.logging.Logger
@@ -38,7 +38,7 @@ import java.io.File
  * - Reads as UTF-8; non-UTF-8 bytes fall through Java's replacement.
  * - No syntax highlighting. Future polish.
  */
-class RemoteFileEditorActivity : AppCompatActivity() {
+class RemoteFileEditorActivity : TabSSHActivity() {
 
     companion object {
         const val EXTRA_CONNECTION_ID = "connection_id"
@@ -76,7 +76,7 @@ class RemoteFileEditorActivity : AppCompatActivity() {
         val fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: remotePath.substringAfterLast('/')
 
         if (connectionId.isNullOrBlank() || remotePath.isBlank()) {
-            Toast.makeText(this, "Missing file path", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.remote_editor_missing_path, Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -89,16 +89,13 @@ class RemoteFileEditorActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams.MATCH_PARENT
             )
         }
-        val toolbar = Toolbar(this).apply {
-            title = fileName
-            subtitle = remotePath
-            setBackgroundResource(io.github.tabssh.R.color.primary_500)
-            // Toolbar sits on the fixed primary_500 blue, so title/subtitle stay light in both
-            // modes; primary_100 matches Widget.TabSSH.Toolbar's subtitleTextColor
-            setTitleTextColor(androidx.core.content.ContextCompat.getColor(this@RemoteFileEditorActivity, io.github.tabssh.R.color.white))
-            setSubtitleTextColor(androidx.core.content.ContextCompat.getColor(this@RemoteFileEditorActivity, io.github.tabssh.R.color.primary_100))
-        }
-        root.addView(toolbar)
+        // Shared app bar, inflated rather than hand-built so this programmatic
+        // screen gets the same toolbar styling as every XML-defined screen.
+        val appBar = layoutInflater.inflate(R.layout.include_app_bar, root, false)
+        val toolbar = appBar.findViewById<Toolbar>(R.id.toolbar)
+        toolbar.title = fileName
+        toolbar.subtitle = remotePath
+        root.addView(appBar)
 
         progress = ProgressBar(this).apply {
             isIndeterminate = true
@@ -134,7 +131,7 @@ class RemoteFileEditorActivity : AppCompatActivity() {
                     if (now != originalText && !dirty) {
                         dirty = true
                         invalidateOptionsMenu()
-                        toolbar.title = "$fileName *"
+                        toolbar.title = getString(R.string.remote_editor_title_dirty_fmt, fileName)
                     } else if (now == originalText && dirty) {
                         dirty = false
                         invalidateOptionsMenu()
@@ -147,14 +144,13 @@ class RemoteFileEditorActivity : AppCompatActivity() {
 
         setContentView(root)
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
         // Connect SFTP and download.
         lifecycleScope.launch { downloadFile(connectionId) }
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(0, 1, 0, "Save").apply {
+        menu.add(0, 1, 0, R.string.save).apply {
             setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
             setIcon(android.R.drawable.ic_menu_save)
             isEnabled = dirty
@@ -169,7 +165,6 @@ class RemoteFileEditorActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
-            android.R.id.home -> { onBackPressed(); true }
             1 -> { saveFile(); true }
             else -> super.onOptionsItemSelected(item)
         }
@@ -186,11 +181,11 @@ class RemoteFileEditorActivity : AppCompatActivity() {
 
     private fun promptUnsavedChanges() {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Unsaved changes")
-            .setMessage("Save before closing?")
-            .setPositiveButton("Save") { _, _ -> saveFile { finish() } }
-            .setNegativeButton("Discard") { _, _ -> finish() }
-            .setNeutralButton("Cancel", null)
+            .setTitle(R.string.remote_editor_unsaved_title)
+            .setMessage(R.string.remote_editor_unsaved_message)
+            .setPositiveButton(R.string.save) { _, _ -> saveFile { finish() } }
+            .setNegativeButton(R.string.discard) { _, _ -> finish() }
+            .setNeutralButton(R.string.cancel, null)
             .show()
     }
 
@@ -198,7 +193,7 @@ class RemoteFileEditorActivity : AppCompatActivity() {
         val ssh = app.sshSessionManager.getConnection(connectionId)
         if (ssh == null) {
             runOnUiThread {
-                Toast.makeText(this, "Connection not active — open the terminal first", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, R.string.remote_editor_no_connection, Toast.LENGTH_LONG).show()
                 finish()
             }
             return
@@ -206,7 +201,7 @@ class RemoteFileEditorActivity : AppCompatActivity() {
         val mgr = SFTPManager(ssh)
         if (!mgr.connect()) {
             runOnUiThread {
-                Toast.makeText(this, "SFTP failed to open", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, R.string.remote_editor_sftp_failed, Toast.LENGTH_LONG).show()
                 finish()
             }
             return
@@ -223,7 +218,7 @@ class RemoteFileEditorActivity : AppCompatActivity() {
                     io.github.tabssh.sftp.TransferState.ERROR,
                     io.github.tabssh.sftp.TransferState.CANCELLED -> {
                         runOnUiThread {
-                            Toast.makeText(this@RemoteFileEditorActivity, "Download failed", Toast.LENGTH_LONG).show()
+                            Toast.makeText(this@RemoteFileEditorActivity, R.string.remote_editor_download_failed, Toast.LENGTH_LONG).show()
                             finish()
                         }
                         return
@@ -233,7 +228,7 @@ class RemoteFileEditorActivity : AppCompatActivity() {
             }
             if (!cacheFile.exists()) {
                 runOnUiThread {
-                    Toast.makeText(this, "Download produced no file", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, R.string.remote_editor_download_empty, Toast.LENGTH_LONG).show()
                     finish()
                 }
                 return
@@ -249,7 +244,11 @@ class RemoteFileEditorActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Logger.e(TAG, "Download failed", e)
             runOnUiThread {
-                Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    this,
+                    getString(R.string.remote_editor_error_fmt, e.message.orEmpty()),
+                    Toast.LENGTH_LONG
+                ).show()
                 finish()
             }
         }
@@ -260,7 +259,7 @@ class RemoteFileEditorActivity : AppCompatActivity() {
         // Reject re-entry while an upload is already in flight — otherwise two
         // concurrent uploads race and the second clobbers the first.
         if (isSaving) {
-            Toast.makeText(this, "Save already in progress…", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.remote_editor_save_in_progress, Toast.LENGTH_SHORT).show()
             return
         }
         isSaving = true
@@ -287,20 +286,24 @@ class RemoteFileEditorActivity : AppCompatActivity() {
                 runOnUiThread {
                     progress.visibility = android.view.View.GONE
                     if (success) {
-                        Toast.makeText(this@RemoteFileEditorActivity, "Saved", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@RemoteFileEditorActivity, R.string.remote_editor_saved, Toast.LENGTH_SHORT).show()
                         originalText = text
                         dirty = false
                         invalidateOptionsMenu()
                         onComplete?.invoke()
                     } else {
-                        Toast.makeText(this@RemoteFileEditorActivity, "Upload failed", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@RemoteFileEditorActivity, R.string.remote_editor_upload_failed, Toast.LENGTH_LONG).show()
                     }
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Save failed", e)
                 runOnUiThread {
                     progress.visibility = android.view.View.GONE
-                    Toast.makeText(this@RemoteFileEditorActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        this@RemoteFileEditorActivity,
+                        getString(R.string.remote_editor_error_fmt, e.message.orEmpty()),
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             } finally {
                 tmpFile.delete()

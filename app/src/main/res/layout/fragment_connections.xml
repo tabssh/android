@@ -19,8 +19,9 @@
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar_connections"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:title="Connections" />
+            android:layout_height="?attr/actionBarSize"
+            android:elevation="4dp"
+            app:title="@string/connections_tab_title" />
 
         <!-- Search Bar -->
         <com.google.android.material.card.MaterialCardView

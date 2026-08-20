@@ -2,9 +2,7 @@ package io.github.tabssh.ui.activities
 
 import android.content.Intent
 import android.os.Bundle
-import android.view.MenuItem
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
@@ -23,7 +21,7 @@ import kotlinx.coroutines.withContext
  * All import/export logic previously in MainActivity lives here.
  * Launched from Settings → Import / Export preference.
  */
-class ImportExportActivity : AppCompatActivity() {
+class ImportExportActivity : TabSSHActivity() {
 
     private lateinit var app: TabSSHApplication
     // Nullable so click handlers can detect "not yet ready" without crashing.
@@ -74,8 +72,6 @@ class ImportExportActivity : AppCompatActivity() {
 
         val toolbar = findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        toolbar.setNavigationOnClickListener { finish() }
 
         // BackupManager's constructor calls SyncEncryptor() which seeds BouncyCastle's
         // DRBG — a potentially blocking operation. Initialise on IO so onCreate returns
@@ -110,16 +106,6 @@ class ImportExportActivity : AppCompatActivity() {
             .setOnClickListener {
                 exportConnectionsLauncher.launch("tabssh_connections_${System.currentTimeMillis()}.zip")
             }
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
-        android.R.id.home -> { finish(); true }
-        else -> super.onOptionsItemSelected(item)
-    }
-
-    override fun onSupportNavigateUp(): Boolean {
-        finish()
-        return true
     }
 
     /**

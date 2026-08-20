@@ -198,7 +198,7 @@
         <activity
             android:name=".ui.activities.ClusterCommandActivity"
             android:exported="false"
-            android:label="Cluster Commands"
+            android:label="@string/activity_label_cluster_commands"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -206,7 +206,7 @@
         <activity
             android:name=".ui.activities.ProxmoxManagerActivity"
             android:exported="false"
-            android:label="Proxmox Manager"
+            android:label="@string/activity_label_proxmox_manager"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -214,7 +214,7 @@
         <activity
             android:name=".ui.activities.XCPngManagerActivity"
             android:exported="false"
-            android:label="XCP-ng Manager"
+            android:label="@string/activity_label_xcpng_manager"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -222,7 +222,7 @@
         <activity
             android:name=".ui.activities.VMwareManagerActivity"
             android:exported="false"
-            android:label="VMware Manager"
+            android:label="@string/activity_label_vmware_manager"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -230,7 +230,7 @@
         <activity
             android:name=".ui.activities.HypervisorEditActivity"
             android:exported="false"
-            android:label="Edit Hypervisor"
+            android:label="@string/activity_label_edit_hypervisor"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -238,7 +238,7 @@
         <activity
             android:name=".ui.activities.OciManagerActivity"
             android:exported="false"
-            android:label="OCI Manager"
+            android:label="@string/activity_label_oci_manager"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -246,7 +246,7 @@
         <activity
             android:name=".ui.activities.ContainerHostEditActivity"
             android:exported="false"
-            android:label="Edit Container Host"
+            android:label="@string/activity_label_edit_container_host"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -254,7 +254,7 @@
         <activity
             android:name=".ui.activities.ContainerHostManagerActivity"
             android:exported="false"
-            android:label="Container Manager"
+            android:label="@string/activity_label_container_manager"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -262,14 +262,14 @@
         <activity
             android:name=".ui.activities.ContainerDetailActivity"
             android:exported="false"
-            android:label="Container"
+            android:label="@string/activity_label_container"
             android:parentActivityName=".ui.activities.ContainerHostManagerActivity" />
 
         <!-- Compose stack editor (paste-first YAML flow) -->
         <activity
             android:name=".ui.activities.ComposeEditorActivity"
             android:exported="false"
-            android:label="Compose Stack"
+            android:label="@string/activity_label_compose_stack"
             android:parentActivityName=".ui.activities.ContainerHostManagerActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -277,7 +277,7 @@
         <activity
             android:name=".ui.activities.SingleContainerConfigEditorActivity"
             android:exported="false"
-            android:label="Container Config"
+            android:label="@string/activity_label_container_config"
             android:parentActivityName=".ui.activities.ContainerHostManagerActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -285,7 +285,7 @@
         <activity
             android:name=".ui.activities.StackLogsActivity"
             android:exported="false"
-            android:label="Stack Logs"
+            android:label="@string/activity_label_stack_logs"
             android:parentActivityName=".ui.activities.ContainerHostManagerActivity" />
 
         <!-- System-wide ssh://, sftp://, spice://, spice+tls:// and vnc://
@@ -383,7 +383,7 @@
         <activity
             android:name=".ui.activities.ThemeEditorActivity"
             android:exported="false"
-            android:label="Theme Editor"
+            android:label="@string/activity_label_theme_editor"
             android:parentActivityName=".ui.activities.SettingsActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -391,14 +391,14 @@
         <activity
             android:name=".ui.activities.ConnectionHistoryActivity"
             android:exported="false"
-            android:label="Connection History"
+            android:label="@string/activity_label_connection_history"
             android:parentActivityName=".ui.activities.MainActivity" />
 
         <!-- Wave 3.6 — What's new -->
         <activity
             android:name=".ui.activities.WhatsNewActivity"
             android:exported="false"
-            android:label="What's New"
+            android:label="@string/activity_label_whats_new"
             android:parentActivityName=".ui.activities.MainActivity" />
 
         <!-- Wave 3.2 — PIN lock screen (FLAG_SECURE; not exported) -->
@@ -407,27 +407,27 @@
             android:exported="false"
             android:excludeFromRecents="true"
             android:launchMode="singleTask"
-            android:label="App Lock" />
+            android:label="@string/activity_label_app_lock" />
 
         <!-- Wave 4.g — Multi-host performance dashboard -->
         <activity
             android:name=".ui.activities.MultiHostDashboardActivity"
             android:exported="false"
-            android:label="Multi-host Dashboard"
+            android:label="@string/activity_label_multi_host_dashboard"
             android:parentActivityName=".ui.activities.MainActivity" />
 
         <!-- Single-host detail / monitoring view (launched from dashboard cards) -->
         <activity
             android:name=".ui.activities.HostDetailActivity"
             android:exported="false"
-            android:label="Host Detail"
+            android:label="@string/activity_label_host_detail"
             android:parentActivityName=".ui.activities.MultiHostDashboardActivity" />
 
         <!-- Wave 5.1 — Cloud accounts (DigitalOcean inventory etc.) -->
         <activity
             android:name=".ui.activities.CloudAccountsActivity"
             android:exported="false"
-            android:label="Cloud Accounts"
+            android:label="@string/activity_label_cloud_accounts"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -435,7 +435,7 @@
         <activity
             android:name=".ui.activities.CloudAccountManagerActivity"
             android:exported="false"
-            android:label="Cloud Instances"
+            android:label="@string/activity_label_cloud_instances"
             android:theme="@style/Theme.TabSSH"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
@@ -453,7 +453,7 @@
         <activity
             android:name=".ui.activities.ImportFromQrActivity"
             android:exported="false"
-            android:label="Pair from Desktop"
+            android:label="@string/activity_label_pair_from_desktop"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -531,7 +531,7 @@
              app exporting EDIT_SETTING as an available plugin action. -->
         <activity
             android:name=".automation.LocaleEditActivity"
-            android:label="TabSSH Action"
+            android:label="@string/activity_label_tasker_action"
             android:exported="true">
             <intent-filter>
                 <action android:name="com.twofortyfouram.locale.intent.action.EDIT_SETTING" />
@@ -564,14 +564,14 @@
 
         <activity
             android:name=".ui.activities.TranscriptViewerActivity"
-            android:label="Session Transcripts"
+            android:label="@string/activity_label_session_transcripts"
             android:parentActivityName=".ui.activities.TabTerminalActivity"
             android:exported="false" />
 
         <!-- Widget Configuration Activity -->
         <activity
             android:name=".widget.WidgetConfigActivity"
-            android:label="Configure Widget"
+            android:label="@string/activity_label_configure_widget"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
@@ -581,7 +581,7 @@
         <!-- 1x1 Widget -->
         <receiver
             android:name=".widget.ConnectionWidgetProvider"
-            android:label="TabSSH 1x1"
+            android:label="@string/widget_label_1x1"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -594,7 +594,7 @@
         <!-- 2x1 Widget -->
         <receiver
             android:name=".widget.ConnectionWidgetProvider$Widget2x1"
-            android:label="TabSSH 2x1"
+            android:label="@string/widget_label_2x1"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -607,7 +607,7 @@
         <!-- 4x2 Widget -->
         <receiver
             android:name=".widget.ConnectionWidgetProvider$Widget4x2"
-            android:label="TabSSH 4x2"
+            android:label="@string/widget_label_4x2"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -620,7 +620,7 @@
         <!-- 4x4 Widget -->
         <receiver
             android:name=".widget.ConnectionWidgetProvider$Widget4x4"
-            android:label="TabSSH 4x4"
+            android:label="@string/widget_label_4x4"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -640,7 +640,7 @@
         <activity
             android:name=".ui.activities.LibvirtManagerActivity"
             android:exported="false"
-            android:label="QEMU/libvirt Manager"
+            android:label="@string/activity_label_libvirt_manager"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -648,7 +648,7 @@
         <activity
             android:name=".ui.activities.VncHostEditActivity"
             android:exported="false"
-            android:label="VNC Host"
+            android:label="@string/activity_label_vnc_host"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 

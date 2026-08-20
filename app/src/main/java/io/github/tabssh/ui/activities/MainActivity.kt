@@ -8,17 +8,12 @@ import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.GravityCompat
-import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
-import com.google.android.material.navigation.NavigationView
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
-import io.github.tabssh.BuildConfig
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.hypervisor.vnc.VncDirectConnector
@@ -37,10 +32,9 @@ import kotlinx.coroutines.withContext
  * Main activity with 5-tab JuiceSSH-inspired layout
  * Tabs: Frequent | Connections | Identities | Performance | Hypervisors
  */
-class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
+class MainActivity : TabSSHActivity() {
 
     private lateinit var app: TabSSHApplication
-    private lateinit var drawerLayout: DrawerLayout
     private lateinit var viewPager: ViewPager2
     private lateinit var tabLayout: TabLayout
     private lateinit var fab: FloatingActionButton
@@ -66,13 +60,11 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 .forEach { nm.cancel(it.id) }
         }
 
-        // Setup drawer — hamburger is now inline with the tab bar (no separate title row)
-        drawerLayout = findViewById(R.id.drawer_layout)
-        val navView = findViewById<NavigationView>(R.id.nav_view)
-        navView.setNavigationItemSelectedListener(this)
-
+        // The drawer itself comes from TabSSHActivity's shared scaffold; the
+        // home screen only supplies its own inline hamburger, which sits in
+        // the tab row instead of a separate title bar.
         findViewById<android.widget.ImageButton>(R.id.btn_nav_menu).setOnClickListener {
-            drawerLayout.openDrawer(GravityCompat.START)
+            openNavigationDrawer()
         }
 
         // Setup ViewPager2 + TabLayout
@@ -150,27 +142,22 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             android.view.View.GONE
         }
 
-        // Handle back press for drawer + optional exit-confirmation prompt
-        // controlled by the user-visible `confirm_exit` preference
-        // (preferences_general.xml). When the toggle is on, the back press
-        // that would exit MainActivity is intercepted and an AlertDialog
-        // asks the user to confirm before finishing.
+        // Optional exit-confirmation prompt controlled by the user-visible
+        // `confirm_exit` preference. Closing an open drawer is handled by
+        // TabSSHActivity, whose callback is registered later and therefore
+        // runs first.
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
-                    drawerLayout.closeDrawer(GravityCompat.START)
-                    return
-                }
                 val confirmExit = app.preferencesManager.getBoolean("confirm_exit", false)
                 if (confirmExit) {
                     MaterialAlertDialogBuilder(this@MainActivity)
                         .setTitle(R.string.app_name)
-                        .setMessage("Exit TabSSH?")
-                        .setPositiveButton("Exit") { _, _ ->
+                        .setMessage(R.string.exit_confirm_message)
+                        .setPositiveButton(R.string.action_exit) { _, _ ->
                             isEnabled = false
                             onBackPressedDispatcher.onBackPressed()
                         }
-                        .setNegativeButton("Cancel", null)
+                        .setNegativeButton(R.string.action_cancel, null)
                         .show()
                 } else {
                     isEnabled = false
@@ -178,6 +165,10 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 }
             }
         })
+
+        // A drawer action picked on another screen routes here (MainActivity
+        // is singleTop) because its UI lives on the home screen.
+        handleNavAction(intent)
 
         // Request notification permission for Android 13+
         requestNotificationPermissionIfNeeded()
@@ -247,313 +238,28 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         }
     }
 
-    // Toolbar menu removed - using drawer navigation only
-
+    // Quick Connect is the one drawer entry whose UI lives here: it needs the
+    // tab manager and the home screen's connection list. Every other entry is
+    // handled identically for all screens by TabSSHActivity.
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            // Main actions
-            // Quick
-            R.id.nav_quick_connect -> showQuickConnectDialog()
-
-            // Manage
-            R.id.nav_snippets -> startActivity(Intent(this, SnippetManagerActivity::class.java))
-            R.id.nav_manage_groups -> startActivity(Intent(this, GroupManagementActivity::class.java))
-
-            // Connect
-            R.id.nav_port_forwarding -> startActivity(Intent(this, PortForwardingActivity::class.java))
-            R.id.nav_cluster_commands -> startActivity(Intent(this, ClusterCommandActivity::class.java))
-
-            // Insights
-            R.id.nav_multi_dashboard -> startActivity(Intent(this, MultiHostDashboardActivity::class.java))
-            R.id.nav_connection_history -> startActivity(Intent(this, ConnectionHistoryActivity::class.java))
-
-            // Accounts
-            R.id.nav_vnc_hosts -> startActivity(Intent(this, VncHostsActivity::class.java))
-
-            // Settings
-            R.id.nav_settings -> startActivity(Intent(this, SettingsActivity::class.java))
-
-            // Diagnostics
-            R.id.nav_copy_app_log -> copyAppLog()
-            R.id.nav_copy_debug_logs -> copyDebugLogs()
-            R.id.nav_whats_new -> startActivity(Intent(this, WhatsNewActivity::class.java))
-            R.id.nav_help -> showHelpDialog()
-            R.id.nav_about -> showAboutDialog()
+        if (item.itemId == R.id.nav_quick_connect) {
+            closeNavigationDrawer()
+            showQuickConnectDialog()
+            return true
         }
-        
-        drawerLayout.closeDrawer(GravityCompat.START)
-        return true
-    }
-    
-    /**
-     * Show help dialog
-     */
-    private fun showHelpDialog() {
-        val helpText = """
-        TabSSH - Modern SSH Client for Android
-        
-        Getting Started:
-        • Tap (+) to add a new connection
-        • Long-press a connection for more options
-        • Swipe left/right to navigate between tabs
-        
-        Features:
-        • Browser-style SSH tabs
-        • SSH key management
-        • Port forwarding
-        • SFTP file transfer
-        • Performance monitoring
-        • Hypervisor management
-        
-        For more help, visit:
-        https://github.com/tabssh/android
-        """.trimIndent()
-        
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Help")
-            .setMessage(helpText)
-            .setPositiveButton("OK", null)
-            .setNeutralButton("Visit Website") { _, _ ->
-                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/tabssh/android"))
-                startActivity(intent)
-            }
-            .show()
-    }
-    
-    /**
-     * Show about dialog
-     */
-    private fun showAboutDialog() {
-        // Pull real version/build metadata from BuildConfig so devel/daily/beta
-        // builds are distinguishable — the About dialog previously showed a
-        // hard-coded "1.0.0 (Build 1)" which made every build look identical
-        // and left users unsure whether an update had actually landed.
-        val versionName = io.github.tabssh.BuildConfig.VERSION_NAME
-        val versionCode = io.github.tabssh.BuildConfig.VERSION_CODE
-        val commit = io.github.tabssh.BuildConfig.GIT_COMMIT_ID ?: "unknown"
-        val flavor = io.github.tabssh.BuildConfig.BUILD_TYPE
-        // Native components are cross-compiled per ABI and bundled as
-        // jniLibs/<abi>/lib*.so; whether they made it into THIS build depends on
-        // the device ABI and whether the binaries workflow had published them at
-        // build time, so report their live availability rather than assuming.
-        val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"
-        val torIncluded = io.github.tabssh.protocols.tor.TorNativeClient.isAvailable(this)
-        val moshIncluded = io.github.tabssh.protocols.mosh.MoshNativeClient.isAvailable(this)
-        val torState = if (torIncluded) "included" else "not bundled"
-        val moshState = if (moshIncluded) "included" else "not bundled"
-        val nativeComponents = """
-        Native components ($abi):
-        • Tor ${io.github.tabssh.protocols.tor.TorNativeClient.TOR_VERSION} — $torState
-        • Mosh ${io.github.tabssh.protocols.mosh.MoshNativeClient.MOSH_VERSION} — $moshState
-        • Tor crypto: OpenSSL ${io.github.tabssh.protocols.tor.TorNativeClient.OPENSSL_VERSION}, libevent ${io.github.tabssh.protocols.tor.TorNativeClient.LIBEVENT_VERSION}, zlib ${io.github.tabssh.protocols.tor.TorNativeClient.ZLIB_VERSION}
-        • Terminal: Termux ${io.github.tabssh.BuildConfig.TERMINAL_EMULATOR_VERSION}
-        """.trimIndent()
-        val aboutText = """
-        TabSSH
-        Version $versionName (Build $versionCode)
-        Commit: $commit ($flavor)
-
-        A modern, open-source SSH client for Android with browser-style tabs, Material Design 3, and comprehensive security features.
-
-        © 2024-2026 TabSSH Project
-        Licensed under MIT License
-
-        Built with:
-        • Kotlin 2.0.21
-        • JSch (SSH library)
-        • Material Design Components
-        • MPAndroidChart
-
-        $nativeComponents
-
-        Credits:
-        • Development: TabSSH Team
-        • Icon Design: Material Icons
-        • Community Contributors
-        """.trimIndent()
-        
-        MaterialAlertDialogBuilder(this)
-            .setTitle("About TabSSH")
-            .setMessage(aboutText)
-            .setPositiveButton("OK", null)
-            .setNeutralButton("GitHub") { _, _ ->
-                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/tabssh/android"))
-                startActivity(intent)
-            }
-            .setNegativeButton("License") { _, _ ->
-                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/tabssh/android/blob/main/LICENSE.md"))
-                startActivity(intent)
-            }
-            .show()
+        return super.onNavigationItemSelected(item)
     }
 
     /**
-     * Copy debug logs to clipboard and offer to share
+     * Performs a drawer action that another screen delegated to the home
+     * screen by launching it with [EXTRA_NAV_ACTION].
      */
-    private fun copyDebugLogs() {
-        // Probe the actual file — substring-sniffing the rendered text
-        // (what the old version did) was unreliable and copied placeholder
-        // strings into the clipboard while toasting "success". Now we
-        // route on file state directly.
-        val file = Logger.getLogFile()
-        val haveRealLogs = file != null && file.exists() && file.length() > 0
-        if (!haveRealLogs) {
-            // Show a hint that depends on which build the user is on:
-            //   DEBUG_LOG build → debug logging is on, but no events captured
-            //                     yet — "do something first"
-            //   release build   → the Debug Logging settings category is
-            //                     hidden when DEBUG_LOG is false (see
-            //                     LoggingSettingsFragment), so pointing the
-            //                     user at Settings was a dead end. Say what is
-            //                     actually true: this build cannot capture
-            //                     debug logs at all.
-            val msg = if (BuildConfig.DEBUG_LOG) {
-                "Debug logging is enabled (this is a development build) but " +
-                "no events have been captured yet.\n\nUse the app a bit " +
-                "(open a connection, navigate around) and try Copy Debug " +
-                "Logs again."
-            } else {
-                "Debug logging is not available in this release build.\n\n" +
-                "Install a development build if you need to capture logs for " +
-                "a bug report."
-            }
-            MaterialAlertDialogBuilder(this)
-                .setTitle("No Debug Logs Yet")
-                .setMessage(msg)
-                .setPositiveButton("OK", null)
-                .show()
-            return
+    private fun handleNavAction(source: Intent?) {
+        val action = source?.getStringExtra(EXTRA_NAV_ACTION) ?: return
+        source.removeExtra(EXTRA_NAV_ACTION)
+        if (action == EXTRA_QUICK_CONNECT) {
+            showQuickConnectDialog()
         }
-
-        // Logger.getAllLogs() reads multiple files synchronously — must run on IO,
-        // not on Main, to avoid blocking the main thread (ANR).
-        lifecycleScope.launch {
-            val logs = withContext(Dispatchers.IO) { Logger.getAllLogs() }
-            offerLogShareOrCopy(
-                title = "Debug Logs",
-                clipLabel = "TabSSH Debug Logs",
-                shareSubject = "TabSSH Debug Logs",
-                logs = logs,
-                logType = "debug",
-                onClear = {
-                    Logger.clearLogs()
-                    android.widget.Toast.makeText(this@MainActivity, "Logs cleared", android.widget.Toast.LENGTH_SHORT).show()
-                }
-            )
-        }
-    }
-
-    /**
-     * Show a log and offer Copy/Open Issue/Clear.
-     *
-     * "Open Issue" uploads the sanitized log to the configured paste service
-     * and opens the GitHub new-issue page pre-filled with the paste URL —
-     * no API token required.  This is more actionable than a raw Share sheet
-     * because it lands directly in the bug tracker with device context already
-     * attached.
-     *
-     * Clipboard write is still attempted for convenience but is wrapped in
-     * try/catch because OEM clipboard services throw TransactionTooLargeException
-     * on large payloads; when that happens we skip the copy and keep the
-     * Open Issue button as the primary action.
-     *
-     * @param logType  "debug" or "app" — passed to [io.github.tabssh.ui.dialogs.ReportIssueDialog]
-     *                 to label the paste correctly (both log types are pre-sanitized at write time).
-     */
-    private fun offerLogShareOrCopy(
-        title: String,
-        clipLabel: String,
-        shareSubject: String,
-        logs: String,
-        logType: String,
-        onClear: () -> Unit
-    ) {
-        val openIssueAction: () -> Unit = {
-            io.github.tabssh.ui.dialogs.ReportIssueDialog
-                .create(logs, logType)
-                .show(supportFragmentManager, "report_issue")
-        }
-
-        // Empirical safe cap. Real binder limit is ~1MB across all parcels
-        // in the call; clipboard service adds metadata, so 256 KB leaves
-        // plenty of headroom even on cranky OEM builds.
-        val clipboardCapBytes = 256 * 1024
-        val logsBytes = logs.toByteArray(Charsets.UTF_8).size
-        val tooBigForClipboard = logsBytes > clipboardCapBytes
-
-        if (tooBigForClipboard) {
-            // Don't even attempt clipboard — large strings have crashed
-            // here before (TransactionTooLargeException) and there's no
-            // sane way to recover mid-binder-call.
-            MaterialAlertDialogBuilder(this)
-                .setTitle("$title — too large to copy")
-                .setMessage(
-                    "Log is ${logsBytes / 1024} KB — too large for the clipboard. " +
-                    "Use \"Paste / Issue\" to upload it to a paste service — you can " +
-                    "copy the URL or open a pre-filled GitHub bug report."
-                )
-                .setPositiveButton("Paste / Issue") { _, _ -> openIssueAction() }
-                .setNeutralButton("Clear") { _, _ -> onClear() }
-                .setNegativeButton("Cancel", null)
-                .show()
-            return
-        }
-
-        val copied = try {
-            io.github.tabssh.utils.ClipboardHelper.copy(this, clipLabel, logs, sensitive = false)
-            true
-        } catch (e: Throwable) {
-            // RemoteException / TransactionTooLargeException / OEM weirdness.
-            Logger.e("MainActivity", "Clipboard write failed for $title (${logsBytes} bytes)", e)
-            false
-        }
-
-        val msg = if (copied) {
-            "${logs.length} characters copied to clipboard.\n\nTap \"Paste / Issue\" to upload to a paste service — copy the URL or open a GitHub issue."
-        } else {
-            "Clipboard write failed — log may be too large. Use \"Paste / Issue\" to upload it directly."
-        }
-        MaterialAlertDialogBuilder(this)
-            .setTitle(if (copied) "$title Copied" else title)
-            .setMessage(msg)
-            .setPositiveButton("OK", null)
-            .setNeutralButton("Paste / Issue") { _, _ -> openIssueAction() }
-            .setNegativeButton("Clear") { _, _ -> onClear() }
-            .show()
-    }
-
-    /**
-     * Copy sanitized app log (safe for public sharing)
-     */
-    private fun copyAppLog() {
-        // Probe the file directly — `getAppLog()` returns a "No logs
-        // recorded yet" placeholder when there's nothing, but checking
-        // file existence + size is more reliable than substring matching
-        // (which previously also missed the placeholder for the debug-log
-        // sibling and copied junk).
-        val file = Logger.getAppLogFile()
-        val haveRealLogs = file != null && file.exists() && file.length() > 0
-        if (!haveRealLogs) {
-            MaterialAlertDialogBuilder(this)
-                .setTitle("Application Log")
-                .setMessage("No logs recorded yet.\n\nUse the app normally, and logs will be captured automatically.")
-                .setPositiveButton("OK", null)
-                .show()
-            return
-        }
-
-        val logs = Logger.getAppLog()
-        offerLogShareOrCopy(
-            title = "App Log",
-            clipLabel = "TabSSH App Log",
-            shareSubject = "TabSSH App Log",
-            logs = logs,
-            logType = "app",
-            onClear = {
-                Logger.clearAppLog()
-                android.widget.Toast.makeText(this, "App log cleared", android.widget.Toast.LENGTH_SHORT).show()
-            }
-        )
     }
 
     /**
@@ -648,8 +354,8 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         setIntent(intent)
         val tab = intent.getIntExtra("start_tab", -1).takeIf { it in 0..4 }
         if (tab != null) viewPager.setCurrentItem(tab, /* smoothScroll = */ true)
+        handleNavAction(intent)
     }
-
 
     // Modern result API — replaces startActivityForResult/onActivityResult.
     override fun onPause() {
@@ -912,35 +618,5 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         startActivity(intent)
 
         Logger.i("MainActivity", "Quick connecting to $username@$hostname:$port")
-    }
-    
-    private fun showLogsDialog() {
-        try {
-            val logEntries = Logger.getRecentLogs()
-            if (logEntries.isEmpty()) {
-                io.github.tabssh.ui.utils.DialogUtils.showSuccessDialog(
-                    this,
-                    "Application Logs",
-                    "No logs available. Logs are generated during app usage."
-                )
-            } else {
-                // Convert LogEntry list to formatted string
-                val logs = logEntries.joinToString("\n") { entry ->
-                    "${entry.timestamp} [${entry.level}] ${entry.tag}: ${entry.message}"
-                }
-                
-                io.github.tabssh.ui.utils.DialogUtils.showCopyableDialog(
-                    this,
-                    "Application Logs (Last 500 entries)",
-                    logs
-                )
-            }
-        } catch (e: Exception) {
-            io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
-                this,
-                "Error Loading Logs",
-                "Failed to load logs: ${e.message}"
-            )
-        }
     }
 }

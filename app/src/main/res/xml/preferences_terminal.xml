@@ -1,189 +1,270 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto">
+  xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory
-        android:title="Appearance"
-        android:key="category_terminal_appearance">
+  <PreferenceCategory
+    android:key="category_terminal_appearance"
+    android:title="@string/prefcat_terminal_appearance">
 
-        <ListPreference
-            android:key="terminal_theme"
-            android:title="Theme / Colors"
-            android:summary="Terminal color scheme"
-            android:entries="@array/terminal_theme_entries"
-            android:entryValues="@array/terminal_theme_values"
-            android:defaultValue="dracula"
-            app:useSimpleSummaryProvider="true" />
+    <ListPreference
+      android:key="terminal_theme"
+      android:title="@string/prefs_terminal_theme_title"
+      android:summary="@string/prefs_terminal_theme_summary"
+      android:entries="@array/terminal_theme_entries"
+      android:entryValues="@array/terminal_theme_values"
+      android:defaultValue="dracula"
+      app:useSimpleSummaryProvider="true" />
 
-        <Preference
-            android:key="import_custom_theme"
-            android:title="Import Custom Theme"
-            android:summary="Load a JSON theme file" />
+    <Preference
+      android:key="import_custom_theme"
+      android:title="@string/prefs_import_custom_theme_title"
+      android:summary="@string/prefs_import_custom_theme_summary" />
 
-        <Preference
-            android:key="export_current_theme"
-            android:title="Export Current Theme"
-            android:summary="Save current theme as JSON" />
+    <Preference
+      android:key="export_current_theme"
+      android:title="@string/prefs_export_current_theme_title"
+      android:summary="@string/prefs_export_current_theme_summary" />
 
-        <ListPreference
-            android:key="terminal_font"
-            android:title="Font"
-            android:summary="Monospace font family"
-            android:entries="@array/terminal_font_entries"
-            android:entryValues="@array/terminal_font_values"
-            android:defaultValue="jetbrains_mono_nerd"
-            app:useSimpleSummaryProvider="true" />
+    <ListPreference
+      android:key="terminal_font"
+      android:title="@string/prefs_terminal_font_title"
+      android:summary="@string/prefs_terminal_font_summary"
+      android:entries="@array/terminal_font_entries"
+      android:entryValues="@array/terminal_font_values"
+      android:defaultValue="jetbrains_mono_nerd"
+      app:useSimpleSummaryProvider="true" />
 
-        <SeekBarPreference
-            android:key="terminal_font_size"
-            android:title="Font Size"
-            android:summary="Terminal text size"
-            android:defaultValue="14"
-            android:max="32"
-            android:min="8"
-            app:showSeekBarValue="true" />
+    <SeekBarPreference
+      android:key="terminal_font_size"
+      android:title="@string/prefs_terminal_font_size_title"
+      android:summary="@string/prefs_terminal_font_size_summary"
+      android:defaultValue="14"
+      android:max="32"
+      android:min="8"
+      app:showSeekBarValue="true" />
 
-    </PreferenceCategory>
+    <SeekBarPreference
+      android:key="terminal_line_spacing"
+      android:title="@string/prefs_terminal_line_spacing_title"
+      android:summary="@string/prefs_terminal_line_spacing_summary"
+      android:defaultValue="120"
+      android:max="200"
+      android:min="100"
+      app:showSeekBarValue="true" />
 
-    <PreferenceCategory
-        android:title="Behavior"
-        android:key="category_terminal_behavior">
+  </PreferenceCategory>
 
-        <ListPreference
-            android:key="terminal_cursor_style"
-            android:title="Cursor Style"
-            android:summary="Cursor appearance"
-            android:entries="@array/cursor_style_entries"
-            android:entryValues="@array/cursor_style_values"
-            android:defaultValue="bar"
-            app:useSimpleSummaryProvider="true" />
+  <PreferenceCategory
+    android:key="category_terminal_cursor"
+    android:title="@string/prefcat_terminal_cursor">
 
-        <SwitchPreferenceCompat
-            android:key="terminal_cursor_blink"
-            android:title="Cursor Blink"
-            android:summary="Blinking cursor"
-            android:defaultValue="true" />
+    <ListPreference
+      android:key="terminal_cursor_style"
+      android:title="@string/prefs_terminal_cursor_style_title"
+      android:summary="@string/prefs_terminal_cursor_style_summary"
+      android:entries="@array/cursor_style_entries"
+      android:entryValues="@array/cursor_style_values"
+      android:defaultValue="bar"
+      app:useSimpleSummaryProvider="true" />
 
-        <EditTextPreference
-            android:key="terminal_scrollback"
-            android:title="Scrollback Buffer"
-            android:summary="Lines in history (250 min, -1 unlimited)"
-            android:defaultValue="-1"
-            android:inputType="numberSigned" />
+    <SwitchPreferenceCompat
+      android:key="terminal_cursor_blink"
+      android:title="@string/prefs_terminal_cursor_blink_title"
+      android:summary="@string/prefs_terminal_cursor_blink_summary"
+      android:defaultValue="true" />
 
-        <SwitchPreferenceCompat
-            android:key="terminal_reverse_scroll"
-            android:title="Reverse scroll direction"
-            android:summary="OFF: swipe up to see older output (standard, like JuiceSSH/Termux) · ON: swipe down to see older output (old TabSSH behaviour)"
-            android:defaultValue="false" />
+  </PreferenceCategory>
 
-        <SwitchPreferenceCompat
-            android:key="terminal_bell"
-            android:title="Terminal Bell"
-            android:summary="Audible bell on BEL character"
-            android:defaultValue="true" />
+  <PreferenceCategory
+    android:key="category_terminal_text"
+    android:title="@string/prefcat_terminal_text">
 
-        <SwitchPreferenceCompat
-            android:key="terminal_bell_vibrate"
-            android:title="Vibrate on Bell"
-            android:summary="Vibrate device when BEL character received"
-            android:defaultValue="true"
-            android:dependency="terminal_bell" />
+    <SwitchPreferenceCompat
+      android:key="terminal_word_wrap"
+      android:title="@string/prefs_terminal_word_wrap_title"
+      android:summary="@string/prefs_terminal_word_wrap_summary"
+      android:defaultValue="true" />
 
-        <SwitchPreferenceCompat
-            android:key="terminal_bell_visual"
-            android:title="Flash on Bell"
-            android:summary="Briefly invert terminal colors when BEL received"
-            android:defaultValue="true"
-            android:dependency="terminal_bell" />
+    <EditTextPreference
+      android:key="terminal_scrollback"
+      android:title="@string/prefs_terminal_scrollback_title"
+      android:summary="@string/prefs_terminal_scrollback_summary"
+      android:defaultValue="-1"
+      android:inputType="numberSigned" />
 
-        <SwitchPreferenceCompat
-            android:key="terminal_word_wrap"
-            android:title="Word Wrap"
-            android:summary="Wrap long lines at the terminal width"
-            android:defaultValue="true" />
+    <SwitchPreferenceCompat
+      android:key="terminal_reverse_scroll"
+      android:title="@string/prefs_terminal_reverse_scroll_title"
+      android:summary="@string/prefs_terminal_reverse_scroll_summary"
+      android:defaultValue="false" />
 
-        <SwitchPreferenceCompat
-            android:key="terminal_copy_on_select"
-            android:title="Copy on Select"
-            android:summary="Auto-copy selected text to clipboard"
-            android:defaultValue="false" />
+  </PreferenceCategory>
 
-        <SeekBarPreference
-            android:key="terminal_line_spacing"
-            android:title="Line Spacing"
-            android:summary="Vertical spacing between lines (100% = normal)"
-            android:defaultValue="120"
-            android:max="200"
-            android:min="100"
-            app:showSeekBarValue="true" />
+  <PreferenceCategory
+    android:key="category_terminal_input"
+    android:title="@string/prefcat_terminal_input">
 
-        <SwitchPreferenceCompat
-            android:key="ui_fullscreen_mode"
-            android:title="Fullscreen Terminal"
-            android:summary="Hide status &amp; navigation bars while in a tab"
-            android:defaultValue="false" />
+    <ListPreference
+      android:key="volume_keys_action"
+      android:title="@string/prefs_volume_keys_action_title"
+      android:summary="@string/prefs_volume_keys_action_summary"
+      android:entries="@array/volume_keys_action_entries"
+      android:entryValues="@array/volume_keys_action_values"
+      android:defaultValue="font_size"
+      app:useSimpleSummaryProvider="true" />
 
-        <ListPreference
-            android:key="volume_keys_action"
-            android:title="Volume Key Action"
-            android:summary="What the volume buttons do inside a terminal session"
-            android:entries="@array/volume_keys_action_entries"
-            android:entryValues="@array/volume_keys_action_values"
-            android:defaultValue="font_size"
-            app:useSimpleSummaryProvider="true" />
+    <SwitchPreferenceCompat
+      android:key="terminal_copy_on_select"
+      android:title="@string/prefs_terminal_copy_on_select_title"
+      android:summary="@string/prefs_terminal_copy_on_select_summary"
+      android:defaultValue="false" />
 
-        <SwitchPreferenceCompat
-            android:key="detect_urls"
-            android:title="Detect URLs"
-            android:summary="Enable clickable URLs in terminal (long press to open)"
-            android:defaultValue="true" />
+    <SwitchPreferenceCompat
+      android:key="detect_urls"
+      android:title="@string/prefs_detect_urls_title"
+      android:summary="@string/prefs_detect_urls_summary"
+      android:defaultValue="true" />
 
-        <SwitchPreferenceCompat
-            android:key="show_performance_overlay"
-            android:title="Show Performance Overlay"
-            android:summary="Display CPU, memory, battery, and network stats"
-            android:defaultValue="false" />
+  </PreferenceCategory>
 
-        <SwitchPreferenceCompat
-            android:key="auto_record_sessions"
-            android:title="Auto-Record Sessions"
-            android:summary="Automatically record all SSH sessions to transcripts"
-            android:defaultValue="false" />
+  <!-- Multiplexer gestures live on the Terminal screen, not Connection: the
+       prefix keys they send are a terminal concern, and gesture_multiplexer_type
+       depends on enable_custom_gestures, which AndroidX only resolves within a
+       single screen (the target must also be declared before its dependent). -->
+  <PreferenceCategory
+    android:key="category_multiplexer_prefixes"
+    android:title="@string/prefcat_terminal_multiplexer">
 
-    </PreferenceCategory>
+    <SwitchPreferenceCompat
+      android:key="enable_custom_gestures"
+      android:title="@string/prefs_enable_custom_gestures_title"
+      android:summary="@string/prefs_enable_custom_gestures_summary"
+      android:defaultValue="false" />
 
-    <PreferenceCategory
-        android:title="Custom Keyboard"
-        android:key="category_custom_keyboard">
+    <ListPreference
+      android:key="gesture_multiplexer_type"
+      android:title="@string/prefs_gesture_multiplexer_type_title"
+      android:summary="@string/prefs_gesture_multiplexer_type_summary"
+      android:entries="@array/multiplexer_type_entries"
+      android:entryValues="@array/multiplexer_type_values"
+      android:defaultValue="tmux"
+      android:dependency="enable_custom_gestures" />
 
-        <!-- Wave 3.7 — bottom nav visibility -->
-        <SwitchPreferenceCompat
-            android:key="show_bottom_nav"
-            android:title="Show bottom nav bar"
-            android:summary="Adds a 48dp Kbd · Snip · Files · Paste · Menu bar between the custom keyboard and the Android keyboard. Off by default — most actions live in the terminal long-press menu."
-            android:defaultValue="false" />
+    <EditTextPreference
+      android:key="multiplexer_custom_prefix_tmux"
+      android:title="@string/prefs_multiplexer_custom_prefix_tmux_title"
+      android:summary="@string/prefs_multiplexer_custom_prefix_tmux_summary"
+      android:dialogMessage="@string/prefs_multiplexer_custom_prefix_tmux_dialog"
+      android:defaultValue="C-b"
+      android:inputType="text"
+      app:useSimpleSummaryProvider="true" />
 
-        <ListPreference
-            android:key="keyboard_row_count"
-            android:title="Keyboard Rows"
-            android:summary="Number of rows in the custom keyboard (1-5)"
-            android:entries="@array/keyboard_row_entries"
-            android:entryValues="@array/keyboard_row_values"
-            android:defaultValue="3"
-            app:useSimpleSummaryProvider="true" />
+    <EditTextPreference
+      android:key="multiplexer_custom_prefix_zellij"
+      android:title="@string/prefs_multiplexer_custom_prefix_zellij_title"
+      android:summary="@string/prefs_multiplexer_custom_prefix_zellij_summary"
+      android:dialogMessage="@string/prefs_multiplexer_custom_prefix_zellij_dialog"
+      android:defaultValue="C-g"
+      android:inputType="text"
+      app:useSimpleSummaryProvider="true" />
 
-        <Preference
-            android:key="customize_keyboard_layout"
-            android:title="Customize Keyboard Layout"
-            android:summary="Add, remove, or reorder keyboard keys"
-            android:icon="@drawable/ic_keyboard" />
+    <EditTextPreference
+      android:key="multiplexer_custom_prefix_screen"
+      android:title="@string/prefs_multiplexer_custom_prefix_screen_title"
+      android:summary="@string/prefs_multiplexer_custom_prefix_screen_summary"
+      android:dialogMessage="@string/prefs_multiplexer_custom_prefix_screen_dialog"
+      android:defaultValue="C-a"
+      android:inputType="text"
+      app:useSimpleSummaryProvider="true" />
 
-        <Preference
-            android:key="reset_keyboard_layout"
-            android:title="Reset Keyboard Layout"
-            android:summary="Restore default keyboard configuration" />
+  </PreferenceCategory>
 
-    </PreferenceCategory>
+  <PreferenceCategory
+    android:key="category_custom_keyboard"
+    android:title="@string/prefcat_terminal_keyboard">
+
+    <SwitchPreferenceCompat
+      android:key="show_bottom_nav"
+      android:title="@string/prefs_show_bottom_nav_title"
+      android:summary="@string/prefs_show_bottom_nav_summary"
+      android:defaultValue="false" />
+
+    <ListPreference
+      android:key="keyboard_row_count"
+      android:title="@string/prefs_keyboard_row_count_title"
+      android:summary="@string/prefs_keyboard_row_count_summary"
+      android:entries="@array/keyboard_row_entries"
+      android:entryValues="@array/keyboard_row_values"
+      android:defaultValue="3"
+      app:useSimpleSummaryProvider="true" />
+
+    <Preference
+      android:key="customize_keyboard_layout"
+      android:title="@string/prefs_customize_keyboard_layout_title"
+      android:summary="@string/prefs_customize_keyboard_layout_summary"
+      android:icon="@drawable/ic_keyboard" />
+
+    <Preference
+      android:key="reset_keyboard_layout"
+      android:title="@string/prefs_reset_keyboard_layout_title"
+      android:summary="@string/prefs_reset_keyboard_layout_summary" />
+
+  </PreferenceCategory>
+
+  <PreferenceCategory
+    android:key="category_terminal_bell"
+    android:title="@string/prefcat_terminal_bell">
+
+    <SwitchPreferenceCompat
+      android:key="terminal_bell"
+      android:title="@string/prefs_terminal_bell_title"
+      android:summary="@string/prefs_terminal_bell_summary"
+      android:defaultValue="true" />
+
+    <SwitchPreferenceCompat
+      android:key="terminal_bell_vibrate"
+      android:title="@string/prefs_terminal_bell_vibrate_title"
+      android:summary="@string/prefs_terminal_bell_vibrate_summary"
+      android:defaultValue="true"
+      android:dependency="terminal_bell" />
+
+    <SwitchPreferenceCompat
+      android:key="terminal_bell_visual"
+      android:title="@string/prefs_terminal_bell_visual_title"
+      android:summary="@string/prefs_terminal_bell_visual_summary"
+      android:defaultValue="true"
+      android:dependency="terminal_bell" />
+
+  </PreferenceCategory>
+
+  <PreferenceCategory
+    android:key="category_terminal_behavior"
+    android:title="@string/prefcat_terminal_display">
+
+    <SwitchPreferenceCompat
+      android:key="ui_fullscreen_mode"
+      android:title="@string/prefs_ui_fullscreen_mode_title"
+      android:summary="@string/prefs_ui_fullscreen_mode_summary"
+      android:defaultValue="false" />
+
+    <SwitchPreferenceCompat
+      android:key="show_performance_overlay"
+      android:title="@string/prefs_show_performance_overlay_title"
+      android:summary="@string/prefs_show_performance_overlay_summary"
+      android:defaultValue="false" />
+
+  </PreferenceCategory>
+
+  <PreferenceCategory
+    android:key="category_terminal_recording"
+    android:title="@string/prefcat_terminal_recording">
+
+    <SwitchPreferenceCompat
+      android:key="auto_record_sessions"
+      android:title="@string/prefs_auto_record_sessions_title"
+      android:summary="@string/prefs_auto_record_sessions_summary"
+      android:defaultValue="false" />
+
+  </PreferenceCategory>
 
 </PreferenceScreen>

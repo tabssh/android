@@ -1,5 +1,8 @@
 package io.github.tabssh.sftp
 
+import android.content.Context
+import io.github.tabssh.R
+import io.github.tabssh.utils.Format
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,7 +50,7 @@ class TransferTask(
     val result: StateFlow<TransferResult?> = _result.asStateFlow()
     
     init {
-        Logger.d("TransferTask", "Created transfer task: $type ${getDisplayName()}")
+        Logger.d("TransferTask", "Created transfer task: $type $sourceName -> $destinationName")
     }
     
     /**
@@ -125,46 +128,56 @@ class TransferTask(
     /**
      * Get formatted progress string
      */
-    fun getProgressString(): String {
-        val transferred = formatBytes(bytesTransferred)
-        val total = formatBytes(totalBytes)
-        val percentage = getProgressPercentage()
-        return "$transferred / $total ($percentage%)"
-    }
-    
+    fun getProgressString(context: Context): String = context.getString(
+        R.string.transfer_progress_fmt,
+        Format.size(context, bytesTransferred),
+        Format.size(context, totalBytes),
+        getProgressPercentage()
+    )
+
     /**
      * Get formatted speed string
      */
-    fun getSpeedString(): String {
-        val currentSpeed = _speed.value
-        return if (currentSpeed > 0) {
-            "${formatBytes(currentSpeed)}/s"
-        } else {
-            "0 B/s"
-        }
-    }
-    
+    fun getSpeedString(context: Context): String = Format.rate(context, _speed.value)
+
     /**
      * Get formatted ETA string
      */
-    fun getETAString(): String {
+    fun getETAString(context: Context): String {
         val etaMs = _eta.value
         return if (etaMs > 0) {
-            formatDuration(etaMs)
+            Format.duration(context, etaMs)
         } else {
-            "--:--"
+            context.getString(R.string.transfer_eta_unknown)
         }
     }
     
     /**
-     * Get display name for the transfer
+     * Name of the file the bytes are read from — the raw value, for logs and
+     * for callers that compose their own display text.
      */
-    fun getDisplayName(): String {
-        return when (type) {
-            TransferType.UPLOAD -> "${File(localPath).name} → ${File(remotePath).name}"
-            TransferType.DOWNLOAD -> "${File(remotePath).name} → ${File(localPath).name}"
+    val sourceName: String
+        get() = when (type) {
+            TransferType.UPLOAD -> File(localPath).name
+            TransferType.DOWNLOAD -> File(remotePath).name
         }
-    }
+
+    /**
+     * Name of the file the bytes are written to — the raw value, for logs and
+     * for callers that compose their own display text.
+     */
+    val destinationName: String
+        get() = when (type) {
+            TransferType.UPLOAD -> File(remotePath).name
+            TransferType.DOWNLOAD -> File(localPath).name
+        }
+
+    /**
+     * Get display name for the transfer; the source/destination separator is
+     * a string resource so translations control its form and direction.
+     */
+    fun getDisplayName(context: Context): String =
+        context.getString(R.string.transfer_display_name_fmt, sourceName, destinationName)
     
     /**
      * Pause the transfer
@@ -222,29 +235,6 @@ class TransferTask(
     fun isActive(): Boolean = _state.value == TransferState.ACTIVE
     fun isCompleted(): Boolean = _state.value == TransferState.COMPLETED
     fun hasError(): Boolean = _state.value == TransferState.ERROR
-    
-    // Utility functions
-    
-    private fun formatBytes(bytes: Long): String {
-        return when {
-            bytes < 1024 -> "$bytes B"
-            bytes < 1024 * 1024 -> String.format("%.1f KB", bytes / 1024.0)
-            bytes < 1024 * 1024 * 1024 -> String.format("%.1f MB", bytes / (1024.0 * 1024))
-            else -> String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024))
-        }
-    }
-    
-    private fun formatDuration(milliseconds: Long): String {
-        val seconds = milliseconds / 1000
-        val minutes = seconds / 60
-        val hours = minutes / 60
-        
-        return when {
-            hours > 0 -> String.format("%d:%02d:%02d", hours, minutes % 60, seconds % 60)
-            minutes > 0 -> String.format("%02d:%02d", minutes, seconds % 60)
-            else -> String.format("00:%02d", seconds)
-        }
-    }
 }
 
 /**

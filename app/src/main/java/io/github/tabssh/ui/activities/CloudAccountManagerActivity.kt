@@ -7,7 +7,6 @@ import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -42,7 +41,7 @@ import org.json.JSONObject
  *
  * The activity fetches fresh live state on resume and after every power action.
  */
-class CloudAccountManagerActivity : AppCompatActivity() {
+class CloudAccountManagerActivity : TabSSHActivity() {
 
     companion object {
         private const val TAG = "CloudAccountManager"
@@ -87,9 +86,7 @@ class CloudAccountManagerActivity : AppCompatActivity() {
         binding = ActivityCloudManagerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setSupportActionBar(binding.toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        binding.toolbar.setNavigationOnClickListener { finish() }
+        setSupportActionBar(binding.appBar.toolbar)
 
         adapter = CloudInstanceAdapter(
             onPowerToggle     = { inst -> handlePowerToggle(inst) },
@@ -118,7 +115,7 @@ class CloudAccountManagerActivity : AppCompatActivity() {
                 return@launch
             }
             account = loaded
-            binding.toolbar.title = loaded.name
+            binding.appBar.toolbar.title = loaded.name
             loadInstances(loaded)
         }
     }
