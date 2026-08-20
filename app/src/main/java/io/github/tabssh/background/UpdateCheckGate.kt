@@ -1,7 +1,7 @@
 package io.github.tabssh.background
 
 /**
- * Pure per-host due-time gate for [DockerUpdateCheckWorker] — separated so
+ * Pure per-host due-time gate for [ContainerUpdateCheckWorker] — separated so
  * the enable/interval decision is unit-testable on the JVM.
  */
 object UpdateCheckGate {

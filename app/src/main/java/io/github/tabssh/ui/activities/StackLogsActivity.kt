@@ -14,11 +14,11 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
-import io.github.tabssh.docker.DockerSessionManager
-import io.github.tabssh.docker.transport.DockerCliParsers
-import io.github.tabssh.docker.transport.DockerResult
-import io.github.tabssh.ui.dialogs.DockerErrorPresenter
-import io.github.tabssh.ui.utils.DockerText
+import io.github.tabssh.containers.ContainerSessionManager
+import io.github.tabssh.containers.transport.DockerCliParsers
+import io.github.tabssh.containers.transport.ContainerResult
+import io.github.tabssh.ui.dialogs.ContainerErrorPresenter
+import io.github.tabssh.ui.utils.ContainerText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -35,7 +35,7 @@ import kotlinx.coroutines.launch
 class StackLogsActivity : AppCompatActivity() {
 
     companion object {
-        const val EXTRA_HOST_ID = "docker_host_id"
+        const val EXTRA_HOST_ID = "container_host_id"
         const val EXTRA_STACK_NAME = "compose_stack_name"
         const val EXTRA_STACK_DIR = "compose_stack_dir"
         const val EXTRA_CONFIG_FILE = "compose_config_file"
@@ -54,7 +54,7 @@ class StackLogsActivity : AppCompatActivity() {
          * (a lone U+202E would visually reverse the rest of the line).
          */
         internal fun sanitizeLogLine(line: String): String =
-            DockerText.block(ANSI_REGEX.replace(line, ""), MAX_LOG_LINE_CHARS)
+            ContainerText.block(ANSI_REGEX.replace(line, ""), MAX_LOG_LINE_CHARS)
     }
 
     private lateinit var app: TabSSHApplication
@@ -69,7 +69,7 @@ class StackLogsActivity : AppCompatActivity() {
     private var stackDir: String? = null
     private var configFile: String? = null
     private var externalName: String? = null
-    private var session: DockerSessionManager.DockerSession? = null
+    private var session: ContainerSessionManager.ContainerSession? = null
     private var logsJob: Job? = null
     private val logLines = ArrayDeque<String>()
     private var services: List<String> = emptyList()
@@ -106,7 +106,7 @@ class StackLogsActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         // The stack name reaches this screen from `docker compose ls` output —
         // sanitize before it becomes the toolbar title.
-        toolbar.title = getString(R.string.docker_stack_logs_title, DockerText.display(stackName))
+        toolbar.title = getString(R.string.container_stack_logs_title, ContainerText.display(stackName))
         toolbar.setNavigationOnClickListener { finish() }
 
         spinnerService.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -126,18 +126,18 @@ class StackLogsActivity : AppCompatActivity() {
     private fun acquireSession() {
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch {
-            val result = DockerSessionManager.acquire(app, hostId)
+            val result = ContainerSessionManager.acquire(app, hostId)
             // acquire() suspends — the activity may be gone by the time it returns.
             if (!isAlive()) return@launch
             when (result) {
-                is DockerResult.Success -> {
+                is ContainerResult.Success -> {
                     session = result.value
                     loadServices()
                     startLogs(service = null)
                 }
                 else -> {
                     progressBar.visibility = View.GONE
-                    DockerErrorPresenter.present(this@StackLogsActivity, result)
+                    ContainerErrorPresenter.present(this@StackLogsActivity, result)
                 }
             }
         }
@@ -150,10 +150,10 @@ class StackLogsActivity : AppCompatActivity() {
             val output = psOutput(current)
             if (!isAlive()) return@launch
             services = output?.let { DockerCliParsers.parseComposePsServices(it) }.orEmpty()
-            val labels = mutableListOf(getString(R.string.docker_stack_logs_all_services))
+            val labels = mutableListOf(getString(R.string.container_stack_logs_all_services))
             // Service names come straight from `compose ps` — sanitize the
             // spinner labels; `services` keeps the raw values the CLI expects.
-            labels.addAll(services.map { DockerText.display(it) })
+            labels.addAll(services.map { ContainerText.display(it) })
             val adapter = ArrayAdapter(
                 this@StackLogsActivity, android.R.layout.simple_spinner_item, labels
             )
@@ -165,7 +165,7 @@ class StackLogsActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun psOutput(session: DockerSessionManager.DockerSession): String? {
+    private suspend fun psOutput(session: ContainerSessionManager.ContainerSession): String? {
         val dir = stackDir
         val name = externalName
         val file = configFile
@@ -213,11 +213,11 @@ class StackLogsActivity : AppCompatActivity() {
                 // dies mid-follow — surface it instead of crashing the screen.
                 if (!isAlive()) return@launch
                 progressBar.visibility = View.GONE
-                DockerErrorPresenter.present(
+                ContainerErrorPresenter.present(
                     this@StackLogsActivity,
-                    DockerResult.Error(
-                        DockerText.display(e.message).ifEmpty {
-                            getString(R.string.docker_error_title)
+                    ContainerResult.Error(
+                        ContainerText.display(e.message).ifEmpty {
+                            getString(R.string.container_error_title)
                         }
                     )
                 )
@@ -226,7 +226,7 @@ class StackLogsActivity : AppCompatActivity() {
     }
 
     private fun composeLogsFlow(
-        session: DockerSessionManager.DockerSession,
+        session: ContainerSessionManager.ContainerSession,
         service: String?
     ): Flow<String>? {
         val dir = stackDir

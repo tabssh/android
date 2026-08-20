@@ -27,7 +27,7 @@ import io.github.tabssh.ui.activities.VMwareManagerActivity
 import io.github.tabssh.ui.activities.XCPngManagerActivity
 import io.github.tabssh.ui.adapters.HypervisorAdapter
 import io.github.tabssh.storage.database.entities.HypervisorType
-import io.github.tabssh.ui.utils.DockerText
+import io.github.tabssh.ui.utils.ContainerText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -162,7 +162,7 @@ class HypervisorsFragment : Fragment() {
                 Toast.makeText(
                     requireContext(),
                     getString(
-                        R.string.hypervisor_load_failed_fmt, DockerText.display(e.message)
+                        R.string.hypervisor_load_failed_fmt, ContainerText.display(e.message)
                     ),
                     Toast.LENGTH_SHORT
                 ).show()
@@ -268,7 +268,7 @@ class HypervisorsFragment : Fragment() {
                             requireContext(),
                             getString(
                                 R.string.hypervisor_delete_failed_fmt,
-                                DockerText.display(e.message)
+                                ContainerText.display(e.message)
                             ),
                             Toast.LENGTH_SHORT
                         ).show()
@@ -342,7 +342,7 @@ class HypervisorsFragment : Fragment() {
         } catch (e: Exception) {
             io.github.tabssh.utils.logging.Logger.d(
                 "HypervisorsFragment",
-                "Connectivity check failed for ${hypervisor.name}: ${DockerText.display(e.message)}"
+                "Connectivity check failed for ${hypervisor.name}: ${ContainerText.display(e.message)}"
             )
             false
         }

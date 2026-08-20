@@ -125,7 +125,7 @@ class BackupManager(private val context: Context) {
      *   [password]; [password] is then mandatory.
      * @param plaintextSecretsConfirmed required when [encryptBackup] is false.
      *   An unencrypted archive contains every SSH key passphrase and every
-     *   connection/Docker/registry/VNC password in readable form, so the caller
+     *   connection/container-host/registry/VNC password in readable form, so the caller
      *   must have obtained an explicit type-to-confirm acknowledgement from the
      *   user first. Without it the backup is refused before any bytes are
      *   written to [outputUri].

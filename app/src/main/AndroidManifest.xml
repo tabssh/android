@@ -242,19 +242,19 @@
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
-        <!-- Docker host add/edit form with transport test -->
+        <!-- Container host add/edit form with transport test -->
         <activity
-            android:name=".ui.activities.DockerHostEditActivity"
+            android:name=".ui.activities.ContainerHostEditActivity"
             android:exported="false"
-            android:label="Edit Docker Host"
+            android:label="Edit Container Host"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
-        <!-- Docker Manager activity (containers / images / volumes / networks / stacks / registries) -->
+        <!-- Container manager activity (containers / images / volumes / networks / stacks / registries) -->
         <activity
-            android:name=".ui.activities.DockerHostManagerActivity"
+            android:name=".ui.activities.ContainerHostManagerActivity"
             android:exported="false"
-            android:label="Docker Manager"
+            android:label="Container Manager"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -263,14 +263,14 @@
             android:name=".ui.activities.ContainerDetailActivity"
             android:exported="false"
             android:label="Container"
-            android:parentActivityName=".ui.activities.DockerHostManagerActivity" />
+            android:parentActivityName=".ui.activities.ContainerHostManagerActivity" />
 
         <!-- Compose stack editor (paste-first YAML flow) -->
         <activity
             android:name=".ui.activities.ComposeEditorActivity"
             android:exported="false"
             android:label="Compose Stack"
-            android:parentActivityName=".ui.activities.DockerHostManagerActivity"
+            android:parentActivityName=".ui.activities.ContainerHostManagerActivity"
             android:windowSoftInputMode="adjustResize" />
 
         <!-- Single-container run.yml config editor -->
@@ -278,7 +278,7 @@
             android:name=".ui.activities.SingleContainerConfigEditorActivity"
             android:exported="false"
             android:label="Container Config"
-            android:parentActivityName=".ui.activities.DockerHostManagerActivity"
+            android:parentActivityName=".ui.activities.ContainerHostManagerActivity"
             android:windowSoftInputMode="adjustResize" />
 
         <!-- Compose stack logs (tracked or discovered/external) -->
@@ -286,7 +286,7 @@
             android:name=".ui.activities.StackLogsActivity"
             android:exported="false"
             android:label="Stack Logs"
-            android:parentActivityName=".ui.activities.DockerHostManagerActivity" />
+            android:parentActivityName=".ui.activities.ContainerHostManagerActivity" />
 
         <!-- System-wide ssh://, sftp://, spice://, spice+tls:// and vnc://
              link

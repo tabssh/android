@@ -11,8 +11,8 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import io.github.tabssh.R
-import io.github.tabssh.docker.transport.DockerTransport
-import io.github.tabssh.ui.utils.DockerText
+import io.github.tabssh.containers.transport.ContainerTransport
+import io.github.tabssh.ui.utils.ContainerText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -52,7 +52,7 @@ object PullImageDialog {
     fun show(
         context: Context,
         lifecycleOwner: LifecycleOwner,
-        transport: DockerTransport,
+        transport: ContainerTransport,
         onDone: () -> Unit
     ) {
         val view = LayoutInflater.from(context).inflate(R.layout.dialog_pull_image, null)
@@ -62,9 +62,9 @@ object PullImageDialog {
 
         var pullJob: Job? = null
         val dialog = MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.docker_pull_title)
+            .setTitle(R.string.container_pull_title)
             .setView(view)
-            .setPositiveButton(R.string.docker_pull_action, null)
+            .setPositiveButton(R.string.container_pull_action, null)
             .setNegativeButton(R.string.cancel, null)
             .setOnDismissListener { pullJob?.cancel() }
             .create()
@@ -75,7 +75,7 @@ object PullImageDialog {
             pullButton.setOnClickListener {
                 val ref = editRef.text?.toString()?.trim().orEmpty()
                 if (ref.isEmpty()) {
-                    Toast.makeText(context, R.string.docker_pull_error_ref, Toast.LENGTH_SHORT)
+                    Toast.makeText(context, R.string.container_pull_error_ref, Toast.LENGTH_SHORT)
                         .show()
                     return@setOnClickListener
                 }
@@ -84,7 +84,7 @@ object PullImageDialog {
                 // against a leading dash being parsed as an option, so reject
                 // anything that is not a plausible image reference.
                 if (!isPlausibleRef(ref)) {
-                    Toast.makeText(context, R.string.docker_pull_error_ref, Toast.LENGTH_SHORT)
+                    Toast.makeText(context, R.string.container_pull_error_ref, Toast.LENGTH_SHORT)
                         .show()
                     return@setOnClickListener
                 }
@@ -99,7 +99,7 @@ object PullImageDialog {
                 pullJob = lifecycleOwner.lifecycleScope.launch {
                     try {
                         transport.pullImage(ref).collect { event ->
-                            val key = DockerText.display(event.layerId.orEmpty(), MAX_LAYER_KEY)
+                            val key = ContainerText.display(event.layerId.orEmpty(), MAX_LAYER_KEY)
                             // Cap the row count — a hostile or chatty daemon can
                             // emit unbounded distinct layer ids, and one TextView
                             // per id would grow the view tree without limit.
@@ -120,20 +120,20 @@ object PullImageDialog {
                                 ""
                             }
                             val prefix = if (key.isEmpty()) "" else "$key: "
-                            val status = DockerText.display(event.status, MAX_STATUS)
+                            val status = ContainerText.display(event.status, MAX_STATUS)
                             row?.text = "$prefix$status$progress"
                             if (event.error != null) {
                                 failed = true
                                 textStatus.visibility = View.VISIBLE
                                 textStatus.text = context.getString(
-                                    R.string.docker_pull_failed,
-                                    DockerText.display(event.error, MAX_STATUS)
+                                    R.string.container_pull_failed,
+                                    ContainerText.display(event.error, MAX_STATUS)
                                 )
                             }
                         }
                         if (!failed) {
                             textStatus.visibility = View.VISIBLE
-                            textStatus.setText(R.string.docker_pull_done)
+                            textStatus.setText(R.string.container_pull_done)
                             onDone()
                         }
                     } catch (e: CancellationException) {
@@ -145,8 +145,8 @@ object PullImageDialog {
                         failed = true
                         textStatus.visibility = View.VISIBLE
                         textStatus.text = context.getString(
-                            R.string.docker_pull_failed,
-                            DockerText.display(e.message, MAX_STATUS)
+                            R.string.container_pull_failed,
+                            ContainerText.display(e.message, MAX_STATUS)
                         )
                     } finally {
                         // Re-enable on every exit path — leaving the dialog with

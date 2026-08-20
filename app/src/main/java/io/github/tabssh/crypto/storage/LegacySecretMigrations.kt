@@ -2,6 +2,7 @@ package io.github.tabssh.crypto.storage
 
 import android.content.SharedPreferences
 import io.github.tabssh.storage.database.TabSSHDatabase
+import io.github.tabssh.storage.database.entities.ContainerHost
 import io.github.tabssh.storage.database.entities.HypervisorAccount
 import io.github.tabssh.utils.logging.Logger
 
@@ -30,6 +31,12 @@ object LegacySecretMigrations {
 
     /** Legacy profile-keyed OCI passphrase alias. */
     const val LEGACY_OCI_PASS_PREFIX = "oci_passphrase_"
+
+    /**
+     * Legacy container-host alias prefix, from when the feature was Docker-only.
+     * The current namespace is [ContainerHost.ALIAS_PREFIX].
+     */
+    const val LEGACY_CONTAINER_HOST_PREFIX = "docker_host_"
 
     /**
      * Move every plaintext `password_{connectionId}` value out of the default
@@ -175,6 +182,70 @@ object LegacySecretMigrations {
                 complete = false
             }
         }
+        return complete
+    }
+
+    /**
+     * Move custom-endpoint container-host passwords from the Docker-only alias
+     * namespace `docker_host_{id}` onto the engine-agnostic
+     * [ContainerHost.ALIAS_PREFIX] namespace `container_host_{id}`.
+     *
+     * Aliases are enumerated from the Keystore-backed store rather than from
+     * the `container_hosts` table so a secret whose row was already removed is
+     * cleaned up too instead of lingering forever. An alias that already exists
+     * under the new name wins — it is what the runtime auth path reads — and
+     * the legacy copy is simply dropped. The legacy alias is cleared only after
+     * the new write reports success, so a Keystore failure defers that entry to
+     * the next launch instead of losing the password.
+     *
+     * @return true when no legacy `docker_host_` alias remains.
+     */
+    suspend fun migrateContainerHostAliases(passwordManager: SecurePasswordManager): Boolean {
+        val legacyAliases = passwordManager.storedAliases().filter {
+            it.startsWith(LEGACY_CONTAINER_HOST_PREFIX) &&
+                it.length > LEGACY_CONTAINER_HOST_PREFIX.length
+        }
+        if (legacyAliases.isEmpty()) return true
+
+        var migrated = 0
+        var dropped = 0
+        var complete = true
+        for (legacyAlias in legacyAliases) {
+            val id = legacyAlias.removePrefix(LEGACY_CONTAINER_HOST_PREFIX)
+            val newAlias = "${ContainerHost.ALIAS_PREFIX}$id"
+            try {
+                if (passwordManager.hasStoredPassword(newAlias)) {
+                    passwordManager.clearPassword(legacyAlias)
+                    dropped++
+                    continue
+                }
+                val secret = passwordManager.retrievePassword(legacyAlias)
+                if (secret.isNullOrEmpty()) {
+                    passwordManager.clearPassword(legacyAlias)
+                    dropped++
+                    continue
+                }
+                val stored = passwordManager.storePassword(
+                    newAlias,
+                    secret,
+                    SecurePasswordManager.StorageLevel.ENCRYPTED
+                )
+                if (stored) {
+                    passwordManager.clearPassword(legacyAlias)
+                    migrated++
+                } else {
+                    complete = false
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to migrate container host alias $legacyAlias", e)
+                complete = false
+            }
+        }
+        Logger.i(
+            TAG,
+            "Container host alias migration: $migrated renamed, $dropped stale aliases dropped, " +
+                "complete=$complete"
+        )
         return complete
     }
 }

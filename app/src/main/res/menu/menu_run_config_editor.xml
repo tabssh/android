@@ -4,6 +4,6 @@
 
     <item
         android:id="@+id/action_logs"
-        android:title="@string/docker_action_logs"
+        android:title="@string/container_action_logs"
         app:showAsAction="never" />
 </menu>

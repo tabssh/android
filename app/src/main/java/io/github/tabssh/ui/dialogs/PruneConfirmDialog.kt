@@ -21,7 +21,7 @@ object PruneConfirmDialog {
         MaterialAlertDialogBuilder(context)
             .setTitle(titleRes)
             .setMessage(messageRes)
-            .setPositiveButton(R.string.docker_prune_action) { _, _ -> onConfirm() }
+            .setPositiveButton(R.string.container_prune_action) { _, _ -> onConfirm() }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }

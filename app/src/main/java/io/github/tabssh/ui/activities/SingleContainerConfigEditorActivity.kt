@@ -18,17 +18,17 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
-import io.github.tabssh.docker.DockerSessionManager
-import io.github.tabssh.docker.runconfig.RunConfig
-import io.github.tabssh.docker.runconfig.RunConfigException
-import io.github.tabssh.docker.runconfig.RunConfigParser
-import io.github.tabssh.docker.runconfig.RunConfigTranslator
-import io.github.tabssh.docker.runconfig.RunConfigWriter
-import io.github.tabssh.docker.transport.DockerResult
-import io.github.tabssh.docker.transport.SshExecRunner
+import io.github.tabssh.containers.ContainerSessionManager
+import io.github.tabssh.containers.runconfig.RunConfig
+import io.github.tabssh.containers.runconfig.RunConfigException
+import io.github.tabssh.containers.runconfig.RunConfigParser
+import io.github.tabssh.containers.runconfig.RunConfigTranslator
+import io.github.tabssh.containers.runconfig.RunConfigWriter
+import io.github.tabssh.containers.transport.ContainerResult
+import io.github.tabssh.containers.transport.SshExecRunner
 import io.github.tabssh.storage.database.entities.SingleContainerConfig
-import io.github.tabssh.ui.dialogs.DockerErrorPresenter
-import io.github.tabssh.ui.utils.DockerText
+import io.github.tabssh.ui.dialogs.ContainerErrorPresenter
+import io.github.tabssh.ui.utils.ContainerText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -42,7 +42,7 @@ import kotlinx.coroutines.launch
 class SingleContainerConfigEditorActivity : AppCompatActivity() {
 
     companion object {
-        const val EXTRA_HOST_ID = "docker_host_id"
+        const val EXTRA_HOST_ID = "container_host_id"
         const val EXTRA_CONFIG_ID = "run_config_id"
         private val NAME_REGEX = Regex("^[A-Za-z0-9][A-Za-z0-9_-]*$")
     }
@@ -70,7 +70,7 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
     private var hostId: Long = 0
     private var configId: Long = 0
     private var config: SingleContainerConfig? = null
-    private var session: DockerSessionManager.DockerSession? = null
+    private var session: ContainerSessionManager.ContainerSession? = null
 
     /** Guards the log lookup — repeated menu taps must not stack `docker ps` runs. */
     private var lookingUpLogs = false
@@ -95,7 +95,7 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setTitle(
-            if (configId == 0L) R.string.docker_run_new_title else R.string.docker_run_edit_title
+            if (configId == 0L) R.string.container_run_new_title else R.string.container_run_edit_title
         )
         toolbar.setNavigationOnClickListener { finish() }
 
@@ -131,11 +131,11 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
     private fun acquireSession() {
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch {
-            val result = DockerSessionManager.acquire(app, hostId)
+            val result = ContainerSessionManager.acquire(app, hostId)
             // acquire() suspends — the activity may be gone by the time it returns.
             if (!isAlive()) return@launch
             when (result) {
-                is DockerResult.Success -> {
+                is ContainerResult.Success -> {
                     session = result.value
                     if (configId != 0L) {
                         loadConfig()
@@ -145,7 +145,7 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
                 }
                 else -> {
                     progressBar.visibility = View.GONE
-                    DockerErrorPresenter.present(
+                    ContainerErrorPresenter.present(
                         this@SingleContainerConfigEditorActivity, result
                     )
                 }
@@ -212,7 +212,7 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
                     fillForm(RunConfigParser.parse(text))
                 } catch (e: RunConfigException) {
                     Toast.makeText(
-                        this, getString(R.string.docker_run_parse_error, e.message),
+                        this, getString(R.string.container_run_parse_error, e.message),
                         Toast.LENGTH_LONG
                     ).show()
                     switchAdvanced.isChecked = true
@@ -231,7 +231,7 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
     private fun buildConfigFromForm(): RunConfig? {
         val image = editImage.text?.toString()?.trim().orEmpty()
         if (image.isEmpty()) {
-            Toast.makeText(this, R.string.docker_run_error_image, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.container_run_error_image, Toast.LENGTH_SHORT).show()
             return null
         }
         val env = linkedMapOf<String, String>()
@@ -263,7 +263,7 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
                 text
             } catch (e: RunConfigException) {
                 Toast.makeText(
-                    this, getString(R.string.docker_run_parse_error, e.message),
+                    this, getString(R.string.container_run_parse_error, e.message),
                     Toast.LENGTH_LONG
                 ).show()
                 null
@@ -277,7 +277,7 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
         val current = session ?: return
         val name = editName.text?.toString()?.trim().orEmpty()
         if (configId == 0L && !NAME_REGEX.matches(name)) {
-            Toast.makeText(this, R.string.docker_run_error_name, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.container_run_error_name, Toast.LENGTH_SHORT).show()
             return
         }
         val yaml = currentYaml() ?: return
@@ -296,10 +296,10 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
             val written = current.transport.writeRemoteFile("$remotePath/run.yml", yaml)
             // The remote write suspends — nothing below may touch dead views.
             if (!isAlive()) return@launch
-            if (written !is DockerResult.Success) {
+            if (written !is ContainerResult.Success) {
                 progressBar.visibility = View.GONE
                 buttonSave.isEnabled = true
-                DockerErrorPresenter.present(
+                ContainerErrorPresenter.present(
                     this@SingleContainerConfigEditorActivity, written
                 )
                 return@launch
@@ -307,7 +307,7 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
             if (existing == null) {
                 configId = dao.insert(
                     SingleContainerConfig(
-                        dockerHostId = hostId, name = name, remotePath = remotePath,
+                        containerHostId = hostId, name = name, remotePath = remotePath,
                         modifiedAt = System.currentTimeMillis()
                     )
                 )
@@ -321,9 +321,9 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
             buttonSave.isEnabled = true
             Toast.makeText(
                 this@SingleContainerConfigEditorActivity,
-                getString(R.string.docker_run_saved, remotePath), Toast.LENGTH_SHORT
+                getString(R.string.container_run_saved, remotePath), Toast.LENGTH_SHORT
             ).show()
-            supportActionBar?.setTitle(R.string.docker_run_edit_title)
+            supportActionBar?.setTitle(R.string.container_run_edit_title)
             editName.isEnabled = false
             invalidateOptionsMenu()
         }
@@ -369,7 +369,7 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
-                val docker = current.host.dockerCliPath ?: "docker"
+                val docker = current.host.cliBinary()
                 val filter = SshExecRunner.shQuote("name=^$containerName$")
                 // run() throws TransportUnavailableException on a dead session.
                 val result = current.runner.run(
@@ -382,7 +382,7 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
                 if (containerId.isNullOrBlank()) {
                     Toast.makeText(
                         this@SingleContainerConfigEditorActivity,
-                        R.string.docker_run_container_not_found, Toast.LENGTH_SHORT
+                        R.string.container_run_container_not_found, Toast.LENGTH_SHORT
                     ).show()
                     return@launch
                 }
@@ -403,11 +403,11 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 if (!isAlive()) return@launch
                 progressBar.visibility = View.GONE
-                DockerErrorPresenter.present(
+                ContainerErrorPresenter.present(
                     this@SingleContainerConfigEditorActivity,
-                    DockerResult.Error(
-                        DockerText.display(e.message).ifEmpty {
-                            getString(R.string.docker_error_title)
+                    ContainerResult.Error(
+                        ContainerText.display(e.message).ifEmpty {
+                            getString(R.string.container_error_title)
                         }
                     )
                 )
@@ -425,7 +425,7 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
             RunConfigParser.parse(yaml)
         } catch (e: RunConfigException) {
             Toast.makeText(
-                this, getString(R.string.docker_run_parse_error, e.message), Toast.LENGTH_LONG
+                this, getString(R.string.container_run_parse_error, e.message), Toast.LENGTH_LONG
             ).show()
             return
         }
@@ -433,7 +433,7 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
         buttonRun.isEnabled = false
         lifecycleScope.launch {
             try {
-                val docker = current.host.dockerCliPath ?: "docker"
+                val docker = current.host.cliBinary()
                 // Every argv token is shell-quoted before remote interpolation.
                 val command = docker + " " + RunConfigTranslator.toRunArgv(parsed)
                     .joinToString(" ") { SshExecRunner.shQuote(it) }
@@ -444,8 +444,8 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
                     Toast.makeText(
                         this@SingleContainerConfigEditorActivity,
                         getString(
-                            R.string.docker_run_started,
-                            DockerText.display(result.stdout.trim().take(12))
+                            R.string.container_run_started,
+                            ContainerText.display(result.stdout.trim().take(12))
                         ),
                         Toast.LENGTH_SHORT
                     ).show()
@@ -453,9 +453,9 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
                     // stderr/stdout are remote-controlled — sanitize before display.
                     Toast.makeText(
                         this@SingleContainerConfigEditorActivity,
-                        DockerText.display(
+                        ContainerText.display(
                             result.stderr.trim().ifEmpty { result.stdout.trim() }
-                        ).ifEmpty { getString(R.string.docker_error_title) },
+                        ).ifEmpty { getString(R.string.container_error_title) },
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -463,11 +463,11 @@ class SingleContainerConfigEditorActivity : AppCompatActivity() {
                 throw e
             } catch (e: Exception) {
                 if (!isAlive()) return@launch
-                DockerErrorPresenter.present(
+                ContainerErrorPresenter.present(
                     this@SingleContainerConfigEditorActivity,
-                    DockerResult.Error(
-                        DockerText.display(e.message).ifEmpty {
-                            getString(R.string.docker_error_title)
+                    ContainerResult.Error(
+                        ContainerText.display(e.message).ifEmpty {
+                            getString(R.string.container_error_title)
                         }
                     )
                 )

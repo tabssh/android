@@ -110,7 +110,7 @@ class SyncDataCollector {
         val syncDashboard          = preferenceManager.isSyncDashboardEnabled()
         val syncPortForwards       = preferenceManager.isSyncPortForwardsEnabled()
         val syncNetworkRoutes      = preferenceManager.isSyncNetworkRoutesEnabled()
-        val syncDocker             = preferenceManager.isSyncDockerEnabled()
+        val syncContainers         = preferenceManager.isSyncContainersEnabled()
 
         val connections        = if (syncConns)              collectConnections()        else emptyList()
         val keys               = if (syncKeys)               collectKeys()               else emptyList()
@@ -133,11 +133,11 @@ class SyncDataCollector {
         val namedPrefFiles     = if (syncSettings)           collectNamedPreferenceFiles() else emptyMap()
         val portForwards       = if (syncPortForwards)       collectPortForwards()       else emptyList()
         val networkRoutes      = if (syncNetworkRoutes)      collectNetworkRoutes()      else emptyList()
-        val dockerHosts                = if (syncDocker) collectDockerHosts()                else emptyList()
-        val registryCredentials        = if (syncDocker) collectRegistryCredentials()        else emptyList()
-        val composeStacks              = if (syncDocker) collectComposeStacks()               else emptyList()
-        val singleContainerConfigs     = if (syncDocker) collectSingleContainerConfigs()      else emptyList()
-        val containerAutoUpdatePolicies = if (syncDocker) collectContainerAutoUpdatePolicies() else emptyList()
+        val containerHosts              = if (syncContainers) collectContainerHosts()              else emptyList()
+        val registryCredentials         = if (syncContainers) collectRegistryCredentials()         else emptyList()
+        val composeStacks               = if (syncContainers) collectComposeStacks()               else emptyList()
+        val singleContainerConfigs      = if (syncContainers) collectSingleContainerConfigs()      else emptyList()
+        val containerAutoUpdatePolicies = if (syncContainers) collectContainerAutoUpdatePolicies() else emptyList()
 
         val itemCounts = SyncItemCounts(
             connections        = connections.size,
@@ -160,7 +160,7 @@ class SyncDataCollector {
             dashboard          = dashboardConfig.size,
             portForwards       = portForwards.size,
             networkRoutes      = networkRoutes.size,
-            dockerHosts                     = dockerHosts.size,
+            containerHosts                  = containerHosts.size,
             registryCredentials             = registryCredentials.size,
             composeStacks                   = composeStacks.size,
             singleContainerConfigs          = singleContainerConfigs.size,
@@ -196,7 +196,7 @@ class SyncDataCollector {
             namedPreferenceFiles = namedPrefFiles,
             portForwards       = portForwards,
             networkRoutes      = networkRoutes,
-            dockerHosts                 = dockerHosts,
+            containerHosts              = containerHosts,
             registryCredentials         = registryCredentials,
             composeStacks               = composeStacks,
             singleContainerConfigs      = singleContainerConfigs,
@@ -319,12 +319,12 @@ class SyncDataCollector {
         }
     }
 
-    /** Docker host connection profiles. Custom-endpoint password travels via secrets. */
-    private suspend fun collectDockerHosts(): List<io.github.tabssh.storage.database.entities.DockerHost> {
+    /** Container host connection profiles. Custom-endpoint password travels via secrets. */
+    private suspend fun collectContainerHosts(): List<io.github.tabssh.storage.database.entities.ContainerHost> {
         return try {
-            database.dockerHostDao().getAllList()
+            database.containerHostDao().getAllList()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect Docker hosts", e)
+            Logger.e(TAG, "Failed to collect container hosts", e)
             emptyList()
         }
     }
@@ -339,7 +339,7 @@ class SyncDataCollector {
         }
     }
 
-    /** Compose stack definitions tracked per Docker host. No secrets. */
+    /** Compose stack definitions tracked per container host. No secrets. */
     private suspend fun collectComposeStacks(): List<io.github.tabssh.storage.database.entities.ComposeStack> {
         return try {
             database.composeStackDao().getAllList()
@@ -349,7 +349,7 @@ class SyncDataCollector {
         }
     }
 
-    /** Single-container run configs tracked per Docker host. No secrets. */
+    /** Single-container run configs tracked per container host. No secrets. */
     private suspend fun collectSingleContainerConfigs(): List<io.github.tabssh.storage.database.entities.SingleContainerConfig> {
         return try {
             database.singleContainerConfigDao().getAllList()
@@ -461,7 +461,7 @@ class SyncDataCollector {
         val syncDashboard          = preferenceManager.isSyncDashboardEnabled()
         val syncPortForwards       = preferenceManager.isSyncPortForwardsEnabled()
         val syncNetworkRoutes      = preferenceManager.isSyncNetworkRoutesEnabled()
-        val syncDocker             = preferenceManager.isSyncDockerEnabled()
+        val syncContainers         = preferenceManager.isSyncContainersEnabled()
 
         val connections = if (syncConns)      collectConnections().filter { it.modifiedAt > timestamp } else emptyList()
         val keys        = if (syncKeys)       collectKeys().filter { it.modifiedAt > timestamp }        else emptyList()
@@ -494,16 +494,16 @@ class SyncDataCollector {
         // NetworkRoute has modifiedAt; delta-filter it like the other simple entities.
         val networkRoutes = if (syncNetworkRoutes)
             collectNetworkRoutes().filter { it.modifiedAt > timestamp } else emptyList()
-        // DockerHost/RegistryCredential/ContainerAutoUpdatePolicy have no modifiedAt
+        // ContainerHost/RegistryCredential/ContainerAutoUpdatePolicy have no modifiedAt
         // column — low-volume, always include in full like HypervisorProfile above.
         // ComposeStack/SingleContainerConfig have updatedAt, so delta-filter them.
-        val dockerHosts = if (syncDocker) collectDockerHosts() else emptyList()
-        val registryCredentials = if (syncDocker) collectRegistryCredentials() else emptyList()
-        val composeStacks = if (syncDocker)
+        val containerHosts = if (syncContainers) collectContainerHosts() else emptyList()
+        val registryCredentials = if (syncContainers) collectRegistryCredentials() else emptyList()
+        val composeStacks = if (syncContainers)
             collectComposeStacks().filter { it.updatedAt > timestamp } else emptyList()
-        val singleContainerConfigs = if (syncDocker)
+        val singleContainerConfigs = if (syncContainers)
             collectSingleContainerConfigs().filter { it.updatedAt > timestamp } else emptyList()
-        val containerAutoUpdatePolicies = if (syncDocker) collectContainerAutoUpdatePolicies() else emptyList()
+        val containerAutoUpdatePolicies = if (syncContainers) collectContainerAutoUpdatePolicies() else emptyList()
 
         val preferences = if (syncSettings && hasPreferencesChanged(timestamp)) {
             collectPreferences()
@@ -535,7 +535,7 @@ class SyncDataCollector {
             dashboard          = dashboardConfig.size,
             portForwards       = portForwards.size,
             networkRoutes      = networkRoutes.size,
-            dockerHosts                     = dockerHosts.size,
+            containerHosts                  = containerHosts.size,
             registryCredentials             = registryCredentials.size,
             composeStacks                   = composeStacks.size,
             singleContainerConfigs          = singleContainerConfigs.size,
@@ -574,7 +574,7 @@ class SyncDataCollector {
             namedPreferenceFiles = namedPrefFiles,
             portForwards       = portForwards,
             networkRoutes      = networkRoutes,
-            dockerHosts                 = dockerHosts,
+            containerHosts              = containerHosts,
             registryCredentials         = registryCredentials,
             composeStacks               = composeStacks,
             singleContainerConfigs      = singleContainerConfigs,
@@ -623,8 +623,8 @@ class SyncDataCollector {
         if (preferenceManager.isSyncCloudAccountsEnabled())      out += TombstoneRecorder.CLOUD_ACCOUNT
         if (preferenceManager.isSyncPortForwardsEnabled())       out += TombstoneRecorder.PORT_FORWARD
         if (preferenceManager.isSyncNetworkRoutesEnabled())      out += TombstoneRecorder.NETWORK_ROUTE
-        if (preferenceManager.isSyncDockerEnabled()) {
-            out += TombstoneRecorder.DOCKER_HOST
+        if (preferenceManager.isSyncContainersEnabled()) {
+            out += TombstoneRecorder.CONTAINER_HOST
             out += TombstoneRecorder.REGISTRY_CREDENTIAL
             out += TombstoneRecorder.COMPOSE_STACK
             out += TombstoneRecorder.SINGLE_CONTAINER_CONFIG
@@ -655,7 +655,7 @@ class SyncDataCollector {
         TombstoneRecorder.CLOUD_ACCOUNT     -> collectCloudAccounts().map { it.id }
         TombstoneRecorder.PORT_FORWARD      -> collectPortForwards().map { it.id }
         TombstoneRecorder.NETWORK_ROUTE     -> collectNetworkRoutes().map { it.id }
-        TombstoneRecorder.DOCKER_HOST       -> collectDockerHosts().map { TombstoneRecorder.naturalKey(it) }
+        TombstoneRecorder.CONTAINER_HOST    -> collectContainerHosts().map { TombstoneRecorder.naturalKey(it) }
         TombstoneRecorder.REGISTRY_CREDENTIAL -> collectRegistryCredentials().map { TombstoneRecorder.naturalKey(it) }
         TombstoneRecorder.COMPOSE_STACK     -> collectComposeStacks().map { TombstoneRecorder.naturalKey(it) }
         TombstoneRecorder.SINGLE_CONTAINER_CONFIG -> collectSingleContainerConfigs().map { TombstoneRecorder.naturalKey(it) }
@@ -682,7 +682,7 @@ class SyncDataCollector {
             "identity_", "hypervisor_", "hypervisor_account_",
             "oci_private_key_account_", "oci_passphrase_account_",
             "vnc_identity_", "vnc_host_", "cloud_token_",
-            "key_passphrase_", "docker_host_", "registry_credential_"
+            "key_passphrase_", "container_host_", "registry_credential_"
         )
         pm.storedAliases().forEach { alias ->
             if (wirePrefixes.any { alias.startsWith(it) }) out += alias
@@ -749,7 +749,7 @@ class SyncDataCollector {
             TombstoneRecorder.HYPERVISOR_ACCOUNT, TombstoneRecorder.VNC_HOST,
             TombstoneRecorder.VNC_IDENTITY, TombstoneRecorder.CLOUD_ACCOUNT,
             TombstoneRecorder.PORT_FORWARD, TombstoneRecorder.NETWORK_ROUTE,
-            TombstoneRecorder.DOCKER_HOST,
+            TombstoneRecorder.CONTAINER_HOST,
             TombstoneRecorder.REGISTRY_CREDENTIAL, TombstoneRecorder.COMPOSE_STACK,
             TombstoneRecorder.SINGLE_CONTAINER_CONFIG, TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY,
             TombstoneRecorder.SECRET
@@ -791,7 +791,7 @@ class SyncDataCollector {
         val syncVncHosts      = preferenceManager.isSyncVncHostsEnabled()
         val syncVncIdentities = preferenceManager.isSyncVncIdentitiesEnabled()
         val syncCloudAccounts = preferenceManager.isSyncCloudAccountsEnabled()
-        val syncDocker = preferenceManager.isSyncDockerEnabled()
+        val syncContainers = preferenceManager.isSyncContainersEnabled()
         try {
             if (pm != null) {
                 // Identity passwords — alias: identity_{id}
@@ -865,19 +865,19 @@ class SyncDataCollector {
                     }
                 }
 
-                // Docker host custom-endpoint passwords — alias: docker_host_{id}
-                if (syncDocker) {
-                    database.dockerHostDao().getAllList()
+                // Container host custom-endpoint passwords — alias: container_host_{id}
+                if (syncContainers) {
+                    database.containerHostDao().getAllList()
                         .filter { it.usesCustomEndpoint() }
                         .forEach { h ->
-                            pm.retrievePassword("docker_host_${h.id}")
+                            pm.retrievePassword("container_host_${h.id}")
                                 ?.takeIf { it.isNotEmpty() }
-                                ?.let { out["docker_host_${h.id}"] = it }
+                                ?.let { out["container_host_${h.id}"] = it }
                         }
                 }
 
                 // Registry credential secrets — alias: registry_credential_{id}
-                if (syncDocker) {
+                if (syncContainers) {
                     database.registryCredentialDao().getAllList().forEach { c ->
                         pm.retrievePassword("registry_credential_${c.id}")
                             ?.takeIf { it.isNotEmpty() }
@@ -1001,7 +1001,7 @@ class SyncDataCollector {
             prefs["audit"]          = anyMapToJsonObject(collectAuditPreferences())
             prefs["tasker"]         = anyMapToJsonObject(collectTaskerPreferences())
             prefs["logging"]        = anyMapToJsonObject(collectLoggingPreferences())
-            prefs["docker"]         = anyMapToJsonObject(collectDockerPreferences())
+            prefs["containers"]     = anyMapToJsonObject(collectContainerPreferences())
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to collect preferences", e)
         }
@@ -1112,7 +1112,7 @@ class SyncDataCollector {
             "syncDashboard"         to preferenceManager.isSyncDashboardEnabled(),
             "syncPortForwards"      to preferenceManager.isSyncPortForwardsEnabled(),
             "syncNetworkRoutes"     to preferenceManager.isSyncNetworkRoutesEnabled(),
-            "syncDocker"            to preferenceManager.isSyncDockerEnabled(),
+            "syncContainers"        to preferenceManager.isSyncContainersEnabled(),
             "autoResolve"           to preferenceManager.isAutoResolveConflictsEnabled()
         )
     }
@@ -1237,8 +1237,8 @@ class SyncDataCollector {
         "hostLogMaxSizeMb"  to preferenceManager.getHostLogMaxSizeMb()
     )
 
-    private fun collectDockerPreferences(): Map<String, Any> = mapOf(
-        "updateCheckEnabled" to preferenceManager.isDockerUpdateCheckEnabled()
+    private fun collectContainerPreferences(): Map<String, Any> = mapOf(
+        "updateCheckEnabled" to preferenceManager.isContainerUpdateCheckEnabled()
     )
 
     /**
@@ -1274,7 +1274,7 @@ class SyncDataCollector {
             dashboard         = try { collectDashboardConfig().size } catch (_: Exception) { 0 },
             portForwards      = try { database.portForwardDao().getAllList().size } catch (_: Exception) { 0 },
             networkRoutes     = try { database.networkRouteDao().getAllList().size } catch (_: Exception) { 0 },
-            dockerHosts       = try { database.dockerHostDao().getAllList().size } catch (_: Exception) { 0 },
+            containerHosts    = try { database.containerHostDao().getAllList().size } catch (_: Exception) { 0 },
             registryCredentials = try { database.registryCredentialDao().getAllList().size } catch (_: Exception) { 0 },
             composeStacks     = try { database.composeStackDao().getAllList().size } catch (_: Exception) { 0 },
             singleContainerConfigs = try { database.singleContainerConfigDao().getAllList().size } catch (_: Exception) { 0 },

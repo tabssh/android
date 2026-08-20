@@ -12,7 +12,7 @@ import kotlin.test.assertNull
  * instead of sequentially, and bounds the whole group to [loadConcurrently]'s
  * timeout instead of letting one stalled call hang the caller forever — the
  * root cause behind the per-host Docker dashboard spinning indefinitely
- * (TODO.AI.md A4): DockerDashboardFragment used to `await` engineInfo(),
+ * (TODO.AI.md A4): ContainerDashboardFragment used to `await` engineInfo(),
  * engineVersion() and diskUsage() one after another with no overall bound.
  */
 class ConcurrentLoadTest {

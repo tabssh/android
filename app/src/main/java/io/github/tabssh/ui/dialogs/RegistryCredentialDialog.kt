@@ -36,9 +36,9 @@ object RegistryCredentialDialog {
 
     // Display-label resource per wire value, same order as AUTH_TYPES.
     private val AUTH_TYPE_LABELS = listOf(
-        R.string.docker_registry_auth_basic,
-        R.string.docker_registry_auth_token,
-        R.string.docker_registry_auth_anonymous
+        R.string.container_registry_auth_basic,
+        R.string.container_registry_auth_token,
+        R.string.container_registry_auth_anonymous
     )
 
     /**
@@ -74,9 +74,9 @@ object RegistryCredentialDialog {
             val empty = view.findViewById<TextView>(R.id.text_registry_empty)
 
             val dialog = MaterialAlertDialogBuilder(activity)
-                .setTitle(R.string.docker_registry_title)
+                .setTitle(R.string.container_registry_title)
                 .setView(view)
-                .setPositiveButton(R.string.docker_registry_add) { _, _ ->
+                .setPositiveButton(R.string.container_registry_add) { _, _ ->
                     showEditor(activity, app, null)
                 }
                 .setNegativeButton(R.string.close, null)
@@ -178,15 +178,15 @@ object RegistryCredentialDialog {
             editHost.setText(existing.registryHost)
             editUsername.setText(existing.username)
             tilSecret.helperText =
-                activity.getString(R.string.docker_registry_secret_keep_helper)
+                activity.getString(R.string.container_registry_secret_keep_helper)
         }
 
         val dialog = MaterialAlertDialogBuilder(activity)
             .setTitle(
                 if (existing == null) {
-                    R.string.docker_registry_add
+                    R.string.container_registry_add
                 } else {
-                    R.string.docker_registry_edit_title
+                    R.string.container_registry_edit_title
                 }
             )
             .setView(view)
@@ -200,7 +200,7 @@ object RegistryCredentialDialog {
             .setOnClickListener {
                 val host = editHost.text?.toString()?.trim().orEmpty()
                 if (host.isEmpty()) {
-                    tilHost.error = activity.getString(R.string.docker_registry_error_host)
+                    tilHost.error = activity.getString(R.string.container_registry_error_host)
                     return@setOnClickListener
                 }
                 // The host is later concatenated into an https:// URL for the
@@ -208,7 +208,7 @@ object RegistryCredentialDialog {
                 // host[:port] before it can smuggle in a scheme, path or query.
                 if (!isPlausibleRegistryHost(host)) {
                     tilHost.error =
-                        activity.getString(R.string.docker_registry_error_host_format)
+                        activity.getString(R.string.container_registry_error_host_format)
                     return@setOnClickListener
                 }
                 tilHost.error = null
@@ -264,7 +264,7 @@ object RegistryCredentialDialog {
                     RegistryCredentialStore.store(appContext, id, secret)
                 }
                 if (activity.isFinishing || activity.isDestroyed) return@launch
-                Toast.makeText(activity, R.string.docker_registry_saved, Toast.LENGTH_SHORT)
+                Toast.makeText(activity, R.string.container_registry_saved, Toast.LENGTH_SHORT)
                     .show()
             } catch (e: CancellationException) {
                 throw e
@@ -273,7 +273,7 @@ object RegistryCredentialDialog {
                 // Never surface the exception text — a Keystore/cipher failure
                 // message can echo the value it was handed.
                 Toast.makeText(
-                    activity, R.string.docker_registry_save_failed, Toast.LENGTH_SHORT
+                    activity, R.string.container_registry_save_failed, Toast.LENGTH_SHORT
                 ).show()
             }
         }
@@ -288,7 +288,7 @@ object RegistryCredentialDialog {
             .setTitle(credential.registryHost)
             .setMessage(
                 activity.getString(
-                    R.string.docker_registry_delete_message, credential.registryHost
+                    R.string.container_registry_delete_message, credential.registryHost
                 )
             )
             .setPositiveButton(R.string.delete) { _, _ ->
@@ -316,7 +316,7 @@ object RegistryCredentialDialog {
                     } catch (e: Exception) {
                         if (activity.isFinishing || activity.isDestroyed) return@launch
                         Toast.makeText(
-                            activity, R.string.docker_registry_delete_failed, Toast.LENGTH_SHORT
+                            activity, R.string.container_registry_delete_failed, Toast.LENGTH_SHORT
                         ).show()
                     }
                 }

@@ -18,7 +18,7 @@
         android:id="@+id/spinner_service"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:contentDescription="@string/docker_stack_logs_service_label"
+        android:contentDescription="@string/container_stack_logs_service_label"
         android:paddingHorizontal="@dimen/space_md"
         android:paddingVertical="@dimen/space_xs" />
 

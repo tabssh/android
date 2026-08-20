@@ -42,7 +42,7 @@ class InfraFragment : Fragment() {
 
         TabLayoutMediator(tabLayout, viewPager) { tab, position ->
             tab.text = when (position) {
-                0 -> getString(R.string.docker_tab_title)
+                0 -> getString(R.string.container_tab_title)
                 1 -> getString(R.string.infra_tab_hypervisors)
                 2 -> getString(R.string.infra_tab_cloud)
                 else -> ""
@@ -54,7 +54,7 @@ class InfraFragment : Fragment() {
         override fun getItemCount(): Int = 3
 
         override fun createFragment(position: Int): Fragment = when (position) {
-            0 -> DockerHostsFragment.newInstance()
+            0 -> ContainerHostsFragment.newInstance()
             1 -> HypervisorsFragment.newInstance()
             2 -> CloudAccountsFragment.newInstance()
             else -> error("Invalid Infra sub-tab position $position")

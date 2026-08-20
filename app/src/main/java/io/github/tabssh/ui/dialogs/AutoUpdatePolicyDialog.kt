@@ -48,7 +48,7 @@ object AutoUpdatePolicyDialog {
             val spinnerCredential = view.findViewById<Spinner>(R.id.spinner_credential)
 
             // First spinner row means "no credential" (anonymous pulls).
-            val labels = mutableListOf(context.getString(R.string.docker_policy_none))
+            val labels = mutableListOf(context.getString(R.string.container_policy_none))
             credentials.forEach { labels.add(it.registryHost) }
             spinnerCredential.adapter = ArrayAdapter(
                 context, android.R.layout.simple_spinner_dropdown_item, labels
@@ -62,7 +62,7 @@ object AutoUpdatePolicyDialog {
             if (selectedIndex >= 0) spinnerCredential.setSelection(selectedIndex + 1)
 
             MaterialAlertDialogBuilder(context)
-                .setTitle(context.getString(R.string.docker_policy_title))
+                .setTitle(context.getString(R.string.container_policy_title))
                 .setView(view)
                 .setPositiveButton(R.string.save) { _, _ ->
                     val credentialId = credentials
@@ -70,7 +70,7 @@ object AutoUpdatePolicyDialog {
                     owner.lifecycleScope.launch {
                         val policy = ContainerAutoUpdatePolicy(
                             id = existing?.id ?: 0,
-                            dockerHostId = hostId,
+                            containerHostId = hostId,
                             containerNameOrStackName = containerName,
                             scope = "container",
                             enabled = switchEnabled.isChecked,
@@ -91,7 +91,7 @@ object AutoUpdatePolicyDialog {
                             return@launch
                         }
                         Toast.makeText(
-                            context, R.string.docker_policy_saved, Toast.LENGTH_SHORT
+                            context, R.string.container_policy_saved, Toast.LENGTH_SHORT
                         ).show()
                     }
                 }

@@ -71,7 +71,7 @@
             android:layout_height="@dimen/min_touch_target"
             android:layout_gravity="center_vertical"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/docker_more_actions_desc"
+            android:contentDescription="@string/container_more_actions_desc"
             android:src="@drawable/ic_more_vert"
             app:tint="?attr/colorOnSurfaceVariant" />
 

@@ -8,13 +8,13 @@ import kotlinx.serialization.Serializable
 
 /**
  * App-driven auto-update policy for one container or one compose stack
- * service on a [DockerHost] — registry digest checks + pull/recreate,
+ * service on a [ContainerHost] — registry digest checks + pull/recreate,
  * no host agent.
  */
 @Entity(
     tableName = "container_auto_update_policies",
     indices = [
-        Index("docker_host_id"),
+        Index("container_host_id"),
         Index("registry_credential_id")
     ]
 )
@@ -24,9 +24,9 @@ data class ContainerAutoUpdatePolicy(
     @ColumnInfo(name = "id")
     val id: Long = 0,
 
-    /** Reference to the owning DockerHost.id (FK-by-convention). */
-    @ColumnInfo(name = "docker_host_id")
-    val dockerHostId: Long,
+    /** Reference to the owning ContainerHost.id (FK-by-convention). */
+    @ColumnInfo(name = "container_host_id")
+    val containerHostId: Long,
 
     @ColumnInfo(name = "container_name_or_stack_name")
     val containerNameOrStackName: String,

@@ -7,7 +7,7 @@ import androidx.room.PrimaryKey
 import kotlinx.serialization.Serializable
 
 /**
- * Compose stack metadata for a [DockerHost].
+ * Compose stack metadata for a [ContainerHost].
  *
  * The remote files under [remotePath] (typically
  * `{composeBasePath}/{name}/compose.yaml`) are the source of truth;
@@ -16,7 +16,7 @@ import kotlinx.serialization.Serializable
 @Entity(
     tableName = "compose_stacks",
     indices = [
-        Index("docker_host_id")
+        Index("container_host_id")
     ]
 )
 @Serializable
@@ -25,9 +25,9 @@ data class ComposeStack(
     @ColumnInfo(name = "id")
     val id: Long = 0,
 
-    /** Reference to the owning DockerHost.id (FK-by-convention). */
-    @ColumnInfo(name = "docker_host_id")
-    val dockerHostId: Long,
+    /** Reference to the owning ContainerHost.id (FK-by-convention). */
+    @ColumnInfo(name = "container_host_id")
+    val containerHostId: Long,
 
     @ColumnInfo(name = "name")
     val name: String,

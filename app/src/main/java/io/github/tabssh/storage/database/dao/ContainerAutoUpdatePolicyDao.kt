@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ContainerAutoUpdatePolicyDao {
 
-    @Query("SELECT * FROM container_auto_update_policies WHERE docker_host_id = :hostId ORDER BY container_name_or_stack_name ASC")
+    @Query("SELECT * FROM container_auto_update_policies WHERE container_host_id = :hostId ORDER BY container_name_or_stack_name ASC")
     fun getPoliciesForHost(hostId: Long): Flow<List<ContainerAutoUpdatePolicy>>
 
     /** Enabled policies across all hosts — the periodic update-check worker's work list. */
@@ -33,8 +33,8 @@ interface ContainerAutoUpdatePolicyDao {
     @Query("DELETE FROM container_auto_update_policies WHERE id = :id")
     suspend fun deleteById(id: Long)
 
-    /** Cascade-by-convention — call from the DockerHost delete path. */
-    @Query("DELETE FROM container_auto_update_policies WHERE docker_host_id = :hostId")
+    /** Cascade-by-convention — call from the ContainerHost delete path. */
+    @Query("DELETE FROM container_auto_update_policies WHERE container_host_id = :hostId")
     suspend fun deleteForHost(hostId: Long)
 
     @Query("UPDATE container_auto_update_policies SET last_checked_at = :timestamp, last_digest_seen = :digest WHERE id = :id")

@@ -379,18 +379,18 @@ class SyncDataApplier {
                 }
             }
 
-            // Docker subsystem — five Long-PK entities, applied by raw id (see
+            // Container subsystem — five Long-PK entities, applied by raw id (see
             // TombstoneRecorder KDoc); tombstone suppression keys on naturalKey().
-            if (preferenceManager.isSyncDockerEnabled()) {
-                data.dockerHosts.forEach { h ->
+            if (preferenceManager.isSyncContainersEnabled()) {
+                data.containerHosts.forEach { h ->
                     try {
-                        if (suppressed(TombstoneRecorder.DOCKER_HOST, TombstoneRecorder.naturalKey(h), h.modifiedAt)) return@forEach
-                        val existing = database.dockerHostDao().getById(h.id)
-                        if (existing == null) database.dockerHostDao().insert(h)
-                        else database.dockerHostDao().update(h)
+                        if (suppressed(TombstoneRecorder.CONTAINER_HOST, TombstoneRecorder.naturalKey(h), h.modifiedAt)) return@forEach
+                        val existing = database.containerHostDao().getById(h.id)
+                        if (existing == null) database.containerHostDao().insert(h)
+                        else database.containerHostDao().update(h)
                         appliedCount++
                     } catch (e: Exception) {
-                        Logger.w(TAG, "Failed to apply Docker host: ${h.name}", e)
+                        Logger.w(TAG, "Failed to apply container host: ${h.name}", e)
                     }
                 }
                 data.registryCredentials.forEach { c ->
@@ -516,10 +516,10 @@ class SyncDataApplier {
                 database.hypervisorAccountDao().getAllAccountsList()
                     .associateBy { TombstoneRecorder.naturalKey(it) }
             else emptyMap()
-        // Same natural-key treatment for the five Long-PK Docker entities.
-        val dockerHostsByKey =
-            if (tombstones.any { it.entityType == TombstoneRecorder.DOCKER_HOST })
-                database.dockerHostDao().getAllList()
+        // Same natural-key treatment for the five Long-PK container entities.
+        val containerHostsByKey =
+            if (tombstones.any { it.entityType == TombstoneRecorder.CONTAINER_HOST })
+                database.containerHostDao().getAllList()
                     .associateBy { TombstoneRecorder.naturalKey(it) }
             else emptyMap()
         val registryCredentialsByKey =
@@ -642,9 +642,9 @@ class SyncDataApplier {
                             if (row != null) database.monitorSlotDao().delete(row)
                             false
                         }
-                        TombstoneRecorder.DOCKER_HOST -> {
-                            val row = dockerHostsByKey[t.entityKey]
-                            if (row != null) database.dockerHostDao().delete(row)
+                        TombstoneRecorder.CONTAINER_HOST -> {
+                            val row = containerHostsByKey[t.entityKey]
+                            if (row != null) database.containerHostDao().delete(row)
                             false
                         }
                         TombstoneRecorder.REGISTRY_CREDENTIAL -> {
@@ -796,8 +796,8 @@ class SyncDataApplier {
         alias.startsWith("vnc_identity_") -> preferenceManager.isSyncVncIdentitiesEnabled()
         alias.startsWith("vnc_host_") -> preferenceManager.isSyncVncHostsEnabled()
         alias.startsWith("cloud_token_") -> preferenceManager.isSyncCloudAccountsEnabled()
-        alias.startsWith("docker_host_") || alias.startsWith("registry_credential_") ->
-            preferenceManager.isSyncDockerEnabled()
+        alias.startsWith("container_host_") || alias.startsWith("registry_credential_") ->
+            preferenceManager.isSyncContainersEnabled()
         else -> false
     }
 
@@ -1089,9 +1089,12 @@ class SyncDataApplier {
             logging?.let {
                 count += applyLoggingPreferences(it)
             }
-            val docker = (preferences["docker"] as? JsonObject)?.toAnyMap()
-            docker?.let {
-                count += applyDockerPreferences(it)
+            // "docker" is the group name the development build wrote; the
+            // collector only ever emits "containers" now.
+            val containers = (preferences["containers"] as? JsonObject)?.toAnyMap()
+                ?: (preferences["docker"] as? JsonObject)?.toAnyMap()
+            containers?.let {
+                count += applyContainerPreferences(it)
             }
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to apply preferences", e)
@@ -1130,7 +1133,9 @@ class SyncDataApplier {
                     "syncDashboard"         -> preferenceManager.setSyncDashboardEnabled(value as Boolean)
                     "syncPortForwards"      -> preferenceManager.setSyncPortForwardsEnabled(value as Boolean)
                     "syncNetworkRoutes"     -> preferenceManager.setSyncNetworkRoutesEnabled(value as Boolean)
-                    "syncDocker"            -> preferenceManager.setSyncDockerEnabled(value as Boolean)
+                    "syncContainers"        -> preferenceManager.setSyncContainersEnabled(value as Boolean)
+                    // Development-build read compatibility: payloads written before the container rename used `syncDocker`.
+                    "syncDocker"            -> preferenceManager.setSyncContainersEnabled(value as Boolean)
                     "autoResolve"           -> preferenceManager.setAutoResolveConflicts(value as Boolean)
                 }
                 count++
@@ -1275,12 +1280,12 @@ class SyncDataApplier {
         return count
     }
 
-    private fun applyDockerPreferences(prefs: Map<String, Any>): Int {
+    private fun applyContainerPreferences(prefs: Map<String, Any>): Int {
         var count = 0
         prefs.forEach { (key, value) ->
             try {
                 when (key) {
-                    "updateCheckEnabled" -> preferenceManager.setDockerUpdateCheckEnabled(value as Boolean)
+                    "updateCheckEnabled" -> preferenceManager.setContainerUpdateCheckEnabled(value as Boolean)
                 }
                 count++
             } catch (e: Exception) {

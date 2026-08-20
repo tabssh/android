@@ -61,7 +61,7 @@ class SyncSettingsActivity : AppCompatActivity() {
         private const val PREF_DASHBOARD            = "sync_dashboard"
         private const val PREF_PORT_FORWARDS        = "sync_port_forwards"
         private const val PREF_NETWORK_ROUTES       = "sync_network_routes"
-        private const val PREF_DOCKER               = "sync_docker"
+        private const val PREF_CONTAINERS           = "sync_containers"
         private const val PREF_FREQUENCY     = "sync_frequency"
         private val FREQUENCY_LABELS = mapOf(
             "manual" to "Manual only",
@@ -214,14 +214,14 @@ class SyncSettingsActivity : AppCompatActivity() {
             Triple(findViewById(R.id.row_sync_dashboard),          PREF_DASHBOARD,           "Multi-host dashboard layout"),
             Triple(findViewById(R.id.row_sync_port_forwards),      PREF_PORT_FORWARDS,       "Saved port-forward rules"),
             Triple(findViewById(R.id.row_sync_network_routes),     PREF_NETWORK_ROUTES,      getString(R.string.sync_network_routes_summary)),
-            Triple(findViewById(R.id.row_sync_docker),             PREF_DOCKER,              "Docker hosts, registries, stacks & containers")
+            Triple(findViewById(R.id.row_sync_containers),         PREF_CONTAINERS,          "Container hosts, registries, stacks & containers")
         )
         val titles = listOf(
             "Connections", "Identities", "SSH Keys", "Snippets", "Themes",
             "Host Keys", "Groups", "Workspaces", "Macros", "Monitor Slots",
             "Hypervisors", "Hypervisor Accounts", "VNC Hosts", "VNC Identities",
             "Cloud Accounts", "Certificates", "Dashboard", "Port Forwards",
-            getString(R.string.sync_network_routes), "Docker"
+            getString(R.string.sync_network_routes), "Containers"
         )
         val defaults = listOf(
             true, true, true, true, true,

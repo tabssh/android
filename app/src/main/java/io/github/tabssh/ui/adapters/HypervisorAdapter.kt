@@ -110,16 +110,16 @@ class HypervisorAdapter(
             textLastConnected.visibility = View.VISIBLE
             if (hypervisor.lastConnected > 0) {
                 // Localized relative time from the platform formatter, matching
-                // DockerHostAdapter — replaces hand-built English-only strings.
+                // ContainerHostAdapter — replaces hand-built English-only strings.
                 val relativeTime = DateUtils.getRelativeTimeSpanString(
                     hypervisor.lastConnected,
                     System.currentTimeMillis(),
                     DateUtils.MINUTE_IN_MILLIS
                 )
                 textLastConnected.text =
-                    context.getString(R.string.docker_last_used_fmt, relativeTime)
+                    context.getString(R.string.container_last_used_fmt, relativeTime)
             } else {
-                textLastConnected.text = context.getString(R.string.docker_never_connected)
+                textLastConnected.text = context.getString(R.string.container_never_connected)
             }
 
             // Status indicator (not connected for now)

@@ -5,8 +5,10 @@ import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HostKeyEntry
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.storage.database.entities.ThemeDefinition
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNames
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -49,9 +51,13 @@ data class SyncItemCounts(
     val portForwards: Int = 0,
     /** Reusable network routes (proxies and SSH jump hosts). */
     val networkRoutes: Int = 0,
-    /** Docker subsystem: hosts, registry credentials, compose stacks, single-container
-     *  run configs, and auto-update policies. */
-    val dockerHosts: Int = 0,
+    /** Container subsystem: hosts, registry credentials, compose stacks, single-container
+     *  run configs, and auto-update policies.
+     *  `@JsonNames("dockerHosts")` accepts the development build's old field name on read;
+     *  writes always emit `containerHosts`. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @JsonNames("dockerHosts")
+    val containerHosts: Int = 0,
     val registryCredentials: Int = 0,
     val composeStacks: Int = 0,
     val singleContainerConfigs: Int = 0,
@@ -60,7 +66,7 @@ data class SyncItemCounts(
     fun total(): Int = connections + keys + themes + preferences + hostKeys +
         workspaces + snippets + identities + groups + hypervisors + certificates +
         macros + monitorSlots + hypervisorAccounts + vncHosts + vncIdentities +
-        cloudAccounts + dashboard + portForwards + networkRoutes + dockerHosts + registryCredentials +
+        cloudAccounts + dashboard + portForwards + networkRoutes + containerHosts + registryCredentials +
         composeStacks + singleContainerConfigs + containerAutoUpdatePolicies
 }
 
@@ -137,12 +143,16 @@ data class SyncDataPackage(
     val portForwards: List<io.github.tabssh.storage.database.entities.PortForward> = emptyList(),
     /** Reusable network routes (proxies and SSH jump hosts), last-write-wins REPLACE on UUID PK. */
     val networkRoutes: List<io.github.tabssh.storage.database.entities.NetworkRoute> = emptyList(),
-    /** Docker subsystem — all use autoGenerate Long PKs, so cross-device ID collisions
+    /** Container subsystem — all use autoGenerate Long PKs, so cross-device ID collisions
      *  are possible (same caveat as HypervisorProfile above, documented in AI.md §9.4).
-     *  DockerHost's custom-endpoint SSH password and RegistryCredential's secret stay
-     *  Keystore-bound under `docker_host_{id}` / `registry_credential_{id}` and travel
-     *  via the secrets map only. */
-    val dockerHosts: List<io.github.tabssh.storage.database.entities.DockerHost> = emptyList(),
+     *  ContainerHost's custom-endpoint SSH password and RegistryCredential's secret stay
+     *  Keystore-bound under `container_host_{id}` / `registry_credential_{id}` and travel
+     *  via the secrets map only.
+     *  `@JsonNames("dockerHosts")` accepts the development build's old field name on read;
+     *  writes always emit `containerHosts`. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @JsonNames("dockerHosts")
+    val containerHosts: List<io.github.tabssh.storage.database.entities.ContainerHost> = emptyList(),
     val registryCredentials: List<io.github.tabssh.storage.database.entities.RegistryCredential> = emptyList(),
     val composeStacks: List<io.github.tabssh.storage.database.entities.ComposeStack> = emptyList(),
     val singleContainerConfigs: List<io.github.tabssh.storage.database.entities.SingleContainerConfig> = emptyList(),

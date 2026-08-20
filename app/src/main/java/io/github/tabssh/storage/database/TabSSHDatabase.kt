@@ -14,7 +14,7 @@ import io.github.tabssh.utils.logging.Logger
 /**
  * Main Room database for TabSSH.
  *
- * Current version: 14.
+ * Current version: 15.
  * Versions 1 and 2 never shipped to real users, so v3 is the effective schema
  * baseline and no fallback path exists for them. Every version bump from v3
  * onward MUST register a real Migration object via addMigrations(); destructive
@@ -44,7 +44,7 @@ import io.github.tabssh.utils.logging.Logger
         SyncTombstone::class,
         SyncShadow::class,
         PortForward::class,
-        DockerHost::class,
+        ContainerHost::class,
         ComposeStack::class,
         SingleContainerConfig::class,
         ContainerAutoUpdatePolicy::class,
@@ -53,7 +53,7 @@ import io.github.tabssh.utils.logging.Logger
         PendingSyncConflict::class,
         SyncLogEntry::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -81,7 +81,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun syncTombstoneDao(): SyncTombstoneDao
     abstract fun syncShadowDao(): SyncShadowDao
     abstract fun portForwardDao(): PortForwardDao
-    abstract fun dockerHostDao(): DockerHostDao
+    abstract fun containerHostDao(): ContainerHostDao
     abstract fun composeStackDao(): ComposeStackDao
     abstract fun singleContainerConfigDao(): SingleContainerConfigDao
     abstract fun containerAutoUpdatePolicyDao(): ContainerAutoUpdatePolicyDao
@@ -355,7 +355,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
          * identity_id) so a Docker host can use its own SSH endpoint
          * instead of a saved connection. Additive only; no data
          * transform. The custom-endpoint password is Keystore-only
-         * (DockerHostPasswordStore) — no secret column.
+         * (ContainerHostPasswordStore) — no secret column.
          */
         val MIGRATION_9_10 = object : Migration(9, 10) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -588,6 +588,185 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v14 -> v15: the container feature stops being Docker-only.
+         *
+         * `docker_hosts` becomes `container_hosts` and gains an `engine`
+         * column (`docker`, `incus`, `podman`, `lxd`); `docker_cli_path`
+         * becomes `engine_cli_path`; and the three owned tables rename their
+         * `docker_host_id` foreign key to `container_host_id`. A host row that
+         * runs Incus must not be reachable through a column called
+         * `docker_host_id`, so this is a rename, not an alias.
+         *
+         * minSdk 24 predates `ALTER TABLE ... RENAME COLUMN` (SQLite 3.25), so
+         * every rename here is a full table recreate: build the replacement,
+         * copy every column by name, drop the original, rename, recreate the
+         * indices. Table renames themselves use `ALTER TABLE ... RENAME TO`,
+         * which has always existed.
+         *
+         * `socket_path` keeps whatever the row already had. Existing rows all
+         * hold an explicit Docker socket, which stays correct for a Docker
+         * host; only newly added hosts get the blank "probe this engine's
+         * defaults" value.
+         *
+         * No secret is touched: `container_hosts` has no secret column, and the
+         * Keystore alias rename (`docker_host_{id}` -> `container_host_{id}`)
+         * happens outside Room in ContainerHostPasswordStore, which a Room
+         * migration cannot reach.
+         */
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `container_hosts` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`linked_connection_id` TEXT, " +
+                        "`custom_host` TEXT, " +
+                        "`custom_port` INTEGER, " +
+                        "`custom_username` TEXT, " +
+                        "`custom_auth_type` TEXT, " +
+                        "`custom_key_id` TEXT, " +
+                        "`custom_identity_id` TEXT, " +
+                        "`engine` TEXT NOT NULL DEFAULT 'docker', " +
+                        "`socket_path` TEXT NOT NULL DEFAULT '', " +
+                        "`transport_mode` TEXT NOT NULL, " +
+                        "`engine_cli_path` TEXT, " +
+                        "`compose_invocation` TEXT NOT NULL, " +
+                        "`pinned_api_version` TEXT, " +
+                        "`compose_base_path` TEXT NOT NULL, " +
+                        "`run_config_base_path` TEXT NOT NULL, " +
+                        "`update_check_enabled` INTEGER NOT NULL DEFAULT 1, " +
+                        "`update_check_interval_hours` INTEGER, " +
+                        "`last_update_check` INTEGER NOT NULL DEFAULT 0, " +
+                        "`notes` TEXT, " +
+                        "`last_connected` INTEGER NOT NULL, " +
+                        "`created_at` INTEGER NOT NULL, " +
+                        "`modified_at` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "INSERT INTO `container_hosts` (" +
+                        "`id`, `name`, `linked_connection_id`, `custom_host`, `custom_port`, " +
+                        "`custom_username`, `custom_auth_type`, `custom_key_id`, " +
+                        "`custom_identity_id`, `engine`, `socket_path`, `transport_mode`, " +
+                        "`engine_cli_path`, `compose_invocation`, `pinned_api_version`, " +
+                        "`compose_base_path`, `run_config_base_path`, `update_check_enabled`, " +
+                        "`update_check_interval_hours`, `last_update_check`, `notes`, " +
+                        "`last_connected`, `created_at`, `modified_at`) " +
+                        "SELECT `id`, `name`, `linked_connection_id`, `custom_host`, `custom_port`, " +
+                        "`custom_username`, `custom_auth_type`, `custom_key_id`, " +
+                        "`custom_identity_id`, 'docker', `socket_path`, `transport_mode`, " +
+                        "`docker_cli_path`, `compose_invocation`, `pinned_api_version`, " +
+                        "`compose_base_path`, `run_config_base_path`, `update_check_enabled`, " +
+                        "`update_check_interval_hours`, `last_update_check`, `notes`, " +
+                        "`last_connected`, `created_at`, `modified_at` FROM `docker_hosts`"
+                )
+                db.execSQL("DROP TABLE `docker_hosts`")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_container_hosts_linked_connection_id` " +
+                        "ON `container_hosts` (`linked_connection_id`)"
+                )
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `compose_stacks_new` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`container_host_id` INTEGER NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`remote_path` TEXT NOT NULL, " +
+                        "`auto_update_enabled` INTEGER NOT NULL, " +
+                        "`last_known_status` TEXT, " +
+                        "`created_at` INTEGER NOT NULL, " +
+                        "`updated_at` INTEGER NOT NULL, " +
+                        "`modified_at` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "INSERT INTO `compose_stacks_new` (" +
+                        "`id`, `container_host_id`, `name`, `remote_path`, `auto_update_enabled`, " +
+                        "`last_known_status`, `created_at`, `updated_at`, `modified_at`) " +
+                        "SELECT `id`, `docker_host_id`, `name`, `remote_path`, `auto_update_enabled`, " +
+                        "`last_known_status`, `created_at`, `updated_at`, `modified_at` " +
+                        "FROM `compose_stacks`"
+                )
+                db.execSQL("DROP TABLE `compose_stacks`")
+                db.execSQL("ALTER TABLE `compose_stacks_new` RENAME TO `compose_stacks`")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_compose_stacks_container_host_id` " +
+                        "ON `compose_stacks` (`container_host_id`)"
+                )
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `single_container_configs_new` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`container_host_id` INTEGER NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`remote_path` TEXT NOT NULL, " +
+                        "`config_format` TEXT NOT NULL, " +
+                        "`auto_update_enabled` INTEGER NOT NULL, " +
+                        "`last_known_status` TEXT, " +
+                        "`created_at` INTEGER NOT NULL, " +
+                        "`updated_at` INTEGER NOT NULL, " +
+                        "`modified_at` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "INSERT INTO `single_container_configs_new` (" +
+                        "`id`, `container_host_id`, `name`, `remote_path`, `config_format`, " +
+                        "`auto_update_enabled`, `last_known_status`, `created_at`, `updated_at`, " +
+                        "`modified_at`) " +
+                        "SELECT `id`, `docker_host_id`, `name`, `remote_path`, `config_format`, " +
+                        "`auto_update_enabled`, `last_known_status`, `created_at`, `updated_at`, " +
+                        "`modified_at` FROM `single_container_configs`"
+                )
+                db.execSQL("DROP TABLE `single_container_configs`")
+                db.execSQL(
+                    "ALTER TABLE `single_container_configs_new` RENAME TO `single_container_configs`"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_single_container_configs_container_host_id` " +
+                        "ON `single_container_configs` (`container_host_id`)"
+                )
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `container_auto_update_policies_new` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`container_host_id` INTEGER NOT NULL, " +
+                        "`container_name_or_stack_name` TEXT NOT NULL, " +
+                        "`scope` TEXT NOT NULL, " +
+                        "`enabled` INTEGER NOT NULL, " +
+                        "`auto_recreate_on_update` INTEGER NOT NULL, " +
+                        "`registry_credential_id` INTEGER, " +
+                        "`last_checked_at` INTEGER NOT NULL, " +
+                        "`last_digest_seen` TEXT, " +
+                        "`pending_update_digest` TEXT, " +
+                        "`modified_at` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "INSERT INTO `container_auto_update_policies_new` (" +
+                        "`id`, `container_host_id`, `container_name_or_stack_name`, `scope`, " +
+                        "`enabled`, `auto_recreate_on_update`, `registry_credential_id`, " +
+                        "`last_checked_at`, `last_digest_seen`, `pending_update_digest`, " +
+                        "`modified_at`) " +
+                        "SELECT `id`, `docker_host_id`, `container_name_or_stack_name`, `scope`, " +
+                        "`enabled`, `auto_recreate_on_update`, `registry_credential_id`, " +
+                        "`last_checked_at`, `last_digest_seen`, `pending_update_digest`, " +
+                        "`modified_at` FROM `container_auto_update_policies`"
+                )
+                db.execSQL("DROP TABLE `container_auto_update_policies`")
+                db.execSQL(
+                    "ALTER TABLE `container_auto_update_policies_new` " +
+                        "RENAME TO `container_auto_update_policies`"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS " +
+                        "`index_container_auto_update_policies_container_host_id` " +
+                        "ON `container_auto_update_policies` (`container_host_id`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS " +
+                        "`index_container_auto_update_policies_registry_credential_id` " +
+                        "ON `container_auto_update_policies` (`registry_credential_id`)"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -597,7 +776,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
                 .build()
                 INSTANCE = instance
                 instance

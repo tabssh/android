@@ -39,7 +39,18 @@ class TabSSHApplication : Application() {
         private const val KEY_INLINE_PROXY_ROUTE_MIGRATED = "inline_proxy_route_migrated"
         private const val KEY_CONNECTION_PASSWORDS_MIGRATED = "connection_passwords_keystore_migrated"
         private const val KEY_OCI_ACCOUNT_SECRETS_MIGRATED = "oci_account_secrets_migrated"
+        private const val KEY_CONTAINER_HOST_ALIASES_MIGRATED = "container_host_aliases_migrated"
+        private const val KEY_CONTAINER_NAMING_MIGRATED = "container_naming_migrated"
+        private const val KEY_LEGACY_CONTAINER_WORK_CANCELLED = "legacy_docker_update_work_cancelled"
         private const val LEGACY_KEY_PREFIX_KEY_ENABLED = "terminal_prefix_key_enabled"
+
+        // Docker-only identifiers replaced by the engine-agnostic container
+        // naming — see migrateDockerNamingToContainer().
+        private const val LEGACY_KEY_DOCKER_UPDATE_CHECK = "docker_update_check_enabled"
+        private const val KEY_CONTAINER_UPDATE_CHECK = "container_update_check_enabled"
+        private const val LEGACY_KEY_SYNC_DOCKER = "sync_docker"
+        private const val KEY_SYNC_CONTAINERS = "sync_containers"
+        private const val LEGACY_TOMBSTONE_DOCKER_HOST = "docker_host"
 
         // Intent extras used to pass crash data directly to CrashReportActivity.
         // Preferred over SharedPreferences because they are in-process and not
@@ -285,6 +296,8 @@ class TabSSHApplication : Application() {
             migrateInlineProxiesToRoutes()
             migratePlaintextConnectionPasswords()
             migrateProfileKeyedOciSecrets()
+            migrateContainerHostAliases()
+            migrateDockerNamingToContainer()
             // Re-register periodic sync work on every cold start. WorkManager's
             // DB survives process death but can be wiped by reinstall or system
             // maintenance. Re-registering is idempotent when
@@ -394,6 +407,110 @@ class TabSSHApplication : Application() {
             false
         }
         if (complete) prefs.edit().putBoolean(KEY_OCI_ACCOUNT_SECRETS_MIGRATED, true).apply()
+    }
+
+    /**
+     * One-time secret migration for the Docker → container rename: move every
+     * custom-endpoint host password from the `docker_host_{id}` Keystore alias
+     * onto `container_host_{id}`, the only alias the auth path reads now.
+     *
+     * The done-flag is set only once no legacy alias remains, so a Keystore
+     * failure retries on the next launch instead of dropping the password.
+     */
+    private suspend fun migrateContainerHostAliases() {
+        val prefs = getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_CONTAINER_HOST_ALIASES_MIGRATED, false)) return
+        val complete = try {
+            io.github.tabssh.crypto.storage.LegacySecretMigrations
+                .migrateContainerHostAliases(securePasswordManager)
+        } catch (e: Exception) {
+            Logger.e("TabSSHApplication", "Container host alias migration failed", e)
+            false
+        }
+        if (complete) prefs.edit().putBoolean(KEY_CONTAINER_HOST_ALIASES_MIGRATED, true).apply()
+    }
+
+    /**
+     * One-time rename migration for the non-Keystore Docker-only identifiers
+     * the engine-agnostic container feature replaced:
+     *
+     *  - the `docker_update_check_enabled` preference, whose value is copied to
+     *    `container_update_check_enabled` before the old key is removed, so a
+     *    user who turned the update checker off keeps it off;
+     *  - the `sync_docker` preference, copied to `sync_containers` the same way
+     *    so a user who excluded container data from sync keeps it excluded;
+     *  - persisted `sync_tombstones` rows still typed `docker_host`, re-recorded
+     *    under `container_host` with their original deletedAt/deviceId so the
+     *    deletion keeps winning last-write-wins against a stale peer copy.
+     *
+     * Every part is idempotent; the done-flag is set only when all of them complete.
+     */
+    private suspend fun migrateDockerNamingToContainer() {
+        val prefs = getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_CONTAINER_NAMING_MIGRATED, false)) return
+        val complete = try {
+            migrateDockerUpdateCheckPref()
+            migrateSyncDockerPref()
+            migrateDockerHostTombstones()
+            true
+        } catch (e: Exception) {
+            Logger.e("TabSSHApplication", "Docker → container naming migration failed", e)
+            false
+        }
+        if (complete) prefs.edit().putBoolean(KEY_CONTAINER_NAMING_MIGRATED, true).apply()
+    }
+
+    private fun migrateDockerUpdateCheckPref() {
+        val defaultPrefs = androidx.preference.PreferenceManager
+            .getDefaultSharedPreferences(this)
+        if (!defaultPrefs.contains(LEGACY_KEY_DOCKER_UPDATE_CHECK)) return
+        val enabled = defaultPrefs.getBoolean(LEGACY_KEY_DOCKER_UPDATE_CHECK, true)
+        defaultPrefs.edit()
+            .putBoolean(KEY_CONTAINER_UPDATE_CHECK, enabled)
+            .remove(LEGACY_KEY_DOCKER_UPDATE_CHECK)
+            .apply()
+        Logger.i("TabSSHApplication", "Migrated update-check preference to container_update_check_enabled")
+    }
+
+    private fun migrateSyncDockerPref() {
+        val defaultPrefs = androidx.preference.PreferenceManager
+            .getDefaultSharedPreferences(this)
+        if (!defaultPrefs.contains(LEGACY_KEY_SYNC_DOCKER)) return
+        val enabled = defaultPrefs.getBoolean(LEGACY_KEY_SYNC_DOCKER, true)
+        defaultPrefs.edit()
+            .putBoolean(KEY_SYNC_CONTAINERS, enabled)
+            .remove(LEGACY_KEY_SYNC_DOCKER)
+            .apply()
+        Logger.i("TabSSHApplication", "Migrated sync toggle preference to sync_containers")
+    }
+
+    /**
+     * Cancel the periodic update-check work still registered under the development build's
+     * unique name. Renaming [io.github.tabssh.background.ContainerUpdateCheckWorker.WORK_NAME]
+     * alone would leave that registration enqueued forever, running a second checker cycle
+     * beside the new one. Runs before the new work is enqueued and is guarded by its own
+     * one-time flag so a normal cold start does not touch the WorkManager DB.
+     */
+    private fun cancelLegacyDockerUpdateWork() {
+        val prefs = getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_LEGACY_CONTAINER_WORK_CANCELLED, false)) return
+        androidx.work.WorkManager.getInstance(this)
+            .cancelUniqueWork(io.github.tabssh.background.ContainerUpdateCheckWorker.LEGACY_WORK_NAME)
+        prefs.edit().putBoolean(KEY_LEGACY_CONTAINER_WORK_CANCELLED, true).apply()
+        Logger.i("TabSSHApplication", "Cancelled legacy docker_update_check periodic work")
+    }
+
+    private suspend fun migrateDockerHostTombstones() {
+        val dao = database.syncTombstoneDao()
+        val legacy = dao.getByType(LEGACY_TOMBSTONE_DOCKER_HOST)
+        if (legacy.isEmpty()) return
+        dao.recordAll(
+            legacy.map {
+                it.copy(entityType = io.github.tabssh.sync.tombstone.TombstoneRecorder.CONTAINER_HOST)
+            }
+        )
+        legacy.forEach { dao.clear(LEGACY_TOMBSTONE_DOCKER_HOST, it.entityKey) }
+        Logger.i("TabSSHApplication", "Retyped ${legacy.size} docker_host tombstones to container_host")
     }
 
     private fun wireGlobalNotifications() {
@@ -533,11 +650,18 @@ class TabSSHApplication : Application() {
             io.github.tabssh.background.HostAvailabilityWorker.schedule(this)
         }
 
-        // Schedule periodic Docker image update checks (12 h cycle). Same
+        // Must run BEFORE the scheduling below: the periodic work registered
+        // under the old unique name would otherwise keep firing alongside the
+        // new one for the lifetime of the install.
+        tryInit("LegacyContainerWorkCancel") {
+            cancelLegacyDockerUpdateWork()
+        }
+
+        // Schedule periodic container image update checks (12 h cycle). Same
         // KEEP-policy idempotence as HostMonitor; the master
-        // "docker_update_check_enabled" pref is checked inside the worker.
-        tryInit("DockerUpdateCheck") {
-            io.github.tabssh.background.DockerUpdateCheckWorker.schedule(this)
+        // "container_update_check_enabled" pref is checked inside the worker.
+        tryInit("ContainerUpdateCheck") {
+            io.github.tabssh.background.ContainerUpdateCheckWorker.schedule(this)
         }
 
         // Bring up enabled auto-start port forwards on cold start too (not just

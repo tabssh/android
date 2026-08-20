@@ -4,53 +4,53 @@
 
     <item
         android:id="@+id/action_terminal"
-        android:title="@string/docker_action_terminal"
+        android:title="@string/container_action_terminal"
         android:icon="@drawable/ic_terminal"
         app:showAsAction="ifRoom" />
 
     <item
         android:id="@+id/action_refresh"
-        android:title="@string/docker_refresh"
+        android:title="@string/container_refresh"
         android:icon="@drawable/ic_refresh"
         app:showAsAction="ifRoom" />
 
     <item
         android:id="@+id/action_start"
-        android:title="@string/docker_action_start"
+        android:title="@string/container_action_start"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_restart"
-        android:title="@string/docker_action_restart"
+        android:title="@string/container_action_restart"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_stop"
-        android:title="@string/docker_action_stop"
+        android:title="@string/container_action_stop"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_pause"
-        android:title="@string/docker_action_pause"
+        android:title="@string/container_action_pause"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_unpause"
-        android:title="@string/docker_action_unpause"
+        android:title="@string/container_action_unpause"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_rename"
-        android:title="@string/docker_action_rename"
+        android:title="@string/container_action_rename"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_kill"
-        android:title="@string/docker_action_kill"
+        android:title="@string/container_action_kill"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_remove"
-        android:title="@string/docker_action_remove"
+        android:title="@string/container_action_remove"
         app:showAsAction="never" />
 </menu>

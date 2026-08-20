@@ -1,6 +1,6 @@
 package io.github.tabssh.ui.adapters
 
-import io.github.tabssh.docker.transport.ComposeLsEntry
+import io.github.tabssh.containers.transport.ComposeLsEntry
 import io.github.tabssh.storage.database.entities.ComposeStack
 
 /**

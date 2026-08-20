@@ -7,7 +7,7 @@ import androidx.room.PrimaryKey
 import kotlinx.serialization.Serializable
 
 /**
- * Single-container run config metadata for a [DockerHost].
+ * Single-container run config metadata for a [ContainerHost].
  *
  * Same shape as [ComposeStack], but [remotePath] lives under
  * `{runConfigBasePath}/{name}/` and the file is a run config
@@ -17,7 +17,7 @@ import kotlinx.serialization.Serializable
 @Entity(
     tableName = "single_container_configs",
     indices = [
-        Index("docker_host_id")
+        Index("container_host_id")
     ]
 )
 @Serializable
@@ -26,9 +26,9 @@ data class SingleContainerConfig(
     @ColumnInfo(name = "id")
     val id: Long = 0,
 
-    /** Reference to the owning DockerHost.id (FK-by-convention). */
-    @ColumnInfo(name = "docker_host_id")
-    val dockerHostId: Long,
+    /** Reference to the owning ContainerHost.id (FK-by-convention). */
+    @ColumnInfo(name = "container_host_id")
+    val containerHostId: Long,
 
     @ColumnInfo(name = "name")
     val name: String,

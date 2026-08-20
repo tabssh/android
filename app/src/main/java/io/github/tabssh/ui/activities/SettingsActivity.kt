@@ -1240,22 +1240,22 @@ class MonitoringSettingsFragment : androidx.preference.PreferenceFragmentCompat(
                 true
             }
 
-        // Docker update-check toggle — schedule or cancel the 12 h worker.
-        findPreference<androidx.preference.SwitchPreferenceCompat>("docker_update_check_enabled")
+        // Container update-check toggle — schedule or cancel the 12 h worker.
+        findPreference<androidx.preference.SwitchPreferenceCompat>("container_update_check_enabled")
             ?.setOnPreferenceChangeListener { _, newValue ->
                 val enabled = newValue as? Boolean ?: false
                 val ctx = requireContext()
                 if (enabled) {
-                    io.github.tabssh.background.DockerUpdateCheckWorker.schedule(ctx)
+                    io.github.tabssh.background.ContainerUpdateCheckWorker.schedule(ctx)
                 } else {
-                    io.github.tabssh.background.DockerUpdateCheckWorker.cancel(ctx)
+                    io.github.tabssh.background.ContainerUpdateCheckWorker.cancel(ctx)
                 }
                 // Persist immediately so Application.onCreate reads the same
                 // key on cold start.
                 androidx.preference.PreferenceManager
                     .getDefaultSharedPreferences(ctx)
                     .edit()
-                    .putBoolean("docker_update_check_enabled", enabled)
+                    .putBoolean("container_update_check_enabled", enabled)
                     .apply()
                 true
             }

@@ -79,13 +79,13 @@
 
     </PreferenceCategory>
 
-    <PreferenceCategory android:title="Docker updates">
+    <PreferenceCategory android:title="@string/container_update_category_title">
 
-        <!-- Master on/off switch for the Docker image update-check worker. -->
+        <!-- Master on/off switch for the container image update-check worker. -->
         <SwitchPreferenceCompat
-            android:key="docker_update_check_enabled"
-            android:title="Docker image update checks"
-            android:summary="Periodically compare watched containers against their registry and alert when a newer image is available"
+            android:key="container_update_check_enabled"
+            android:title="@string/container_update_check_title"
+            android:summary="@string/container_update_check_summary"
             android:defaultValue="true" />
 
     </PreferenceCategory>

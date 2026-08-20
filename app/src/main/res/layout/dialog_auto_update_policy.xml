@@ -9,20 +9,20 @@
         android:id="@+id/switch_enabled"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/docker_policy_enabled" />
+        android:text="@string/container_policy_enabled" />
 
     <com.google.android.material.switchmaterial.SwitchMaterial
         android:id="@+id/switch_auto_recreate"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/space_sm"
-        android:text="@string/docker_policy_auto_recreate" />
+        android:text="@string/container_policy_auto_recreate" />
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/space_xs"
-        android:text="@string/docker_policy_auto_recreate_desc"
+        android:text="@string/container_policy_auto_recreate_desc"
         android:textSize="12sp"
         android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -30,7 +30,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/space_md"
-        android:text="@string/docker_policy_credential_hint"
+        android:text="@string/container_policy_credential_hint"
         android:textSize="13sp"
         android:textColor="?attr/colorOnSurfaceVariant" />
 

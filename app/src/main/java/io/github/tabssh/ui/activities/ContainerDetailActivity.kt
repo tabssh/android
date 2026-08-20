@@ -16,13 +16,13 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.tabs.TabLayout
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
-import io.github.tabssh.docker.DockerSessionManager
-import io.github.tabssh.docker.transport.ContainerAction
-import io.github.tabssh.docker.transport.DockerResult
+import io.github.tabssh.containers.ContainerSessionManager
+import io.github.tabssh.containers.transport.ContainerAction
+import io.github.tabssh.containers.transport.ContainerResult
 import io.github.tabssh.ui.dialogs.ContainerRenameDialog
-import io.github.tabssh.ui.dialogs.DockerErrorPresenter
-import io.github.tabssh.ui.utils.DockerExecLauncher
-import io.github.tabssh.ui.utils.DockerText
+import io.github.tabssh.ui.dialogs.ContainerErrorPresenter
+import io.github.tabssh.ui.utils.ContainerExecLauncher
+import io.github.tabssh.ui.utils.ContainerText
 import io.github.tabssh.ui.views.SparklineView
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -37,7 +37,7 @@ import org.json.JSONObject
 class ContainerDetailActivity : AppCompatActivity() {
 
     companion object {
-        const val EXTRA_HOST_ID = "docker_host_id"
+        const val EXTRA_HOST_ID = "container_host_id"
         const val EXTRA_CONTAINER_ID = "container_id"
         const val EXTRA_CONTAINER_NAME = "container_name"
         /** Which tab to open on ([TAB_INSPECT] et al.) — defaults to inspect. */
@@ -78,7 +78,7 @@ class ContainerDetailActivity : AppCompatActivity() {
     private var hostId: Long = 0
     private lateinit var containerId: String
     private lateinit var containerName: String
-    private var session: DockerSessionManager.DockerSession? = null
+    private var session: ContainerSessionManager.ContainerSession? = null
     private var logsJob: Job? = null
     private var statsJob: Job? = null
     private val logLines = ArrayDeque<String>()
@@ -107,7 +107,7 @@ class ContainerDetailActivity : AppCompatActivity() {
         // The name comes from the daemon and is rendered in the toolbar and in
         // the remove-confirmation dialog — sanitize once at intake so bidi
         // overrides cannot make the confirmation read as a different container.
-        containerName = DockerText.display(
+        containerName = ContainerText.display(
             intent.getStringExtra(EXTRA_CONTAINER_NAME)
         ).ifEmpty { containerId.take(12) }
         if (containerId.isEmpty()) {
@@ -150,10 +150,10 @@ class ContainerDetailActivity : AppCompatActivity() {
 
     private fun setupTabs() {
         val titles = intArrayOf(
-            R.string.docker_detail_tab_inspect,
-            R.string.docker_detail_tab_config,
-            R.string.docker_detail_tab_logs,
-            R.string.docker_detail_tab_stats
+            R.string.container_detail_tab_inspect,
+            R.string.container_detail_tab_config,
+            R.string.container_detail_tab_logs,
+            R.string.container_detail_tab_stats
         )
         titles.forEach { tabLayout.addTab(tabLayout.newTab().setText(it)) }
         tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
@@ -184,13 +184,13 @@ class ContainerDetailActivity : AppCompatActivity() {
     private fun acquireSession() {
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch {
-            val result = DockerSessionManager.acquire(app, hostId)
+            val result = ContainerSessionManager.acquire(app, hostId)
             // Acquisition suspends for the whole SSH/API handshake — the user
             // can leave the screen in that window, and present() would then
             // attach a dialog to a dead window token.
             if (!isAlive) return@launch
             when (result) {
-                is DockerResult.Success -> {
+                is ContainerResult.Success -> {
                     session = result.value
                     progressBar.visibility = View.GONE
                     loadInspect()
@@ -201,7 +201,7 @@ class ContainerDetailActivity : AppCompatActivity() {
                 }
                 else -> {
                     progressBar.visibility = View.GONE
-                    DockerErrorPresenter.present(this@ContainerDetailActivity, result)
+                    ContainerErrorPresenter.present(this@ContainerDetailActivity, result)
                 }
             }
         }
@@ -215,13 +215,13 @@ class ContainerDetailActivity : AppCompatActivity() {
             if (!isAlive) return@launch
             progressBar.visibility = View.GONE
             when (result) {
-                is DockerResult.Success -> {
+                is ContainerResult.Success -> {
                     // Inspect output is daemon-controlled (labels, env values,
                     // image names) — strip control/bidi characters and cap it.
-                    textInspect.text = DockerText.block(prettyJson(result.value))
-                    textConfig.text = DockerText.block(buildConfigSummary(result.value))
+                    textInspect.text = ContainerText.block(prettyJson(result.value))
+                    textConfig.text = ContainerText.block(buildConfigSummary(result.value))
                 }
-                else -> DockerErrorPresenter.present(this@ContainerDetailActivity, result)
+                else -> ContainerErrorPresenter.present(this@ContainerDetailActivity, result)
             }
         }
     }
@@ -242,7 +242,7 @@ class ContainerDetailActivity : AppCompatActivity() {
 
     /** Env / mounts / ports summary extracted from the inspect payload. */
     private fun buildConfigSummary(json: String): String {
-        val none = getString(R.string.docker_detail_none)
+        val none = getString(R.string.container_detail_none)
         return try {
             val root = json.trim()
             // docker inspect wraps the object in a one-element array.
@@ -253,7 +253,7 @@ class ContainerDetailActivity : AppCompatActivity() {
             }
             val builder = StringBuilder()
 
-            builder.append(getString(R.string.docker_detail_env)).append('\n')
+            builder.append(getString(R.string.container_detail_env)).append('\n')
             val env = obj.optJSONObject("Config")?.optJSONArray("Env")
             if (env == null || env.length() == 0) {
                 builder.append("  ").append(none).append('\n')
@@ -263,7 +263,7 @@ class ContainerDetailActivity : AppCompatActivity() {
                 }
             }
 
-            builder.append('\n').append(getString(R.string.docker_detail_mounts)).append('\n')
+            builder.append('\n').append(getString(R.string.container_detail_mounts)).append('\n')
             val mounts = obj.optJSONArray("Mounts")
             if (mounts == null || mounts.length() == 0) {
                 builder.append("  ").append(none).append('\n')
@@ -276,7 +276,7 @@ class ContainerDetailActivity : AppCompatActivity() {
                 }
             }
 
-            builder.append('\n').append(getString(R.string.docker_detail_ports)).append('\n')
+            builder.append('\n').append(getString(R.string.container_detail_ports)).append('\n')
             val ports = obj.optJSONObject("NetworkSettings")?.optJSONObject("Ports")
             if (ports == null || ports.length() == 0) {
                 builder.append("  ").append(none).append('\n')
@@ -316,7 +316,7 @@ class ContainerDetailActivity : AppCompatActivity() {
                     // Daemon-controlled: strip ANSI first, then the remaining
                     // C0/C1 controls and bidi overrides, and cap the line.
                     logLines.addLast(
-                        DockerText.display(ANSI_REGEX.replace(line, ""), MAX_LOG_LINE_LENGTH)
+                        ContainerText.display(ANSI_REGEX.replace(line, ""), MAX_LOG_LINE_LENGTH)
                     )
                     while (logLines.size > MAX_LOG_LINES) {
                         logLines.removeFirst()
@@ -329,7 +329,7 @@ class ContainerDetailActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 if (!isAlive) return@launch
                 textLogs.text = getString(
-                    R.string.docker_error_detail_fmt, DockerText.display(e.message)
+                    R.string.container_error_detail_fmt, ContainerText.display(e.message)
                 )
             }
         }
@@ -354,32 +354,32 @@ class ContainerDetailActivity : AppCompatActivity() {
                     sparklineMem.addSample(stats.memPercent.toFloat())
                     val ctx = this@ContainerDetailActivity
                     textStatsCpu.text = getString(
-                        R.string.docker_stats_cpu_fmt, String.format("%.1f", stats.cpuPercent)
+                        R.string.container_stats_cpu_fmt, String.format("%.1f", stats.cpuPercent)
                     )
                     textStatsMem.text = getString(
-                        R.string.docker_stats_mem_fmt,
+                        R.string.container_stats_mem_fmt,
                         android.text.format.Formatter.formatShortFileSize(ctx, stats.memUsageBytes),
                         android.text.format.Formatter.formatShortFileSize(ctx, stats.memLimitBytes),
                         String.format("%.1f", stats.memPercent)
                     )
                     textStatsNet.text = getString(
-                        R.string.docker_stats_net_fmt,
+                        R.string.container_stats_net_fmt,
                         android.text.format.Formatter.formatShortFileSize(ctx, stats.netInputBytes),
                         android.text.format.Formatter.formatShortFileSize(ctx, stats.netOutputBytes)
                     )
                     textStatsBlock.text = getString(
-                        R.string.docker_stats_block_fmt,
+                        R.string.container_stats_block_fmt,
                         android.text.format.Formatter.formatShortFileSize(ctx, stats.blockReadBytes),
                         android.text.format.Formatter.formatShortFileSize(ctx, stats.blockWriteBytes)
                     )
-                    textStatsPids.text = getString(R.string.docker_stats_pids_fmt, stats.pids)
+                    textStatsPids.text = getString(R.string.container_stats_pids_fmt, stats.pids)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 if (!isAlive) return@launch
                 textStatsCpu.text = getString(
-                    R.string.docker_error_detail_fmt, DockerText.display(e.message)
+                    R.string.container_error_detail_fmt, ContainerText.display(e.message)
                 )
             }
         }
@@ -435,9 +435,9 @@ class ContainerDetailActivity : AppCompatActivity() {
     /** SIGKILL confirmation — the container name is the subject of the prompt. */
     private fun confirmKill() {
         MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.docker_action_kill)
-            .setMessage(getString(R.string.docker_kill_container_message, containerName))
-            .setPositiveButton(R.string.docker_action_kill) { _, _ ->
+            .setTitle(R.string.container_action_kill)
+            .setMessage(getString(R.string.container_kill_container_message, containerName))
+            .setPositiveButton(R.string.container_action_kill) { _, _ ->
                 runAction(ContainerAction.KILL)
             }
             .setNegativeButton(R.string.cancel, null)
@@ -455,14 +455,14 @@ class ContainerDetailActivity : AppCompatActivity() {
                 if (!isAlive) return@launch
                 progressBar.visibility = View.GONE
                 when (result) {
-                    is DockerResult.Success -> {
+                    is ContainerResult.Success -> {
                         Toast.makeText(
                             this@ContainerDetailActivity,
-                            R.string.docker_action_success, Toast.LENGTH_SHORT
+                            R.string.container_action_success, Toast.LENGTH_SHORT
                         ).show()
                         loadInspect()
                     }
-                    else -> DockerErrorPresenter.present(this@ContainerDetailActivity, result)
+                    else -> ContainerErrorPresenter.present(this@ContainerDetailActivity, result)
                 }
             } finally {
                 actionInFlight = false
@@ -483,12 +483,12 @@ class ContainerDetailActivity : AppCompatActivity() {
                     if (!isAlive) return@launch
                     progressBar.visibility = View.GONE
                     when (result) {
-                        is DockerResult.Success -> {
-                            containerName = DockerText.display(newName)
+                        is ContainerResult.Success -> {
+                            containerName = ContainerText.display(newName)
                             supportActionBar?.title = containerName
                             loadInspect()
                         }
-                        else -> DockerErrorPresenter.present(this@ContainerDetailActivity, result)
+                        else -> ContainerErrorPresenter.present(this@ContainerDetailActivity, result)
                     }
                 } finally {
                     actionInFlight = false
@@ -500,7 +500,7 @@ class ContainerDetailActivity : AppCompatActivity() {
     private fun confirmRemove() {
         MaterialAlertDialogBuilder(this)
             .setTitle(containerName)
-            .setMessage(getString(R.string.docker_remove_container_message, containerName))
+            .setMessage(getString(R.string.container_remove_container_message, containerName))
             .setPositiveButton(R.string.delete) { _, _ -> removeContainer() }
             .setNegativeButton(R.string.cancel, null)
             .show()
@@ -517,8 +517,8 @@ class ContainerDetailActivity : AppCompatActivity() {
                 if (!isAlive) return@launch
                 progressBar.visibility = View.GONE
                 when (result) {
-                    is DockerResult.Success -> finish()
-                    else -> DockerErrorPresenter.present(this@ContainerDetailActivity, result)
+                    is ContainerResult.Success -> finish()
+                    else -> ContainerErrorPresenter.present(this@ContainerDetailActivity, result)
                 }
             } finally {
                 actionInFlight = false
@@ -528,19 +528,19 @@ class ContainerDetailActivity : AppCompatActivity() {
 
     /**
      * Open a terminal tab running docker exec -it into this container via the
-     * shared DockerExecLauncher (bash/sh probe + ephemeral profile).
+     * shared ContainerExecLauncher (bash/sh probe + ephemeral profile).
      */
     private fun enterTerminal() {
         val current = session ?: return
         if (actionInFlight) return
         actionInFlight = true
         progressBar.visibility = View.VISIBLE
-        Toast.makeText(this, R.string.docker_terminal_probing, Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, R.string.container_terminal_probing, Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             try {
                 // buildExecIntent runs a shell probe over the session runner,
                 // which throws when the SSH session died since acquisition.
-                val intent = DockerExecLauncher.buildExecIntent(
+                val intent = ContainerExecLauncher.buildExecIntent(
                     this@ContainerDetailActivity, current, hostId, containerId, containerName
                 )
                 if (!isAlive) return@launch
@@ -553,7 +553,7 @@ class ContainerDetailActivity : AppCompatActivity() {
                 progressBar.visibility = View.GONE
                 Toast.makeText(
                     this@ContainerDetailActivity,
-                    getString(R.string.docker_error_detail_fmt, DockerText.display(e.message)),
+                    getString(R.string.container_error_detail_fmt, ContainerText.display(e.message)),
                     Toast.LENGTH_LONG
                 ).show()
             } finally {

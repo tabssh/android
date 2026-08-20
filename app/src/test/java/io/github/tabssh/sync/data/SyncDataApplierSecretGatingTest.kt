@@ -115,13 +115,13 @@ class SyncDataApplierSecretGatingTest {
     }
 
     @Test
-    fun `docker secrets are gated by sync_docker`() {
-        Mockito.`when`(preferenceManager.isSyncDockerEnabled()).thenReturn(false)
-        assertFalse(isSecretAliasEnabled("docker_host_abc123"))
+    fun `container secrets are gated by sync_containers`() {
+        Mockito.`when`(preferenceManager.isSyncContainersEnabled()).thenReturn(false)
+        assertFalse(isSecretAliasEnabled("container_host_abc123"))
         assertFalse(isSecretAliasEnabled("registry_credential_abc123"))
 
-        Mockito.`when`(preferenceManager.isSyncDockerEnabled()).thenReturn(true)
-        assertTrue(isSecretAliasEnabled("docker_host_abc123"))
+        Mockito.`when`(preferenceManager.isSyncContainersEnabled()).thenReturn(true)
+        assertTrue(isSecretAliasEnabled("container_host_abc123"))
         assertTrue(isSecretAliasEnabled("registry_credential_abc123"))
     }
 

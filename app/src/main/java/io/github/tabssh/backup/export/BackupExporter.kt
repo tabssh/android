@@ -9,7 +9,7 @@ import io.github.tabssh.storage.database.entities.ComposeStack
 import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy
-import io.github.tabssh.storage.database.entities.DockerHost
+import io.github.tabssh.storage.database.entities.ContainerHost
 import io.github.tabssh.storage.database.entities.HostKeyEntry
 import io.github.tabssh.storage.database.entities.HypervisorAccount
 import io.github.tabssh.storage.database.entities.HypervisorProfile
@@ -74,7 +74,7 @@ import org.json.JSONObject
  *                                                   (oci_private_key_account_{id} /
  *                                                   oci_passphrase_account_{id}).
  *   - VNC host/identity passwords                 — exported in secrets.json (vnc_host_{id} / vnc_identity_{id}).
- *   - Docker host + registry credentials          — exported in secrets.json (docker_host_{id} / registry_credential_{id}).
+ *   - Container host + registry credentials       — exported in secrets.json (container_host_{id} / registry_credential_{id}).
  *
  * Tables intentionally excluded from backup:
  *   - sync_state — per-device sync bookkeeping; meaningless on another device
@@ -135,12 +135,12 @@ class BackupExporter(
          */
         const val FILE_NETWORK_ROUTES    = "network_routes.json"
         /**
-         * Docker subsystem — hosts, private registry credentials, compose stacks,
+         * Container subsystem — hosts, private registry credentials, compose stacks,
          * single-container run configs, and container/stack auto-update policies.
          * Custom-endpoint SSH passwords and registry secrets live in [FILE_SECRETS]
-         * under `docker_host_{id}` / `registry_credential_{id}`.
+         * under `container_host_{id}` / `registry_credential_{id}`.
          */
-        const val FILE_DOCKER_HOSTS      = "docker_hosts.json"
+        const val FILE_CONTAINER_HOSTS   = "container_hosts.json"
         const val FILE_REGISTRY_CREDENTIALS = "registry_credentials.json"
         const val FILE_COMPOSE_STACKS    = "compose_stacks.json"
         const val FILE_SINGLE_CONTAINER_CONFIGS = "single_container_configs.json"
@@ -211,7 +211,7 @@ class BackupExporter(
         out[FILE_VNC_IDENTITIES]   = exportVncIdentities()
         out[FILE_PORT_FORWARDS]    = exportPortForwards()
         out[FILE_NETWORK_ROUTES]   = exportNetworkRoutes()
-        out[FILE_DOCKER_HOSTS]     = exportDockerHosts()
+        out[FILE_CONTAINER_HOSTS]  = exportContainerHosts()
         out[FILE_REGISTRY_CREDENTIALS] = exportRegistryCredentials()
         out[FILE_COMPOSE_STACKS]   = exportComposeStacks()
         out[FILE_SINGLE_CONTAINER_CONFIGS] = exportSingleContainerConfigs()
@@ -332,11 +332,11 @@ class BackupExporter(
         encodeEntities(ListSerializer(NetworkRoute.serializer()),
             database.networkRouteDao().getAllList())
 
-    private suspend fun exportDockerHosts(): String =
+    private suspend fun exportContainerHosts(): String =
         // No secret column — custom-endpoint passwords live in exportSecrets()
-        // under `docker_host_{id}`. All row fields are safe to export as-is.
-        encodeEntities(ListSerializer(DockerHost.serializer()),
-            database.dockerHostDao().getAllList())
+        // under `container_host_{id}`. All row fields are safe to export as-is.
+        encodeEntities(ListSerializer(ContainerHost.serializer()),
+            database.containerHostDao().getAllList())
 
     private suspend fun exportRegistryCredentials(): String =
         // No secret column — the credential value lives in exportSecrets()
@@ -354,7 +354,7 @@ class BackupExporter(
 
     private suspend fun exportContainerAutoUpdatePolicies(): String =
         // User config, not audit data — ContainerAutoUpdatePolicy syncs like
-        // the rest of the Docker subsystem, unlike AuditLogEntry/TabSession.
+        // the rest of the container subsystem, unlike AuditLogEntry/TabSession.
         encodeEntities(ListSerializer(ContainerAutoUpdatePolicy.serializer()),
             database.containerAutoUpdatePolicyDao().getAllList())
 
@@ -412,7 +412,7 @@ class BackupExporter(
      *   `key_passphrase_{keyId}`         — SSH private key passphrase (SecurePasswordManager)
      *   `conn_pw_{id}`                   — SSH connection password (SecurePasswordManager,
      *                                      stored under the bare connection id)
-     *   `docker_host_{id}`               — Docker host custom-endpoint SSH password (SecurePasswordManager)
+     *   `container_host_{id}`            — container host custom-endpoint SSH password (SecurePasswordManager)
      *   `registry_credential_{id}`       — private registry credential secret (SecurePasswordManager)
      *
      * SSH private key JSch bytes are exported separately under `ssh_keys` keyed
@@ -486,13 +486,13 @@ class BackupExporter(
                     ?.let { passwords["key_passphrase_${key.keyId}"] = it }
             }
 
-            // Docker host custom-endpoint passwords — alias: docker_host_{id}
-            database.dockerHostDao().getAllList()
+            // Container host custom-endpoint passwords — alias: container_host_{id}
+            database.containerHostDao().getAllList()
                 .filter { it.usesCustomEndpoint() }
                 .forEach { h ->
-                    pm.retrievePassword("docker_host_${h.id}")
+                    pm.retrievePassword("container_host_${h.id}")
                         ?.takeIf { it.isNotEmpty() }
-                        ?.let { passwords["docker_host_${h.id}"] = it }
+                        ?.let { passwords["container_host_${h.id}"] = it }
                 }
 
             // Registry credential secrets — alias: registry_credential_{id}
@@ -664,7 +664,7 @@ class BackupExporter(
             put("syncCloudAccounts",      preferenceManager.isSyncCloudAccountsEnabled())
             put("syncCertificates",       preferenceManager.isSyncCertificatesEnabled())
             put("syncDashboard",          preferenceManager.isSyncDashboardEnabled())
-            put("syncDocker",             preferenceManager.isSyncDockerEnabled())
+            put("syncContainers",             preferenceManager.isSyncContainersEnabled())
             put("syncPortForwards",       preferenceManager.isSyncPortForwardsEnabled())
             put("syncNetworkRoutes",      preferenceManager.isSyncNetworkRoutesEnabled())
             put("autoResolve",            preferenceManager.isAutoResolveConflictsEnabled())
@@ -703,8 +703,8 @@ class BackupExporter(
             put("hostLogMaxSizeMb", preferenceManager.getHostLogMaxSizeMb())
         })
 
-        root.put("docker", JSONObject().apply {
-            put("updateCheckEnabled", preferenceManager.isDockerUpdateCheckEnabled())
+        root.put("containers", JSONObject().apply {
+            put("updateCheckEnabled", preferenceManager.isContainerUpdateCheckEnabled())
         })
 
         // Multiplexer key bindings: gesture type/enable in default SharedPreferences;

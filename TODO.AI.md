@@ -148,6 +148,31 @@ C2. Nav drawer available on every screen via a hamburger toggle,
 C3. App-wide interface uniformity: one back-button / toolbar / menu
     pattern everywhere. Current inconsistency example from the user —
     groups/snippets screens vs the routing screens' back buttons.
+C4. AndroidManifest.xml hardcodes `android:label` on 12 activities
+    ("Cluster Commands", "Proxmox Manager", "Edit Hypervisor",
+    "Container Manager", …). AI.md PART 7 requires user-visible text to
+    live in strings.xml — move every one to a string resource. Found
+    during the commit-B container rename; not container-specific, so it
+    belongs with the app-wide UI pass.
+
+## Open — 2026-08-20 raw NUL bytes make three test sources binary
+
+Fix immediately after commit B, as its own commit — these are hypervisor
+tests, unrelated to the container feature, so they must not ride along in
+it. Each embeds a literal NUL byte inside a test string instead of the
+`\u0000` escape, which makes git treat the whole file as binary: the diff
+is unreviewable and `grep` over the file silently returns nothing, so a
+verification sweep can report a false clean. Replace the raw byte with the
+escape (equivalent to the compiler, and the assertion still tests the same
+input):
+
+- app/src/test/java/io/github/tabssh/ui/activities/XCPngSafeTextTest.kt
+- app/src/test/java/io/github/tabssh/ui/activities/LibvirtSafeTextTest.kt
+- app/src/test/java/io/github/tabssh/hypervisor/viewer/VirtViewerFileTest.kt
+
+Found while checking why `ContainerHostEditValidationTest.kt` showed as
+`Bin` in the commit-B diff; that one is fixed in commit B because the
+container rename already puts it in that commit's scope.
 
 ## Open — 2026-08-14 Play Protect false positive (user action required)
 

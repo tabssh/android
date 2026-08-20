@@ -1305,7 +1305,7 @@ class TabTerminalActivity : AppCompatActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_open_url_title)
             .setMessage(getString(R.string.terminal_open_url_message, url))
-            .setPositiveButton(R.string.docker_option_open) { _, _ ->
+            .setPositiveButton(R.string.container_option_open) { _, _ ->
                 openUrl(url)
             }
             .setNeutralButton(R.string.copy) { _, _ ->
@@ -1511,7 +1511,7 @@ class TabTerminalActivity : AppCompatActivity() {
             }
             .setNegativeButton(R.string.cancel, null)
         if (hasHandler) {
-            builder.setPositiveButton(R.string.docker_option_open) { _, _ ->
+            builder.setPositiveButton(R.string.container_option_open) { _, _ ->
                 openUrl(url)
             }
         }
@@ -2962,7 +2962,7 @@ class TabTerminalActivity : AppCompatActivity() {
             .setTitle(getString(R.string.terminal_new_multiplexer_session_title, req.type))
             .setMessage(R.string.terminal_new_multiplexer_session_message)
             .setView(form.root)
-            .setPositiveButton(R.string.docker_create) { _, _ ->
+            .setPositiveButton(R.string.container_create) { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isNotEmpty() && !name.contains(' ')) {
                     tab.createMultiplexerSession(req.type, name)
@@ -4935,7 +4935,7 @@ class TabTerminalActivity : AppCompatActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_create_snippet_title)
             .setView(dialogView)
-            .setPositiveButton(R.string.docker_create) { _, _ ->
+            .setPositiveButton(R.string.container_create) { _, _ ->
                 val name = inputName.text.toString().trim()
                 val command = inputCommand.text.toString().trim()
                 val category = inputCategory.text.toString().trim().ifBlank { "General" }

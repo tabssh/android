@@ -11,7 +11,7 @@ import io.github.tabssh.storage.database.entities.ComposeStack
 import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy
-import io.github.tabssh.storage.database.entities.DockerHost
+import io.github.tabssh.storage.database.entities.ContainerHost
 import io.github.tabssh.storage.database.entities.HostKeyEntry
 import io.github.tabssh.storage.database.entities.HypervisorAccount
 import io.github.tabssh.storage.database.entities.HypervisorProfile
@@ -59,7 +59,17 @@ class BackupImporter(
     private val keyStorage: KeyStorage? = null
 ) {
 
-    companion object { private const val TAG = "BackupImporter" }
+    companion object {
+        private const val TAG = "BackupImporter"
+
+        /**
+         * Read-only fallback: a backup taken by the development build, before the
+         * container feature was made engine-agnostic, names the container-host
+         * table `docker_hosts.json`. Import still accepts that entry and restores
+         * it into container_hosts; export only ever writes the new name.
+         */
+        private const val LEGACY_FILE_DOCKER_HOSTS = "docker_hosts.json"
+    }
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -142,8 +152,13 @@ class BackupImporter(
             { restorePortForwards(it, effectiveOverwrite) }) { out["port_forwards"] = it; Logger.d(TAG, "Restored $it port forwards") }
         table(BackupExporter.FILE_NETWORK_ROUTES, "network_routes",
             { restoreNetworkRoutes(it, effectiveOverwrite) }) { out["network_routes"] = it; Logger.d(TAG, "Restored $it network routes") }
-        table(BackupExporter.FILE_DOCKER_HOSTS, "docker_hosts",
-            { restoreDockerHosts(it, effectiveOverwrite) }) { out["docker_hosts"] = it; Logger.d(TAG, "Restored $it Docker hosts") }
+        // Prefer the current entry name; fall back to the development build's
+        // docker_hosts.json so an old archive still restores into container_hosts.
+        val containerHostsKey =
+            if (backupData.containsKey(BackupExporter.FILE_CONTAINER_HOSTS)) BackupExporter.FILE_CONTAINER_HOSTS
+            else LEGACY_FILE_DOCKER_HOSTS
+        table(containerHostsKey, "container_hosts",
+            { restoreContainerHosts(it, effectiveOverwrite) }) { out["container_hosts"] = it; Logger.d(TAG, "Restored $it container hosts") }
         table(BackupExporter.FILE_REGISTRY_CREDENTIALS, "registry_credentials",
             { restoreRegistryCredentials(it, effectiveOverwrite) }) { out["registry_credentials"] = it; Logger.d(TAG, "Restored $it registry credentials") }
         table(BackupExporter.FILE_COMPOSE_STACKS, "compose_stacks",
@@ -235,8 +250,10 @@ class BackupImporter(
         if (backupData.containsKey(BackupExporter.FILE_NETWORK_ROUTES)) {
             database.networkRouteDao().getAllList().forEach { database.networkRouteDao().delete(it) }
         }
-        if (backupData.containsKey(BackupExporter.FILE_DOCKER_HOSTS)) {
-            database.dockerHostDao().getAllList().forEach { database.dockerHostDao().delete(it) }
+        if (backupData.containsKey(BackupExporter.FILE_CONTAINER_HOSTS) ||
+            backupData.containsKey(LEGACY_FILE_DOCKER_HOSTS)
+        ) {
+            database.containerHostDao().getAllList().forEach { database.containerHostDao().delete(it) }
         }
         if (backupData.containsKey(BackupExporter.FILE_REGISTRY_CREDENTIALS)) {
             database.registryCredentialDao().getAllList().forEach { database.registryCredentialDao().delete(it) }
@@ -495,17 +512,17 @@ class BackupImporter(
             true
         }
 
-    // ── Docker ───────────────────────────────────────────────────────────────
+    // ── Containers ───────────────────────────────────────────────────────────
 
-    private suspend fun restoreDockerHosts(data: String, overwriteExisting: Boolean): Int =
+    private suspend fun restoreContainerHosts(data: String, overwriteExisting: Boolean): Int =
         // Custom-endpoint SSH password is NOT in this entity (it lives in
-        // SecurePasswordManager under docker_host_{id}); restored from the
+        // SecurePasswordManager under container_host_{id}); restored from the
         // secrets file when present in the backup.
-        restoreEntityList(data, ListSerializer(DockerHost.serializer())) { h ->
-            val existing = database.dockerHostDao().getById(h.id)
+        restoreEntityList(data, ListSerializer(ContainerHost.serializer())) { h ->
+            val existing = database.containerHostDao().getById(h.id)
             if (existing != null && !overwriteExisting) return@restoreEntityList false
-            if (existing == null) database.dockerHostDao().insert(h)
-            else database.dockerHostDao().update(h)
+            if (existing == null) database.containerHostDao().insert(h)
+            else database.containerHostDao().update(h)
             true
         }
 
@@ -768,7 +785,8 @@ class BackupImporter(
             preferenceManager.setSyncCloudAccountsEnabled(s.optBoolean("syncCloudAccounts", true))
             preferenceManager.setSyncCertificatesEnabled(s.optBoolean("syncCertificates", true))
             preferenceManager.setSyncDashboardEnabled(s.optBoolean("syncDashboard", false))
-            preferenceManager.setSyncDockerEnabled(s.optBoolean("syncDocker", true))
+            // `syncDocker` is the development build's old key, read as the fallback only.
+            preferenceManager.setSyncContainersEnabled(s.optBoolean("syncContainers", s.optBoolean("syncDocker", true)))
             preferenceManager.setSyncPortForwardsEnabled(s.optBoolean("syncPortForwards", true))
             preferenceManager.setSyncNetworkRoutesEnabled(s.optBoolean("syncNetworkRoutes", true))
             preferenceManager.setAutoResolveConflicts(s.optBoolean("autoResolve", true))
@@ -821,8 +839,10 @@ class BackupImporter(
             preferenceManager.setHostLoggingEnabled(l.optBoolean("hostLogging", false))
             preferenceManager.setHostLogMaxSizeMb(l.optInt("hostLogMaxSizeMb", 1))
         }
-        root.optJSONObject("docker")?.let { d ->
-            preferenceManager.setDockerUpdateCheckEnabled(d.optBoolean("updateCheckEnabled", true))
+        // "docker" is the group name the development build's exporter wrote;
+        // export only ever emits "containers" now.
+        (root.optJSONObject("containers") ?: root.optJSONObject("docker"))?.let { d ->
+            preferenceManager.setContainerUpdateCheckEnabled(d.optBoolean("updateCheckEnabled", true))
         }
 
         // Proxy configuration lives on NetworkRoute rows, which are restored as

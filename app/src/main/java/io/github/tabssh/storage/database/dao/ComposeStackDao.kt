@@ -7,10 +7,10 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ComposeStackDao {
 
-    @Query("SELECT * FROM compose_stacks WHERE docker_host_id = :hostId ORDER BY name ASC")
+    @Query("SELECT * FROM compose_stacks WHERE container_host_id = :hostId ORDER BY name ASC")
     fun getStacksForHost(hostId: Long): Flow<List<ComposeStack>>
 
-    @Query("SELECT * FROM compose_stacks WHERE docker_host_id = :hostId ORDER BY name ASC")
+    @Query("SELECT * FROM compose_stacks WHERE container_host_id = :hostId ORDER BY name ASC")
     suspend fun getStacksForHostList(hostId: Long): List<ComposeStack>
 
     /** All stacks across every host — backup export and sync collection. */
@@ -20,7 +20,7 @@ interface ComposeStackDao {
     @Query("SELECT * FROM compose_stacks WHERE id = :id")
     suspend fun getById(id: Long): ComposeStack?
 
-    @Query("SELECT * FROM compose_stacks WHERE docker_host_id = :hostId AND name = :name")
+    @Query("SELECT * FROM compose_stacks WHERE container_host_id = :hostId AND name = :name")
     suspend fun getByHostAndName(hostId: Long, name: String): ComposeStack?
 
     @Insert
@@ -35,8 +35,8 @@ interface ComposeStackDao {
     @Query("DELETE FROM compose_stacks WHERE id = :id")
     suspend fun deleteById(id: Long)
 
-    /** Cascade-by-convention — call from the DockerHost delete path. */
-    @Query("DELETE FROM compose_stacks WHERE docker_host_id = :hostId")
+    /** Cascade-by-convention — call from the ContainerHost delete path. */
+    @Query("DELETE FROM compose_stacks WHERE container_host_id = :hostId")
     suspend fun deleteForHost(hostId: Long)
 
     @Query("UPDATE compose_stacks SET last_known_status = :status, updated_at = :timestamp WHERE id = :id")

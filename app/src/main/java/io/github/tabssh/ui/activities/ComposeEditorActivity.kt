@@ -19,12 +19,12 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
-import io.github.tabssh.docker.DockerSessionManager
-import io.github.tabssh.docker.transport.DockerResult
+import io.github.tabssh.containers.ContainerSessionManager
+import io.github.tabssh.containers.transport.ContainerResult
 import io.github.tabssh.storage.database.entities.ComposeStack
-import io.github.tabssh.ui.dialogs.DockerErrorPresenter
-import io.github.tabssh.ui.dialogs.DockerInspectDialog
-import io.github.tabssh.ui.utils.DockerText
+import io.github.tabssh.ui.dialogs.ContainerErrorPresenter
+import io.github.tabssh.ui.dialogs.ContainerInspectDialog
+import io.github.tabssh.ui.utils.ContainerText
 import kotlinx.coroutines.launch
 import org.yaml.snakeyaml.Yaml
 import org.yaml.snakeyaml.nodes.MappingNode
@@ -48,7 +48,7 @@ import java.io.StringReader
 class ComposeEditorActivity : AppCompatActivity() {
 
     companion object {
-        const val EXTRA_HOST_ID = "docker_host_id"
+        const val EXTRA_HOST_ID = "container_host_id"
         const val EXTRA_STACK_ID = "compose_stack_id"
         const val EXTRA_EXTERNAL_CONFIG_FILE = "compose_external_config_file"
         const val EXTRA_EXTERNAL_NAME = "compose_external_name"
@@ -69,7 +69,7 @@ class ComposeEditorActivity : AppCompatActivity() {
     private var hostId: Long = 0
     private var stackId: Long = 0
     private var stack: ComposeStack? = null
-    private var session: DockerSessionManager.DockerSession? = null
+    private var session: ContainerSessionManager.ContainerSession? = null
 
     /** Absolute remote path to an untracked project's compose file, or null when tracked/new. */
     private var externalConfigFile: String? = null
@@ -110,8 +110,8 @@ class ComposeEditorActivity : AppCompatActivity() {
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setTitle(
-            if (stackId == 0L && !isExternal) R.string.docker_stack_new_title
-            else R.string.docker_stack_edit_title
+            if (stackId == 0L && !isExternal) R.string.container_stack_new_title
+            else R.string.container_stack_edit_title
         )
         toolbar.setNavigationOnClickListener { finish() }
 
@@ -120,7 +120,7 @@ class ComposeEditorActivity : AppCompatActivity() {
             // config file, and the project's own name is not renameable here.
             layoutEnv.visibility = View.GONE
             // The project name comes from `docker compose ls` — sanitize before display.
-            editName.setText(DockerText.display(externalName))
+            editName.setText(ContainerText.display(externalName))
             editName.isEnabled = false
         }
 
@@ -134,11 +134,11 @@ class ComposeEditorActivity : AppCompatActivity() {
     private fun acquireSession() {
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch {
-            val result = DockerSessionManager.acquire(app, hostId)
+            val result = ContainerSessionManager.acquire(app, hostId)
             // acquire() suspends — the activity may be gone by the time it returns.
             if (!isAlive()) return@launch
             when (result) {
-                is DockerResult.Success -> {
+                is ContainerResult.Success -> {
                     session = result.value
                     when {
                         isExternal -> loadExternalStack()
@@ -148,7 +148,7 @@ class ComposeEditorActivity : AppCompatActivity() {
                 }
                 else -> {
                     progressBar.visibility = View.GONE
-                    DockerErrorPresenter.present(this@ComposeEditorActivity, result)
+                    ContainerErrorPresenter.present(this@ComposeEditorActivity, result)
                 }
             }
         }
@@ -170,9 +170,9 @@ class ComposeEditorActivity : AppCompatActivity() {
             editName.isEnabled = false
             val compose = current.transport.readRemoteFile("${loaded.remotePath}/compose.yaml")
             if (!isAlive()) return@launch
-            if (compose !is DockerResult.Success) {
+            if (compose !is ContainerResult.Success) {
                 progressBar.visibility = View.GONE
-                DockerErrorPresenter.present(this@ComposeEditorActivity, compose)
+                ContainerErrorPresenter.present(this@ComposeEditorActivity, compose)
                 finish()
                 return@launch
             }
@@ -194,9 +194,9 @@ class ComposeEditorActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val compose = current.transport.readRemoteFile(path)
             if (!isAlive()) return@launch
-            if (compose !is DockerResult.Success) {
+            if (compose !is ContainerResult.Success) {
                 progressBar.visibility = View.GONE
-                DockerErrorPresenter.present(this@ComposeEditorActivity, compose)
+                ContainerErrorPresenter.present(this@ComposeEditorActivity, compose)
                 finish()
                 return@launch
             }
@@ -217,17 +217,17 @@ class ComposeEditorActivity : AppCompatActivity() {
     /** Compose text must parse as YAML with a mapping at the root. */
     private fun validateYaml(text: String): Boolean {
         if (text.isBlank()) {
-            Toast.makeText(this, R.string.docker_stack_empty_compose, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.container_stack_empty_compose, Toast.LENGTH_SHORT).show()
             return false
         }
         val node = try {
             Yaml().compose(StringReader(text))
         } catch (_: Exception) {
-            Toast.makeText(this, R.string.docker_stack_error_yaml, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.container_stack_error_yaml, Toast.LENGTH_SHORT).show()
             return false
         }
         if (node !is MappingNode) {
-            Toast.makeText(this, R.string.docker_stack_error_yaml_mapping, Toast.LENGTH_SHORT)
+            Toast.makeText(this, R.string.container_stack_error_yaml_mapping, Toast.LENGTH_SHORT)
                 .show()
             return false
         }
@@ -238,7 +238,7 @@ class ComposeEditorActivity : AppCompatActivity() {
         val current = session ?: return
         val name = editName.text?.toString()?.trim().orEmpty()
         if (!isExternal && stackId == 0L && !NAME_REGEX.matches(name)) {
-            Toast.makeText(this, R.string.docker_stack_error_name, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.container_stack_error_name, Toast.LENGTH_SHORT).show()
             return
         }
         val compose = editCompose.text?.toString().orEmpty()
@@ -263,26 +263,26 @@ class ComposeEditorActivity : AppCompatActivity() {
             }
             val written = current.transport.writeRemoteFile("$remotePath/compose.yaml", compose)
             if (!isAlive()) return@launch
-            if (written !is DockerResult.Success) {
+            if (written !is ContainerResult.Success) {
                 progressBar.visibility = View.GONE
                 buttonSave.isEnabled = true
-                DockerErrorPresenter.present(this@ComposeEditorActivity, written)
+                ContainerErrorPresenter.present(this@ComposeEditorActivity, written)
                 return@launch
             }
             if (env.isNotBlank()) {
                 val envWritten = current.transport.writeRemoteFile("$remotePath/.env", env)
                 if (!isAlive()) return@launch
-                if (envWritten !is DockerResult.Success) {
+                if (envWritten !is ContainerResult.Success) {
                     progressBar.visibility = View.GONE
                     buttonSave.isEnabled = true
-                    DockerErrorPresenter.present(this@ComposeEditorActivity, envWritten)
+                    ContainerErrorPresenter.present(this@ComposeEditorActivity, envWritten)
                     return@launch
                 }
             }
             if (existing == null) {
                 stackId = dao.insert(
                     ComposeStack(
-                        dockerHostId = hostId,
+                        containerHostId = hostId,
                         name = name,
                         remotePath = remotePath,
                         modifiedAt = System.currentTimeMillis()
@@ -297,9 +297,9 @@ class ComposeEditorActivity : AppCompatActivity() {
             buttonSave.isEnabled = true
             Toast.makeText(
                 this@ComposeEditorActivity,
-                getString(R.string.docker_stack_saved, remotePath), Toast.LENGTH_SHORT
+                getString(R.string.container_stack_saved, remotePath), Toast.LENGTH_SHORT
             ).show()
-            supportActionBar?.setTitle(R.string.docker_stack_edit_title)
+            supportActionBar?.setTitle(R.string.container_stack_edit_title)
             editName.isEnabled = false
             invalidateOptionsMenu()
         }
@@ -310,7 +310,7 @@ class ComposeEditorActivity : AppCompatActivity() {
      * create a directory or a Room row, and never move the file into the
      * tracked compose-dir layout.
      */
-    private fun saveExternal(current: DockerSessionManager.DockerSession, compose: String) {
+    private fun saveExternal(current: ContainerSessionManager.ContainerSession, compose: String) {
         val path = externalConfigFile ?: return
         progressBar.visibility = View.VISIBLE
         buttonSave.isEnabled = false
@@ -319,13 +319,13 @@ class ComposeEditorActivity : AppCompatActivity() {
             if (!isAlive()) return@launch
             progressBar.visibility = View.GONE
             buttonSave.isEnabled = true
-            if (written !is DockerResult.Success) {
-                DockerErrorPresenter.present(this@ComposeEditorActivity, written)
+            if (written !is ContainerResult.Success) {
+                ContainerErrorPresenter.present(this@ComposeEditorActivity, written)
                 return@launch
             }
             Toast.makeText(
                 this@ComposeEditorActivity,
-                getString(R.string.docker_stack_saved, path), Toast.LENGTH_SHORT
+                getString(R.string.container_stack_saved, path), Toast.LENGTH_SHORT
             ).show()
         }
     }
@@ -396,7 +396,7 @@ class ComposeEditorActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-    private fun runComposeAction(action: suspend () -> DockerResult<String>): Boolean {
+    private fun runComposeAction(action: suspend () -> ContainerResult<String>): Boolean {
         val name = stack?.name ?: externalName ?: return true
         // compose up/down/restart are not idempotent under concurrency — one
         // in-flight action at a time, however fast the menu is tapped.
@@ -409,17 +409,17 @@ class ComposeEditorActivity : AppCompatActivity() {
                 if (!isAlive()) return@launch
                 progressBar.visibility = View.GONE
                 when (result) {
-                    is DockerResult.Success -> DockerInspectDialog.show(
+                    is ContainerResult.Success -> ContainerInspectDialog.show(
                         this@ComposeEditorActivity,
                         getString(
-                            R.string.docker_stack_action_output_title,
-                            DockerText.display(name)
+                            R.string.container_stack_action_output_title,
+                            ContainerText.display(name)
                         ),
-                        DockerText.block(result.value).ifBlank {
-                            getString(R.string.docker_action_success)
+                        ContainerText.block(result.value).ifBlank {
+                            getString(R.string.container_action_success)
                         }
                     )
-                    else -> DockerErrorPresenter.present(this@ComposeEditorActivity, result)
+                    else -> ContainerErrorPresenter.present(this@ComposeEditorActivity, result)
                 }
             } finally {
                 actionRunning = false
@@ -431,10 +431,10 @@ class ComposeEditorActivity : AppCompatActivity() {
     private fun confirmDelete() {
         // Sanitized so a crafted name cannot bidi-reorder the confirmation text
         // into naming a different stack than the one that will be deleted.
-        val name = DockerText.display(stack?.name ?: return)
+        val name = ContainerText.display(stack?.name ?: return)
         MaterialAlertDialogBuilder(this)
             .setTitle(name)
-            .setMessage(getString(R.string.docker_stack_delete_message, name))
+            .setMessage(getString(R.string.container_stack_delete_message, name))
             .setPositiveButton(R.string.delete) { _, _ -> deleteStack() }
             .setNegativeButton(R.string.cancel, null)
             .show()

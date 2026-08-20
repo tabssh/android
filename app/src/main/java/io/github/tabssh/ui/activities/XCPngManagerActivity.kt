@@ -1059,7 +1059,7 @@ class XCPngManagerActivity : AppCompatActivity() {
             .setTitle(getString(R.string.hypervisor_create_snapshot_title))
             .setMessage(getString(R.string.hypervisor_snapshot_name_prompt_fmt, safeText(vm.name, 64)))
             .setView(form.root)
-            .setPositiveButton(getString(R.string.docker_create)) { _, _ ->
+            .setPositiveButton(getString(R.string.container_create)) { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isEmpty()) {
                     Toast.makeText(this, getString(R.string.xcpng_snapshot_name_required), Toast.LENGTH_SHORT).show()

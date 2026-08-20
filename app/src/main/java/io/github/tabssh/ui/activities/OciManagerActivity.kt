@@ -30,7 +30,7 @@ import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.StoredKey
-import io.github.tabssh.ui.utils.DockerText
+import io.github.tabssh.ui.utils.ContainerText
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
 import kotlinx.coroutines.Dispatchers
@@ -212,7 +212,7 @@ class OciManagerActivity : AppCompatActivity() {
                 // e.message can carry an OCI-supplied error body — sanitize it
                 // before it reaches the status line.
                 showError(
-                    getString(R.string.oci_connect_failed_fmt, profile.name, DockerText.display(e.message))
+                    getString(R.string.oci_connect_failed_fmt, profile.name, ContainerText.display(e.message))
                 )
             }
         }
@@ -278,7 +278,7 @@ class OciManagerActivity : AppCompatActivity() {
             throw e
         } catch (e: Exception) {
             Logger.e(TAG, "loadInstances failed", e)
-            showError(getString(R.string.oci_error_load_instances_fmt, DockerText.display(e.message)))
+            showError(getString(R.string.oci_error_load_instances_fmt, ContainerText.display(e.message)))
         }
     }
 
@@ -313,7 +313,7 @@ class OciManagerActivity : AppCompatActivity() {
             instanceAction(inst, client, action)
             return
         }
-        val name = DockerText.display(inst.displayName)
+        val name = ContainerText.display(inst.displayName)
         MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.oci_confirm_action_title_fmt, action.wireValue))
             .setMessage(getString(R.string.oci_confirm_action_message_fmt, action.wireValue, name))
@@ -329,7 +329,7 @@ class OciManagerActivity : AppCompatActivity() {
         actionInFlight = true
         // displayName is tenancy-supplied and is echoed into the status line
         // and a toast — sanitize before it reaches either.
-        val name = DockerText.display(inst.displayName)
+        val name = ContainerText.display(inst.displayName)
         lifecycleScope.launch {
             showProgress(getString(R.string.oci_action_progress_fmt, action.wireValue, name))
             try {
@@ -354,7 +354,7 @@ class OciManagerActivity : AppCompatActivity() {
                 throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Action ${action.wireValue} failed", e)
-                showError(getString(R.string.oci_error_action_failed_fmt, DockerText.display(e.message)))
+                showError(getString(R.string.oci_error_action_failed_fmt, ContainerText.display(e.message)))
             } finally {
                 actionInFlight = false
             }
@@ -413,7 +413,7 @@ class OciManagerActivity : AppCompatActivity() {
         val view = layoutInflater.inflate(R.layout.dialog_oci_ssh_config, null)
         // Tenancy-supplied name — rendered in the dialog title and stored as
         // the profile name, so sanitize it once here.
-        val instanceName = DockerText.display(inst.displayName)
+        val instanceName = ContainerText.display(inst.displayName)
 
         val instanceLabel = view.findViewById<TextView>(R.id.oci_ssh_instance_label)
         val usernameField = view.findViewById<TextInputEditText>(R.id.oci_ssh_username)
@@ -579,15 +579,15 @@ class OciManagerActivity : AppCompatActivity() {
 
             // Display name, shape, AD, IPs and lifecycle state all come straight
             // from the tenancy API — sanitize before they reach a row widget.
-            holder.name.text = DockerText.display(inst.displayName)
-            holder.state.text = DockerText.display(stateLabel(inst.lifecycleState))
+            holder.name.text = ContainerText.display(inst.displayName)
+            holder.state.text = ContainerText.display(stateLabel(inst.lifecycleState))
             holder.state.setTextColor(stateColor(inst.lifecycleState))
             holder.statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(stateColor(inst.lifecycleState))
-            holder.info.text = DockerText.display(getString(R.string.oci_instance_info_fmt, inst.shape, inst.availabilityDomain))
+            holder.info.text = ContainerText.display(getString(R.string.oci_instance_info_fmt, inst.shape, inst.availabilityDomain))
 
             val ipParts = mutableListOf<String>()
-            inst.publicIp?.let { ipParts += getString(R.string.oci_ip_public_fmt, DockerText.display(it)) }
-            inst.privateIp?.let { ipParts += getString(R.string.oci_ip_private_fmt, DockerText.display(it)) }
+            inst.publicIp?.let { ipParts += getString(R.string.oci_ip_public_fmt, ContainerText.display(it)) }
+            inst.privateIp?.let { ipParts += getString(R.string.oci_ip_private_fmt, ContainerText.display(it)) }
             if (ipParts.isNotEmpty()) {
                 holder.ip.text = ipParts.joinToString(getString(R.string.oci_list_separator))
                 holder.ip.visibility = View.VISIBLE

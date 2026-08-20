@@ -4,32 +4,32 @@
 
     <item
         android:id="@+id/action_up"
-        android:title="@string/docker_stack_action_up"
+        android:title="@string/container_stack_action_up"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_down"
-        android:title="@string/docker_stack_action_down"
+        android:title="@string/container_stack_action_down"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_pull"
-        android:title="@string/docker_stack_action_pull"
+        android:title="@string/container_stack_action_pull"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_restart"
-        android:title="@string/docker_stack_action_restart"
+        android:title="@string/container_stack_action_restart"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_services"
-        android:title="@string/docker_stack_services"
+        android:title="@string/container_stack_services"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_logs"
-        android:title="@string/docker_action_logs"
+        android:title="@string/container_action_logs"
         app:showAsAction="never" />
 
     <item

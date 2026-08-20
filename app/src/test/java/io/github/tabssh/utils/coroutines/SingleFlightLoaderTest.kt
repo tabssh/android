@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
 /**
  * Proves [SingleFlightLoader] cancels an in-flight load when a newer one
  * starts, so a slower stale result can never land after (and overwrite) a
- * faster fresh one — the DockerDashboardFragment/DockerPageFragment
+ * faster fresh one — the ContainerDashboardFragment/ContainerPageFragment
  * `onSessionReady` re-entrancy race, where `sessionFlow` and `refreshFlow`
  * can both fire in quick succession.
  */

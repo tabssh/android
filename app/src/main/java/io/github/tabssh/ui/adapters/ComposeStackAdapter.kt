@@ -8,7 +8,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
-import io.github.tabssh.ui.utils.DockerText
+import io.github.tabssh.ui.utils.ContainerText
 
 /**
  * Compose stack list rows: name, remote path, and the
@@ -98,19 +98,19 @@ class ComposeStackAdapter(
         fun bind(item: StackListItem) {
             // Externally discovered stacks carry daemon-supplied names, paths
             // and status text — sanitize before they reach the row.
-            textName.text = DockerText.display(item.name)
-            textPath.text = DockerText.display(item.statusLine)
+            textName.text = ContainerText.display(item.name)
+            textPath.text = ContainerText.display(item.statusLine)
             val status = when (item) {
                 is StackListItem.Tracked -> item.stack.lastKnownStatus
                 is StackListItem.External -> itemView.context.getString(
-                    R.string.docker_stack_external_status, item.entry.status
+                    R.string.container_stack_external_status, item.entry.status
                 )
             }
             if (status.isNullOrBlank()) {
                 textStatus.visibility = View.GONE
             } else {
                 textStatus.visibility = View.VISIBLE
-                textStatus.text = DockerText.display(status)
+                textStatus.text = ContainerText.display(status)
             }
         }
     }

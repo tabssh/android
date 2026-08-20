@@ -43,7 +43,7 @@ object NotificationHelper {
     // monitoring (200_000–289_999) ranges so they never collide.
     private const val NOTIFICATION_ID_SSH_GROUP = 1000
     private const val NOTIFICATION_ID_MONITORING_GROUP = 199_999
-    private const val NOTIFICATION_ID_DOCKER_UPDATES_GROUP = 299_999
+    private const val NOTIFICATION_ID_CONTAINER_UPDATES_GROUP = 299_999
 
     // Per-tab notifications occupy a dedicated id range. The id is
     // derived from `SSHTab.tabId.hashCode()` so it's stable for the
@@ -63,7 +63,7 @@ object NotificationHelper {
     // when there are 4+ children (behaviour varies by launcher).
     private const val GROUP_SSH_SESSIONS = "tabssh_ssh_sessions"
     private const val GROUP_MONITORING   = "tabssh_monitoring"
-    private const val GROUP_DOCKER_UPDATES = "tabssh_docker_updates"
+    private const val GROUP_CONTAINER_UPDATES = "tabssh_container_updates"
 
     // ── Notification channel IDs ──────────────────────────────────────────────
 
@@ -93,8 +93,11 @@ object NotificationHelper {
     // Background host metric threshold alerts (CPU/mem/disk).
     internal const val CHANNEL_HOST_METRICS = "host_metrics_v1"
 
-    // Docker image update notifications (update available / update applied).
-    internal const val CHANNEL_DOCKER_UPDATES = "docker_updates_v1"
+    // Container image update notifications (update available / update applied).
+    // The id keeps its `docker_` prefix deliberately: a NotificationChannel id is immutable once
+    // registered, and changing it would delete the channel and discard the user's per-channel
+    // sound, importance and badge settings. Only the user-visible name and description are reworded.
+    internal const val CHANNEL_CONTAINER_UPDATES = "docker_updates_v1"
     
     /**
      * Create all notification channels (Android 8+)
@@ -222,14 +225,14 @@ object NotificationHelper {
                 setSound(null, null)
             }
 
-            // ── Docker Update Alerts ──────────────────────────────────────────────
-            // Fired by DockerUpdateCheckWorker when a registry digest check finds
+            // ── Container Update Alerts ──────────────────────────────────────────────
+            // Fired by ContainerUpdateCheckWorker when a registry digest check finds
             // a newer image for a container with an enabled auto-update policy,
             // and when an unattended pull-and-recreate completes (or fails).
             // Importance DEFAULT: worth surfacing, but never an interruption.
-            val dockerUpdates = NotificationChannel(
-                CHANNEL_DOCKER_UPDATES,
-                "Docker Update Alerts",
+            val containerUpdates = NotificationChannel(
+                CHANNEL_CONTAINER_UPDATES,
+                "Container Update Alerts",
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Alerts when a newer image is available for a watched container"
@@ -252,10 +255,10 @@ object NotificationHelper {
                 sshAlerts,
                 hostMonitoring,
                 hostMetrics,
-                dockerUpdates
+                containerUpdates
             ))
 
-            Logger.d("NotificationHelper", "Registered 8 notification channels: Session Service, Active Sessions, Session Alerts, File Transfers, Connection Errors, Host Monitoring Alerts, Performance Alerts, Docker Update Alerts")
+            Logger.d("NotificationHelper", "Registered 8 notification channels: Session Service, Active Sessions, Session Alerts, File Transfers, Connection Errors, Host Monitoring Alerts, Performance Alerts, Container Update Alerts")
         }
     }
 
@@ -993,15 +996,15 @@ object NotificationHelper {
         nm.notify(NOTIFICATION_ID_MONITORING_GROUP, summary)
     }
 
-    // ── Docker update notifications ───────────────────────────────────────────
+    // ── Container update notifications ───────────────────────────────────────────
 
     /**
      * Post an "image update available" alert for a watched container.
-     * Fired by DockerUpdateCheckWorker when the registry digest moved past
+     * Fired by ContainerUpdateCheckWorker when the registry digest moved past
      * the running container's digest (deduped against the stored pending
      * digest, so the same update never re-alerts every check cycle).
      */
-    fun notifyDockerUpdateAvailable(
+    fun notifyContainerUpdateAvailable(
         context: Context,
         policyId: Long,
         hostName: String,
@@ -1010,7 +1013,7 @@ object NotificationHelper {
     ) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val pi = mainActivityPendingIntent(context)
-        val n = NotificationCompat.Builder(context, CHANNEL_DOCKER_UPDATES)
+        val n = NotificationCompat.Builder(context, CHANNEL_CONTAINER_UPDATES)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Update available: $containerName")
             .setContentText("$imageRef has a newer image on $hostName")
@@ -1018,17 +1021,17 @@ object NotificationHelper {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .setGroup(GROUP_DOCKER_UPDATES)
+            .setGroup(GROUP_CONTAINER_UPDATES)
             .build()
-        nm.notify(dockerUpdateNotificationId(policyId, "available"), n)
-        postDockerUpdatesGroupSummary(context, nm)
+        nm.notify(containerUpdateNotificationId(policyId, "available"), n)
+        postContainerUpdatesGroupSummary(context, nm)
     }
 
     /**
      * Post the outcome of an unattended pull-and-recreate run
      * (ContainerAutoUpdatePolicy.autoRecreateOnUpdate).
      */
-    fun notifyDockerUpdateApplied(
+    fun notifyContainerUpdateApplied(
         context: Context,
         policyId: Long,
         hostName: String,
@@ -1038,7 +1041,7 @@ object NotificationHelper {
     ) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         // The "available" alert is resolved either way — replace it.
-        nm.cancel(dockerUpdateNotificationId(policyId, "available"))
+        nm.cancel(containerUpdateNotificationId(policyId, "available"))
         val pi = mainActivityPendingIntent(context)
         val title = if (success) "Updated: $containerName" else "Update failed: $containerName"
         val text = if (success) {
@@ -1046,7 +1049,7 @@ object NotificationHelper {
         } else {
             detail ?: "Pull-and-recreate failed on $hostName"
         }
-        val n = NotificationCompat.Builder(context, CHANNEL_DOCKER_UPDATES)
+        val n = NotificationCompat.Builder(context, CHANNEL_CONTAINER_UPDATES)
             .setSmallIcon(if (success) R.drawable.ic_connected else R.drawable.ic_error)
             .setContentTitle(title)
             .setContentText(text)
@@ -1054,32 +1057,32 @@ object NotificationHelper {
             .setAutoCancel(true)
             .setPriority(if (success) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH)
             .setCategory(if (success) NotificationCompat.CATEGORY_STATUS else NotificationCompat.CATEGORY_ERROR)
-            .setGroup(GROUP_DOCKER_UPDATES)
+            .setGroup(GROUP_CONTAINER_UPDATES)
             .build()
-        nm.notify(dockerUpdateNotificationId(policyId, "applied"), n)
-        postDockerUpdatesGroupSummary(context, nm)
+        nm.notify(containerUpdateNotificationId(policyId, "applied"), n)
+        postContainerUpdatesGroupSummary(context, nm)
     }
 
     /** Stable notification ID for a given policy + alert type pair. */
-    private fun dockerUpdateNotificationId(policyId: Long, type: String): Int {
+    private fun containerUpdateNotificationId(policyId: Long, type: String): Int {
         val base = 300_000
         return base + ((("$policyId$type").hashCode().toLong() and 0x7FFFFFFFL) % 90_000).toInt()
     }
 
-    /** Post (or refresh) the Docker updates notification group summary. */
-    private fun postDockerUpdatesGroupSummary(context: Context, nm: NotificationManager) {
+    /** Post (or refresh) the container updates notification group summary. */
+    private fun postContainerUpdatesGroupSummary(context: Context, nm: NotificationManager) {
         val pi = mainActivityPendingIntent(context)
-        val summary = NotificationCompat.Builder(context, CHANNEL_DOCKER_UPDATES)
-            .setContentTitle("TabSSH Docker Updates")
+        val summary = NotificationCompat.Builder(context, CHANNEL_CONTAINER_UPDATES)
+            .setContentTitle("TabSSH Container Updates")
             .setContentText("Container image update alerts")
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pi)
-            .setGroup(GROUP_DOCKER_UPDATES)
+            .setGroup(GROUP_CONTAINER_UPDATES)
             .setGroupSummary(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setAutoCancel(true)
             .build()
-        nm.notify(NOTIFICATION_ID_DOCKER_UPDATES_GROUP, summary)
+        nm.notify(NOTIFICATION_ID_CONTAINER_UPDATES_GROUP, summary)
     }
 
     private fun mainActivityPendingIntent(context: Context): PendingIntent {

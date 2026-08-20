@@ -163,8 +163,8 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_MONITORING_DEFAULT_DISK_THRESHOLD = "monitoring_default_disk_threshold"
         private const val KEY_MONITORING_RUN_IN_BATTERY_SAVER = "monitoring_run_in_battery_saver"
 
-        // Docker update-check preferences — keys MUST match preferences_monitoring.xml.
-        private const val KEY_DOCKER_UPDATE_CHECK_ENABLED = "docker_update_check_enabled"
+        // Container update-check preferences — keys MUST match preferences_monitoring.xml.
+        private const val KEY_CONTAINER_UPDATE_CHECK_ENABLED = "container_update_check_enabled"
 
         // Tasker preferences — keys MUST match preferences_tasker.xml.
         // tasker_command_timeout is EditTextPreference (String-backed), routed
@@ -679,8 +679,8 @@ class PreferenceManager(private val context: Context) {
     fun isSyncNetworkRoutesEnabled(): Boolean = getBoolean("sync_network_routes", true)
     fun setSyncNetworkRoutesEnabled(enabled: Boolean) = setBoolean("sync_network_routes", enabled)
 
-    fun isSyncDockerEnabled(): Boolean = getBoolean("sync_docker", true)
-    fun setSyncDockerEnabled(enabled: Boolean) = setBoolean("sync_docker", enabled)
+    fun isSyncContainersEnabled(): Boolean = getBoolean("sync_containers", true)
+    fun setSyncContainersEnabled(enabled: Boolean) = setBoolean("sync_containers", enabled)
 
     // Dashboard config is per-device by default — the user must explicitly opt in to sync it
     // so that each device keeps its own dashboard layout. Useful for migrating to a new device.
@@ -767,11 +767,11 @@ class PreferenceManager(private val context: Context) {
     fun setMonitoringRunInBatterySaverEnabled(enabled: Boolean) =
         setBoolean(KEY_MONITORING_RUN_IN_BATTERY_SAVER, enabled)
 
-    // --- Docker update checks ---
+    // --- Container update checks ---
 
-    fun isDockerUpdateCheckEnabled(): Boolean = getBoolean(KEY_DOCKER_UPDATE_CHECK_ENABLED, true)
-    fun setDockerUpdateCheckEnabled(enabled: Boolean) =
-        setBoolean(KEY_DOCKER_UPDATE_CHECK_ENABLED, enabled)
+    fun isContainerUpdateCheckEnabled(): Boolean = getBoolean(KEY_CONTAINER_UPDATE_CHECK_ENABLED, true)
+    fun setContainerUpdateCheckEnabled(enabled: Boolean) =
+        setBoolean(KEY_CONTAINER_UPDATE_CHECK_ENABLED, enabled)
 
     // --- Tasker ---
 

@@ -1,6 +1,6 @@
 ## Project description
 
-TabSSH is an Android SSH client that brings browser-style tabbed sessions to the terminal. Users manage multiple concurrent SSH connections as swipe-able tabs, browse remote filesystems over SFTP, manage SSH keys and reusable credential identities, and optionally control Proxmox, XCP-ng, VMware, and OCI hypervisors, cloud instances, and Docker hosts — all from a single app. Sync across devices uses Android's Storage Access Framework so users supply their own cloud storage (Drive, Dropbox, Nextcloud, local, etc.) with no cloud accounts required by the app itself.
+TabSSH is an Android SSH client that brings browser-style tabbed sessions to the terminal. Users manage multiple concurrent SSH connections as swipe-able tabs, browse remote filesystems over SFTP, manage SSH keys and reusable credential identities, and optionally control Proxmox, XCP-ng, VMware, and OCI hypervisors, cloud instances, and container hosts (Docker, Incus, Podman, LXC/LXD) — all from a single app. Sync across devices uses Android's Storage Access Framework so users supply their own cloud storage (Drive, Dropbox, Nextcloud, local, etc.) with no cloud accounts required by the app itself.
 
 ## Project variables
 
@@ -92,7 +92,7 @@ version_code_scheme: manual
 - Reusable network routes (proxies and SSH jump hosts) sync device-to-device like port-forward rules — full row, last-write-wins, and no secrets to keep Keystore-bound
 - End-to-end encrypted sync — a user passphrase is required, there are no server-side keys, and sync data is never readable by the storage provider
 - Backup and restore as a portable archive covering everything the app stores — encrypted when the user sets a password, plaintext when they do not; backups made by older app versions must always import into newer versions
-- A plaintext backup includes the stored secrets (SSH key passphrases, connection, Docker, registry and VNC passwords) in the clear and is reachable only behind an explicit type-to-confirm warning naming that exposure
+- A plaintext backup includes the stored secrets (SSH key passphrases, connection, container host, registry and VNC passwords) in the clear and is reachable only behind an explicit type-to-confirm warning naming that exposure
 
 ### Hypervisor management
 - Proxmox, XCP-ng (and Xen Orchestra), VMware, QEMU/libvirt (KVM) — list VMs/instances, start, stop, shutdown, reboot, snapshot
@@ -110,20 +110,24 @@ version_code_scheme: manual
 - Cloud account credentials must never be stored in the database
 - No vendor SDKs embedded — all providers accessed via their REST APIs
 
-### Docker host management
-- Portainer-class management of Docker hosts reached over the user's existing SSH connections — no host agent, no exposed Docker API port required
-- A Docker Hosts section in the Hypervisors tab; a host links to a saved SSH connection or carries its own custom SSH endpoint (address, port, username, auth via password/SSH key/saved identity) — the host name is optional, defaulting to the connection name or endpoint hostname
-- Docker is a separate domain like hypervisors: custom-endpoint sessions and container exec tabs never appear in the active-sessions list, recents, connection stats, or session restore; custom-endpoint passwords are Keystore-only, never a database column
-- Containers: list, inspect, start/stop/restart/pause/kill/rename/remove, live-follow logs, live stats; enter any running container as a normal terminal tab via docker exec (shell auto-detected)
-- Images (pull with progress, remove, prune), volumes, networks, and an engine dashboard with disk usage
+### Container host management
+- Portainer-class management of container hosts reached over the user's existing SSH connections — no host agent, no exposed engine API port required
+- Four engines at full parity: Docker, Incus, Podman, and LXC/LXD. The engine is chosen from a dropdown when the host is added — order Docker (preselected default), Incus, Podman, LXC/LXD — and every screen adapts to the engine instead of hiding behind a Docker-only assumption
+- Capability-driven UI: a concept an engine does not have is hidden, never shown empty. Docker and Podman get compose stacks and disk usage; Incus and LXC/LXD get snapshots plus dedicated profiles and projects tabs
+- A Container Hosts section in the Hypervisors tab; adding a host mirrors the hypervisor add flow but authenticates over SSH only — link a saved SSH connection or enter a custom endpoint (address, port, username, auth via password/SSH key/saved identity); the host name is optional, defaulting to the connection name or endpoint hostname
+- Containers are a separate domain like hypervisors: custom-endpoint sessions and container exec tabs never appear in the active-sessions list, recents, connection stats, or session restore; custom-endpoint passwords are Keystore-only, never a database column
+- Per-host view, tabs in order: Dashboard, Containers, Stacks, Images, Volumes, Networks. The dashboard is per host, and counts stack members even though the Containers list hides them — 3 standalone containers plus 2 stacks of 2 shows 2 stacks and 7 containers
+- Containers: list, inspect, start/stop/restart/pause/kill/rename/remove, live-follow logs, live stats; enter any running container as a normal terminal tab via the engine's exec (shell auto-detected)
+- Images (pull with progress, remove, prune), volumes, and networks on every engine
 - Compose stacks are paste-first: paste a complete compose file and it is saved to a per-host configurable remote directory (default `/srv/$USER/tabssh/docker/compose/{name}`) and run; up/down/pull/restart with per-service status; remote directories are created on demand
 - Single-container run configs: a form-based `run.yml` (mirroring `docker run` flags) per container under a second configurable remote directory (default `/srv/$USER/tabssh/docker/docker/{name}`), with a raw-YAML advanced toggle
-- Hybrid transport: Docker Engine API over an SSH forward of the host's unix socket when the server permits it, automatic fallback to the docker CLI over SSH exec — every feature works on CLI-only hosts, with documented degradation (stats become polled)
-- Socket forwarding requires sshd `AllowTcpForwarding yes` and `AllowStreamLocalForwarding yes`; a denial must produce an actionable remediation hint, never a silent permanent downgrade — a manual "retest transport" action exists
-- Docker sessions are pooled per host: one SSH connection per host opened on demand, locked per host (parallel across hosts), LRU-capped at 16 open sessions, disconnected after 10 minutes idle, and dead sessions evicted with their relays closed — monitoring-only SSH connections are released with the session, user terminal connections never are
+- Hybrid transport, identical for every engine: the engine's REST API over an SSH forward of its unix socket when the server permits it, automatic fallback to the engine's CLI over SSH exec — every feature works on CLI-only hosts, with documented degradation (stats become polled)
+- The socket path is auto-detected from the selected engine's known locations; a per-host override replaces it and also accepts `tcp://host:port` and `ssh://user@host`
+- Socket forwarding requires sshd `AllowTcpForwarding yes` and `AllowStreamLocalForwarding yes`; a transport that cannot be established fails early with a blocking error card carrying an actionable remediation hint and a Retest action — never a silent permanent downgrade
+- Container sessions are pooled per host: one SSH connection per host opened on demand, locked per host (parallel across hosts), LRU-capped at 16 open sessions, disconnected after 10 minutes idle, and dead sessions evicted with their relays closed — monitoring-only SSH connections are released with the session, user terminal connections never are
 - App-driven, watchtower-style updates: periodic registry digest checks flag stale containers (notification + in-app badge); unattended pull+recreate is opt-in per policy and must preserve the container's configuration, with automatic rollback if the replacement fails
-- Update checks run twice daily by default, at most 2 hosts concurrently; each Docker host can disable checks or set its own interval in hours (blank = default), stored on the host row via an additive migration
-- Docker Hub and private registries (Basic/Bearer) supported; registry credentials are Keystore-only, never a database column
+- Update checks run twice daily by default, at most 2 hosts concurrently; each container host can disable checks or set its own interval in hours (blank = default), stored on the host row
+- Docker Hub, image servers, and private registries (Basic/Bearer) supported; registry credentials are Keystore-only, never a database column
 
 ### Accessibility and UI
 - TalkBack support with content descriptions on all interactive elements
@@ -164,7 +168,7 @@ version_code_scheme: manual
 
 ### Accepted design decisions
 
-- Docker unix-socket forwarding uses the SSH library's native
+- Container engine unix-socket forwarding uses the SSH library's native
   `direct-streamlocal@openssh.com` support (no custom protocol code) —
   verified working end-to-end against a real sshd on 2026-08-07. The server
   must allow both TCP and stream-local forwarding; the server reports a

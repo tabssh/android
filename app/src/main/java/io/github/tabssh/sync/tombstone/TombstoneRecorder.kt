@@ -4,7 +4,7 @@ import android.content.Context
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.ComposeStack
 import io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy
-import io.github.tabssh.storage.database.entities.DockerHost
+import io.github.tabssh.storage.database.entities.ContainerHost
 import io.github.tabssh.storage.database.entities.HypervisorAccount
 import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.RegistryCredential
@@ -31,7 +31,7 @@ import io.github.tabssh.utils.logging.Logger
  *
  * [entityKey] is the stable cross-device identity, NOT the raw Room PK. For the
  * UUID-keyed entities pass the UUID. For the Long-autoincrement entities
- * (HypervisorProfile, HypervisorAccount, and the five Docker entities) pass
+ * (HypervisorProfile, HypervisorAccount, and the five container entities) pass
  * [naturalKey] — their Long id is meaningless across devices. For [SECRET] the
  * key is the sync wire alias (e.g. `conn_pw_{id}`, `ssh_key_{keyId}`), which is
  * already device-independent.
@@ -56,7 +56,7 @@ object TombstoneRecorder {
     const val CLOUD_ACCOUNT = "cloud_account"
     const val PORT_FORWARD = "port_forward"
     const val NETWORK_ROUTE = "network_route"
-    const val DOCKER_HOST = "docker_host"
+    const val CONTAINER_HOST = "container_host"
     const val REGISTRY_CREDENTIAL = "registry_credential"
     const val COMPOSE_STACK = "compose_stack"
     const val SINGLE_CONTAINER_CONFIG = "single_container_config"
@@ -84,11 +84,11 @@ object TombstoneRecorder {
         "${account.name}|${account.authType}|${account.username}"
 
     /**
-     * Stable cross-device key for the Long-PK [DockerHost]: the user-facing
+     * Stable cross-device key for the Long-PK [ContainerHost]: the user-facing
      * `name` plus whichever endpoint identifier is set, since two devices'
      * autoincrement ids for the same host are unrelated.
      */
-    fun naturalKey(host: DockerHost): String =
+    fun naturalKey(host: ContainerHost): String =
         "${host.name}|${host.linkedConnectionId ?: ""}|${host.customHost ?: ""}"
 
     /**
@@ -100,24 +100,24 @@ object TombstoneRecorder {
 
     /**
      * Stable cross-device key for the Long-PK [ComposeStack]: scoped by its
-     * parent [DockerHost.id] (FK-by-convention, not remapped — see AI.md
+     * parent [ContainerHost.id] (FK-by-convention, not remapped — see AI.md
      * PART 6) plus the stack name, which is unique per host.
      */
-    fun naturalKey(stack: ComposeStack): String = "${stack.dockerHostId}|${stack.name}"
+    fun naturalKey(stack: ComposeStack): String = "${stack.containerHostId}|${stack.name}"
 
     /**
      * Stable cross-device key for the Long-PK [SingleContainerConfig]: scoped
-     * by its parent [DockerHost.id] plus the config name, unique per host.
+     * by its parent [ContainerHost.id] plus the config name, unique per host.
      */
-    fun naturalKey(config: SingleContainerConfig): String = "${config.dockerHostId}|${config.name}"
+    fun naturalKey(config: SingleContainerConfig): String = "${config.containerHostId}|${config.name}"
 
     /**
      * Stable cross-device key for the Long-PK [ContainerAutoUpdatePolicy]:
-     * scoped by its parent [DockerHost.id] plus the container/stack name and
+     * scoped by its parent [ContainerHost.id] plus the container/stack name and
      * scope discriminator, which together are unique per host.
      */
     fun naturalKey(policy: ContainerAutoUpdatePolicy): String =
-        "${policy.dockerHostId}|${policy.containerNameOrStackName}|${policy.scope}"
+        "${policy.containerHostId}|${policy.containerNameOrStackName}|${policy.scope}"
 
     /**
      * Record a tombstone for a just-deleted synced entity. Best-effort — never

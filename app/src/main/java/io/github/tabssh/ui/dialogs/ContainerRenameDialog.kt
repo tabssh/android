@@ -6,8 +6,8 @@ import android.widget.Toast
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import io.github.tabssh.R
-import io.github.tabssh.ui.utils.DockerNames
-import io.github.tabssh.ui.utils.DockerText
+import io.github.tabssh.ui.utils.ContainerNames
+import io.github.tabssh.ui.utils.ContainerText
 
 /**
  * Rename prompt for a container. Validation only —
@@ -21,21 +21,21 @@ object ContainerRenameDialog {
         val editName = view.findViewById<TextInputEditText>(R.id.edit_name)
         // The pre-fill comes from the daemon; a control or bidi character in it
         // would otherwise be edited back into the new name.
-        val safeCurrent = DockerText.display(currentName, DockerNames.MAX_NAME_LENGTH)
+        val safeCurrent = ContainerText.display(currentName, ContainerNames.MAX_NAME_LENGTH)
         editName.setText(safeCurrent)
         editName.setSelection(safeCurrent.length)
         MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.docker_rename_title)
+            .setTitle(R.string.container_rename_title)
             .setView(view)
-            .setPositiveButton(R.string.docker_action_rename) { _, _ ->
+            .setPositiveButton(R.string.container_action_rename) { _, _ ->
                 val newName = editName.text?.toString()?.trim().orEmpty()
                 // The new name becomes a `docker rename` argument — enforce the
                 // daemon's own grammar before it reaches the transport.
                 if (newName.isEmpty() || newName == safeCurrent) {
-                    Toast.makeText(context, R.string.docker_rename_error, Toast.LENGTH_SHORT)
+                    Toast.makeText(context, R.string.container_rename_error, Toast.LENGTH_SHORT)
                         .show()
-                } else if (!DockerNames.isValidResourceName(newName)) {
-                    Toast.makeText(context, R.string.docker_error_name_format, Toast.LENGTH_LONG)
+                } else if (!ContainerNames.isValidResourceName(newName)) {
+                    Toast.makeText(context, R.string.container_error_name_format, Toast.LENGTH_LONG)
                         .show()
                 } else {
                     onRename(newName)
