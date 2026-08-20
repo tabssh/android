@@ -759,7 +759,9 @@ class TerminalView @JvmOverloads constructor(
         val listener = object : TerminalListener {
             override fun onDataReceived(data: ByteArray) {
                 // Performance: Mark current cursor row dirty (most data updates cursor line)
-                Logger.d("TerminalView", "Terminal data received: ${data.size} bytes")
+                Logger.dThrottled("TerminalView", "dataReceived", 500) {
+                    "Terminal data received: ${data.size} bytes"
+                }
                 post {
                     // Mark cursor row and a few surrounding rows dirty (new lines, scrolling)
                     val bridge = termuxBridge
@@ -1396,7 +1398,6 @@ class TerminalView @JvmOverloads constructor(
         // Fall back to old emulator rendering
         terminalRenderer?.let { renderer ->
             terminalBuffer?.let { buffer ->
-                Logger.d("TerminalView", "Rendering terminal: ${buffer.getRows()}x${buffer.getCols()}, scroll=$scrollYInt")
                 renderer.render(canvas, buffer, paddingLeft.toFloat(), gridTop,
                     cellWidth, cellHeight, scrollYInt)
                 // URL underline pass — drawn after text so underlines are on top of glyphs.
@@ -1437,10 +1438,14 @@ class TerminalView @JvmOverloads constructor(
                     }
                 }
             } ?: run {
-                Logger.w("TerminalView", "Terminal buffer is null in onDraw")
+                Logger.wThrottled("TerminalView", "bufferNullOnDraw", 5000) {
+                    "Terminal buffer is null in onDraw"
+                }
             }
         } ?: run {
-            Logger.w("TerminalView", "Terminal renderer is null in onDraw")
+            Logger.wThrottled("TerminalView", "rendererNullOnDraw", 5000) {
+                "Terminal renderer is null in onDraw"
+            }
         }
 
         // Scrollback thumb overlay for the fallback renderer path.

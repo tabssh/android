@@ -708,7 +708,11 @@ class TermuxBridge(
         }
 
         override fun titleChanged(oldTitle: String?, newTitle: String?) {
-            Logger.d(TAG, "Title changed: $oldTitle -> $newTitle")
+            // Some shells emit OSC title updates on every prompt/keystroke —
+            // throttle to avoid flooding the writer with per-event lines.
+            Logger.dThrottled(TAG, "titleChangedBridge", 1000) {
+                "Title changed: $oldTitle -> $newTitle"
+            }
             runOnMain {
                 listeners.forEach { it.onTitleChanged(newTitle ?: "") }
             }

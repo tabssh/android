@@ -315,9 +315,25 @@ object Logger {
      */
     fun dThrottled(tag: String, key: String, minIntervalMs: Long, message: () -> String) {
         if (!debugMode || !shouldLog(LVL_DEBUG)) return
+        if (!shouldEmitThrottled(tag, key, minIntervalMs)) return
+        val resolved = message()
+        Log.d("$TAG_PREFIX:$tag", logcatMessage(resolved), null)
+        writeToFile("D", tag, resolved, null)
+    }
+
+    // Injectable so the unit test can advance time deterministically instead
+    // of sleeping; production always reads the wall clock.
+    internal var throttleClock: () -> Long = { System.currentTimeMillis() }
+
+    /**
+     * Records an emit for (tag, key) and reports whether the caller may write.
+     * Shared by every throttled level so one call site can never be rate
+     * limited on two independent clocks.
+     */
+    internal fun shouldEmitThrottled(tag: String, key: String, minIntervalMs: Long): Boolean {
         val throttleKey = "$tag:$key"
-        val now = System.currentTimeMillis()
-        val emit = synchronized(throttleTimestamps) {
+        val now = throttleClock()
+        return synchronized(throttleTimestamps) {
             val last = throttleTimestamps[throttleKey]
             if (last == null || now - last >= minIntervalMs) {
                 throttleTimestamps[throttleKey] = now
@@ -325,11 +341,6 @@ object Logger {
             } else {
                 false
             }
-        }
-        if (emit) {
-            val resolved = message()
-            Log.d("$TAG_PREFIX:$tag", logcatMessage(resolved), null)
-            writeToFile("D", tag, resolved, null)
         }
     }
 
@@ -372,6 +383,24 @@ object Logger {
         }
         // Write sanitized version to app log
         writeToAppLog("W", tag, message, throwable)
+    }
+
+    /**
+     * Rate-limited variant of w() for warnings that repeat every frame while
+     * a misconfiguration persists (a render path that never got wired up).
+     * The condition is worth a warning — demoting it to debug would hide it
+     * from the app log and from non-debug builds — but the repetition is not,
+     * so at most one call per (tag, key) is emitted every [minIntervalMs].
+     */
+    fun wThrottled(tag: String, key: String, minIntervalMs: Long, message: () -> String) {
+        if (!shouldLog(LVL_WARNING)) return
+        if (!shouldEmitThrottled(tag, key, minIntervalMs)) return
+        val resolved = message()
+        Log.w("$TAG_PREFIX:$tag", logcatMessage(resolved), null)
+        if (logToFile) {
+            writeToFile("W", tag, resolved, null)
+        }
+        writeToAppLog("W", tag, resolved, null)
     }
 
     fun e(tag: String, message: String, throwable: Throwable? = null) {

@@ -158,33 +158,49 @@ B8. Incus/LXC/LXD full parity where the concept exists — instances
    Until appealed/re-classified, "Install anyway" + verifying
    checksums-dev.sha256 is the workaround.
 
-## Open — 2026-08-14 user-reported regressions in devel-3d12d05e (all fully working before; must be fixed)
+## Needs user re-test — 2026-08-14 regressions in devel-3d12d05e
 
-1. Settings ANR: every settings page hangs (ANR) in the minified devel
-   build. Debug log shows an active mosh session streaming during the
-   hang; prime suspect is Logger lock contention under DEBUG_LOG=true.
-   Second log (cleared-then-reproduced, 84 s window) confirms: the
-   settings tap emits ZERO log lines while a session streams — the main
-   thread blocks before the first Logger call in the settings path.
-   Debugger agent reproducing live on the AVD with an active session.
-2. Debug-log spam: TerminalView logs "onScreenChanged - scheduling
-   redraw" per frame and "Terminal title changed" per second — 97.5% of
-   the user's 463 KB log; the export's interesting window (settings
-   taps, proxmox, docker) was pushed past the paste-service 100 KB cap.
-   Remove or rate-limit per-frame logging.
-3. Proxmox/VNC not working (user report). Second debug log shows the
-   transport SUCCEEDING: termproxy ticket OK → serial console rejected
-   with a 35-byte binary error frame → intentional vncproxy fallback →
-   "VncView: VNC connected: 720×400 'QEMU (router)'" with RfbClient
-   pointer events flowing. So the break is rendering/interaction, not
-   connection. Leads: repeated "W/TerminalView: Terminal renderer is
-   null in onDraw" as the console tab wires up, and "E/TermuxBridge:
-   Error reading from SSH: Pipe closed" fired during the serial→VNC
-   teardown — check whether that error path blanks/kills the tab the
-   VNC view lives in. VNC itself locally testable against a VNC server
-   container on host dockerd.
-4. Docker dashboard "just loads" — spinner forever, never renders data.
-   Locally testable against host dockerd over SSH to the host sshd.
+Re-triaged against HEAD on 2026-08-20. All four were reported on
+`devel-3d12d05e`; three had already been fixed by later commits and the
+fourth is now fully addressed. None of them reproduces in the current
+code. They stay recorded here until the user confirms on a devel build,
+because the original reports came from a real device and the two
+console/dashboard verdicts rest on code reading, not a live repro.
+
+1. Settings ANR — FIXED by e7e979dbf071, after the reported baseline.
+   The reported mechanism was wrong: `writeToFile` already dispatched
+   onto a single-thread executor at the baseline, so a Logger call never
+   blocked the caller, and "zero log lines during the hang" is a writer
+   backlog artifact rather than proof of a main-thread block. The real
+   mechanism was the writer thread doing a `FileWriter` open/write/close
+   per line, which under a streaming mosh session saturated storage I/O
+   and stalled the settings path's own disk work (SharedPreferences
+   reads, `sanitizeSeekBarPrefs`'s `commit()`). HEAD replaces that with a
+   bounded drop-oldest queue plus a persistent `BufferedWriter` per sink,
+   and throttles the flood at its source. If it still reproduces, the
+   next evidence needed is an actual ANR `traces.txt` — the debug log
+   cannot distinguish these two mechanisms.
+2. Debug-log spam — FIXED. The two named `TerminalView` sites were
+   already throttled; four further unthrottled per-frame/per-read sites
+   were found and fixed on 2026-08-20 (legacy-render line deleted, the
+   two `onDraw` null warnings and the per-read `onDataReceived` line
+   throttled, plus `TermuxBridge.titleChanged`).
+3. Proxmox/VNC console — FIXED by the 2026-08-15 `getAllTabsSealed()`
+   change (beta-pass item 1): an activity launched for a console tab
+   previously saw an empty tab list, skipped `updateViewPagerAdapter()`,
+   and so never called `RfbClient.start()`. Both log leads are benign:
+   the "renderer is null in onDraw" warning only fires in the window
+   before the console bridge is wired (and the view is set to GONE once
+   the tab goes graphical), and the "Pipe closed" error is the expected
+   result of closing the termproxy socket to retry over vncproxy — no
+   listener is registered on that bridge, so nothing tears the tab down.
+4. Container dashboard spinner — FIXED. The reported symptom was traced
+   on 2026-08-15 to the SSH user lacking docker.sock group access, i.e.
+   host configuration; fd85dfa569aa then added the fail-early probe, so
+   a permission failure now resolves to the blocking error card before
+   the dashboard fragment is built. The dashboard's own load is
+   timeout-bounded and hides its spinner on both the timeout and the
+   success path.
 
 ## Open — 2026-08-15 beta pass on the AVD (findings + remaining coverage)
 
