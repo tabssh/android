@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-##@Version 202608150001-git
+##@Version 202608210120-git
 # scripts/ui-test.sh — scriptable UI test runner for TabSSH on a live emulator/device.
 #
 # Resolves __adb the same way android-emulator.sh does.  Each named test is a
@@ -15,14 +15,20 @@
 #   --apk    <path>     APK to install before running tests (implies --install)
 #   --install           Install binaries/tabssh-android-x86.apk before running
 #   --verbose           Print every __adb command
+#   --debug             Alias for --verbose
+#   --color             Force colour/emoji output even when NO_COLOR is set
 #   --list              Print available named tests and exit
-#   --help              Print this help and exit
+#   --help, -h          Print this help and exit
+#   --version, -v       Print the script version and exit
 #
 # Named tests (pass one or more, or "all"):
 #   crash-dialog        Crash report dialog shows "Paste / Issue" not "Share"
 #   hypervisor-form     HypervisorEditActivity renders without ANR
 #   settings-opens      SettingsActivity main screen is navigable
 #   logging-navigation  Settings → Logging: all sections and key prefs visible
+#   main-tabs           Every main tab (and Infra sub-tab) switches and renders
+#   nav-drawer          Drawer lists all entries, closes, and each opens
+#   settings-screens    Every Settings category opens its own screen
 #   all                 Run all of the above
 #
 # Ad-hoc inline test:
@@ -88,22 +94,47 @@
 
 set -euo pipefail
 
-VERSION="202608150001-git"
+VERSION="202608210120-git"
 
 # ── colour ───────────────────────────────────────────────────────────────────
-if [[ -n "${NO_COLOR:-}" ]]; then
-    RED=''; GREEN=''; YELLOW=''
-    BLUE=''; CYAN=''; NC=''
-else
+__colour_on() {
+    USE_EMOJI=1
     RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
     BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
+}
+__colour_off() {
+    USE_EMOJI=0
+    RED=''; GREEN=''; YELLOW=''
+    BLUE=''; CYAN=''; NC=''
+}
+if [[ -n "${NO_COLOR:-}" ]]; then
+    __colour_off
+else
+    __colour_on
 fi
 TEST_FAILS=0
 
-__pass()  { echo -e "${GREEN}  ✅ $*${NC}"; }
-__fail()  { echo -e "${RED}  ❌ $*${NC}"; TEST_FAILS=$((TEST_FAILS+1)); }
-__info()  { echo -e "${BLUE}  ▸ $*${NC}"; }
-__warn()  { echo -e "${YELLOW}  ⚠ $*${NC}"; }
+__pass() {
+    local emoji=""
+    [[ $USE_EMOJI -eq 1 ]] && emoji="✅ "
+    echo -e "${GREEN}  ${emoji}$*${NC}"
+}
+__fail() {
+    local emoji=""
+    [[ $USE_EMOJI -eq 1 ]] && emoji="❌ "
+    echo -e "${RED}  ${emoji}$*${NC}"
+    TEST_FAILS=$((TEST_FAILS+1))
+}
+__info() {
+    local emoji=""
+    [[ $USE_EMOJI -eq 1 ]] && emoji="▸ "
+    echo -e "${BLUE}  ${emoji}$*${NC}"
+}
+__warn() {
+    local emoji=""
+    [[ $USE_EMOJI -eq 1 ]] && emoji="⚠ "
+    echo -e "${YELLOW}  ${emoji}$*${NC}"
+}
 __debug() { [[ ${VERBOSE:-0} -eq 1 ]] && echo -e "${CYAN}  $ $*${NC}" || true; }
 
 # ── SDK / __adb resolution ─────────────────────────────────────────────────────
@@ -140,18 +171,25 @@ while [[ $# -gt 0 ]]; do
         --apk)      shift; APK="$1"; INSTALL=1 ;;
         --install)  INSTALL=1 ;;
         --verbose)  VERBOSE=1 ;;
+        --debug)    VERBOSE=1 ;;
+        --color)    __colour_on ;;
         --list)
             echo "Named tests:"
             echo "  crash-dialog        Crash report dialog shows 'Paste / Issue' not 'Share'"
             echo "  hypervisor-form     HypervisorEditActivity renders without ANR"
             echo "  settings-opens      SettingsActivity main screen is navigable"
             echo "  logging-navigation  Settings → Logging: all sections and key prefs visible"
+            echo "  main-tabs           Every main tab (and Infra sub-tab) switches and renders"
+            echo "  nav-drawer          Drawer lists all entries, closes, and each opens"
+            echo "  settings-screens    Every Settings category opens its own screen"
             echo "  all                 All of the above"
             echo ""
             echo "Use 'run STEPS…' for inline tests — see --help for step reference."
             exit 0 ;;
         --help|-h)  __usage 0 ;;
-        all)        TESTS+=(crash-dialog hypervisor-form settings-opens logging-navigation) ;;
+        -v|--version) echo "ui-test.sh $VERSION"; exit 0 ;;
+        all)        TESTS+=(crash-dialog hypervisor-form settings-opens logging-navigation
+                             main-tabs nav-drawer settings-screens) ;;
         *)          TESTS+=("$1") ;;
     esac
     shift
@@ -185,12 +223,19 @@ sleep 1
 
 # ── optional install ─────────────────────────────────────────────────────────
 PKG="io.github.tabssh"
+# User-visible label (res/values/strings.xml app_name).  ANR dialogs are titled
+# with the label, not the package, so __ui_dismiss_anr needs it to tell an ANR
+# in the app under test apart from one in the launcher or System UI.
+APP_LABEL="TabSSH"
 
 if [[ $INSTALL -eq 1 ]]; then
     if [[ -z "$APK" ]]; then
-        REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+        # ${0%/*} is $0 unchanged when the script was found on PATH with no
+        # slash in it, so fall back to the current directory in that case.
+        _self_dir="${0%/*}"
+        [[ "$_self_dir" == "$0" ]] && _self_dir="."
+        REPO_ROOT="$(cd "$_self_dir/.." && pwd)"
         # Pick the APK that matches the device ABI; fall back to universal.
-        local _abi
         _abi=$("$_ADB_BIN" ${SERIAL:+-s "$SERIAL"} shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r')
         case "$_abi" in
             x86_64)   APK="$REPO_ROOT/binaries/tabssh-android-amd64.apk" ;;
@@ -202,8 +247,28 @@ if [[ $INSTALL -eq 1 ]]; then
         [[ -f "$APK" ]] || APK="$REPO_ROOT/binaries/tabssh-android-universal.apk"
     fi
     [[ -f "$APK" ]] || { echo "❌ APK not found: $APK  (run 'make build' first)" >&2; exit 2; }
-    __info "Installing $(basename "$APK")…"
-    __adb install -r "$APK" | grep -E -- "Success|Failure|error" || true
+    __info "Installing ${APK##*/}…"
+    # -g grants every runtime permission up front. Without it the first launch
+    # stops on the notification-permission dialog and every later assertion
+    # reads that dialog instead of the app.
+    INSTALL_OUT=$(__adb install -r -g "$APK" 2>&1) || true
+    # A debug build signed with a different keystore than the one already on the
+    # device can only be installed after removing the old copy. Emulators are
+    # disposable, so wipe and retry there; on a real device stop and say why,
+    # because uninstalling would take the user's app data with it.
+    if grep -qF -- "INSTALL_FAILED_UPDATE_INCOMPATIBLE" <<<"$INSTALL_OUT"; then
+        if [[ "$SERIAL" == emulator-* ]]; then
+            __warn "Signature mismatch with the installed copy — uninstalling and retrying"
+            __adb uninstall "$PKG" >/dev/null 2>&1 || true
+            INSTALL_OUT=$(__adb install -r -g "$APK" 2>&1) || true
+        else
+            echo "❌ $PKG is installed with a different signing key." >&2
+            echo "   Uninstall it on $SERIAL first (this erases its app data), then re-run." >&2
+            exit 2
+        fi
+    fi
+    grep -E -- "Success|Failure|error" <<<"$INSTALL_OUT" || true
+    grep -qF -- "Success" <<<"$INSTALL_OUT" || { echo "❌ Install failed — tests would run against a stale build." >&2; exit 2; }
 fi
 
 # ── temp dir ─────────────────────────────────────────────────────────────────
@@ -225,26 +290,55 @@ __ui_dump() {
         [[ -s "$UI_XML" ]] && return 0
         sleep 1
     done
+    # An empty dump means uiautomator itself failed — most often a previous
+    # run was killed mid-dump and left its UiAutomation service registered,
+    # after which every dump crashes with "already registered". Every
+    # assertion downstream would then fail against a blank screen, so say so
+    # rather than let it look like the app lost its UI.
+    # Returns success anyway: `set -e` is in force and most call sites invoke
+    # this as a bare statement, so a non-zero status here would abort the run
+    # instead of letting the individual assertion report its own failure.
+    __warn "uiautomator dump returned nothing — assertions below are unreliable (reboot the device to clear a stale UiAutomation service)"
+    return 0
 }
 
-# Dismiss Android "System UI isn't responding" or app ANR dialogs by tapping
-# "Wait" if visible.  Retries up to 3 times and waits 6 seconds after each tap
-# so that slow SwiftShader emulators have enough time to re-inflate the UI
-# before the caller proceeds.  Call before each wait/assert to avoid false
-# failures on fresh-booted emulators where System UI takes a few seconds to
-# settle.
+# Dismiss Android ANR dialogs ("<app> isn't responding") so a slow emulator
+# cannot make every downstream assertion fail against a dialog that has nothing
+# to do with the app under test.  Call before each wait/assert.
+#
+# The dialog title is matched on "responding" alone: Android renders the
+# contraction with a typographic apostrophe (U+2019), so an ASCII "isn't"
+# pattern silently never matches and the dialog is left sitting on screen.
+#
+# Button choice depends on whose ANR it is.  For the app under test "Wait" is
+# correct — the test wants that process alive.  For anything else (most often
+# Pixel Launcher or System UI right after boot) "Close app" clears the dialog
+# immediately and lets the system restart the process, whereas "Wait" leaves
+# the dialog to reappear a few seconds later.
 __ui_dismiss_anr() {
-    local i
+    local i coords screen
     for i in 1 2 3; do
         __ui_dump
-        __ui_texts | grep -qF -- "isn't responding" || return 0
-        local coords
-        coords=$(__ui_find_xy "Wait") || true
+        screen=$(__ui_texts)
+        grep -q -- "responding" <<<"$screen" || return 0
+        local button="Close app"
+        grep -q -- "$APP_LABEL" <<<"$screen" && button="Wait"
+        coords=$(__ui_find_xy "$button") || true
+        if [[ -z "$coords" ]]; then
+            # Whichever button this dialog offers, take the other one rather
+            # than leaving the dialog up.
+            [[ "$button" == "Wait" ]] && button="Close app" || button="Wait"
+            coords=$(__ui_find_xy "$button") || true
+        fi
         [[ -n "$coords" ]] || return 0
-        __debug "ANR dialog detected — tapping Wait (attempt $i)"
+        __debug "ANR dialog detected — tapping $button (attempt $i)"
         __adb shell input tap $coords
         sleep 6
     done
+    __ui_dump
+    __ui_texts | grep -q -- "responding" &&
+        __warn "ANR dialog still on screen after 3 dismissal attempts"
+    return 0
 }
 
 # Print every non-empty text= value currently visible.
@@ -280,10 +374,13 @@ def find_clickable(node, target, best_clickable=None):
     if node.get('clickable') == 'true':
         best_clickable = node
     if node.get('text') == target:
-        if best_clickable is not None:
-            cx, cy = centre(best_clickable.get('bounds', '[0,0][0,0]'))
-            print(cx, cy)
-            return True
+        # A missing clickable ancestor does not mean the label cannot be
+        # tapped — menu rows frequently mark no node clickable at all.
+        # The label's own centre lands inside the row either way.
+        hit = best_clickable if best_clickable is not None else node
+        cx, cy = centre(hit.get('bounds', '[0,0][0,0]'))
+        print(cx, cy)
+        return True
     for child in node:
         if find_clickable(child, target, best_clickable):
             return True
@@ -358,12 +455,31 @@ __ui_long_tap_xy() {
     sleep 0.5
 }
 
+# Resolve the display size once per run into UI_SCREEN_W / UI_SCREEN_H. Every
+# gesture derives its coordinates from these, so the same test drives a phone
+# and a tablet without hardcoding one device's resolution.
+UI_SCREEN_W=""
+UI_SCREEN_H=""
+__ui_screen_size() {
+    [[ -n "$UI_SCREEN_W" ]] && return 0
+    local size
+    size=$(__adb shell wm size 2>/dev/null | tr -d '\r' | grep -oE -- '[0-9]+x[0-9]+' | tail -1)
+    UI_SCREEN_W="${size%x*}"
+    UI_SCREEN_H="${size#*x}"
+    if [[ -z "$UI_SCREEN_W" || -z "$UI_SCREEN_H" ]]; then
+        __warn "Could not read display size — assuming 1080×1920"
+        UI_SCREEN_W=1080
+        UI_SCREEN_H=1920
+    fi
+    __debug "screen ${UI_SCREEN_W}×${UI_SCREEN_H}"
+}
+
 # Swipe in a cardinal direction.
 # __ui_swipe up|down|left|right [distance_px=800]
 __ui_swipe() {
     local dir="$1" dist="${2:-800}" ms="${3:-400}"
-    # Centre of a 1080×1920 screen
-    local cx=540 cy=960
+    __ui_screen_size
+    local cx=$((UI_SCREEN_W / 2)) cy=$((UI_SCREEN_H / 2))
     local x1=$cx y1=$cy x2=$cx y2=$cy
     case "$dir" in
         up)    y1=$((cy+dist/2)); y2=$((cy-dist/2)) ;;
@@ -438,7 +554,24 @@ __ui_launch() {
     __adb shell am start -n "$component" >/dev/null
     sleep 2
     __ui_dismiss_anr
+    __ui_dismiss_permission
     __ui_dump
+}
+
+# Clear a runtime-permission dialog if one is showing. Belt-and-braces next to
+# `install -g`: a device that already had the app installed keeps its old
+# permission state, so the dialog can still appear on a re-run.
+__ui_dismiss_permission() {
+    local i coords
+    for i in 1 2 3; do
+        __ui_dump
+        __ui_texts | grep -qE -- "Allow .* to|to send you notifications" || return 0
+        coords=$(__ui_find_xy "Allow") || true
+        [[ -n "$coords" ]] || return 0
+        __debug "Permission dialog detected — tapping Allow (attempt $i)"
+        __adb shell input tap $coords
+        sleep 2
+    done
 }
 
 # Force-stop the app and wait for the process to fully die.
@@ -453,6 +586,13 @@ __ui_stop() {
 __ui_scroll_to() {
     local text="$1" max="${2:-8}" dir="${3:-up}"
     local i
+    # Search downward from the top. Scrolling only ever moves one way, so a
+    # list left part-way down by a previous lookup would hide everything above
+    # it and report entries that are plainly on screen as missing.
+    __ui_dump
+    if [[ "$dir" == "up" ]] && ! __ui_texts | grep -qF -- "$text"; then
+        __ui_scroll_top
+    fi
     for i in $(seq 1 "$max"); do
         __ui_dismiss_anr
         if __ui_texts | grep -qF -- "$text"; then
@@ -465,6 +605,20 @@ __ui_scroll_to() {
         __ui_swipe "$dir"
     done
     return 1
+}
+
+# Fling the current list back to its first item. Stops early once two
+# consecutive dumps show the same content, so a short list costs one swipe.
+__ui_scroll_top() {
+    local i prev="" now
+    for i in 1 2 3 4 5 6; do
+        __ui_dump
+        now=$(__ui_texts | md5sum)
+        [[ "$now" == "$prev" ]] && return 0
+        prev="$now"
+        __ui_swipe down
+        sleep 0.4
+    done
 }
 
 # Tap the element with the given text, scrolling if needed.
@@ -508,7 +662,232 @@ __ui_long_tap() {
     return 1
 }
 
+# Tap an element by content-description rather than text. The navigation
+# hamburger is an icon with no text, so text-based lookup can never find it.
+# The toolbar's navigation icon only gets its description once the drawer
+# toggle has synced, a beat after the activity first draws, so the lookup is
+# retried rather than failed on the first dump.
+# __ui_tap_desc description [attempts=6]
+__ui_tap_desc() {
+    local desc="$1" attempts="${2:-6}" try
+    local coords=""
+    for ((try = 0; try < attempts; try++)); do
+        [[ $try -gt 0 ]] && sleep 1
+        __ui_dump
+        coords=$(python3 - "$UI_XML" "$desc" <<'PY'
+import sys, xml.etree.ElementTree as ET
+
+def centre(bounds):
+    nums = [int(n) for n in bounds.replace('][', ',').strip('[]').split(',')]
+    return (nums[0] + nums[2]) // 2, (nums[1] + nums[3]) // 2
+
+try:
+    root = ET.parse(sys.argv[1]).getroot()
+except ET.ParseError:
+    sys.exit(0)
+for node in root.iter('node'):
+    if node.get('content-desc') == sys.argv[2]:
+        cx, cy = centre(node.get('bounds', '[0,0][0,0]'))
+        print(cx, cy)
+        break
+PY
+        ) || true
+        [[ -n "$coords" ]] && break
+    done
+    if [[ -z "$coords" ]]; then
+        __warn "__ui_tap_desc: \"$desc\" not found"
+        return 1
+    fi
+    __adb shell input tap $coords
+    sleep 1
+    __ui_dump
+}
+
+# Bring MainActivity to the front if something else is on top. Back from a
+# destination usually lands there on its own, but a destination that finishes
+# its own task (or an extra Back consumed by a dialog) leaves the launcher
+# showing, and every later drawer lookup would then fail for the wrong reason.
+__ui_ensure_main() {
+    local top
+    top=$(__adb shell dumpsys activity activities 2>/dev/null | grep -m1 -- "topResumedActivity" || true)
+    grep -qF -- ".ui.activities.MainActivity" <<<"$top" && return 0
+    __info "MainActivity not on top — relaunching"
+    __adb shell am start -n "$PKG/.ui.activities.MainActivity" >/dev/null 2>&1 || true
+    __ui_wait_for_quiet "Hosts" 15
+}
+
+# Wait for text without emitting a pass/fail line — used by recovery paths.
+__ui_wait_for_quiet() {
+    local text="$1" timeout="${2:-8}" i
+    for ((i = 0; i < timeout; i++)); do
+        __ui_dump
+        __ui_texts | grep -qxF -- "$text" && return 0
+        sleep 1
+    done
+    return 1
+}
+
+# True when the navigation drawer is on screen. A closed DrawerLayout child is
+# still in the dumped hierarchy — it is translated off the left edge — so the
+# test is on its bounds, not on its presence.
+__ui_drawer_is_open() {
+    __ui_dump
+    python3 - "$UI_XML" <<'PY'
+import sys, xml.etree.ElementTree as ET
+try:
+    root = ET.parse(sys.argv[1]).getroot()
+except ET.ParseError:
+    sys.exit(1)
+for node in root.iter('node'):
+    if node.get('resource-id', '').endswith(':id/tabssh_nav_view'):
+        nums = [int(n) for n in node.get('bounds', '[0,0][0,0]')
+                .replace('][', ',').strip('[]').split(',')]
+        sys.exit(0 if nums[2] > 0 else 1)
+sys.exit(1)
+PY
+}
+
+# Open the navigation drawer from whatever screen is showing, always scrolled
+# back to its first entry. The drawer keeps its scroll position between opens,
+# so without the reset the top items are off-screen and a tap for one of them
+# looks like a missing entry.
+__ui_open_drawer() {
+    __ui_screen_size
+    local x=$((UI_SCREEN_W / 6))
+    local y1=$((UI_SCREEN_H / 4))
+    local y2=$((UI_SCREEN_H * 4 / 5))
+    local i
+    # Tapping the hamburger while the drawer is already open lands on a menu
+    # row instead — the toolbar sits underneath the open drawer — which
+    # navigates somewhere unexpected and loses the rest of the test.
+    if ! __ui_drawer_is_open; then
+        __ui_tap_desc "Open navigation drawer" || return 1
+        # Wait for the slide-in to finish. Swipes sent mid-animation are
+        # swallowed by the DrawerLayout, so the menu would stay wherever the
+        # previous open left it.
+        for i in 1 2 3 4 5 6 7 8; do
+            __ui_drawer_is_open && break
+            sleep 0.5
+        done
+        # Fall back to the edge-swipe gesture — a tap can be dropped while the
+        # activity is still settling, and the swipe does not depend on the
+        # toolbar icon being wired up yet.
+        if ! __ui_drawer_is_open; then
+            __adb shell input swipe 5 $((UI_SCREEN_H / 2)) $((UI_SCREEN_W / 2)) $((UI_SCREEN_H / 2)) 300
+            sleep 1
+        fi
+        __ui_drawer_is_open || return 1
+    fi
+    for i in 1 2 3; do
+        __adb shell input swipe "$x" "$y1" "$x" "$y2" 250
+        sleep 0.6
+    done
+    __ui_dump
+}
+
+# Scroll the open drawer until `text` is visible. The generic scroll helpers
+# swipe at the middle of the display, which on a tablet lands in the content
+# area beside the drawer and moves the wrong list.
+# __ui_drawer_scroll_to text [max_swipes=8]
+__ui_drawer_scroll_to() {
+    local text="$1" max="${2:-8}" i
+    __ui_screen_size
+    local x=$((UI_SCREEN_W / 6))
+    local y1=$((UI_SCREEN_H * 4 / 5))
+    local y2=$((UI_SCREEN_H / 4))
+    for ((i = 0; i <= max; i++)); do
+        __ui_dump
+        __ui_texts | grep -qxF -- "$text" && return 0
+        __adb shell input swipe "$x" "$y1" "$x" "$y2" 250
+        sleep 0.4
+    done
+    return 1
+}
+
+# Assert a drawer entry exists, scrolling the drawer to reach it.
+__ui_drawer_assert() {
+    local text="$1"
+    if __ui_drawer_scroll_to "$text"; then
+        __pass "Drawer entry: \"$text\""
+    else
+        __fail "Drawer entry missing: \"$text\""
+    fi
+}
+
+# Open the drawer, tap one destination, assert the screen it opens, then come
+# back to the caller's screen.
+# __ui_drawer_visit item expected_text
+__ui_drawer_visit() {
+    local item="$1" expect="$2" attempt arrived=0
+    __info "Drawer → $item"
+    # Three attempts, each verifying the destination rather than just the tap.
+    # A drawer list that is still settling when the coordinates are read sends
+    # the tap to a neighbouring row, which lands on the wrong screen — an
+    # emulator timing property, not an app defect. Re-checking the destination
+    # inside the loop self-heals that, while a genuinely broken entry still
+    # fails loudly because no attempt ever reaches "$expect".
+    for attempt in 1 2 3; do
+        __ui_ensure_main
+        __ui_open_drawer || { sleep 2; continue; }
+        # Tap from the same dump the scroll ended on. Handing the label to
+        # __ui_tap instead would let it "search" by swiping the content area
+        # beside the drawer, which moves the wrong list and loses the entry.
+        __ui_drawer_scroll_to "$item" || { sleep 2; continue; }
+        local coords
+        coords=$(__ui_find_xy "$item") || true
+        [[ -n "$coords" ]] || { sleep 2; continue; }
+        __adb shell input tap $coords
+        sleep 1
+        if __ui_wait_contains "$expect" 15; then
+            arrived=1
+            break
+        fi
+        __debug "Drawer → $item: landed somewhere else, retrying"
+        __ui_press_back
+        sleep 2
+    done
+    if [[ $arrived -eq 1 ]]; then
+        __pass "Found: \"$expect\""
+    else
+        __fail "Drawer entry did not open \"$expect\": \"$item\""
+        __info "Screen:"; __ui_texts | sed 's/^/    /'
+    fi
+    __ui_screenshot "drawer-${item// /-}"
+    __ui_press_back
+    sleep 1
+}
+
+# Open one Settings sub-screen, assert a heading that belongs only to it, then
+# return to the Settings root.
+# __ui_settings_screen category expected_text
+__ui_settings_screen() {
+    local category="$1" expect="$2"
+    __info "Settings → $category"
+    __ui_tap "$category" 8
+    sleep 2
+    __ui_dismiss_anr
+    __ui_wait_for "$expect" 20
+    __ui_screenshot "settings-${category// /-}"
+    __ui_press_back
+    sleep 1
+    __ui_dismiss_anr
+}
+
 # ── assertions ────────────────────────────────────────────────────────────────
+
+# Wait up to N seconds for a substring to appear, reporting only through the
+# exit status. Callers that retry need to probe for a screen without each
+# unsuccessful probe printing a failure line of its own.
+__ui_wait_contains() {
+    local text="$1" timeout="${2:-8}" waited=0
+    while [[ $waited -lt $timeout ]]; do
+        __ui_dismiss_anr
+        __ui_texts | grep -qF -- "$text" && return 0
+        sleep 1
+        waited=$((waited+1))
+    done
+    return 1
+}
 
 # Wait up to N seconds for text to appear; assert it arrives.
 __ui_wait_for() {
@@ -517,7 +896,7 @@ __ui_wait_for() {
         __ui_dismiss_anr
         if __ui_texts | grep -qF -- "$text"; then
             __pass "Found: \"$text\""
-            return
+            return 0
         fi
         sleep 1
         waited=$((waited+1))
@@ -533,7 +912,7 @@ __ui_wait_gone() {
         __ui_dump
         if ! __ui_texts | grep -qF -- "$text"; then
             __pass "Gone: \"$text\""
-            return
+            return 0
         fi
         sleep 1
         waited=$((waited+1))
@@ -798,6 +1177,113 @@ __test_settings_opens() {
     __ui_assert_scroll  "Logging" 8
 }
 
+# ── test: main-tabs ──────────────────────────────────────────────────────────
+# Taps every tab on the home screen and asserts that tab's content actually
+# rendered. Regression guard for the tablet drawer bug: a drawer locked open
+# swallows every touch in the content area, so the tab strip goes dead while
+# the drawer's own items keep working — tapping a tab and asserting the
+# resulting content is the only check that catches it.
+__test_main_tabs() {
+    __ui_stop
+    __ui_launch "$PKG/.ui.activities.MainActivity"
+    __ui_wait_for "Hosts" 20
+
+    __ui_tap      "Frequent"
+    __ui_wait_for "Frequently Used Connections" 10
+    __ui_screenshot "tab-frequent"
+
+    __ui_tap      "Hosts"
+    __ui_wait_for "Connections" 10
+    __ui_assert_present "Search connections..."
+    __ui_screenshot "tab-hosts"
+
+    __ui_tap      "Identities"
+    __ui_wait_for "Host Identities" 10
+    __ui_screenshot "tab-identities"
+
+    __ui_tap      "Stats"
+    __ui_wait_for "Performance Monitor" 10
+    __ui_screenshot "tab-stats"
+
+    __ui_tap      "Infra"
+    __ui_wait_for "Containers" 10
+    __ui_screenshot "tab-infra"
+
+    # Infra's own sub-tabs — a second TabLayout nested in the tab content.
+    __ui_tap      "Hypervisors"
+    __ui_wait_for "Hypervisors" 10
+    __ui_tap      "Cloud"
+    __ui_wait_for "Cloud" 10
+    __ui_tap      "Containers"
+    __ui_wait_for "Containers" 10
+
+    # Back to the default tab so a following test starts from a known screen.
+    __ui_tap      "Hosts"
+    __ui_wait_for "Connections" 10
+    __ui_stop
+}
+
+# ── test: nav-drawer ─────────────────────────────────────────────────────────
+# Opens the drawer from the home screen, asserts every entry is listed, then
+# visits each navigational destination and confirms the screen it opens.
+# Diagnostics entries that only copy to the clipboard are asserted present but
+# not tapped — tapping them proves nothing on screen.
+__test_nav_drawer() {
+    __ui_stop
+    __ui_launch "$PKG/.ui.activities.MainActivity"
+    __ui_wait_for "Hosts" 20
+
+    __ui_open_drawer
+    __ui_wait_for "Quick Connect" 10
+    __ui_screenshot "drawer-open"
+    local item
+    for item in "Quick Connect" "VNC Hosts" "Snippets" "Groups" \
+                "Routing & Forwarding" "Cluster Commands" \
+                "Multi-host Dashboard" "Connection History" "Settings" \
+                "Copy App Log (Safe to Share)" "Copy Debug Logs (Developer)" \
+                "What's New" "Help" "About"; do
+        __ui_drawer_assert "$item"
+    done
+
+    # The drawer must close again — if it does not, every content tap below
+    # would be swallowed and the failure would look like "nothing works".
+    __ui_press_back
+    sleep 1
+    __ui_assert_absent "Multi-host Dashboard"
+
+    __ui_drawer_visit "VNC Hosts"             "VNC Hosts"
+    __ui_drawer_visit "Snippets"              "Snippets"
+    __ui_drawer_visit "Groups"                "Groups"
+    __ui_drawer_visit "Routing & Forwarding"  "Routing & Forwarding"
+    __ui_drawer_visit "Cluster Commands"      "Cluster Commands"
+    __ui_drawer_visit "Multi-host Dashboard"  "Dashboard"
+    __ui_drawer_visit "Connection History"    "History"
+    __ui_drawer_visit "Settings"              "Settings"
+    __ui_drawer_visit "What's New"            "What's New"
+    __ui_drawer_visit "Help"                  "Help"
+    __ui_drawer_visit "About"                 "About"
+    __ui_stop
+}
+
+# ── test: settings-screens ───────────────────────────────────────────────────
+# Opens every category on the Settings root and asserts the sub-screen renders
+# a preference of its own, then returns to the root.
+__test_settings_screens() {
+    __ui_stop
+    __ui_launch "$PKG/.ui.activities.SettingsActivity"
+    __ui_wait_for "Settings" 20
+
+    __ui_settings_screen "General"      "Appearance"
+    __ui_settings_screen "Terminal"     "Appearance"
+    __ui_settings_screen "App Security" "App lock"
+    __ui_settings_screen "Connection"   "Defaults for new connections"
+    __ui_settings_screen "Monitoring"   "Status & background activity"
+    __ui_settings_screen "Tasker"       "Tasker integration"
+    __ui_settings_screen "Logging"      "Application log"
+    __ui_settings_screen "Audit Log"    "Audit"
+    __ui_stop
+}
+
 __test_hypervisor_form() {
     __ui_stop
     __ui_launch "$PKG/.ui.activities.HypervisorEditActivity"
@@ -824,42 +1310,43 @@ __test_logging_navigation() {
     # Allow 15 seconds for inflation before attempting any assertions.
     sleep 15
     __ui_dismiss_anr
-    __ui_wait_for "Debug Logging" 30
+    __ui_wait_for "Debug logging" 30
 
-    # ── Debug Logging (use wait_for, not assert_present, because inflation may
+    # ── Debug logging (use wait_for, not assert_present, because inflation may
     # still be in progress on SwiftShader after the section header appears) ───
     __ui_wait_for "Enable Debug Logging" 15
     __ui_wait_for "Debug Log Level" 10
     __ui_wait_for "Log raw keystroke bytes (privacy risk)" 10
     # In the Debug Logging section near the top — assert before scrolling down.
-    __ui_assert_scroll "Test crash dialog"    12  # visible only in devel builds
+    # visible only in devel builds
+    __ui_assert_scroll "Test crash dialog"    12
 
-    # ── Application Log ───────────────────────────────────────────────────────
+    # ── Application log ───────────────────────────────────────────────────────
     # Use max=12 scrolls throughout — the preferences list is long and
     # SwiftShader renders slowly so each scroll iteration takes extra time.
-    __ui_assert_scroll "Application Log"      12
+    __ui_assert_scroll "Application log"      12
     __ui_assert_scroll "Always-on sanitized log" 12
 
-    # ── Host Logs ─────────────────────────────────────────────────────────────
-    __ui_assert_scroll "Host Logs"            12
+    # ── Host logs ─────────────────────────────────────────────────────────────
+    __ui_assert_scroll "Host logs"            12
     __ui_assert_scroll "Enable Host Logs"     12
     __ui_assert_scroll "One log file per connection" 12
     __ui_assert_scroll "Max Size per Host (MB)" 12
 
-    # ── View Logs ─────────────────────────────────────────────────────────────
-    __ui_assert_scroll "View Logs"            12
+    # ── View logs ─────────────────────────────────────────────────────────────
+    __ui_assert_scroll "View logs"            12
     __ui_assert_scroll "View Application Log" 12
     __ui_assert_scroll "View Debug Log"       12
     __ui_assert_scroll "View Host Logs"       12
     __ui_assert_scroll "View Audit Log"       12
 
-    # ── Log Management ────────────────────────────────────────────────────────
-    __ui_assert_scroll "Log Management"       12
+    # ── Log management ────────────────────────────────────────────────────────
+    __ui_assert_scroll "Log management"       12
     __ui_assert_scroll "Export Logs"          12
     __ui_assert_scroll "Clear Logs"           12
 
-    # ── Issue Reporting ───────────────────────────────────────────────────────
-    __ui_assert_scroll "Issue Reporting"      12
+    # ── Issue reporting ───────────────────────────────────────────────────────
+    __ui_assert_scroll "Issue reporting"      12
     __ui_assert_scroll "Paste Service"        12
     __ui_assert_scroll "MicroBin Server"      12
     __ui_assert_scroll "Lenpaste Server"      12
@@ -906,7 +1393,7 @@ while [[ $i -lt ${#TESTS[@]} ]]; do
             # A bare word with no leading -- that matches a known test name
             # (or "run") ends the inline block.
             if [[ "$next" != --* && "$next" != "run" ]]; then
-                fn_cand="test_${next//-/_}"
+                fn_cand="__test_${next//-/_}"
                 if declare -f "$fn_cand" >/dev/null 2>&1 || [[ "$next" == "all" ]]; then
                     break
                 fi
