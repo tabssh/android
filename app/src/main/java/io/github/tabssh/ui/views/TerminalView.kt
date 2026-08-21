@@ -9,10 +9,12 @@ import android.util.AttributeSet
 import android.view.*
 import android.view.inputmethod.*
 import android.widget.OverScroller
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.annotation.RequiresApi
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
+import io.github.tabssh.R
 import io.github.tabssh.terminal.emulator.TerminalEmulator
 import io.github.tabssh.terminal.emulator.TerminalBuffer
 import io.github.tabssh.terminal.emulator.TerminalListener
@@ -88,7 +90,7 @@ class TerminalView @JvmOverloads constructor(
     // backgrounds; applyTheme() updates it to the theme's primary color when
     // one is set.
     private val urlUnderlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF4FC3F7.toInt()
+        color = ContextCompat.getColor(context, R.color.terminal_link)
         style = Paint.Style.FILL
     }
 
@@ -1053,7 +1055,7 @@ class TerminalView @JvmOverloads constructor(
         textPaint.color = theme.foreground
 
         // URL underline: use theme primary when available, otherwise the default link-blue.
-        urlUnderlinePaint.color = theme.primary ?: 0xFF4FC3F7.toInt()
+        urlUnderlinePaint.color = theme.primary ?: ContextCompat.getColor(context, R.color.terminal_link)
 
         // Update terminal buffer colors
         terminalBuffer?.let { buffer ->
@@ -1388,7 +1390,7 @@ class TerminalView @JvmOverloads constructor(
             // Visual bell overlay — XOR-ish full-screen flash via translucent
             // accent. Cheap; auto-clears in 120ms via postDelayed.
             if (visualBellActive) {
-                canvas.drawColor(0x40FFFFFF.toInt())
+                canvas.drawColor(ContextCompat.getColor(context, R.color.terminal_bell_flash))
             }
             // Scrollback thumb overlay — last so it sits above all content.
             drawScrollThumb(canvas)

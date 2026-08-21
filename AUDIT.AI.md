@@ -4,9 +4,6 @@ Started: 2026-08-13
 
 ## Pass 2: Code Quality
 - [ ] 40 app classes fully removed by R8 (see usage.txt) — unwired features vs genuine dead code triage
-- [ ] ui/ hardcoded colors — TerminalView.kt:91,1056 `0xFF4FC3F7` — re-verified 2026-08-21: the
-      2026-08-19 UI/UX + Settings pass already removed the hardcoded Toast strings (SettingsActivity
-      and other files now clean); only the two TerminalView.kt hardcoded color literals remain
 
 ## Pass 6: Code Flow Trace
 - [ ] Verify the Fragment keep rule seeds all 8 settings fragments and that @Serializable classes outside the explicitly-kept packages survive R8 (needs a fresh assembleDevel usage.txt/seeds.txt)

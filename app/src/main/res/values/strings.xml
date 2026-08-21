@@ -1983,6 +1983,12 @@
     <string name="group_mgmt_empty_action">Create Group</string>
     <string name="group_mgmt_fab_content_description">Create group</string>
 
+    <!-- Group management: edit group dialog -->
+    <string name="group_mgmt_edit_name_hint">Group Name</string>
+    <string name="group_mgmt_edit_color_hint">Color (e.g. #FF5722)</string>
+    <string name="group_mgmt_edit_icon_hint">Icon (emoji or name)</string>
+    <string name="group_mgmt_edit_icon_tip">Tip: Use emojis for colorful icons! 🌐 🖥️ ☁️ 🔒</string>
+
     <!-- Snippet manager -->
     <string name="snippet_mgr_header_subtitle">Save and reuse frequently typed commands</string>
     <string name="snippet_mgr_empty_icon">💾</string>

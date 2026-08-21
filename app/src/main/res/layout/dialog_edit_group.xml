@@ -10,12 +10,12 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="@dimen/space_md">
 
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Group Name"
+            android:hint="@string/group_mgmt_edit_name_hint"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -30,8 +30,8 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:hint="Color (e.g. #FF5722)"
+            android:layout_marginTop="@dimen/space_sm"
+            android:hint="@string/group_mgmt_edit_color_hint"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -46,8 +46,8 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:hint="Icon (emoji or name)"
+            android:layout_marginTop="@dimen/space_sm"
+            android:hint="@string/group_mgmt_edit_icon_hint"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -62,8 +62,8 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="Tip: Use emojis for colorful icons! 🌐 🖥️ ☁️ 🔒"
+            android:layout_marginTop="@dimen/space_md"
+            android:text="@string/group_mgmt_edit_icon_tip"
             android:textSize="12sp"
             android:textColor="?android:attr/textColorSecondary" />
 
