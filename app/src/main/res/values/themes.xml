@@ -183,6 +183,17 @@
         <item name="navigationIconTint">@color/white</item>
     </style>
 
+    <!-- Section header inside a screen's content, not an app bar. These sit
+         directly below the real app bar, so inheriting the primary background
+         from toolbarStyle would merge the two into one oversized colour block.
+         Kept on the surface colour so the header reads as part of the content. -->
+    <style name="Widget.TabSSH.Toolbar.Section" parent="Widget.Material3.Toolbar">
+        <item name="android:background">?attr/colorSurface</item>
+        <item name="titleTextColor">?attr/colorOnSurface</item>
+        <item name="subtitleTextColor">?attr/colorOnSurfaceVariant</item>
+        <item name="navigationIconTint">?attr/colorOnSurface</item>
+    </style>
+
     <!-- Compact toolbar title -->
     <style name="TextAppearance.TabSSH.Toolbar.Title" parent="TextAppearance.Material3.TitleMedium">
         <item name="android:textSize">16sp</item>

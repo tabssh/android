@@ -1,8 +1,10 @@
 package io.github.tabssh.ui.adapters
 
+import android.content.Context
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.viewpager2.adapter.FragmentStateAdapter
+import io.github.tabssh.R
 import io.github.tabssh.ui.fragments.*
 
 /**
@@ -22,12 +24,14 @@ class MainPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activi
     // now "Infra" — it combines Hypervisors and Cloud Accounts in two
     // sub-tabs so both live inside one main-tab slot.
     private val tabTitles = listOf(
-        "Frequent",
-        "Hosts",
-        "Identities",
-        "Stats",
-        "Infra"
+        R.string.main_tab_frequent,
+        R.string.main_tab_hosts,
+        R.string.main_tab_identities,
+        R.string.main_tab_stats,
+        R.string.main_tab_infra
     )
+
+    private val context: Context = activity
 
     override fun getItemCount(): Int = tabTitles.size
 
@@ -40,5 +44,6 @@ class MainPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activi
         else -> error("Invalid tab position $position")
     }
 
-    fun getTabTitle(position: Int): String = tabTitles.getOrElse(position) { "" }
+    fun getTabTitle(position: Int): String =
+        tabTitles.getOrNull(position)?.let(context::getString) ?: ""
 }

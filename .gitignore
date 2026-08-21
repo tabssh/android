@@ -175,6 +175,10 @@ keystore.jks
 mosh/out/
 app/src/main/jniLibs/*/libmosh-client.so
 
+# Tor native binaries — fetched from GH releases at build time
+# (see scripts/fetch-tor-binaries.sh + .github/workflows/tor-binaries.yml)
+app/src/main/jniLibs/*/libtor.so
+
 # SPICE native library — cross-compiled by spice-libs.yml, fetched from GH
 # releases at build time (see scripts/fetch-spice-libs.sh + spice/Dockerfile).
 spice/out/

@@ -46,7 +46,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Host Identities"
+                        android:text="@string/identity_section_title"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:textColor="?attr/colorOnSurface" />
@@ -54,7 +54,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Reusable SSH credentials for connecting to hosts"
+                        android:text="@string/identity_section_subtitle"
                         android:textSize="12sp"
                         android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -65,7 +65,7 @@
                     style="@style/Widget.Material3.Button.IconButton"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
-                    android:contentDescription="Add host identity"
+                    android:contentDescription="@string/identity_add_content_description"
                     app:icon="@android:drawable/ic_input_add" />
 
             </LinearLayout>
@@ -85,7 +85,7 @@
                 android:id="@+id/text_identities_empty"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="No host identities yet — tap + to create one"
+                android:text="@string/identity_empty_message"
                 android:textSize="13sp"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:gravity="center"
@@ -127,7 +127,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="SSH Keys"
+                        android:text="@string/identity_ssh_keys_title"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:textColor="?attr/colorOnSurface" />
@@ -135,7 +135,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Private keys used for public-key authentication"
+                        android:text="@string/identity_ssh_keys_subtitle"
                         android:textSize="12sp"
                         android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -146,7 +146,7 @@
                     style="@style/Widget.Material3.Button.IconButton"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
-                    android:contentDescription="Import or generate SSH key"
+                    android:contentDescription="@string/identity_ssh_keys_add_content_description"
                     app:icon="@android:drawable/ic_input_add" />
 
             </LinearLayout>
@@ -166,7 +166,7 @@
                 android:id="@+id/text_ssh_keys_empty"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="No SSH keys yet — tap + to import or generate one"
+                android:text="@string/identity_ssh_keys_empty_message"
                 android:textSize="13sp"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:gravity="center"
@@ -208,7 +208,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="VM Credentials"
+                        android:text="@string/identity_vm_credentials_title"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:textColor="?attr/colorOnSurface" />
@@ -216,7 +216,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Login credentials for Proxmox, VMware, and XCP-ng"
+                        android:text="@string/identity_vm_credentials_subtitle"
                         android:textSize="12sp"
                         android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -227,7 +227,7 @@
                     style="@style/Widget.Material3.Button.IconButton"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
-                    android:contentDescription="Add VM credential"
+                    android:contentDescription="@string/identity_vm_credentials_add_content_description"
                     app:icon="@android:drawable/ic_input_add" />
 
             </LinearLayout>
@@ -247,7 +247,7 @@
                 android:id="@+id/text_virt_identities_empty"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="No VM credentials yet — tap + to create one"
+                android:text="@string/identity_vm_credentials_empty_message"
                 android:textSize="13sp"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:gravity="center"
@@ -289,7 +289,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="VNC Identities"
+                        android:text="@string/identity_vnc_title"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:textColor="?attr/colorOnSurface" />
@@ -297,7 +297,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Credentials for direct VNC and VeNCrypt connections"
+                        android:text="@string/identity_vnc_subtitle"
                         android:textSize="12sp"
                         android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -308,7 +308,7 @@
                     style="@style/Widget.Material3.Button.IconButton"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
-                    android:contentDescription="Add VNC identity"
+                    android:contentDescription="@string/identity_vnc_add_content_description"
                     app:icon="@android:drawable/ic_input_add" />
 
             </LinearLayout>
@@ -328,7 +328,7 @@
                 android:id="@+id/text_vnc_identities_empty"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="No VNC identities yet — tap + to create one"
+                android:text="@string/identity_vnc_empty_message"
                 android:textSize="13sp"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:gravity="center"

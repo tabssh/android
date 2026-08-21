@@ -1,7 +1,6 @@
 package io.github.tabssh.ui.activities
 
 import android.content.Intent
-import android.graphics.Color
 import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
@@ -55,14 +54,6 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
 
     protected open val drawerMode: DrawerMode = DrawerMode.FULL
 
-    /**
-     * True on screens wide enough (sw720dp) to keep the drawer on screen as a
-     * permanent sidebar instead of an off-canvas overlay. Session screens stay
-     * on the overlay so the terminal keeps its full width.
-     */
-    private val usesPermanentSidebar: Boolean
-        get() = resources.getBoolean(R.bool.is_tablet) && drawerMode == DrawerMode.FULL
-
     private var drawerLayout: DrawerLayout? = null
     private var navigationView: NavigationView? = null
     private var appBarToolbar: Toolbar? = null
@@ -114,9 +105,7 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
 
         scaffold.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
             override fun onDrawerOpened(drawerView: View) {
-                // A permanent sidebar is always "open", so back must keep its
-                // normal meaning there rather than trying to close it.
-                drawerBackCallback.isEnabled = !usesPermanentSidebar
+                drawerBackCallback.isEnabled = true
             }
 
             override fun onDrawerClosed(drawerView: View) {
@@ -124,16 +113,6 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
                 applyDrawerMode()
             }
         })
-        if (usesPermanentSidebar) {
-            // DrawerLayout dims the content in proportion to the drawer's slide
-            // offset, so a drawer that is always open would dim the screen
-            // permanently; the sidebar is chrome, not a modal surface.
-            scaffold.setScrimColor(Color.TRANSPARENT)
-            val contentParams = container.layoutParams as DrawerLayout.LayoutParams
-            contentParams.marginStart = resources.getDimensionPixelSize(R.dimen.nav_drawer_width)
-            container.layoutParams = contentParams
-            scaffold.openDrawer(GravityCompat.START)
-        }
         applyDrawerMode()
     }
 
@@ -158,18 +137,15 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
 
     private fun applyNavigationAffordance() {
         val toolbar = appBarToolbar ?: return
-        // Nothing to toggle when the sidebar is already on screen.
-        if (usesPermanentSidebar) return
         toolbar.setNavigationIcon(R.drawable.ic_menu)
         toolbar.navigationContentDescription = getString(R.string.navigation_drawer_open)
         toolbar.setNavigationOnClickListener { openNavigationDrawer() }
     }
 
     private fun applyDrawerMode() {
-        val lockMode = when {
-            usesPermanentSidebar -> DrawerLayout.LOCK_MODE_LOCKED_OPEN
-            drawerMode == DrawerMode.FULL -> DrawerLayout.LOCK_MODE_UNLOCKED
-            else -> DrawerLayout.LOCK_MODE_LOCKED_CLOSED
+        val lockMode = when (drawerMode) {
+            DrawerMode.FULL -> DrawerLayout.LOCK_MODE_UNLOCKED
+            DrawerMode.TOOLBAR_ONLY -> DrawerLayout.LOCK_MODE_LOCKED_CLOSED
         }
         drawerLayout?.setDrawerLockMode(lockMode, GravityCompat.START)
     }

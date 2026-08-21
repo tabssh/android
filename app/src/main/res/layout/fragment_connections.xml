@@ -21,6 +21,7 @@
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             android:elevation="4dp"
+            style="@style/Widget.TabSSH.Toolbar.Section"
             app:title="@string/connections_tab_title" />
 
         <!-- Search Bar -->

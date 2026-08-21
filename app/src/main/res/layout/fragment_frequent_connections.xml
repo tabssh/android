@@ -30,7 +30,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Frequently Used Connections"
+                android:text="@string/frequent_connections_title"
                 android:textSize="20sp"
                 android:textStyle="bold"
                 android:textColor="?attr/colorOnSurface" />
@@ -40,7 +40,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Top 10 connections by activity score (usage × recency)"
+            android:text="@string/frequent_connections_subtitle"
             android:textSize="14sp"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:paddingBottom="@dimen/space_md" />
@@ -73,7 +73,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="No Frequent Connections"
+                android:text="@string/frequent_connections_empty_title"
                 android:textSize="18sp"
                 android:textStyle="bold"
                 android:gravity="center"
@@ -83,7 +83,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Your most-used connections will appear here.\nConnect to servers to build your activity history."
+                android:text="@string/frequent_connections_empty_message"
                 android:textSize="14sp"
                 android:gravity="center"
                 android:textColor="?attr/colorOnSurfaceVariant" />

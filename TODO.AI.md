@@ -158,6 +158,28 @@ B8. Incus/LXC/LXD full parity where the concept exists — instances
    Until appealed/re-classified, "Install anyway" + verifying
    checksums-dev.sha256 is the workaround.
 
+## Fixed — 2026-08-20 "nothing is clickable" UI regression
+
+Cause: `TabSSHActivity` put the drawer in
+`DrawerLayout.LOCK_MODE_LOCKED_OPEN` whenever a `values-sw720dp`
+`is_tablet` bool resolved true. A locked-open drawer keeps a non-zero
+scrim opacity even with `setScrimColor(Color.TRANSPARENT)`, so
+`onInterceptTouchEvent` swallowed every touch in the content area —
+tabs, list rows and buttons all stopped responding. The Galaxy Tab A9
+(SM-X230) hit `sw720dp`, which is why it looked device-specific.
+
+Fix: the locked-open branch, both `bools.xml` files and the permanent-
+sidebar affordance are gone; `applyDrawerMode()` now only chooses
+between `LOCK_MODE_UNLOCKED` and `LOCK_MODE_LOCKED_CLOSED`. In-content
+section headers got `Widget.TabSSH.Toolbar.Section` so the global
+`toolbarStyle` no longer paints them as app bars.
+
+Verified on emulators (not a compile-only pass): `scripts/ui-test.sh`
+suite green on `TabSSH_phone` (1080×2400 @420dpi) and `TabSSH_tablet`
+(2560×1600 @320dpi) — all 5 main tabs, the 3 Infra sub-tabs, all 14
+drawer entries opened, the drawer confirmed to close after navigation,
+all 8 Settings sub-screens, and the Logging screen.
+
 ## Needs user re-test — 2026-08-14 regressions in devel-3d12d05e
 
 Re-triaged against HEAD on 2026-08-20. All four were reported on

@@ -206,7 +206,17 @@
 
     <!-- Performance Monitor -->
     <string name="select_connection">Select Connection</string>
-    
+
+    <!-- Performance fragment (fragment_performance.xml) -->
+    <string name="perf_monitor_title">📊 Performance Monitor</string>
+    <string name="perf_cpu_usage_title">CPU Usage</string>
+    <string name="perf_memory_title">Memory</string>
+    <string name="perf_disk_title">Disk</string>
+    <string name="perf_network_title">Network</string>
+    <string name="perf_load_average_title">Load Average</string>
+    <string name="perf_empty_state_message">Select a connection to monitor</string>
+    <string name="perf_fab_control_content_description">Start/Stop monitoring</string>
+
     <!-- Widgets -->
     <string name="widget_1x1_description">Quick connect icon</string>
     <string name="widget_2x1_description">Connection info with connect button</string>
@@ -432,6 +442,13 @@
     <string name="conn_route_direct">Direct (no proxy or jump)</string>
     <string name="conn_route_global_default">Use global default</string>
     <string name="conn_route_add_new">+ Add new route…</string>
+
+    <!-- Main tabs. Kept short: five labels have to fit one phone-width row. -->
+    <string name="main_tab_frequent">Frequent</string>
+    <string name="main_tab_hosts">Hosts</string>
+    <string name="main_tab_identities">Identities</string>
+    <string name="main_tab_stats">Stats</string>
+    <string name="main_tab_infra">Infra</string>
 
     <!-- Infra tab (Containers / Hypervisors / Cloud sub-tabs) -->
     <string name="infra_tab_hypervisors">Hypervisors</string>
@@ -964,6 +981,30 @@
     <string name="identity_import_alias_hint">SSH alias (e.g. id_ed25519)</string>
     <string name="identity_import_alias_helper">Matches IdentityFile in ~/.ssh/config</string>
     <string name="identity_import_passphrase_hint">Enter passphrase</string>
+
+    <!-- Identities fragment (fragment_identities.xml) -->
+    <string name="identity_section_title">Host Identities</string>
+    <string name="identity_section_subtitle">Reusable SSH credentials for connecting to hosts</string>
+    <string name="identity_add_content_description">Add host identity</string>
+    <string name="identity_empty_message">No host identities yet — tap + to create one</string>
+    <string name="identity_ssh_keys_title">SSH Keys</string>
+    <string name="identity_ssh_keys_subtitle">Private keys used for public-key authentication</string>
+    <string name="identity_ssh_keys_add_content_description">Import or generate SSH key</string>
+    <string name="identity_ssh_keys_empty_message">No SSH keys yet — tap + to import or generate one</string>
+    <string name="identity_vm_credentials_title">VM Credentials</string>
+    <string name="identity_vm_credentials_subtitle">Login credentials for Proxmox, VMware, and XCP-ng</string>
+    <string name="identity_vm_credentials_add_content_description">Add VM credential</string>
+    <string name="identity_vm_credentials_empty_message">No VM credentials yet — tap + to create one</string>
+    <string name="identity_vnc_title">VNC Identities</string>
+    <string name="identity_vnc_subtitle">Credentials for direct VNC and VeNCrypt connections</string>
+    <string name="identity_vnc_add_content_description">Add VNC identity</string>
+    <string name="identity_vnc_empty_message">No VNC identities yet — tap + to create one</string>
+
+    <!-- Frequent connections fragment (fragment_frequent_connections.xml) -->
+    <string name="frequent_connections_title">Frequently Used Connections</string>
+    <string name="frequent_connections_subtitle">Top 10 connections by activity score (usage × recency)</string>
+    <string name="frequent_connections_empty_title">No Frequent Connections</string>
+    <string name="frequent_connections_empty_message">Your most-used connections will appear here.\nConnect to servers to build your activity history.</string>
 
     <!-- SFTP activity dialogs -->
     <string name="sftp_create_folder_hint">Folder name</string>
