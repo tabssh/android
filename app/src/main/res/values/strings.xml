@@ -50,6 +50,16 @@
     <string name="paste">Paste</string>
     <string name="copy">Copy</string>
     <string name="select_all">Select All</string>
+    <string name="text_import_hint">Paste text here</string>
+    <string name="text_import_clipboard_empty">Clipboard is empty or contains no text</string>
+    <string name="text_import_empty_error">Paste some text first</string>
+    <string name="text_export_copied_toast">Copied to clipboard</string>
+    <string name="import_source_chooser_title">Import from</string>
+    <string name="import_source_file">File</string>
+    <string name="import_source_paste">Paste text</string>
+    <string name="export_target_chooser_title">Export as</string>
+    <string name="export_target_file">Save to file</string>
+    <string name="export_target_text">View &amp; copy</string>
     <string name="open_files">Files</string>
 
     <!-- Accessibility strings -->
@@ -1051,6 +1061,7 @@
     <string name="import_export_bulk_found_connections">Found %1$d connection(s).\n\n%2$s%3$s%4$s</string>
     <string name="import_export_ssh_config_import_failed">Failed to import SSH config: %1$s</string>
     <string name="import_export_import_ssh_config_title">Import SSH Config</string>
+    <string name="import_export_export_ssh_config_title">Export SSH Config</string>
     <string name="import_export_found_hosts">Found %1$d host(s)</string>
     <string name="import_export_in_groups">" in %1$d group(s)"</string>
     <string name="import_export_groups_to_create">Groups to create:\n</string>

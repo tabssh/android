@@ -104,11 +104,23 @@ class VpsTrackerActivity : TabSSHActivity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.action_import -> {
-                importLauncher.launch(arrayOf("text/markdown", "text/plain", "*/*"))
+                io.github.tabssh.ui.dialogs.ImportExportChooserDialog.showImportSource(
+                    this,
+                    onFile = { importLauncher.launch(arrayOf("text/markdown", "text/plain", "*/*")) },
+                    onPaste = {
+                        io.github.tabssh.ui.dialogs.TextImportDialog.show(
+                            this, getString(R.string.nav_item_vps_tracker)
+                        ) { text -> importText(text) }
+                    }
+                )
                 true
             }
             R.id.action_export -> {
-                exportLauncher.launch("VPS.md")
+                io.github.tabssh.ui.dialogs.ImportExportChooserDialog.showExportTarget(
+                    this,
+                    onFile = { exportLauncher.launch("VPS.md") },
+                    onText = { showExportText() }
+                )
                 true
             }
             else -> super.onOptionsItemSelected(item)
@@ -133,10 +145,22 @@ class VpsTrackerActivity : TabSSHActivity() {
 
     private fun importFrom(uri: Uri) {
         lifecycleScope.launch {
-            try {
-                val text = withContext(Dispatchers.IO) {
+            val text = withContext(Dispatchers.IO) {
+                try {
                     contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                } ?: return@launch
+                } catch (e: Exception) {
+                    Logger.e(TAG, "VPS markdown read failed", e)
+                    null
+                }
+            } ?: return@launch
+            importText(text)
+        }
+    }
+
+    /** Parse [text] (from a file or pasted directly) and merge into the database by (tenant, hostname). */
+    private fun importText(text: String) {
+        lifecycleScope.launch {
+            try {
                 val result = VpsMarkdownImportExport.parse(text)
                 var added = 0
                 var updated = 0
@@ -186,6 +210,27 @@ class VpsTrackerActivity : TabSSHActivity() {
                 throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "VPS markdown export failed", e)
+                if (!isAlive) return@launch
+                Toast.makeText(this@VpsTrackerActivity, getString(R.string.vps_tracker_export_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    /** Build the Markdown export and show it as a themed, copyable text block instead of a file. */
+    private fun showExportText() {
+        lifecycleScope.launch {
+            try {
+                val markdown = withContext(Dispatchers.IO) {
+                    VpsMarkdownImportExport.export(app.database.vpsHostDao().getAllList())
+                }
+                if (!isAlive) return@launch
+                io.github.tabssh.ui.dialogs.TextExportDialog.show(
+                    this@VpsTrackerActivity, getString(R.string.nav_item_vps_tracker), markdown
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.e(TAG, "VPS markdown export (text) failed", e)
                 if (!isAlive) return@launch
                 Toast.makeText(this@VpsTrackerActivity, getString(R.string.vps_tracker_export_failed_fmt, e.message), Toast.LENGTH_LONG).show()
             }

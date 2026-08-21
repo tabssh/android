@@ -105,11 +105,23 @@ class DomainTrackerActivity : TabSSHActivity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.action_import -> {
-                importLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "*/*"))
+                io.github.tabssh.ui.dialogs.ImportExportChooserDialog.showImportSource(
+                    this,
+                    onFile = { importLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "*/*")) },
+                    onPaste = {
+                        io.github.tabssh.ui.dialogs.TextImportDialog.show(
+                            this, getString(R.string.nav_item_domain_tracker)
+                        ) { text -> importText(text) }
+                    }
+                )
                 true
             }
             R.id.action_export -> {
-                exportLauncher.launch("Domain_List.csv")
+                io.github.tabssh.ui.dialogs.ImportExportChooserDialog.showExportTarget(
+                    this,
+                    onFile = { exportLauncher.launch("Domain_List.csv") },
+                    onText = { showExportText() }
+                )
                 true
             }
             else -> super.onOptionsItemSelected(item)
@@ -134,10 +146,22 @@ class DomainTrackerActivity : TabSSHActivity() {
 
     private fun importFrom(uri: Uri) {
         lifecycleScope.launch {
-            try {
-                val text = withContext(Dispatchers.IO) {
+            val text = withContext(Dispatchers.IO) {
+                try {
                     contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                } ?: return@launch
+                } catch (e: Exception) {
+                    Logger.e(TAG, "Domain CSV read failed", e)
+                    null
+                }
+            } ?: return@launch
+            importText(text)
+        }
+    }
+
+    /** Parse [text] (from a file or pasted directly) and merge into the database by domain name. */
+    private fun importText(text: String) {
+        lifecycleScope.launch {
+            try {
                 val result = DomainCsvImportExport.parse(text)
                 var added = 0
                 var updated = 0
@@ -188,6 +212,27 @@ class DomainTrackerActivity : TabSSHActivity() {
                 throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Domain CSV export failed", e)
+                if (!isAlive) return@launch
+                Toast.makeText(this@DomainTrackerActivity, getString(R.string.domain_tracker_export_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    /** Build the CSV export and show it as a themed, copyable text block instead of a file. */
+    private fun showExportText() {
+        lifecycleScope.launch {
+            try {
+                val csv = withContext(Dispatchers.IO) {
+                    DomainCsvImportExport.export(app.database.domainDao().getAllList())
+                }
+                if (!isAlive) return@launch
+                io.github.tabssh.ui.dialogs.TextExportDialog.show(
+                    this@DomainTrackerActivity, getString(R.string.nav_item_domain_tracker), csv
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.e(TAG, "Domain CSV export (text) failed", e)
                 if (!isAlive) return@launch
                 Toast.makeText(this@DomainTrackerActivity, getString(R.string.domain_tracker_export_failed_fmt, e.message), Toast.LENGTH_LONG).show()
             }

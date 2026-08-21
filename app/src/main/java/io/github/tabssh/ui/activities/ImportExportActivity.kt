@@ -82,15 +82,39 @@ class ImportExportActivity : TabSSHActivity() {
 
         // Wire card click listeners
         findViewById<com.google.android.material.card.MaterialCardView>(R.id.card_import_ssh)
-            .setOnClickListener { importSSHConfigLauncher.launch(arrayOf("*/*")) }
+            .setOnClickListener {
+                io.github.tabssh.ui.dialogs.ImportExportChooserDialog.showImportSource(
+                    this,
+                    onFile = { importSSHConfigLauncher.launch(arrayOf("*/*")) },
+                    onPaste = {
+                        io.github.tabssh.ui.dialogs.TextImportDialog.show(
+                            this, getString(R.string.import_export_import_ssh_config_title)
+                        ) { text -> importSSHConfigText(text) }
+                    }
+                )
+            }
 
         findViewById<com.google.android.material.card.MaterialCardView>(R.id.card_export_ssh)
             .setOnClickListener {
-                exportSshConfigLauncher.launch("ssh_config_${System.currentTimeMillis() / 1000}.txt")
+                io.github.tabssh.ui.dialogs.ImportExportChooserDialog.showExportTarget(
+                    this,
+                    onFile = { exportSshConfigLauncher.launch("ssh_config_${System.currentTimeMillis() / 1000}.txt") },
+                    onText = { showSshConfigExportText() }
+                )
             }
 
         findViewById<com.google.android.material.card.MaterialCardView>(R.id.card_bulk_import)
-            .setOnClickListener { bulkImportLauncher.launch(arrayOf("*/*")) }
+            .setOnClickListener {
+                io.github.tabssh.ui.dialogs.ImportExportChooserDialog.showImportSource(
+                    this,
+                    onFile = { bulkImportLauncher.launch(arrayOf("*/*")) },
+                    onPaste = {
+                        io.github.tabssh.ui.dialogs.TextImportDialog.show(
+                            this, getString(R.string.import_export_bulk_import_title)
+                        ) { text -> bulkImportText(text) }
+                    }
+                )
+            }
 
         findViewById<com.google.android.material.card.MaterialCardView>(R.id.card_pair_qr)
             .setOnClickListener {
@@ -299,16 +323,64 @@ class ImportExportActivity : TabSSHActivity() {
     }
 
     /**
+     * Build the OpenSSH config export and show it as a themed, copyable text
+     * block instead of a file. Passwords are never written — they live in
+     * the Android Keystore.
+     */
+    private fun showSshConfigExportText() {
+        lifecycleScope.launch {
+            try {
+                val connections = withContext(Dispatchers.IO) {
+                    app.database.connectionDao().getAllConnectionsList()
+                }
+                val groups = withContext(Dispatchers.IO) {
+                    try { app.database.connectionGroupDao().getAllGroups().first() } catch (_: Exception) { emptyList() }
+                }
+                val text = io.github.tabssh.ssh.config.SSHConfigExporter.export(connections, groups)
+                io.github.tabssh.ui.dialogs.TextExportDialog.show(
+                    this@ImportExportActivity, getString(R.string.import_export_export_ssh_config_title), text
+                )
+            } catch (e: Exception) {
+                Logger.e("ImportExportActivity", "SSH config export (text) failed", e)
+                Toast.makeText(
+                    this@ImportExportActivity,
+                    getString(R.string.import_export_export_failed, e.message),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    /**
      * Parse a bulk import file (CSV / JSON / PuTTY .reg / Terraform) and show
      * a preview/confirm dialog before inserting into the database.
      */
     private fun bulkImportFromUri(uri: android.net.Uri) {
         lifecycleScope.launch {
-            try {
-                val text = withContext(Dispatchers.IO) {
+            val text = withContext(Dispatchers.IO) {
+                try {
                     contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                } ?: throw Exception(getString(R.string.import_export_could_not_open_file))
+                } catch (e: Exception) {
+                    Logger.e("ImportExportActivity", "Bulk import read failed", e)
+                    null
+                }
+            }
+            if (text == null) {
+                Toast.makeText(
+                    this@ImportExportActivity,
+                    getString(R.string.import_export_bulk_import_failed, getString(R.string.import_export_could_not_open_file)),
+                    Toast.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+            bulkImportText(text)
+        }
+    }
 
+    /** Parse bulk-import [text] (CSV / JSON / PuTTY .reg / Terraform), from a file or pasted directly. */
+    private fun bulkImportText(text: String) {
+        lifecycleScope.launch {
+            try {
                 val result = io.github.tabssh.ssh.config.BulkImportParser.parse(text)
 
                 if (result.hosts.isEmpty()) {
@@ -371,14 +443,34 @@ class ImportExportActivity : TabSSHActivity() {
      */
     private fun importSSHConfigFromUri(uri: android.net.Uri) {
         lifecycleScope.launch {
+            val configContent = withContext(Dispatchers.IO) {
+                // Chain `?.bufferedReader()?.use {}` so the underlying SAF
+                // ParcelFileDescriptor closes even if the reader exhausts
+                // the stream — assigning to a `val` first leaked the fd.
+                try {
+                    contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                } catch (e: Exception) {
+                    Logger.e("ImportExportActivity", "SSH config read failed", e)
+                    null
+                }
+            }
+            if (configContent == null) {
+                Toast.makeText(
+                    this@ImportExportActivity,
+                    getString(R.string.import_export_ssh_config_import_failed, getString(R.string.import_export_could_not_open_file)),
+                    Toast.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+            importSSHConfigText(configContent)
+        }
+    }
+
+    /** Parse OpenSSH config [configContent] (from a file or pasted directly) and show a summary/confirm dialog. */
+    private fun importSSHConfigText(configContent: String) {
+        lifecycleScope.launch {
             try {
                 val profiles = withContext(Dispatchers.IO) {
-                    // Chain `?.bufferedReader()?.use {}` so the underlying SAF
-                    // ParcelFileDescriptor closes even if the reader exhausts
-                    // the stream — assigning to a `val` first leaked the fd.
-                    val configContent = contentResolver.openInputStream(uri)
-                        ?.bufferedReader()?.use { it.readText() }
-                        ?: throw Exception(getString(R.string.import_export_could_not_open_file))
                     val raw = io.github.tabssh.ssh.config.SSHConfigParser().parseConfig(configContent)
 
                     // Attempt to resolve each profile's IdentityFile path to a
