@@ -142,7 +142,10 @@ android {
         // below fails the build by name before any signing task runs, instead
         // of silently signing with a known password.
         release {
-            storeFile file("../keystore.jks")
+            // KEYSTORE_PATH lets a local or CI build point at a throwaway
+            // keystore (emulator UI runs, reproducibility checks) without
+            // moving or overwriting the real one sitting at the repo root.
+            storeFile file(System.getenv("KEYSTORE_PATH") ?: "../keystore.jks")
             storePassword System.getenv("KEYSTORE_PASSWORD")
             keyAlias System.getenv("KEYSTORE_ALIAS") ?: "tabssh"
             // A keystore created with -storepass and no separate -keypass

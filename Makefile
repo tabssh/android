@@ -32,7 +32,8 @@ DOCKER_RUN = docker run --rm \
 	--memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) \
 	-v $(PWD):/workspace \
 	-w /workspace \
-	-e GRADLE_USER_HOME=/workspace/.gradle
+	-e GRADLE_USER_HOME=/workspace/.gradle \
+	-e KEYSTORE_PATH -e KEYSTORE_PASSWORD -e KEY_PASSWORD -e KEYSTORE_ALIAS
 
 # Seed the Gradle wrapper distribution from the image's pre-warmed cache
 GRADLE_SEED = [ -d /workspace/.gradle/wrapper ] || { mkdir -p /workspace/.gradle && cp -a /root/.gradle/wrapper /workspace/.gradle/ 2>/dev/null || true; }
