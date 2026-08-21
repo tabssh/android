@@ -61,6 +61,8 @@ object TombstoneRecorder {
     const val COMPOSE_STACK = "compose_stack"
     const val SINGLE_CONTAINER_CONFIG = "single_container_config"
     const val CONTAINER_AUTO_UPDATE_POLICY = "container_auto_update_policy"
+    const val DOMAIN = "domain"
+    const val VPS_HOST = "vps_host"
 
     /**
      * Keystore/KeyStorage secrets, keyed by their sync wire alias. A removed

@@ -44,6 +44,7 @@ object NotificationHelper {
     private const val NOTIFICATION_ID_SSH_GROUP = 1000
     private const val NOTIFICATION_ID_MONITORING_GROUP = 199_999
     private const val NOTIFICATION_ID_CONTAINER_UPDATES_GROUP = 299_999
+    private const val NOTIFICATION_ID_RENEWAL_REMINDERS_GROUP = 399_999
 
     // Per-tab notifications occupy a dedicated id range. The id is
     // derived from `SSHTab.tabId.hashCode()` so it's stable for the
@@ -64,6 +65,7 @@ object NotificationHelper {
     private const val GROUP_SSH_SESSIONS = "tabssh_ssh_sessions"
     private const val GROUP_MONITORING   = "tabssh_monitoring"
     private const val GROUP_CONTAINER_UPDATES = "tabssh_container_updates"
+    private const val GROUP_RENEWAL_REMINDERS = "tabssh_renewal_reminders"
 
     // ── Notification channel IDs ──────────────────────────────────────────────
 
@@ -98,7 +100,14 @@ object NotificationHelper {
     // registered, and changing it would delete the channel and discard the user's per-channel
     // sound, importance and badge settings. Only the user-visible name and description are reworded.
     internal const val CHANNEL_CONTAINER_UPDATES = "docker_updates_v1"
-    
+
+    // Domain/VPS renewal reminders — fired by RenewalReminderWorker when a
+    // tracked domain expiration or VPS renewal date falls within its
+    // configured reminderDaysBefore window. Same posture as
+    // CHANNEL_CONTAINER_UPDATES: background-worker-driven, informational,
+    // never an interruption.
+    internal const val CHANNEL_RENEWAL_REMINDERS = "renewal_reminders_v1"
+
     /**
      * Create all notification channels (Android 8+)
      */
@@ -241,6 +250,24 @@ object NotificationHelper {
                 setSound(null, null)
             }
 
+            // ── Renewal Reminder Alerts ──────────────────────────────────────────────
+            // Fired by RenewalReminderWorker when a tracked domain's expiration date
+            // or a tracked VPS host's renewal date falls within its configured
+            // reminderDaysBefore window. Purely local-DB-driven — not tied to any
+            // live session. Importance DEFAULT: worth surfacing, but never an
+            // interruption (mirrors CHANNEL_CONTAINER_UPDATES, not the HIGH-importance
+            // outage-alert channels).
+            val renewalReminders = NotificationChannel(
+                CHANNEL_RENEWAL_REMINDERS,
+                "Renewal Reminders",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Reminders when a tracked domain or VPS renewal date is approaching"
+                setShowBadge(true)
+                enableVibration(false)
+                setSound(null, null)
+            }
+
             // Remove the legacy ssh_connection_v2 channel that was registered in an
             // earlier release but never posted to. Its role is covered by
             // ssh_silent_v3 (status) and ssh_alerts_v3 (events). Deleting it removes
@@ -255,10 +282,11 @@ object NotificationHelper {
                 sshAlerts,
                 hostMonitoring,
                 hostMetrics,
-                containerUpdates
+                containerUpdates,
+                renewalReminders
             ))
 
-            Logger.d("NotificationHelper", "Registered 8 notification channels: Session Service, Active Sessions, Session Alerts, File Transfers, Connection Errors, Host Monitoring Alerts, Performance Alerts, Container Update Alerts")
+            Logger.d("NotificationHelper", "Registered 9 notification channels: Session Service, Active Sessions, Session Alerts, File Transfers, Connection Errors, Host Monitoring Alerts, Performance Alerts, Container Update Alerts, Renewal Reminders")
         }
     }
 
@@ -1078,6 +1106,98 @@ object NotificationHelper {
             .setAutoCancel(true)
             .build()
         nm.notify(NOTIFICATION_ID_CONTAINER_UPDATES_GROUP, summary)
+    }
+
+    /**
+     * Post a renewal-reminder alert for a tracked domain approaching its
+     * expiration date. Fired by RenewalReminderWorker; deduped there against
+     * [io.github.tabssh.storage.database.entities.Domain.lastReminderSentAt]
+     * so this only fires once per renewal date, not once per worker run.
+     */
+    fun notifyDomainRenewal(context: Context, domainId: String, domainName: String, daysRemaining: Long) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val pi = trackerPendingIntent(context, isVps = false)
+        val text = if (daysRemaining <= 0) {
+            "$domainName expires today"
+        } else {
+            context.resources.getQuantityString(R.plurals.renewal_reminder_days_remaining, daysRemaining.toInt(), daysRemaining.toInt(), domainName)
+        }
+        val n = NotificationCompat.Builder(context, CHANNEL_RENEWAL_REMINDERS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Domain renewal reminder")
+            .setContentText(text)
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setGroup(GROUP_RENEWAL_REMINDERS)
+            .build()
+        nm.notify(renewalReminderNotificationId("domain", domainId), n)
+        postRenewalRemindersGroupSummary(context, nm)
+    }
+
+    /**
+     * Post a renewal-reminder alert for a tracked VPS host approaching its
+     * renewal date. Fired by RenewalReminderWorker; deduped there against
+     * [io.github.tabssh.storage.database.entities.VpsHost.lastReminderSentAt]
+     * so this only fires once per renewal date, not once per worker run.
+     */
+    fun notifyVpsRenewal(context: Context, hostId: String, hostname: String, daysRemaining: Long) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val pi = trackerPendingIntent(context, isVps = true)
+        val text = if (daysRemaining <= 0) {
+            "$hostname renews today"
+        } else {
+            context.resources.getQuantityString(R.plurals.renewal_reminder_days_remaining, daysRemaining.toInt(), daysRemaining.toInt(), hostname)
+        }
+        val n = NotificationCompat.Builder(context, CHANNEL_RENEWAL_REMINDERS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("VPS renewal reminder")
+            .setContentText(text)
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setGroup(GROUP_RENEWAL_REMINDERS)
+            .build()
+        nm.notify(renewalReminderNotificationId("vps", hostId), n)
+        postRenewalRemindersGroupSummary(context, nm)
+    }
+
+    /** Stable notification ID for a given entity type + id pair. */
+    private fun renewalReminderNotificationId(type: String, id: String): Int {
+        val base = 400_000
+        return base + ((("$type$id").hashCode().toLong() and 0x7FFFFFFFL) % 90_000).toInt()
+    }
+
+    /** Post (or refresh) the renewal reminders notification group summary. */
+    private fun postRenewalRemindersGroupSummary(context: Context, nm: NotificationManager) {
+        val pi = trackerPendingIntent(context, isVps = false)
+        val summary = NotificationCompat.Builder(context, CHANNEL_RENEWAL_REMINDERS)
+            .setContentTitle("TabSSH Renewal Reminders")
+            .setContentText("Domain and VPS renewal reminders")
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentIntent(pi)
+            .setGroup(GROUP_RENEWAL_REMINDERS)
+            .setGroupSummary(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setAutoCancel(true)
+            .build()
+        nm.notify(NOTIFICATION_ID_RENEWAL_REMINDERS_GROUP, summary)
+    }
+
+    private fun trackerPendingIntent(context: Context, isVps: Boolean): PendingIntent {
+        val target = if (isVps) {
+            io.github.tabssh.ui.activities.VpsTrackerActivity::class.java
+        } else {
+            io.github.tabssh.ui.activities.DomainTrackerActivity::class.java
+        }
+        val intent = Intent(context, target)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        return PendingIntent.getActivity(
+            context, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     private fun mainActivityPendingIntent(context: Context): PendingIntent {

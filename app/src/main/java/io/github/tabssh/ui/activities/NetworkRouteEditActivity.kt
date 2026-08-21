@@ -152,11 +152,6 @@ class NetworkRouteEditActivity : TabSSHActivity() {
     }
 
     private fun setupPresetChips() {
-        // The built-in Tor preset only makes sense when a bundled tor binary is
-        // actually present on this device/ABI.
-        val torAvailable = TorNativeClient.isAvailable(this)
-        chipTor.visibility = if (torAvailable) View.VISIBLE else View.GONE
-
         chipOrbot.setOnClickListener {
             builtInTor = false
             applyType(NetworkRouteType.PROXY_SOCKS5)
@@ -210,6 +205,22 @@ class NetworkRouteEditActivity : TabSSHActivity() {
         layoutJumpAuth.visibility = if (isJump && showEndpoint) View.VISIBLE else View.GONE
         textTorDesc.visibility = if (builtInTor) View.VISIBLE else View.GONE
         updateKeyVisibility()
+        updatePresetVisibility()
+    }
+
+    /**
+     * Both bundled presets (Orbot, built-in Tor) only apply a SOCKS5 proxy
+     * configuration — showing them for HTTP/SOCKS4/jump-host types invited
+     * taps that silently discarded the user's selected route type. Show them
+     * only when the current type is the one they actually configure.
+     */
+    private fun updatePresetVisibility() {
+        val applicable = selectedType == NetworkRouteType.PROXY_SOCKS5
+        // The built-in Tor preset additionally only makes sense when a
+        // bundled tor binary is actually present on this device/ABI.
+        val torAvailable = applicable && TorNativeClient.isAvailable(this)
+        chipOrbot.visibility = if (applicable) View.VISIBLE else View.GONE
+        chipTor.visibility = if (torAvailable) View.VISIBLE else View.GONE
     }
 
     private fun updateKeyVisibility() {

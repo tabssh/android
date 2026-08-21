@@ -14,7 +14,7 @@ import io.github.tabssh.utils.logging.Logger
 /**
  * Main Room database for TabSSH.
  *
- * Current version: 15.
+ * Current version: 16.
  * Versions 1 and 2 never shipped to real users, so v3 is the effective schema
  * baseline and no fallback path exists for them. Every version bump from v3
  * onward MUST register a real Migration object via addMigrations(); destructive
@@ -51,9 +51,11 @@ import io.github.tabssh.utils.logging.Logger
         RegistryCredential::class,
         NetworkRoute::class,
         PendingSyncConflict::class,
-        SyncLogEntry::class
+        SyncLogEntry::class,
+        Domain::class,
+        VpsHost::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -89,6 +91,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun networkRouteDao(): NetworkRouteDao
     abstract fun pendingSyncConflictDao(): PendingSyncConflictDao
     abstract fun syncLogDao(): SyncLogDao
+    abstract fun domainDao(): DomainDao
+    abstract fun vpsHostDao(): VpsHostDao
 
     companion object {
         @Volatile
@@ -767,6 +771,51 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v15 -> v16: add the `domains` and `vps_hosts` tables for the Domain
+         * Tracker and VPS Hosting Tracker features. Both are additive-only
+         * new tables — no existing table is touched.
+         */
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `domains` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`domain_name` TEXT NOT NULL, " +
+                        "`privacy_protection` TEXT NOT NULL, " +
+                        "`status_at_registrar` TEXT NOT NULL, " +
+                        "`auto_renew` TEXT NOT NULL, " +
+                        "`expiration_date` INTEGER, " +
+                        "`reminder_days_before` INTEGER NOT NULL DEFAULT 7, " +
+                        "`last_reminder_sent_at` INTEGER, " +
+                        "`notes` TEXT, " +
+                        "`created_at` INTEGER NOT NULL, " +
+                        "`modified_at` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `vps_hosts` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`tenant` TEXT NOT NULL, " +
+                        "`hostname` TEXT NOT NULL, " +
+                        "`ipv4` TEXT, " +
+                        "`ipv6` TEXT, " +
+                        "`specs` TEXT, " +
+                        "`linked_domain` TEXT, " +
+                        "`renewal_raw` TEXT, " +
+                        "`renewal_date` INTEGER, " +
+                        "`billing_cycle` TEXT, " +
+                        "`price` TEXT, " +
+                        "`description` TEXT, " +
+                        "`reminder_days_before` INTEGER NOT NULL DEFAULT 7, " +
+                        "`last_reminder_sent_at` INTEGER, " +
+                        "`created_at` INTEGER NOT NULL, " +
+                        "`modified_at` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -776,7 +825,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
                 .build()
                 INSTANCE = instance
                 instance

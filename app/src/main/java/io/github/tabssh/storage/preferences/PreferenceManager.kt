@@ -165,6 +165,7 @@ class PreferenceManager(private val context: Context) {
 
         // Container update-check preferences — keys MUST match preferences_monitoring.xml.
         private const val KEY_CONTAINER_UPDATE_CHECK_ENABLED = "container_update_check_enabled"
+        private const val KEY_RENEWAL_REMINDERS_ENABLED = "renewal_reminders_enabled"
 
         // Tasker preferences — keys MUST match preferences_tasker.xml.
         // tasker_command_timeout is EditTextPreference (String-backed), routed
@@ -772,6 +773,13 @@ class PreferenceManager(private val context: Context) {
     fun isContainerUpdateCheckEnabled(): Boolean = getBoolean(KEY_CONTAINER_UPDATE_CHECK_ENABLED, true)
     fun setContainerUpdateCheckEnabled(enabled: Boolean) =
         setBoolean(KEY_CONTAINER_UPDATE_CHECK_ENABLED, enabled)
+
+    // --- Renewal reminders (Domain Tracker / VPS Tracker) ---
+
+    fun isRenewalRemindersEnabled(): Boolean =
+        areNotificationsEnabled() && getBoolean(KEY_RENEWAL_REMINDERS_ENABLED, true)
+    fun setRenewalRemindersEnabled(enabled: Boolean) =
+        setBoolean(KEY_RENEWAL_REMINDERS_ENABLED, enabled)
 
     // --- Tasker ---
 

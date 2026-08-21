@@ -110,4 +110,17 @@
 
   </PreferenceCategory>
 
+  <PreferenceCategory
+    android:key="category_renewal_reminders"
+    android:title="@string/renewal_reminders_category_title">
+
+    <!-- Master on/off switch for the domain/VPS renewal reminder worker. -->
+    <SwitchPreferenceCompat
+      android:key="renewal_reminders_enabled"
+      android:title="@string/renewal_reminders_check_title"
+      android:summary="@string/renewal_reminders_check_summary"
+      android:defaultValue="true" />
+
+  </PreferenceCategory>
+
 </PreferenceScreen>

@@ -62,4 +62,11 @@ object FontManager {
         }
     }
 
+    /**
+     * Number of bundled Nerd Font files, for display on the About screen.
+     * Unlike Tor/Mosh these are plain assets bundled into every ABI variant,
+     * so there is no "not bundled" state — this is purely informational.
+     */
+    fun bundledFontCount(): Int = fontAssetMap.values.count { it != null }
+
 }

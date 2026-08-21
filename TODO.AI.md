@@ -4,6 +4,20 @@ Task tracking (AI-owned). Items are ordered by priority, highest first.
 Complete each item fully before removing; never clear an item while its work
 is in progress.
 
+## Process note — 2026-08-21
+
+The Domain/VPS renewal tracking feature was fully implemented in a prior
+session (entities, DAOs, CSV/Markdown import-export, tracker+edit screens,
+DB migration, notification channel, preference toggle, nav-drawer wiring,
+boot rescheduling, sync tombstones) but that session's context was cleared
+before the work was committed and before it was logged here, so it shipped
+nowhere and was invisible to the user until they asked why it was missing
+from the nav drawer. Root cause: finished work sitting uncommitted across a
+context clear with no TODO.AI.md trace, violating "no issue left only in
+conversation" / TODO hygiene. Fixed by committing the feature (see
+CHANGELOG.md Unreleased) in the same commit as the bracketed-paste fix.
+No further action needed — noting for the durable record only.
+
 ## Shipped — 2026-08-19 user batch of 10 (decisions locked via wizard)
 
 Commit cadence (user instruction, overrides the per-finding default):

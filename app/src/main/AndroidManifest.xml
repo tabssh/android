@@ -449,6 +449,16 @@
             android:name=".ui.activities.VncHostsActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".ui.activities.DomainTrackerActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.activities.MainActivity" />
+
+        <activity
+            android:name=".ui.activities.VpsTrackerActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.activities.MainActivity" />
+
         <!-- QR Pairing — Pair from desktop (see QR_PAIRING.md) -->
         <activity
             android:name=".ui.activities.ImportFromQrActivity"
@@ -650,6 +660,22 @@
             android:exported="false"
             android:label="@string/activity_label_vnc_host"
             android:parentActivityName=".ui.activities.MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Domain Tracker editor (create / edit tracked domain registrations) -->
+        <activity
+            android:name=".ui.activities.DomainEditActivity"
+            android:exported="false"
+            android:label="@string/activity_label_domain"
+            android:parentActivityName=".ui.activities.DomainTrackerActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- VPS Hosting Tracker editor (create / edit tracked VPS/hosting instances) -->
+        <activity
+            android:name=".ui.activities.VpsHostEditActivity"
+            android:exported="false"
+            android:label="@string/activity_label_vps_host"
+            android:parentActivityName=".ui.activities.VpsTrackerActivity"
             android:windowSoftInputMode="adjustResize" />
 
         <!-- Crash reporter (debug builds only) -->

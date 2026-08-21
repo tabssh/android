@@ -47,6 +47,14 @@ class MonitoringBootReceiver : BroadcastReceiver() {
                 } else {
                     Logger.d(TAG, "monitoring_enabled=false — not rescheduling")
                 }
+
+                val renewalRemindersOn = TabSSHApplication.get().preferencesManager.isRenewalRemindersEnabled()
+                if (renewalRemindersOn) {
+                    Logger.i(TAG, "Rescheduling renewal-reminder worker after ${intent.action}")
+                    RenewalReminderWorker.schedule(context)
+                } else {
+                    Logger.d(TAG, "renewal_reminders_enabled=false — not rescheduling")
+                }
             }
         }
     }

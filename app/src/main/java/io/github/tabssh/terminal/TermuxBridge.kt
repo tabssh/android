@@ -73,6 +73,40 @@ class TermuxBridge(
             val have = len - i
             return if (have < seqLen) have else 0
         }
+
+        // Common 7-byte prefix of the bracketed-paste DECSET toggles
+        // ESC[?2004h (enable) and ESC[?2004l (disable) — they differ only in
+        // the final byte, so a trailing match against this prefix covers both.
+        private val ESC_2004_PREFIX = byteArrayOf(
+            0x1B, '['.code.toByte(), '?'.code.toByte(), '2'.code.toByte(),
+            '0'.code.toByte(), '0'.code.toByte(), '4'.code.toByte()
+        )
+
+        /**
+         * Number of trailing bytes in [buf] (within [len]) that form a partial,
+         * still-extendable prefix of ESC[?2004h / ESC[?2004l, or 0 when the
+         * buffer does not end mid-sequence. Internal for unit testing.
+         *
+         * Bracketed-paste tracking below scans a single read()'s worth of
+         * decoded text with String.lastIndexOf(). That scan is not stateful
+         * across chunks the way Termux's own escape parser is — if a socket
+         * read splits ESC[?2004h/l in two, neither chunk contains the full
+         * token and the toggle is silently missed, leaving bracketedPasteActive
+         * stuck at its old value. Held-back bytes are re-prepended to the next
+         * chunk, same pattern as [pendingUtf8].
+         */
+        internal fun escIncompleteTrailingBytes(buf: ByteArray, len: Int): Int {
+            if (len == 0) return 0
+            val maxCheck = minOf(len, ESC_2004_PREFIX.size)
+            for (k in maxCheck downTo 1) {
+                var matches = true
+                for (j in 0 until k) {
+                    if (buf[len - k + j] != ESC_2004_PREFIX[j]) { matches = false; break }
+                }
+                if (matches) return k
+            }
+            return 0
+        }
         private const val PASTE_CHUNK_SIZE = 4096
 
         // Hard cap on tracked OSC 8 hyperlink spans. A long-running session that
@@ -477,6 +511,11 @@ class TermuxBridge(
     // as U+FFFD. Only touched from the read loop, no synchronization needed.
     private var pendingUtf8: ByteArray = EMPTY_BYTES
 
+    // Trailing bytes of a partial ESC[?2004h/l token held back from the
+    // previous append — see [escIncompleteTrailingBytes]. Only touched from
+    // the read loop, no synchronization needed.
+    private var pendingEscTail: ByteArray = EMPTY_BYTES
+
     /**
      * Feed data to the emulator with OSC 8 interception.
      *
@@ -498,15 +537,24 @@ class TermuxBridge(
         // bytes from an ESC chunk must always be re-prepended first).
         var data = rawData
         var length = rawLength
-        if (pendingUtf8.isNotEmpty()) {
-            data = pendingUtf8 + rawData.copyOf(rawLength)
+        if (pendingEscTail.isNotEmpty() || pendingUtf8.isNotEmpty()) {
+            data = pendingEscTail + pendingUtf8 + rawData.copyOf(rawLength)
             length = data.size
+            pendingEscTail = EMPTY_BYTES
             pendingUtf8 = EMPTY_BYTES
         }
         val hold = utf8IncompleteTrailingBytes(data, length)
         if (hold > 0) {
             pendingUtf8 = data.copyOfRange(length - hold, length)
             length -= hold
+        }
+        // Hold back a partial ESC[?2004h/l token the same way, so the
+        // bracketed-paste scan below always sees the full toggle in one
+        // pass instead of missing it when a socket read splits it in two.
+        val escHold = escIncompleteTrailingBytes(data, length)
+        if (escHold > 0) {
+            pendingEscTail = data.copyOfRange(length - escHold, length)
+            length -= escHold
         }
         if (length == 0) return
 
@@ -1275,6 +1323,7 @@ class TermuxBridge(
         // into the next.
         osc8Links = CopyOnWriteArrayList()
         bracketedPasteActive = false
+        pendingEscTail = EMPTY_BYTES
 
         if (wasConnected) {
             runOnMain {

@@ -6,6 +6,9 @@
   Groups: Quick → Accounts → Manage → Connect → Insights → Settings → Diagnostics
   Tabs handle: Frequent | Hosts | Identities | Stats | VMs
   Import/Export moved to Settings screen.
+  Quick.Home always returns to MainActivity's last-used tab (see
+  TabSSHActivity.goHome()) — the only drawer path back to the main tab UI
+  once you've drilled into a tracker/manager screen.
 
   TabSSHActivity hosts this menu on every screen, so every destination here
   is reachable from anywhere in the app.
@@ -14,6 +17,10 @@
 
     <!-- Quick: one-shot actions that don't live in any tab -->
     <group android:id="@+id/group_quick">
+        <item
+            android:id="@+id/nav_home"
+            android:icon="@android:drawable/ic_menu_myplaces"
+            android:title="@string/nav_item_home" />
         <item
             android:id="@+id/nav_quick_connect"
             android:icon="@drawable/ic_flash"
@@ -65,6 +72,14 @@
                 android:id="@+id/nav_connection_history"
                 android:icon="@android:drawable/ic_menu_recent_history"
                 android:title="@string/nav_item_connection_history" />
+            <item
+                android:id="@+id/nav_domain_tracker"
+                android:icon="@android:drawable/ic_menu_mapmode"
+                android:title="@string/nav_item_domain_tracker" />
+            <item
+                android:id="@+id/nav_vps_tracker"
+                android:icon="@android:drawable/ic_menu_manage"
+                android:title="@string/nav_item_vps_tracker" />
         </menu>
     </item>
 

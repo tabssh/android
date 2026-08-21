@@ -1374,6 +1374,7 @@
     <string name="nav_group_diagnostics">Diagnostics</string>
 
     <!-- Navigation drawer: destinations -->
+    <string name="nav_item_home">Home</string>
     <string name="nav_item_quick_connect">Quick Connect</string>
     <string name="nav_item_vnc_hosts">VNC Hosts</string>
     <string name="nav_item_snippets">Snippets</string>
@@ -1381,6 +1382,8 @@
     <string name="nav_item_cluster_commands">Cluster Commands</string>
     <string name="nav_item_multi_host_dashboard">Multi-host Dashboard</string>
     <string name="nav_item_connection_history">Connection History</string>
+    <string name="nav_item_domain_tracker">Domain Tracker</string>
+    <string name="nav_item_vps_tracker">VPS Hosting Tracker</string>
     <string name="nav_item_settings">Settings</string>
     <string name="nav_item_copy_app_log">Copy App Log (Safe to Share)</string>
     <string name="nav_item_copy_debug_logs">Copy Debug Logs (Developer)</string>
@@ -1407,8 +1410,12 @@
     <string name="about_abi_unknown">unknown</string>
     <string name="about_component_included">included</string>
     <string name="about_component_not_bundled">not bundled</string>
-    <string name="about_native_components">Native components (%1$s):\n• Tor %2$s — %3$s\n• Mosh %4$s — %5$s\n• Tor crypto: OpenSSL %6$s, libevent %7$s, zlib %8$s\n• Terminal: Termux %9$s</string>
+    <string name="about_native_components">Native components (%1$s):\n• Tor %2$s — %3$s\n• Mosh %4$s — %5$s\n• Tor crypto: OpenSSL %6$s, libevent %7$s, zlib %8$s\n• Terminal: Termux %9$s\n• Fonts: %10$s</string>
     <string name="about_body">TabSSH\nVersion %1$s (Build %2$d)\nCommit: %3$s (%4$s)\n\nA modern, open-source SSH client for Android with browser-style tabs, Material Design 3, and comprehensive security features.\n\n© 2024-2026 TabSSH Project\nLicensed under the MIT License\n\n%5$s</string>
+    <plurals name="about_fonts_count">
+        <item quantity="one">%d Nerd Font included</item>
+        <item quantity="other">%d Nerd Fonts included</item>
+    </plurals>
 
     <!-- Log capture dialogs -->
     <string name="log_app_title">App Log</string>
@@ -2319,5 +2326,104 @@
     <string name="sync_file_error_message">Cannot access sync file: %1$s\n\nPlease reconfigure the location.</string>
     <string name="sync_last_never">Never</string>
     <string name="sync_last_just_now">Just now</string>
+
+    <!-- ── Domain Tracker ─────────────────────────────────────────────────── -->
+    <string name="domain_tracker_header_emoji">🌐</string>
+    <string name="domain_tracker_header_subtitle">Tracked domain registrations, expirations, and renewal status</string>
+    <string name="domain_tracker_empty_title">No Domains Tracked</string>
+    <string name="domain_tracker_empty_subtitle">Add a domain or import your Domain_List.csv export</string>
+    <string name="domain_tracker_fab_add_desc">Add Domain</string>
+    <string name="domain_tracker_col_name">Domain</string>
+    <string name="domain_tracker_col_privacy">Privacy</string>
+    <string name="domain_tracker_col_status">Status</string>
+    <string name="domain_tracker_col_auto_renew">Auto-renew</string>
+    <string name="domain_tracker_col_expires">Expires</string>
+    <string name="domain_tracker_import_success_fmt">Imported %1$d domain(s)</string>
+    <string name="domain_tracker_import_failed_fmt">Import failed: %1$s</string>
+    <string name="domain_tracker_export_success">Domains exported</string>
+    <string name="domain_tracker_export_failed_fmt">Export failed: %1$s</string>
+    <string name="domain_delete_title">Delete \'%1$s\'?</string>
+    <string name="domain_delete_message">This removes the tracked domain record.</string>
+    <string name="domain_delete_failed_fmt">Delete failed: %1$s</string>
+
+    <string name="domain_edit_title_new">Add Domain</string>
+    <string name="domain_edit_title_edit">Edit Domain</string>
+    <string name="domain_edit_hint_name">Domain name</string>
+    <string name="domain_edit_hint_status">Status at registrar</string>
+    <string name="domain_edit_hint_reminder_days">Reminder days before expiration</string>
+    <string name="domain_edit_hint_notes">Notes</string>
+    <string name="domain_edit_switch_privacy">Privacy protection</string>
+    <string name="domain_edit_switch_auto_renew">Auto-renew</string>
+    <string name="domain_edit_hint_expiration">Expiration date</string>
+    <string name="domain_edit_expiration_unset">Not set</string>
+    <string name="domain_edit_error_name_required">Domain name is required</string>
+    <string name="domain_edit_saved">Domain saved</string>
+    <string name="domain_edit_save_failed_fmt">Save failed: %1$s</string>
+    <string name="domain_edit_deleted">Domain deleted</string>
+    <string name="domain_edit_delete_failed_fmt">Delete failed: %1$s</string>
+    <string name="domain_edit_not_found">Domain not found</string>
+
+    <!-- ── VPS Hosting Tracker ────────────────────────────────────────────── -->
+    <string name="vps_tracker_header_emoji">🖧</string>
+    <string name="vps_tracker_header_subtitle">Tracked VPS/hosting instances, specs, and renewal status</string>
+    <string name="vps_tracker_empty_title">No VPS Hosts Tracked</string>
+    <string name="vps_tracker_empty_subtitle">Add a host or import your VPS.md export</string>
+    <string name="vps_tracker_fab_add_desc">Add VPS Host</string>
+    <string name="vps_tracker_col_tenant">Tenant</string>
+    <string name="vps_tracker_col_hostname">Hostname</string>
+    <string name="vps_tracker_col_ipv4">IPv4</string>
+    <string name="vps_tracker_col_ipv6">IPv6</string>
+    <string name="vps_tracker_col_specs">Specs</string>
+    <string name="vps_tracker_col_domain">Domain</string>
+    <string name="vps_tracker_col_renewal">Renewal</string>
+    <string name="vps_tracker_col_cycle">Cycle</string>
+    <string name="vps_tracker_col_price">Price</string>
+    <string name="vps_tracker_import_success_fmt">Imported %1$d VPS host(s)</string>
+    <string name="vps_tracker_import_failed_fmt">Import failed: %1$s</string>
+    <string name="vps_tracker_export_success">VPS hosts exported</string>
+    <string name="vps_tracker_export_failed_fmt">Export failed: %1$s</string>
+    <string name="vps_host_delete_title">Delete \'%1$s\'?</string>
+    <string name="vps_host_delete_message">This removes the tracked VPS host record.</string>
+    <string name="vps_host_delete_failed_fmt">Delete failed: %1$s</string>
+
+    <string name="vps_host_edit_title_new">Add VPS Host</string>
+    <string name="vps_host_edit_title_edit">Edit VPS Host</string>
+    <string name="vps_host_edit_hint_tenant">Tenant / provider</string>
+    <string name="vps_host_edit_hint_hostname">Hostname</string>
+    <string name="vps_host_edit_hint_ipv4">IPv4</string>
+    <string name="vps_host_edit_hint_ipv6">IPv6</string>
+    <string name="vps_host_edit_hint_specs">Specs</string>
+    <string name="vps_host_edit_hint_linked_domain">Linked domain</string>
+    <string name="vps_host_edit_hint_renewal_raw">Renewal (date, or free text e.g. \"Free/Never\", \"TBD\")</string>
+    <string name="vps_host_edit_hint_billing_cycle">Billing cycle</string>
+    <string name="vps_host_edit_hint_price">Price</string>
+    <string name="vps_host_edit_hint_description">Description</string>
+    <string name="vps_host_edit_hint_reminder_days">Reminder days before renewal</string>
+    <string name="vps_host_edit_error_tenant_required">Tenant is required</string>
+    <string name="vps_host_edit_error_hostname_required">Hostname is required</string>
+    <string name="vps_host_edit_saved">VPS host saved</string>
+    <string name="vps_host_edit_save_failed_fmt">Save failed: %1$s</string>
+    <string name="vps_host_edit_deleted">VPS host deleted</string>
+    <string name="vps_host_edit_delete_failed_fmt">Delete failed: %1$s</string>
+    <string name="vps_host_edit_not_found">VPS host not found</string>
+    <string name="vps_host_delete_confirm_title">Delete VPS host?</string>
+    <string name="vps_host_delete_confirm_message">This removes the tracked VPS host record.</string>
+    <string name="activity_label_domain">Domain</string>
+    <string name="activity_label_vps_host">VPS Host</string>
+    <string name="domain_delete_confirm_title">Delete domain?</string>
+    <string name="domain_delete_confirm_message">This removes the tracked domain record.</string>
+
+    <!-- ── Tracker toolbar menu (shared) ─────────────────────────────────── -->
+    <string name="menu_import">Import</string>
+    <string name="menu_export">Export</string>
+
+    <!-- ── Renewal reminder notifications & preferences ──────────────────── -->
+    <plurals name="renewal_reminder_days_remaining">
+        <item quantity="one">%2$s renews in %1$d day</item>
+        <item quantity="other">%2$s renews in %1$d days</item>
+    </plurals>
+    <string name="renewal_reminders_category_title">Renewal Reminders</string>
+    <string name="renewal_reminders_check_title">Domain &amp; VPS renewal reminders</string>
+    <string name="renewal_reminders_check_summary">Notify when a tracked domain or VPS renewal date is approaching</string>
 
 </resources>

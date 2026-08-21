@@ -173,7 +173,10 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
         closeNavigationDrawer()
         when (item.itemId) {
+            R.id.nav_home -> goHome()
             R.id.nav_quick_connect -> startMain(EXTRA_QUICK_CONNECT)
+            R.id.nav_domain_tracker -> startDestination(DomainTrackerActivity::class.java)
+            R.id.nav_vps_tracker -> startDestination(VpsTrackerActivity::class.java)
             R.id.nav_snippets -> startDestination(SnippetManagerActivity::class.java)
             R.id.nav_manage_groups -> startDestination(GroupManagementActivity::class.java)
             R.id.nav_port_forwarding -> startDestination(PortForwardingActivity::class.java)
@@ -209,6 +212,23 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
         startActivity(
             Intent(this, MainActivity::class.java).apply {
                 putExtra(EXTRA_NAV_ACTION, action)
+            }
+        )
+    }
+
+    /**
+     * "Home" always lands back on the main Frequent/Hosts/Identities/Stats/VMs
+     * tab UI, the same way reopening the app does — there was previously no
+     * drawer path back to it once you'd drilled into a tracker/manager screen.
+     * CLEAR_TOP+SINGLE_TOP reuses the existing MainActivity instance (or
+     * starts a fresh one, which restores the last-used tab the same way a
+     * cold launch does) and drops any drawer destinations stacked above it.
+     */
+    private fun goHome() {
+        if (this::class.java == MainActivity::class.java) return
+        startActivity(
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
         )
     }
@@ -256,7 +276,12 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
             io.github.tabssh.protocols.tor.TorNativeClient.OPENSSL_VERSION,
             io.github.tabssh.protocols.tor.TorNativeClient.LIBEVENT_VERSION,
             io.github.tabssh.protocols.tor.TorNativeClient.ZLIB_VERSION,
-            BuildConfig.TERMINAL_EMULATOR_VERSION
+            BuildConfig.TERMINAL_EMULATOR_VERSION,
+            resources.getQuantityString(
+                R.plurals.about_fonts_count,
+                io.github.tabssh.utils.FontManager.bundledFontCount(),
+                io.github.tabssh.utils.FontManager.bundledFontCount()
+            )
         )
         val aboutText = getString(
             R.string.about_body,

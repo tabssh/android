@@ -671,6 +671,10 @@ class TabSSHApplication : Application() {
             io.github.tabssh.background.PortForwardStartupWorker.schedule(this)
         }
 
+        tryInit("RenewalReminder") {
+            io.github.tabssh.background.RenewalReminderWorker.schedule(this)
+        }
+
         tryInit("SessionPersistence") {
             registerActivityLifecycleCallbacks(sessionPersistenceManager)
         }
