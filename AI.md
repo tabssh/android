@@ -278,8 +278,8 @@ Update these when their subject changes:
 ## Non-negotiables
 
 1. **`applicationId` never changes** after first release (see ⚠️ CRITICAL above).
-2. **Room schema changes always ship a numbered migration** (PART 5). SQLite < 3.35 has no `DROP COLUMN` — rename by adding a column, migrating data, and leaving the old column. A column that must genuinely disappear (rule 3) is removed by recreating the table: create the new table, copy every retained column, drop the old table, rename, recreate its indices — never a literal `DROP COLUMN`.
-3. **Credentials never touch the database.** A secret-bearing column is removed outright by the table-recreate migration in rule 2; where one still exists for schema-compat reasons it is always an empty string. Storage: Android Keystore AES-GCM (PART 6).
+2. **Room schema changes always ship a numbered migration** (PART 5). SQLite < 3.35 has no `DROP COLUMN` — rename by adding a column, migrating data, and leaving the old column.
+3. **Credentials never touch the database.** DB password columns, where they exist for schema-compat reasons, are always empty strings. Storage: Android Keystore AES-GCM (PART 6).
 4. **All builds run in Docker** (PART 4). The host has no SDK, no Gradle, no JDK. Never `sdkmanager`/`gradle` on the host.
 5. **First run works with zero config.** No mandatory sign-in, no required server, no feature gating. Telemetry is opt-in only — default OFF.
 6. **Dark mode is the default**; support dark/light/auto. Never hardcode colors — Material theme attributes and a central theme definition only.
@@ -655,7 +655,7 @@ The Room/database sections apply only if the IDEA.md `## Applicability` matrix d
 4. `make check` to trigger schema export.
 5. Commit the updated `app/schemas/` JSON in the same commit.
 
-**Never destructive-migrate.** No `fallbackToDestructiveMigration()` in any variant. SQLite < 3.35: no `DROP COLUMN` — add the new column, copy data, leave the old column in place. When a column must actually be removed (a secret-bearing column, PART 0 rule 3), recreate the table instead: create the replacement, copy every retained column, drop the original, rename, recreate its indices.
+**Never destructive-migrate.** No `fallbackToDestructiveMigration()` in any variant. SQLite < 3.35: no `DROP COLUMN` — add the new column, copy data, leave the old column in place.
 
 ## Preferences
 
@@ -707,6 +707,41 @@ Offer per-credential persistence levels where secrets are cached:
 - Material 3, dark mode default, `dark`/`light`/`auto` selectable.
 - Never hardcode colors: theme attributes + a central theme definition. If the app has user-selectable themes, model them as a data class (name, isDark, semantic colors, optional palette) with a `ThemeManager` exposing the current theme as `StateFlow`.
 - Contrast validation for user-created/custom themes: WCAG 2.1 AA (4.5:1) minimum, AAA (7:1) advisory; surface issues in the theme editor in real time.
+
+## Reuse Before Creating
+
+**Before writing new code for anything — a function, a variable/constant, or a UI component/style — check whether an equivalent already exists in the project and reuse or extend it. Only create something new when nothing existing covers the need.** This is a general project-wide rule; it governs every artifact type and is not restricted to any one feature.
+
+### Functions
+
+Before writing a new function, search for an existing one with the same or similar behavior — in the same package, in existing extension functions/utility objects, in existing ViewModels/UseCases/Repositories — and call or extend it instead of re-implementing the logic. Two near-identical functions that differ only in a hardcoded value are a sign the existing function should take that value as a parameter instead of being copy-pasted.
+
+### Variables & Constants
+
+Before adding a new constant, preference key, or string resource, check `res/values/strings.xml`, existing `object`/`companion object` constants, and the preferences schema for one that already means the same thing. Two names for the same underlying value is a bug waiting to happen, not two separate settings.
+
+### Components
+
+Before building a new Composable/View or screen, check for an existing one — buttons, cards, dialogs, list items, form fields — and reuse or extend it instead of building a near-duplicate with a different name.
+
+### Styling (Material 3 theme — not CSS)
+
+**This is a native Android app — there is no Web CSS to reuse.** Styling reuse instead means: never invent a second color palette or a second theming mechanism alongside the central theme definition already required in Theming above.
+
+- Always style through the existing central theme (theme attributes / the `ThemeManager`-exposed theme data class) — never a new hardcoded color literal in a Composable or layout. A genuinely new semantic color still gets added to the central theme definition, not inlined at the call site.
+- Reuse existing Material 3 components (`Button`, `Card`, `TextField`, etc.) with the app's theme applied, instead of building custom-drawn equivalents that bypass the theme.
+
+```kotlin
+// CORRECT — new UI reuses the central theme's semantic color, no literal hex
+Text(text = "Warning", color = MaterialTheme.colorScheme.error)
+```
+
+```kotlin
+// WRONG — hardcodes a new color literal instead of reusing the theme
+Text(text = "Warning", color = Color(0xFFFF5252))
+```
+
+This rule governs the entire spec — it is not restricted to the Theming section, and it is not restricted to whatever the reader might assume is the "main" screen. Every section describing a function, variable, or UI element inherits this rule automatically; sections do not need to restate it.
 
 ## Accessibility (required, not optional)
 
@@ -829,6 +864,7 @@ Include only if the IDEA.md `## Applicability` matrix declares `backup_sync: yes
 - Secrets in a separate `secrets.json`, included only with explicit user choice, encrypted per PART 6.
 - Restore path validates the manifest first (`validateBackup(uri)`), supports at least one prior format version, and reports per-domain restored counts.
 - Runtime-only tables are excluded (PART 5).
+- Export uses `ACTION_CREATE_DOCUMENT`; import uses `ACTION_OPEN_DOCUMENT` — both native SAF pickers, so the user chooses the destination/source path and filename. Never a hardcoded save location and never a custom in-app file browser as the only path — the same "user/OS owns the path, app only produces or consumes the file" principle as the web templates' Import/Export UI Convention.
 
 ## SAF-based device sync (optional)
 
