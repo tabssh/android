@@ -17,6 +17,16 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
+        <!-- Section header (emoji + bold title + subtitle), shared chassis -->
+        <include
+            android:id="@+id/section_header"
+            layout="@layout/include_section_header"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_md"
+            android:layout_marginTop="@dimen/space_md"
+            android:layout_marginEnd="@dimen/space_md" />
+
         <!-- VNC Host List -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recycler_vnc_hosts"
@@ -64,12 +74,8 @@
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:paddingBottom="@dimen/space_lg" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/button_add_first"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Add VNC Host"
-                style="@style/Widget.TabSSH.Button" />
+            <!-- No second add action here — the FAB below is the single,
+                 consistent add affordance for this screen. -->
 
         </LinearLayout>
 

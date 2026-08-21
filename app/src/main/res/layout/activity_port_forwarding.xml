@@ -37,11 +37,20 @@
                 android:paddingTop="@dimen/space_sm">
 
                 <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/routing_section_routes_emoji"
+                    android:textSize="24sp"
+                    android:layout_marginEnd="@dimen/space_sm" />
+
+                <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/routing_section_routes_title"
-                    android:textAppearance="?attr/textAppearanceTitleMedium" />
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:textColor="?attr/colorOnSurface" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_add_route"
@@ -60,8 +69,8 @@
                 android:paddingStart="@dimen/space_md"
                 android:paddingEnd="@dimen/space_md"
                 android:text="@string/routing_section_routes_subtitle"
-                android:textAppearance="?attr/textAppearanceBodySmall"
-                android:textColor="?android:attr/textColorSecondary" />
+                android:textSize="14sp"
+                android:textColor="?attr/colorOnSurfaceVariant" />
 
             <!-- Default route selector -->
             <com.google.android.material.card.MaterialCardView
@@ -155,14 +164,42 @@
             </LinearLayout>
 
             <!-- ===== Port Forwards section ===== -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="@dimen/space_md"
+                android:paddingEnd="@dimen/space_md"
+                android:paddingTop="@dimen/space_lg">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/routing_section_forwards_emoji"
+                    android:textSize="24sp"
+                    android:layout_marginEnd="@dimen/space_sm" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/routing_section_forwards_title"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:textColor="?attr/colorOnSurface" />
+
+            </LinearLayout>
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingStart="@dimen/space_md"
                 android:paddingEnd="@dimen/space_md"
-                android:paddingTop="@dimen/space_lg"
-                android:text="@string/routing_section_forwards_title"
-                android:textAppearance="?attr/textAppearanceTitleMedium" />
+                android:paddingTop="@dimen/space_xs"
+                android:text="@string/routing_section_forwards_subtitle"
+                android:textSize="14sp"
+                android:textColor="?attr/colorOnSurfaceVariant" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recycler_forwards"

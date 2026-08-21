@@ -377,9 +377,12 @@
     <string name="port_forward_error_host_ip">Enter the target host</string>
 
     <!-- Routing & Forwarding hub — section headers -->
+    <string name="routing_section_routes_emoji">🌐</string>
     <string name="routing_section_routes_title">Network Routes</string>
     <string name="routing_section_routes_subtitle">Proxies and SSH jump hosts your connections dial through.</string>
+    <string name="routing_section_forwards_emoji">↔️</string>
     <string name="routing_section_forwards_title">Port Forwards</string>
+    <string name="routing_section_forwards_subtitle">Local and remote port forwards reused across your connections.</string>
     <string name="routes_empty_title">No network routes yet</string>
     <string name="routes_empty_body">Add a proxy, SSH jump host, or Tor route to reuse across your connections.</string>
 
@@ -1172,6 +1175,8 @@
     <string name="vm_state_stopping">Stopping</string>
 
     <!-- VNC hosts list -->
+    <string name="vnc_hosts_header_emoji">🖥️</string>
+    <string name="vnc_hosts_header_subtitle">Direct VNC connections to remote desktops and KVM/IPMI consoles</string>
     <string name="vnc_host_delete_title">Delete \'%1$s\'?</string>
     <string name="vnc_host_delete_message">This removes the VNC host record. Any linked identity is not deleted.</string>
     <string name="vnc_host_delete_failed_fmt">Delete failed: %1$s</string>
@@ -1960,11 +1965,11 @@
     <string name="group_mgmt_empty_action">Create Group</string>
     <string name="group_mgmt_fab_content_description">Create group</string>
 
-    <!-- Snippet manager empty state -->
+    <!-- Snippet manager -->
+    <string name="snippet_mgr_header_subtitle">Save and reuse frequently typed commands</string>
     <string name="snippet_mgr_empty_icon">💾</string>
     <string name="snippet_mgr_empty_title">No Snippets Yet</string>
     <string name="snippet_mgr_empty_message">Save your frequently used commands\nTap + to create your first snippet</string>
-    <string name="snippet_mgr_empty_action">Create Snippet</string>
     <string name="snippet_mgr_fab_content_description">Create snippet</string>
 
     <!-- Connections list: sorting -->

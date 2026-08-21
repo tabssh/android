@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Shared list-screen section header: emoji + bold title + grey subtitle,
+  matching the Frequent Connections chassis (fragment_frequent_connections.xml
+  is the reference; this partial gives every other screen the same block via
+  <include> instead of re-declaring three TextViews per screen).
+
+  Including layouts must give the <include> tag an id (e.g. section_header)
+  so ViewBinding generates a nested IncludeSectionHeaderBinding reachable as
+  binding.sectionHeader.* — set the three strings from Kotlin, e.g.:
+    binding.sectionHeader.textHeaderEmoji.text = "🔧"
+    binding.sectionHeader.textHeaderTitle.text = getString(R.string.foo_title)
+    binding.sectionHeader.textHeaderSubtitle.text = getString(R.string.foo_subtitle)
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingBottom="@dimen/space_md">
+
+        <TextView
+            android:id="@+id/text_header_emoji"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="24sp"
+            android:layout_marginEnd="@dimen/space_sm"
+            tools:text="🔧" />
+
+        <TextView
+            android:id="@+id/text_header_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="?attr/colorOnSurface"
+            tools:text="Section Title" />
+
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/text_header_subtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="14sp"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:paddingBottom="@dimen/space_md"
+        tools:text="Section subtitle explaining this screen." />
+
+</LinearLayout>

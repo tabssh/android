@@ -17,6 +17,16 @@
         android:orientation="vertical"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
+        <!-- Section header (emoji + bold title + subtitle), shared chassis -->
+        <include
+            android:id="@+id/section_header"
+            layout="@layout/include_section_header"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_md"
+            android:layout_marginTop="@dimen/space_md"
+            android:layout_marginEnd="@dimen/space_md" />
+
         <!-- Category filter chips -->
         <HorizontalScrollView
             android:layout_width="match_parent"
@@ -78,12 +88,8 @@
             android:gravity="center"
             android:layout_marginBottom="24dp" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/button_create_snippet"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/snippet_mgr_empty_action"
-            style="@style/Widget.Material3.Button.TonalButton" />
+        <!-- No second add action here — the FAB below is the single,
+             consistent add affordance for this screen. -->
 
     </LinearLayout>
 
@@ -95,6 +101,6 @@
         android:layout_gravity="bottom|end"
         android:layout_margin="16dp"
         android:contentDescription="@string/snippet_mgr_fab_content_description"
-        app:srcCompat="@android:drawable/ic_input_add" />
+        app:srcCompat="@drawable/ic_add" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -61,6 +61,10 @@ class VncHostsActivity : TabSSHActivity() {
         setSupportActionBar(binding.appBar.toolbar)
         supportActionBar?.setTitle(R.string.nav_item_vnc_hosts)
 
+        binding.sectionHeader.textHeaderEmoji.text = getString(R.string.vnc_hosts_header_emoji)
+        binding.sectionHeader.textHeaderTitle.text = getString(R.string.nav_item_vnc_hosts)
+        binding.sectionHeader.textHeaderSubtitle.text = getString(R.string.vnc_hosts_header_subtitle)
+
         adapter = VncHostAdapter(
             onConnect  = { host -> openVncConsole(host) },
             onLongPress = { host -> showHostMenu(host) }
@@ -69,10 +73,6 @@ class VncHostsActivity : TabSSHActivity() {
         binding.recyclerVncHosts.adapter = adapter
 
         binding.fabAdd.setOnClickListener { launchAddHost() }
-
-        // The "Add VNC Host" button inside the empty state also opens the add form.
-        binding.emptyState.findViewById<MaterialButton>(R.id.button_add_first)
-            .setOnClickListener { launchAddHost() }
 
         // Observe the database and update the list whenever it changes.
         lifecycleScope.launch {

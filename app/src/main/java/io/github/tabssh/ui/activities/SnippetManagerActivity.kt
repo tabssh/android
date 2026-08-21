@@ -59,6 +59,10 @@ class SnippetManagerActivity : TabSSHActivity() {
     private fun setupToolbar() {
         setSupportActionBar(findViewById(R.id.toolbar))
         supportActionBar?.setTitle(R.string.activity_label_manage_snippets)
+
+        findViewById<TextView>(R.id.text_header_emoji).text = getString(R.string.snippet_mgr_empty_icon)
+        findViewById<TextView>(R.id.text_header_title).text = getString(R.string.activity_label_manage_snippets)
+        findViewById<TextView>(R.id.text_header_subtitle).text = getString(R.string.snippet_mgr_header_subtitle)
     }
 
     private fun setupViews() {
@@ -79,11 +83,6 @@ class SnippetManagerActivity : TabSSHActivity() {
 
         // Setup FAB
         fab.setOnClickListener {
-            showCreateSnippetDialog()
-        }
-
-        // Setup empty state button
-        findViewById<View>(R.id.button_create_snippet).setOnClickListener {
             showCreateSnippetDialog()
         }
 
