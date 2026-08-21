@@ -34,7 +34,9 @@ import kotlinx.coroutines.withContext
 /**
  * List screen for the VPS Hosting Tracker: tracked VPS/hosting instances
  * grouped by tenant, mirroring [VncHostsActivity]'s pattern and the row
- * conventions established by [DomainTrackerActivity].
+ * conventions established by [DomainTrackerActivity] — rows wrap onto a
+ * second line rather than living inside a clickable `HorizontalScrollView`,
+ * which previously swallowed tap and long-press gestures.
  */
 class VpsTrackerActivity : TabSSHActivity() {
 
@@ -136,12 +138,30 @@ class VpsTrackerActivity : TabSSHActivity() {
                     contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                 } ?: return@launch
                 val result = VpsMarkdownImportExport.parse(text)
+                var added = 0
+                var updated = 0
                 withContext(Dispatchers.IO) {
-                    app.database.vpsHostDao().insertAll(result.hosts)
+                    val dao = app.database.vpsHostDao()
+                    val merged = result.hosts.map { parsed ->
+                        val existing = dao.getByTenantAndHostname(parsed.tenant, parsed.hostname)
+                        if (existing != null) {
+                            updated++
+                            parsed.copy(
+                                id = existing.id,
+                                reminderDaysBefore = existing.reminderDaysBefore,
+                                lastReminderSentAt = existing.lastReminderSentAt,
+                                createdAt = existing.createdAt
+                            )
+                        } else {
+                            added++
+                            parsed
+                        }
+                    }
+                    dao.insertAll(merged)
                 }
                 for (warning in result.warnings) Logger.w(TAG, "Markdown import: $warning")
                 if (!isAlive) return@launch
-                Toast.makeText(this@VpsTrackerActivity, getString(R.string.vps_tracker_import_success_fmt, result.hosts.size), Toast.LENGTH_LONG).show()
+                Toast.makeText(this@VpsTrackerActivity, getString(R.string.vps_tracker_import_success_fmt, added, updated), Toast.LENGTH_LONG).show()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -222,13 +242,7 @@ class VpsTrackerActivity : TabSSHActivity() {
 
         inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val hostname: TextView = view.findViewById(R.id.text_vps_hostname)
-            val ipv4: TextView = view.findViewById(R.id.text_vps_ipv4)
-            val ipv6: TextView = view.findViewById(R.id.text_vps_ipv6)
-            val specs: TextView = view.findViewById(R.id.text_vps_specs)
-            val domain: TextView = view.findViewById(R.id.text_vps_domain)
-            val renewal: TextView = view.findViewById(R.id.text_vps_renewal)
-            val cycle: TextView = view.findViewById(R.id.text_vps_cycle)
-            val price: TextView = view.findViewById(R.id.text_vps_price)
+            val detail: TextView = view.findViewById(R.id.text_vps_detail)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -240,14 +254,16 @@ class VpsTrackerActivity : TabSSHActivity() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val host = getItem(position)
             holder.hostname.text = "${host.tenant} · ${host.hostname}"
-            holder.ipv4.text = getString(R.string.vps_tracker_col_ipv4) + ": " + (host.ipv4 ?: "—")
-            holder.ipv6.text = getString(R.string.vps_tracker_col_ipv6) + ": " + (host.ipv6 ?: "—")
-            holder.specs.text = getString(R.string.vps_tracker_col_specs) + ": " + (host.specs ?: "—")
-            holder.domain.text = getString(R.string.vps_tracker_col_domain) + ": " + (host.linkedDomain ?: "—")
-            holder.renewal.text = getString(R.string.vps_tracker_col_renewal) + ": " +
-                (host.renewalDate?.let { VpsMarkdownImportExport.formatRenewalDate(it) } ?: host.renewalRaw ?: "—")
-            holder.cycle.text = getString(R.string.vps_tracker_col_cycle) + ": " + (host.billingCycle ?: "—")
-            holder.price.text = getString(R.string.vps_tracker_col_price) + ": " + (host.price ?: "—")
+            val renewal = host.renewalDate?.let { VpsMarkdownImportExport.formatRenewalDate(it) } ?: host.renewalRaw ?: "—"
+            holder.detail.text = listOf(
+                getString(R.string.vps_tracker_col_ipv4) + ": " + (host.ipv4 ?: "—"),
+                getString(R.string.vps_tracker_col_ipv6) + ": " + (host.ipv6 ?: "—"),
+                getString(R.string.vps_tracker_col_specs) + ": " + (host.specs ?: "—"),
+                getString(R.string.vps_tracker_col_domain) + ": " + (host.linkedDomain ?: "—"),
+                getString(R.string.vps_tracker_col_renewal) + ": " + renewal,
+                getString(R.string.vps_tracker_col_cycle) + ": " + (host.billingCycle ?: "—"),
+                getString(R.string.vps_tracker_col_price) + ": " + (host.price ?: "—")
+            ).joinToString("  ·  ")
             holder.itemView.setOnClickListener { onClick?.invoke(host) }
             holder.itemView.setOnLongClickListener {
                 onLongPress(host)

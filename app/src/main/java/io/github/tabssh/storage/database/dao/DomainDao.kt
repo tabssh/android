@@ -21,6 +21,9 @@ interface DomainDao {
     @Query("SELECT * FROM domains WHERE id = :id")
     suspend fun getById(id: String): Domain?
 
+    @Query("SELECT * FROM domains WHERE domain_name = :domainName COLLATE NOCASE")
+    suspend fun getByDomainName(domainName: String): Domain?
+
     @Query("SELECT * FROM domains WHERE expiration_date IS NOT NULL")
     suspend fun getAllWithExpiration(): List<Domain>
 

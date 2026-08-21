@@ -35,8 +35,9 @@ import kotlinx.coroutines.withContext
  * List screen for the Domain Tracker: tracked domain registrations,
  * expirations, and renewal status, mirroring [VncHostsActivity]'s pattern.
  *
- * Rows are single-line and horizontally scrollable (never wrapped) so long
- * domain names / status strings never truncate silently.
+ * Rows wrap onto a second line instead of scrolling horizontally — a
+ * clickable/long-clickable `HorizontalScrollView` root previously
+ * swallowed tap and long-press gestures, silently breaking edit/delete.
  */
 class DomainTrackerActivity : TabSSHActivity() {
 
@@ -138,12 +139,31 @@ class DomainTrackerActivity : TabSSHActivity() {
                     contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                 } ?: return@launch
                 val result = DomainCsvImportExport.parse(text)
+                var added = 0
+                var updated = 0
                 withContext(Dispatchers.IO) {
-                    app.database.domainDao().insertAll(result.domains)
+                    val dao = app.database.domainDao()
+                    val merged = result.domains.map { parsed ->
+                        val existing = dao.getByDomainName(parsed.domainName)
+                        if (existing != null) {
+                            updated++
+                            parsed.copy(
+                                id = existing.id,
+                                reminderDaysBefore = existing.reminderDaysBefore,
+                                lastReminderSentAt = existing.lastReminderSentAt,
+                                notes = existing.notes,
+                                createdAt = existing.createdAt
+                            )
+                        } else {
+                            added++
+                            parsed
+                        }
+                    }
+                    dao.insertAll(merged)
                 }
                 for (warning in result.warnings) Logger.w(TAG, "CSV import: $warning")
                 if (!isAlive) return@launch
-                Toast.makeText(this@DomainTrackerActivity, getString(R.string.domain_tracker_import_success_fmt, result.domains.size), Toast.LENGTH_LONG).show()
+                Toast.makeText(this@DomainTrackerActivity, getString(R.string.domain_tracker_import_success_fmt, added, updated), Toast.LENGTH_LONG).show()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -224,10 +244,7 @@ class DomainTrackerActivity : TabSSHActivity() {
 
         inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val name: TextView = view.findViewById(R.id.text_domain_name)
-            val privacy: TextView = view.findViewById(R.id.text_domain_privacy)
-            val status: TextView = view.findViewById(R.id.text_domain_status)
-            val autoRenew: TextView = view.findViewById(R.id.text_domain_auto_renew)
-            val expiration: TextView = view.findViewById(R.id.text_domain_expiration)
+            val detail: TextView = view.findViewById(R.id.text_domain_detail)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -239,12 +256,14 @@ class DomainTrackerActivity : TabSSHActivity() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val domain = getItem(position)
             holder.name.text = domain.domainName
-            holder.privacy.text = getString(R.string.domain_tracker_col_privacy) + ": " + domain.privacyProtection
-            holder.status.text = getString(R.string.domain_tracker_col_status) + ": " + domain.statusAtRegistrar
-            holder.autoRenew.text = getString(R.string.domain_tracker_col_auto_renew) + ": " + domain.autoRenew
-            holder.expiration.text = getString(R.string.domain_tracker_col_expires) + ": " +
-                (domain.expirationDate?.let { android.text.format.DateFormat.getMediumDateFormat(this@DomainTrackerActivity).format(it) }
-                    ?: getString(R.string.domain_edit_expiration_unset))
+            val expiration = domain.expirationDate?.let { android.text.format.DateFormat.getMediumDateFormat(this@DomainTrackerActivity).format(it) }
+                ?: getString(R.string.domain_edit_expiration_unset)
+            holder.detail.text = listOf(
+                getString(R.string.domain_tracker_col_privacy) + ": " + domain.privacyProtection,
+                getString(R.string.domain_tracker_col_status) + ": " + domain.statusAtRegistrar,
+                getString(R.string.domain_tracker_col_auto_renew) + ": " + domain.autoRenew,
+                getString(R.string.domain_tracker_col_expires) + ": " + expiration
+            ).joinToString("  ·  ")
             holder.itemView.setOnClickListener { onClick?.invoke(domain) }
             holder.itemView.setOnLongClickListener {
                 onLongPress(domain)

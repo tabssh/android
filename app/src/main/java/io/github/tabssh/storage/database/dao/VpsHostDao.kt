@@ -21,6 +21,9 @@ interface VpsHostDao {
     @Query("SELECT * FROM vps_hosts WHERE id = :id")
     suspend fun getById(id: String): VpsHost?
 
+    @Query("SELECT * FROM vps_hosts WHERE tenant = :tenant COLLATE NOCASE AND hostname = :hostname COLLATE NOCASE")
+    suspend fun getByTenantAndHostname(tenant: String, hostname: String): VpsHost?
+
     @Query("SELECT * FROM vps_hosts WHERE renewal_date IS NOT NULL")
     suspend fun getAllWithRenewal(): List<VpsHost>
 

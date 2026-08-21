@@ -2338,7 +2338,7 @@
     <string name="domain_tracker_col_status">Status</string>
     <string name="domain_tracker_col_auto_renew">Auto-renew</string>
     <string name="domain_tracker_col_expires">Expires</string>
-    <string name="domain_tracker_import_success_fmt">Imported %1$d domain(s)</string>
+    <string name="domain_tracker_import_success_fmt">Imported %1$d new, updated %2$d existing domain(s)</string>
     <string name="domain_tracker_import_failed_fmt">Import failed: %1$s</string>
     <string name="domain_tracker_export_success">Domains exported</string>
     <string name="domain_tracker_export_failed_fmt">Export failed: %1$s</string>
@@ -2378,7 +2378,7 @@
     <string name="vps_tracker_col_renewal">Renewal</string>
     <string name="vps_tracker_col_cycle">Cycle</string>
     <string name="vps_tracker_col_price">Price</string>
-    <string name="vps_tracker_import_success_fmt">Imported %1$d VPS host(s)</string>
+    <string name="vps_tracker_import_success_fmt">Imported %1$d new, updated %2$d existing VPS host(s)</string>
     <string name="vps_tracker_import_failed_fmt">Import failed: %1$s</string>
     <string name="vps_tracker_export_success">VPS hosts exported</string>
     <string name="vps_tracker_export_failed_fmt">Export failed: %1$s</string>
