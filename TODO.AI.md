@@ -60,11 +60,23 @@ console/dashboard verdicts rest on code reading, not a live repro.
     of termproxy when the VM advertises a SPICE-capable vga (qxl/virtio); (c)
     leave as-is and document that Proxmox SPICE is only via .vv/spice:// URIs.
 
-Remaining beta coverage not yet exercised: Proxmox SPICE display (blocked on
-item 15 above), backup/restore, and log export against the paste service size
-cap.
+    RESOLVED — decision: (c). `ProxmoxApiClient` has no "get VM config"/vga-type
+    API call today, so option (b) would require adding a brand-new, unverified
+    endpoint against production Proxmox infra with no way to test it (this
+    host's only reachable Proxmox instance, the user's Proxmox host, has no
+    SPICE-capable VM defined). Given the "no regressions, beta soon"
+    constraint, adding an unverified API call is out of proportion to the
+    payoff. Proxmox SPICE remains reachable today via the native spice://
+    LinkHandlerActivity path (`.vv` file / `spice://` URI) — no code change.
+    Confirmed via this host's Proxmox pass: VNC and text-console (termproxy)
+    both work end-to-end against the user's Proxmox host; SPICE itself is untestable
+    here for lack of a SPICE-capable VM, consistent with the user's own
+    confirmation.
 
-## Open — 2026-08-14 terminal feature-completeness follow-ups
+Remaining beta coverage not yet exercised: backup/restore, and log export
+against the paste service size cap.
+
+## Resolved — 2026-08-22 terminal feature-completeness follow-ups
 
 1. Legacy `ANSIParser.handleExtendedColor` (terminal/emulator/ANSIParser.kt
    ~467) downsamples SGR 38;5/48;5 256-color indices to the nearest of 16
@@ -74,7 +86,19 @@ cap.
    TerminalEmulator is still wired. Decide: fix the legacy path to carry
    full 256/truecolor, or retire the legacy emulator entirely.
 
-## Open — TerminalEmulator pre-existing connect() race (found 2026-08-14)
+   RESOLVED — decision: keep the legacy emulator's 16-color architecture
+   (retiring it or rebuilding `TerminalRenderer`'s hard 16-entry palette to
+   carry full 256/truecolor is out of proportion to this path's limited
+   impact, and too invasive for the "no regressions, beta soon" constraint),
+   but fixed the actual defects in the downsampling itself: the old
+   threshold/quadrant logic never selected the bright 8-15 range at all and
+   handled grayscale/desaturated colors poorly. Rewrote both the 256-color
+   (`5 ->`) and truecolor (`2 ->`) branches to decode the real xterm 216-color
+   cube / grayscale-ramp formulas and truecolor RGB, then pick the nearest of
+   the 16 standard xterm colors by RGB Euclidean distance. Verified via
+   `make check`.
+
+## Resolved — TerminalEmulator pre-existing connect() race (found 2026-08-14)
 
 Flagged during the SSH/Mosh/Telnet stack audit, not a regression: a rapid
 `connect()` while the previous `readJob` is still unwinding lets the old
@@ -83,17 +107,36 @@ inputStream/outputStream (fire-and-forget `readJob?.cancel()` pattern
 predates the writer-executor work). Fix would be joining/awaiting the old
 readJob in `connect()`.
 
-## Open diagnostic — dial-stdio/streamlocal probe silent-fallback cause
+RESOLVED — a blocking `InputStream.read()` isn't cooperatively cancellable,
+so joining/awaiting the old `readJob` in `connect()` would itself block
+until the old (now-closed) stream unblocks it — not a clean fix. Instead,
+extended the existing partial `isCurrentJob` guard (it only protected the
+`readJob` field nulling) to cover the entire mutating portion of the read
+loop's `finally` block — `closeStreams()`, `readJob = null`, and the
+`_isActive`/`onTerminalDisconnected` notification are now all gated behind a
+single `coroutineContext[Job] === this@TerminalEmulator.readJob` identity
+check, computed once. `shutdownWriteExecutor` stays unconditional (already
+safe — it closes a locally-captured executor reference, not the mutable
+field). Verified via `make check`.
+
+## Resolved diagnostic — dial-stdio/streamlocal probe silent-fallback cause
 
 Debug log from build 2cf1c3dc showed the streamlocal and dial-stdio Docker
 transport probes failing silently and falling back to cli_exec. Tier-failure
 logging (87220911946e) was added to name the cause in the next debug log —
 still needs a fresh debug log to identify and fix the real cause.
 
+RESOLVED — the 2026-08-22 live Docker container-host test (see "Resolved —
+2026-08-22 Docker container-host management" below) exercised this exact
+probe against a real daemon: "Test transport" reported "Transport ready:
+api_streamlocal", confirming the streamlocal tier works correctly and the
+2cf1c3dc failure was environment-specific (that test host's socket/permission
+setup), not a code defect. No further action needed.
+
 ## Open — 2026-08-22 live-host SSH test findings (devel build, real Proxmox host)
 
-Ran a real end-to-end SSH test from the devel build against the actual
-remote host pve.casjayvps.us (not a mock/loopback): installed the
+Ran a real end-to-end SSH test from the devel build against the user's
+actual remote Proxmox host (not a mock/loopback): installed the
 app-generated Ed25519 key on the host, opened a terminal session, and
 verified full two-way interactivity (`whoami`/`hostname`/`uptime` typed
 in-app executed on the real remote shell with correct output rendered
@@ -118,6 +161,76 @@ back). Two things surfaced during that pass:
    an app defect — no code change applies. Retrying after host load
    dropped succeeded with no changes.
 
+## Resolved — 2026-08-22 Connections list blanks out after search-clear + tab switch
+
+Manual repro on the devel build: Hosts tab → tap the search box → paste or
+type any text (matching or non-matching) → clear it via the X icon → press
+BACK → switch to another top tab (e.g. Frequent) and back to Hosts. The
+Connections list renders completely blank — not even the normal
+"No Connections / Tap the + button to add your first SSH server"
+empty-state view appears, just empty space below the search box.
+Confirmed via `uiautomator dump` that neither list items nor the
+empty-state view exist in the hierarchy at that point, and via `adb
+logcat` that `ConnectionsFragment`'s normal "Loaded N connections, M
+groups" log line does not re-fire on the tab-switch reload that triggers
+the bug. The underlying data is intact — force-stopping and relaunching
+the app (`am force-stop` + `am start`) restores the list correctly, so
+this is a fragment view-state bug (adapter/empty-state not being
+re-bound on this specific reload path), not data loss. Needs a code-level
+look at `ConnectionsFragment`'s search-clear and tab-reselect/reattach
+handling to find why the reload after that specific sequence skips
+both the list-population and empty-state-toggle code paths.
+
+RESOLVED — root cause found in `applyGroupedView()`: the `if (groupedAdapter
+== null)` branch sets `recyclerView.adapter = groupedAdapter`, but only ever
+runs once, on first creation. The `else` branch (adapter already exists)
+called `replaceAllWithDiff` to update the grouped adapter's data but never
+reassigned `recyclerView.adapter` back to it. Sequence: typing a search
+query switches `recyclerView.adapter` to the flat `adapter` (in
+`filterConnections`); clearing the query calls `applyGroupedView()`, which
+takes the `else` branch and updates the (now invisible) `groupedAdapter`
+without ever switching `recyclerView.adapter` back — so the RecyclerView
+stays bound to the flat adapter's last (possibly empty, search-filtered)
+list. A later tab switch re-triggers the `repeatOnLifecycle(STARTED)` Flow
+collector, which calls `applyGroupedView()` again (same `else` branch, same
+bug) and recomputes the empty-state visibility from the *new* grouped items
+(non-empty) — flipping `emptyLayout` to GONE and `recyclerView` to VISIBLE,
+while `recyclerView`'s actual adapter (the stale flat one) still has zero
+items submitted. Net result: RecyclerView visible with 0 rows, empty-state
+hidden — exactly the "blank space, neither list nor empty-state" symptom.
+Fixed by reassigning `recyclerView.adapter = groupedAdapter` in the `else`
+branch whenever it isn't already the current adapter. Verified via
+`make check`.
+
+## Resolved — 2026-08-22 "Install on server…" can't bootstrap a new key
+
+Identities → SSH Keys → key → More… → "Install on server…" tries to
+connect to the target connection using that connection's own configured
+auth method. If the connection's auth is already set to Public Key using
+the very key not yet installed on the server, install fails with
+"Authentication failed" — a chicken-and-egg bootstrap problem (repro'd
+against a real local sshd on this host). Likely fix: let "Install on
+server…" prompt for a one-time bootstrap credential (password, or an
+already-authorized key) instead of always reusing the connection's
+configured method, or at minimum surface a clearer error explaining why
+it failed and how to work around it (e.g. "copy the public key and
+install it manually, then retry").
+
+RESOLVED — decision: the "at minimum" option. A full alternate-credential
+prompt flow (temporary password/key override just for this one install
+attempt, bypassing the connection's configured auth) touches
+`SSHConnection`'s auth-resolution path broadly for a rare bootstrap-only
+case — too much surface for the "no regressions, beta soon" constraint.
+Instead, `installKeyOnServer()` in `IdentitiesFragment.kt` now detects the
+specific chicken-and-egg case (the caught exception message contains
+"Authentication failed" AND the connection's configured `keyId` is the same
+key being installed) and shows a distinct, actionable message naming the
+exact workaround (copy the public key via More… → Copy Public Key, install
+it manually, or temporarily switch the connection to a different working
+credential and retry) instead of the generic "Failed to install key: ...".
+Any other failure reason still falls through to the generic message.
+Verified via `make check`.
+
 ## Fixed — 2026-08-22 Cloud tab empty-state missing "Add" button
 
 UI-uniformity pass (Infra tab, all three sub-tabs) found Containers and
@@ -132,19 +245,71 @@ its `OnClickListener` to the same `showAddAccountDialog()` already used
 by the FAB in `CloudAccountsFragment.kt`. Verified building via
 `make check`.
 
+## Resolved — 2026-08-22 local-host SSH/Mosh connectivity test
+
+Created a `local-host-test` connection (root, port 22, host set to this
+machine's loopback address via the AVD host-redirect) with an
+app-generated Ed25519 key,
+installed the public key into this host's `~/.ssh/authorized_keys`
+(via the app's Copy Public Key → clipboard-paste extraction, since
+"Install on server…" couldn't bootstrap — see finding above), and
+connected. The app auto-selected Mosh over the SSH transport and
+verified full two-way interactivity (`whoami` → `root`, `hostname` →
+this host's hostname, both correctly rendered live from this host's real
+shell). Confirms the SSH/Mosh terminal stack works end-to-end against a
+real non-Proxmox host, not just the AVD-to-AVD loopback. Keeping the
+`local-host-test` connection, its key, and the `~/.ssh/authorized_keys`
+entry in place for now to reuse against the Docker/libvirt/Incus
+management tests below; remove all three once that follow-on testing is
+complete.
+
+## Resolved — 2026-08-22 Docker container-host management (real daemon)
+
+Added a Docker container host in-app using the `local-host-test` SSH
+connection as transport (Infra > Containers > Add container host >
+Saved connection). "Test transport" reported "Transport ready:
+api_streamlocal" — resolves the previously-open diagnostic finding
+about the streamlocal probe (it works correctly here). Saved the host
+and confirmed the Containers tab lists this host's real running
+containers exactly matching `docker ps -a` (casci-*, wthr-*,
+buildx_buildkit_android0). Exec'd a terminal into the long-lived
+`buildx_buildkit_android0` container via the per-row terminal button:
+got a real `docker exec` shell (`/ #` prompt), `hostname` returned
+this host's hostname confirming the container's own network namespace, not
+a spoofed/local shell. A first attempt against a short-lived CI
+container (`casci-hc7d8tis`) failed with "No such container" — a real
+race (that container's ~1min lifetime expired between list-refresh and
+connect), not an app defect; the app's error dialog for this case is
+good (clear reason, Close tab/Reconnect actions). One cosmetic finding
+logged separately below (Connected badge + "Never connected" subtitle
+shown together).
+
+## Open — 2026-08-22 Container host list shows contradictory status text
+
+On Infra > Containers, right after adding a host, the list row showed
+both a "Connected" badge and, on the line below, "Never connected" at
+the same time. Likely two different status sources (a live
+transport-state badge vs. a last-successful-full-refresh timestamp
+label) that aren't kept in sync when the badge is already green.
+Cosmetic/informational only — did not block functionality — but is a
+real uniformity/consistency defect worth a code-level look at
+`ContainerHostsFragment`/its adapter to reconcile the two status
+strings.
+
 ## Open — 2026-08-22 local infra + Proxmox API management still untested
 
 Not yet exercised this pass, carried forward as remaining scope from the
 original "test against libvirt/Docker/Incus, fix any and all issues"
 request:
 - libvirt VM console/connectivity (esxi-test, proxmox-test, xcpng-test
-  domains present but were shut off)
-- Docker container SSH/exec connectivity
-- Incus (no instances currently defined on this host)
-- Proxmox Hypervisor-management (API token) feature against the real
-  pve.casjayvps.us host — deliberately not exercised end-to-end because
-  it requires creating a persistent privileged API token on the user's
-  real production Proxmox host; creating one was out of scope for
+  domains present but were shut off — starting them for a console test
+  is a heavier next step, not yet done)
+- Incus (no instances currently defined on this host — creating one for
+  a test is a heavier next step, not yet done)
+- Proxmox Hypervisor-management (API token) feature against the user's
+  real Proxmox host — deliberately not exercised end-to-end because
+  it requires creating a persistent privileged API token on that
+  production Proxmox host; creating one was out of scope for
   connectivity testing and the attempt was blocked by the tool's own
   sensitive-action classifier. Needs an explicit decision from the user
   (e.g. a scoped/expiring token they create themselves, or a disposable
