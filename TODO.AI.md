@@ -90,6 +90,85 @@ transport probes failing silently and falling back to cli_exec. Tier-failure
 logging (87220911946e) was added to name the cause in the next debug log —
 still needs a fresh debug log to identify and fix the real cause.
 
+## Open — 2026-08-22 live-host SSH test findings (devel build, real Proxmox host)
+
+Ran a real end-to-end SSH test from the devel build against the actual
+remote host pve.casjayvps.us (not a mock/loopback): installed the
+app-generated Ed25519 key on the host, opened a terminal session, and
+verified full two-way interactivity (`whoami`/`hostname`/`uptime` typed
+in-app executed on the real remote shell with correct output rendered
+back). Two things surfaced during that pass:
+
+1. RESOLVED, not a bug — re-tested with a clean single BACK press per
+   step: with the keyboard showing, BACK dismisses only the keyboard
+   (terminal session stays open); a second BACK (keyboard already
+   hidden) returns to the Hosts list with the session preserved as an
+   active background session ("Active Sessions: PVE-Proxmox", connect
+   count intact) rather than exiting the app. The earlier "exits to
+   home screen" observation was most likely a double/repeated BACK
+   dispatch during the ANR-recovery sequence (see note below), not a
+   distinct defect. No code change needed.
+2. NOTE (not app-fixable, recorded for the record only) — two
+   "TabSSH isn't responding" ANRs occurred when opening a terminal
+   session on this AVD, root-caused via /data/anr trace analysis to the
+   emulator's software-GPU RenderThread stalling in the QEMU GL
+   passthrough pipe (`qemu_pipe_read` under swiftshader_indirect) while
+   host CPU load average was ~40-44 on a 12-core host. Guest-side CPU
+   was idle at the time. This is host/emulator resource contention, not
+   an app defect — no code change applies. Retrying after host load
+   dropped succeeded with no changes.
+
+## Fixed — 2026-08-22 Cloud tab empty-state missing "Add" button
+
+UI-uniformity pass (Infra tab, all three sub-tabs) found Containers and
+Hypervisors empty-states both show a labeled `MaterialButton` ("Add
+container host" / new-hypervisor title) plus the FAB, but Cloud's
+empty-state (`fragment_cloud_accounts.xml`) showed only the FAB — a real
+uniformity break across the three otherwise-identical sub-tab patterns.
+Fixed: added a `button_add_first` `MaterialButton` (same
+`Widget.TabSSH.Button` style, reusing existing
+`R.string.cloud_add_account_title`) to the empty-state layout, and wired
+its `OnClickListener` to the same `showAddAccountDialog()` already used
+by the FAB in `CloudAccountsFragment.kt`. Verified building via
+`make check`.
+
+## Open — 2026-08-22 local infra + Proxmox API management still untested
+
+Not yet exercised this pass, carried forward as remaining scope from the
+original "test against libvirt/Docker/Incus, fix any and all issues"
+request:
+- libvirt VM console/connectivity (esxi-test, proxmox-test, xcpng-test
+  domains present but were shut off)
+- Docker container SSH/exec connectivity
+- Incus (no instances currently defined on this host)
+- Proxmox Hypervisor-management (API token) feature against the real
+  pve.casjayvps.us host — deliberately not exercised end-to-end because
+  it requires creating a persistent privileged API token on the user's
+  real production Proxmox host; creating one was out of scope for
+  connectivity testing and the attempt was blocked by the tool's own
+  sensitive-action classifier. Needs an explicit decision from the user
+  (e.g. a scoped/expiring token they create themselves, or a disposable
+  test VM) before this sub-feature can be tested end-to-end.
+
+## Resolved, not a bug — 2026-08-22 Add Hypervisor form initial focus
+
+Manual test observation: after tapping "Add Hypervisor" (Infra >
+Hypervisors), typed text appeared to land in the **Username** field
+instead of **Host**. Re-checked against the actual source
+(`activity_hypervisor_edit.xml` + `HypervisorEditActivity.kt`):
+- The form's real field order is Name → Type spinner → Host → Port →
+  (Use account) → Username → Password → Realm → Notes — Host is not
+  actually the first field; Name is.
+- `HypervisorEditActivity` contains no `requestFocus()` call anywhere
+  and never disables/hides `edit_name`, so default Android focus
+  traversal (topmost focusable view) would land on the Name field, not
+  Username.
+- No code path sets focus to Username on launch.
+Conclusion: the observed text landing in Username was almost certainly
+a mistimed/stray tap during the manual test (same class of
+stale-coordinate-after-layout-shift artifact seen elsewhere this
+session), not an app defect. No code change made.
+
 ## Needs verification
 
 ### Manual console smoke tests (user-side — no hypervisor hosts available here)

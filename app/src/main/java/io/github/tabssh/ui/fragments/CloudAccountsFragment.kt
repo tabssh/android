@@ -213,6 +213,9 @@ class CloudAccountsFragment : Fragment() {
         view.findViewById<FloatingActionButton>(R.id.fab_add).setOnClickListener {
             showAddAccountDialog()
         }
+        view.findViewById<View>(R.id.button_add_first).setOnClickListener {
+            showAddAccountDialog()
+        }
 
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {

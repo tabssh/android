@@ -48,6 +48,14 @@
             android:gravity="center"
             android:layout_marginTop="@dimen/space_sm" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/button_add_first"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_lg"
+            android:text="@string/cloud_add_account_title"
+            style="@style/Widget.TabSSH.Button" />
+
     </LinearLayout>
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
