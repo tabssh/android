@@ -7,21 +7,21 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="@dimen/space_md">
 
     <TextView
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:text="Configure TabSSH Action"
+      android:text="@string/locale_edit_title"
       android:textSize="20sp"
       android:textStyle="bold"
       android:textColor="?attr/colorOnSurface"
-      android:paddingBottom="16dp" />
+      android:paddingBottom="@dimen/space_md" />
 
     <TextView
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:text="Action"
+      android:text="@string/locale_edit_action_label"
       android:textSize="14sp"
       android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -29,13 +29,13 @@
       android:id="@+id/spinner_action"
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:paddingBottom="8dp" />
+      android:paddingBottom="@dimen/space_sm" />
 
     <TextView
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:layout_marginTop="8dp"
-      android:text="Connection"
+      android:layout_marginTop="@dimen/space_sm"
+      android:text="@string/container_host_section_connection"
       android:textSize="14sp"
       android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -43,14 +43,14 @@
       android:id="@+id/spinner_connection"
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:paddingBottom="8dp" />
+      android:paddingBottom="@dimen/space_sm" />
 
     <EditText
       android:id="@+id/input_command"
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:layout_marginTop="8dp"
-      android:hint="Command to run"
+      android:layout_marginTop="@dimen/space_sm"
+      android:hint="@string/locale_edit_command_hint"
       android:inputType="text"
       android:importantForAutofill="no"
       android:visibility="gone" />
@@ -59,15 +59,15 @@
       android:id="@+id/check_wait_result"
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:text="Wait for output (broadcast result)"
+      android:text="@string/locale_edit_wait_for_output"
       android:visibility="gone" />
 
     <EditText
       android:id="@+id/input_keys"
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:layout_marginTop="8dp"
-      android:hint="Keys (e.g. ENTER, TAB, CTRL+C, or text)"
+      android:layout_marginTop="@dimen/space_sm"
+      android:hint="@string/locale_edit_keys_hint"
       android:inputType="text"
       android:importantForAutofill="no"
       android:visibility="gone" />
@@ -75,15 +75,15 @@
     <TextView
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:layout_marginTop="16dp"
-      android:text="Actions only run while Tasker integration is enabled in TabSSH settings."
+      android:layout_marginTop="@dimen/space_md"
+      android:text="@string/locale_edit_actions_help"
       android:textSize="12sp"
       android:textColor="?attr/colorOnSurfaceVariant" />
 
     <LinearLayout
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:layout_marginTop="16dp"
+      android:layout_marginTop="@dimen/space_md"
       android:orientation="horizontal">
 
       <Button
@@ -91,8 +91,8 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:layout_marginEnd="8dp"
-        android:text="Cancel"
+        android:layout_marginEnd="@dimen/space_sm"
+        android:text="@string/cancel"
         style="@style/Widget.Material3.Button.OutlinedButton" />
 
       <Button
@@ -100,7 +100,7 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:text="Save" />
+        android:text="@string/save" />
     </LinearLayout>
 
   </LinearLayout>

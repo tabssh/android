@@ -32,8 +32,8 @@
             android:textSize="14sp"
             android:gravity="center_vertical"
             android:drawablePadding="@dimen/space_sm"
-            android:contentDescription="Device is offline; host checks are suspended"
-            android:text="Offline — host checks paused until network returns"
+            android:contentDescription="@string/dashboard_offline_banner_description"
+            android:text="@string/dashboard_offline_banner_message"
             android:visibility="gone" />
 
     </com.google.android.material.appbar.AppBarLayout>
@@ -42,7 +42,7 @@
         android:id="@+id/recycler"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:paddingBottom="80dp"
+        android:paddingBottom="@dimen/space_80dp"
         android:clipToPadding="false"
         app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
@@ -53,8 +53,8 @@
         android:layout_gravity="bottom|end"
         android:layout_margin="@dimen/space_md"
         app:tint="@android:color/white"
-        android:text="New Group"
-        android:contentDescription="Create a new dashboard group"
+        android:text="@string/dashboard_new_group_button"
+        android:contentDescription="@string/dashboard_new_group_description"
         app:icon="@drawable/ic_add" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

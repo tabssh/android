@@ -71,8 +71,8 @@ class TranscriptViewerActivity : TabSSHActivity() {
                 MaterialAlertDialogBuilder(this@TranscriptViewerActivity)
                     .setTitle(transcript.name)
                     .setMessage(content)
-                    .setPositiveButton("Close", null)
-                    .setNeutralButton("Share") { _, _ -> shareTranscript(transcript) }
+                    .setPositiveButton(getString(R.string.close), null)
+                    .setNeutralButton(getString(R.string.share)) { _, _ -> shareTranscript(transcript) }
                     .show()
             }
         }
@@ -87,16 +87,16 @@ class TranscriptViewerActivity : TabSSHActivity() {
                     putExtra(Intent.EXTRA_SUBJECT, transcript.name)
                     putExtra(Intent.EXTRA_TEXT, content)
                 }
-                startActivity(Intent.createChooser(intent, "Share Transcript"))
+                startActivity(Intent.createChooser(intent, getString(R.string.transcript_viewer_share_chooser_title)))
             }
         }
     }
     
     private fun deleteTranscript(transcript: TranscriptManager.Transcript) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Delete Transcript")
-            .setMessage("Delete ${transcript.name}?")
-            .setPositiveButton("Delete") { _, _ ->
+            .setTitle(getString(R.string.transcript_viewer_delete_title))
+            .setMessage(getString(R.string.transcript_viewer_delete_message_fmt, transcript.name))
+            .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 // File deletion runs off Main — TranscriptManager.deleteTranscript
                 // walks the filesystem and can block on slow storage.
                 lifecycleScope.launch(Dispatchers.IO) {
@@ -105,21 +105,21 @@ class TranscriptViewerActivity : TabSSHActivity() {
                         if (ok) {
                             android.widget.Toast.makeText(
                                 this@TranscriptViewerActivity,
-                                "Transcript deleted",
+                                getString(R.string.transcript_viewer_deleted_toast),
                                 android.widget.Toast.LENGTH_SHORT
                             ).show()
                             loadTranscripts()
                         } else {
                             android.widget.Toast.makeText(
                                 this@TranscriptViewerActivity,
-                                "Failed to delete transcript",
+                                getString(R.string.transcript_viewer_delete_failed_toast),
                                 android.widget.Toast.LENGTH_SHORT
                             ).show()
                         }
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
     

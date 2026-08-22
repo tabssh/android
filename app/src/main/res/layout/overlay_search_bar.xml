@@ -10,7 +10,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_gravity="top"
-    android:layout_margin="8dp"
+    android:layout_margin="@dimen/space_sm"
     app:cardCornerRadius="8dp"
     app:cardElevation="6dp"
     app:cardBackgroundColor="?attr/colorSurface"
@@ -21,8 +21,8 @@
         android:layout_height="48dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingStart="12dp"
-        android:paddingEnd="4dp">
+        android:paddingStart="@dimen/space_12dp"
+        android:paddingEnd="@dimen/space_xs">
 
         <!-- Search icon -->
         <ImageView
@@ -30,7 +30,7 @@
             android:layout_height="20dp"
             android:src="@drawable/ic_search"
             app:tint="?attr/colorOnSurfaceVariant"
-            android:layout_marginEnd="8dp"
+            android:layout_marginEnd="@dimen/space_sm"
             android:contentDescription="@null" />
 
         <!-- Query input -->
@@ -39,7 +39,7 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:hint="Search in scrollback…"
+            android:hint="@string/search_bar_hint"
             android:textSize="14sp"
             android:textColor="?attr/colorOnSurface"
             android:textColorHint="?attr/colorOnSurfaceVariant"
@@ -58,7 +58,7 @@
             android:textColor="?attr/colorOnSurfaceVariant"
             android:minWidth="48dp"
             android:gravity="center"
-            android:paddingHorizontal="4dp"
+            android:paddingHorizontal="@dimen/space_xs"
             android:visibility="gone" />
 
         <!-- Previous match -->
@@ -67,7 +67,7 @@
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:src="@drawable/ic_arrow_up"
-            android:contentDescription="Previous match"
+            android:contentDescription="@string/search_bar_previous_match_description"
             android:background="?attr/selectableItemBackgroundBorderless"
             app:tint="?attr/colorOnSurface" />
 
@@ -77,7 +77,7 @@
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:src="@drawable/ic_arrow_down"
-            android:contentDescription="Next match"
+            android:contentDescription="@string/search_bar_next_match_description"
             android:background="?attr/selectableItemBackgroundBorderless"
             app:tint="?attr/colorOnSurface" />
 
@@ -87,12 +87,12 @@
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="wrap_content"
             android:layout_height="36dp"
-            android:text="Aa"
+            android:text="@string/search_bar_case_toggle"
             android:textSize="13sp"
             android:minWidth="0dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:contentDescription="Toggle case sensitivity" />
+            android:contentDescription="@string/search_bar_case_toggle_description" />
 
         <!-- Close -->
         <ImageButton
@@ -100,7 +100,7 @@
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:src="@drawable/ic_close"
-            android:contentDescription="Close search"
+            android:contentDescription="@string/search_bar_close_description"
             android:background="?attr/selectableItemBackgroundBorderless"
             app:tint="?attr/colorOnSurface" />
 

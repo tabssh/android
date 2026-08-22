@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
-        android:paddingBottom="88dp"
+        android:paddingBottom="@dimen/space_88dp"
         android:scrollbars="none" />
 
     <LinearLayout
@@ -25,7 +25,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="&#x2601;&#xFE0F;"
+            android:text="@string/common_icon_cloud"
             android:textSize="64sp"
             android:gravity="center" />
 

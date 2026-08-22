@@ -90,20 +90,6 @@ transport probes failing silently and falling back to cli_exec. Tier-failure
 logging (87220911946e) was added to name the cause in the next debug log —
 still needs a fresh debug log to identify and fix the real cause.
 
-## Open — 2026-08-21 app-wide hardcoded UI strings (AI.md PART 7 I18N)
-
-Theming audit (triggered by user report of "bare/unstyled" screens) found
-~428 hardcoded `android:text`/`android:hint` string literals across dozens
-of layout files app-wide, pre-existing and unrelated to the dialog/color
-scope of that pass. AI.md PART 7 requires every user-visible string to be
-`@string/...` (zero hardcoded UI strings in code or layouts) so these are
-genuine violations, but rewriting ~428 occurrences is a large, separate
-effort with broad blast radius — deliberately not attempted inline during
-the theming-bug fix pass. Needs its own dedicated sweep: enumerate every
-layout file with `grep -rln 'android:text="[^"@]' app/src/main/res/layout`,
-extract each literal to `strings.xml`, verify no behavior change via
-`make check`.
-
 ## Needs verification
 
 ### Manual console smoke tests (user-side — no hypervisor hosts available here)

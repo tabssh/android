@@ -58,13 +58,13 @@ class WhatsNewActivity : TabSSHActivity() {
         root.addView(scroll)
 
         val openBtn = Button(this).apply {
-            this.text = "View full git history on GitHub"
+            this.text = getString(R.string.whats_new_view_full_history_button)
         }
         openBtn.setOnClickListener {
             try {
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GH_HISTORY)))
             } catch (e: Exception) {
-                Toast.makeText(this, "No browser available", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.whats_new_no_browser_available), Toast.LENGTH_SHORT).show()
             }
         }
         root.addView(openBtn)
@@ -76,7 +76,7 @@ class WhatsNewActivity : TabSSHActivity() {
             assets.open(ASSET).bufferedReader().use { it.readText() }
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to read $ASSET", e)
-            "What's New asset is missing.\n\nSee $GH_HISTORY for full history."
+            getString(R.string.whats_new_asset_missing_fmt, GH_HISTORY)
         }
     }
 

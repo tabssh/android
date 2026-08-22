@@ -8,7 +8,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="@dimen/space_md">
 
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
@@ -17,19 +17,19 @@
             android:id="@+id/edit_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Identity Name"
+            android:hint="@string/identity_edit_name_hint"
             android:inputType="text" />
     </com.google.android.material.textfield.TextInputLayout>
 
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp">
+        android:layout_marginTop="@dimen/space_sm">
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/edit_username"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Username"
+            android:hint="@string/username_hint"
             android:inputType="text" />
     </com.google.android.material.textfield.TextInputLayout>
 
@@ -37,8 +37,8 @@
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:hint="Authentication Type"
+        android:layout_marginTop="@dimen/space_sm"
+        android:hint="@string/connection_edit_auth_type_hint"
         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
         <com.google.android.material.textfield.MaterialAutoCompleteTextView
             android:id="@+id/spinner_auth_type"
@@ -52,14 +52,14 @@
         android:id="@+id/layout_password"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="@dimen/space_sm"
         android:visibility="gone"
         app:passwordToggleEnabled="true">
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/edit_password"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Password"
+            android:hint="@string/password_hint"
             android:inputType="textPassword" />
     </com.google.android.material.textfield.TextInputLayout>
 
@@ -68,9 +68,9 @@
         android:id="@+id/layout_ssh_key"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="@dimen/space_sm"
         android:visibility="gone"
-        android:hint="SSH Key"
+        android:hint="@string/connection_edit_ssh_key_hint"
         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
         <com.google.android.material.textfield.MaterialAutoCompleteTextView
             android:id="@+id/spinner_ssh_key"
@@ -82,12 +82,12 @@
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp">
+        android:layout_marginTop="@dimen/space_sm">
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/edit_description"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Description (optional)"
+            android:hint="@string/connection_edit_mosh_custom_desc_hint"
             android:inputType="textMultiLine"
             android:lines="3" />
     </com.google.android.material.textfield.TextInputLayout>

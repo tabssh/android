@@ -4,10 +4,10 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginStart="12dp"
-    android:layout_marginEnd="12dp"
-    android:layout_marginTop="4dp"
-    android:layout_marginBottom="4dp"
+    android:layout_marginStart="@dimen/space_12dp"
+    android:layout_marginEnd="@dimen/space_12dp"
+    android:layout_marginTop="@dimen/space_xs"
+    android:layout_marginBottom="@dimen/space_xs"
     app:cardCornerRadius="12dp"
     app:cardElevation="2dp"
     app:cardBackgroundColor="?attr/colorSurface">
@@ -16,7 +16,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:padding="@dimen/space_12dp">
 
         <!-- ── Title row ─────────────────────────────────────────────── -->
         <LinearLayout
@@ -32,7 +32,7 @@
                 android:layout_height="10dp"
                 android:background="@drawable/bg_circle"
                 android:backgroundTint="?attr/colorOutline"
-                android:layout_marginEnd="8dp" />
+                android:layout_marginEnd="@dimen/space_sm" />
 
             <!-- Host display name -->
             <TextView
@@ -51,7 +51,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="16sp"
-                android:paddingEnd="4dp" />
+                android:paddingEnd="@dimen/space_xs" />
 
             <!-- Monitor bell button -->
             <ImageButton
@@ -59,7 +59,7 @@
                 android:layout_width="32dp"
                 android:layout_height="32dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Monitor settings"
+                android:contentDescription="@string/host_detail_action_monitor_settings"
                 app:srcCompat="@drawable/ic_notification"
                 app:tint="?attr/colorOnSurfaceVariant" />
 
@@ -72,7 +72,7 @@
             android:layout_height="wrap_content"
             android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
             android:textColor="?attr/colorOnSurfaceVariant"
-            android:paddingStart="18dp"
+            android:paddingStart="@dimen/space_18dp"
             android:layout_marginBottom="@dimen/space_sm"
             android:ellipsize="end"
             android:maxLines="1" />
@@ -88,7 +88,7 @@
             <TextView
                 android:layout_width="36dp"
                 android:layout_height="wrap_content"
-                android:text="CPU"
+                android:text="@string/host_detail_label_cpu"
                 android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -98,8 +98,8 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:max="100"
-                android:layout_marginStart="4dp"
-                android:layout_marginEnd="4dp"
+                android:layout_marginStart="@dimen/space_xs"
+                android:layout_marginEnd="@dimen/space_xs"
                 app:trackThickness="6dp"
                 app:trackCornerRadius="3dp"
                 app:indicatorColor="@color/accent_500"
@@ -109,7 +109,7 @@
                 android:id="@+id/tv_cpu"
                 android:layout_width="44dp"
                 android:layout_height="wrap_content"
-                android:text="—"
+                android:text="@string/host_detail_value_unavailable"
                 android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
                 android:textColor="?attr/colorOnSurface"
                 android:gravity="end" />
@@ -127,7 +127,7 @@
             <TextView
                 android:layout_width="36dp"
                 android:layout_height="wrap_content"
-                android:text="MEM"
+                android:text="@string/dashboard_host_card_mem_label"
                 android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -137,8 +137,8 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:max="100"
-                android:layout_marginStart="4dp"
-                android:layout_marginEnd="4dp"
+                android:layout_marginStart="@dimen/space_xs"
+                android:layout_marginEnd="@dimen/space_xs"
                 app:trackThickness="6dp"
                 app:trackCornerRadius="3dp"
                 app:indicatorColor="?attr/colorPrimary"
@@ -148,7 +148,7 @@
                 android:id="@+id/tv_mem"
                 android:layout_width="44dp"
                 android:layout_height="wrap_content"
-                android:text="—"
+                android:text="@string/host_detail_value_unavailable"
                 android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
                 android:textColor="?attr/colorOnSurface"
                 android:gravity="end" />
@@ -166,7 +166,7 @@
             <TextView
                 android:layout_width="36dp"
                 android:layout_height="wrap_content"
-                android:text="DISK"
+                android:text="@string/dashboard_host_card_disk_label"
                 android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -176,8 +176,8 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:max="100"
-                android:layout_marginStart="4dp"
-                android:layout_marginEnd="4dp"
+                android:layout_marginStart="@dimen/space_xs"
+                android:layout_marginEnd="@dimen/space_xs"
                 app:trackThickness="6dp"
                 app:trackCornerRadius="3dp"
                 app:indicatorColor="?attr/colorTertiary"
@@ -187,7 +187,7 @@
                 android:id="@+id/tv_disk"
                 android:layout_width="44dp"
                 android:layout_height="wrap_content"
-                android:text="—"
+                android:text="@string/host_detail_value_unavailable"
                 android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
                 android:textColor="?attr/colorOnSurface"
                 android:gravity="end" />
@@ -199,14 +199,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="2dp">
+            android:layout_marginBottom="@dimen/space_2dp">
 
             <TextView
                 android:id="@+id/tv_load"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="LOAD —"
+                android:text="@string/dashboard_host_card_load_placeholder"
                 android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -214,7 +214,7 @@
                 android:id="@+id/tv_uptime"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="⏱ —"
+                android:text="@string/dashboard_host_card_uptime_placeholder"
                 android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -231,7 +231,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="↓ — ↑ —"
+                android:text="@string/dashboard_host_card_net_placeholder"
                 android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -239,7 +239,7 @@
                 android:id="@+id/tv_procs"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="⚙ —"
+                android:text="@string/dashboard_host_card_procs_placeholder"
                 android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 

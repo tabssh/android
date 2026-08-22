@@ -25,22 +25,22 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingBottom="88dp">
+            android:paddingBottom="@dimen/space_88dp">
 
             <!-- Number of Rows -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:paddingHorizontal="16dp"
-                android:paddingVertical="8dp"
+                android:paddingHorizontal="@dimen/space_md"
+                android:paddingVertical="@dimen/space_sm"
                 android:gravity="center_vertical">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Number of Rows"
+                    android:text="@string/kbdcustom_number_of_rows_label"
                     android:textSize="16sp"
                     android:textColor="?attr/colorOnSurface" />
 
@@ -56,35 +56,35 @@
                         style="?attr/materialButtonOutlinedStyle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="1" />
+                        android:text="@string/keyboard_customization_row_button_1" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_row_2"
                         style="?attr/materialButtonOutlinedStyle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="2" />
+                        android:text="@string/keyboard_customization_row_button_2" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_row_3"
                         style="?attr/materialButtonOutlinedStyle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="3" />
+                        android:text="@string/keyboard_customization_row_button_3" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_row_4"
                         style="?attr/materialButtonOutlinedStyle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="4" />
+                        android:text="@string/keyboard_customization_row_button_4" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_row_5"
                         style="?attr/materialButtonOutlinedStyle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="5" />
+                        android:text="@string/keyboard_customization_row_button_5" />
 
                 </com.google.android.material.button.MaterialButtonToggleGroup>
 
@@ -94,8 +94,8 @@
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginBottom="8dp"
+                android:layout_marginHorizontal="@dimen/space_md"
+                android:layout_marginBottom="@dimen/space_sm"
                 app:cardElevation="4dp"
                 app:cardCornerRadius="8dp">
 
@@ -103,20 +103,20 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="12dp">
+                    android:padding="@dimen/space_12dp">
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
-                        android:layout_marginBottom="6dp">
+                        android:layout_marginBottom="@dimen/space_6dp">
 
                         <TextView
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Preview"
+                            android:text="@string/kbdcustom_preview_label"
                             android:textStyle="bold"
                             android:textSize="14sp"
                             android:textColor="?attr/colorPrimary" />
@@ -124,7 +124,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Tap row to select  ·  drag ≡ to reorder  ·  tap key to remove"
+                            android:text="@string/kbdcustom_preview_hint"
                             android:textSize="10sp"
                             android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -136,7 +136,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:padding="4dp" />
+                        android:padding="@dimen/space_xs" />
 
                 </LinearLayout>
 
@@ -146,8 +146,8 @@
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginBottom="8dp"
+                android:layout_marginHorizontal="@dimen/space_md"
+                android:layout_marginBottom="@dimen/space_sm"
                 app:cardElevation="2dp"
                 app:cardCornerRadius="8dp">
 
@@ -155,30 +155,30 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="12dp">
+                    android:padding="@dimen/space_12dp">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Available Keys"
+                        android:text="@string/kbdcustom_available_keys_label"
                         android:textStyle="bold"
                         android:textSize="14sp"
                         android:textColor="?attr/colorPrimary"
-                        android:layout_marginBottom="2dp" />
+                        android:layout_marginBottom="@dimen/space_2dp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Tap a key to add it to the selected row"
+                        android:text="@string/kbdcustom_available_keys_hint"
                         android:textSize="12sp"
                         android:textColor="?attr/colorOnSurfaceVariant"
-                        android:layout_marginBottom="8dp" />
+                        android:layout_marginBottom="@dimen/space_sm" />
 
                     <!-- Category Filter Chips -->
                     <HorizontalScrollView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginBottom="8dp"
+                        android:layout_marginBottom="@dimen/space_sm"
                         android:scrollbars="none">
 
                         <com.google.android.material.chip.ChipGroup
@@ -194,7 +194,7 @@
                                 style="@style/Widget.MaterialComponents.Chip.Choice"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="All"
+                                android:text="@string/kbdcustom_category_all"
                                 android:checked="true" />
 
                             <com.google.android.material.chip.Chip
@@ -202,35 +202,35 @@
                                 style="@style/Widget.MaterialComponents.Chip.Choice"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Special" />
+                                android:text="@string/kbdcustom_category_special" />
 
                             <com.google.android.material.chip.Chip
                                 android:id="@+id/chip_navigation"
                                 style="@style/Widget.MaterialComponents.Chip.Choice"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Navigation" />
+                                android:text="@string/kbdcustom_category_navigation" />
 
                             <com.google.android.material.chip.Chip
                                 android:id="@+id/chip_function"
                                 style="@style/Widget.MaterialComponents.Chip.Choice"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Function" />
+                                android:text="@string/kbdcustom_category_function" />
 
                             <com.google.android.material.chip.Chip
                                 android:id="@+id/chip_symbols"
                                 style="@style/Widget.MaterialComponents.Chip.Choice"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Symbols" />
+                                android:text="@string/kbdcustom_category_symbols" />
 
                             <com.google.android.material.chip.Chip
                                 android:id="@+id/chip_modifiers"
                                 style="@style/Widget.MaterialComponents.Chip.Choice"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Modifiers" />
+                                android:text="@string/kbdcustom_category_modifiers" />
 
                         </com.google.android.material.chip.ChipGroup>
 
@@ -259,8 +259,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
+        android:layout_margin="@dimen/space_md"
         app:srcCompat="@drawable/ic_save"
-        android:contentDescription="Save layout" />
+        android:contentDescription="@string/kbdcustom_save_layout_description" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

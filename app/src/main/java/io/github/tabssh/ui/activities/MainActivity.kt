@@ -188,13 +188,13 @@ class MainActivity : TabSSHActivity() {
         val error = prefs.getString(io.github.tabssh.TabSSHApplication.KEY_STARTUP_ERROR, null)
         if (!error.isNullOrBlank()) {
             MaterialAlertDialogBuilder(this)
-                .setTitle("⚠️ Startup Warning")
-                .setMessage("Some components failed to initialize. The app may have reduced functionality.\n\n$error")
-                .setPositiveButton("Copy & Dismiss") { _, _ ->
+                .setTitle(R.string.main_startup_warning_title)
+                .setMessage(getString(R.string.main_startup_warning_message, error))
+                .setPositiveButton(R.string.main_startup_warning_copy_dismiss) { _, _ ->
                     io.github.tabssh.utils.ClipboardHelper.copy(this@MainActivity, "TabSSH Error", error, sensitive = false)
                     prefs.edit().remove(io.github.tabssh.TabSSHApplication.KEY_STARTUP_ERROR).apply()
                 }
-                .setNegativeButton("Dismiss") { _, _ ->
+                .setNegativeButton(R.string.main_startup_warning_dismiss) { _, _ ->
                     prefs.edit().remove(io.github.tabssh.TabSSHApplication.KEY_STARTUP_ERROR).apply()
                 }
                 .setCancelable(false)
@@ -231,7 +231,7 @@ class MainActivity : TabSSHActivity() {
                 Logger.w("MainActivity", "Notification permission denied")
                 android.widget.Toast.makeText(
                     this,
-                    "⚠️ Notifications disabled - you won't receive connection alerts",
+                    getString(R.string.main_notifications_disabled),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
             }
@@ -275,15 +275,15 @@ class MainActivity : TabSSHActivity() {
                     hypervisors.isEmpty() -> {
                         // No hypervisors of this type, show helpful message
                         val typeName = when (type) {
-                            HypervisorType.PROXMOX -> "Proxmox"
-                            HypervisorType.XCPNG -> "XCP-ng"
-                            HypervisorType.VMWARE -> "VMware"
-                            HypervisorType.OCI -> "OCI"
-                            HypervisorType.LIBVIRT -> "QEMU/libvirt"
+                            HypervisorType.PROXMOX -> getString(R.string.hypervisor_type_proxmox)
+                            HypervisorType.XCPNG -> getString(R.string.hypervisor_type_xcpng)
+                            HypervisorType.VMWARE -> getString(R.string.hypervisor_type_vmware)
+                            HypervisorType.OCI -> getString(R.string.oci_manager_title)
+                            HypervisorType.LIBVIRT -> getString(R.string.hypervisor_type_libvirt)
                         }
                         android.widget.Toast.makeText(
                             this@MainActivity,
-                            "No $typeName hosts configured. Go to Hypervisors tab to add one.",
+                            getString(R.string.main_no_hosts_configured, typeName),
                             android.widget.Toast.LENGTH_LONG
                         ).show()
                         // Switch to Hypervisors tab
@@ -302,7 +302,7 @@ class MainActivity : TabSSHActivity() {
                 Logger.e("MainActivity", "Failed to get hypervisors by type", e)
                 android.widget.Toast.makeText(
                     this@MainActivity,
-                    "Failed to load hypervisors: ${e.message}",
+                    getString(R.string.main_load_hypervisors_failed, e.message),
                     android.widget.Toast.LENGTH_SHORT
                 ).show()
             }
@@ -314,7 +314,7 @@ class MainActivity : TabSSHActivity() {
      */
     private fun openHypervisorManager(hypervisor: HypervisorProfile) {
         if (hypervisor.type == HypervisorType.OCI) {
-            Toast.makeText(this, "OCI is now managed under Cloud Accounts", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.main_oci_managed_under_cloud_accounts), Toast.LENGTH_SHORT).show()
             return
         }
         val intent = when (hypervisor.type) {
@@ -332,14 +332,14 @@ class MainActivity : TabSSHActivity() {
      * Show dialog to select from multiple hypervisors
      */
     private fun showHypervisorSelectionDialog(hypervisors: List<HypervisorProfile>) {
-        val names = hypervisors.map { "${it.name} (${it.host})" }.toTypedArray()
+        val names = hypervisors.map { getString(R.string.main_hypervisor_name_host, it.name, it.host) }.toTypedArray()
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("Select Hypervisor")
+            .setTitle(R.string.main_select_hypervisor_title)
             .setItems(names) { _, which ->
                 openHypervisorManager(hypervisors[which])
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -384,13 +384,13 @@ class MainActivity : TabSSHActivity() {
         // Update hints when protocol selection changes.
         chipGroupProtocol.setOnCheckedStateChangeListener { _, checkedIds ->
             if (checkedIds.contains(R.id.chip_vnc)) {
-                hostLayout.hint = "hostname or IP"
+                hostLayout.hint = getString(R.string.main_quick_connect_hint_host_vnc)
                 portInput.setText("5900")
-                passwordLayout.hint = "VNC password (optional)"
+                passwordLayout.hint = getString(R.string.main_quick_connect_hint_password_vnc)
             } else {
-                hostLayout.hint = "hostname or user@hostname"
+                hostLayout.hint = getString(R.string.main_quick_connect_hint_host_ssh)
                 portInput.setText("22")
-                passwordLayout.hint = "Password (leave blank to use SSH key)"
+                passwordLayout.hint = getString(R.string.main_quick_connect_hint_password_ssh)
             }
         }
 
@@ -400,11 +400,11 @@ class MainActivity : TabSSHActivity() {
         }
 
         val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle("Quick Connect")
+            .setTitle(R.string.quick_connect_title)
             .setView(view)
             // set below to prevent auto-dismiss on error
-            .setPositiveButton("Connect", null)
-            .setNegativeButton("Cancel", null)
+            .setPositiveButton(R.string.connect_button, null)
+            .setNegativeButton(R.string.cancel, null)
             .create()
 
         dialog.setOnShowListener {
@@ -413,7 +413,7 @@ class MainActivity : TabSSHActivity() {
                 val password = passwordInput.text.toString()
 
                 if (raw.isEmpty()) {
-                    hostLayout.error = "Enter a hostname"
+                    hostLayout.error = getString(R.string.main_quick_connect_error_enter_hostname)
                     return@setOnClickListener
                 }
                 hostLayout.error = null
@@ -451,7 +451,7 @@ class MainActivity : TabSSHActivity() {
                                     try { rfbClient.stop() } catch (e: Exception) {
                                         Logger.d("MainActivity", "rfbClient.stop() suppressed after max-tabs reject: ${e.message}")
                                     }
-                                    Toast.makeText(this@MainActivity, "Maximum tabs reached", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(this@MainActivity, getString(R.string.virt_viewer_max_tabs), Toast.LENGTH_SHORT).show()
                                     return@launch
                                 }
                                 tab.rfbClient = rfbClient
@@ -463,7 +463,7 @@ class MainActivity : TabSSHActivity() {
                                 )
                             } catch (e: Exception) {
                                 Logger.e("MainActivity", "Failed to save VNC host", e)
-                                Toast.makeText(this@MainActivity, "Failed to save: ${e.message}", Toast.LENGTH_LONG).show()
+                                Toast.makeText(this@MainActivity, getString(R.string.main_quick_connect_save_failed, e.message), Toast.LENGTH_LONG).show()
                             }
                         }
                     } else {
@@ -490,7 +490,7 @@ class MainActivity : TabSSHActivity() {
                                     try { rfbClient.stop() } catch (e: Exception) {
                                         Logger.d("MainActivity", "rfbClient.stop() suppressed after max-tabs reject: ${e.message}")
                                     }
-                                    Toast.makeText(this@MainActivity, "Maximum tabs reached", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(this@MainActivity, getString(R.string.virt_viewer_max_tabs), Toast.LENGTH_SHORT).show()
                                     return@launch
                                 }
                                 tab.rfbClient = rfbClient
@@ -502,7 +502,7 @@ class MainActivity : TabSSHActivity() {
                                 )
                             } catch (e: Exception) {
                                 Logger.e("MainActivity", "VNC connect failed", e)
-                                Toast.makeText(this@MainActivity, "Connection failed: vnc $raw:$port: ${e.message}", Toast.LENGTH_LONG).show()
+                                Toast.makeText(this@MainActivity, getString(R.string.main_quick_connect_vnc_connection_failed, raw, port, e.message), Toast.LENGTH_LONG).show()
                             }
                         }
                     }
@@ -564,12 +564,12 @@ class MainActivity : TabSSHActivity() {
                     )
                 }
                 Logger.i("MainActivity", "Saved + connecting to $username@$hostname:$port (id=${profile.id})")
-                Toast.makeText(this@MainActivity, "Saved \"$name\"", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, getString(R.string.main_quick_connect_saved, name), Toast.LENGTH_SHORT).show()
                 val intent = TabTerminalActivity.createIntent(this@MainActivity, profile, autoConnect = true)
                 startActivity(intent)
             } catch (e: Exception) {
                 Logger.e("MainActivity", "Failed to save connection", e)
-                Toast.makeText(this@MainActivity, "Failed to save: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@MainActivity, getString(R.string.main_quick_connect_save_failed, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -595,7 +595,7 @@ class MainActivity : TabSSHActivity() {
     private fun quickConnect(username: String, hostname: String, port: Int, password: String? = null) {
         val quickProfile = ConnectionProfile(
             id = java.util.UUID.randomUUID().toString(),
-            name = "Quick: $username@$hostname",
+            name = getString(R.string.main_quick_connect_profile_name, username, hostname),
             host = hostname,
             port = port,
             username = username,

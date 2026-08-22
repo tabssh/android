@@ -78,7 +78,7 @@ class ClusterCommandActivity : TabSSHActivity() {
 
     private fun setupToolbar() {
         setSupportActionBar(findViewById(R.id.toolbar))
-        supportActionBar?.title = "Cluster Commands"
+        supportActionBar?.title = getString(R.string.activity_label_cluster_commands)
     }
 
     private fun setupViews() {
@@ -186,7 +186,7 @@ class ClusterCommandActivity : TabSSHActivity() {
             }
 
             if (snippets.isEmpty()) {
-                Toast.makeText(this@ClusterCommandActivity, "No snippets available", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@ClusterCommandActivity, getString(R.string.cluster_toast_no_snippets), Toast.LENGTH_SHORT).show()
                 return@launch
             }
 
@@ -194,12 +194,12 @@ class ClusterCommandActivity : TabSSHActivity() {
 
             runOnUiThread {
                 MaterialAlertDialogBuilder(this@ClusterCommandActivity)
-                    .setTitle("Select Snippet")
+                    .setTitle(getString(R.string.cluster_select_snippet_title))
                     .setItems(snippetNames) { _, which ->
                         val selectedSnippet = snippets[which]
                         commandInput.setText(selectedSnippet.command)
                     }
-                    .setNegativeButton("Cancel", null)
+                    .setNegativeButton(getString(R.string.cancel), null)
                     .show()
             }
         }
@@ -220,7 +220,7 @@ class ClusterCommandActivity : TabSSHActivity() {
 
     private fun updateSelectedCount() {
         val count = selectedConnections.size
-        selectedCountText.text = "$count selected"
+        selectedCountText.text = getString(R.string.cluster_selected_count, count)
         updateExecuteButton()
     }
 
@@ -291,12 +291,12 @@ class ClusterCommandActivity : TabSSHActivity() {
         val command = commandInput.text.toString().trim()
         
         if (command.isEmpty()) {
-            Toast.makeText(this, "Enter a command", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.cluster_toast_enter_command), Toast.LENGTH_SHORT).show()
             return
         }
-        
+
         if (selectedConnections.isEmpty()) {
-            Toast.makeText(this, "Select at least one connection", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.connections_selection_none), Toast.LENGTH_SHORT).show()
             return
         }
         
@@ -323,15 +323,15 @@ class ClusterCommandActivity : TabSSHActivity() {
                 
                 Toast.makeText(
                     this@ClusterCommandActivity,
-                    "Execution complete",
+                    getString(R.string.cluster_toast_execution_complete),
                     Toast.LENGTH_SHORT
                 ).show()
-                
+
             } catch (e: Exception) {
                 Logger.e("ClusterCommandActivity", "Execution failed", e)
                 Toast.makeText(
                     this@ClusterCommandActivity,
-                    "Execution failed: ${e.message}",
+                    getString(R.string.cluster_toast_execution_failed, e.message),
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -342,7 +342,7 @@ class ClusterCommandActivity : TabSSHActivity() {
         executor.cancelAll()
         executeButton.visibility = View.VISIBLE
         cancelButton.visibility = View.GONE
-        Toast.makeText(this, "Execution cancelled", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.cluster_toast_execution_cancelled), Toast.LENGTH_SHORT).show()
     }
 
     private fun showResults(results: List<ClusterCommandExecutor.ExecutionResult>) {
@@ -353,8 +353,8 @@ class ClusterCommandActivity : TabSSHActivity() {
     }
 
     private fun copyToClipboard(text: String) {
-        io.github.tabssh.utils.ClipboardHelper.copy(this, "Cluster Command Output", text, sensitive = false)
-        Toast.makeText(this, "Output copied to clipboard", Toast.LENGTH_SHORT).show()
+        io.github.tabssh.utils.ClipboardHelper.copy(this, getString(R.string.cluster_clipboard_label), text, sensitive = false)
+        Toast.makeText(this, getString(R.string.cluster_toast_output_copied), Toast.LENGTH_SHORT).show()
     }
 
     private fun updateExecuteButton() {
@@ -392,7 +392,7 @@ class ClusterCommandActivity : TabSSHActivity() {
             val groupName = connection.groupId?.let { groupNames[it] }
             if (groupName != null) {
                 holder.groupBadge.visibility = android.view.View.VISIBLE
-                holder.groupBadge.text = "• $groupName"
+                holder.groupBadge.text = holder.groupBadge.context.getString(R.string.cluster_group_badge, groupName)
             } else {
                 holder.groupBadge.visibility = android.view.View.GONE
             }
@@ -473,12 +473,12 @@ class ClusterCommandActivity : TabSSHActivity() {
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val result = results[position]
-            val outputText = result.output.ifEmpty { result.error ?: "No output" }
+            val outputText = result.output.ifEmpty { result.error ?: holder.itemView.context.getString(R.string.cluster_no_output) }
 
             holder.name.text = result.profile.name
-            holder.status.text = if (result.success) "✅ Success" else "❌ Failed"
+            holder.status.text = if (result.success) holder.itemView.context.getString(R.string.cluster_status_success) else holder.itemView.context.getString(R.string.cluster_status_failed)
             holder.output.text = outputText
-            holder.time.text = "${result.executionTimeMs}ms"
+            holder.time.text = holder.itemView.context.getString(R.string.cluster_execution_time_ms, result.executionTimeMs)
 
             holder.status.setTextColor(
                 if (result.success) androidx.core.content.ContextCompat.getColor(holder.status.context, R.color.status_success) else androidx.core.content.ContextCompat.getColor(holder.status.context, R.color.status_error)

@@ -138,13 +138,13 @@ class CloudAccountsActivity : TabSSHActivity() {
             b.textAccountName.text = account.name
             b.textProviderDetail.text = buildString {
                 append(providerType?.displayName ?: account.provider)
-                if (account.lastCount > 0) append(" · ${account.lastCount} hosts")
+                if (account.lastCount > 0) append(getString(R.string.cloud_accounts_host_count_suffix, account.lastCount))
             }
 
             b.textLastRefresh.text = if (account.lastRefreshAt > 0) {
-                "Last sync: ${ROW_FORMATTER.format(Date(account.lastRefreshAt))}"
+                getString(R.string.cloud_accounts_last_sync, ROW_FORMATTER.format(Date(account.lastRefreshAt)))
             } else {
-                "Never synced"
+                getString(R.string.cloud_accounts_never_synced)
             }
 
             // Deprecated activity — read-only enabled indicator; tap row to open
@@ -191,9 +191,9 @@ class CloudAccountsActivity : TabSSHActivity() {
         }
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("Add cloud account")
+            .setTitle(getString(R.string.cloud_add_account_title))
             .setView(dialogView)
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(getString(R.string.save)) { _, _ ->
                 val name = editName.text?.toString()?.trim().orEmpty()
                 val token = editToken.text?.toString().orEmpty()
                 val selectedLabel = spinProvider.text?.toString().orEmpty()
@@ -202,16 +202,16 @@ class CloudAccountsActivity : TabSSHActivity() {
                     ?: CloudProviderType.entries.first()
 
                 if (name.isBlank()) {
-                    tilName.error = "Account name is required"
+                    tilName.error = getString(R.string.cloud_error_name_required)
                     return@setPositiveButton
                 }
                 if (token.isBlank()) {
-                    tilToken.error = "API token is required"
+                    tilToken.error = getString(R.string.cloud_error_token_required)
                     return@setPositiveButton
                 }
                 saveAccount(name, providerType, token)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -228,30 +228,30 @@ class CloudAccountsActivity : TabSSHActivity() {
                         SecurePasswordManager.StorageLevel.ENCRYPTED
                     )
                 }
-                Toast.makeText(this@CloudAccountsActivity, "Saved '${account.name}'", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@CloudAccountsActivity, getString(R.string.cloud_accounts_toast_saved, account.name), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Logger.e(TAG, "Save cloud account failed", e)
-                Toast.makeText(this@CloudAccountsActivity, "Save failed: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@CloudAccountsActivity, getString(R.string.cloud_accounts_toast_save_failed, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }
 
     private fun refreshAccount(account: CloudAccount) {
-        Toast.makeText(this, "Refreshing ${account.name}…", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.cloud_accounts_toast_refreshing, account.name), Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             val token = withContext(Dispatchers.IO) {
                 app.securePasswordManager.retrievePassword("cloud_token_${account.id}")
             }
             if (token.isNullOrBlank()) {
                 runOnUiThread {
-                    Toast.makeText(this@CloudAccountsActivity, "Token missing — re-add account", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@CloudAccountsActivity, getString(R.string.cloud_manager_toast_token_missing), Toast.LENGTH_LONG).show()
                 }
                 return@launch
             }
             val providerType = CloudProviderType.fromTag(account.provider)
             if (providerType == null) {
                 runOnUiThread {
-                    Toast.makeText(this@CloudAccountsActivity, "Unknown provider: ${account.provider}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@CloudAccountsActivity, getString(R.string.cloud_manager_toast_unknown_provider, account.provider), Toast.LENGTH_LONG).show()
                 }
                 return@launch
             }
@@ -261,7 +261,7 @@ class CloudAccountsActivity : TabSSHActivity() {
             } catch (e: Exception) {
                 Logger.e(TAG, "Inventory fetch failed", e)
                 runOnUiThread {
-                    Toast.makeText(this@CloudAccountsActivity, "Refresh failed: cloud ${account.name}: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@CloudAccountsActivity, getString(R.string.cloud_accounts_toast_refresh_failed, account.name, e.message), Toast.LENGTH_LONG).show()
                 }
                 return@launch
             }
@@ -281,19 +281,19 @@ class CloudAccountsActivity : TabSSHActivity() {
 
     private fun showImportPicker(account: CloudAccount, candidates: List<ImportCandidate>) {
         if (candidates.isEmpty()) {
-            Toast.makeText(this, "${account.name}: 0 hosts found", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.cloud_accounts_toast_zero_hosts_found, account.name), Toast.LENGTH_SHORT).show()
             return
         }
         val labels = candidates.map { "${it.profile.getDisplayName()} (${it.sourceLabel})" }.toTypedArray()
         val checked = BooleanArray(candidates.size) { true }
         MaterialAlertDialogBuilder(this)
-            .setTitle("${account.name}: pick to import (${candidates.size})")
+            .setTitle(getString(R.string.cloud_accounts_import_picker_title, account.name, candidates.size))
             .setMultiChoiceItems(labels, checked) { _, idx, isChecked -> checked[idx] = isChecked }
-            .setPositiveButton("Import") { _, _ ->
+            .setPositiveButton(getString(R.string.conn_edit_import)) { _, _ ->
                 val picked = candidates.filterIndexed { i, _ -> checked[i] }
                 importPicked(picked)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -346,14 +346,14 @@ class CloudAccountsActivity : TabSSHActivity() {
                 runOnUiThread {
                     Toast.makeText(
                         this@CloudAccountsActivity,
-                        "Inserted $inserted, updated $updated",
+                        getString(R.string.cloud_accounts_toast_inserted_updated, inserted, updated),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Bulk insert/update failed", e)
                 runOnUiThread {
-                    Toast.makeText(this@CloudAccountsActivity, "Import failed: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@CloudAccountsActivity, getString(R.string.cloud_accounts_toast_import_failed, e.message), Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -387,14 +387,17 @@ class CloudAccountsActivity : TabSSHActivity() {
                 if (hosts.isEmpty()) {
                     MaterialAlertDialogBuilder(this@CloudAccountsActivity)
                         .setTitle(account.name)
-                        .setMessage("No hosts imported yet. Use the refresh button to fetch and import hosts.")
-                        .setPositiveButton("OK", null)
+                        .setMessage(getString(R.string.cloud_accounts_no_hosts_imported))
+                        .setPositiveButton(getString(R.string.ok), null)
                         .show()
                     return@runOnUiThread
                 }
                 val labels = hosts.map { "${it.getDisplayName()}  –  ${it.host}:${it.port}" }.toTypedArray()
                 MaterialAlertDialogBuilder(this@CloudAccountsActivity)
-                    .setTitle("${account.name} · ${hosts.size} host${if (hosts.size == 1) "" else "s"}")
+                    .setTitle(
+                        if (hosts.size == 1) getString(R.string.cloud_accounts_hosts_title_singular, account.name, hosts.size)
+                        else getString(R.string.cloud_accounts_hosts_title_plural, account.name, hosts.size)
+                    )
                     .setItems(labels) { _, idx ->
                         val profile = hosts[idx]
                         startActivity(
@@ -403,7 +406,7 @@ class CloudAccountsActivity : TabSSHActivity() {
                             )
                         )
                     }
-                    .setNegativeButton("Close", null)
+                    .setNegativeButton(getString(R.string.close), null)
                     .show()
             }
         }
@@ -411,9 +414,9 @@ class CloudAccountsActivity : TabSSHActivity() {
 
     private fun confirmDelete(account: CloudAccount) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Delete ${account.name}?")
-            .setMessage("Removes this cloud account record and its stored token. Imported connections stay.")
-            .setPositiveButton("Delete") { _, _ ->
+            .setTitle(getString(R.string.cloud_accounts_delete_title, account.name))
+            .setMessage(getString(R.string.cloud_accounts_delete_message))
+            .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 lifecycleScope.launch {
                     try {
                         withContext(Dispatchers.IO) {
@@ -427,7 +430,7 @@ class CloudAccountsActivity : TabSSHActivity() {
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 

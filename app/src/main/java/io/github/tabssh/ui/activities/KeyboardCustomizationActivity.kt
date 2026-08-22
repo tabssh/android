@@ -181,7 +181,7 @@ class KeyboardCustomizationActivity : TabSSHActivity() {
     }
 
     private fun makeEmptyRowHint(dp: Float) = TextView(this).apply {
-        text = "Empty row — tap a key below to add"
+        text = getString(R.string.keyboard_customization_empty_row_hint)
         textSize = 11f
         setTextColor(androidx.core.content.ContextCompat.getColor(this@KeyboardCustomizationActivity, R.color.on_surface_variant))
         alpha = 0.6f
@@ -425,12 +425,12 @@ class KeyboardCustomizationActivity : TabSSHActivity() {
             app.preferencesManager.setKeyboardLayoutVersion(
                 io.github.tabssh.ui.keyboard.MultiRowKeyboardView.CURRENT_DEFAULT_LAYOUT_VERSION
             )
-            Toast.makeText(this, "Layout saved (${keyboardLayout.size} rows)", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.keyboard_customization_layout_saved, keyboardLayout.size), Toast.LENGTH_SHORT).show()
             Logger.i("KeyboardCustomization", "Saved ${keyboardLayout.size} rows")
             finish()
         } catch (e: Exception) {
             Logger.e("KeyboardCustomization", "Save failed", e)
-            Toast.makeText(this, "Failed to save: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.keyboard_customization_save_failed, e.message.toString()), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -453,9 +453,9 @@ class KeyboardCustomizationActivity : TabSSHActivity() {
      */
     private fun confirmResetToDefault() {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Reset to default?")
-            .setMessage("Discard the current edits and restore the default keyboard layout. You will still need to tap Save to keep the change.")
-            .setPositiveButton("Reset") { _, _ ->
+            .setTitle(R.string.keyboard_customization_reset_title)
+            .setMessage(R.string.keyboard_customization_reset_message)
+            .setPositiveButton(R.string.settings_action_reset) { _, _ ->
                 val rowCount = keyboardLayout.size.coerceIn(1, 5).takeIf { it > 0 } ?: 3
                 keyboardLayout.clear()
                 keyboardLayout.addAll(
@@ -471,9 +471,9 @@ class KeyboardCustomizationActivity : TabSSHActivity() {
                 activeRow = 0
                 rebuildSurface()
                 refreshAvailableKeys()
-                Toast.makeText(this, "Reset to default layout", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.keyboard_customization_reset_done_toast), Toast.LENGTH_SHORT).show()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 

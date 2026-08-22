@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.cloud.CloudAuthException
 import io.github.tabssh.cloud.CloudInstanceState
@@ -100,7 +101,7 @@ class CloudAccountManagerActivity : TabSSHActivity() {
 
         val accountId = intent.getStringExtra(EXTRA_ACCOUNT_ID)
         if (accountId.isNullOrBlank()) {
-            Toast.makeText(this, "No account specified", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.cloud_manager_toast_no_account_specified), Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -110,7 +111,7 @@ class CloudAccountManagerActivity : TabSSHActivity() {
                 app.database.cloudAccountDao().getById(accountId)
             }
             if (loaded == null) {
-                Toast.makeText(this@CloudAccountManagerActivity, "Account not found", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@CloudAccountManagerActivity, getString(R.string.cloud_manager_toast_account_not_found), Toast.LENGTH_SHORT).show()
                 finish()
                 return@launch
             }
@@ -137,7 +138,7 @@ class CloudAccountManagerActivity : TabSSHActivity() {
             if (token.isNullOrBlank()) {
                 binding.progressLoading.visibility = View.GONE
                 Toast.makeText(this@CloudAccountManagerActivity,
-                    "Token missing — re-add account", Toast.LENGTH_LONG).show()
+                    getString(R.string.cloud_manager_toast_token_missing), Toast.LENGTH_LONG).show()
                 return@launch
             }
 
@@ -145,7 +146,7 @@ class CloudAccountManagerActivity : TabSSHActivity() {
             if (client == null) {
                 binding.progressLoading.visibility = View.GONE
                 Toast.makeText(this@CloudAccountManagerActivity,
-                    "Unknown provider: ${acct.provider}", Toast.LENGTH_LONG).show()
+                    getString(R.string.cloud_manager_toast_unknown_provider, acct.provider), Toast.LENGTH_LONG).show()
                 return@launch
             }
 
@@ -157,13 +158,13 @@ class CloudAccountManagerActivity : TabSSHActivity() {
                 Logger.e(TAG, "fetchLiveInstances auth failed for ${acct.name}", e)
                 binding.progressLoading.visibility = View.GONE
                 Toast.makeText(this@CloudAccountManagerActivity,
-                    "Token invalid — re-add account (${e.message})", Toast.LENGTH_LONG).show()
+                    getString(R.string.cloud_manager_toast_token_invalid_detail, e.message), Toast.LENGTH_LONG).show()
                 return@launch
             } catch (e: Exception) {
                 Logger.e(TAG, "fetchLiveInstances failed for ${acct.name}", e)
                 binding.progressLoading.visibility = View.GONE
                 Toast.makeText(this@CloudAccountManagerActivity,
-                    "Load failed: ${e.message}", Toast.LENGTH_LONG).show()
+                    getString(R.string.cloud_manager_toast_load_failed, e.message), Toast.LENGTH_LONG).show()
                 return@launch
             }
 
@@ -182,13 +183,13 @@ class CloudAccountManagerActivity : TabSSHActivity() {
     private fun handlePowerToggle(inst: CloudInstanceState) {
         val acct = account ?: return
         val isRunning = inst.status == "running"
-        val actionLabel = if (isRunning) "Stop" else "Start"
+        val actionLabel = if (isRunning) getString(R.string.cloud_manager_action_stop) else getString(R.string.cloud_manager_action_start)
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("$actionLabel ${inst.name}?")
-            .setMessage(if (isRunning) "Stop this instance?" else "Start this instance?")
+            .setTitle(getString(R.string.cloud_manager_power_dialog_title, actionLabel, inst.name))
+            .setMessage(if (isRunning) getString(R.string.cloud_manager_power_dialog_message_stop) else getString(R.string.cloud_manager_power_dialog_message_start))
             .setPositiveButton(actionLabel) { _, _ -> performPowerAction(acct, inst, isRunning) }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -199,7 +200,7 @@ class CloudAccountManagerActivity : TabSSHActivity() {
             }
             if (token.isNullOrBlank()) {
                 Toast.makeText(this@CloudAccountManagerActivity,
-                    "Token missing — re-add account", Toast.LENGTH_LONG).show()
+                    getString(R.string.cloud_manager_toast_token_missing), Toast.LENGTH_LONG).show()
                 return@launch
             }
 
@@ -213,7 +214,7 @@ class CloudAccountManagerActivity : TabSSHActivity() {
             } catch (e: CloudAuthException) {
                 Logger.e(TAG, "Power action auth failed for ${inst.name}", e)
                 Toast.makeText(this@CloudAccountManagerActivity,
-                    "Token invalid — re-add account", Toast.LENGTH_LONG).show()
+                    getString(R.string.cloud_manager_toast_token_invalid), Toast.LENGTH_LONG).show()
                 return@launch
             } catch (e: Exception) {
                 Logger.e(TAG, "Power action failed for ${inst.name}", e)
@@ -221,27 +222,27 @@ class CloudAccountManagerActivity : TabSSHActivity() {
             }
 
             persistOciCloudPin(acct, token, client)
-            val verb = if (isRunning) "stop" else "start"
+            val verb = if (isRunning) getString(R.string.cloud_manager_verb_stop) else getString(R.string.cloud_manager_verb_start)
             if (success) {
                 Toast.makeText(this@CloudAccountManagerActivity,
-                    "${inst.name}: ${verb} request sent", Toast.LENGTH_SHORT).show()
+                    getString(R.string.cloud_manager_toast_request_sent, inst.name, verb), Toast.LENGTH_SHORT).show()
                 loadInstances(acct)
             } else {
                 Toast.makeText(this@CloudAccountManagerActivity,
-                    "Failed to $verb ${inst.name}", Toast.LENGTH_LONG).show()
+                    getString(R.string.cloud_manager_toast_action_failed, verb, inst.name), Toast.LENGTH_LONG).show()
             }
         }
     }
 
     private fun handleRestart(inst: CloudInstanceState, force: Boolean) {
         val acct = account ?: return
-        val label = if (force) "Force Restart" else "Restart"
-        val msg = if (force) "Hard power-cycle ${inst.name}?" else "Gracefully reboot ${inst.name}?"
+        val label = if (force) getString(R.string.cloud_manager_action_force_restart) else getString(R.string.cloud_manager_action_restart)
+        val msg = if (force) getString(R.string.cloud_manager_restart_dialog_message_force, inst.name) else getString(R.string.cloud_manager_restart_dialog_message_graceful, inst.name)
         MaterialAlertDialogBuilder(this)
-            .setTitle("$label ${inst.name}?")
+            .setTitle(getString(R.string.cloud_manager_power_dialog_title, label, inst.name))
             .setMessage(msg)
             .setPositiveButton(label) { _, _ -> performRestartAction(acct, inst, force) }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -252,7 +253,7 @@ class CloudAccountManagerActivity : TabSSHActivity() {
             }
             if (token.isNullOrBlank()) {
                 Toast.makeText(this@CloudAccountManagerActivity,
-                    "Token missing — re-add account", Toast.LENGTH_LONG).show()
+                    getString(R.string.cloud_manager_toast_token_missing), Toast.LENGTH_LONG).show()
                 return@launch
             }
             val client = providerClientFor(acct.provider) ?: return@launch
@@ -264,21 +265,21 @@ class CloudAccountManagerActivity : TabSSHActivity() {
             } catch (e: CloudAuthException) {
                 Logger.e(TAG, "Restart auth failed for ${inst.name}", e)
                 Toast.makeText(this@CloudAccountManagerActivity,
-                    "Token invalid — re-add account", Toast.LENGTH_LONG).show()
+                    getString(R.string.cloud_manager_toast_token_invalid), Toast.LENGTH_LONG).show()
                 return@launch
             } catch (e: Exception) {
                 Logger.e(TAG, "Restart failed for ${inst.name}", e)
                 false
             }
             persistOciCloudPin(acct, token, client)
-            val verb = if (force) "force restart" else "restart"
+            val verb = if (force) getString(R.string.cloud_manager_verb_force_restart) else getString(R.string.cloud_manager_verb_restart)
             if (success) {
                 Toast.makeText(this@CloudAccountManagerActivity,
-                    "${inst.name}: $verb request sent", Toast.LENGTH_SHORT).show()
+                    getString(R.string.cloud_manager_toast_request_sent, inst.name, verb), Toast.LENGTH_SHORT).show()
                 loadInstances(acct)
             } else {
                 Toast.makeText(this@CloudAccountManagerActivity,
-                    "Failed to $verb ${inst.name}", Toast.LENGTH_LONG).show()
+                    getString(R.string.cloud_manager_toast_action_failed, verb, inst.name), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -286,7 +287,7 @@ class CloudAccountManagerActivity : TabSSHActivity() {
     private fun handleConnect(inst: CloudInstanceState) {
         val ip = inst.ip
         if (ip.isNullOrBlank()) {
-            Toast.makeText(this, "No public IP available", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.cloud_manager_toast_no_public_ip), Toast.LENGTH_SHORT).show()
             return
         }
         val acct = account ?: return
@@ -434,14 +435,14 @@ class CloudAccountManagerActivity : TabSSHActivity() {
                 return edit
             }
 
-            val editUsername = field("SSH username", existing?.optString("username") ?: "root")
-            val editPassword = field("SSH password (optional)", existing?.optString("password") ?: "", password = true)
-            val editPort     = field("Port", existing?.optInt("port", 22)?.toString() ?: "22")
+            val editUsername = field(getString(R.string.cloud_manager_hint_ssh_username), existing?.optString("username") ?: "root")
+            val editPassword = field(getString(R.string.cloud_manager_hint_ssh_password), existing?.optString("password") ?: "", password = true)
+            val editPort     = field(getString(R.string.route_port_hint), existing?.optInt("port", 22)?.toString() ?: "22")
 
             // Identity dropdown — "(none)" + all stored identities.
             val identityTil = TextInputLayout(ctx, null,
                 com.google.android.material.R.attr.textInputOutlinedExposedDropdownMenuStyle).apply {
-                hint = "SSH identity (optional)"
+                hint = getString(R.string.cloud_manager_hint_ssh_identity)
                 layoutParams = android.widget.LinearLayout.LayoutParams(
                     android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
                     android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
@@ -456,7 +457,7 @@ class CloudAccountManagerActivity : TabSSHActivity() {
             identityTil.addView(identityDropdown)
             ll.addView(identityTil)
 
-            val noneLabel = "(none)"
+            val noneLabel = getString(R.string.container_detail_none)
             val identityLabels = listOf(noneLabel) + identities.map { it.getDisplayName() }
             identityDropdown.setAdapter(
                 ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, identityLabels)
@@ -467,18 +468,18 @@ class CloudAccountManagerActivity : TabSSHActivity() {
             identityDropdown.setText(preselectedIdentity?.getDisplayName() ?: noneLabel, false)
 
             val dialog = MaterialAlertDialogBuilder(ctx)
-                .setTitle("SSH credentials — ${inst.name}")
+                .setTitle(getString(R.string.cloud_manager_credentials_dialog_title, inst.name))
                 .setView(scroll)
-                .setPositiveButton("Save") { _, _ -> /* overridden */ }
-                .setNegativeButton("Cancel", null)
+                .setPositiveButton(getString(R.string.save)) { _, _ -> /* overridden */ }
+                .setNegativeButton(getString(R.string.cancel), null)
                 .also { b ->
                     // Only show Clear if credentials have previously been saved.
                     if (credsJson != null) {
-                        b.setNeutralButton("Clear") { _, _ ->
+                        b.setNeutralButton(getString(R.string.action_clear)) { _, _ ->
                             lifecycleScope.launch(Dispatchers.IO) {
                                 app.securePasswordManager.clearPassword(hostCredKey(acct.id, inst.id))
                             }
-                            Toast.makeText(ctx, "Credentials cleared for ${inst.name}", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(ctx, getString(R.string.cloud_manager_toast_credentials_cleared, inst.name), Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
@@ -508,12 +509,12 @@ class CloudAccountManagerActivity : TabSSHActivity() {
                         )
                     }
                     if (stored) {
-                        val identityLabel = selectedIdentity?.getDisplayName() ?: "no identity"
-                        Toast.makeText(ctx, "Saved: $username:$port ($identityLabel)", Toast.LENGTH_SHORT).show()
+                        val identityLabel = selectedIdentity?.getDisplayName() ?: getString(R.string.cloud_manager_no_identity)
+                        Toast.makeText(ctx, getString(R.string.cloud_manager_toast_credentials_saved, username, port, identityLabel), Toast.LENGTH_SHORT).show()
                         dialog.dismiss()
                     } else {
                         Toast.makeText(ctx,
-                            "Save failed — check device security settings (screen lock required)",
+                            getString(R.string.cloud_manager_toast_save_failed),
                             Toast.LENGTH_LONG).show()
                     }
                 }

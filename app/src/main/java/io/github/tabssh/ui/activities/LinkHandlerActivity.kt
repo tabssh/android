@@ -111,7 +111,7 @@ class LinkHandlerActivity : AppCompatActivity() {
         val rawUrl = intent?.dataString
         if (rawUrl.isNullOrBlank()) {
             Logger.w(TAG, "Launched with no intent data — nothing to handle")
-            Toast.makeText(this, "Invalid link", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.link_handler_invalid_link), Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -127,7 +127,7 @@ class LinkHandlerActivity : AppCompatActivity() {
                 // A malformed link can still carry userinfo (ssh://user:secret@…),
                 // so redact before logging it.
                 Logger.w(TAG, "Unhandled or malformed link: ${Logger.urlForLogging(rawUrl)}")
-                Toast.makeText(this, "Could not parse this link", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.link_handler_could_not_parse), Toast.LENGTH_SHORT).show()
                 finish()
             }
         }
@@ -136,13 +136,10 @@ class LinkHandlerActivity : AppCompatActivity() {
     private fun showSshDialog(action: TerminalLinkClassifier.LinkAction.Ssh) {
         val display = describe(action.username, action.host, action.port)
         MaterialAlertDialogBuilder(this)
-            .setTitle("Connect via SSH?")
-            .setMessage(
-                "$display\n\nTabSSH will open a new session to this host. " +
-                    "No stored password or key is attached automatically."
-            )
-            .setPositiveButton("Connect") { _, _ -> connectSsh(action) }
-            .setNegativeButton("Cancel") { _, _ -> finish() }
+            .setTitle(R.string.link_handler_ssh_dialog_title)
+            .setMessage(getString(R.string.link_handler_ssh_dialog_message, display))
+            .setPositiveButton(R.string.virt_viewer_connect) { _, _ -> connectSsh(action) }
+            .setNegativeButton(R.string.virt_viewer_cancel) { _, _ -> finish() }
             .setOnCancelListener { finish() }
             .show()
     }
@@ -150,14 +147,10 @@ class LinkHandlerActivity : AppCompatActivity() {
     private fun showSftpDialog(action: TerminalLinkClassifier.LinkAction.Sftp) {
         val display = describe(action.username, action.host, action.port)
         MaterialAlertDialogBuilder(this)
-            .setTitle("Browse via SFTP?")
-            .setMessage(
-                "$display\nRemote path: ${action.path}\n\n" +
-                    "TabSSH will connect to this host, then open the SFTP browser " +
-                    "at that path. No stored password or key is attached automatically."
-            )
-            .setPositiveButton("Connect") { _, _ -> connectSftp(action) }
-            .setNegativeButton("Cancel") { _, _ -> finish() }
+            .setTitle(R.string.link_handler_sftp_dialog_title)
+            .setMessage(getString(R.string.link_handler_sftp_dialog_message, display, action.path))
+            .setPositiveButton(R.string.virt_viewer_connect) { _, _ -> connectSftp(action) }
+            .setNegativeButton(R.string.virt_viewer_cancel) { _, _ -> finish() }
             .setOnCancelListener { finish() }
             .show()
     }

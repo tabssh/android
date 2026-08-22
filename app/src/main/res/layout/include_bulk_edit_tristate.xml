@@ -15,21 +15,21 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:paddingTop="8dp"
-    android:paddingBottom="8dp">
+    android:paddingTop="@dimen/space_sm"
+    android:paddingBottom="@dimen/space_sm">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:layout_marginBottom="6dp">
+        android:layout_marginBottom="@dimen/space_6dp">
 
         <ImageView
             android:id="@+id/tri_icon"
             android:layout_width="20dp"
             android:layout_height="20dp"
-            android:layout_marginEnd="12dp"
+            android:layout_marginEnd="@dimen/space_12dp"
             android:src="@drawable/ic_settings_general"
             app:tint="?attr/colorOnSurfaceVariant"
             android:importantForAccessibility="no" />
@@ -60,10 +60,10 @@
             android:minHeight="44dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:paddingHorizontal="8dp"
+            android:paddingHorizontal="@dimen/space_sm"
             android:textAllCaps="false"
             android:textAppearance="?attr/textAppearanceLabelMedium"
-            android:text="Don't change" />
+            android:text="@string/include_bulk_edit_tristate_unchanged" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/tri_off"
@@ -74,10 +74,10 @@
             android:minHeight="44dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:paddingHorizontal="8dp"
+            android:paddingHorizontal="@dimen/space_sm"
             android:textAllCaps="false"
             android:textAppearance="?attr/textAppearanceLabelMedium"
-            android:text="Off" />
+            android:text="@string/include_bulk_edit_tristate_off" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/tri_on"
@@ -88,10 +88,10 @@
             android:minHeight="44dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:paddingHorizontal="8dp"
+            android:paddingHorizontal="@dimen/space_sm"
             android:textAllCaps="false"
             android:textAppearance="?attr/textAppearanceLabelMedium"
-            android:text="On" />
+            android:text="@string/include_bulk_edit_tristate_on" />
 
     </com.google.android.material.button.MaterialButtonToggleGroup>
 

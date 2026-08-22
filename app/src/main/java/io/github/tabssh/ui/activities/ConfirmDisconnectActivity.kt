@@ -3,6 +3,7 @@ package io.github.tabssh.ui.activities
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
@@ -78,9 +79,9 @@ class ConfirmDisconnectActivity : AppCompatActivity() {
         }
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("Disconnect?")
-            .setMessage("Close the $sessionKind session \"$displayName\"?")
-            .setPositiveButton("Disconnect") { _, _ ->
+            .setTitle(getString(R.string.confirm_disconnect_title))
+            .setMessage(getString(R.string.confirm_disconnect_message, sessionKind, displayName))
+            .setPositiveButton(getString(R.string.locale_action_disconnect)) { _, _ ->
                 Logger.i(TAG, "User confirmed disconnect for tab $tabId")
                 // Cancel the notification immediately for instant visual
                 // feedback — the async disconnect chain below can take
@@ -120,7 +121,7 @@ class ConfirmDisconnectActivity : AppCompatActivity() {
                 }
                 finish()
             }
-            .setNegativeButton("Cancel") { _, _ ->
+            .setNegativeButton(getString(R.string.cancel)) { _, _ ->
                 finish()
             }
             .setOnCancelListener {

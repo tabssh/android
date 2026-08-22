@@ -40,7 +40,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Connection Details"
+                        android:text="@string/connection_edit_details_title"
                         android:textAppearance="?attr/textAppearanceLabelLarge"
                         android:layout_marginBottom="@dimen/space_md" />
 
@@ -89,7 +89,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Protocol"
+                            android:text="@string/connection_edit_protocol_label"
                             android:layout_marginEnd="@dimen/space_sm" />
 
                         <Spinner
@@ -98,7 +98,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:entries="@array/protocol_options"
-                            android:contentDescription="Connection protocol selector" />
+                            android:contentDescription="@string/connection_edit_protocol_content_description" />
 
                     </LinearLayout>
 
@@ -112,7 +112,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="IP mode"
+                            android:text="@string/connection_edit_ip_mode_label"
                             android:layout_marginEnd="@dimen/space_sm" />
 
                         <Spinner
@@ -121,7 +121,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:entries="@array/ip_mode_entries"
-                            android:contentDescription="IP mode selector (IPv4, IPv6, or auto)" />
+                            android:contentDescription="@string/connection_edit_ip_mode_content_description" />
 
                     </LinearLayout>
 
@@ -138,7 +138,7 @@
                             android:hint="@string/connection_port_hint"
                             android:layout_marginEnd="@dimen/space_sm"
                             app:errorEnabled="true"
-                            app:helperText="1–65535"
+                            app:helperText="@string/connection_edit_port_range_helper"
                             style="@style/Widget.TabSSH.TextInputLayout">
 
                             <com.google.android.material.textfield.TextInputEditText
@@ -148,7 +148,7 @@
                                 android:inputType="number"
                                 android:imeOptions="actionNext"
                                 android:maxLength="5"
-                                android:hint="22" />
+                                android:hint="@string/connection_port_hint" />
 
                         </com.google.android.material.textfield.TextInputLayout>
 
@@ -193,15 +193,15 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Organization"
+                        android:text="@string/connection_edit_organization_title"
                         android:textAppearance="?attr/textAppearanceLabelLarge"
                         android:layout_marginBottom="@dimen/space_md"
-                        android:contentDescription="Organization settings section" />
+                        android:contentDescription="@string/connection_edit_organization_content_description" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Group"
+                        android:hint="@string/sftp_perm_group"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
                         <com.google.android.material.textfield.MaterialAutoCompleteTextView
@@ -209,7 +209,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="none"
-                            android:contentDescription="Select connection group for organization" />
+                            android:contentDescription="@string/connection_edit_group_content_description" />
 
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -224,7 +224,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Color tag"
+                            android:text="@string/connection_edit_color_tag_label"
                             android:layout_marginEnd="@dimen/space_sm" />
 
                         <View
@@ -233,20 +233,20 @@
                             android:layout_height="24dp"
                             android:layout_marginEnd="@dimen/space_sm"
                             android:background="?attr/colorOutline"
-                            android:contentDescription="Current connection color tag" />
+                            android:contentDescription="@string/connection_edit_color_tag_content_description" />
 
                         <Button
                             android:id="@+id/btn_pick_color_tag"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Pick…"
+                            android:text="@string/connection_edit_pick_color_button"
                             android:layout_marginEnd="@dimen/space_sm" />
 
                         <Button
                             android:id="@+id/btn_clear_color_tag"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Clear" />
+                            android:text="@string/conn_edit_clear" />
                     </LinearLayout>
 
                     <!-- Reused for both SSH identities and VNC identities depending
@@ -255,7 +255,7 @@
                         android:id="@+id/layout_identity_row"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Identity"
+                        android:hint="@string/container_host_identity_hint"
                         android:layout_marginTop="@dimen/space_sm"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
@@ -264,7 +264,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="none"
-                            android:contentDescription="Select identity for reusable credentials" />
+                            android:contentDescription="@string/connection_edit_identity_content_description" />
 
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -274,7 +274,7 @@
                         android:id="@+id/layout_vnc_password"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="VNC Password"
+                        android:hint="@string/connection_edit_vnc_password_hint"
                         android:layout_marginTop="@dimen/space_sm"
                         android:visibility="gone"
                         app:endIconMode="password_toggle"
@@ -287,7 +287,7 @@
                             android:inputType="textPassword|textNoSuggestions"
                             android:imeOptions="actionDone"
                             android:autofillHints="password"
-                            android:contentDescription="VNC password for this host" />
+                            android:contentDescription="@string/connection_edit_vnc_password_content_description" />
 
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -319,14 +319,14 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Authentication"
+                        android:text="@string/connection_edit_authentication_title"
                         android:textAppearance="?attr/textAppearanceLabelLarge"
                         android:layout_marginBottom="@dimen/space_md" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Authentication Type"
+                        android:hint="@string/connection_edit_auth_type_hint"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
                         <com.google.android.material.textfield.MaterialAutoCompleteTextView
@@ -361,7 +361,7 @@
                                 android:inputType="textPassword|textNoSuggestions"
                                 android:imeOptions="actionNext"
                                 android:autofillHints="password"
-                                android:contentDescription="SSH password" />
+                                android:contentDescription="@string/connection_edit_ssh_password_content_description" />
 
                         </com.google.android.material.textfield.TextInputLayout>
 
@@ -376,7 +376,7 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:checked="true"
-                                android:text="Save password securely"
+                                android:text="@string/connection_edit_save_password_switch"
                                 android:textColor="?android:attr/textColorPrimary"
                                 android:tooltipText="Encrypted with hardware-backed keystore" />
 
@@ -396,7 +396,7 @@
                         <com.google.android.material.textfield.TextInputLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:hint="SSH Key"
+                            android:hint="@string/connection_edit_ssh_key_hint"
                             style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
                             <com.google.android.material.textfield.MaterialAutoCompleteTextView
@@ -414,7 +414,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="@dimen/space_sm"
-                            android:text="Generate New Key" />
+                            android:text="@string/generate_key" />
 
                     </LinearLayout>
 
@@ -439,14 +439,14 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Advanced Settings"
+                        android:text="@string/connection_edit_advanced_settings_title"
                         android:textAppearance="?attr/textAppearanceLabelLarge"
                         android:layout_marginBottom="@dimen/space_md" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Terminal Type"
+                        android:hint="@string/connection_edit_terminal_type_hint"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
                         <com.google.android.material.textfield.MaterialAutoCompleteTextView
@@ -454,7 +454,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="none"
-                            android:text="xterm-256color"
+                            android:text="@string/connection_edit_terminal_type_default"
                             android:tooltipText="xterm-256color for best compatibility" />
 
                     </com.google.android.material.textfield.TextInputLayout>
@@ -464,7 +464,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_md"
-                        android:text="Enable Compression"
+                        android:text="@string/connection_edit_compression_switch"
                         android:textColor="?android:attr/textColorPrimary"
                         android:checked="true"
                         android:tooltipText="Reduce bandwidth usage on slow connections" />
@@ -474,7 +474,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_md"
-                        android:text="Keep-Alive (recommended for mobile)"
+                        android:text="@string/connection_edit_keep_alive_switch"
                         android:textColor="?android:attr/textColorPrimary"
                         android:checked="true" />
 
@@ -488,7 +488,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
-                        android:text="X11 Forwarding (needs XServer-XSDL)"
+                        android:text="@string/connection_edit_x11_forwarding_switch"
                         android:textColor="?android:attr/textColorPrimary"
                         android:checked="false"
                         android:tooltipText="Routes remote X11 traffic to localhost:6000. Install an X server (XServer-XSDL) on this device; without one, X11 apps will fail with 'cannot open display'." />
@@ -500,7 +500,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
-                        android:hint="Mosh mode">
+                        android:hint="@string/connection_edit_mosh_mode_hint">
                         <com.google.android.material.textfield.MaterialAutoCompleteTextView
                             android:id="@+id/spinner_mosh_mode"
                             android:layout_width="match_parent"
@@ -515,7 +515,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
-                        android:hint="Mosh server command"
+                        android:hint="@string/connection_edit_mosh_command_hint"
                         android:visibility="gone">
                         <com.google.android.material.textfield.MaterialAutoCompleteTextView
                             android:id="@+id/spinner_mosh_command"
@@ -531,7 +531,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_xs"
-                        android:hint="mosh-server command"
+                        android:hint="@string/connection_edit_mosh_custom_command_hint"
                         android:visibility="gone">
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/edit_mosh_custom_command"
@@ -549,7 +549,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_xs"
-                        android:hint="Description (optional)"
+                        android:hint="@string/connection_edit_mosh_custom_desc_hint"
                         android:visibility="gone">
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/edit_mosh_custom_desc"
@@ -565,13 +565,13 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
-                        android:hint="Character Encoding">
+                        android:hint="@string/connection_edit_encoding_hint">
                         <com.google.android.material.textfield.MaterialAutoCompleteTextView
                             android:id="@+id/spinner_encoding"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="none"
-                            android:text="UTF-8" />
+                            android:text="@string/connection_edit_encoding_default" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -580,15 +580,15 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
-                        android:hint="Connect Timeout (seconds)"
-                        app:helperText="1–600. Default: 15">
+                        android:hint="@string/connection_edit_connect_timeout_hint"
+                        app:helperText="@string/connection_edit_connect_timeout_helper">
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/edit_connect_timeout"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="number"
                             android:imeOptions="actionNext"
-                            android:text="15" />
+                            android:text="@string/connection_edit_connect_timeout_default" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -597,15 +597,15 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
-                        android:hint="Read Timeout (seconds)"
-                        app:helperText="1–600. Default: 30">
+                        android:hint="@string/connection_edit_read_timeout_hint"
+                        app:helperText="@string/connection_edit_read_timeout_helper">
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/edit_read_timeout"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="number"
                             android:imeOptions="actionNext"
-                            android:text="30" />
+                            android:text="@string/connection_edit_read_timeout_default" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -614,15 +614,15 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
-                        android:hint="Server-Alive Interval (seconds)"
-                        app:helperText="0 = use global default (Settings → Connection)">
+                        android:hint="@string/connection_edit_server_alive_interval_hint"
+                        app:helperText="@string/connection_edit_server_alive_interval_helper">
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/edit_server_alive_interval"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="number"
                             android:imeOptions="actionNext"
-                            android:text="0" />
+                            android:text="@string/connection_edit_server_alive_interval_default" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.materialswitch.MaterialSwitch
@@ -630,7 +630,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
-                        android:text="Port Knocking"
+                        android:text="@string/connection_edit_port_knock_switch"
                         android:textColor="?android:attr/textColorPrimary"
                         android:checked="false" />
 
@@ -640,7 +640,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
-                        android:text="Configure Knock Sequence"
+                        android:text="@string/connection_edit_configure_knock_button"
                         android:visibility="gone" />
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -649,16 +649,16 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_xs"
-                        android:hint="Post-knock delay (ms)"
+                        android:hint="@string/connection_edit_port_knock_delay_hint"
                         android:visibility="gone"
-                        app:helperText="Wait this long after the last knock before opening SSH. Default: 100 ms">
+                        app:helperText="@string/connection_edit_port_knock_delay_helper">
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/edit_port_knock_delay"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="number"
                             android:imeOptions="actionNext"
-                            android:text="100" />
+                            android:text="@string/connection_edit_port_knock_delay_default" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                 </LinearLayout>
@@ -685,14 +685,14 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Notifications"
+                        android:text="@string/prefcat_general_notifications"
                         android:textAppearance="?attr/textAppearanceLabelLarge"
                         android:layout_marginBottom="@dimen/space_sm" />
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Status notifications stay silent. Choose if connect/disconnect events should sound or vibrate — handy for long-running tasks where a non-zero exit means something went wrong."
+                        android:text="@string/connection_edit_notifications_description"
                         android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?android:attr/textColorSecondary"
                         android:layout_marginBottom="@dimen/space_md" />
@@ -701,7 +701,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="@dimen/space_sm"
-                        android:hint="Sound"
+                        android:hint="@string/connection_edit_notif_sound_hint"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
                         <com.google.android.material.textfield.MaterialAutoCompleteTextView
@@ -716,7 +716,7 @@
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Vibrate"
+                        android:hint="@string/prefs_notification_vibrate_title"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
                         <com.google.android.material.textfield.MaterialAutoCompleteTextView
@@ -749,14 +749,14 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Terminal Multiplexer"
+                        android:text="@string/connection_edit_multiplexer_title"
                         android:textAppearance="?attr/textAppearanceLabelLarge"
                         android:layout_marginBottom="@dimen/space_sm" />
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Auto-attach to tmux, screen, or zellij sessions"
+                        android:text="@string/connection_edit_multiplexer_description"
                         android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?android:attr/textColorSecondary"
                         android:layout_marginBottom="@dimen/space_md" />
@@ -764,7 +764,7 @@
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Multiplexer Mode"
+                        android:hint="@string/connection_edit_multiplexer_mode_hint"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
                         <com.google.android.material.textfield.MaterialAutoCompleteTextView
@@ -780,7 +780,7 @@
                         android:id="@+id/layout_multiplexer_session_name"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Session Name (optional)"
+                        android:hint="@string/connection_edit_multiplexer_session_name_hint"
                         android:layout_marginTop="@dimen/space_sm"
                         android:visibility="gone"
                         style="@style/Widget.TabSSH.TextInputLayout">
@@ -798,7 +798,7 @@
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="PRE Key Override"
+                        android:hint="@string/connection_edit_multiplexer_override_hint"
                         android:layout_marginTop="@dimen/space_sm"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
@@ -832,14 +832,14 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Appearance &amp; Scripts"
+                        android:text="@string/connection_edit_appearance_title"
                         android:textAppearance="?attr/textAppearanceLabelLarge"
                         android:layout_marginBottom="@dimen/space_md" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Terminal Theme (Override)"
+                        android:hint="@string/connection_edit_theme_override_hint"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
                         <com.google.android.material.textfield.MaterialAutoCompleteTextView
@@ -854,9 +854,9 @@
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Font Size Override"
+                        android:hint="@string/connection_edit_font_size_override_hint"
                         android:layout_marginTop="@dimen/space_sm"
-                        app:helperText="Leave empty to use global setting"
+                        app:helperText="@string/connection_edit_font_size_override_helper"
                         style="@style/Widget.TabSSH.TextInputLayout">
 
                         <com.google.android.material.textfield.TextInputEditText
@@ -872,9 +872,9 @@
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Post-Connect Script"
+                        android:hint="@string/connection_edit_post_connect_script_hint"
                         android:layout_marginTop="@dimen/space_sm"
-                        app:helperText="Commands to run after connecting (one per line)"
+                        app:helperText="@string/connection_edit_post_connect_script_helper"
                         style="@style/Widget.TabSSH.TextInputLayout">
 
                         <com.google.android.material.textfield.TextInputEditText
@@ -894,9 +894,9 @@
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Environment Variables"
+                        android:hint="@string/connection_edit_env_vars_hint"
                         android:layout_marginTop="@dimen/space_sm"
-                        app:helperText="One per line: KEY=value · server must allow via AcceptEnv"
+                        app:helperText="@string/connection_edit_env_vars_helper"
                         style="@style/Widget.TabSSH.TextInputLayout">
 
                         <com.google.android.material.textfield.TextInputEditText
@@ -920,7 +920,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_md"
-                        android:text="Remote Command"
+                        android:text="@string/connection_edit_remote_command_label"
                         android:textAppearance="?attr/textAppearanceLabelLarge"
                         android:textColor="?android:attr/textColorPrimary" />
 
@@ -937,8 +937,8 @@
                         android:layout_height="wrap_content"
                         android:visibility="gone"
                         android:layout_marginTop="@dimen/space_xs"
-                        android:hint="Custom remote command"
-                        app:helperText="Sent as the SSH exec command instead of opening a login shell. PTY allocated automatically."
+                        android:hint="@string/connection_edit_remote_command_custom_hint"
+                        app:helperText="@string/connection_edit_remote_command_custom_helper"
                         style="@style/Widget.TabSSH.TextInputLayout">
 
                         <com.google.android.material.textfield.TextInputEditText
@@ -957,7 +957,7 @@
                         android:layout_marginTop="@dimen/space_xs"
                         android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?android:attr/textColorSecondary"
-                        android:text="For most hosts leave this at the default. Some hosts (e.g. shell.sourceforge.net) require a specific command to spawn a shell." />
+                        android:text="@string/connection_edit_remote_command_helper" />
 
                     <!-- Wave 1.5: SSH agent forwarding -->
                     <com.google.android.material.materialswitch.MaterialSwitch
@@ -965,7 +965,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
-                        android:text="SSH agent forwarding"
+                        android:text="@string/connection_edit_agent_forwarding_switch"
                         android:tooltipText="Forward your local SSH keys to the remote host (use carefully)" />
 
                 </LinearLayout>

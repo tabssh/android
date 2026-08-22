@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="8dp"
+    android:layout_marginBottom="@dimen/space_sm"
     app:cardElevation="2dp"
     app:cardCornerRadius="8dp">
 
@@ -11,7 +11,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:padding="@dimen/space_12dp">
 
         <!-- VM Name and Status -->
         <LinearLayout
@@ -27,7 +27,7 @@
                 android:layout_weight="1"
                 android:textSize="16sp"
                 android:textStyle="bold"
-                android:text="VM Name" />
+                android:text="@string/item_proxmox_vm_placeholder_name" />
 
             <TextView
                 android:id="@+id/vm_status"
@@ -35,8 +35,8 @@
                 android:layout_height="wrap_content"
                 android:textSize="14sp"
                 android:textStyle="bold"
-                android:padding="4dp"
-                android:text="RUNNING" />
+                android:padding="@dimen/space_xs"
+                android:text="@string/common_status_running" />
 
         </LinearLayout>
 
@@ -45,20 +45,20 @@
             android:id="@+id/vm_info"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="@dimen/space_xs"
             android:textSize="12sp"
             android:textColor="?android:attr/textColorSecondary"
-            android:text="Node: pve | CPU: 25% | RAM: 2048MB" />
+            android:text="@string/item_proxmox_vm_placeholder_stats" />
 
         <!-- IP Address -->
         <TextView
             android:id="@+id/vm_ip_address"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
+            android:layout_marginTop="@dimen/space_2dp"
             android:textSize="12sp"
             android:textColor="?android:attr/textColorSecondary"
-            android:text="IP: 192.168.1.100"
+            android:text="@string/item_proxmox_vm_placeholder_ip"
             android:visibility="gone" />
 
         <!-- Connect row: VNC console + SSH — primary actions for running VMs. -->
@@ -67,7 +67,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="@dimen/space_sm"
             android:visibility="gone">
 
             <Button
@@ -75,8 +75,8 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="VNC"
-                android:layout_marginEnd="4dp"
+                android:text="@string/hypervisor_vm_action_vnc"
+                android:layout_marginEnd="@dimen/space_xs"
                 style="@style/Widget.Material3.Button.OutlinedButton" />
 
             <Button
@@ -84,7 +84,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="SSH"
+                android:text="@string/hypervisor_vm_action_ssh"
                 style="@style/Widget.Material3.Button" />
 
         </LinearLayout>
@@ -95,7 +95,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="@dimen/space_sm"
             android:visibility="gone">
 
             <Button
@@ -103,8 +103,8 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Start"
-                android:layout_marginEnd="4dp"
+                android:text="@string/container_action_start"
+                android:layout_marginEnd="@dimen/space_xs"
                 style="@style/Widget.Material3.Button.TonalButton" />
 
             <Button
@@ -112,7 +112,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Stop"
+                android:text="@string/container_action_stop"
                 style="@style/Widget.Material3.Button.TonalButton" />
 
         </LinearLayout>
@@ -123,7 +123,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="@dimen/space_xs"
             android:visibility="gone">
 
             <Button
@@ -131,8 +131,8 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Reboot"
-                android:layout_marginEnd="4dp"
+                android:text="@string/hypervisor_vm_action_reboot"
+                android:layout_marginEnd="@dimen/space_xs"
                 style="@style/Widget.Material3.Button.TonalButton" />
 
             <Button
@@ -140,18 +140,18 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Reset"
+                android:text="@string/libvirt_reset_button"
                 style="@style/Widget.Material3.Button.TonalButton" />
 
             <Button
                 android:id="@+id/snapshots_button"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:text="📸"
+                android:layout_marginStart="@dimen/space_xs"
+                android:text="@string/item_proxmox_vm_snapshot_icon"
                 android:minWidth="0dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
+                android:paddingStart="@dimen/space_sm"
+                android:paddingEnd="@dimen/space_sm"
                 android:visibility="gone"
                 style="@style/Widget.Material3.Button.TonalButton" />
 

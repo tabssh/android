@@ -74,7 +74,7 @@
                         android:id="@+id/text_platform_icon"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="🐧"
+                        android:text="@string/common_icon_linux"
                         android:textSize="28sp"
                         android:layout_marginEnd="@dimen/space_md" />
 
@@ -419,7 +419,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="📊"
+                    android:text="@string/fragment_frequent_connections_empty_emoji"
                     android:textSize="64sp" />
 
                 <TextView

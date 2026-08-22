@@ -4,7 +4,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
-    android:layout_margin="4dp"
+    android:layout_margin="@dimen/space_xs"
     app:cardElevation="2dp"
     app:cardCornerRadius="8dp">
 
@@ -12,14 +12,14 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="12dp"
+        android:padding="@dimen/space_12dp"
         android:gravity="center">
 
         <TextView
             android:id="@+id/key_label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="ESC"
+            android:text="@string/kbdcustom_key_label_placeholder"
             android:textSize="16sp"
             android:textStyle="bold"
             android:minWidth="48dp"
@@ -29,10 +29,10 @@
             android:id="@+id/key_description"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Escape"
+            android:text="@string/kbdcustom_key_description_placeholder"
             android:textSize="11sp"
             android:textColor="?attr/colorOnSurfaceVariant"
-            android:paddingTop="2dp" />
+            android:paddingTop="@dimen/space_2dp" />
 
     </LinearLayout>
 

@@ -41,15 +41,15 @@ class CrashReportActivity : AppCompatActivity() {
         val stackTrace =
             intent.getStringExtra(TabSSHApplication.EXTRA_CRASH_TRACE)
                 ?: prefs.getString(TabSSHApplication.KEY_LAST_CRASH, null)
-                ?: "No crash details available."
+                ?: getString(R.string.crash_report_no_details)
         val crashTime =
             intent.getLongExtra(TabSSHApplication.EXTRA_CRASH_TIME, 0L)
                 .takeIf { it > 0L }
                 ?: prefs.getLong(TabSSHApplication.KEY_CRASH_TIME, 0L)
         val crashThread =
             intent.getStringExtra(TabSSHApplication.EXTRA_CRASH_THREAD)
-                ?: prefs.getString(TabSSHApplication.KEY_CRASH_THREAD, "unknown")
-                ?: "unknown"
+                ?: prefs.getString(TabSSHApplication.KEY_CRASH_THREAD, getString(R.string.settings_value_unknown))
+                ?: getString(R.string.settings_value_unknown)
 
         prefs.edit()
             .remove(TabSSHApplication.KEY_LAST_CRASH)
@@ -62,13 +62,13 @@ class CrashReportActivity : AppCompatActivity() {
         } else ""
 
         findViewById<TextView>(R.id.text_timestamp).text = timestamp
-        findViewById<TextView>(R.id.text_thread).text = "Thread: $crashThread"
+        findViewById<TextView>(R.id.text_thread).text = getString(R.string.crash_report_thread_label, crashThread)
         findViewById<TextView>(R.id.text_stacktrace).text = stackTrace
 
         findViewById<MaterialButton>(R.id.btn_copy).setOnClickListener {
             // Route through ClipboardHelper so a crash-report copy cancels any pending sensitive clear.
             io.github.tabssh.utils.ClipboardHelper.copy(this, label = "Crash", text = stackTrace, sensitive = false)
-            Toast.makeText(this, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.text_export_copied_toast), Toast.LENGTH_SHORT).show()
         }
 
         // "Paste / Issue" — upload the sanitized crash to a paste service and

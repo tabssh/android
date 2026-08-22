@@ -125,7 +125,7 @@ class SyncSettingsActivity : TabSSHActivity() {
                 result.data?.data?.let { uri ->
                     syncManager.saveSyncUri(uri)
                     refresh()
-                    toast("Sync location set")
+                    toast(getString(R.string.sync_settings_toast_location_set))
                 }
             }
         }
@@ -171,7 +171,7 @@ class SyncSettingsActivity : TabSSHActivity() {
                 pendingDao.deleteAll()
             }
             resolvingDeferredConflicts = false
-            toast("Deferred sync conflicts resolved")
+            toast(getString(R.string.sync_settings_toast_deferred_resolved))
         }
     }
 
@@ -195,33 +195,33 @@ class SyncSettingsActivity : TabSSHActivity() {
 
         // Bind what-to-sync rows
         syncItems = listOf(
-            Triple(findViewById(R.id.row_sync_connections),        PREF_CONNECTIONS,         "SSH connection profiles"),
-            Triple(findViewById(R.id.row_sync_identities),         PREF_IDENTITIES,          "Reusable credentials"),
-            Triple(findViewById(R.id.row_sync_keys),               PREF_KEYS,                "Key metadata (private keys stay local)"),
-            Triple(findViewById(R.id.row_sync_snippets),           PREF_SNIPPETS,            "Command snippets"),
-            Triple(findViewById(R.id.row_sync_themes),             PREF_THEMES,              "Custom terminal themes"),
-            Triple(findViewById(R.id.row_sync_host_keys),          PREF_HOST_KEYS,           "Trusted server fingerprints"),
-            Triple(findViewById(R.id.row_sync_groups),             PREF_GROUPS,              "Connection groups"),
-            Triple(findViewById(R.id.row_sync_workspaces),         PREF_WORKSPACES,          "Workspaces"),
-            Triple(findViewById(R.id.row_sync_macros),             PREF_MACROS,              "Command macros"),
-            Triple(findViewById(R.id.row_sync_monitor_slots),      PREF_MONITOR_SLOTS,       "Host monitor config"),
-            Triple(findViewById(R.id.row_sync_hypervisors),        PREF_HYPERVISORS,         "Hypervisor profiles"),
-            Triple(findViewById(R.id.row_sync_hypervisor_accounts),PREF_HYPERVISOR_ACCOUNTS, "Hypervisor accounts"),
-            Triple(findViewById(R.id.row_sync_vnc_hosts),          PREF_VNC_HOSTS,           "VNC hosts"),
-            Triple(findViewById(R.id.row_sync_vnc_identities),     PREF_VNC_IDENTITIES,      "VNC credentials"),
-            Triple(findViewById(R.id.row_sync_cloud_accounts),     PREF_CLOUD_ACCOUNTS,      "Cloud accounts"),
-            Triple(findViewById(R.id.row_sync_certificates),       PREF_CERTIFICATES,        "Trusted certificates"),
-            Triple(findViewById(R.id.row_sync_dashboard),          PREF_DASHBOARD,           "Multi-host dashboard layout"),
-            Triple(findViewById(R.id.row_sync_port_forwards),      PREF_PORT_FORWARDS,       "Saved port-forward rules"),
+            Triple(findViewById(R.id.row_sync_connections),        PREF_CONNECTIONS,         getString(R.string.sync_settings_subtitle_connections)),
+            Triple(findViewById(R.id.row_sync_identities),         PREF_IDENTITIES,          getString(R.string.sync_settings_subtitle_identities)),
+            Triple(findViewById(R.id.row_sync_keys),               PREF_KEYS,                getString(R.string.sync_settings_subtitle_keys)),
+            Triple(findViewById(R.id.row_sync_snippets),           PREF_SNIPPETS,            getString(R.string.sync_settings_subtitle_snippets)),
+            Triple(findViewById(R.id.row_sync_themes),             PREF_THEMES,              getString(R.string.sync_settings_subtitle_themes)),
+            Triple(findViewById(R.id.row_sync_host_keys),          PREF_HOST_KEYS,           getString(R.string.sync_settings_subtitle_host_keys)),
+            Triple(findViewById(R.id.row_sync_groups),             PREF_GROUPS,              getString(R.string.sync_settings_subtitle_groups)),
+            Triple(findViewById(R.id.row_sync_workspaces),         PREF_WORKSPACES,          getString(R.string.sync_settings_title_workspaces)),
+            Triple(findViewById(R.id.row_sync_macros),             PREF_MACROS,              getString(R.string.sync_settings_subtitle_macros)),
+            Triple(findViewById(R.id.row_sync_monitor_slots),      PREF_MONITOR_SLOTS,       getString(R.string.sync_settings_subtitle_monitor_slots)),
+            Triple(findViewById(R.id.row_sync_hypervisors),        PREF_HYPERVISORS,         getString(R.string.sync_settings_subtitle_hypervisors)),
+            Triple(findViewById(R.id.row_sync_hypervisor_accounts),PREF_HYPERVISOR_ACCOUNTS, getString(R.string.sync_settings_subtitle_hypervisor_accounts)),
+            Triple(findViewById(R.id.row_sync_vnc_hosts),          PREF_VNC_HOSTS,           getString(R.string.sync_settings_subtitle_vnc_hosts)),
+            Triple(findViewById(R.id.row_sync_vnc_identities),     PREF_VNC_IDENTITIES,      getString(R.string.sync_settings_subtitle_vnc_identities)),
+            Triple(findViewById(R.id.row_sync_cloud_accounts),     PREF_CLOUD_ACCOUNTS,      getString(R.string.sync_settings_subtitle_cloud_accounts)),
+            Triple(findViewById(R.id.row_sync_certificates),       PREF_CERTIFICATES,        getString(R.string.sync_settings_subtitle_certificates)),
+            Triple(findViewById(R.id.row_sync_dashboard),          PREF_DASHBOARD,           getString(R.string.sync_settings_subtitle_dashboard)),
+            Triple(findViewById(R.id.row_sync_port_forwards),      PREF_PORT_FORWARDS,       getString(R.string.sync_settings_subtitle_port_forwards)),
             Triple(findViewById(R.id.row_sync_network_routes),     PREF_NETWORK_ROUTES,      getString(R.string.sync_network_routes_summary)),
-            Triple(findViewById(R.id.row_sync_containers),         PREF_CONTAINERS,          "Container hosts, registries, stacks & containers")
+            Triple(findViewById(R.id.row_sync_containers),         PREF_CONTAINERS,          getString(R.string.sync_settings_subtitle_containers))
         )
         val titles = listOf(
-            "Connections", "Identities", "SSH Keys", "Snippets", "Themes",
-            "Host Keys", "Groups", "Workspaces", "Macros", "Monitor Slots",
-            "Hypervisors", "Hypervisor Accounts", "VNC Hosts", "VNC Identities",
-            "Cloud Accounts", "Certificates", "Dashboard", "Port Forwards",
-            getString(R.string.sync_network_routes), "Containers"
+            getString(R.string.settings_connections), getString(R.string.main_tab_identities), getString(R.string.identity_ssh_keys_title), getString(R.string.nav_item_snippets), getString(R.string.sync_settings_title_themes),
+            getString(R.string.sync_settings_title_host_keys), getString(R.string.nav_item_groups), getString(R.string.sync_settings_title_workspaces), getString(R.string.sync_settings_title_macros), getString(R.string.sync_settings_title_monitor_slots),
+            getString(R.string.infra_tab_hypervisors), getString(R.string.sync_settings_title_hypervisor_accounts), getString(R.string.nav_item_vnc_hosts), getString(R.string.identity_vnc_title),
+            getString(R.string.activity_label_cloud_accounts), getString(R.string.sync_settings_title_certificates), getString(R.string.container_manager_tab_dashboard), getString(R.string.routing_section_forwards_title),
+            getString(R.string.sync_network_routes), getString(R.string.container_tab_title)
         )
         val defaults = listOf(
             true, true, true, true, true,
@@ -296,18 +296,18 @@ class SyncSettingsActivity : TabSSHActivity() {
         // Advanced
         findViewById<View>(R.id.btn_force_upload).setOnClickListener {
             MaterialAlertDialogBuilder(this)
-                .setTitle("Force Upload")
-                .setMessage("Upload local data to the sync file, overwriting remote.\n\nContinue?")
-                .setPositiveButton("Upload") { _, _ -> performSync() }
-                .setNegativeButton("Cancel", null)
+                .setTitle(R.string.sync_settings_force_upload_title)
+                .setMessage(R.string.sync_settings_force_upload_message)
+                .setPositiveButton(R.string.upload_file) { _, _ -> performSync() }
+                .setNegativeButton(R.string.cancel, null)
                 .show()
         }
         findViewById<View>(R.id.btn_force_download).setOnClickListener {
             MaterialAlertDialogBuilder(this)
-                .setTitle("⚠️ Force Download")
-                .setMessage("Download remote data and overwrite all local data.\n\nThis cannot be undone. Continue?")
-                .setPositiveButton("Download") { _, _ -> performDownload() }
-                .setNegativeButton("Cancel", null)
+                .setTitle(R.string.sync_settings_force_download_title)
+                .setMessage(R.string.sync_settings_force_download_message)
+                .setPositiveButton(R.string.download_file) { _, _ -> performDownload() }
+                .setNegativeButton(R.string.cancel, null)
                 .show()
         }
         findViewById<View>(R.id.btn_view_sync_log).setOnClickListener {
@@ -315,18 +315,18 @@ class SyncSettingsActivity : TabSSHActivity() {
         }
         findViewById<View>(R.id.btn_clear_config).setOnClickListener {
             MaterialAlertDialogBuilder(this)
-                .setTitle("Clear Configuration")
-                .setMessage("Remove sync setup. Your local data is NOT affected.")
-                .setPositiveButton("Clear") { _, _ ->
+                .setTitle(R.string.sync_settings_clear_config_title)
+                .setMessage(R.string.sync_settings_clear_config_message)
+                .setPositiveButton(R.string.sync_settings_clear) { _, _ ->
                     lifecycleScope.launch {
                         withContext(Dispatchers.IO) { syncManager.clearConfiguration() }
                         switchEnabled.isChecked = false
                         workScheduler.cancelPeriodicSync()
                         refresh()
-                        toast("Sync configuration cleared")
+                        toast(getString(R.string.sync_settings_toast_config_cleared))
                     }
                 }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(R.string.cancel, null)
                 .show()
         }
     }
@@ -342,44 +342,44 @@ class SyncSettingsActivity : TabSSHActivity() {
         // Location badge
         badgeLocation.visibility       = if (hasLocation) View.VISIBLE else View.GONE
         textLocationSummary.text = syncManager.getSyncLocationName()
-            ?: "Tap to choose a file in any cloud app"
+            ?: getString(R.string.sync_settings_location_summary_default)
 
         // Password badge
         badgePassword.visibility       = if (hasPassword) View.VISIBLE else View.GONE
-        textPasswordSummary.text = if (hasPassword) "Set — tap to change" else "Required — encrypts all synced data (AES-256)"
+        textPasswordSummary.text = if (hasPassword) getString(R.string.sync_settings_password_summary_set) else getString(R.string.sync_settings_password_summary_required)
 
         // Enable toggle
         switchEnabled.isEnabled = isReady
         textToggleHint.text = when {
-            !hasLocation && !hasPassword -> "Set location and password first"
-            !hasLocation -> "Set sync location first"
-            !hasPassword -> "Set encryption password first"
-            else         -> "Sync across devices"
+            !hasLocation && !hasPassword -> getString(R.string.sync_settings_toggle_hint_location_and_password)
+            !hasLocation -> getString(R.string.sync_settings_toggle_hint_location)
+            !hasPassword -> getString(R.string.sync_settings_toggle_hint_password)
+            else         -> getString(R.string.sync_settings_toggle_hint_ready)
         }
 
         // Status card
         when {
             isEnabled -> {
                 statusIcon.text = "🔄"
-                statusTitle.text = "Sync Active"
-                statusSubtitle.text = "Last sync: ${formatLastSync(syncManager.getLastSyncTime())}"
+                statusTitle.text = getString(R.string.sync_settings_status_active)
+                statusSubtitle.text = getString(R.string.sync_settings_status_last_sync, formatLastSync(syncManager.getLastSyncTime()))
                 btnSyncNow.visibility = View.VISIBLE
                 textLastSync.visibility = View.VISIBLE
-                textLastSync.text = "Last: ${formatLastSync(syncManager.getLastSyncTime())}"
+                textLastSync.text = getString(R.string.sync_settings_last_sync_short, formatLastSync(syncManager.getLastSyncTime()))
             }
             isReady -> {
                 statusIcon.text = "✅"
-                statusTitle.text = "Ready"
-                statusSubtitle.text = "Toggle Enable Sync to start"
+                statusTitle.text = getString(R.string.sync_settings_status_ready)
+                statusSubtitle.text = getString(R.string.sync_settings_status_ready_subtitle)
                 btnSyncNow.visibility = View.GONE
                 textLastSync.visibility = View.GONE
             }
             else -> {
                 statusIcon.text = "⚙️"
-                statusTitle.text = "Not configured"
+                statusTitle.text = getString(R.string.sync_settings_status_not_configured)
                 statusSubtitle.text = buildString {
-                    if (!hasLocation) append("• Choose sync location\n")
-                    if (!hasPassword) append("• Set encryption password")
+                    if (!hasLocation) append(getString(R.string.sync_settings_status_bullet_choose_location) + "\n")
+                    if (!hasPassword) append(getString(R.string.sync_settings_status_bullet_set_password))
                 }.trimEnd()
                 btnSyncNow.visibility = View.GONE
                 textLastSync.visibility = View.GONE
@@ -399,12 +399,12 @@ class SyncSettingsActivity : TabSSHActivity() {
     private fun showLocationOptions() {
         val hasExisting = syncManager.getSyncUri() != null
         val options = buildList {
-            add("Create new sync file")
-            add("Open existing sync file")
-            if (hasExisting) add("Clear current location")
+            add(getString(R.string.sync_settings_location_option_create))
+            add(getString(R.string.sync_settings_location_option_open))
+            if (hasExisting) add(getString(R.string.sync_settings_location_option_clear))
         }
         MaterialAlertDialogBuilder(this)
-            .setTitle("Sync Location")
+            .setTitle(R.string.sync_settings_location_dialog_title)
             .setItems(options.toTypedArray()) { _, which ->
                 when (which) {
                     0 -> createFileLauncher.launch(syncManager.getCreateFileIntent())
@@ -412,11 +412,11 @@ class SyncSettingsActivity : TabSSHActivity() {
                     2 -> lifecycleScope.launch {
                         withContext(Dispatchers.IO) { syncManager.clearConfiguration() }
                         refresh()
-                        toast("Location cleared")
+                        toast(getString(R.string.sync_settings_toast_location_cleared))
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -428,11 +428,11 @@ class SyncSettingsActivity : TabSSHActivity() {
         val confirmLayout  = view.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_confirm)
 
         val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle("Encryption Password")
-            .setMessage("Same password required on all devices. Min 8 characters.")
+            .setTitle(R.string.sync_settings_password_dialog_title)
+            .setMessage(R.string.sync_settings_password_dialog_message)
             .setView(view)
-            .setPositiveButton("Set Password", null)
-            .setNegativeButton("Cancel", null)
+            .setPositiveButton(R.string.sync_settings_set_password, null)
+            .setNegativeButton(R.string.cancel, null)
             .create()
 
         dialog.show()
@@ -450,7 +450,7 @@ class SyncSettingsActivity : TabSSHActivity() {
                     lifecycleScope.launch {
                         withContext(Dispatchers.IO) { syncManager.setSyncPassword(pw) }
                         refresh()
-                        toast("Password set")
+                        toast(getString(R.string.sync_settings_toast_password_set))
                         dialog.dismiss()
                     }
                 }
@@ -473,11 +473,11 @@ class SyncSettingsActivity : TabSSHActivity() {
         confirmLayout?.visibility = View.GONE
 
         val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle("Enter Sync File Password")
-            .setMessage("Enter the encryption password used when this file was created.")
+            .setTitle(R.string.sync_settings_verify_password_dialog_title)
+            .setMessage(R.string.sync_settings_verify_password_dialog_message)
             .setView(view)
-            .setPositiveButton("Verify & Use", null)
-            .setNegativeButton("Cancel") { _, _ ->
+            .setPositiveButton(R.string.sync_settings_verify_and_use, null)
+            .setNegativeButton(R.string.cancel) { _, _ ->
                 lifecycleScope.launch {
                     withContext(Dispatchers.IO) { syncManager.clearConfiguration() }
                     refresh()
@@ -496,21 +496,21 @@ class SyncSettingsActivity : TabSSHActivity() {
             }
             val btn = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
             btn.isEnabled = false
-            btn.text = "Verifying…"
+            btn.text = getString(R.string.sync_settings_verifying)
             lifecycleScope.launch {
                 val ok = withContext(Dispatchers.IO) { syncManager.verifyPassword(uri, pw) }
                 if (ok) {
                     withContext(Dispatchers.IO) { syncManager.setSyncPassword(pw) }
                     withContext(Dispatchers.Main) {
                         refresh()
-                        toast("Sync location set and verified")
+                        toast(getString(R.string.sync_settings_toast_location_set_and_verified))
                         dialog.dismiss()
                     }
                 } else {
                     withContext(Dispatchers.Main) {
                         btn.isEnabled = true
-                        btn.text = "Verify & Use"
-                        passwordLayout?.error = "Wrong password — decryption failed"
+                        btn.text = getString(R.string.sync_settings_verify_and_use)
+                        passwordLayout?.error = getString(R.string.sync_settings_error_wrong_password)
                     }
                 }
             }
@@ -521,19 +521,19 @@ class SyncSettingsActivity : TabSSHActivity() {
         val current = prefs.getString(PREF_FREQUENCY, "1h") ?: "1h"
         val currentIdx = FREQUENCY_KEYS.indexOf(current).coerceAtLeast(0)
         MaterialAlertDialogBuilder(this)
-            .setTitle("Sync Frequency")
+            .setTitle(R.string.sync_settings_frequency_dialog_title)
             .setSingleChoiceItems(FREQUENCY_VALUES, currentIdx) { d, which ->
                 prefs.edit().putString(PREF_FREQUENCY, FREQUENCY_KEYS[which]).apply()
                 textFrequencyValue.text = FREQUENCY_VALUES[which]
                 if (switchEnabled.isChecked) workScheduler.schedulePeriodicSync()
                 d.dismiss()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
     private fun performSync() {
-        if (!syncManager.isConfigured()) { toast("Sync not configured"); return }
+        if (!syncManager.isConfigured()) { toast(getString(R.string.sync_settings_toast_not_configured)); return }
         progressSync.visibility = View.VISIBLE
         btnSyncNow.isEnabled = false
         lifecycleScope.launch {
@@ -562,22 +562,22 @@ class SyncSettingsActivity : TabSSHActivity() {
                 withContext(Dispatchers.Main) {
                     progressSync.visibility = View.GONE
                     btnSyncNow.isEnabled = true
-                    if (ok) { refresh(); toast("Sync complete") }
-                    else toast("Sync failed — check the log")
+                    if (ok) { refresh(); toast(getString(R.string.sync_settings_toast_sync_complete)) }
+                    else toast(getString(R.string.sync_settings_toast_sync_failed_check_log))
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Sync failed", e)
                 withContext(Dispatchers.Main) {
                     progressSync.visibility = View.GONE
                     btnSyncNow.isEnabled = true
-                    toast("Sync failed: ${e.message}")
+                    toast(getString(R.string.sync_settings_toast_sync_failed, e.message))
                 }
             }
         }
     }
 
     private fun performDownload() {
-        if (!syncManager.isConfigured()) { toast("Sync not configured"); return }
+        if (!syncManager.isConfigured()) { toast(getString(R.string.sync_settings_toast_not_configured)); return }
         progressSync.visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
@@ -598,19 +598,19 @@ class SyncSettingsActivity : TabSSHActivity() {
                     withContext(Dispatchers.Main) {
                         progressSync.visibility = View.GONE
                         refresh()
-                        toast("Download complete")
+                        toast(getString(R.string.sync_settings_toast_download_complete))
                     }
                 } else {
                     withContext(Dispatchers.Main) {
                         progressSync.visibility = View.GONE
-                        toast("Nothing to download")
+                        toast(getString(R.string.sync_settings_toast_nothing_to_download))
                     }
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Download failed", e)
                 withContext(Dispatchers.Main) {
                     progressSync.visibility = View.GONE
-                    toast("Download failed: ${e.message}")
+                    toast(getString(R.string.sync_settings_toast_download_failed, e.message))
                 }
             }
         }

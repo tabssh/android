@@ -4,17 +4,17 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="@dimen/space_md">
 
     <!-- Title -->
     <TextView
         android:id="@+id/dialog_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Backup Jobs"
+        android:text="@string/backup_jobs_dialog_title"
         android:textSize="20sp"
         android:textStyle="bold"
-        android:paddingBottom="16dp" />
+        android:paddingBottom="@dimen/space_md" />
 
     <!-- Progress Bar -->
     <ProgressBar
@@ -30,9 +30,9 @@
         android:id="@+id/empty_state_text"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="No backup jobs found"
+        android:text="@string/backup_jobs_empty_state"
         android:textAlignment="center"
-        android:padding="32dp"
+        android:padding="@dimen/space_xl"
         android:visibility="gone" />
 
     <!-- Backup Job List -->
@@ -41,8 +41,8 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="8dp" />
+        android:layout_marginTop="@dimen/space_sm"
+        android:layout_marginBottom="@dimen/space_sm" />
 
     <!-- Action Buttons -->
     <LinearLayout
@@ -55,15 +55,15 @@
             android:id="@+id/refresh_button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Refresh"
+            android:text="@string/container_refresh"
             style="@style/Widget.Material3.Button.TonalButton" />
 
         <Button
             android:id="@+id/close_button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Close"
-            android:layout_marginStart="8dp"
+            android:text="@string/close"
+            android:layout_marginStart="@dimen/space_sm"
             style="@style/Widget.Material3.Button.TextButton" />
 
     </LinearLayout>

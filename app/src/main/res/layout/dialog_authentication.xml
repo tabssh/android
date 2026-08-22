@@ -16,7 +16,7 @@
             android:id="@+id/layout_password"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Password"
+            android:hint="@string/password_hint"
             app:endIconMode="password_toggle"
             style="@style/Widget.TabSSH.TextInputLayout">
 
@@ -40,7 +40,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginTop="12dp">
+            android:layout_marginTop="@dimen/space_12dp">
 
             <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/switch_save_password"
@@ -51,8 +51,8 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="12dp"
-                android:text="Save password for next time"
+                android:layout_marginStart="@dimen/space_12dp"
+                android:text="@string/dialog_authentication_save_password"
                 android:textAppearance="?attr/textAppearanceBodyMedium" />
         </LinearLayout>
 

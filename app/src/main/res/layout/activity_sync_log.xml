@@ -15,7 +15,7 @@
         android:id="@+id/recycler_sync_log"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:padding="8dp"
+        android:padding="@dimen/space_sm"
         app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
     <TextView

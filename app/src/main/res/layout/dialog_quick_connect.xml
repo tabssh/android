@@ -10,16 +10,16 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingHorizontal="24dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp">
+        android:paddingHorizontal="@dimen/space_lg"
+        android:paddingTop="@dimen/space_sm"
+        android:paddingBottom="@dimen/space_sm">
 
         <!-- Protocol selector -->
         <com.google.android.material.chip.ChipGroup
             android:id="@+id/chip_group_protocol"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
+            android:layout_marginBottom="@dimen/space_12dp"
             app:singleSelection="true"
             app:selectionRequired="true">
 
@@ -28,7 +28,7 @@
                 style="@style/Widget.Material3.Chip.Filter"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="SSH"
+                android:text="@string/dialog_quick_connect_chip_ssh"
                 android:checked="true" />
 
             <com.google.android.material.chip.Chip
@@ -36,7 +36,7 @@
                 style="@style/Widget.Material3.Chip.Filter"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="VNC" />
+                android:text="@string/dialog_quick_connect_chip_vnc" />
 
         </com.google.android.material.chip.ChipGroup>
 
@@ -45,8 +45,8 @@
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="hostname or user@hostname"
-            android:layout_marginBottom="12dp"
+            android:hint="@string/dialog_quick_connect_host_hint"
+            android:layout_marginBottom="@dimen/space_12dp"
             app:startIconDrawable="@drawable/ic_computer">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -64,8 +64,8 @@
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Port"
-            android:layout_marginBottom="12dp">
+            android:hint="@string/container_host_custom_port_hint"
+            android:layout_marginBottom="@dimen/space_12dp">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/input_port"
@@ -73,7 +73,7 @@
                 android:layout_height="wrap_content"
                 android:inputType="number"
                 android:imeOptions="actionNext"
-                android:text="22"
+                android:text="@string/connection_port_hint"
                 android:singleLine="true" />
 
         </com.google.android.material.textfield.TextInputLayout>
@@ -83,8 +83,8 @@
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Password (leave blank to use SSH key)"
-            android:layout_marginBottom="8dp"
+            android:hint="@string/dialog_quick_connect_password_hint"
+            android:layout_marginBottom="@dimen/space_sm"
             app:passwordToggleEnabled="true">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -109,8 +109,8 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginTop="4dp"
-            android:layout_marginBottom="4dp">
+            android:layout_marginTop="@dimen/space_xs"
+            android:layout_marginBottom="@dimen/space_xs">
 
             <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/switch_save_connection"
@@ -121,8 +121,8 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="12dp"
-                android:text="Save this connection"
+                android:layout_marginStart="@dimen/space_12dp"
+                android:text="@string/dialog_quick_connect_save_switch"
                 android:textAppearance="?attr/textAppearanceBodyMedium" />
         </LinearLayout>
 
@@ -131,7 +131,7 @@
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Connection name (optional)"
+            android:hint="@string/dialog_quick_connect_save_name_hint"
             android:visibility="gone"
             app:startIconDrawable="@drawable/ic_bookmark">
 

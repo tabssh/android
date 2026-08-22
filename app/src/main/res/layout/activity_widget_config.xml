@@ -3,26 +3,26 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="@dimen/space_md">
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Select Connection for Widget"
+        android:text="@string/widget_config_select_connection_title"
         android:textSize="20sp"
         android:textStyle="bold"
         android:textColor="?attr/colorOnSurface"
         android:gravity="center"
-        android:paddingBottom="16dp" />
+        android:paddingBottom="@dimen/space_md" />
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Choose a connection to display in the widget"
+        android:text="@string/widget_config_select_connection_subtitle"
         android:textSize="14sp"
         android:textColor="?attr/colorOnSurfaceVariant"
         android:gravity="center"
-        android:paddingBottom="16dp" />
+        android:paddingBottom="@dimen/space_md" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_connections"
@@ -36,8 +36,8 @@
         android:id="@+id/button_cancel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="Cancel"
+        android:layout_marginTop="@dimen/space_md"
+        android:text="@string/cancel"
         style="@style/Widget.Material3.Button.OutlinedButton" />
 
 </LinearLayout>

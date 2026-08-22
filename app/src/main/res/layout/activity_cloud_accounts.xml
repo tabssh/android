@@ -43,14 +43,14 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="&#x2601;&#xFE0F;"
+                    android:text="@string/common_icon_cloud"
                     android:textSize="64sp"
                     android:gravity="center" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="No cloud accounts yet"
+                    android:text="@string/cloud_empty_title"
                     android:textSize="18sp"
                     android:textStyle="bold"
                     android:textColor="?attr/colorOnSurface"
@@ -60,7 +60,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Tap + to add your first cloud provider"
+                    android:text="@string/cloud_empty_hint"
                     android:textSize="14sp"
                     android:textColor="?attr/colorOnSurfaceVariant"
                     android:gravity="center"
@@ -86,7 +86,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_margin="@dimen/space_lg"
-        android:contentDescription="Add cloud account"
+        android:contentDescription="@string/cloud_add_account_title"
         app:srcCompat="@drawable/ic_add"
         app:tint="@android:color/white" />
 

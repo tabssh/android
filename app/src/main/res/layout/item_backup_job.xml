@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="4dp"
+    android:layout_margin="@dimen/space_xs"
     app:cardElevation="2dp"
     app:cardCornerRadius="8dp">
 
@@ -11,14 +11,14 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:padding="@dimen/space_12dp">
 
         <!-- Job Name -->
         <TextView
             android:id="@+id/job_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Backup Job Name"
+            android:text="@string/backup_job_item_name_placeholder"
             android:textSize="16sp"
             android:textStyle="bold" />
 
@@ -27,13 +27,13 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="4dp">
+            android:layout_marginTop="@dimen/space_xs">
 
             <TextView
                 android:id="@+id/job_mode"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Mode: Full"
+                android:text="@string/backup_job_item_mode_placeholder"
                 android:textSize="12sp"
                 android:textColor="?android:textColorSecondary" />
 
@@ -46,7 +46,7 @@
                 android:id="@+id/job_status"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="● Enabled"
+                android:text="@string/backup_job_item_status_enabled_placeholder"
                 android:textSize="12sp"
                 android:textColor="@android:color/holo_green_dark" />
 
@@ -57,34 +57,34 @@
             android:id="@+id/job_schedule"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Schedule: Daily at 02:00"
+            android:text="@string/backup_job_item_schedule_placeholder"
             android:textSize="12sp"
             android:textColor="?android:textColorSecondary"
-            android:layout_marginTop="4dp" />
+            android:layout_marginTop="@dimen/space_xs" />
 
         <!-- VM Count -->
         <TextView
             android:id="@+id/job_vms"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="VMs: 5"
+            android:text="@string/backup_job_item_vms_placeholder"
             android:textSize="12sp"
             android:textColor="?android:textColorSecondary"
-            android:layout_marginTop="2dp" />
+            android:layout_marginTop="@dimen/space_2dp" />
 
         <!-- Action Buttons -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="8dp">
+            android:layout_marginTop="@dimen/space_sm">
 
             <Button
                 android:id="@+id/trigger_button"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Trigger Now"
+                android:text="@string/backup_job_item_trigger_now"
                 style="@style/Widget.Material3.Button.TonalButton" />
 
             <Button
@@ -92,8 +92,8 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="View Runs"
-                android:layout_marginStart="8dp"
+                android:text="@string/backup_job_item_view_runs"
+                android:layout_marginStart="@dimen/space_sm"
                 style="@style/Widget.Material3.Button.OutlinedButton" />
 
         </LinearLayout>

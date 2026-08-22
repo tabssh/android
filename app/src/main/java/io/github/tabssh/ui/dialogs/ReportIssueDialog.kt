@@ -108,7 +108,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
 
         // ── heading ──────────────────────────────────────────────────────────
         root.addView(TextView(ctx).apply {
-            text = "Create Paste"
+            text = ctx.getString(io.github.tabssh.R.string.report_issue_heading)
             textSize = 20f
             setTypeface(null, Typeface.BOLD)
         }, lp(bottomMargin = dp(16)))
@@ -125,7 +125,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
             null,
             com.google.android.material.R.attr.textInputOutlinedStyle
         ).apply {
-            hint = "Paste service"
+            hint = ctx.getString(io.github.tabssh.R.string.report_issue_paste_service_hint)
             endIconMode = TextInputLayout.END_ICON_DROPDOWN_MENU
         }
         val serviceSpinner = AutoCompleteTextView(ctx).apply {
@@ -143,7 +143,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
             ctx,
             null,
             com.google.android.material.R.attr.textInputOutlinedStyle
-        ).apply { hint = "Title (optional for paste, required for issue)" }
+        ).apply { hint = ctx.getString(io.github.tabssh.R.string.report_issue_title_hint) }
         val titleEdit = TextInputEditText(ctx).apply {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                     android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
@@ -159,7 +159,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
             null,
             com.google.android.material.R.attr.textInputOutlinedStyle
         ).apply {
-            hint = "Describe the issue — steps to reproduce, expected vs actual"
+            hint = ctx.getString(io.github.tabssh.R.string.report_issue_description_hint)
             visibility = View.GONE
         }
         val descEdit = TextInputEditText(ctx).apply {
@@ -196,7 +196,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
             null,
             com.google.android.material.R.attr.materialButtonOutlinedStyle
         ).apply {
-            text = "Copy"
+            text = ctx.getString(io.github.tabssh.R.string.copy)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -210,7 +210,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
         val buttonRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
 
         val pasteBtn = MaterialButton(ctx).apply {
-            text = "Create Paste"
+            text = ctx.getString(io.github.tabssh.R.string.report_issue_heading)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 .also { it.marginEnd = dp(8) }
         }
@@ -219,7 +219,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
             null,
             com.google.android.material.R.attr.materialButtonOutlinedStyle
         ).apply {
-            text = "Open Issue"
+            text = ctx.getString(io.github.tabssh.R.string.report_issue_open_issue_button)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
         buttonRow.addView(pasteBtn)
@@ -238,8 +238,8 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
             resultUrl.text = url
             resultRow.visibility = View.VISIBLE
             copyBtn.setOnClickListener {
-                io.github.tabssh.utils.ClipboardHelper.copy(ctx, "Paste URL", url, sensitive = false)
-                Toast.makeText(ctx, "URL copied", Toast.LENGTH_SHORT).show()
+                io.github.tabssh.utils.ClipboardHelper.copy(ctx, ctx.getString(io.github.tabssh.R.string.report_issue_clipboard_label), url, sensitive = false)
+                Toast.makeText(ctx, ctx.getString(io.github.tabssh.R.string.report_issue_url_copied_toast), Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -260,7 +260,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
             setUploading(true)
             lifecycleScope.launch {
                 try {
-                    val title = titleEdit.text.toString().trim().ifBlank { "Log" }
+                    val title = titleEdit.text.toString().trim().ifBlank { ctx.getString(io.github.tabssh.R.string.report_issue_default_title) }
                     val url = withContext(Dispatchers.IO) {
                         val content = preparedContent()
                         PasteProviderFactory
@@ -272,7 +272,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
                     onSuccess(url)
                 } catch (e: Exception) {
                     setUploading(false)
-                    Toast.makeText(ctx, "Upload failed: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(ctx, ctx.getString(io.github.tabssh.R.string.report_issue_upload_failed_fmt, e.message), Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -288,19 +288,19 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
             // Second tap (description already visible): validate and proceed.
             if (descLayout.visibility != View.VISIBLE) {
                 descLayout.visibility = View.VISIBLE
-                issueBtn.text = "Submit Issue"
+                issueBtn.text = ctx.getString(io.github.tabssh.R.string.report_issue_submit_button)
                 return@setOnClickListener
             }
 
             val issueTitle = titleEdit.text.toString().trim()
             val description = descEdit.text.toString().trim()
             if (issueTitle.isBlank()) {
-                titleLayout.error = "Title is required"
+                titleLayout.error = ctx.getString(io.github.tabssh.R.string.report_issue_title_required)
                 return@setOnClickListener
             }
             titleLayout.error = null
             if (description.isBlank()) {
-                descLayout.error = "Description is required"
+                descLayout.error = ctx.getString(io.github.tabssh.R.string.report_issue_description_required)
                 return@setOnClickListener
             }
             descLayout.error = null

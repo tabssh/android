@@ -165,7 +165,7 @@ class HypervisorEditActivity : TabSSHActivity() {
                     emptyList()
                 }
             }
-            val labels = mutableListOf("(none — password only)")
+            val labels = mutableListOf(getString(R.string.hypervisor_edit_ssh_identity_none))
             labels += availableSshKeys.map { it.getDisplayName() }
             dropdownSshIdentity.setAdapter(
                 ArrayAdapter(
@@ -273,10 +273,10 @@ class HypervisorEditActivity : TabSSHActivity() {
     private fun renderPinnedCertText() {
         val pin = currentPin
         if (pin.isNullOrBlank()) {
-            textPinnedCert.text = "(not pinned yet — will pin on next successful connect)"
+            textPinnedCert.text = getString(R.string.hypervisor_edit_pin_not_pinned_yet)
             buttonForgetPin.visibility = View.GONE
         } else {
-            textPinnedCert.text = "SHA-256: $pin"
+            textPinnedCert.text = getString(R.string.hypervisor_edit_pin_sha256, pin)
             buttonForgetPin.visibility = View.VISIBLE
         }
     }
@@ -366,7 +366,7 @@ class HypervisorEditActivity : TabSSHActivity() {
                 if (connections.isEmpty()) {
                     Toast.makeText(
                         this@HypervisorEditActivity,
-                        "No existing connections found. Create a connection first.",
+                        getString(R.string.hypervisor_edit_no_connections_found),
                         Toast.LENGTH_LONG
                     ).show()
                     return@launch
@@ -374,16 +374,16 @@ class HypervisorEditActivity : TabSSHActivity() {
 
                 // Build display list
                 val connectionNames = connections.map { conn: io.github.tabssh.storage.database.entities.ConnectionProfile ->
-                    "${conn.name ?: conn.getDisplayName()} (${conn.host})"
+                    getString(R.string.hypervisor_edit_connection_list_item, conn.name ?: conn.getDisplayName(), conn.host)
                 }.toTypedArray()
 
                 MaterialAlertDialogBuilder(this@HypervisorEditActivity)
-                    .setTitle("Import from Existing Host")
+                    .setTitle(R.string.hypervisor_edit_import_title)
                     .setItems(connectionNames) { _: android.content.DialogInterface, which: Int ->
                         val selectedConnection = connections[which]
                         importFromConnection(selectedConnection)
                     }
-                    .setNegativeButton("Cancel", null)
+                    .setNegativeButton(R.string.cancel, null)
                     .show()
 
             } catch (e: CancellationException) {
@@ -392,7 +392,7 @@ class HypervisorEditActivity : TabSSHActivity() {
                 Logger.w("HypervisorEditActivity", "Failed to load connections for import", e)
                 Toast.makeText(
                     this@HypervisorEditActivity,
-                    "Error loading connections",
+                    getString(R.string.hypervisor_edit_load_connections_error),
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -448,7 +448,7 @@ class HypervisorEditActivity : TabSSHActivity() {
         // Show confirmation
         Toast.makeText(
             this,
-            "Imported from ${connection.host}. Adjust port and credentials as needed.",
+            getString(R.string.hypervisor_edit_imported_from, connection.host),
             Toast.LENGTH_LONG
         ).show()
     }
@@ -498,14 +498,14 @@ class HypervisorEditActivity : TabSSHActivity() {
                 layoutRealm.visibility = View.GONE
                 layoutApiType.visibility = View.VISIBLE
                 textApiTypeHint.visibility = View.VISIBLE
-                textApiTypeHint.text = "Auto: Try XO REST → XCP-ng XML-RPC\nDirect: XCP-ng host (XML-RPC)\nCentralized: Xen Orchestra (REST API)"
+                textApiTypeHint.text = getString(R.string.hypervisor_edit_api_hint_xcpng)
             }
             HypervisorType.VMWARE -> {
                 applyTypeDefaultPort("443")
                 layoutRealm.visibility = View.GONE
                 layoutApiType.visibility = View.VISIBLE
                 textApiTypeHint.visibility = View.VISIBLE
-                textApiTypeHint.text = "Auto: Try vCenter → ESXi\nDirect: ESXi host\nCentralized: vCenter/vSphere"
+                textApiTypeHint.text = getString(R.string.hypervisor_edit_api_hint_vmware)
             }
             HypervisorType.LIBVIRT -> {
                 applyTypeDefaultPort("22")
@@ -532,7 +532,7 @@ class HypervisorEditActivity : TabSSHActivity() {
     private fun refreshAccountDropdown() {
         // OCI accounts are never shown via this spinner; filter them out for all types
         val filtered = availableAccounts.filter { acc -> acc.authType != "oci_api_key" }
-        val labels = mutableListOf("(none — use inline credentials)")
+        val labels = mutableListOf(getString(R.string.hypervisor_edit_account_none))
         labels += filtered.map { it.getDisplayName() }
         dropdownAccount.setAdapter(
             ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, labels)
@@ -564,7 +564,7 @@ class HypervisorEditActivity : TabSSHActivity() {
                     if (hypervisor.type == HypervisorType.OCI) {
                         com.google.android.material.snackbar.Snackbar.make(
                             findViewById(android.R.id.content),
-                            "OCI hypervisors have moved to Cloud Accounts. Manage them there.",
+                            getString(R.string.hypervisor_edit_oci_moved_message),
                             com.google.android.material.snackbar.Snackbar.LENGTH_LONG
                         ).show()
                         finish()
@@ -627,7 +627,7 @@ class HypervisorEditActivity : TabSSHActivity() {
                             catch (_: Exception) { emptyList() }
                         }
                         availableSshKeys = keys
-                        val keyLabels = mutableListOf("(none — password only)")
+                        val keyLabels = mutableListOf(getString(R.string.hypervisor_edit_ssh_identity_none))
                         keyLabels += keys.map { it.getDisplayName() }
                         dropdownSshIdentity.setAdapter(
                             ArrayAdapter(
@@ -653,7 +653,7 @@ class HypervisorEditActivity : TabSSHActivity() {
                 throw e
             } catch (e: Exception) {
                 Logger.e("HypervisorEditActivity", "Failed to load hypervisor", e)
-                showError("Failed to load hypervisor", "Error")
+                showError(getString(R.string.hypervisor_edit_load_failed), getString(R.string.dialog_title_error))
                 finish()
             }
         }
@@ -663,7 +663,7 @@ class HypervisorEditActivity : TabSSHActivity() {
         if (!validateFields()) return
         
         buttonTestConnection.isEnabled = false
-        buttonTestConnection.text = "Testing..."
+        buttonTestConnection.text = getString(R.string.conn_edit_testing_ellipsis)
         
         lifecycleScope.launch {
             try {
@@ -735,7 +735,7 @@ class HypervisorEditActivity : TabSSHActivity() {
                     }
                     else -> {
                         Toast.makeText(this@HypervisorEditActivity,
-                            "Test not supported for this type", Toast.LENGTH_SHORT).show()
+                            getString(R.string.hypervisor_edit_test_not_supported), Toast.LENGTH_SHORT).show()
                     }
                 }
 
@@ -748,9 +748,9 @@ class HypervisorEditActivity : TabSSHActivity() {
                 }
 
                 if (success) {
-                    Toast.makeText(this@HypervisorEditActivity, "✓ Connection successful", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@HypervisorEditActivity, getString(R.string.hypervisor_edit_test_successful), Toast.LENGTH_LONG).show()
                 } else {
-                    showError("✗ Connection failed", "Error")
+                    showError(getString(R.string.hypervisor_edit_test_failed), getString(R.string.dialog_title_error))
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -758,11 +758,11 @@ class HypervisorEditActivity : TabSSHActivity() {
                 Logger.w("HypervisorEditActivity", "Test connection failed", e)
                 // e.message can be a raw server error body (vSphere/XO echo the
                 // request, including the Authorization header) — sanitize and cap.
-                showError("Error: ${safeDetail(e.message)}", "Error")
+                showError(getString(R.string.hypervisor_edit_error_detail, safeDetail(e.message)), getString(R.string.dialog_title_error))
             } finally {
                 if (!isFinishing && !isDestroyed) {
                     buttonTestConnection.isEnabled = true
-                    buttonTestConnection.text = "Test Connection"
+                    buttonTestConnection.text = getString(R.string.hypervisor_edit_test_connection_button)
                 }
             }
         }
@@ -826,11 +826,11 @@ class HypervisorEditActivity : TabSSHActivity() {
 
                 val savedId = if (hypervisorId != null) {
                     app.database.hypervisorDao().update(hypervisor)
-                    Toast.makeText(this@HypervisorEditActivity, "Updated ${hypervisor.name}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@HypervisorEditActivity, getString(R.string.hypervisor_edit_updated_toast, hypervisor.name), Toast.LENGTH_SHORT).show()
                     hypervisorId!!
                 } else {
                     val newId = app.database.hypervisorDao().insert(hypervisor)
-                    Toast.makeText(this@HypervisorEditActivity, "Added ${hypervisor.name}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@HypervisorEditActivity, getString(R.string.hypervisor_edit_added_toast, hypervisor.name), Toast.LENGTH_SHORT).show()
                     newId
                 }
 
@@ -863,7 +863,7 @@ class HypervisorEditActivity : TabSSHActivity() {
                 if (!storeOk) {
                     Toast.makeText(
                         this@HypervisorEditActivity,
-                        "⚠ Password stored insecurely (Keystore unavailable). Re-edit to retry.",
+                        getString(R.string.hypervisor_edit_password_insecure_warning),
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -873,7 +873,7 @@ class HypervisorEditActivity : TabSSHActivity() {
                 throw e
             } catch (e: Exception) {
                 Logger.e("HypervisorEditActivity", "Failed to save hypervisor", e)
-                showError("Failed to save: ${safeDetail(e.message)}", "Error")
+                showError(getString(R.string.hypervisor_edit_save_failed, safeDetail(e.message)), getString(R.string.dialog_title_error))
             } finally {
                 isSaving = false
                 if (!isFinishing && !isDestroyed) buttonSave.isEnabled = true
@@ -883,12 +883,12 @@ class HypervisorEditActivity : TabSSHActivity() {
 
     private fun validateFields(): Boolean {
         if (editName.text.toString().isBlank()) {
-            editName.error = "Name is required"
+            editName.error = getString(R.string.xcpng_name_required)
             return false
         }
         val host = editHost.text.toString().trim()
         if (host.isBlank()) {
-            editHost.error = "Host is required"
+            editHost.error = getString(R.string.conn_edit_host_required)
             return false
         }
         // The host is concatenated into the https:// base URL of the Proxmox /
@@ -896,18 +896,18 @@ class HypervisorEditActivity : TabSSHActivity() {
         // CR/LF, a scheme, or an embedded path/credential there is either a
         // request-splitting primitive or silently redirects the connection.
         if (!isValidHostValue(host)) {
-            editHost.error = "Invalid host — use a hostname or IP address only"
+            editHost.error = getString(R.string.hypervisor_edit_invalid_host)
             return false
         }
         if (editPort.text.toString().isBlank()) {
-            editPort.error = "Port is required"
+            editPort.error = getString(R.string.conn_edit_port_required)
             return false
         }
         // Skip inline credential checks when a reusable account is selected;
         // those fields are hidden and credentials resolve from the account.
         if (selectedAccountId == null) {
             if (editUsername.text.toString().isBlank()) {
-                editUsername.error = "Username is required"
+                editUsername.error = getString(R.string.conn_edit_username_required)
                 return false
             }
             // Password is optional for LIBVIRT when an SSH key identity is
@@ -915,14 +915,14 @@ class HypervisorEditActivity : TabSSHActivity() {
             val isLibvirtWithKey = hypervisorTypes.getOrNull(spinnerType.selectedItemPosition) == HypervisorType.LIBVIRT
                 && selectedSshIdentityId != null
             if (!isLibvirtWithKey && editPassword.text.toString().isBlank()) {
-                editPassword.error = "Password is required"
+                editPassword.error = getString(R.string.hypervisor_edit_password_required)
                 return false
             }
         }
 
         val port = editPort.text.toString().toIntOrNull()
         if (port == null || port !in 1..65535) {
-            editPort.error = "Invalid port"
+            editPort.error = getString(R.string.hypervisor_edit_invalid_port)
             return false
         }
 

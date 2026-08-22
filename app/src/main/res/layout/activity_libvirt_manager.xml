@@ -15,14 +15,14 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:padding="16dp">
+        android:padding="@dimen/space_md">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_refresh"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Refresh"
+            android:text="@string/container_refresh"
             style="@style/Widget.Material3.Button" />
 
     </LinearLayout>
@@ -31,7 +31,7 @@
         android:id="@+id/progress_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
+        android:layout_marginHorizontal="@dimen/space_md"
         android:visibility="gone"
         style="@style/Widget.AppCompat.ProgressBar.Horizontal"
         android:indeterminate="true" />
@@ -40,8 +40,8 @@
         android:id="@+id/status_text"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="16dp"
-        android:text="Loading domains…"
+        android:padding="@dimen/space_md"
+        android:text="@string/libvirt_loading_domains"
         android:textAlignment="center"
         android:visibility="gone" />
 
@@ -50,6 +50,6 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:padding="8dp" />
+        android:padding="@dimen/space_sm" />
 
 </LinearLayout>

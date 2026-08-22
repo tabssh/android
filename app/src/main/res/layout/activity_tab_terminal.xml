@@ -84,10 +84,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="top|start"
-            android:layout_marginStart="8dp"
-            android:layout_marginTop="8dp"
+            android:layout_marginStart="@dimen/space_sm"
+            android:layout_marginTop="@dimen/space_sm"
             android:src="@drawable/ic_menu"
-            android:contentDescription="Open menu and tabs"
+            android:contentDescription="@string/tab_terminal_menu_button_open_description"
             app:fabSize="mini"
             app:backgroundTint="?attr/colorSecondaryContainer"
             app:tint="?attr/colorOnSecondaryContainer"
@@ -100,9 +100,9 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="top|end"
-            android:layout_marginTop="8dp"
-            android:layout_marginEnd="8dp"
-            android:text="tmux"
+            android:layout_marginTop="@dimen/space_sm"
+            android:layout_marginEnd="@dimen/space_sm"
+            android:text="@string/tab_terminal_multiplexer_chip_default"
             android:textSize="11sp"
             app:chipBackgroundColor="@color/terminal_green"
             app:chipMinHeight="24dp"
@@ -190,7 +190,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="@dimen/space_sm"
-                android:text="Kbd"
+                android:text="@string/tab_terminal_action_keyboard"
                 android:drawableTop="@drawable/ic_keyboard" />
 
             <com.google.android.material.button.MaterialButton
@@ -200,7 +200,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="@dimen/space_sm"
-                android:text="Snip"
+                android:text="@string/tab_terminal_action_snippets"
                 android:drawableTop="@drawable/ic_code" />
 
             <com.google.android.material.button.MaterialButton
@@ -210,7 +210,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="@dimen/space_sm"
-                android:text="Files"
+                android:text="@string/open_files"
                 android:drawableTop="@drawable/ic_folder" />
 
             <com.google.android.material.button.MaterialButton
@@ -220,7 +220,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="@dimen/space_sm"
-                android:text="Paste"
+                android:text="@string/paste"
                 android:drawableTop="@drawable/ic_paste" />
 
             <com.google.android.material.button.MaterialButton
@@ -229,7 +229,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Menu"
+                android:text="@string/tab_terminal_action_menu"
                 android:drawableTop="@drawable/ic_menu" />
 
         </LinearLayout>

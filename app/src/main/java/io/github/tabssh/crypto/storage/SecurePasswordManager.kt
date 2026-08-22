@@ -13,6 +13,7 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import io.github.tabssh.R
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.security.KeyStore
@@ -325,10 +326,10 @@ class SecurePasswordManager(private val context: Context) {
                 })
             
             val promptInfo = BiometricPrompt.PromptInfo.Builder()
-                .setTitle("Store Password Securely")
-                .setSubtitle("Use your biometric to securely store the SSH password")
-                .setDescription("This will encrypt and store your password using hardware-backed security")
-                .setNegativeButtonText("Cancel")
+                .setTitle(context.getString(R.string.secure_password_store_prompt_title))
+                .setSubtitle(context.getString(R.string.secure_password_store_prompt_subtitle))
+                .setDescription(context.getString(R.string.secure_password_store_prompt_description))
+                .setNegativeButtonText(context.getString(R.string.biometric_negative))
                 .build()
             
             biometricPrompt.authenticate(promptInfo)
@@ -377,10 +378,10 @@ class SecurePasswordManager(private val context: Context) {
                 })
             
             val promptInfo = BiometricPrompt.PromptInfo.Builder()
-                .setTitle("Access Stored Password")
-                .setSubtitle("Use your biometric to access the stored SSH password")
-                .setDescription("Authenticate to decrypt your securely stored password")
-                .setNegativeButtonText("Cancel")
+                .setTitle(context.getString(R.string.secure_password_access_prompt_title))
+                .setSubtitle(context.getString(R.string.secure_password_access_prompt_subtitle))
+                .setDescription(context.getString(R.string.secure_password_access_prompt_description))
+                .setNegativeButtonText(context.getString(R.string.biometric_negative))
                 .build()
             
             biometricPrompt.authenticate(promptInfo)

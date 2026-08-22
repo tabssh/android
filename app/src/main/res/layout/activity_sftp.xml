@@ -71,7 +71,7 @@
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
                         android:background="?attr/colorSurfaceVariant"
-                        android:paddingHorizontal="4dp">
+                        android:paddingHorizontal="@dimen/space_xs">
 
                         <ImageButton
                             android:id="@+id/btn_local_up"
@@ -80,15 +80,15 @@
                             android:src="@drawable/ic_arrow_up"
                             android:background="?attr/selectableItemBackgroundBorderless"
                             app:tint="?attr/colorOnSurfaceVariant"
-                            android:contentDescription="Go up" />
+                            android:contentDescription="@string/sftp_browser_go_up_description" />
 
                         <TextView
                             android:id="@+id/text_local_path"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:layout_marginHorizontal="4dp"
-                            android:text="/storage/emulated/0"
+                            android:layout_marginHorizontal="@dimen/space_xs"
+                            android:text="@string/sftp_path_default_storage"
                             android:textSize="13sp"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:singleLine="true"
@@ -113,7 +113,7 @@
                     android:layout_gravity="center"
                     android:orientation="vertical"
                     android:gravity="center"
-                    android:padding="16dp"
+                    android:padding="@dimen/space_md"
                     android:visibility="gone">
 
                     <ImageView
@@ -127,8 +127,8 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:text="Empty folder"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:text="@string/sftp_browser_empty_folder"
                         android:textSize="13sp"
                         android:textColor="?attr/colorOnSurfaceVariant" />
                 </LinearLayout>
@@ -160,7 +160,7 @@
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
                         android:background="?attr/colorSurfaceVariant"
-                        android:paddingHorizontal="4dp">
+                        android:paddingHorizontal="@dimen/space_xs">
 
                         <ImageButton
                             android:id="@+id/btn_remote_up"
@@ -169,15 +169,15 @@
                             android:src="@drawable/ic_arrow_up"
                             android:background="?attr/selectableItemBackgroundBorderless"
                             app:tint="?attr/colorOnSurfaceVariant"
-                            android:contentDescription="Go up" />
+                            android:contentDescription="@string/sftp_browser_go_up_description" />
 
                         <TextView
                             android:id="@+id/text_remote_path"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:layout_marginHorizontal="4dp"
-                            android:text="/"
+                            android:layout_marginHorizontal="@dimen/space_xs"
+                            android:text="@string/sftp_path_root"
                             android:textSize="13sp"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:singleLine="true"
@@ -201,7 +201,7 @@
                     android:layout_gravity="center"
                     android:orientation="vertical"
                     android:gravity="center"
-                    android:padding="16dp"
+                    android:padding="@dimen/space_md"
                     android:visibility="gone">
 
                     <ImageView
@@ -215,8 +215,8 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:text="Empty folder"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:text="@string/sftp_browser_empty_folder"
                         android:textSize="13sp"
                         android:textColor="?attr/colorOnSurfaceVariant" />
                 </LinearLayout>
@@ -240,8 +240,8 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:background="?attr/colorSurface"
-            android:paddingHorizontal="4dp"
-            android:paddingVertical="4dp"
+            android:paddingHorizontal="@dimen/space_xs"
+            android:paddingVertical="@dimen/space_xs"
             android:gravity="center_vertical">
 
             <com.google.android.material.button.MaterialButton
@@ -250,7 +250,7 @@
                 android:layout_width="0dp"
                 android:layout_height="56dp"
                 android:layout_weight="1"
-                android:text="Upload"
+                android:text="@string/upload_file"
                 android:textSize="11sp"
                 app:icon="@drawable/ic_upload"
                 app:iconGravity="top"
@@ -264,7 +264,7 @@
                 android:layout_width="0dp"
                 android:layout_height="56dp"
                 android:layout_weight="1"
-                android:text="Download"
+                android:text="@string/download_file"
                 android:textSize="11sp"
                 app:icon="@drawable/ic_download"
                 app:iconGravity="top"
@@ -278,7 +278,7 @@
                 android:layout_width="0dp"
                 android:layout_height="56dp"
                 android:layout_weight="1"
-                android:text="New Folder"
+                android:text="@string/new_folder"
                 android:textSize="11sp"
                 app:icon="@drawable/ic_add"
                 app:iconGravity="top"
@@ -291,7 +291,7 @@
                 android:layout_width="0dp"
                 android:layout_height="56dp"
                 android:layout_weight="1"
-                android:text="Refresh"
+                android:text="@string/container_refresh"
                 android:textSize="11sp"
                 app:icon="@drawable/ic_refresh"
                 app:iconGravity="top"

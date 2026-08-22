@@ -1,12 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Spacing system (8dp grid) -->
+    <dimen name="space_none">0dp</dimen>
+    <dimen name="space_1dp">1dp</dimen>
+    <dimen name="space_2dp">2dp</dimen>
     <dimen name="space_xs">4dp</dimen>
+    <dimen name="space_6dp">6dp</dimen>
     <dimen name="space_sm">8dp</dimen>
+    <dimen name="space_10dp">10dp</dimen>
+    <dimen name="space_12dp">12dp</dimen>
     <dimen name="space_md">16dp</dimen>
+    <dimen name="space_18dp">18dp</dimen>
+    <dimen name="space_20dp">20dp</dimen>
     <dimen name="space_lg">24dp</dimen>
     <dimen name="space_xl">32dp</dimen>
     <dimen name="space_xxl">48dp</dimen>
+    <dimen name="space_60dp">60dp</dimen>
+    <dimen name="space_80dp">80dp</dimen>
+    <dimen name="space_88dp">88dp</dimen>
     
     <!-- Text sizes -->
     <dimen name="text_size_caption">12sp</dimen>

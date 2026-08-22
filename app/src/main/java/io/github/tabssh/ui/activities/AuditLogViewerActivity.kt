@@ -85,15 +85,15 @@ class AuditLogViewerActivity : TabSSHActivity() {
                 if (logs.isEmpty()) {
                     android.widget.Toast.makeText(
                         this@AuditLogViewerActivity,
-                        "No logs to copy",
+                        getString(R.string.audit_log_toast_no_logs_to_copy),
                         android.widget.Toast.LENGTH_SHORT
                     ).show()
                     return@launch
                 }
 
                 val logsText = buildString {
-                    append("TabSSH Audit Logs\n")
-                    append("Copied: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}\n")
+                    append(getString(R.string.audit_log_clipboard_label) + "\n")
+                    append(getString(R.string.audit_log_clipboard_copied_at, java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())) + "\n")
                     append("=".repeat(60) + "\n\n")
 
                     logs.forEach { log ->
@@ -104,11 +104,11 @@ class AuditLogViewerActivity : TabSSHActivity() {
                     }
                 }
 
-                io.github.tabssh.utils.ClipboardHelper.copy(this@AuditLogViewerActivity, "TabSSH Audit Logs", logsText, sensitive = false)
+                io.github.tabssh.utils.ClipboardHelper.copy(this@AuditLogViewerActivity, getString(R.string.audit_log_clipboard_label), logsText, sensitive = false)
 
                 android.widget.Toast.makeText(
                     this@AuditLogViewerActivity,
-                    "✓ Copied ${logs.size} audit log entries to clipboard",
+                    getString(R.string.audit_log_toast_copied, logs.size),
                     android.widget.Toast.LENGTH_SHORT
                 ).show()
 
@@ -116,7 +116,7 @@ class AuditLogViewerActivity : TabSSHActivity() {
                 Logger.e("AuditLogViewer", "Failed to copy logs", e)
                 android.widget.Toast.makeText(
                     this@AuditLogViewerActivity,
-                    "Failed to copy logs: ${e.message}",
+                    getString(R.string.audit_log_toast_copy_failed, e.message),
                     android.widget.Toast.LENGTH_SHORT
                 ).show()
             }
@@ -144,7 +144,7 @@ class AuditLogViewerActivity : TabSSHActivity() {
                 Logger.e("AuditLogViewer", "Failed to load audit logs", e)
                 android.widget.Toast.makeText(
                     this@AuditLogViewerActivity,
-                    "Failed to load logs: ${e.message}",
+                    getString(R.string.audit_log_toast_load_failed, e.message),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
             }
@@ -156,20 +156,20 @@ class AuditLogViewerActivity : TabSSHActivity() {
      */
     private fun showFilterDialog() {
         val filterOptions = arrayOf(
-            "All Events",
-            "Authentication",
-            "Connections",
-            "File Transfers",
-            "Configuration Changes",
-            "Errors Only"
+            getString(R.string.audit_log_filter_all_events),
+            getString(R.string.route_auth_type_hint),
+            getString(R.string.settings_connections),
+            getString(R.string.audit_log_filter_file_transfers),
+            getString(R.string.audit_log_filter_configuration_changes),
+            getString(R.string.audit_log_filter_errors_only)
         )
-        
+
         MaterialAlertDialogBuilder(this)
-            .setTitle("Filter Logs")
+            .setTitle(getString(R.string.audit_log_filter_dialog_title))
             .setItems(filterOptions) { _, which ->
                 applyFilter(which)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
     
@@ -181,22 +181,22 @@ class AuditLogViewerActivity : TabSSHActivity() {
             try {
                 val dao = app.database.auditLogDao()
                 val (logs, filterName) = when (filterIndex) {
-                    0 -> Pair(dao.getRecentSummary(1000), "All")
-                    1 -> Pair(dao.getByEventTypeSummary("AUTH%"), "Authentication")
-                    2 -> Pair(dao.getByEventTypeSummary("CONNECT%"), "Connections")
-                    3 -> Pair(dao.getByEventTypeSummary("SFTP%"), "File Transfers")
-                    4 -> Pair(dao.getByEventTypeSummary("CONFIG%"), "Config Changes")
-                    5 -> Pair(dao.getByEventTypeSummary("ERROR%"), "Errors")
-                    else -> Pair(dao.getRecentSummary(1000), "All")
+                    0 -> Pair(dao.getRecentSummary(1000), getString(R.string.audit_log_filter_name_all))
+                    1 -> Pair(dao.getByEventTypeSummary("AUTH%"), getString(R.string.route_auth_type_hint))
+                    2 -> Pair(dao.getByEventTypeSummary("CONNECT%"), getString(R.string.settings_connections))
+                    3 -> Pair(dao.getByEventTypeSummary("SFTP%"), getString(R.string.audit_log_filter_name_file_transfers))
+                    4 -> Pair(dao.getByEventTypeSummary("CONFIG%"), getString(R.string.audit_log_filter_name_config_changes))
+                    5 -> Pair(dao.getByEventTypeSummary("ERROR%"), getString(R.string.audit_log_filter_name_errors))
+                    else -> Pair(dao.getRecentSummary(1000), getString(R.string.audit_log_filter_name_all))
                 }
 
                 adapter.updateLogs(logs)
 
                 // Update title to show current filter
                 supportActionBar?.title = if (filterIndex == 0) {
-                    "Audit Logs"
+                    getString(R.string.audit_log_viewer_title)
                 } else {
-                    "Audit Logs - $filterName"
+                    getString(R.string.audit_log_title_with_filter, filterName)
                 }
 
             } catch (e: Exception) {
@@ -245,15 +245,15 @@ class AuditLogViewerActivity : TabSSHActivity() {
                 
                 android.widget.Toast.makeText(
                     this@AuditLogViewerActivity,
-                    "✓ Exported ${logs.size} logs to $filename",
+                    getString(R.string.audit_log_toast_exported, logs.size, filename),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
-                
+
             } catch (e: Exception) {
                 Logger.e("AuditLogViewer", "Failed to export logs", e)
                 android.widget.Toast.makeText(
                     this@AuditLogViewerActivity,
-                    "Failed to export logs: ${e.message}",
+                    getString(R.string.audit_log_toast_export_failed, e.message),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
             }

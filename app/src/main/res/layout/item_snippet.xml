@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="8dp"
+    android:layout_margin="@dimen/space_sm"
     app:cardCornerRadius="8dp"
     app:cardElevation="2dp">
 
@@ -11,7 +11,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="@dimen/space_md">
 
         <!-- Header row with name and favorite icon -->
         <LinearLayout
@@ -28,15 +28,15 @@
                 android:textSize="16sp"
                 android:textStyle="bold"
                 android:textColor="?attr/colorOnSurface"
-                android:text="Snippet Name" />
+                android:text="@string/snippet_item_name_placeholder" />
 
             <ImageView
                 android:id="@+id/icon_variables"
                 android:layout_width="20dp"
                 android:layout_height="20dp"
-                android:layout_marginEnd="8dp"
+                android:layout_marginEnd="@dimen/space_sm"
                 android:src="@drawable/ic_code"
-                android:contentDescription="Has variables"
+                android:contentDescription="@string/snippet_item_has_variables_description"
                 android:visibility="gone" />
 
             <ImageView
@@ -44,7 +44,7 @@
                 android:layout_width="24dp"
                 android:layout_height="24dp"
                 android:src="@drawable/ic_star_outline"
-                android:contentDescription="Toggle favorite" />
+                android:contentDescription="@string/snippet_item_toggle_favorite_description" />
 
         </LinearLayout>
 
@@ -53,11 +53,11 @@
             android:id="@+id/text_snippet_command"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="@dimen/space_sm"
             android:textSize="14sp"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:fontFamily="monospace"
-            android:text="command goes here"
+            android:text="@string/snippet_item_command_placeholder"
             android:maxLines="2"
             android:ellipsize="end" />
 
@@ -65,7 +65,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="@dimen/space_sm"
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
@@ -75,9 +75,9 @@
                 android:layout_height="wrap_content"
                 android:textSize="12sp"
                 android:textColor="?attr/colorPrimary"
-                android:text="Category"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="4dp"
+                android:text="@string/snippet_item_category_placeholder"
+                android:paddingHorizontal="@dimen/space_sm"
+                android:paddingVertical="@dimen/space_xs"
                 android:background="@drawable/bg_category_chip" />
 
             <View
@@ -91,7 +91,7 @@
                 android:layout_height="wrap_content"
                 android:textSize="12sp"
                 android:textColor="?attr/colorOnSurfaceVariant"
-                android:text="Used 5 times"
+                android:text="@string/snippet_item_usage_count_placeholder"
                 android:visibility="gone" />
 
         </LinearLayout>

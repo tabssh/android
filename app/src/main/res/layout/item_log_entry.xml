@@ -4,7 +4,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="4dp"
+    android:layout_margin="@dimen/space_xs"
     app:cardElevation="2dp"
     app:cardCornerRadius="8dp">
 
@@ -12,7 +12,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:padding="@dimen/space_12dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -24,7 +24,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="2025-12-19 12:34:56"
+                android:text="@string/log_viewer_item_timestamp_placeholder"
                 android:textSize="11sp"
                 android:textColor="?android:attr/textColorSecondary"
                 android:fontFamily="monospace" />
@@ -33,11 +33,11 @@
                 android:id="@+id/text_log_level"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="INFO"
+                android:text="@string/log_viewer_item_level_placeholder"
                 android:textSize="11sp"
                 android:textStyle="bold"
-                android:paddingStart="8dp"
-                android:paddingEnd="0dp"
+                android:paddingStart="@dimen/space_sm"
+                android:paddingEnd="@dimen/space_none"
                 android:fontFamily="monospace" />
 
         </LinearLayout>
@@ -46,21 +46,21 @@
             android:id="@+id/text_log_tag"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="MainActivity"
+            android:text="@string/log_viewer_item_tag_placeholder"
             android:textSize="12sp"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="@dimen/space_xs"
             android:fontFamily="monospace" />
 
         <TextView
             android:id="@+id/text_log_message"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Application started successfully"
+            android:text="@string/log_viewer_item_message_placeholder"
             android:textSize="13sp"
             android:textColor="?android:attr/textColorPrimary"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="@dimen/space_xs"
             android:fontFamily="monospace" />
 
     </LinearLayout>

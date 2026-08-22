@@ -7,12 +7,12 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="@dimen/space_md">
 
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Name"
+            android:hint="@string/container_name_hint"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -26,8 +26,8 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Host"
-            android:layout_marginTop="8dp"
+            android:hint="@string/route_host_hint"
+            android:layout_marginTop="@dimen/space_sm"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -41,8 +41,8 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Port"
-            android:layout_marginTop="8dp"
+            android:hint="@string/route_port_hint"
+            android:layout_marginTop="@dimen/space_sm"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -56,8 +56,8 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Username"
-            android:layout_marginTop="8dp"
+            android:hint="@string/route_username_hint"
+            android:layout_marginTop="@dimen/space_sm"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -71,8 +71,8 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Password"
-            android:layout_marginTop="8dp"
+            android:hint="@string/password_hint"
+            android:layout_marginTop="@dimen/space_sm"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -86,8 +86,8 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Realm (pam/pve)"
-            android:layout_marginTop="8dp"
+            android:hint="@string/hypervisor_add_realm_hint"
+            android:layout_marginTop="@dimen/space_sm"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -103,8 +103,8 @@
             android:id="@+id/api_type_layout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:hint="API Type"
+            android:layout_marginTop="@dimen/space_md"
+            android:hint="@string/hypervisor_add_api_type_hint"
             android:visibility="gone"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
@@ -113,7 +113,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:inputType="none"
-                android:text="Auto-detect (recommended)" />
+                android:text="@string/hypervisor_add_api_type_auto_detect" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -121,8 +121,8 @@
             android:id="@+id/api_type_hint"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Auto-detect: Try both APIs automatically\nDirect: Connect to host directly\nCentralized: Connect via management server"
+            android:layout_marginTop="@dimen/space_xs"
+            android:text="@string/hypervisor_add_api_type_explanation"
             android:textSize="12sp"
             android:textColor="?android:textColorSecondary"
             android:visibility="gone" />

@@ -31,7 +31,7 @@
             android:layout_height="@dimen/connection_icon_size"
             android:src="@drawable/ic_computer"
             android:layout_marginEnd="@dimen/space_md"
-            android:contentDescription="Connection icon" />
+            android:contentDescription="@string/item_connection_icon_content_description" />
 
         <LinearLayout
             android:layout_width="0dp"

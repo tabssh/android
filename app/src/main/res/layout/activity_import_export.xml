@@ -20,14 +20,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingBottom="16dp">
+            android:paddingBottom="@dimen/space_md">
 
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/card_import_ssh"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="@dimen/space_md"
+                android:layout_marginTop="@dimen/space_sm"
                 app:cardCornerRadius="8dp"
                 app:cardElevation="2dp"
                 android:clickable="true"
@@ -38,13 +38,13 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:padding="16dp">
+                    android:padding="@dimen/space_md">
 
                     <ImageView
                         android:layout_width="32dp"
                         android:layout_height="32dp"
                         android:src="@android:drawable/ic_menu_upload"
-                        android:layout_marginEnd="16dp" />
+                        android:layout_marginEnd="@dimen/space_md" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -55,7 +55,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Import SSH Config"
+                            android:text="@string/import_export_import_ssh_config_title"
                             android:textSize="16sp"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
@@ -63,7 +63,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Import hosts from an OpenSSH config file"
+                            android:text="@string/import_export_card_import_ssh_subtitle"
                             android:textSize="13sp"
                             android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -77,8 +77,8 @@
                 android:id="@+id/card_export_ssh"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="@dimen/space_md"
+                android:layout_marginTop="@dimen/space_sm"
                 app:cardCornerRadius="8dp"
                 app:cardElevation="2dp"
                 android:clickable="true"
@@ -89,13 +89,13 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:padding="16dp">
+                    android:padding="@dimen/space_md">
 
                     <ImageView
                         android:layout_width="32dp"
                         android:layout_height="32dp"
                         android:src="@android:drawable/ic_menu_save"
-                        android:layout_marginEnd="16dp" />
+                        android:layout_marginEnd="@dimen/space_md" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -106,7 +106,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Export SSH Config"
+                            android:text="@string/import_export_export_ssh_config_title"
                             android:textSize="16sp"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
@@ -114,7 +114,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Save all hosts as an OpenSSH config file"
+                            android:text="@string/import_export_card_export_ssh_subtitle"
                             android:textSize="13sp"
                             android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -128,8 +128,8 @@
                 android:id="@+id/card_bulk_import"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="@dimen/space_md"
+                android:layout_marginTop="@dimen/space_sm"
                 app:cardCornerRadius="8dp"
                 app:cardElevation="2dp"
                 android:clickable="true"
@@ -140,13 +140,13 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:padding="16dp">
+                    android:padding="@dimen/space_md">
 
                     <ImageView
                         android:layout_width="32dp"
                         android:layout_height="32dp"
                         android:src="@android:drawable/ic_menu_upload"
-                        android:layout_marginEnd="16dp" />
+                        android:layout_marginEnd="@dimen/space_md" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -157,7 +157,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Bulk Import"
+                            android:text="@string/import_export_bulk_import_title"
                             android:textSize="16sp"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
@@ -165,7 +165,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Import from CSV, JSON, PuTTY .reg, or Terraform"
+                            android:text="@string/import_export_card_bulk_import_subtitle"
                             android:textSize="13sp"
                             android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -179,8 +179,8 @@
                 android:id="@+id/card_pair_qr"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="@dimen/space_md"
+                android:layout_marginTop="@dimen/space_sm"
                 app:cardCornerRadius="8dp"
                 app:cardElevation="2dp"
                 android:clickable="true"
@@ -191,13 +191,13 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:padding="16dp">
+                    android:padding="@dimen/space_md">
 
                     <ImageView
                         android:layout_width="32dp"
                         android:layout_height="32dp"
                         android:src="@android:drawable/ic_menu_camera"
-                        android:layout_marginEnd="16dp" />
+                        android:layout_marginEnd="@dimen/space_md" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -208,7 +208,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Pair from Desktop (QR)"
+                            android:text="@string/import_export_card_pair_qr_title"
                             android:textSize="16sp"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
@@ -216,7 +216,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Scan QR code to import connections from desktop"
+                            android:text="@string/import_export_card_pair_qr_subtitle"
                             android:textSize="13sp"
                             android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -230,8 +230,8 @@
                 android:id="@+id/card_import_backup"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="@dimen/space_md"
+                android:layout_marginTop="@dimen/space_sm"
                 app:cardCornerRadius="8dp"
                 app:cardElevation="2dp"
                 android:clickable="true"
@@ -242,13 +242,13 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:padding="16dp">
+                    android:padding="@dimen/space_md">
 
                     <ImageView
                         android:layout_width="32dp"
                         android:layout_height="32dp"
                         android:src="@android:drawable/ic_menu_upload"
-                        android:layout_marginEnd="16dp" />
+                        android:layout_marginEnd="@dimen/space_md" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -259,7 +259,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Import Backup"
+                            android:text="@string/import_export_card_import_backup_title"
                             android:textSize="16sp"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
@@ -267,7 +267,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Restore from a TabSSH backup ZIP"
+                            android:text="@string/import_export_card_import_backup_subtitle"
                             android:textSize="13sp"
                             android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -281,8 +281,8 @@
                 android:id="@+id/card_export_backup"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="@dimen/space_md"
+                android:layout_marginTop="@dimen/space_sm"
                 app:cardCornerRadius="8dp"
                 app:cardElevation="2dp"
                 android:clickable="true"
@@ -293,13 +293,13 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:padding="16dp">
+                    android:padding="@dimen/space_md">
 
                     <ImageView
                         android:layout_width="32dp"
                         android:layout_height="32dp"
                         android:src="@android:drawable/ic_menu_save"
-                        android:layout_marginEnd="16dp" />
+                        android:layout_marginEnd="@dimen/space_md" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -310,7 +310,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Export Backup"
+                            android:text="@string/import_export_card_export_backup_title"
                             android:textSize="16sp"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
@@ -318,7 +318,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Save a full TabSSH backup ZIP"
+                            android:text="@string/import_export_card_export_backup_subtitle"
                             android:textSize="13sp"
                             android:textColor="?attr/colorOnSurfaceVariant" />
 

@@ -4,14 +4,14 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_background"
-    android:padding="8dp">
+    android:padding="@dimen/space_sm">
 
     <TextView
         android:id="@+id/widget_icon"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:gravity="center"
-        android:text="📱"
+        android:text="@string/common_icon_phone"
         android:textSize="32sp"
         android:textColor="?attr/colorOnSurface" />
 

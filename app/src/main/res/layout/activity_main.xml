@@ -35,7 +35,7 @@
                 app:tint="@color/white"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/navigation_drawer_open"
-                android:padding="12dp" />
+                android:padding="@dimen/space_12dp" />
 
             <com.google.android.material.tabs.TabLayout
                 android:id="@+id/tab_layout"

@@ -4,34 +4,34 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="@dimen/space_md">
 
     <TextView
         android:id="@+id/job_name_text"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Backup Job: Loading..."
+        android:text="@string/backup_runs_job_name_loading"
         android:textSize="18sp"
         android:textStyle="bold"
-        android:layout_marginBottom="16dp" />
+        android:layout_marginBottom="@dimen/space_md" />
 
     <ProgressBar
         android:id="@+id/progress_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:visibility="gone"
-        android:layout_marginBottom="16dp" />
+        android:layout_marginBottom="@dimen/space_md" />
 
     <TextView
         android:id="@+id/empty_state_text"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="No backup runs found"
+        android:text="@string/backup_runs_empty_state"
         android:textAlignment="center"
         android:textSize="16sp"
         android:visibility="gone"
-        android:layout_marginTop="32dp"
-        android:layout_marginBottom="32dp" />
+        android:layout_marginTop="@dimen/space_xl"
+        android:layout_marginBottom="@dimen/space_xl" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/backup_runs_recycler_view"
@@ -42,15 +42,15 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginTop="16dp">
+        android:layout_marginTop="@dimen/space_md">
 
         <Button
             android:id="@+id/refresh_button"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Refresh"
-            android:layout_marginEnd="8dp"
+            android:text="@string/container_refresh"
+            android:layout_marginEnd="@dimen/space_sm"
             style="@style/Widget.Material3.Button.OutlinedButton" />
 
         <Button
@@ -58,8 +58,8 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Close"
-            android:layout_marginStart="8dp"
+            android:text="@string/close"
+            android:layout_marginStart="@dimen/space_sm"
             style="@style/Widget.Material3.Button" />
     </LinearLayout>
 

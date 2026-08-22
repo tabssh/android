@@ -36,7 +36,7 @@
             android:id="@+id/text_sheet_subtitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
+            android:layout_marginTop="@dimen/space_2dp"
             android:paddingStart="@dimen/space_md"
             android:paddingEnd="@dimen/space_md"
             android:textSize="@dimen/text_size_caption"

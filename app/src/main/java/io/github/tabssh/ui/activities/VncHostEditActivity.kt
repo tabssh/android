@@ -145,11 +145,11 @@ class VncHostEditActivity : TabSSHActivity() {
             }
             availableIdentities = identities
 
-            val labels = mutableListOf("(None)")
+            val labels = mutableListOf(getString(R.string.vnc_host_edit_identity_none))
             labels.addAll(identities.map { it.name })
             val adapter = ArrayAdapter(this@VncHostEditActivity, android.R.layout.simple_dropdown_item_1line, labels)
             dropdownIdentity.setAdapter(adapter)
-            dropdownIdentity.setText("(None)", false)
+            dropdownIdentity.setText(getString(R.string.vnc_host_edit_identity_none), false)
             dropdownIdentity.setOnItemClickListener { _, _, position, _ ->
                 selectedIdentityId = if (position == 0) null else identities[position - 1].id
             }
@@ -164,7 +164,7 @@ class VncHostEditActivity : TabSSHActivity() {
         lifecycleScope.launch {
             val host = withContext(Dispatchers.IO) { app.database.vncHostDao().getById(hostId) }
             if (host == null) {
-                Toast.makeText(this@VncHostEditActivity, "Host not found", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@VncHostEditActivity, getString(R.string.vnc_host_edit_host_not_found), Toast.LENGTH_SHORT).show()
                 finish()
                 return@launch
             }
@@ -183,7 +183,7 @@ class VncHostEditActivity : TabSSHActivity() {
             val identityIndex = if (host.identityId == null) 0
             else availableIdentities.indexOfFirst { it.id == host.identityId }.let { if (it < 0) 0 else it + 1 }
             dropdownIdentity.setText(
-                if (identityIndex == 0) "(None)" else availableIdentities[identityIndex - 1].name,
+                if (identityIndex == 0) getString(R.string.vnc_host_edit_identity_none) else availableIdentities[identityIndex - 1].name,
                 false
             )
             val secLabel = SECURITY_TYPE_LABELS.firstOrNull { it.second == host.securityType }?.first
@@ -198,7 +198,7 @@ class VncHostEditActivity : TabSSHActivity() {
                 try { app.securePasswordManager.retrievePassword("vnc_host_$hostId") } catch (_: Exception) { null }
             }
             if (storedPw != null) {
-                layoutPassword.helperText = "Password saved — enter new to replace, leave blank to keep"
+                layoutPassword.helperText = getString(R.string.vnc_host_edit_password_helper_existing)
             }
         }
     }
@@ -208,12 +208,12 @@ class VncHostEditActivity : TabSSHActivity() {
     private fun saveHost() {
         val name = editName.text?.toString()?.trim()
         if (name.isNullOrBlank()) {
-            editName.error = "Name is required"
+            editName.error = getString(R.string.xcpng_name_required)
             return
         }
         val host = editHost.text?.toString()?.trim()
         if (host.isNullOrBlank()) {
-            editHost.error = "Host is required"
+            editHost.error = getString(R.string.vnc_host_edit_host_required)
             return
         }
         val useDisplay = switchUseDisplay.isChecked
@@ -224,11 +224,11 @@ class VncHostEditActivity : TabSSHActivity() {
         // only surfaced later as an opaque socket-connect failure.
         if (useDisplay) {
             if (displayNumber == null || displayNumber !in 0..MAX_DISPLAY_NUMBER) {
-                editDisplay.error = "Display must be 0–$MAX_DISPLAY_NUMBER"
+                editDisplay.error = getString(R.string.vnc_host_edit_display_range_fmt, MAX_DISPLAY_NUMBER)
                 return
             }
         } else if (port !in 1..65535) {
-            editPort.error = "Port must be 1–65535"
+            editPort.error = getString(R.string.vnc_host_edit_port_error)
             return
         }
 
@@ -278,11 +278,11 @@ class VncHostEditActivity : TabSSHActivity() {
                         )
                     }
                 }
-                Toast.makeText(this@VncHostEditActivity, "Saved", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@VncHostEditActivity, getString(R.string.remote_editor_saved), Toast.LENGTH_SHORT).show()
                 finish()
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to save VNC host", e)
-                Toast.makeText(this@VncHostEditActivity, "Save failed: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@VncHostEditActivity, getString(R.string.vps_host_edit_save_failed_fmt, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -290,10 +290,10 @@ class VncHostEditActivity : TabSSHActivity() {
     private fun confirmDelete() {
         val hostId = editingHostId ?: return
         MaterialAlertDialogBuilder(this)
-            .setTitle("Delete VNC host?")
-            .setMessage("This removes the host record. Any linked identity is not deleted.")
-            .setPositiveButton("Delete") { _, _ -> deleteHost(hostId) }
-            .setNegativeButton("Cancel", null)
+            .setTitle(getString(R.string.vnc_host_edit_delete_title))
+            .setMessage(getString(R.string.vnc_host_edit_delete_message))
+            .setPositiveButton(getString(R.string.delete)) { _, _ -> deleteHost(hostId) }
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -308,11 +308,11 @@ class VncHostEditActivity : TabSSHActivity() {
                     // H6 — record the deletion so it propagates and is not resurrected.
                     TombstoneRecorder.record(app, TombstoneRecorder.VNC_HOST, hostId)
                 }
-                Toast.makeText(this@VncHostEditActivity, "Deleted", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@VncHostEditActivity, getString(R.string.vnc_host_edit_deleted), Toast.LENGTH_SHORT).show()
                 finish()
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to delete VNC host", e)
-                Toast.makeText(this@VncHostEditActivity, "Delete failed: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@VncHostEditActivity, getString(R.string.vps_host_edit_delete_failed_fmt, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }

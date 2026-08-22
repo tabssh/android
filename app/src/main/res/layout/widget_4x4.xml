@@ -4,24 +4,24 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_background"
     android:orientation="vertical"
-    android:padding="8dp">
+    android:padding="@dimen/space_sm">
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="📱 TabSSH"
+        android:text="@string/widget_header_tabssh"
         android:textSize="18sp"
         android:textStyle="bold"
         android:textColor="?attr/colorOnSurface"
         android:gravity="center"
-        android:paddingBottom="8dp" />
+        android:paddingBottom="@dimen/space_sm" />
 
     <TextView
         android:id="@+id/widget_open_app"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:text="Tap to open app"
+        android:text="@string/widget_tap_to_open_app"
         android:textSize="14sp"
         android:textColor="?attr/colorOnSurfaceVariant"
         android:gravity="center"

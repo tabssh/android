@@ -22,7 +22,7 @@
             android:layout_height="48dp"
             android:gravity="center"
             android:textSize="32sp"
-            android:text="📚" />
+            android:text="@string/common_icon_book" />
 
         <!-- Info Column -->
         <LinearLayout
@@ -46,7 +46,7 @@
                 android:id="@+id/text_path"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="@dimen/space_2dp"
                 android:textSize="12sp"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:maxLines="1"
@@ -56,7 +56,7 @@
                 android:id="@+id/text_status"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="@dimen/space_2dp"
                 android:textSize="12sp"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:maxLines="2"

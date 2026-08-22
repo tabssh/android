@@ -72,7 +72,7 @@ class ConnectionHistoryActivity : TabSSHActivity() {
                 runOnUiThread {
                     if (all.isEmpty()) {
                         val empty = TextView(this@ConnectionHistoryActivity).apply {
-                            text = "No connection history yet."
+                            text = getString(R.string.conn_history_empty)
                             gravity = Gravity.CENTER
                             setPadding(dp(24))
                         }
@@ -85,7 +85,7 @@ class ConnectionHistoryActivity : TabSSHActivity() {
                 }
             } catch (e: Exception) {
                 Logger.e("ConnectionHistory", "Failed to load history", e)
-                Toast.makeText(this@ConnectionHistoryActivity, "Failed: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@ConnectionHistoryActivity, getString(R.string.conn_history_load_failed, e.message.toString()), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -116,7 +116,10 @@ class ConnectionHistoryActivity : TabSSHActivity() {
             textSize = 15f
         })
         text.addView(TextView(this).apply {
-            this.text = "${c.username}@${c.host}:${c.port} · ${rowFormatter.format(Date(c.lastConnected))} · ${c.connectionCount}×"
+            this.text = getString(
+                R.string.conn_history_row_subtitle,
+                c.username, c.host, c.port, rowFormatter.format(Date(c.lastConnected)), c.connectionCount
+            )
             textSize = 12f
         })
         row.addView(text)

@@ -31,7 +31,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_md"
-                android:text="Import from Existing Host"
+                android:text="@string/hypervisor_edit_import_from_host"
                 app:icon="@drawable/ic_import_export"
                 app:iconGravity="start"
                 style="@style/Widget.Material3.Button.TonalButton" />
@@ -40,7 +40,7 @@
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Name"
+                android:hint="@string/container_name_hint"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -57,7 +57,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
-                android:text="Type"
+                android:text="@string/hypervisor_edit_type_label"
                 android:textSize="12sp"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -65,7 +65,7 @@
                 android:id="@+id/spinner_type"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="@dimen/space_xs"
                 android:background="@drawable/spinner_background"
                 android:paddingHorizontal="@dimen/space_md" />
 
@@ -75,7 +75,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
-                android:hint="Host"
+                android:hint="@string/route_host_hint"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -93,7 +93,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
-                android:hint="Port"
+                android:hint="@string/route_port_hint"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -118,15 +118,15 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="OCI hosts use API-key auth — import a config + .pem via the wizard."
+                    android:text="@string/hypervisor_edit_oci_notice"
                     android:textAppearance="?attr/textAppearanceBodySmall"
-                    android:layout_marginBottom="8dp" />
+                    android:layout_marginBottom="@dimen/space_sm" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/button_configure_oci"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Configure OCI credentials…" />
+                    android:text="@string/hypervisor_edit_configure_oci_credentials" />
 
             </LinearLayout>
 
@@ -138,7 +138,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
-                android:hint="Use account (optional)"
+                android:hint="@string/hypervisor_edit_use_account_hint"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
                 <com.google.android.material.textfield.MaterialAutoCompleteTextView
@@ -155,7 +155,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
-                android:hint="Username"
+                android:hint="@string/username_hint"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -173,7 +173,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
-                android:hint="Password"
+                android:hint="@string/password_hint"
                 app:endIconMode="password_toggle"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
@@ -198,7 +198,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/space_md"
-                    android:hint="Realm (pam/pve)"
+                    android:hint="@string/hypervisor_edit_realm_hint"
                     style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                     <com.google.android.material.textfield.TextInputEditText
@@ -207,7 +207,7 @@
                         android:layout_height="wrap_content"
                         android:inputType="text"
                         android:maxLines="1"
-                        android:text="pam" />
+                        android:text="@string/hypervisor_edit_realm_default" />
 
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -219,7 +219,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
-                android:text="Verify SSL Certificate"
+                android:text="@string/hypervisor_edit_verify_ssl"
                 android:checked="false" />
 
             <!-- Pinned cert fingerprint (Phase 1 cert pinning).
@@ -238,7 +238,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Pinned cert (SHA-256)"
+                    android:text="@string/hypervisor_edit_pinned_cert_label"
                     android:textSize="12sp"
                     android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -247,14 +247,14 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginTop="2dp">
+                    android:layout_marginTop="@dimen/space_2dp">
 
                     <TextView
                         android:id="@+id/text_pinned_cert"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="(not pinned yet — will pin on next successful connect)"
+                        android:text="@string/hypervisor_edit_not_pinned_yet"
                         android:textSize="13sp"
                         android:fontFamily="monospace"
                         android:textColor="?attr/colorOnSurface"
@@ -267,7 +267,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:minHeight="36dp"
-                        android:text="Forget"
+                        android:text="@string/hypervisor_edit_forget_pin"
                         android:visibility="gone" />
 
                 </LinearLayout>
@@ -280,7 +280,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
-                android:hint="API Type"
+                android:hint="@string/hypervisor_edit_api_type_hint"
                 android:visibility="gone"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
@@ -296,8 +296,8 @@
                 android:id="@+id/text_api_type_hint"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="Auto-detect: Tries both APIs automatically"
+                android:layout_marginTop="@dimen/space_xs"
+                android:text="@string/hypervisor_edit_api_type_auto_detect_hint"
                 android:textSize="12sp"
                 android:textColor="?android:textColorSecondary"
                 android:visibility="gone" />
@@ -308,7 +308,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
-                android:hint="SSH Key (optional)"
+                android:hint="@string/hypervisor_edit_ssh_key_hint"
                 android:visibility="gone"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
@@ -325,7 +325,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
-                android:hint="Notes (optional)"
+                android:hint="@string/hypervisor_edit_notes_hint"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -344,7 +344,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_lg"
-                android:text="Test Connection"
+                android:text="@string/hypervisor_edit_test_connection"
                 style="@style/Widget.Material3.Button.OutlinedButton" />
 
         </LinearLayout>
@@ -366,7 +366,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginEnd="@dimen/space_sm"
-            android:text="Cancel"
+            android:text="@string/cancel"
             style="@style/Widget.Material3.Button.OutlinedButton" />
 
         <com.google.android.material.button.MaterialButton
@@ -375,7 +375,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="@dimen/space_sm"
-            android:text="Save"
+            android:text="@string/save"
             style="@style/Widget.Material3.Button" />
 
     </LinearLayout>

@@ -3,14 +3,14 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="4dp"
+    android:layout_margin="@dimen/space_xs"
     app:cardElevation="2dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:padding="12dp">
+        android:padding="@dimen/space_12dp">
 
         <LinearLayout
             android:layout_width="0dp"
@@ -21,16 +21,16 @@
                 android:id="@+id/text_name"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="session_server_20250203"
+                android:text="@string/item_transcript_placeholder_name"
                 android:textSize="16sp"
                 android:textStyle="bold" />
             <TextView
                 android:id="@+id/text_info"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="15 KB • Dec 03, 2025 14:30"
+                android:text="@string/item_transcript_placeholder_meta"
                 android:textSize="12sp"
-                android:layout_marginTop="4dp" />
+                android:layout_marginTop="@dimen/space_xs" />
         </LinearLayout>
 
         <ImageButton
@@ -39,7 +39,7 @@
             android:layout_height="32dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_view"
-            android:contentDescription="View" />
+            android:contentDescription="@string/transcript_item_view_description" />
 
         <ImageButton
             android:id="@+id/btn_share"
@@ -47,7 +47,7 @@
             android:layout_height="32dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_share"
-            android:contentDescription="Share" />
+            android:contentDescription="@string/share" />
 
         <ImageButton
             android:id="@+id/btn_delete"
@@ -55,7 +55,7 @@
             android:layout_height="32dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_delete"
-            android:contentDescription="Delete" />
+            android:contentDescription="@string/delete" />
 
     </LinearLayout>
 

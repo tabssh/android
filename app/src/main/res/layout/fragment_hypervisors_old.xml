@@ -10,14 +10,14 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="☁️"
+        android:text="@string/common_icon_cloud"
         android:textSize="64sp"
         android:paddingBottom="@dimen/space_md" />
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Hypervisor Management"
+        android:text="@string/hypervisor_management_title"
         android:textSize="20sp"
         android:textStyle="bold"
         android:gravity="center"
@@ -27,7 +27,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Manage Proxmox, VMware, and XCP-ng virtual machines directly from TabSSH"
+        android:text="@string/hypervisor_management_subtitle"
         android:textSize="14sp"
         android:gravity="center"
         android:textColor="?attr/colorOnSurfaceVariant"
@@ -36,7 +36,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Coming in Phase 3"
+        android:text="@string/hypervisor_management_coming_soon"
         android:textSize="16sp"
         android:textStyle="bold"
         android:gravity="center"

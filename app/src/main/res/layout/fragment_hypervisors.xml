@@ -44,14 +44,14 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="☁️"
+                android:text="@string/common_icon_cloud"
                 android:textSize="64sp"
                 android:paddingBottom="@dimen/space_md" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="No Hypervisors"
+                android:text="@string/hypervisor_list_empty_title"
                 android:textSize="20sp"
                 android:textStyle="bold"
                 android:gravity="center"
@@ -61,7 +61,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Add a Proxmox, VMware, or XCP-ng hypervisor to manage your virtual machines"
+                android:text="@string/hypervisor_list_empty_hint"
                 android:textSize="14sp"
                 android:gravity="center"
                 android:textColor="?attr/colorOnSurfaceVariant"
@@ -71,7 +71,7 @@
                 android:id="@+id/button_add_first"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Add Hypervisor"
+                android:text="@string/hypervisor_edit_title_new"
                 style="@style/Widget.TabSSH.Button" />
 
         </LinearLayout>
@@ -93,7 +93,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_margin="@dimen/space_lg"
-        android:contentDescription="Add Hypervisor"
+        android:contentDescription="@string/hypervisor_edit_title_new"
         app:srcCompat="@drawable/ic_add" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -88,7 +88,7 @@ class LogViewerActivity : TabSSHActivity() {
         if (logEntries.isEmpty()) {
             android.widget.Toast.makeText(
                 this,
-                "No logs to copy",
+                getString(R.string.log_viewer_no_logs_to_copy),
                 android.widget.Toast.LENGTH_SHORT
             ).show()
             return
@@ -108,7 +108,7 @@ class LogViewerActivity : TabSSHActivity() {
 
         android.widget.Toast.makeText(
             this,
-            "✓ Copied ${logEntries.size} log entries to clipboard",
+            getString(R.string.log_viewer_copied_to_clipboard, logEntries.size),
             android.widget.Toast.LENGTH_SHORT
         ).show()
     }
@@ -158,7 +158,7 @@ class LogViewerActivity : TabSSHActivity() {
                 Logger.e("LogViewer", "Failed to load logs", e)
                 android.widget.Toast.makeText(
                     this@LogViewerActivity,
-                    "Failed to load logs: ${e.message}",
+                    getString(R.string.log_viewer_load_failed, e.message),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
             }
@@ -190,19 +190,19 @@ class LogViewerActivity : TabSSHActivity() {
      */
     private fun showFilterDialog() {
         val filterOptions = arrayOf(
-            "All Logs",
-            "Errors Only",
-            "Warnings",
-            "Info",
-            "Debug"
+            getString(R.string.log_viewer_filter_all),
+            getString(R.string.log_viewer_filter_errors_only),
+            getString(R.string.log_viewer_filter_warnings),
+            getString(R.string.log_viewer_filter_info),
+            getString(R.string.log_viewer_filter_debug)
         )
-        
+
         MaterialAlertDialogBuilder(this)
-            .setTitle("Filter Logs")
+            .setTitle(R.string.log_viewer_filter_dialog_title)
             .setItems(filterOptions) { _, which ->
                 applyFilter(which)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
     
@@ -229,9 +229,9 @@ class LogViewerActivity : TabSSHActivity() {
 
         // Update title to show current filter
         supportActionBar?.title = if (filterIndex == 0) {
-            "Application Logs"
+            getString(R.string.log_viewer_title_application_logs)
         } else {
-            "Application Logs - $filterName"
+            getString(R.string.log_viewer_title_application_logs_filtered, filterName)
         }
 
         if (logEntries.isEmpty()) {
@@ -270,15 +270,15 @@ class LogViewerActivity : TabSSHActivity() {
                 
                 android.widget.Toast.makeText(
                     this@LogViewerActivity,
-                    "✓ Exported ${logEntries.size} log entries to $filename",
+                    getString(R.string.log_viewer_exported, logEntries.size, filename),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
-                
+
             } catch (e: Exception) {
                 Logger.e("LogViewer", "Failed to export logs", e)
                 android.widget.Toast.makeText(
                     this@LogViewerActivity,
-                    "Failed to export logs: ${e.message}",
+                    getString(R.string.log_viewer_export_failed, e.message),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
             }

@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
-    android:padding="16dp"
+    android:padding="@dimen/space_md"
     android:background="?attr/selectableItemBackground"
     android:gravity="center_vertical">
 
@@ -13,7 +13,7 @@
         android:id="@+id/view_group_color"
         android:layout_width="4dp"
         android:layout_height="match_parent"
-        android:layout_marginEnd="12dp"
+        android:layout_marginEnd="@dimen/space_12dp"
         android:visibility="gone" />
 
     <!-- Expand/collapse icon -->
@@ -21,9 +21,9 @@
         android:id="@+id/icon_expand"
         android:layout_width="24dp"
         android:layout_height="24dp"
-        android:layout_marginEnd="12dp"
+        android:layout_marginEnd="@dimen/space_12dp"
         android:src="@drawable/ic_expand_more"
-        android:contentDescription="Expand/collapse group" />
+        android:contentDescription="@string/item_group_expand_collapse_content_description" />
 
     <!-- Group name and connection count -->
     <TextView
@@ -34,6 +34,6 @@
         android:textSize="16sp"
         android:textStyle="bold"
         android:textColor="?attr/colorOnSurface"
-        android:text="Group Name (5)" />
+        android:text="@string/item_connection_group_name_placeholder" />
 
 </LinearLayout>

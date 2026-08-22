@@ -4,7 +4,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="4dp"
+    android:layout_margin="@dimen/space_xs"
     app:cardElevation="2dp"
     app:cardCornerRadius="8dp">
 
@@ -12,7 +12,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:padding="@dimen/space_12dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -33,8 +33,8 @@
                 android:layout_height="wrap_content"
                 android:textSize="12sp"
                 android:textStyle="bold"
-                android:paddingStart="8dp"
-                android:paddingEnd="0dp" />
+                android:paddingStart="@dimen/space_sm"
+                android:paddingEnd="@dimen/space_none" />
 
         </LinearLayout>
 
@@ -44,7 +44,7 @@
             android:layout_height="wrap_content"
             android:textSize="14sp"
             android:textColor="?android:attr/textColorPrimary"
-            android:layout_marginTop="4dp" />
+            android:layout_marginTop="@dimen/space_xs" />
 
         <TextView
             android:id="@+id/text_sync_log_device"
@@ -52,7 +52,7 @@
             android:layout_height="wrap_content"
             android:textSize="12sp"
             android:textColor="?android:attr/textColorSecondary"
-            android:layout_marginTop="4dp" />
+            android:layout_marginTop="@dimen/space_xs" />
 
     </LinearLayout>
 

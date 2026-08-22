@@ -33,7 +33,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="👤"
+                    android:text="@string/fragment_identities_section_emoji"
                     android:textSize="20sp"
                     android:layout_marginEnd="@dimen/space_sm" />
 
@@ -114,7 +114,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="🔑"
+                    android:text="@string/fragment_identities_ssh_keys_emoji"
                     android:textSize="20sp"
                     android:layout_marginEnd="@dimen/space_sm" />
 
@@ -195,7 +195,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="🖥️"
+                    android:text="@string/vnc_hosts_header_emoji"
                     android:textSize="20sp"
                     android:layout_marginEnd="@dimen/space_sm" />
 
@@ -276,7 +276,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="🖵"
+                    android:text="@string/fragment_identities_vnc_emoji"
                     android:textSize="20sp"
                     android:layout_marginEnd="@dimen/space_sm" />
 

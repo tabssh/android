@@ -101,21 +101,21 @@ class ThemeEditorActivity : TabSSHActivity() {
         root.addView(scroll)
 
         // ── Base theme picker ─────────────────────────────────────────
-        content.addView(sectionHeader("Base"))
-        val baseBtn = Button(this).apply { text = "Pick base theme…" }
+        content.addView(sectionHeader(getString(io.github.tabssh.R.string.theme_editor_section_base)))
+        val baseBtn = Button(this).apply { text = getString(io.github.tabssh.R.string.theme_editor_pick_base_button) }
         baseBtn.setOnClickListener { showBasePicker { id -> seedFromBase(id); refreshAllSwatches(); refreshPreview() } }
         content.addView(baseBtn)
 
         // ── Name ───────────────────────────────────────────────────────
-        content.addView(sectionHeader("Name"))
+        content.addView(sectionHeader(getString(io.github.tabssh.R.string.theme_editor_section_name)))
         nameInput = EditText(this).apply {
-            hint = "My Custom Theme"
+            hint = getString(io.github.tabssh.R.string.theme_editor_name_hint)
             inputType = InputType.TYPE_CLASS_TEXT
         }
         content.addView(nameInput)
 
         // ── Live preview ───────────────────────────────────────────────
-        content.addView(sectionHeader("Preview"))
+        content.addView(sectionHeader(getString(io.github.tabssh.R.string.theme_editor_section_preview)))
         previewText.apply {
             typeface = Typeface.MONOSPACE
             textSize = 13f
@@ -125,19 +125,28 @@ class ThemeEditorActivity : TabSSHActivity() {
         content.addView(previewText)
 
         // ── Core colours ───────────────────────────────────────────────
-        content.addView(sectionHeader("Core colors"))
-        content.addView(colorRow("Background", "background"))
-        content.addView(colorRow("Foreground", "foreground"))
-        content.addView(colorRow("Cursor", "cursor"))
-        content.addView(colorRow("Selection", "selection"))
+        content.addView(sectionHeader(getString(io.github.tabssh.R.string.theme_editor_section_core_colors)))
+        content.addView(colorRow(getString(io.github.tabssh.R.string.theme_editor_label_background), "background"))
+        content.addView(colorRow(getString(io.github.tabssh.R.string.theme_editor_label_foreground), "foreground"))
+        content.addView(colorRow(getString(io.github.tabssh.R.string.prefcat_terminal_cursor), "cursor"))
+        content.addView(colorRow(getString(io.github.tabssh.R.string.theme_editor_label_selection), "selection"))
 
         // ── ANSI 0-7 ───────────────────────────────────────────────────
-        content.addView(sectionHeader("ANSI normal (0-7)"))
-        val ansiNames = arrayOf("Black", "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White")
+        content.addView(sectionHeader(getString(io.github.tabssh.R.string.theme_editor_section_ansi_normal)))
+        val ansiNames = arrayOf(
+            getString(io.github.tabssh.R.string.theme_editor_ansi_black),
+            getString(io.github.tabssh.R.string.theme_editor_ansi_red),
+            getString(io.github.tabssh.R.string.theme_editor_ansi_green),
+            getString(io.github.tabssh.R.string.theme_editor_ansi_yellow),
+            getString(io.github.tabssh.R.string.theme_editor_ansi_blue),
+            getString(io.github.tabssh.R.string.theme_editor_ansi_magenta),
+            getString(io.github.tabssh.R.string.theme_editor_ansi_cyan),
+            getString(io.github.tabssh.R.string.theme_editor_ansi_white)
+        )
         for (i in 0..7) content.addView(colorRow("$i • ${ansiNames[i]}", "ansi$i"))
 
         // ── ANSI 8-15 ──────────────────────────────────────────────────
-        content.addView(sectionHeader("ANSI bright (8-15)"))
+        content.addView(sectionHeader(getString(io.github.tabssh.R.string.theme_editor_section_ansi_bright)))
         for (i in 8..15) content.addView(colorRow("$i • ${ansiNames[i - 8]}", "ansi$i"))
 
         // ── Save bar ───────────────────────────────────────────────────
@@ -146,7 +155,7 @@ class ThemeEditorActivity : TabSSHActivity() {
             setPadding(dp(12))
         }
         val saveBtn = Button(this).apply {
-            text = "Save"
+            text = getString(io.github.tabssh.R.string.save)
             layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
         }
         saveBtn.setOnClickListener { saveTheme() }
@@ -176,9 +185,9 @@ class ThemeEditorActivity : TabSSHActivity() {
         val themes = BuiltInThemes.getAllThemes()
         val labels = themes.map { it.name }.toTypedArray()
         MaterialAlertDialogBuilder(this)
-            .setTitle("Base theme")
+            .setTitle(getString(io.github.tabssh.R.string.theme_editor_base_theme_title))
             .setItems(labels) { _, which -> onPicked(themes[which].id) }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(io.github.tabssh.R.string.cancel), null)
             .show()
     }
 
@@ -253,7 +262,11 @@ class ThemeEditorActivity : TabSSHActivity() {
         val hueBar = mkBar(360, hsv[0] / 360f)
         val satBar = mkBar(100, hsv[1])
         val valBar = mkBar(100, hsv[2])
-        listOf("Hue" to hueBar, "Saturation" to satBar, "Value" to valBar).forEach { (label, bar) ->
+        listOf(
+            getString(io.github.tabssh.R.string.theme_editor_hue) to hueBar,
+            getString(io.github.tabssh.R.string.theme_editor_saturation) to satBar,
+            getString(io.github.tabssh.R.string.theme_editor_value) to valBar
+        ).forEach { (label, bar) ->
             layout.addView(TextView(this).apply { text = label })
             layout.addView(bar)
         }
@@ -271,15 +284,15 @@ class ThemeEditorActivity : TabSSHActivity() {
             })
         }
         MaterialAlertDialogBuilder(this)
-            .setTitle("Pick color")
+            .setTitle(getString(io.github.tabssh.R.string.theme_editor_pick_color_title))
             .setView(layout)
-            .setPositiveButton("OK") { _, _ ->
+            .setPositiveButton(getString(io.github.tabssh.R.string.ok)) { _, _ ->
                 hsv[0] = hueBar.progress.toFloat()
                 hsv[1] = satBar.progress / 100f
                 hsv[2] = valBar.progress / 100f
                 onPick(Color.HSVToColor(hsv))
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(io.github.tabssh.R.string.cancel), null)
             .show()
     }
 
@@ -320,7 +333,7 @@ class ThemeEditorActivity : TabSSHActivity() {
     private fun saveTheme() {
         val name = nameInput?.text?.toString()?.trim().orEmpty()
         if (name.isBlank()) {
-            Toast.makeText(this, "Enter a name", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(io.github.tabssh.R.string.port_forward_error_name), Toast.LENGTH_SHORT).show()
             return
         }
         val theme = Theme(
@@ -340,13 +353,19 @@ class ThemeEditorActivity : TabSSHActivity() {
         lifecycleScope.launch {
             when (val r = withContext(Dispatchers.IO) { app.themeManager.saveCustomTheme(theme) }) {
                 is ImportThemeResult.Success -> {
-                    Toast.makeText(this@ThemeEditorActivity, "Saved '${r.theme.name}'", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        this@ThemeEditorActivity,
+                        getString(io.github.tabssh.R.string.theme_editor_saved_toast_fmt, r.theme.name),
+                        Toast.LENGTH_SHORT
+                    ).show()
                     Logger.i(TAG, "Saved custom theme ${r.theme.id}")
                     finish()
                 }
                 is ImportThemeResult.Error -> {
                     io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
-                        this@ThemeEditorActivity, "Save failed", r.message
+                        this@ThemeEditorActivity,
+                        getString(io.github.tabssh.R.string.theme_editor_save_failed_title),
+                        r.message
                     )
                 }
             }

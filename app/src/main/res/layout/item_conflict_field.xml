@@ -3,33 +3,33 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="12dp"
+    android:padding="@dimen/space_12dp"
     android:background="?android:attr/selectableItemBackground">
 
     <TextView
         android:id="@+id/field_name"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Hostname"
+        android:text="@string/vps_host_edit_hint_hostname"
         android:textSize="14sp"
         android:textStyle="bold"
         android:textColor="?android:attr/textColorPrimary"
-        android:layout_marginBottom="4dp" />
+        android:layout_marginBottom="@dimen/space_xs" />
 
     <TextView
         android:id="@+id/local_value"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Local: example.com"
+        android:text="@string/item_conflict_field_local_placeholder"
         android:textSize="12sp"
         android:textColor="?android:attr/textColorSecondary"
-        android:layout_marginBottom="2dp" />
+        android:layout_marginBottom="@dimen/space_2dp" />
 
     <TextView
         android:id="@+id/remote_value"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Remote: example.org"
+        android:text="@string/item_conflict_field_remote_placeholder"
         android:textSize="12sp"
         android:textColor="?android:attr/textColorSecondary" />
 
@@ -37,6 +37,6 @@
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="?android:attr/dividerVertical"
-        android:layout_marginTop="8dp" />
+        android:layout_marginTop="@dimen/space_sm" />
 
 </LinearLayout>

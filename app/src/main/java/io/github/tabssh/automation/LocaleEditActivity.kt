@@ -41,7 +41,14 @@ class LocaleEditActivity : AppCompatActivity() {
         TaskerWorker.ACTION_SEND_COMMAND,
         TaskerWorker.ACTION_SEND_KEYS
     )
-    private val actionLabels = listOf("Connect", "Disconnect", "Send Command", "Send Keys")
+    private val actionLabels by lazy {
+        listOf(
+            getString(R.string.connect_button),
+            getString(R.string.locale_action_disconnect),
+            getString(R.string.locale_action_send_command),
+            getString(R.string.locale_action_send_keys)
+        )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -110,18 +117,18 @@ class LocaleEditActivity : AppCompatActivity() {
     private fun saveAndFinish() {
         val profile = profiles.getOrNull(connectionSpinner.selectedItemPosition)
         if (profile == null) {
-            Toast.makeText(this, "Add a connection in TabSSH first", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.locale_toast_add_connection_first), Toast.LENGTH_LONG).show()
             return
         }
         val action = actionValues[actionSpinner.selectedItemPosition]
         val command = commandInput.text.toString().take(LocalePlugin.MAX_COMMAND_LENGTH)
         val keys = keysInput.text.toString().take(LocalePlugin.MAX_KEYS_LENGTH)
         if (action == TaskerWorker.ACTION_SEND_COMMAND && command.isBlank()) {
-            Toast.makeText(this, "Enter a command to run", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.locale_toast_enter_command), Toast.LENGTH_SHORT).show()
             return
         }
         if (action == TaskerWorker.ACTION_SEND_KEYS && keys.isBlank()) {
-            Toast.makeText(this, "Enter the keys to send", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.locale_toast_enter_keys), Toast.LENGTH_SHORT).show()
             return
         }
 

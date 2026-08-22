@@ -93,7 +93,7 @@ class SnippetManagerActivity : TabSSHActivity() {
     private fun setupCategoryChips() {
         // Add "All" chip
         val allChip = Chip(this).apply {
-            text = "All"
+            text = getString(R.string.snippet_mgr_category_all)
             isCheckable = true
             isChecked = true
             setOnClickListener {
@@ -163,7 +163,7 @@ class SnippetManagerActivity : TabSSHActivity() {
                 Logger.e("SnippetManagerActivity", "Failed to load snippets", e)
                 runOnUiThread {
                     if (!isFinishing && !isDestroyed) {
-                        showError("Failed to load snippets", "Error")
+                        showError(getString(R.string.snippet_mgr_error_load_failed), getString(R.string.dialog_title_error))
                     }
                 }
             }
@@ -197,26 +197,26 @@ class SnippetManagerActivity : TabSSHActivity() {
         }
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("Create Snippet")
+            .setTitle(R.string.snippet_mgr_dialog_title_create)
             .setView(dialogView)
-            .setPositiveButton("Create") { _, _ ->
+            .setPositiveButton(R.string.container_create) { _, _ ->
                 val name = nameInput.text.toString().trim()
                 val command = commandInput.text.toString().trim()
                 val description = descriptionInput.text.toString().trim()
-                val category = categoryInput.text.toString().trim().ifBlank { "General" }
+                val category = categoryInput.text.toString().trim().ifBlank { getString(R.string.settings_general) }
 
                 if (name.isBlank()) {
-                    showError("Snippet name cannot be empty", "Error")
+                    showError(getString(R.string.snippet_mgr_error_name_empty), getString(R.string.dialog_title_error))
                     return@setPositiveButton
                 }
                 if (command.isBlank()) {
-                    showError("Command cannot be empty", "Error")
+                    showError(getString(R.string.snippet_mgr_error_command_empty), getString(R.string.dialog_title_error))
                     return@setPositiveButton
                 }
 
                 createSnippet(name, command, description, category)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -243,25 +243,25 @@ class SnippetManagerActivity : TabSSHActivity() {
         }
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("Edit Snippet")
+            .setTitle(R.string.snippet_mgr_dialog_title_edit)
             .setView(dialogView)
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(R.string.save) { _, _ ->
                 val name = nameInput.text.toString().trim()
                 val command = commandInput.text.toString().trim()
                 val description = descriptionInput.text.toString().trim()
-                val category = categoryInput.text.toString().trim().ifBlank { "General" }
+                val category = categoryInput.text.toString().trim().ifBlank { getString(R.string.settings_general) }
 
                 if (name.isBlank() || command.isBlank()) {
-                    showError("Name and command cannot be empty", "Error")
+                    showError(getString(R.string.snippet_mgr_error_name_command_empty), getString(R.string.dialog_title_error))
                     return@setPositiveButton
                 }
 
                 updateSnippet(snippet, name, command, description, category)
             }
-            .setNeutralButton("Delete") { _, _ ->
+            .setNeutralButton(R.string.delete) { _, _ ->
                 deleteSnippet(snippet)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -280,7 +280,7 @@ class SnippetManagerActivity : TabSSHActivity() {
                 app.database.snippetDao().insertSnippet(snippet)
 
                 runOnUiThread {
-                    Toast.makeText(this@SnippetManagerActivity, "Snippet created", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@SnippetManagerActivity, getString(R.string.snippet_mgr_toast_created), Toast.LENGTH_SHORT).show()
                 }
 
                 Logger.i("SnippetManagerActivity", "Created snippet: $name")
@@ -288,7 +288,7 @@ class SnippetManagerActivity : TabSSHActivity() {
                 Logger.e("SnippetManagerActivity", "Failed to create snippet", e)
                 runOnUiThread {
                     if (!isFinishing && !isDestroyed) {
-                        showError("Failed to create snippet", "Error")
+                        showError(getString(R.string.snippet_mgr_error_create_failed), getString(R.string.dialog_title_error))
                     }
                 }
             }
@@ -309,7 +309,7 @@ class SnippetManagerActivity : TabSSHActivity() {
                 app.database.snippetDao().updateSnippet(updatedSnippet)
 
                 runOnUiThread {
-                    Toast.makeText(this@SnippetManagerActivity, "Snippet updated", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@SnippetManagerActivity, getString(R.string.snippet_mgr_toast_updated), Toast.LENGTH_SHORT).show()
                 }
 
                 Logger.i("SnippetManagerActivity", "Updated snippet: $name")
@@ -317,7 +317,7 @@ class SnippetManagerActivity : TabSSHActivity() {
                 Logger.e("SnippetManagerActivity", "Failed to update snippet", e)
                 runOnUiThread {
                     if (!isFinishing && !isDestroyed) {
-                        showError("Failed to update snippet", "Error")
+                        showError(getString(R.string.snippet_mgr_error_update_failed), getString(R.string.dialog_title_error))
                     }
                 }
             }
@@ -326,12 +326,12 @@ class SnippetManagerActivity : TabSSHActivity() {
 
     private fun deleteSnippet(snippet: Snippet) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Delete Snippet?")
-            .setMessage("Are you sure you want to delete '${snippet.name}'?")
-            .setPositiveButton("Delete") { _, _ ->
+            .setTitle(R.string.snippet_mgr_dialog_title_delete)
+            .setMessage(getString(R.string.hypervisor_delete_message, snippet.name))
+            .setPositiveButton(R.string.delete) { _, _ ->
                 performDelete(snippet)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -343,7 +343,7 @@ class SnippetManagerActivity : TabSSHActivity() {
                 TombstoneRecorder.record(app, TombstoneRecorder.SNIPPET, snippet.id)
 
                 runOnUiThread {
-                    Toast.makeText(this@SnippetManagerActivity, "Snippet deleted", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@SnippetManagerActivity, getString(R.string.snippet_mgr_toast_deleted), Toast.LENGTH_SHORT).show()
                 }
 
                 Logger.i("SnippetManagerActivity", "Deleted snippet: ${snippet.name}")
@@ -351,7 +351,7 @@ class SnippetManagerActivity : TabSSHActivity() {
                 Logger.e("SnippetManagerActivity", "Failed to delete snippet", e)
                 runOnUiThread {
                     if (!isFinishing && !isDestroyed) {
-                        showError("Failed to delete snippet", "Error")
+                        showError(getString(R.string.snippet_mgr_error_delete_failed), getString(R.string.dialog_title_error))
                     }
                 }
             }
@@ -365,7 +365,7 @@ class SnippetManagerActivity : TabSSHActivity() {
         }
         
         // Show toast
-        Toast.makeText(this, "Snippet copied: ${snippet.name}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.snippet_mgr_toast_copied, snippet.name), Toast.LENGTH_SHORT).show()
         
         // Route through ClipboardHelper so a snippet copy cancels any pending sensitive clear.
         io.github.tabssh.utils.ClipboardHelper.copy(this, label = "Snippet", text = snippet.command, sensitive = false)
@@ -403,7 +403,7 @@ class SnippetManagerActivity : TabSSHActivity() {
             holder.categoryText.text = snippet.category
 
             if (snippet.usageCount > 0) {
-                holder.usageText.text = "Used ${snippet.usageCount} times"
+                holder.usageText.text = holder.usageText.context.getString(R.string.snippet_mgr_usage_count, snippet.usageCount)
                 holder.usageText.visibility = View.VISIBLE
             } else {
                 holder.usageText.visibility = View.GONE

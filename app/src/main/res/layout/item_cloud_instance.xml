@@ -93,7 +93,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="@dimen/space_xs"
-                android:text="SSH"
+                android:text="@string/hypervisor_vm_action_ssh"
                 android:minHeight="@dimen/min_touch_target" />
 
             <!-- Single toggle button: "Start" when stopped, "Stop" when running -->
@@ -103,7 +103,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Start"
+                android:text="@string/container_action_start"
                 android:minHeight="@dimen/min_touch_target" />
 
         </LinearLayout>
@@ -124,7 +124,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="@dimen/space_xs"
-                android:text="Restart"
+                android:text="@string/container_action_restart"
                 android:minHeight="@dimen/min_touch_target" />
 
             <com.google.android.material.button.MaterialButton
@@ -133,7 +133,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Force Restart"
+                android:text="@string/cloud_instance_action_force_restart"
                 android:minHeight="@dimen/min_touch_target" />
 
         </LinearLayout>

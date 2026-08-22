@@ -4,8 +4,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginHorizontal="8dp"
-    android:layout_marginBottom="8dp"
+    android:layout_marginHorizontal="@dimen/space_sm"
+    android:layout_marginBottom="@dimen/space_sm"
     app:cardElevation="2dp"
     app:cardCornerRadius="8dp">
 
@@ -13,7 +13,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:padding="@dimen/space_12dp">
 
         <!-- Header: status dot + name + state badge -->
         <LinearLayout
@@ -26,7 +26,7 @@
                 android:id="@+id/view_status_dot"
                 android:layout_width="10dp"
                 android:layout_height="10dp"
-                android:layout_marginEnd="8dp"
+                android:layout_marginEnd="@dimen/space_sm"
                 android:background="@drawable/bg_status_dot" />
 
             <TextView
@@ -52,7 +52,7 @@
             android:id="@+id/vm_info"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="@dimen/space_xs"
             android:textSize="12sp"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -61,7 +61,7 @@
             android:id="@+id/vm_ip"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
+            android:layout_marginTop="@dimen/space_2dp"
             android:textSize="12sp"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:visibility="gone" />
@@ -72,7 +72,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="@dimen/space_10dp"
             android:visibility="gone">
 
             <com.google.android.material.button.MaterialButton
@@ -81,10 +81,10 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginEnd="4dp"
+                android:layout_marginEnd="@dimen/space_xs"
                 android:minHeight="@dimen/min_touch_target"
                 android:minWidth="0dp"
-                android:text="VNC" />
+                android:text="@string/hypervisor_vm_action_vnc" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_ssh"
@@ -92,10 +92,10 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="4dp"
+                android:layout_marginStart="@dimen/space_xs"
                 android:minHeight="@dimen/min_touch_target"
                 android:minWidth="0dp"
-                android:text="SSH" />
+                android:text="@string/hypervisor_vm_action_ssh" />
 
         </LinearLayout>
 
@@ -105,7 +105,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="@dimen/space_sm"
             android:visibility="gone">
 
             <com.google.android.material.button.MaterialButton
@@ -114,10 +114,10 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginEnd="4dp"
+                android:layout_marginEnd="@dimen/space_xs"
                 android:minHeight="@dimen/min_touch_target"
                 android:minWidth="0dp"
-                android:text="Start" />
+                android:text="@string/container_action_start" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_stop"
@@ -125,10 +125,10 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="4dp"
+                android:layout_marginStart="@dimen/space_xs"
                 android:minHeight="@dimen/min_touch_target"
                 android:minWidth="0dp"
-                android:text="Stop" />
+                android:text="@string/container_action_stop" />
 
         </LinearLayout>
 
@@ -138,7 +138,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="@dimen/space_sm"
             android:visibility="gone">
 
             <com.google.android.material.button.MaterialButton
@@ -147,10 +147,10 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginEnd="4dp"
+                android:layout_marginEnd="@dimen/space_xs"
                 android:minHeight="@dimen/min_touch_target"
                 android:minWidth="0dp"
-                android:text="Reboot" />
+                android:text="@string/hypervisor_vm_action_reboot" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_reset"
@@ -158,10 +158,10 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="4dp"
+                android:layout_marginStart="@dimen/space_xs"
                 android:minHeight="@dimen/min_touch_target"
                 android:minWidth="0dp"
-                android:text="Reset" />
+                android:text="@string/libvirt_reset_button" />
 
         </LinearLayout>
 

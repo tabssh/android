@@ -4,13 +4,13 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="@dimen/space_md">
 
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp"
-        android:hint="Identity name"
+        android:layout_marginBottom="@dimen/space_sm"
+        android:hint="@string/virt_identity_edit_name_hint"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/edit_name"
@@ -23,8 +23,8 @@
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp"
-        android:hint="Username"
+        android:layout_marginBottom="@dimen/space_sm"
+        android:hint="@string/username_hint"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/edit_username"
@@ -37,8 +37,8 @@
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp"
-        android:hint="Password"
+        android:layout_marginBottom="@dimen/space_sm"
+        android:hint="@string/password_hint"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
         app:passwordToggleEnabled="true">
         <com.google.android.material.textfield.TextInputEditText
@@ -52,8 +52,8 @@
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="4dp"
-        android:hint="Realm (optional — Proxmox: pam / pve)"
+        android:layout_marginBottom="@dimen/space_xs"
+        android:hint="@string/virt_identity_edit_realm_hint"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/edit_realm"
@@ -66,8 +66,8 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="Password is stored in the Android Keystore. Per-host realm overrides this default."
+        android:layout_marginTop="@dimen/space_sm"
+        android:text="@string/virt_identity_edit_password_note"
         android:textSize="12sp"
         android:textColor="?attr/colorOnSurfaceVariant" />
 

@@ -51,7 +51,7 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="@dimen/space_2dp"
                 android:orientation="horizontal">
 
                 <!-- Engine Badge -->
@@ -64,8 +64,8 @@
                     android:textStyle="bold"
                     android:textColor="?attr/colorOnPrimary"
                     android:background="@drawable/badge_background"
-                    android:paddingHorizontal="8dp"
-                    android:paddingVertical="2dp" />
+                    android:paddingHorizontal="@dimen/space_sm"
+                    android:paddingVertical="@dimen/space_2dp" />
 
                 <!-- The wrapper takes the leftover width so the badge inside can
                      ellipsize instead of being clipped by the row. -->
@@ -83,8 +83,8 @@
                         android:textStyle="bold"
                         android:textColor="?attr/colorOnSecondaryContainer"
                         android:background="@drawable/badge_background_secondary"
-                        android:paddingHorizontal="8dp"
-                        android:paddingVertical="2dp"
+                        android:paddingHorizontal="@dimen/space_sm"
+                        android:paddingVertical="@dimen/space_2dp"
                         android:maxLines="1"
                         android:ellipsize="end" />
 
@@ -97,7 +97,7 @@
                 android:id="@+id/text_connection"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="@dimen/space_xs"
                 android:textSize="13sp"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:maxLines="1"
@@ -108,7 +108,7 @@
                 android:id="@+id/text_last_connected"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="@dimen/space_2dp"
                 android:textSize="12sp"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:maxLines="1"

@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="8dp"
+    android:layout_margin="@dimen/space_sm"
     app:cardElevation="2dp"
     app:cardCornerRadius="8dp">
 
@@ -11,7 +11,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:padding="@dimen/space_12dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -23,7 +23,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Identity Name"
+                android:text="@string/identity_edit_name_hint"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
@@ -33,7 +33,7 @@
                 android:layout_height="32dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@android:drawable/ic_menu_edit"
-                android:contentDescription="Edit" />
+                android:contentDescription="@string/edit" />
 
             <ImageButton
                 android:id="@+id/btn_delete"
@@ -41,7 +41,7 @@
                 android:layout_height="32dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@android:drawable/ic_menu_delete"
-                android:contentDescription="Delete" />
+                android:contentDescription="@string/delete" />
 
         </LinearLayout>
 
@@ -49,27 +49,27 @@
             android:id="@+id/text_username"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Username: admin"
+            android:text="@string/item_identity_username_placeholder"
             android:textSize="14sp"
-            android:layout_marginTop="4dp" />
+            android:layout_marginTop="@dimen/space_xs" />
 
         <TextView
             android:id="@+id/text_auth_type"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="SSH Key"
+            android:text="@string/connection_edit_ssh_key_hint"
             android:textSize="12sp"
             android:textColor="@color/primary_600"
-            android:layout_marginTop="4dp" />
+            android:layout_marginTop="@dimen/space_xs" />
 
         <TextView
             android:id="@+id/text_description"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Description"
+            android:text="@string/vps_host_edit_hint_description"
             android:textSize="12sp"
             android:textColor="?android:attr/textColorSecondary"
-            android:layout_marginTop="4dp" />
+            android:layout_marginTop="@dimen/space_xs" />
 
     </LinearLayout>
 

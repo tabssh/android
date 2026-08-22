@@ -4,7 +4,7 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:padding="16dp">
+    android:padding="@dimen/space_md">
 
     <LinearLayout
         android:layout_width="0dp"
@@ -16,7 +16,7 @@
             android:id="@+id/text_sync_item_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Item"
+            android:text="@string/sync_toggle_item_title_placeholder"
             android:textAppearance="?attr/textAppearanceBodyLarge" />
 
         <TextView

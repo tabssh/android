@@ -8,21 +8,21 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingStart="8dp"
-    android:paddingEnd="8dp">
+    android:paddingStart="@dimen/space_sm"
+    android:paddingEnd="@dimen/space_sm">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="8dp">
+        android:padding="@dimen/space_sm">
 
         <!-- Instance label -->
         <TextView
             android:id="@+id/oci_ssh_instance_label"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
+            android:layout_marginBottom="@dimen/space_12dp"
             android:textAppearance="?attr/textAppearanceBodySmall"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -30,8 +30,8 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:hint="Username">
+            android:layout_marginBottom="@dimen/space_sm"
+            android:hint="@string/route_username_hint">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/oci_ssh_username"
@@ -45,8 +45,8 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:hint="Port">
+            android:layout_marginBottom="@dimen/space_sm"
+            android:hint="@string/route_port_hint">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/oci_ssh_port"
@@ -54,16 +54,16 @@
                 android:layout_height="wrap_content"
                 android:inputType="number"
                 android:singleLine="true"
-                android:text="22" />
+                android:text="@string/common_default_ssh_port" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <!-- Auth method label -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:layout_marginBottom="4dp"
-            android:text="Authentication"
+            android:layout_marginTop="@dimen/space_xs"
+            android:layout_marginBottom="@dimen/space_xs"
+            android:text="@string/route_auth_type_hint"
             android:textAppearance="?attr/textAppearanceLabelMedium" />
 
         <!-- Auth method spinner -->
@@ -71,16 +71,16 @@
             android:id="@+id/oci_ssh_auth_method"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp" />
+            android:layout_marginBottom="@dimen/space_sm" />
 
         <!-- Key picker (shown only when auth = PUBLIC_KEY) -->
         <TextView
             android:id="@+id/oci_ssh_key_label"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:layout_marginBottom="4dp"
-            android:text="Identity key"
+            android:layout_marginTop="@dimen/space_xs"
+            android:layout_marginBottom="@dimen/space_xs"
+            android:text="@string/oci_ssh_identity_key_label"
             android:textAppearance="?attr/textAppearanceLabelMedium"
             android:visibility="gone" />
 
@@ -88,7 +88,7 @@
             android:id="@+id/oci_ssh_key_spinner"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
+            android:layout_marginBottom="@dimen/space_sm"
             android:visibility="gone" />
 
         <!-- No-keys hint -->
@@ -96,8 +96,8 @@
             android:id="@+id/oci_ssh_no_keys_hint"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:text="No SSH keys stored. Add a key in Settings → SSH Keys first."
+            android:layout_marginBottom="@dimen/space_sm"
+            android:text="@string/oci_ssh_no_keys_hint"
             android:textAppearance="?attr/textAppearanceBodySmall"
             android:textColor="?attr/colorError"
             android:visibility="gone" />

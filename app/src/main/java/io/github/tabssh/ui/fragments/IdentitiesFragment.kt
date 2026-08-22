@@ -89,13 +89,13 @@ class IdentitiesFragment : Fragment() {
                     .openInputStream(uri)?.bufferedReader()?.use { it.readText() }?.trim().orEmpty()
                 withContext(Dispatchers.Main) {
                     if (!isAdded) return@withContext
-                    if (validateCert(text)) setKeyCert(key, text, "Certificate attached")
+                    if (validateCert(text)) setKeyCert(key, text, getString(R.string.identity_cert_attached_toast))
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to read cert file", e)
                 withContext(Dispatchers.Main) {
                     if (!isAdded) return@withContext
-                    Toast.makeText(requireContext(), "Failed to read certificate: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), getString(R.string.identity_read_cert_failed_fmt, e.message), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -120,13 +120,13 @@ class IdentitiesFragment : Fragment() {
                 }
                 withContext(Dispatchers.Main) {
                     if (!isAdded) return@withContext
-                    Toast.makeText(requireContext(), "Private key exported", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), getString(R.string.identity_private_key_exported_toast), Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to write private key export", e)
                 withContext(Dispatchers.Main) {
                     if (!isAdded) return@withContext
-                    Toast.makeText(requireContext(), "Export failed: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(requireContext(), getString(R.string.identity_export_failed_fmt, e.message), Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -259,19 +259,19 @@ class IdentitiesFragment : Fragment() {
                 withContext(Dispatchers.Main) {
                     if (hasPw) {
                         passwordInput.setText(PASSWORD_MASK)
-                        passwordInput.hint = "Password set — leave to keep, or type to replace"
+                        passwordInput.hint = getString(R.string.identity_password_set_hint)
                     }
                 }
             }
         }
 
         MaterialAlertDialogBuilder(ctx)
-            .setTitle(if (existing == null) "Add VNC Identity" else "Edit VNC Identity")
+            .setTitle(if (existing == null) getString(R.string.identity_vnc_add_title) else getString(R.string.identity_vnc_edit_title))
             .setView(dialogView)
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(getString(R.string.save)) { _, _ ->
                 val name = nameInput.text.toString().trim()
                 if (name.isBlank()) {
-                    Toast.makeText(ctx, "Name is required", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(ctx, getString(R.string.xcpng_name_required), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 val now = System.currentTimeMillis()
@@ -304,18 +304,18 @@ class IdentitiesFragment : Fragment() {
                             Logger.w(TAG, "Failed to store VNC identity password: ${e.message}")
                         }
                     }
-                    Toast.makeText(ctx, "Saved", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(ctx, getString(R.string.remote_editor_saved), Toast.LENGTH_SHORT).show()
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
     private fun confirmDeleteVncIdentity(identity: VncIdentity) {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Delete VNC identity?")
-            .setMessage("\"${identity.name}\" will be removed. Any VNC hosts using it will lose their credential link.")
-            .setPositiveButton("Delete") { _, _ ->
+            .setTitle(getString(R.string.identity_vnc_delete_title))
+            .setMessage(getString(R.string.identity_vnc_delete_message_fmt, identity.name))
+            .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 lifecycleScope.launch {
                     withContext(Dispatchers.IO) {
                         app.database.vncIdentityDao().deleteById(identity.id)
@@ -329,7 +329,7 @@ class IdentitiesFragment : Fragment() {
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -363,7 +363,7 @@ class IdentitiesFragment : Fragment() {
                 holder.description.text = identity.description
             } else if (!identity.username.isNullOrBlank()) {
                 holder.description.visibility = View.VISIBLE
-                holder.description.text = "Username: ${identity.username}"
+                holder.description.text = getString(R.string.hypervisor_account_username_fmt, identity.username)
             } else {
                 holder.description.visibility = View.GONE
             }
@@ -450,10 +450,10 @@ class IdentitiesFragment : Fragment() {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(identity.getDisplayName())
             .setItems(arrayOf(
-                "✏️ Edit",
-                "📋 Apply to Connections",
-                "🔗 View Linked Connections",
-                "🗑️ Delete"
+                getString(R.string.identity_menu_edit),
+                getString(R.string.identity_menu_apply_to_connections),
+                getString(R.string.identity_menu_view_linked_connections),
+                getString(R.string.identity_menu_delete)
             )) { _, which ->
                 when (which) {
                     0 -> showEditIdentityDialog(identity)
@@ -492,7 +492,11 @@ class IdentitiesFragment : Fragment() {
             descriptionInput.setText(id.description ?: "")
         }
 
-        val authTypes = listOf("Password", "SSH Key", "Keyboard Interactive")
+        val authTypes = listOf(
+            getString(R.string.identity_auth_type_password),
+            getString(R.string.identity_auth_type_ssh_key),
+            getString(R.string.identity_auth_type_keyboard_interactive)
+        )
         authTypeSpinner.setAdapter(
             ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, authTypes)
         )
@@ -508,7 +512,7 @@ class IdentitiesFragment : Fragment() {
         var allKeysList = listOf<StoredKey>()
         lifecycleScope.launch(Dispatchers.IO) {
             allKeysList = app.database.keyDao().getAllKeysList()
-            val keyNames = listOf("No Key") + allKeysList.map { "${it.name} (${it.keyType})" }
+            val keyNames = listOf(getString(R.string.identity_no_key)) + allKeysList.map { "${it.name} (${it.keyType})" }
             val currentKeyIndex = existing?.keyId?.let { kid ->
                 val idx = allKeysList.indexOfFirst { it.keyId == kid }
                 if (idx >= 0) idx + 1 else 0
@@ -531,13 +535,13 @@ class IdentitiesFragment : Fragment() {
 
         if (existing != null && !existing.password.isNullOrEmpty()) {
             passwordInput.setText(PASSWORD_MASK)
-            passwordInput.hint = "Password set — leave to keep, or type to replace"
+            passwordInput.hint = getString(R.string.identity_password_set_hint)
         }
 
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle(if (existing == null) "Create Identity" else "Edit Identity")
+            .setTitle(if (existing == null) getString(R.string.identity_create_title) else getString(R.string.identity_edit_title))
             .setView(dialogView)
-            .setPositiveButton(if (existing == null) "Create" else "Save") { _, _ ->
+            .setPositiveButton(if (existing == null) getString(R.string.container_create) else getString(R.string.save)) { _, _ ->
                 val name = nameInput.text.toString().trim()
                 val username = usernameInput.text.toString().trim()
                 val description = descriptionInput.text.toString().trim()
@@ -550,12 +554,12 @@ class IdentitiesFragment : Fragment() {
                 }
                 val selectedKeyId: String? = if (authType == AuthType.PUBLIC_KEY) {
                     val sel = sshKeySpinner.text.toString()
-                    if (sel == "No Key") null
+                    if (sel == getString(R.string.identity_no_key)) null
                     else allKeysList.find { "${it.name} (${it.keyType})" == sel }?.keyId
                 } else null
 
                 if (name.isBlank() || username.isBlank()) {
-                    Toast.makeText(requireContext(), "Name and username are required", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), getString(R.string.identity_name_username_required), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
 
@@ -580,7 +584,7 @@ class IdentitiesFragment : Fragment() {
                     ))
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -589,7 +593,7 @@ class IdentitiesFragment : Fragment() {
             val allConnections = app.database.connectionDao().getAllConnectionsList()
             if (allConnections.isEmpty()) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(requireContext(), "No connections available", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), getString(R.string.identity_no_connections_available), Toast.LENGTH_SHORT).show()
                 }
                 return@launch
             }
@@ -600,19 +604,19 @@ class IdentitiesFragment : Fragment() {
 
             withContext(Dispatchers.Main) {
                 MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Apply \"${identity.name}\" to:")
+                    .setTitle(getString(R.string.identity_apply_to_title_fmt, identity.name))
                     .setMultiChoiceItems(names, checked) { _, i, v -> checked[i] = v }
-                    .setPositiveButton("Apply") { _, _ ->
+                    .setPositiveButton(getString(R.string.identity_apply_button)) { _, _ ->
                         val ids = allConnections.filterIndexed { i, _ -> checked[i] }.map { it.id }
                         applyIdentityToConnections(identity, ids)
                     }
-                    .setNeutralButton("Select All") { dialog, _ ->
+                    .setNeutralButton(getString(R.string.identity_select_all_button)) { dialog, _ ->
                         checked.fill(true)
                         (dialog as? androidx.appcompat.app.AlertDialog)?.listView?.let { lv ->
                             for (i in 0 until lv.count) lv.setItemChecked(i, true)
                         }
                     }
-                    .setNegativeButton("Cancel", null)
+                    .setNegativeButton(getString(R.string.cancel), null)
                     .show()
             }
         }
@@ -620,7 +624,7 @@ class IdentitiesFragment : Fragment() {
 
     private fun applyIdentityToConnections(identity: Identity, connectionIds: List<String>) {
         if (connectionIds.isEmpty()) {
-            Toast.makeText(requireContext(), "No connections selected", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), getString(R.string.identity_no_connections_selected), Toast.LENGTH_SHORT).show()
             return
         }
         lifecycleScope.launch(Dispatchers.IO) {
@@ -629,13 +633,13 @@ class IdentitiesFragment : Fragment() {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(
                         requireContext(),
-                        "Applied \"${identity.name}\" to ${connectionIds.size} connection(s)",
+                        getString(R.string.identity_applied_to_connections_fmt, identity.name, connectionIds.size),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(requireContext(), "Failed to apply identity: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), getString(R.string.identity_apply_failed_fmt, e.message), Toast.LENGTH_SHORT).show()
                 }
                 Logger.e(TAG, "Failed to apply identity", e)
             }
@@ -648,17 +652,17 @@ class IdentitiesFragment : Fragment() {
             withContext(Dispatchers.Main) {
                 if (linked.isEmpty()) {
                     MaterialAlertDialogBuilder(requireContext())
-                        .setTitle("Linked Connections")
-                        .setMessage("No connections are using this identity.\n\nTap \"Apply to Connections\" to link it.")
-                        .setPositiveButton("OK", null)
+                        .setTitle(getString(R.string.identity_linked_connections_title))
+                        .setMessage(getString(R.string.identity_no_linked_connections_message))
+                        .setPositiveButton(getString(R.string.ok), null)
                         .show()
                 } else {
-                    val list = linked.joinToString("\n") { "• ${it.name} (${it.host})" }
+                    val list = linked.joinToString("\n") { getString(R.string.identity_linked_connection_line_fmt, it.name, it.host) }
                     MaterialAlertDialogBuilder(requireContext())
-                        .setTitle("Connections using \"${identity.name}\"")
-                        .setMessage("${linked.size} connection(s):\n\n$list")
-                        .setPositiveButton("OK", null)
-                        .setNeutralButton("Remove All") { _, _ -> removeIdentityFromAllConnections(identity) }
+                        .setTitle(getString(R.string.identity_connections_using_title_fmt, identity.name))
+                        .setMessage(getString(R.string.identity_connections_count_message_fmt, linked.size, list))
+                        .setPositiveButton(getString(R.string.ok), null)
+                        .setNeutralButton(getString(R.string.identity_remove_all_button)) { _, _ -> removeIdentityFromAllConnections(identity) }
                         .show()
                 }
             }
@@ -669,17 +673,17 @@ class IdentitiesFragment : Fragment() {
         lifecycleScope.launch(Dispatchers.IO) {
             app.database.connectionDao().removeIdentityFromAllConnections(identity.id)
             withContext(Dispatchers.Main) {
-                Toast.makeText(requireContext(), "Removed identity from all connections", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), getString(R.string.identity_removed_from_all_connections), Toast.LENGTH_SHORT).show()
             }
         }
     }
 
     private fun confirmDeleteIdentity(identity: Identity) {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Delete Identity")
-            .setMessage("Delete \"${identity.name}\"? Connections using it will need to be reconfigured.")
-            .setPositiveButton("Delete") { _, _ -> deleteIdentity(identity) }
-            .setNegativeButton("Cancel", null)
+            .setTitle(getString(R.string.identity_delete_title))
+            .setMessage(getString(R.string.identity_delete_message_fmt, identity.name))
+            .setPositiveButton(getString(R.string.delete)) { _, _ -> deleteIdentity(identity) }
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -704,7 +708,7 @@ class IdentitiesFragment : Fragment() {
                 )
             }
             withContext(Dispatchers.Main) {
-                Toast.makeText(requireContext(), "Identity \"$name\" created", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), getString(R.string.identity_created_toast_fmt, name), Toast.LENGTH_SHORT).show()
                 Logger.d(TAG, "Created identity: $name")
                 // Immediately offer to link the new identity to connections so the
                 // user doesn't have to discover "Apply to Connections" separately.
@@ -725,7 +729,7 @@ class IdentitiesFragment : Fragment() {
                 )
             }
             withContext(Dispatchers.Main) {
-                Toast.makeText(requireContext(), "Identity updated", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), getString(R.string.identity_updated_toast), Toast.LENGTH_SHORT).show()
                 Logger.d(TAG, "Updated identity: ${identity.name}")
             }
         }
@@ -741,7 +745,7 @@ class IdentitiesFragment : Fragment() {
             }
             try { app.securePasswordManager.clearPassword("identity_${identity.id}") } catch (_: Exception) {}
             withContext(Dispatchers.Main) {
-                Toast.makeText(requireContext(), "Identity deleted", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), getString(R.string.identity_deleted_toast), Toast.LENGTH_SHORT).show()
                 Logger.d(TAG, "Deleted identity: ${identity.name}")
             }
         }
@@ -768,24 +772,24 @@ class IdentitiesFragment : Fragment() {
                 withContext(Dispatchers.Main) {
                     if (hasPw) {
                         editPassword.setText(PASSWORD_MASK)
-                        editPassword.hint = "Password set — leave to keep, or type to replace"
+                        editPassword.hint = getString(R.string.identity_password_set_hint)
                     }
                 }
             }
         }
 
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle(if (existing == null) "New VM Credential" else "Edit VM Credential")
+            .setTitle(if (existing == null) getString(R.string.identity_vm_cred_new_title) else getString(R.string.identity_vm_cred_edit_title))
             .setView(dialogView)
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(getString(R.string.save)) { _, _ ->
                 val name = editName.text?.toString()?.trim().orEmpty()
                 if (name.isBlank()) {
-                    Toast.makeText(requireContext(), "Name is required", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), getString(R.string.xcpng_name_required), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 saveVirtAccount(existing, name, editUsername, editPassword, editRealm)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -802,7 +806,7 @@ class IdentitiesFragment : Fragment() {
         val realm = editRealm.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
 
         if (username.isBlank()) {
-            Toast.makeText(requireContext(), "Username is required", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), getString(R.string.identity_username_required), Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -856,9 +860,9 @@ class IdentitiesFragment : Fragment() {
             }
 
             MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Delete VM Credential")
+                .setTitle(getString(R.string.identity_vm_cred_delete_title))
                 .setMessage(message)
-                .setPositiveButton("Delete") { _, _ ->
+                .setPositiveButton(getString(R.string.delete)) { _, _ ->
                     if (linked > 0) return@setPositiveButton
                     lifecycleScope.launch {
                         app.database.hypervisorAccountDao().delete(account)
@@ -873,7 +877,7 @@ class IdentitiesFragment : Fragment() {
                         Logger.i(TAG, "Deleted VM credential id=${account.id} (${account.name})")
                     }
                 }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(getString(R.string.cancel), null)
                 .show()
         }
     }
@@ -882,8 +886,12 @@ class IdentitiesFragment : Fragment() {
 
     private fun showSshKeyAddMenu() {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Add SSH Key")
-            .setItems(arrayOf("📥 Import from File", "📋 Paste Key", "🔑 Generate Key")) { _, which ->
+            .setTitle(getString(R.string.identity_add_ssh_key_title))
+            .setItems(arrayOf(
+                getString(R.string.identity_menu_import_from_file),
+                getString(R.string.identity_menu_paste_key),
+                getString(R.string.identity_menu_generate_key)
+            )) { _, which ->
                 when (which) {
                     0 -> importKeyLauncher.launch(arrayOf("*/*"))
                     1 -> showKeyPasteDialog()
@@ -896,7 +904,10 @@ class IdentitiesFragment : Fragment() {
     private fun showSshKeyOptionsMenu(key: StoredKey) {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(key.getDisplayName())
-            .setItems(arrayOf("ℹ️ Details & More…", "🗑️ Delete Key")) { _, which ->
+            .setItems(arrayOf(
+                getString(R.string.identity_menu_details_more),
+                getString(R.string.identity_menu_delete_key)
+            )) { _, which ->
                 when (which) {
                     0 -> showKeyDetails(key)
                     1 -> confirmDeleteSshKey(key)
@@ -908,47 +919,54 @@ class IdentitiesFragment : Fragment() {
     private fun showKeyDetails(key: StoredKey) {
         val certInfo = key.certificate?.let {
             val firstField = it.trim().substringBefore(' ')
-            "Certificate: ✓ attached ($firstField)"
-        } ?: "Certificate: — none"
+            getString(R.string.identity_key_cert_attached_fmt, firstField)
+        } ?: getString(R.string.identity_key_cert_none)
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(key.name)
             .setMessage(
-                "Type: ${key.keyType}\n" +
-                "Fingerprint: ${key.fingerprint}\n" +
-                "Created: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(key.createdAt))}\n" +
-                (if (!key.comment.isNullOrEmpty()) "Comment: ${key.comment}\n" else "") +
+                getString(R.string.sftp_props_type_fmt, key.keyType) + "\n" +
+                getString(R.string.identity_key_fingerprint_fmt, key.fingerprint) + "\n" +
+                getString(R.string.identity_key_created_fmt, java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(key.createdAt))) + "\n" +
+                (if (!key.comment.isNullOrEmpty()) getString(R.string.identity_key_comment_fmt, key.comment) + "\n" else "") +
                 certInfo
             )
-            .setPositiveButton("OK", null)
-            .setNeutralButton("More…") { _, _ -> showMoreActionsDialog(key) }
-            .setNegativeButton("Delete") { _, _ -> confirmDeleteSshKey(key) }
+            .setPositiveButton(getString(R.string.ok), null)
+            .setNeutralButton(getString(R.string.identity_more_button)) { _, _ -> showMoreActionsDialog(key) }
+            .setNegativeButton(getString(R.string.delete)) { _, _ -> confirmDeleteSshKey(key) }
             .show()
     }
 
     private fun showMoreActionsDialog(key: StoredKey) {
+        val copyPublicKey = getString(R.string.identity_menu_copy_public_key)
+        val installOnServer = getString(R.string.identity_menu_install_on_server)
+        val exportPrivateKey = getString(R.string.identity_menu_export_private_key)
+        val rename = getString(R.string.rename_file)
+        val attachCertPaste = getString(R.string.identity_menu_attach_cert_paste)
+        val attachCertFile = getString(R.string.identity_menu_attach_cert_file)
+        val removeCertificate = getString(R.string.identity_menu_remove_certificate)
         val items = mutableListOf(
-            "📋 Copy Public Key",
-            "⬆️ Install on server…",
-            "⬇️ Export private key…",
-            "Rename",
-            "Attach certificate (paste)…",
-            "Attach certificate (file)…"
+            copyPublicKey,
+            installOnServer,
+            exportPrivateKey,
+            rename,
+            attachCertPaste,
+            attachCertFile
         )
-        if (key.certificate != null) items += "Remove certificate"
+        if (key.certificate != null) items += removeCertificate
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(key.name)
             .setItems(items.toTypedArray()) { _, which ->
                 when (items[which]) {
-                    "📋 Copy Public Key" -> copyPublicKeyToClipboard(key)
-                    "⬆️ Install on server…" -> showInstallOnServerDialog(key)
-                    "⬇️ Export private key…" -> showExportPrivateKeyDialog(key)
-                    "Rename" -> showRenameKeyDialog(key)
-                    "Attach certificate (paste)…" -> showPasteCertDialog(key)
-                    "Attach certificate (file)…" -> { pendingCertKey = key; attachCertLauncher.launch(arrayOf("*/*")) }
-                    "Remove certificate" -> setKeyCert(key, null, "Certificate removed")
+                    copyPublicKey -> copyPublicKeyToClipboard(key)
+                    installOnServer -> showInstallOnServerDialog(key)
+                    exportPrivateKey -> showExportPrivateKeyDialog(key)
+                    rename -> showRenameKeyDialog(key)
+                    attachCertPaste -> showPasteCertDialog(key)
+                    attachCertFile -> { pendingCertKey = key; attachCertLauncher.launch(arrayOf("*/*")) }
+                    removeCertificate -> setKeyCert(key, null, getString(R.string.identity_certificate_removed_toast))
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -958,7 +976,7 @@ class IdentitiesFragment : Fragment() {
                 .filter { it.protocol == "ssh" }
             if (sshConnections.isEmpty()) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(requireContext(), "No SSH connections saved", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), getString(R.string.identity_no_ssh_connections_saved_toast), Toast.LENGTH_SHORT).show()
                 }
                 return@launch
             }
@@ -968,12 +986,12 @@ class IdentitiesFragment : Fragment() {
             withContext(Dispatchers.Main) {
                 var selectedIdx = 0
                 MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Install \"${key.name}\" on server")
+                    .setTitle(getString(R.string.identity_install_on_server_title_fmt, key.name))
                     .setSingleChoiceItems(names, 0) { _, i -> selectedIdx = i }
-                    .setPositiveButton("Install") { _, _ ->
+                    .setPositiveButton(getString(R.string.identity_install_button)) { _, _ ->
                         installKeyOnServer(key, sshConnections[selectedIdx])
                     }
-                    .setNegativeButton("Cancel", null)
+                    .setNegativeButton(getString(R.string.cancel), null)
                     .show()
             }
         }
@@ -983,8 +1001,8 @@ class IdentitiesFragment : Fragment() {
         lifecycleScope.launch(Dispatchers.IO) {
             val progressDialog = withContext(Dispatchers.Main) {
                 MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Installing key…")
-                    .setMessage("Connecting to ${profile.host}…")
+                    .setTitle(getString(R.string.identity_installing_key_title))
+                    .setMessage(getString(R.string.connecting_to, profile.host))
                     .setCancelable(false)
                     .show()
             }
@@ -1011,11 +1029,11 @@ class IdentitiesFragment : Fragment() {
                     progressDialog.dismiss()
                     val msg = when {
                         output.contains("already_present") ->
-                            "Key is already installed on ${profile.host}"
+                            getString(R.string.identity_key_already_installed_fmt, profile.host)
                         output.contains("installed") ->
-                            "Key installed on ${profile.host}"
+                            getString(R.string.identity_key_installed_fmt, profile.host)
                         else ->
-                            "Key installation completed on ${profile.host}"
+                            getString(R.string.identity_key_installation_completed_fmt, profile.host)
                     }
                     Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
                 }
@@ -1025,7 +1043,7 @@ class IdentitiesFragment : Fragment() {
                     progressDialog.dismiss()
                     Toast.makeText(
                         requireContext(),
-                        "Failed to install key: ${e.message}",
+                        getString(R.string.identity_install_key_failed_fmt, e.message),
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -1042,11 +1060,11 @@ class IdentitiesFragment : Fragment() {
             withContext(Dispatchers.Main) {
                 if (!isAdded) return@withContext
                 if (text == null) {
-                    Toast.makeText(requireContext(), "Failed to read public key", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), getString(R.string.identity_read_public_key_failed_toast), Toast.LENGTH_SHORT).show()
                     return@withContext
                 }
-                io.github.tabssh.utils.ClipboardHelper.copy(requireContext(), "SSH public key", text, sensitive = false)
-                Toast.makeText(requireContext(), "Public key copied to clipboard", Toast.LENGTH_SHORT).show()
+                io.github.tabssh.utils.ClipboardHelper.copy(requireContext(), getString(R.string.identity_public_key_clip_label), text, sensitive = false)
+                Toast.makeText(requireContext(), getString(R.string.identity_public_key_copied_toast), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -1057,14 +1075,14 @@ class IdentitiesFragment : Fragment() {
             form, getString(R.string.identity_export_passphrase_hint)
         )
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Export Private Key")
-            .setMessage("Enter a passphrase to encrypt the exported key, or leave blank to export without encryption.")
+            .setTitle(getString(R.string.identity_export_private_key_title))
+            .setMessage(getString(R.string.identity_export_passphrase_message))
             .setView(form.root)
-            .setPositiveButton("Export") { _, _ ->
+            .setPositiveButton(getString(R.string.import_export_export)) { _, _ ->
                 val passphrase = passphraseEdit.text.toString().takeIf { it.isNotEmpty() }
                 triggerPrivateKeyExport(key, passphrase)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -1088,7 +1106,7 @@ class IdentitiesFragment : Fragment() {
             withContext(Dispatchers.Main) {
                 if (!isAdded) return@withContext
                 if (pem == null) {
-                    Toast.makeText(requireContext(), "Failed to read key for export", Toast.LENGTH_LONG).show()
+                    Toast.makeText(requireContext(), getString(R.string.identity_read_key_export_failed_toast), Toast.LENGTH_LONG).show()
                     return@withContext
                 }
                 pendingExportContent = pem
@@ -1111,21 +1129,21 @@ class IdentitiesFragment : Fragment() {
             minLines = 4, maxLines = 8, monospace = true
         )
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Attach OpenSSH Certificate")
+            .setTitle(getString(R.string.identity_attach_cert_title))
             .setView(form.root)
-            .setPositiveButton("Attach") { _, _ ->
+            .setPositiveButton(getString(R.string.identity_attach_button)) { _, _ ->
                 val cert = edit.text.toString().trim()
-                if (validateCert(cert)) setKeyCert(key, cert, "Certificate attached")
+                if (validateCert(cert)) setKeyCert(key, cert, getString(R.string.identity_cert_attached_toast))
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
     private fun validateCert(cert: String): Boolean {
         if (!cert.contains("-cert-v01@openssh.com")) {
             showError(
-                "Doesn't look like an OpenSSH certificate (missing '-cert-v01@openssh.com').",
-                "Invalid Certificate"
+                getString(R.string.identity_cert_invalid_message),
+                getString(R.string.identity_cert_invalid_title)
             )
             return false
         }
@@ -1139,7 +1157,7 @@ class IdentitiesFragment : Fragment() {
                 Toast.makeText(requireContext(), toastMsg, Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to update certificate", e)
-                showError("Failed to update certificate: ${e.message}", "Error")
+                showError(getString(R.string.identity_update_cert_failed_fmt, e.message), getString(R.string.dialog_title_error))
             }
         }
     }
@@ -1151,13 +1169,13 @@ class IdentitiesFragment : Fragment() {
         )
         edit.selectAll()
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Rename SSH Key")
+            .setTitle(getString(R.string.identity_rename_key_title))
             .setView(form.root)
-            .setPositiveButton("Rename") { _, _ ->
+            .setPositiveButton(getString(R.string.rename_file)) { _, _ ->
                 val newName = edit.text.toString().trim()
                 if (newName.isNotBlank() && newName != key.name) renameKey(key, newName)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -1165,10 +1183,10 @@ class IdentitiesFragment : Fragment() {
         lifecycleScope.launch {
             try {
                 app.database.keyDao().updateKey(key.copy(name = newName))
-                Toast.makeText(requireContext(), "Key renamed to \"$newName\"", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), getString(R.string.identity_key_renamed_toast_fmt, newName), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to rename key", e)
-                showError("Failed to rename key: ${e.message}", "Rename Error")
+                showError(getString(R.string.identity_rename_key_failed_fmt, e.message), getString(R.string.identity_rename_error_title))
             }
         }
     }
@@ -1180,14 +1198,14 @@ class IdentitiesFragment : Fragment() {
             minLines = 10, maxLines = 20, monospace = true
         )
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Paste SSH Private Key")
+            .setTitle(getString(R.string.conn_edit_paste_key_title))
             .setView(form.root)
-            .setPositiveButton("Next") { _, _ ->
+            .setPositiveButton(getString(R.string.next)) { _, _ ->
                 val content = edit.text.toString()
                 if (content.isNotBlank()) {
                     lifecycleScope.launch(Dispatchers.IO) {
                         val preview = app.keyStorage.previewKey(content)
-                        val defaultName = preview.comment.takeIf { it.isNotBlank() } ?: "Pasted Key"
+                        val defaultName = preview.comment.takeIf { it.isNotBlank() } ?: getString(R.string.identity_default_pasted_key_name)
                         val defaultAlias = if (preview.keyType != null) {
                             app.keyStorage.generateDefaultAlias(preview.keyType)
                         } else "pasted_key"
@@ -1199,27 +1217,28 @@ class IdentitiesFragment : Fragment() {
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
     private fun showKeyGenerateDialog() {
+        // Algorithm/key-size identifiers — fixed technical terms, not localizable UI copy.
         val keyTypes = arrayOf("RSA 2048", "RSA 4096", "ECDSA P-256", "ECDSA P-384", "Ed25519")
         // Default to Ed25519
         var selectedType = 4
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Generate SSH Key")
+            .setTitle(getString(R.string.identity_generate_key_title))
             .setSingleChoiceItems(keyTypes, selectedType) { _, which -> selectedType = which }
-            .setPositiveButton("Next") { _, _ ->
+            .setPositiveButton(getString(R.string.next)) { _, _ ->
                 val nameForm = DialogFields.form(requireContext())
                 val nameEdit = DialogFields.addText(
                     nameForm, getString(R.string.identity_key_generate_name_hint)
                 )
                 MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Key Name")
+                    .setTitle(getString(R.string.identity_key_name_title))
                     .setView(nameForm.root)
-                    .setPositiveButton("Generate") { _, _ ->
-                        val keyName = nameEdit.text.toString().trim().ifBlank { "generated-key" }
+                    .setPositiveButton(getString(R.string.conn_edit_generate)) { _, _ ->
+                        val keyName = nameEdit.text.toString().trim().ifBlank { getString(R.string.identity_default_generated_key_name) }
                         val (type, size) = when (selectedType) {
                             0 -> KeyType.RSA to 2048
                             1 -> KeyType.RSA to 4096
@@ -1229,10 +1248,10 @@ class IdentitiesFragment : Fragment() {
                         }
                         generateKey(type, size, keyName)
                     }
-                    .setNegativeButton("Cancel", null)
+                    .setNegativeButton(getString(R.string.cancel), null)
                     .show()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -1242,7 +1261,7 @@ class IdentitiesFragment : Fragment() {
                 val content = requireContext().contentResolver
                     .openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                     ?: return@launch
-                val display = resolveDisplayName(uri) ?: uri.lastPathSegment ?: "Imported Key"
+                val display = resolveDisplayName(uri) ?: uri.lastPathSegment ?: getString(R.string.identity_default_imported_key_name)
                 val filenameBase = extractKeyNameFromFilename(display)
 
                 // Quick parse to get comment + key type for smart dialog defaults.
@@ -1268,7 +1287,7 @@ class IdentitiesFragment : Fragment() {
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to read key file", e)
                 withContext(Dispatchers.Main) {
-                    showError("Failed to read key file: ${e.message}", "Import Error")
+                    showError(getString(R.string.identity_read_key_file_failed_fmt, e.message), getString(R.string.identity_import_error_title))
                 }
             }
         }
@@ -1305,14 +1324,14 @@ class IdentitiesFragment : Fragment() {
         aliasEdit.setSelection(aliasEdit.text?.length ?: 0)
 
         MaterialAlertDialogBuilder(ctx)
-            .setTitle("Import SSH Key")
+            .setTitle(getString(R.string.identity_import_key_title))
             .setView(form.root)
-            .setPositiveButton("Import") { _, _ ->
+            .setPositiveButton(getString(R.string.conn_edit_import)) { _, _ ->
                 val name = nameEdit.text.toString().trim().ifBlank { defaultName }
                 val alias = aliasEdit.text.toString().trim().ifBlank { defaultAlias }
                 onConfirm(name, alias)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -1329,7 +1348,7 @@ class IdentitiesFragment : Fragment() {
                     when (result) {
                         is ImportResult.Success -> {
                             Logger.i(TAG, "Key imported: ${result.keyId}")
-                            Toast.makeText(requireContext(), "SSH key imported", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(requireContext(), getString(R.string.identity_ssh_key_imported_toast), Toast.LENGTH_SHORT).show()
                         }
                         is ImportResult.Error -> {
                             if (result.message.contains("encrypted") &&
@@ -1337,7 +1356,7 @@ class IdentitiesFragment : Fragment() {
                             ) {
                                 showPassphraseDialog(keyContent, filename, keyAlias)
                             } else {
-                                showError("Key import failed:\n\n${result.message}", "Import Failed")
+                                showError(getString(R.string.identity_key_import_failed_fmt, result.message), getString(R.string.identity_import_failed_title))
                             }
                         }
                     }
@@ -1345,7 +1364,7 @@ class IdentitiesFragment : Fragment() {
             } catch (e: Exception) {
                 Logger.e(TAG, "Key import failed", e)
                 withContext(Dispatchers.Main) {
-                    showError("Key import failed: ${e.message}", "Import Error")
+                    showError(getString(R.string.identity_key_import_failed_exception_fmt, e.message), getString(R.string.identity_import_error_title))
                 }
             }
         }
@@ -1355,14 +1374,14 @@ class IdentitiesFragment : Fragment() {
         val form = DialogFields.form(requireContext())
         val edit = DialogFields.addSecret(form, getString(R.string.identity_import_passphrase_hint))
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Encrypted Key")
-            .setMessage("This key is encrypted. Enter the passphrase to import it.")
+            .setTitle(getString(R.string.identity_encrypted_key_title))
+            .setMessage(getString(R.string.identity_encrypted_key_message))
             .setView(form.root)
-            .setPositiveButton("Import") { _, _ ->
+            .setPositiveButton(getString(R.string.conn_edit_import)) { _, _ ->
                 val passphrase = edit.text.toString()
                 importKeyWithPassphrase(keyContent, filename, passphrase, keyAlias)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -1384,25 +1403,25 @@ class IdentitiesFragment : Fragment() {
                     when (result) {
                         is ImportResult.Success -> {
                             Logger.i(TAG, "Encrypted key imported: ${result.keyId}")
-                            Toast.makeText(requireContext(), "SSH key imported", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(requireContext(), getString(R.string.identity_ssh_key_imported_toast), Toast.LENGTH_SHORT).show()
                         }
                         is ImportResult.Error -> {
                             Logger.e(TAG, "Encrypted key import failed: ${result.message}")
-                            showError("Import failed:\n\n${result.message}", "Import Failed")
+                            showError(getString(R.string.identity_import_failed_fmt, result.message), getString(R.string.identity_import_failed_title))
                         }
                     }
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Encrypted key import failed", e)
                 withContext(Dispatchers.Main) {
-                    showError("Encrypted key import failed: ${e.message}", "Import Error")
+                    showError(getString(R.string.identity_encrypted_key_import_failed_fmt, e.message), getString(R.string.identity_import_error_title))
                 }
             }
         }
     }
 
     private fun generateKey(keyType: KeyType, keySize: Int, keyName: String) {
-        Toast.makeText(requireContext(), "Generating SSH key…", Toast.LENGTH_SHORT).show()
+        Toast.makeText(requireContext(), getString(R.string.identity_generating_key_toast), Toast.LENGTH_SHORT).show()
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val result = app.keyStorage.generateKeyPair(keyType, keySize, keyName)
@@ -1410,18 +1429,18 @@ class IdentitiesFragment : Fragment() {
                     when (result) {
                         is GenerateResult.Success ->
                             MaterialAlertDialogBuilder(requireContext())
-                                .setTitle("Key Generated")
-                                .setMessage("\"$keyName\" generated successfully.\n\nFingerprint:\n${result.fingerprint}")
-                                .setPositiveButton("OK", null)
+                                .setTitle(getString(R.string.identity_key_generated_title))
+                                .setMessage(getString(R.string.identity_key_generated_message_fmt, keyName, result.fingerprint))
+                                .setPositiveButton(getString(R.string.ok), null)
                                 .show()
                         is GenerateResult.Error ->
-                            showError("Failed to generate key:\n\n${result.message}", "Generation Failed")
+                            showError(getString(R.string.identity_generate_key_failed_fmt, result.message), getString(R.string.identity_generation_failed_title))
                     }
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Key generation failed", e)
                 withContext(Dispatchers.Main) {
-                    showError("Key generation failed: ${e.message}", "Error")
+                    showError(getString(R.string.identity_key_generation_failed_exception_fmt, e.message), getString(R.string.dialog_title_error))
                 }
             }
         }
@@ -1429,10 +1448,10 @@ class IdentitiesFragment : Fragment() {
 
     private fun confirmDeleteSshKey(key: StoredKey) {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Delete SSH Key")
-            .setMessage("Delete key \"${key.name}\"?\n\nIdentities using this key will lose their key association.")
-            .setPositiveButton("Delete") { _, _ -> deleteSshKey(key) }
-            .setNegativeButton("Cancel", null)
+            .setTitle(getString(R.string.identity_delete_ssh_key_title))
+            .setMessage(getString(R.string.identity_delete_ssh_key_message_fmt, key.name))
+            .setPositiveButton(getString(R.string.delete)) { _, _ -> deleteSshKey(key) }
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -1448,7 +1467,7 @@ class IdentitiesFragment : Fragment() {
             }
             try { app.securePasswordManager.clearPassword("key_passphrase_${key.keyId}") } catch (_: Exception) {}
             withContext(Dispatchers.Main) {
-                Toast.makeText(requireContext(), "SSH key deleted", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), getString(R.string.identity_ssh_key_deleted_toast), Toast.LENGTH_SHORT).show()
                 Logger.d(TAG, "Deleted SSH key: ${key.name}")
             }
         }

@@ -15,16 +15,16 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="@dimen/space_md">
 
         <!-- Server Selection -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="XCP-ng / Xen Orchestra Server"
+            android:text="@string/xcpng_manager_server_label"
             android:textSize="16sp"
             android:textStyle="bold"
-            android:paddingBottom="8dp" />
+            android:paddingBottom="@dimen/space_sm" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -41,7 +41,7 @@
                 android:id="@+id/add_server_button"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="+"
+                android:text="@string/xcpng_manager_add_button_text"
                 style="@style/Widget.Material3.Button.TonalButton" />
 
         </LinearLayout>
@@ -51,8 +51,8 @@
             android:id="@+id/refresh_button"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Refresh VMs"
-            android:layout_marginTop="8dp"
+            android:text="@string/xcpng_manager_refresh_vms"
+            android:layout_marginTop="@dimen/space_sm"
             style="@style/Widget.Material3.Button" />
         
         <!-- Backup Jobs Button (XO only) -->
@@ -60,8 +60,8 @@
             android:id="@+id/backup_jobs_button"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="📦 Backup Jobs"
-            android:layout_marginTop="8dp"
+            android:text="@string/xcpng_manager_backup_jobs"
+            android:layout_marginTop="@dimen/space_sm"
             android:visibility="gone"
             style="@style/Widget.Material3.Button.TonalButton" />
 
@@ -70,8 +70,8 @@
             android:id="@+id/infrastructure_button"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="🏗️ Show Infrastructure"
-            android:layout_marginTop="8dp"
+            android:text="@string/xcpng_manager_show_infrastructure"
+            android:layout_marginTop="@dimen/space_sm"
             android:visibility="gone"
             style="@style/Widget.Material3.Button.TonalButton" />
 
@@ -80,7 +80,7 @@
             android:id="@+id/progress_bar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="@dimen/space_sm"
             android:visibility="gone"
             style="@style/Widget.AppCompat.ProgressBar.Horizontal"
             android:indeterminate="true" />
@@ -90,16 +90,16 @@
             android:id="@+id/status_text"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="No server selected"
+            android:text="@string/xcpng_manager_no_server_selected"
             android:textAlignment="center"
-            android:padding="8dp" />
+            android:padding="@dimen/space_sm" />
         
         <!-- Live indicator for WebSocket connection -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:paddingVertical="4dp"
+            android:paddingVertical="@dimen/space_xs"
             android:gravity="center">
             
             <View
@@ -113,10 +113,10 @@
                 android:id="@+id/live_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="⚡ Live Updates"
+                android:text="@string/xcpng_manager_live_updates"
                 android:textSize="12sp"
                 android:textColor="?android:textColorSecondary"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="@dimen/space_sm"
                 android:visibility="gone" />
         
         </LinearLayout>
@@ -129,6 +129,6 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:padding="8dp" />
+        android:padding="@dimen/space_sm" />
 
 </LinearLayout>

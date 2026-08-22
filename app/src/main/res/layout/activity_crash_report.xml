@@ -4,20 +4,20 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="?android:attr/colorBackground"
-    android:padding="16dp">
+    android:padding="@dimen/space_md">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingBottom="12dp">
+        android:paddingBottom="@dimen/space_12dp">
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="💥 App Crashed"
+            android:text="@string/crash_report_title"
             android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary" />
@@ -34,7 +34,7 @@
         android:id="@+id/text_thread"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingBottom="8dp"
+        android:paddingBottom="@dimen/space_sm"
         android:textSize="13sp"
         android:textColor="?android:attr/textColorSecondary" />
 
@@ -49,7 +49,7 @@
             android:layout_height="wrap_content"
             android:background="@color/console_background"
             android:fontFamily="monospace"
-            android:padding="12dp"
+            android:padding="@dimen/space_12dp"
             android:textColor="@color/console_error_text"
             android:textIsSelectable="true"
             android:textSize="11sp" />
@@ -59,7 +59,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingTop="12dp"
+        android:paddingTop="@dimen/space_12dp"
         android:gravity="end">
 
         <com.google.android.material.button.MaterialButton
@@ -67,22 +67,22 @@
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:text="Paste / Issue" />
+            android:layout_marginEnd="@dimen/space_sm"
+            android:text="@string/crash_report_paste_issue" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_copy"
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:text="Copy" />
+            android:layout_marginEnd="@dimen/space_sm"
+            android:text="@string/copy" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_restart"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Restart" />
+            android:text="@string/container_action_restart" />
     </LinearLayout>
 
 </LinearLayout>

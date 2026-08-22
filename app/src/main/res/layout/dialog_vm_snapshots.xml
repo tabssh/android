@@ -4,26 +4,26 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="@dimen/space_md">
 
     <!-- Title -->
     <TextView
         android:id="@+id/dialog_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="VM Snapshots"
+        android:text="@string/hypervisor_snapshots_dialog_title"
         android:textSize="20sp"
         android:textStyle="bold"
-        android:paddingBottom="16dp" />
+        android:paddingBottom="@dimen/space_md" />
 
     <!-- VM Name -->
     <TextView
         android:id="@+id/vm_name_text"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="VM: Loading..."
+        android:text="@string/hypervisor_snapshots_vm_loading"
         android:textSize="14sp"
-        android:paddingBottom="8dp" />
+        android:paddingBottom="@dimen/space_sm" />
 
     <!-- Progress Bar -->
     <ProgressBar
@@ -39,9 +39,9 @@
         android:id="@+id/empty_state_text"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="No snapshots found"
+        android:text="@string/hypervisor_snapshots_empty"
         android:textAlignment="center"
-        android:padding="32dp"
+        android:padding="@dimen/space_xl"
         android:visibility="gone" />
 
     <!-- Snapshot List -->
@@ -50,8 +50,8 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="8dp" />
+        android:layout_marginTop="@dimen/space_sm"
+        android:layout_marginBottom="@dimen/space_sm" />
 
     <!-- Action Buttons -->
     <LinearLayout
@@ -64,15 +64,15 @@
             android:id="@+id/create_snapshot_button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Create Snapshot"
+            android:text="@string/hypervisor_create_snapshot_title"
             style="@style/Widget.Material3.Button.TonalButton" />
 
         <Button
             android:id="@+id/close_button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Close"
-            android:layout_marginStart="8dp"
+            android:text="@string/close"
+            android:layout_marginStart="@dimen/space_sm"
             style="@style/Widget.Material3.Button.TextButton" />
 
     </LinearLayout>

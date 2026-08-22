@@ -4,10 +4,10 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
-    android:paddingStart="16dp"
-    android:paddingEnd="16dp"
-    android:paddingTop="12dp"
-    android:paddingBottom="12dp"
+    android:paddingStart="@dimen/space_md"
+    android:paddingEnd="@dimen/space_md"
+    android:paddingTop="@dimen/space_12dp"
+    android:paddingBottom="@dimen/space_12dp"
     android:background="?attr/selectableItemBackground"
     android:gravity="center_vertical">
 
@@ -16,7 +16,7 @@
         android:id="@+id/view_color_indicator"
         android:layout_width="4dp"
         android:layout_height="match_parent"
-        android:layout_marginEnd="12dp"
+        android:layout_marginEnd="@dimen/space_12dp"
         android:background="@color/primary_500" />
 
     <!-- Group info -->
@@ -51,6 +51,6 @@
         android:layout_width="24dp"
         android:layout_height="24dp"
         android:src="@android:drawable/arrow_down_float"
-        android:contentDescription="Expand/collapse group" />
+        android:contentDescription="@string/item_group_expand_collapse_content_description" />
 
 </LinearLayout>

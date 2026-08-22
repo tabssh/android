@@ -193,7 +193,7 @@
                                 android:layout_marginEnd="@dimen/space_sm"
                                 android:hint="@string/port_forward_ssh_port_hint"
                                 app:errorEnabled="true"
-                                app:helperText="1–65535"
+                                app:helperText="@string/port_forward_ssh_port_range_helper"
                                 style="@style/Widget.TabSSH.TextInputLayout">
 
                                 <com.google.android.material.textfield.TextInputEditText
@@ -203,7 +203,7 @@
                                     android:inputType="number"
                                     android:maxLength="5"
                                     android:imeOptions="actionNext"
-                                    android:text="22" />
+                                    android:text="@string/common_default_ssh_port" />
 
                             </com.google.android.material.textfield.TextInputLayout>
 

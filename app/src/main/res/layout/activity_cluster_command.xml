@@ -19,7 +19,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="@dimen/space_md">
 
             <!-- Connection Selection -->
             <LinearLayout
@@ -27,20 +27,20 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:paddingBottom="8dp">
+                android:paddingBottom="@dimen/space_sm">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Select Connections"
+                    android:text="@string/cluster_command_select_title"
                     android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
 
                 <TextView
                     android:id="@+id/selected_count"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="0 selected"
+                    android:text="@string/cluster_command_selected_count_zero"
                     android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
                     android:textColor="?attr/colorPrimary" />
 
@@ -50,9 +50,9 @@
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="🔍 Filter connections..."
+                android:hint="@string/cluster_command_filter_hint"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="@dimen/space_sm">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/search_connections"
@@ -69,15 +69,15 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="@dimen/space_sm">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/button_select_all"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Select All"
-                    android:layout_marginEnd="4dp"
+                    android:text="@string/select_all"
+                    android:layout_marginEnd="@dimen/space_xs"
                     style="@style/Widget.Material3.Button.TonalButton" />
 
                 <com.google.android.material.button.MaterialButton
@@ -85,8 +85,8 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Select None"
-                    android:layout_marginStart="4dp"
+                    android:text="@string/cluster_command_select_none"
+                    android:layout_marginStart="@dimen/space_xs"
                     style="@style/Widget.Material3.Button.OutlinedButton" />
 
             </LinearLayout>
@@ -98,7 +98,7 @@
                 android:minHeight="100dp"
                 android:maxHeight="300dp"
                 android:background="?attr/colorSurfaceVariant"
-                android:padding="8dp"
+                android:padding="@dimen/space_sm"
                 android:nestedScrollingEnabled="true" />
 
             <!-- Command Input -->
@@ -107,21 +107,21 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:paddingTop="16dp"
-                android:paddingBottom="8dp">
+                android:paddingTop="@dimen/space_md"
+                android:paddingBottom="@dimen/space_sm">
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Command"
+                    android:text="@string/cluster_command_label"
                     android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/button_from_snippet"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="From Snippet"
+                    android:text="@string/cluster_command_from_snippet"
                     app:icon="@drawable/ic_code"
                     style="@style/Widget.Material3.Button.TextButton" />
 
@@ -132,7 +132,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:scrollbars="none"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="@dimen/space_sm">
 
                 <com.google.android.material.chip.ChipGroup
                     android:id="@+id/command_history_chips"
@@ -150,7 +150,7 @@
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Enter command (multi-line supported)"
+                android:hint="@string/cluster_command_input_hint"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                 app:counterEnabled="true"
                 app:counterMaxLength="1000">
@@ -172,8 +172,8 @@
                 android:id="@+id/execute_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Execute on Selected Servers"
-                android:layout_marginTop="16dp"
+                android:text="@string/cluster_command_execute_button"
+                android:layout_marginTop="@dimen/space_md"
                 style="@style/Widget.Material3.Button" />
 
             <!-- Cancel Button -->
@@ -181,7 +181,7 @@
                 android:id="@+id/cancel_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Cancel Execution"
+                android:text="@string/cluster_command_cancel_button"
                 android:visibility="gone"
                 style="@style/Widget.Material3.Button.TonalButton" />
 
@@ -190,33 +190,33 @@
                 android:id="@+id/progress_bar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="@dimen/space_md"
                 android:indeterminate="false" />
 
             <TextView
                 android:id="@+id/progress_text"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="0/0 completed (0 success, 0 failed)"
+                android:text="@string/cluster_command_progress_initial"
                 android:textAlignment="center"
                 android:textAppearance="@style/TextAppearance.Material3.BodySmall"
-                android:paddingTop="8dp" />
+                android:paddingTop="@dimen/space_sm" />
 
             <!-- Results -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Results"
+                android:text="@string/cluster_command_results_label"
                 android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                android:paddingTop="24dp"
-                android:paddingBottom="8dp" />
+                android:paddingTop="@dimen/space_lg"
+                android:paddingBottom="@dimen/space_sm" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/results_view"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="?attr/colorSurfaceVariant"
-                android:padding="16dp"
+                android:padding="@dimen/space_md"
                 android:nestedScrollingEnabled="false" />
 
         </LinearLayout>
@@ -230,38 +230,38 @@
         android:layout_height="match_parent"
         android:orientation="vertical"
         android:gravity="center"
-        android:padding="32dp"
+        android:padding="@dimen/space_xl"
         android:visibility="gone"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="🖥️"
+            android:text="@string/common_icon_server"
             android:textSize="64sp"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginBottom="@dimen/space_md" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="No Connections"
+            android:text="@string/cluster_command_empty_title"
             android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
-            android:layout_marginBottom="8dp" />
+            android:layout_marginBottom="@dimen/space_sm" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Create a connection first to run\ncluster commands on multiple servers"
+            android:text="@string/cluster_command_empty_hint"
             android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
             android:textColor="?android:attr/textColorSecondary"
             android:gravity="center"
-            android:layout_marginBottom="24dp" />
+            android:layout_marginBottom="@dimen/space_lg" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/button_add_connection"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Add Connection"
+            android:text="@string/cluster_command_add_connection"
             style="@style/Widget.Material3.Button.TonalButton" />
 
     </LinearLayout>

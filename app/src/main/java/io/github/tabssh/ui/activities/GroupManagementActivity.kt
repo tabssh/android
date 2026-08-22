@@ -127,7 +127,7 @@ class GroupManagementActivity : TabSSHActivity() {
             } catch (e: Exception) {
                 Logger.e("GroupManagementActivity", "Failed to load groups", e)
                 runOnUiThread {
-                    showError("Failed to load groups", "Error")
+                    showError(getString(R.string.group_mgmt_load_failed), getString(R.string.dialog_title_error))
                 }
             }
         }
@@ -150,12 +150,12 @@ class GroupManagementActivity : TabSSHActivity() {
         val iconInput = dialogView.findViewById<TextInputEditText>(R.id.edit_group_icon)
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("Create Group")
+            .setTitle(R.string.group_mgmt_create_group_title)
             .setView(dialogView)
-            .setPositiveButton("Create") { _, _ ->
+            .setPositiveButton(R.string.container_create) { _, _ ->
                 val name = nameInput.text.toString().trim()
                 if (name.isBlank()) {
-                    showError("Group name cannot be empty", "Error")
+                    showError(getString(R.string.group_mgmt_name_empty), getString(R.string.dialog_title_error))
                     return@setPositiveButton
                 }
 
@@ -164,7 +164,7 @@ class GroupManagementActivity : TabSSHActivity() {
 
                 createGroup(name, color, icon)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -180,12 +180,12 @@ class GroupManagementActivity : TabSSHActivity() {
         iconInput.setText(group.icon ?: "")
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("Edit Group")
+            .setTitle(R.string.group_mgmt_edit_group_title)
             .setView(dialogView)
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(R.string.save) { _, _ ->
                 val name = nameInput.text.toString().trim()
                 if (name.isBlank()) {
-                    showError("Group name cannot be empty", "Error")
+                    showError(getString(R.string.group_mgmt_name_empty), getString(R.string.dialog_title_error))
                     return@setPositiveButton
                 }
 
@@ -194,10 +194,10 @@ class GroupManagementActivity : TabSSHActivity() {
 
                 updateGroup(group, name, color, icon)
             }
-            .setNeutralButton("Delete") { _, _ ->
+            .setNeutralButton(R.string.delete) { _, _ ->
                 deleteGroup(group)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -216,14 +216,14 @@ class GroupManagementActivity : TabSSHActivity() {
                 app.database.connectionGroupDao().insertGroup(group)
 
                 runOnUiThread {
-                    Toast.makeText(this@GroupManagementActivity, "Group created", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@GroupManagementActivity, getString(R.string.group_mgmt_group_created), Toast.LENGTH_SHORT).show()
                 }
 
                 Logger.i("GroupManagementActivity", "Created group: $name")
             } catch (e: Exception) {
                 Logger.e("GroupManagementActivity", "Failed to create group", e)
                 runOnUiThread {
-                    showError("Failed to create group", "Error")
+                    showError(getString(R.string.group_mgmt_create_failed), getString(R.string.dialog_title_error))
                 }
             }
         }
@@ -242,14 +242,14 @@ class GroupManagementActivity : TabSSHActivity() {
                 app.database.connectionGroupDao().updateGroup(updatedGroup)
 
                 runOnUiThread {
-                    Toast.makeText(this@GroupManagementActivity, "Group updated", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@GroupManagementActivity, getString(R.string.group_mgmt_group_updated), Toast.LENGTH_SHORT).show()
                 }
 
                 Logger.i("GroupManagementActivity", "Updated group: $name")
             } catch (e: Exception) {
                 Logger.e("GroupManagementActivity", "Failed to update group", e)
                 runOnUiThread {
-                    showError("Failed to update group", "Error")
+                    showError(getString(R.string.group_mgmt_update_failed), getString(R.string.dialog_title_error))
                 }
             }
         }
@@ -264,12 +264,12 @@ class GroupManagementActivity : TabSSHActivity() {
                 if (connectionCount > 0) {
                     runOnUiThread {
                         MaterialAlertDialogBuilder(this@GroupManagementActivity)
-                            .setTitle("Delete Group?")
-                            .setMessage("This group contains $connectionCount connection(s). Connections will be moved to 'Ungrouped'.")
-                            .setPositiveButton("Delete") { _, _ ->
+                            .setTitle(R.string.group_mgmt_delete_group_title)
+                            .setMessage(getString(R.string.group_mgmt_delete_group_message, connectionCount))
+                            .setPositiveButton(R.string.delete) { _, _ ->
                                 performDelete(group)
                             }
-                            .setNegativeButton("Cancel", null)
+                            .setNegativeButton(R.string.cancel, null)
                             .show()
                     }
                 } else {
@@ -302,14 +302,14 @@ class GroupManagementActivity : TabSSHActivity() {
                 }
 
                 runOnUiThread {
-                    Toast.makeText(this@GroupManagementActivity, "Group deleted", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@GroupManagementActivity, getString(R.string.group_mgmt_group_deleted), Toast.LENGTH_SHORT).show()
                 }
 
                 Logger.i("GroupManagementActivity", "Deleted group: ${group.name}")
             } catch (e: Exception) {
                 Logger.e("GroupManagementActivity", "Failed to delete group", e)
                 runOnUiThread {
-                    showError("Failed to delete group", "Error")
+                    showError(getString(R.string.group_mgmt_delete_failed), getString(R.string.dialog_title_error))
                 }
             }
         }
@@ -368,7 +368,7 @@ class GroupManagementActivity : TabSSHActivity() {
             }
 
             // Show details (icon if set)
-            holder.detailsText.text = group.icon ?: "📁"
+            holder.detailsText.text = group.icon ?: holder.itemView.context.getString(R.string.group_mgmt_empty_icon)
 
             holder.itemView.setOnClickListener {
                 onGroupClick(group)

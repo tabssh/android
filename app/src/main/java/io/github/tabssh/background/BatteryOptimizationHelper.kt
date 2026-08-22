@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import io.github.tabssh.R
 import io.github.tabssh.utils.logging.Logger
 
 /**
@@ -74,17 +75,10 @@ object BatteryOptimizationHelper {
         }
 
         MaterialAlertDialogBuilder(context)
-            .setTitle("Allow background monitoring")
-            .setMessage(
-                "For reliable host alerts when the app is closed, TabSSH needs to be " +
-                "exempt from battery optimization.\n\n" +
-                "This is the same permission used by email and alarm apps. It does NOT " +
-                "prevent the OS from pausing SSH sessions — it only ensures the " +
-                "availability checker can run at its scheduled interval.\n\n" +
-                "Tap OK to open the system prompt."
-            )
-            .setPositiveButton("OK") { _, _ -> launchExemptionRequest(context) }
-            .setNegativeButton("Not now", null)
+            .setTitle(context.getString(R.string.battery_helper_exemption_title))
+            .setMessage(context.getString(R.string.battery_helper_exemption_message))
+            .setPositiveButton(context.getString(R.string.ok)) { _, _ -> launchExemptionRequest(context) }
+            .setNegativeButton(context.getString(R.string.fileopen_not_now), null)
             .show()
     }
 
@@ -99,16 +93,9 @@ object BatteryOptimizationHelper {
     fun showManufacturerGuidanceIfNeeded(context: Context) {
         val (label, intent) = manufacturerBatteryIntent(context) ?: return
         MaterialAlertDialogBuilder(context)
-            .setTitle("One more step")
-            .setMessage(
-                "Your device ($label) has additional battery restrictions that can " +
-                "prevent background apps from running even after granting the exemption " +
-                "above.\n\n" +
-                "To ensure host alerts arrive promptly, open your device's battery " +
-                "settings and make sure TabSSH is set to 'No restrictions' or 'Allow " +
-                "background activity'."
-            )
-            .setPositiveButton("Open settings") { _, _ ->
+            .setTitle(context.getString(R.string.battery_helper_oem_title))
+            .setMessage(context.getString(R.string.battery_helper_oem_message, label))
+            .setPositiveButton(context.getString(R.string.battery_helper_oem_open_settings)) { _, _ ->
                 try {
                     context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 } catch (e: ActivityNotFoundException) {
@@ -116,7 +103,7 @@ object BatteryOptimizationHelper {
                     openAppInfoSettings(context)
                 }
             }
-            .setNegativeButton("Skip", null)
+            .setNegativeButton(context.getString(R.string.terminal_skip), null)
             .show()
     }
 

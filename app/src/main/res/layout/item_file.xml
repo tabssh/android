@@ -14,7 +14,7 @@
         android:layout_height="@dimen/file_icon_size"
         android:layout_marginEnd="@dimen/space_md"
         android:src="@drawable/ic_file_generic"
-        android:contentDescription="File icon" />
+        android:contentDescription="@string/sftp_browser_file_icon_description" />
 
     <LinearLayout
         android:layout_width="0dp"

@@ -36,7 +36,7 @@
                 android:id="@+id/search_view"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
-                app:queryHint="Search connections..."
+                app:queryHint="@string/fragment_connections_search_hint"
                 app:iconifiedByDefault="false"
                 android:background="?attr/colorSurface" />
 
@@ -79,14 +79,14 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="💻"
+                android:text="@string/fragment_connections_empty_emoji"
                 android:textSize="64sp"
                 android:paddingBottom="@dimen/space_md" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="No Connections"
+                android:text="@string/fragment_connections_empty_title"
                 android:textSize="18sp"
                 android:textStyle="bold"
                 android:gravity="center"
@@ -96,7 +96,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Tap the + button to add your first SSH server"
+                android:text="@string/fragment_connections_empty_message"
                 android:textSize="14sp"
                 android:gravity="center"
                 android:textColor="?attr/colorOnSurfaceVariant" />

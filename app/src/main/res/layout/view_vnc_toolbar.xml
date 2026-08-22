@@ -30,10 +30,10 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingStart="6dp"
-        android:paddingEnd="6dp"
-        android:paddingTop="4dp"
-        android:paddingBottom="4dp">
+        android:paddingStart="@dimen/space_6dp"
+        android:paddingEnd="@dimen/space_6dp"
+        android:paddingTop="@dimen/space_xs"
+        android:paddingBottom="@dimen/space_xs">
 
         <!-- Keyboard toggle -->
         <com.google.android.material.button.MaterialButton
@@ -42,15 +42,15 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             app:icon="@drawable/ic_keyboard"
-            android:contentDescription="Toggle keyboard"
-            android:layout_marginEnd="2dp" />
+            android:contentDescription="@string/vnc_toolbar_toggle_keyboard_description"
+            android:layout_marginEnd="@dimen/space_2dp" />
 
         <View
             android:layout_width="1dp"
             android:layout_height="24dp"
             android:background="@color/vnc_toolbar_divider"
-            android:layout_marginStart="2dp"
-            android:layout_marginEnd="4dp" />
+            android:layout_marginStart="@dimen/space_2dp"
+            android:layout_marginEnd="@dimen/space_xs" />
 
         <!-- Sticky modifier: Ctrl -->
         <com.google.android.material.button.MaterialButton
@@ -58,16 +58,16 @@
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Ctrl"
+            android:text="@string/vnc_toolbar_key_ctrl"
             android:textSize="12sp"
             android:minWidth="0dp"
             android:minHeight="0dp"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"
+            android:paddingStart="@dimen/space_10dp"
+            android:paddingEnd="@dimen/space_10dp"
+            android:paddingTop="@dimen/space_6dp"
+            android:paddingBottom="@dimen/space_6dp"
             android:checkable="true"
-            android:layout_marginEnd="2dp" />
+            android:layout_marginEnd="@dimen/space_2dp" />
 
         <!-- Sticky modifier: Alt -->
         <com.google.android.material.button.MaterialButton
@@ -75,16 +75,16 @@
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Alt"
+            android:text="@string/vnc_toolbar_key_alt"
             android:textSize="12sp"
             android:minWidth="0dp"
             android:minHeight="0dp"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"
+            android:paddingStart="@dimen/space_10dp"
+            android:paddingEnd="@dimen/space_10dp"
+            android:paddingTop="@dimen/space_6dp"
+            android:paddingBottom="@dimen/space_6dp"
             android:checkable="true"
-            android:layout_marginEnd="2dp" />
+            android:layout_marginEnd="@dimen/space_2dp" />
 
         <!-- Sticky modifier: Win/Super -->
         <com.google.android.material.button.MaterialButton
@@ -92,23 +92,23 @@
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Win"
+            android:text="@string/vnc_toolbar_key_win"
             android:textSize="12sp"
             android:minWidth="0dp"
             android:minHeight="0dp"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"
+            android:paddingStart="@dimen/space_10dp"
+            android:paddingEnd="@dimen/space_10dp"
+            android:paddingTop="@dimen/space_6dp"
+            android:paddingBottom="@dimen/space_6dp"
             android:checkable="true"
-            android:layout_marginEnd="2dp" />
+            android:layout_marginEnd="@dimen/space_2dp" />
 
         <View
             android:layout_width="1dp"
             android:layout_height="24dp"
             android:background="@color/vnc_toolbar_divider"
-            android:layout_marginStart="2dp"
-            android:layout_marginEnd="4dp" />
+            android:layout_marginStart="@dimen/space_2dp"
+            android:layout_marginEnd="@dimen/space_xs" />
 
         <!-- Escape -->
         <com.google.android.material.button.MaterialButton
@@ -116,15 +116,15 @@
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Esc"
+            android:text="@string/vnc_toolbar_key_esc"
             android:textSize="12sp"
             android:minWidth="0dp"
             android:minHeight="0dp"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"
-            android:layout_marginEnd="2dp" />
+            android:paddingStart="@dimen/space_10dp"
+            android:paddingEnd="@dimen/space_10dp"
+            android:paddingTop="@dimen/space_6dp"
+            android:paddingBottom="@dimen/space_6dp"
+            android:layout_marginEnd="@dimen/space_2dp" />
 
         <!-- Tab -->
         <com.google.android.material.button.MaterialButton
@@ -132,15 +132,15 @@
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Tab"
+            android:text="@string/vnc_toolbar_key_tab"
             android:textSize="12sp"
             android:minWidth="0dp"
             android:minHeight="0dp"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"
-            android:layout_marginEnd="2dp" />
+            android:paddingStart="@dimen/space_10dp"
+            android:paddingEnd="@dimen/space_10dp"
+            android:paddingTop="@dimen/space_6dp"
+            android:paddingBottom="@dimen/space_6dp"
+            android:layout_marginEnd="@dimen/space_2dp" />
 
         <!-- F-key picker -->
         <com.google.android.material.button.MaterialButton
@@ -148,15 +148,15 @@
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="F…"
+            android:text="@string/vnc_toolbar_fkeys_button"
             android:textSize="12sp"
             android:minWidth="0dp"
             android:minHeight="0dp"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"
-            android:layout_marginEnd="2dp" />
+            android:paddingStart="@dimen/space_10dp"
+            android:paddingEnd="@dimen/space_10dp"
+            android:paddingTop="@dimen/space_6dp"
+            android:paddingBottom="@dimen/space_6dp"
+            android:layout_marginEnd="@dimen/space_2dp" />
 
         <!-- Arrow keys -->
         <com.google.android.material.button.MaterialButton
@@ -165,8 +165,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             app:icon="@drawable/ic_arrow_left"
-            android:contentDescription="Arrow left"
-            android:layout_marginEnd="2dp" />
+            android:contentDescription="@string/vnc_toolbar_arrow_left_description"
+            android:layout_marginEnd="@dimen/space_2dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/vnc_btn_arrow_up"
@@ -174,8 +174,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             app:icon="@drawable/ic_arrow_up"
-            android:contentDescription="Arrow up"
-            android:layout_marginEnd="2dp" />
+            android:contentDescription="@string/vnc_toolbar_arrow_up_description"
+            android:layout_marginEnd="@dimen/space_2dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/vnc_btn_arrow_down"
@@ -183,8 +183,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             app:icon="@drawable/ic_arrow_down"
-            android:contentDescription="Arrow down"
-            android:layout_marginEnd="2dp" />
+            android:contentDescription="@string/vnc_toolbar_arrow_down_description"
+            android:layout_marginEnd="@dimen/space_2dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/vnc_btn_arrow_right"
@@ -192,15 +192,15 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             app:icon="@drawable/ic_arrow_right"
-            android:contentDescription="Arrow right"
-            android:layout_marginEnd="2dp" />
+            android:contentDescription="@string/vnc_toolbar_arrow_right_description"
+            android:layout_marginEnd="@dimen/space_2dp" />
 
         <View
             android:layout_width="1dp"
             android:layout_height="24dp"
             android:background="@color/vnc_toolbar_divider"
-            android:layout_marginStart="2dp"
-            android:layout_marginEnd="4dp" />
+            android:layout_marginStart="@dimen/space_2dp"
+            android:layout_marginEnd="@dimen/space_xs" />
 
         <!-- Overflow / more -->
         <com.google.android.material.button.MaterialButton
@@ -208,14 +208,14 @@
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="⋮"
+            android:text="@string/common_icon_overflow_menu"
             android:textSize="16sp"
             android:minWidth="0dp"
             android:minHeight="0dp"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp" />
+            android:paddingStart="@dimen/space_10dp"
+            android:paddingEnd="@dimen/space_10dp"
+            android:paddingTop="@dimen/space_6dp"
+            android:paddingBottom="@dimen/space_6dp" />
 
     </LinearLayout>
 

@@ -4,10 +4,10 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginStart="8dp"
-    android:layout_marginEnd="8dp"
-    android:layout_marginTop="10dp"
-    android:layout_marginBottom="2dp"
+    android:layout_marginStart="@dimen/space_sm"
+    android:layout_marginEnd="@dimen/space_sm"
+    android:layout_marginTop="@dimen/space_10dp"
+    android:layout_marginBottom="@dimen/space_2dp"
     app:cardCornerRadius="10dp"
     app:cardElevation="0dp"
     app:strokeWidth="1dp"
@@ -20,10 +20,10 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp">
+        android:paddingStart="@dimen/space_xs"
+        android:paddingEnd="@dimen/space_xs"
+        android:paddingTop="@dimen/space_6dp"
+        android:paddingBottom="@dimen/space_6dp">
 
         <!-- Expand/collapse chevron -->
         <ImageButton
@@ -31,7 +31,7 @@
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Toggle group"
+            android:contentDescription="@string/dashboard_group_toggle_description"
             app:srcCompat="@drawable/ic_expand_more"
             app:tint="?attr/colorOnSurfaceVariant" />
 
@@ -44,8 +44,8 @@
             android:textColor="?attr/colorOnSurface"
             android:ellipsize="end"
             android:maxLines="1"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp" />
+            android:paddingStart="@dimen/space_xs"
+            android:paddingEnd="@dimen/space_xs" />
 
         <!-- Aggregated group metrics snapshot — centered in remaining space -->
         <TextView
@@ -64,14 +64,14 @@
             android:id="@+id/tv_host_count"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:paddingStart="6dp"
-            android:paddingEnd="6dp"
-            android:paddingTop="2dp"
-            android:paddingBottom="2dp"
+            android:paddingStart="@dimen/space_6dp"
+            android:paddingEnd="@dimen/space_6dp"
+            android:paddingTop="@dimen/space_2dp"
+            android:paddingBottom="@dimen/space_2dp"
             android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:background="@drawable/bg_host_count_chip"
-            android:layout_marginEnd="4dp" />
+            android:layout_marginEnd="@dimen/space_xs" />
 
         <!-- Add hosts to this group -->
         <ImageButton
@@ -79,7 +79,7 @@
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Add hosts to group"
+            android:contentDescription="@string/dashboard_group_add_hosts_description"
             app:srcCompat="@drawable/ic_add"
             app:tint="?attr/colorOnSurfaceVariant" />
 
@@ -89,7 +89,7 @@
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Configure monitoring for all hosts in group"
+            android:contentDescription="@string/dashboard_group_bulk_monitor_description"
             app:srcCompat="@drawable/ic_flash"
             app:tint="?attr/colorOnSurfaceVariant" />
 
@@ -99,7 +99,7 @@
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Rename group"
+            android:contentDescription="@string/dashboard_group_rename_description"
             app:srcCompat="@drawable/ic_edit"
             app:tint="?attr/colorOnSurfaceVariant" />
 
@@ -109,7 +109,7 @@
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Delete group"
+            android:contentDescription="@string/dashboard_group_delete_description"
             app:srcCompat="@drawable/ic_close"
             app:tint="?attr/colorOnSurfaceVariant" />
 

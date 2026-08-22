@@ -31,7 +31,7 @@
         <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:padding="8dp"
+            android:padding="@dimen/space_sm"
             android:scrollbars="none">
 
             <com.google.android.material.chip.ChipGroup
@@ -48,7 +48,7 @@
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:padding="16dp"
+            android:padding="@dimen/space_md"
             android:clipToPadding="false" />
 
     </LinearLayout>
@@ -60,7 +60,7 @@
         android:layout_height="match_parent"
         android:orientation="vertical"
         android:gravity="center"
-        android:padding="32dp"
+        android:padding="@dimen/space_xl"
         android:visibility="gone"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
@@ -70,14 +70,14 @@
             android:text="@string/snippet_mgr_empty_icon"
             android:textSize="64sp"
             android:importantForAccessibility="no"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginBottom="@dimen/space_md" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/snippet_mgr_empty_title"
             android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
-            android:layout_marginBottom="8dp" />
+            android:layout_marginBottom="@dimen/space_sm" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -86,7 +86,7 @@
             android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
             android:textColor="?android:attr/textColorSecondary"
             android:gravity="center"
-            android:layout_marginBottom="24dp" />
+            android:layout_marginBottom="@dimen/space_lg" />
 
         <!-- No second add action here — the FAB below is the single,
              consistent add affordance for this screen. -->
@@ -99,7 +99,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
+        android:layout_margin="@dimen/space_md"
         android:contentDescription="@string/snippet_mgr_fab_content_description"
         app:srcCompat="@drawable/ic_add" />
 

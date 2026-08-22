@@ -28,9 +28,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingHorizontal="16dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp">
+        android:paddingHorizontal="@dimen/space_md"
+        android:paddingTop="@dimen/space_sm"
+        android:paddingBottom="@dimen/space_sm">
 
         <!-- ───────────────────────── HEADER ───────────────────────── -->
         <LinearLayout
@@ -38,14 +38,14 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginBottom="2dp">
+            android:layout_marginBottom="@dimen/space_2dp">
 
             <TextView
                 android:id="@+id/text_selected_count"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="0 connections selected"
+                android:text="@string/dialog_bulk_edit_selected_count_default"
                 android:textColor="?attr/colorOnSurface"
                 android:textAppearance="?attr/textAppearanceTitleMedium"
                 android:textStyle="bold" />
@@ -57,17 +57,17 @@
                 android:layout_height="wrap_content"
                 android:minWidth="64dp"
                 android:minHeight="36dp"
-                android:text="Reset" />
+                android:text="@string/settings_action_reset" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/text_apply_summary"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="No changes yet — fill in any field below to enqueue it"
+            android:text="@string/connections_bulk_summary_none"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:textAppearance="?attr/textAppearanceBodySmall"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginBottom="@dimen/space_md" />
 
         <!-- ─────────────────────── CONNECTION ─────────────────────── -->
         <com.google.android.material.card.MaterialCardView
@@ -82,14 +82,14 @@
                         android:src="@drawable/ic_connection" />
                     <TextView
                         style="@style/BulkEdit.SectionTitle"
-                        android:text="CONNECTION" />
+                        android:text="@string/dialog_bulk_edit_section_connection" />
                 </LinearLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/layout_username"
                     style="@style/BulkEdit.Input"
                     app:startIconDrawable="@drawable/ic_person"
-                    android:hint="Username">
+                    android:hint="@string/username_hint">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/edit_username"
@@ -100,7 +100,7 @@
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/layout_port"
                     style="@style/BulkEdit.Input"
-                    android:hint="Port">
+                    android:hint="@string/container_host_custom_port_hint">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/edit_port"
@@ -112,7 +112,7 @@
                     android:id="@+id/layout_group"
                     style="@style/BulkEdit.Dropdown"
                     app:startIconDrawable="@drawable/ic_folder"
-                    android:hint="Assign to group">
+                    android:hint="@string/dialog_bulk_edit_group_hint">
 
                     <com.google.android.material.textfield.MaterialAutoCompleteTextView
                         android:id="@+id/dropdown_group"
@@ -124,7 +124,7 @@
                     android:id="@+id/layout_identity"
                     style="@style/BulkEdit.Dropdown"
                     app:startIconDrawable="@drawable/ic_security"
-                    android:hint="Use identity">
+                    android:hint="@string/dialog_bulk_edit_identity_hint">
 
                     <com.google.android.material.textfield.MaterialAutoCompleteTextView
                         android:id="@+id/dropdown_identity"
@@ -135,7 +135,7 @@
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/layout_timeout"
                     style="@style/BulkEdit.Input"
-                    android:hint="Connection timeout (seconds)">
+                    android:hint="@string/dialog_bulk_edit_timeout_hint">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/edit_timeout"
@@ -159,7 +159,7 @@
                         android:src="@drawable/ic_settings_general" />
                     <TextView
                         style="@style/BulkEdit.SectionTitle"
-                        android:text="BEHAVIOR" />
+                        android:text="@string/dialog_bulk_edit_section_behavior" />
                 </LinearLayout>
 
                 <include
@@ -186,14 +186,14 @@
                         android:src="@drawable/ic_terminal" />
                     <TextView
                         style="@style/BulkEdit.SectionTitle"
-                        android:text="TERMINAL" />
+                        android:text="@string/dialog_bulk_edit_section_terminal" />
                 </LinearLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/layout_terminal_type"
                     style="@style/BulkEdit.Dropdown"
                     app:startIconDrawable="@drawable/ic_terminal"
-                    android:hint="Terminal type">
+                    android:hint="@string/dialog_bulk_edit_terminal_type_hint">
 
                     <com.google.android.material.textfield.MaterialAutoCompleteTextView
                         android:id="@+id/dropdown_terminal_type"
@@ -205,7 +205,7 @@
                     android:id="@+id/layout_color_tag"
                     style="@style/BulkEdit.Dropdown"
                     app:startIconDrawable="@drawable/ic_star_outline"
-                    android:hint="Color tag">
+                    android:hint="@string/connection_edit_color_tag_label">
 
                     <com.google.android.material.textfield.MaterialAutoCompleteTextView
                         android:id="@+id/dropdown_color_tag"
@@ -229,7 +229,7 @@
                         android:src="@drawable/ic_flash" />
                     <TextView
                         style="@style/BulkEdit.SectionTitle"
-                        android:text="ADVANCED" />
+                        android:text="@string/dialog_bulk_edit_section_advanced" />
                 </LinearLayout>
 
                 <include
@@ -244,7 +244,7 @@
                     android:id="@+id/layout_post_connect"
                     style="@style/BulkEdit.Input"
                     app:startIconDrawable="@drawable/ic_code"
-                    android:hint="Post-connect script (one command per line)">
+                    android:hint="@string/dialog_bulk_edit_post_connect_hint">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/edit_post_connect"

@@ -59,7 +59,7 @@
                 android:id="@+id/switch_enabled"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="Account enabled"
+                android:contentDescription="@string/cloud_account_enabled_desc"
                 android:checked="true" />
 
         </LinearLayout>
@@ -69,7 +69,7 @@
             android:id="@+id/text_last_refresh"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Last sync: Never synced"
+            android:text="@string/item_cloud_account_placeholder_last_sync"
             android:textSize="12sp"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:gravity="end"
@@ -89,7 +89,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="@dimen/space_xs"
-                android:text="Refresh"
+                android:text="@string/container_refresh"
                 android:minHeight="@dimen/min_touch_target" />
 
             <com.google.android.material.button.MaterialButton
@@ -99,7 +99,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginStart="@dimen/space_xs"
-                android:text="Delete"
+                android:text="@string/delete"
                 android:minHeight="@dimen/min_touch_target"
                 app:strokeColor="?attr/colorError"
                 android:textColor="?attr/colorError" />

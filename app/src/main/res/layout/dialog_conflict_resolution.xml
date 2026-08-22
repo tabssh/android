@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="@dimen/space_md">
 
         <TextView
             android:id="@+id/conflict_title"
@@ -20,7 +20,7 @@
             android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary"
-            android:layout_marginBottom="8dp" />
+            android:layout_marginBottom="@dimen/space_sm" />
 
         <TextView
             android:id="@+id/conflict_entity_type"
@@ -28,7 +28,7 @@
             android:layout_height="wrap_content"
             android:textSize="16sp"
             android:textColor="?android:attr/textColorSecondary"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginBottom="@dimen/space_md" />
 
         <TextView
             android:id="@+id/field_name"
@@ -37,7 +37,7 @@
             android:textSize="14sp"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary"
-            android:layout_marginBottom="8dp" />
+            android:layout_marginBottom="@dimen/space_sm" />
 
         <TextView
             android:id="@+id/local_value"
@@ -45,7 +45,7 @@
             android:layout_height="wrap_content"
             android:textSize="12sp"
             android:textColor="?android:attr/textColorSecondary"
-            android:layout_marginBottom="4dp" />
+            android:layout_marginBottom="@dimen/space_xs" />
 
         <TextView
             android:id="@+id/remote_value"
@@ -53,7 +53,7 @@
             android:layout_height="wrap_content"
             android:textSize="12sp"
             android:textColor="?android:attr/textColorSecondary"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginBottom="@dimen/space_md" />
 
         <TextView
             android:layout_width="match_parent"
@@ -62,7 +62,7 @@
             android:textSize="14sp"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary"
-            android:layout_marginBottom="8dp" />
+            android:layout_marginBottom="@dimen/space_sm" />
 
         <RadioGroup
             android:id="@+id/resolution_options"

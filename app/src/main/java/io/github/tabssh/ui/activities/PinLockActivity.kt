@@ -15,6 +15,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
+import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.pairing.PairingDecryptor
 import io.github.tabssh.utils.logging.Logger
@@ -148,14 +149,14 @@ class PinLockActivity : AppCompatActivity() {
         }
 
         val title = TextView(this).apply {
-            text = if (mode == MODE_SET) "Set app lock PIN" else "Enter app lock PIN"
+            text = if (mode == MODE_SET) getString(R.string.pin_lock_title_set) else getString(R.string.pin_lock_title_enter)
             textSize = 22f
             gravity = Gravity.CENTER
         }
         root.addView(title)
 
         status = TextView(this).apply {
-            text = if (mode == MODE_SET) "Enter a 4–8 digit PIN" else ""
+            text = if (mode == MODE_SET) getString(R.string.pin_lock_status_enter_digits) else ""
             gravity = Gravity.CENTER
             setPadding(0, dp(12), 0, dp(12))
         }
@@ -187,7 +188,7 @@ class PinLockActivity : AppCompatActivity() {
         root.addView(inputField)
 
         val submit = com.google.android.material.button.MaterialButton(this).apply {
-            text = if (mode == MODE_SET) "Continue" else "Unlock"
+            text = if (mode == MODE_SET) getString(R.string.restore_mode_continue) else getString(R.string.pin_lock_unlock)
             layoutParams = LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = dp(16)
             }
@@ -199,7 +200,7 @@ class PinLockActivity : AppCompatActivity() {
             val cancel = com.google.android.material.button.MaterialButton(
                 this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle
             ).apply {
-                text = "Cancel"
+                text = getString(R.string.cancel)
                 layoutParams = LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                     topMargin = dp(8)
                 }
@@ -219,7 +220,7 @@ class PinLockActivity : AppCompatActivity() {
         if (busy) return
         val pin = pinInput.text.toString().trim()
         if (pin.length !in 4..8) {
-            status.text = "PIN must be 4–8 digits"
+            status.text = getString(R.string.pin_lock_status_pin_length)
             return
         }
         when (mode) {
@@ -238,27 +239,27 @@ class PinLockActivity : AppCompatActivity() {
         if (firstPin == null) {
             firstPin = pin
             pinInput.setText("")
-            status.text = "Enter PIN again to confirm"
+            status.text = getString(R.string.pin_lock_status_confirm)
             return
         }
         if (firstPin != pin) {
             firstPin = null
             pinInput.setText("")
-            status.text = "PINs didn't match. Start over."
+            status.text = getString(R.string.pin_lock_status_mismatch)
             return
         }
         // Match — derive the salted Argon2id hash off the UI thread (~1s),
         // then persist. Also reset the failed-attempt counter; setting a new
         // PIN should give the user a full retry budget on next unlock.
         setBusy(true)
-        status.text = "Saving…"
+        status.text = getString(R.string.pin_lock_status_saving)
         lifecycleScope.launch {
             val stored = withContext(Dispatchers.Default) { hashPinV2(pin) }
             app.preferencesManager.setString(PREF_PIN_HASH, stored)
             app.preferencesManager.setBoolean(PREF_PIN_ENABLED, true)
             app.preferencesManager.setInt(PREF_PIN_FAIL_COUNT, 0)
             setBusy(false)
-            Toast.makeText(this@PinLockActivity, "App lock PIN set", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@PinLockActivity, getString(R.string.pin_lock_toast_pin_set), Toast.LENGTH_SHORT).show()
             Logger.i(TAG, "PIN configured")
             app.markAppUnlocked()
             setResult(Activity.RESULT_OK)
@@ -285,7 +286,7 @@ class PinLockActivity : AppCompatActivity() {
         }
         // Derive/compare off the UI thread (Argon2id is intentionally ~1s).
         setBusy(true)
-        status.text = "Checking…"
+        status.text = getString(R.string.pin_lock_status_checking)
         lifecycleScope.launch {
             val ok = withContext(Dispatchers.Default) { verifyPin(pin, expected) }
             setBusy(false)
@@ -307,12 +308,12 @@ class PinLockActivity : AppCompatActivity() {
             attempts = persisted
             pinInput.setText("")
             if (attempts >= MAX_ATTEMPTS) {
-                status.text = "Too many wrong attempts."
-                Toast.makeText(this@PinLockActivity, "Too many wrong attempts — closing app", Toast.LENGTH_LONG).show()
+                status.text = getString(R.string.pin_lock_status_too_many_attempts)
+                Toast.makeText(this@PinLockActivity, getString(R.string.pin_lock_toast_too_many_attempts_closing), Toast.LENGTH_LONG).show()
                 finishAffinity()
                 return@launch
             }
-            status.text = "Incorrect — try again (${MAX_ATTEMPTS - attempts} left)"
+            status.text = getString(R.string.pin_lock_status_incorrect, MAX_ATTEMPTS - attempts)
         }
     }
 

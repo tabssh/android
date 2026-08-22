@@ -784,28 +784,28 @@ class TabTerminalActivity : TabSSHActivity() {
                         stateView.imageTintList = ColorStateList.valueOf(
                             ContextCompat.getColor(ctx, R.color.connected)
                         )
-                        stateView.contentDescription = "Connected"
+                        stateView.contentDescription = getString(R.string.accessibility_connected)
                     }
                     ConnectionState.CONNECTING -> {
                         stateView.setImageResource(R.drawable.ic_connecting)
                         stateView.imageTintList = ColorStateList.valueOf(
                             ContextCompat.getColor(ctx, R.color.connecting)
                         )
-                        stateView.contentDescription = "Connecting"
+                        stateView.contentDescription = getString(R.string.accessibility_connecting)
                     }
                     ConnectionState.AUTHENTICATING -> {
                         stateView.setImageResource(R.drawable.ic_connecting)
                         stateView.imageTintList = ColorStateList.valueOf(
                             ContextCompat.getColor(ctx, R.color.connecting)
                         )
-                        stateView.contentDescription = "Authenticating"
+                        stateView.contentDescription = getString(R.string.accessibility_authenticating)
                     }
                     ConnectionState.ERROR -> {
                         stateView.setImageResource(R.drawable.ic_error)
                         stateView.imageTintList = ColorStateList.valueOf(
                             ContextCompat.getColor(ctx, R.color.connection_error)
                         )
-                        stateView.contentDescription = "Connection error"
+                        stateView.contentDescription = getString(R.string.accessibility_connection_error)
                     }
                     ConnectionState.DISCONNECTED -> {
                         stateView.setImageResource(R.drawable.ic_disconnect)
@@ -813,7 +813,7 @@ class TabTerminalActivity : TabSSHActivity() {
                         val ta = ctx.obtainStyledAttributes(onSurfaceVariantAttrs)
                         stateView.imageTintList = ta.getColorStateList(0)
                         ta.recycle()
-                        stateView.contentDescription = "Disconnected"
+                        stateView.contentDescription = getString(R.string.accessibility_disconnected)
                     }
                 }
 
@@ -826,7 +826,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 // Content description for the whole row assists TalkBack.
                 val stateDesc = stateView.contentDescription
                 rowHolder.row.contentDescription =
-                    "${tab.profile.getDisplayName()}, $stateDesc${if (isActive) ", active tab" else ""}"
+                    "${tab.profile.getDisplayName()}, $stateDesc${if (isActive) getString(R.string.terminal_tab_row_active_suffix) else ""}"
 
                 // Right icon: filled checkmark for active row, chevron for others.
                 if (isActive) {
@@ -835,7 +835,7 @@ class TabTerminalActivity : TabSSHActivity() {
                         ContextCompat.getColor(ctx, R.color.connected)
                     )
                     rightView.visibility = View.VISIBLE
-                    rightView.contentDescription = "Active"
+                    rightView.contentDescription = getString(R.string.terminal_tab_row_active)
                 } else {
                     rightView.setImageResource(R.drawable.ic_forward)
                     val onSurfaceVariantAttrs = intArrayOf(com.google.android.material.R.attr.colorOnSurfaceVariant)
@@ -882,7 +882,7 @@ class TabTerminalActivity : TabSSHActivity() {
             }
 
         val keyBarBtn = view.findViewById<MaterialButton>(R.id.btn_toggle_key_bar)
-        keyBarBtn?.text = if (customKeyboardVisible) "Hide Key Bar" else "Show Key Bar"
+        keyBarBtn?.text = if (customKeyboardVisible) getString(R.string.terminal_hide_key_bar) else getString(R.string.terminal_show_key_bar)
         keyBarBtn?.setOnClickListener {
             bottomSheet.dismiss()
             if (customKeyboardVisible) hideCustomKeyboardBar() else showCustomKeyboardBar()
@@ -903,9 +903,9 @@ class TabTerminalActivity : TabSSHActivity() {
         view.findViewById<MaterialButton>(R.id.btn_toggle_recording)
             ?.apply {
                 text = if (tabManager.getActiveTab()?.sessionRecorder?.isRecording() == true) {
-                    "Stop Recording"
+                    getString(R.string.terminal_stop_recording)
                 } else {
-                    "Start Recording"
+                    getString(R.string.terminal_start_recording)
                 }
                 setOnClickListener {
                     bottomSheet.dismiss()
@@ -1225,7 +1225,7 @@ class TabTerminalActivity : TabSSHActivity() {
                             tab.termuxBridge.sendText(String(command, Charsets.UTF_8))
                             Toast.makeText(
                                 this@TabTerminalActivity,
-                                "Gesture command sent",
+                                getString(R.string.terminal_gesture_command_sent),
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
@@ -1331,7 +1331,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 connectSshLink(action)
             }
             .setNeutralButton(R.string.copy) { _, _ ->
-                copyToClipboard("SSH link", action.url)
+                copyToClipboard(getString(R.string.terminal_clip_label_ssh_link), action.url)
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
@@ -1377,7 +1377,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 connectSftpLink(action)
             }
             .setNeutralButton(R.string.copy) { _, _ ->
-                copyToClipboard("SFTP link", action.url)
+                copyToClipboard(getString(R.string.terminal_clip_label_sftp_link), action.url)
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
@@ -1419,10 +1419,13 @@ class TabTerminalActivity : TabSSHActivity() {
     private fun showRemoteFileDialog(action: TerminalLinkClassifier.LinkAction.RemoteFile) {
         val activeTab = tabManager.getActiveTab()
         val canBrowse = activeTab != null && activeTab.isConnected()
+        val openLabel = getString(R.string.terminal_remote_file_open)
+        val openSftpLabel = getString(R.string.terminal_remote_file_open_sftp)
+        val copyPathLabel = getString(R.string.terminal_remote_file_copy_path)
         val items = if (canBrowse) {
-            arrayOf("Open", "Open in SFTP", "Copy path")
+            arrayOf(openLabel, openSftpLabel, copyPathLabel)
         } else {
-            arrayOf("Copy path")
+            arrayOf(copyPathLabel)
         }
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_remote_file_title)
@@ -1430,9 +1433,9 @@ class TabTerminalActivity : TabSSHActivity() {
             .setItems(items) { _, which ->
                 if (which < 0 || which >= items.size) return@setItems
                 when (items[which]) {
-                    "Open" -> openRemoteFileExternally(activeTab!!, action.path)
-                    "Open in SFTP" -> openSftpAtPath(activeTab!!, action.path)
-                    "Copy path" -> copyToClipboard("Path", action.path)
+                    openLabel -> openRemoteFileExternally(activeTab!!, action.path)
+                    openSftpLabel -> openSftpAtPath(activeTab!!, action.path)
+                    copyPathLabel -> copyToClipboard(getString(R.string.terminal_clip_label_path), action.path)
                 }
             }
             .setNegativeButton(R.string.cancel, null)
@@ -1449,14 +1452,14 @@ class TabTerminalActivity : TabSSHActivity() {
     private fun openRemoteFileExternally(tab: SSHTab, path: String) {
         val ssh = app.sshSessionManager.getConnection(tab.profile.id)
         if (ssh == null) {
-            Toast.makeText(this, "Connection not active", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.sftp_error_connection_inactive), Toast.LENGTH_SHORT).show()
             return
         }
         lifecycleScope.launch {
             val sftp = SFTPManager(ssh)
             val connected = withContext(Dispatchers.IO) { sftp.connect() }
             if (!connected) {
-                Toast.makeText(this@TabTerminalActivity, "SFTP failed to open", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@TabTerminalActivity, getString(R.string.remote_editor_sftp_failed), Toast.LENGTH_LONG).show()
                 return@launch
             }
             remoteFileOpener.open(sftp, path, path.substringAfterLast('/'))
@@ -1529,7 +1532,7 @@ class TabTerminalActivity : TabSSHActivity() {
             Logger.d("TabTerminalActivity", "Opening URL: $url")
         } catch (e: Exception) {
             Logger.e("TabTerminalActivity", "Failed to open URL: $url", e)
-            showError("Failed to open URL", "Error")
+            showError(getString(R.string.terminal_error_failed_open_url), getString(R.string.dialog_title_error))
         }
     }
 
@@ -1540,7 +1543,7 @@ class TabTerminalActivity : TabSSHActivity() {
         // Terminal links aren't usually secret; mark non-sensitive so they
         // don't get hidden behind the system clipboard preview shield.
         ClipboardHelper.copy(this, label, text, sensitive = false)
-        Toast.makeText(this, "$label copied to clipboard", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.terminal_copied_to_clipboard_fmt, label), Toast.LENGTH_SHORT).show()
         // Log label + length only — the copied text may be a path or link
         // that reveals private infrastructure details, never the contents.
         Logger.d("TabTerminalActivity", "Copied $label to clipboard (${text.length} chars)")
@@ -1591,10 +1594,10 @@ class TabTerminalActivity : TabSSHActivity() {
         showTechnicalButton?.setOnClickListener {
             if (technicalDetails?.visibility == View.GONE) {
                 technicalDetails.visibility = View.VISIBLE
-                showTechnicalButton.text = "▼ Hide Technical Details"
+                showTechnicalButton.text = getString(R.string.terminal_hide_technical_details)
             } else {
                 technicalDetails?.visibility = View.GONE
-                showTechnicalButton.text = "▶ Show Technical Details"
+                showTechnicalButton.text = getString(R.string.dialog_ssh_error_show_technical)
             }
         }
         
@@ -1608,29 +1611,29 @@ class TabTerminalActivity : TabSSHActivity() {
         dialogView.findViewById<MaterialButton>(R.id.button_copy_error)
             ?.setOnClickListener {
                 val fullError = buildString {
-                    appendLine("=== SSH Connection Error ===")
+                    appendLine(getString(R.string.terminal_error_report_header))
                     appendLine()
-                    appendLine("Connection: ${profile.name ?: profile.getDisplayName()}")
-                    appendLine("Host: ${profile.host}:${profile.port}")
-                    appendLine("Username: ${profile.username}")
-                    appendLine("Auth: ${profile.authType}")
+                    appendLine(getString(R.string.terminal_error_report_connection_fmt, profile.name ?: profile.getDisplayName()))
+                    appendLine(getString(R.string.terminal_error_report_host_fmt, profile.host, profile.port))
+                    appendLine(getString(R.string.terminal_error_report_username_fmt, profile.username))
+                    appendLine(getString(R.string.terminal_error_report_auth_fmt, profile.authType))
                     appendLine()
-                    appendLine("Error Type: ${errorInfo.errorType}")
+                    appendLine(getString(R.string.terminal_error_report_error_type_fmt, errorInfo.errorType))
                     appendLine()
-                    appendLine("Message:")
+                    appendLine(getString(R.string.terminal_error_report_message_label))
                     appendLine(errorInfo.userMessage)
                     appendLine()
-                    appendLine("Technical Details:")
+                    appendLine(getString(R.string.terminal_error_report_technical_label))
                     appendLine(errorInfo.technicalDetails)
                     appendLine()
-                    appendLine("Possible Solutions:")
+                    appendLine(getString(R.string.terminal_error_report_solutions_label))
                     errorInfo.possibleSolutions.forEach {
                         appendLine(it)
                     }
                 }
                 
-                ClipboardHelper.copy(this, "SSH Error", fullError, sensitive = false)
-                Toast.makeText(this, "Error details copied to clipboard", Toast.LENGTH_SHORT).show()
+                ClipboardHelper.copy(this, getString(R.string.terminal_clip_label_ssh_error), fullError, sensitive = false)
+                Toast.makeText(this, getString(R.string.terminal_error_details_copied), Toast.LENGTH_SHORT).show()
             }
         
         // Edit Connection button
@@ -1675,7 +1678,7 @@ class TabTerminalActivity : TabSSHActivity() {
     private fun showClusterBroadcastDialog() {
         val tabs = tabManager.getAllTabs()
         if (tabs.isEmpty()) {
-            Toast.makeText(this, "No active sessions", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_no_active_sessions), Toast.LENGTH_SHORT).show()
             return
         }
         // setMessage and setView both occupy the dialog body — using both silently
@@ -1695,7 +1698,7 @@ class TabTerminalActivity : TabSSHActivity() {
             .setPositiveButton(R.string.next) { _, _ ->
                 val cmd = input.text.toString()
                 if (cmd.isBlank()) {
-                    Toast.makeText(this, "Empty command", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.terminal_empty_command), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 // Confirm step — the user explicitly asked for it. Lists
@@ -1704,11 +1707,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 val hostList = tabs.joinToString("\n") { "• ${it.profile.getDisplayName()}" }
                 MaterialAlertDialogBuilder(this)
                     .setTitle(R.string.terminal_confirm_broadcast_title)
-                    .setMessage(
-                        "Send to ${tabs.size} session(s)?\n\n" +
-                        "Command: $cmd\n\n" +
-                        hostList
-                    )
+                    .setMessage(getString(R.string.terminal_confirm_broadcast_message, tabs.size, cmd, hostList))
                     .setNegativeButton(R.string.cancel, null)
                     .setPositiveButton(R.string.terminal_send_to_all) { _, _ ->
                         val payload = (cmd + "\n").toByteArray(Charsets.UTF_8)
@@ -1727,7 +1726,7 @@ class TabTerminalActivity : TabSSHActivity() {
                                 Logger.w("TabTerminalActivity", "Cluster send to ${tab.profile.getDisplayName()} failed", e)
                             }
                         }
-                        Toast.makeText(this, "Sent to $sent / ${tabs.size}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.terminal_sent_to_fmt, sent, tabs.size), Toast.LENGTH_SHORT).show()
                     }
                     .show()
             }
@@ -1757,7 +1756,7 @@ class TabTerminalActivity : TabSSHActivity() {
         // a null controller. Re-attempt here against the live active view.
         if (searchController == null) setupSearchOverlay()
         val controller = searchController ?: run {
-            Toast.makeText(this, "No active session", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_no_active_session), Toast.LENGTH_SHORT).show()
             return
         }
         controller.show()
@@ -1769,16 +1768,16 @@ class TabTerminalActivity : TabSSHActivity() {
     private fun copyTerminalScreen() {
         val tab = tabManager.getActiveTab()
         if (tab == null) {
-            Toast.makeText(this, "No active session", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_no_active_session), Toast.LENGTH_SHORT).show()
             return
         }
         val visible = try { tab.getTerminalContent() } catch (e: Exception) { "" }
         if (visible.isBlank()) {
-            Toast.makeText(this, "Nothing on screen to copy", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_nothing_on_screen_to_copy), Toast.LENGTH_SHORT).show()
             return
         }
-        ClipboardHelper.copy(this, "Terminal", visible, sensitive = false)
-        Toast.makeText(this, "Terminal screen copied", Toast.LENGTH_SHORT).show()
+        ClipboardHelper.copy(this, getString(R.string.terminal_clip_label_terminal), visible, sensitive = false)
+        Toast.makeText(this, getString(R.string.terminal_screen_copied), Toast.LENGTH_SHORT).show()
     }
 
     /**
@@ -1794,7 +1793,7 @@ class TabTerminalActivity : TabSSHActivity() {
 
     private fun beginSelection(x: Float, y: Float) {
         val view = getActiveTerminalView() ?: run {
-            Toast.makeText(this, "No active session", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_no_active_session), Toast.LENGTH_SHORT).show()
             return
         }
         // beginWordSelectionAtTouch: expands to the word under the finger,
@@ -1817,15 +1816,15 @@ class TabTerminalActivity : TabSSHActivity() {
         val callback = object : ActionMode.Callback {
             override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
                 mode.title = null
-                menu.add(0, 1, 0, "Copy")
+                menu.add(0, 1, 0, getString(R.string.terminal_selection_menu_copy))
                     .setIcon(android.R.drawable.ic_menu_set_as)
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-                menu.add(0, 2, 1, "Select All")
+                menu.add(0, 2, 1, getString(R.string.terminal_selection_menu_select_all))
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-                menu.add(0, 3, 2, "Paste")
+                menu.add(0, 3, 2, getString(R.string.terminal_selection_menu_paste))
                     .setIcon(android.R.drawable.ic_input_add)
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                menu.add(0, 4, 3, "Cancel")
+                menu.add(0, 4, 3, getString(R.string.terminal_selection_menu_cancel))
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
                 return true
             }
@@ -1835,10 +1834,10 @@ class TabTerminalActivity : TabSSHActivity() {
                     1 -> {
                         val text = view.getSelectedText()
                         if (text.isNullOrEmpty()) {
-                            Toast.makeText(this@TabTerminalActivity, "Nothing selected", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_nothing_selected), Toast.LENGTH_SHORT).show()
                         } else {
-                            ClipboardHelper.copy(this@TabTerminalActivity, "Terminal selection", text, sensitive = false)
-                            Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
+                            ClipboardHelper.copy(this@TabTerminalActivity, getString(R.string.terminal_clip_label_selection), text, sensitive = false)
+                            Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_copied_toast), Toast.LENGTH_SHORT).show()
                         }
                         mode.finish()
                         return true
@@ -1859,7 +1858,7 @@ class TabTerminalActivity : TabSSHActivity() {
                         val text = clipboard.primaryClip?.getItemAt(0)
                             ?.coerceToText(this@TabTerminalActivity)?.toString()
                         if (text.isNullOrEmpty()) {
-                            Toast.makeText(this@TabTerminalActivity, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_clipboard_empty), Toast.LENGTH_SHORT).show()
                         } else {
                             view.pasteText(text)
                         }
@@ -2015,21 +2014,25 @@ class TabTerminalActivity : TabSSHActivity() {
         val profile = currentTab?.profile
         
         val shareText = buildString {
-            append("TabSSH Session\n\n")
+            append(getString(R.string.terminal_share_session_header))
+            append("\n\n")
             profile?.let { p ->
-                append("Host: ${p.host}\n")
-                append("Port: ${p.port}\n")
-                append("User: ${p.username}\n")
+                append(getString(R.string.terminal_share_session_host_fmt, p.host))
+                append("\n")
+                append(getString(R.string.terminal_share_session_port_fmt, p.port))
+                append("\n")
+                append(getString(R.string.terminal_share_session_user_fmt, p.username))
+                append("\n")
             }
         }
-        
+
         val sendIntent = Intent().apply {
             action = Intent.ACTION_SEND
             putExtra(Intent.EXTRA_TEXT, shareText)
             type = "text/plain"
         }
-        
-        startActivity(Intent.createChooser(sendIntent, "Share session info"))
+
+        startActivity(Intent.createChooser(sendIntent, getString(R.string.terminal_share_session_chooser_title)))
     }
     
     private fun setupPerformanceOverlay() {
@@ -2100,7 +2103,7 @@ class TabTerminalActivity : TabSSHActivity() {
                     connectToProfile(profile)
                 } else {
                     Logger.w("TabTerminalActivity", "Widget connection profile not found: $widgetConnectionId")
-                    Toast.makeText(this@TabTerminalActivity, "Connection not found", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_connection_not_found), Toast.LENGTH_SHORT).show()
                 }
             }
             return
@@ -2179,7 +2182,7 @@ class TabTerminalActivity : TabSSHActivity() {
                     }
                 } else {
                     Logger.e("TabTerminalActivity", "Profile not found for ID: $connectionProfileId")
-                    Toast.makeText(this@TabTerminalActivity, "Connection profile not found", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_connection_profile_not_found), Toast.LENGTH_SHORT).show()
                 }
             }
         } else {
@@ -2219,7 +2222,7 @@ class TabTerminalActivity : TabSSHActivity() {
                             if (!isRecreated) {
                                 Toast.makeText(
                                     this,
-                                    "Reattached to ${profile.name}",
+                                    getString(R.string.terminal_reattached_to_fmt, profile.name),
                                     Toast.LENGTH_SHORT
                                 ).show()
                             }
@@ -2260,7 +2263,7 @@ class TabTerminalActivity : TabSSHActivity() {
 
             Logger.i("TabTerminalActivity", "🚀 Starting connection to ${profile.getDisplayName()}")
             runOnUiThread {
-                Toast.makeText(this, "Connecting to ${profile.name}...", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.xcpng_connecting_fmt, profile.name), Toast.LENGTH_SHORT).show()
             }
 
             // Resolve linked identity if set (for effective credentials)
@@ -2319,14 +2322,14 @@ class TabTerminalActivity : TabSSHActivity() {
 
             if (needPasswordPrompt) {
                 val promptMessage = if (effectiveAuthType == AuthType.PUBLIC_KEY && !keyAvailable) {
-                    "SSH key not found. Enter password for $effectiveUsername@${profile.host}"
+                    getString(R.string.terminal_ssh_key_not_found_prompt_fmt, effectiveUsername, profile.host)
                 } else {
-                    "Password required for $effectiveUsername@${profile.host}"
+                    getString(R.string.terminal_password_required_prompt_fmt, effectiveUsername, profile.host)
                 }
                 val enteredPassword = promptForPassword(promptMessage)
                 if (enteredPassword == null) {
                     Logger.i("TabTerminalActivity", "User cancelled password prompt - closing activity")
-                    Toast.makeText(this, "Connection cancelled", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.terminal_connection_cancelled), Toast.LENGTH_SHORT).show()
                     finish()
                     return
                 }
@@ -2422,15 +2425,15 @@ class TabTerminalActivity : TabSSHActivity() {
                                     sshConnection, handoff.info.serverPid, handoff.info.port
                                 )
                                 connected = tab.connect(sshConnection)
-                                showToast(if (moshMode == "on") "Mosh failed — using SSH" else "Connected to ${profile.getDisplayName()}")
+                                showToast(if (moshMode == "on") getString(R.string.terminal_mosh_failed_using_ssh) else getString(R.string.terminal_connected_to_fmt, profile.getDisplayName()))
                             }
                         } else {
                             val errMsg = (handoff as? MoshHandoff.Result.Error)?.message
                             Logger.w("TabTerminalActivity", "Mosh bootstrap failed: $errMsg")
                             connected = tab.connect(sshConnection)
                             showToast(when {
-                                moshMode == "on" -> "Mosh not available — using SSH"
-                                else -> "Connected to ${profile.getDisplayName()}"
+                                moshMode == "on" -> getString(R.string.terminal_mosh_not_available_using_ssh)
+                                else -> getString(R.string.terminal_connected_to_fmt, profile.getDisplayName())
                             })
                         }
                     } else if (moshMode != "off" && !binaryAvailable) {
@@ -2438,15 +2441,15 @@ class TabTerminalActivity : TabSSHActivity() {
                         // Open SSH shell; for "on" offer the server-side handoff.
                         connected = tab.connect(sshConnection)
                         if (connected && moshMode == "on") {
-                            showToast("Connected to ${profile.getDisplayName()}")
+                            showToast(getString(R.string.terminal_connected_to_fmt, profile.getDisplayName()))
                             runOnUiThread { showMoshHandoff() }
                         } else {
-                            showToast("Connected to ${profile.getDisplayName()}")
+                            showToast(getString(R.string.terminal_connected_to_fmt, profile.getDisplayName()))
                         }
                     } else {
                         // "off" mode — plain SSH shell.
                         connected = tab.connect(sshConnection)
-                        showToast("Connected to ${profile.getDisplayName()}")
+                        showToast(getString(R.string.terminal_connected_to_fmt, profile.getDisplayName()))
                     }
                     if (connected) {
                         Logger.i("TabTerminalActivity", "TERMINAL CONNECTED SUCCESSFULLY to ${profile.getDisplayName()}")
@@ -2493,7 +2496,7 @@ class TabTerminalActivity : TabSSHActivity() {
                         // here — it'd duplicate the service-posted row.
                     } else {
                         Logger.e("TabTerminalActivity", "Failed to connect terminal to SSH for ${profile.getDisplayName()}")
-                        showError("Failed to connect terminal", "Error")
+                        showError(getString(R.string.terminal_error_failed_connect_terminal), getString(R.string.dialog_title_error))
                         
                         // Check for detailed error info
                         val errorInfo = sshConnection.detailedError.value
@@ -2518,8 +2521,8 @@ class TabTerminalActivity : TabSSHActivity() {
                     val limit = tabManager.getTabCount()
                     Logger.e("TabTerminalActivity", "Tab limit reached ($limit tabs open) — cannot open ${profile.getDisplayName()}")
                     showError(
-                        "Tab limit reached ($limit tabs open). Close a tab before opening a new one.",
-                        "Cannot open tab"
+                        getString(R.string.terminal_tab_limit_reached_fmt, limit),
+                        getString(R.string.terminal_cannot_open_tab_title)
                     )
                     // Tear down the SSH connection we just established — it can never
                     // be wired to a tab and would otherwise leak until process exit.
@@ -2549,13 +2552,13 @@ class TabTerminalActivity : TabSSHActivity() {
                     )
                 } else {
                     // Fallback to simple toast if no detailed error available
-                    showError("Connection failed: ssh ${profile.username}@${profile.host}:${profile.port}", "Error")
+                    showError(getString(R.string.terminal_ssh_connection_failed_fmt, profile.username, profile.host, profile.port), getString(R.string.dialog_title_error))
 
                     // Show generic error notification
                     NotificationHelper.showConnectionError(
                         this,
                         profile.getDisplayName(),
-                        "Connection failed: ssh ${profile.username}@${profile.host}:${profile.port}"
+                        getString(R.string.terminal_ssh_connection_failed_fmt, profile.username, profile.host, profile.port)
                     )
 
                     // No tab, no session — close the activity so the user is not
@@ -2578,19 +2581,19 @@ class TabTerminalActivity : TabSSHActivity() {
 
             // Try to create a detailed error info from the exception
             val errorInfo = SSHConnectionErrorInfo(
-                errorType = "Connection Error",
-                userMessage = e.message ?: "Unknown error occurred",
+                errorType = getString(R.string.terminal_connection_error_title),
+                userMessage = e.message ?: getString(R.string.terminal_error_unknown_occurred),
                 technicalDetails = buildString {
-                    appendLine("Exception: ${e.javaClass.simpleName}")
-                    appendLine("Message: ${e.message}")
-                    appendLine("\nStack Trace:")
+                    appendLine(getString(R.string.terminal_error_exception_fmt, e.javaClass.simpleName))
+                    appendLine(getString(R.string.terminal_error_message_fmt, e.message))
+                    appendLine(getString(R.string.terminal_error_stack_trace_label))
                     appendLine(e.stackTraceToString())
                 },
                 possibleSolutions = listOf(
-                    "• Try restarting the app",
-                    "• Check connection settings",
-                    "• Verify network connectivity",
-                    "• Check app logs for more details"
+                    getString(R.string.terminal_error_solution_restart_app),
+                    getString(R.string.terminal_error_solution_check_settings),
+                    getString(R.string.terminal_error_solution_verify_network),
+                    getString(R.string.terminal_error_solution_check_logs)
                 ),
                 exception = e
             )
@@ -2619,7 +2622,7 @@ class TabTerminalActivity : TabSSHActivity() {
         val tab = tabManager.createTab(profile, cursorStyle, app.preferencesManager.getTranscriptRows())
         if (tab == null) {
             Logger.e("TabTerminalActivity", "Failed to create tab for ${profile.getDisplayName()}")
-            showError("Failed to create terminal tab", "Error")
+            showError(getString(R.string.terminal_error_failed_create_tab), getString(R.string.dialog_title_error))
             finish()
             return
         }
@@ -2627,7 +2630,7 @@ class TabTerminalActivity : TabSSHActivity() {
 
         val ok = tab.connect(telnet)
         if (ok) {
-            showToast("Connected (telnet) to ${profile.getDisplayName()}")
+            showToast(getString(R.string.terminal_connected_telnet_fmt, profile.getDisplayName()))
             try {
                 app.database.connectionDao().updateLastConnected(profile.id)
             } catch (e: Exception) {
@@ -2637,9 +2640,9 @@ class TabTerminalActivity : TabSSHActivity() {
             // (also for telnet — the service tracks the wrapper state). No
             // legacy showConnectionSuccess here.
         } else {
-            showError("Telnet connection to ${profile.host}:${profile.port} failed", "Connection Error")
+            showError(getString(R.string.terminal_telnet_connection_failed_fmt, profile.host, profile.port), getString(R.string.terminal_connection_error_title))
             NotificationHelper.showConnectionError(
-                this, profile.getDisplayName(), "Connection failed: telnet ${profile.host}:${profile.port.takeIf { it > 0 } ?: 23}"
+                this, profile.getDisplayName(), getString(R.string.terminal_telnet_connect_failed_fmt, profile.host, profile.port.takeIf { it > 0 } ?: 23)
             )
             finish()
         }
@@ -2713,7 +2716,7 @@ class TabTerminalActivity : TabSSHActivity() {
                     tab.termuxBridge.sendText(String(command, Charsets.UTF_8))
                     Toast.makeText(
                         this,
-                        "Gesture command sent",
+                        getString(R.string.terminal_gesture_command_sent),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -2926,7 +2929,7 @@ class TabTerminalActivity : TabSSHActivity() {
         req: SSHTab.MultiplexerAskRequest
     ) {
         if (multiplexerAskDialog?.isShowing == true || multiplexerCreateDialog?.isShowing == true) return
-        val labels = req.sessions.map { "Attach: $it" } + "Create new session"
+        val labels = req.sessions.map { getString(R.string.terminal_multiplexer_attach_fmt, it) } + getString(R.string.terminal_multiplexer_create_new_session)
         multiplexerAskDialog = MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.terminal_multiplexer_sessions_title, req.type, tab.profile.host))
             .setItems(labels.toTypedArray()) { _, which ->
@@ -3534,10 +3537,10 @@ class TabTerminalActivity : TabSSHActivity() {
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "VNC reconnect failed for '${host.name}'", e)
                 if (!isFinishing && !isDestroyed) {
-                    showToast("Reconnect failed: ${e.message}")
+                    showToast(getString(R.string.terminal_reconnect_failed_fmt, e.message))
                     // Put the decision back in front of the user.
                     showConsoleReconnectDialog(
-                        Tab.Vnc(vncTab), e.message ?: "Connection failed")
+                        Tab.Vnc(vncTab), e.message ?: getString(R.string.error_connection_failed))
                 }
             }
         }
@@ -3599,12 +3602,12 @@ class TabTerminalActivity : TabSSHActivity() {
     private fun showHistoryPalette() {
         val active = tabManager.getActiveTab()
         if (active == null) {
-            Toast.makeText(this, "No active tab", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_no_active_tab), Toast.LENGTH_SHORT).show()
             return
         }
         val ssh = active.connection
         if (ssh == null) {
-            Toast.makeText(this, "Not an SSH tab — history needs a live SSH session", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_not_ssh_tab_history), Toast.LENGTH_SHORT).show()
             return
         }
         val cached = historyCache[active.tabId]
@@ -3612,13 +3615,13 @@ class TabTerminalActivity : TabSSHActivity() {
             showHistoryDialog(cached)
             return
         }
-        Toast.makeText(this, "Fetching history…", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.terminal_fetching_history), Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             val hist = HistoryFetcher(ssh).fetch()
             historyCache[active.tabId] = hist
             runOnUiThread {
                 if (hist.isEmpty()) {
-                    Toast.makeText(this@TabTerminalActivity, "No history found (or files unreadable)", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_no_history_found), Toast.LENGTH_LONG).show()
                 } else {
                     showHistoryDialog(hist)
                 }
@@ -3633,7 +3636,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 subtitle = null
             ) { getActiveTerminalView()?.sendText(line) }
         }
-        PaletteDialog.show(this, "Remote history (${history.size})", items)
+        PaletteDialog.show(this, getString(R.string.terminal_remote_history_title_fmt, history.size), items)
     }
 
     /**
@@ -3652,7 +3655,7 @@ class TabTerminalActivity : TabSSHActivity() {
     private fun showBroadcastTargetsDialog() {
         val tabs = tabManager.getAllTabs()
         if (tabs.size < 2) {
-            Toast.makeText(this, "Open at least 2 tabs first", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_open_at_least_2_tabs), Toast.LENGTH_SHORT).show()
             return
         }
         val active = tabManager.getActiveTab()
@@ -3685,9 +3688,9 @@ class TabTerminalActivity : TabSSHActivity() {
         tabManager.getAllTabs().filter { it.tabId != active.tabId }
             .forEach { it.termuxBridge.broadcastTargets = emptyList() }
         if (targetStreams.isEmpty()) {
-            Toast.makeText(this, "Broadcast off", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_broadcast_off), Toast.LENGTH_SHORT).show()
         } else {
-            Toast.makeText(this, "Broadcasting to ${targetStreams.size} tab(s)", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_broadcasting_to_tabs_fmt, targetStreams.size), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -3700,7 +3703,7 @@ class TabTerminalActivity : TabSSHActivity() {
     private fun showSaveWorkspaceDialog() {
         val tabs = tabManager.getAllTabs()
         if (tabs.isEmpty()) {
-            Toast.makeText(this, "No open tabs", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_no_open_tabs), Toast.LENGTH_SHORT).show()
             return
         }
         val form = DialogFields.form(this)
@@ -3725,7 +3728,7 @@ class TabTerminalActivity : TabSSHActivity() {
                             )
                         }
                         runOnUiThread {
-                            Toast.makeText(this@TabTerminalActivity, "Saved workspace '$name'", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_saved_workspace_fmt, name), Toast.LENGTH_SHORT).show()
                         }
                     } catch (e: Exception) {
                         Logger.e("TabTerminalActivity", "Save workspace failed", e)
@@ -3746,7 +3749,7 @@ class TabTerminalActivity : TabSSHActivity() {
             }
             runOnUiThread {
                 if (all.isEmpty()) {
-                    Toast.makeText(this@TabTerminalActivity, "No workspaces saved", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_no_workspaces_saved), Toast.LENGTH_SHORT).show()
                     return@runOnUiThread
                 }
                 val labels = all.map { ws ->
@@ -3772,7 +3775,7 @@ class TabTerminalActivity : TabSSHActivity() {
             emptyList()
         }
         if (ids.isEmpty()) {
-            Toast.makeText(this, "Workspace is empty", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_workspace_empty), Toast.LENGTH_SHORT).show()
             return
         }
         lifecycleScope.launch {
@@ -3811,7 +3814,7 @@ class TabTerminalActivity : TabSSHActivity() {
                             TombstoneRecorder.record(app, TombstoneRecorder.WORKSPACE, ws.id)
                         }
                         runOnUiThread {
-                            Toast.makeText(this@TabTerminalActivity, "Deleted '${ws.name}'", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_deleted_workspace_fmt, ws.name), Toast.LENGTH_SHORT).show()
                         }
                     } catch (e: Exception) {
                         Logger.e("TabTerminalActivity", "Delete workspace failed", e)
@@ -3847,7 +3850,7 @@ class TabTerminalActivity : TabSSHActivity() {
 
     private fun showSplitConnectionPicker() {
         if (splitTab != null) {
-            Toast.makeText(this, "Already split — close the bottom pane first", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_already_split), Toast.LENGTH_SHORT).show()
             return
         }
         lifecycleScope.launch {
@@ -3859,7 +3862,7 @@ class TabTerminalActivity : TabSSHActivity() {
             }
             runOnUiThread {
                 if (recent.isEmpty()) {
-                    Toast.makeText(this@TabTerminalActivity, "No saved connections", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@TabTerminalActivity, getString(R.string.dashboard_no_saved_connections), Toast.LENGTH_SHORT).show()
                     return@runOnUiThread
                 }
                 val labels = recent.map { it.getDisplayName() }.toTypedArray()
@@ -3902,11 +3905,11 @@ class TabTerminalActivity : TabSSHActivity() {
                     delay(150)
                     if (newTab.connect(telnet)) {
                         splitTab = newTab
-                        runOnUiThread { Toast.makeText(this@TabTerminalActivity, "Split (telnet) ready", Toast.LENGTH_SHORT).show() }
+                        runOnUiThread { Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_split_telnet_ready), Toast.LENGTH_SHORT).show() }
                     } else {
                         runOnUiThread {
                             pane.visibility = View.GONE
-                            Toast.makeText(this@TabTerminalActivity, "Split failed: telnet ${profile.host}:${profile.port.takeIf { it > 0 } ?: 23}", Toast.LENGTH_LONG).show()
+                            Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_split_failed_telnet_fmt, profile.host, profile.port.takeIf { it > 0 } ?: 23), Toast.LENGTH_LONG).show()
                         }
                     }
                 } catch (e: CancellationException) {
@@ -3922,7 +3925,7 @@ class TabTerminalActivity : TabSSHActivity() {
             if (ssh == null) {
                 runOnUiThread {
                     pane.visibility = View.GONE
-                    Toast.makeText(this@TabTerminalActivity, "Split failed: ssh ${profile.username}@${profile.host}:${profile.port}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_split_failed_ssh_fmt, profile.username, profile.host, profile.port), Toast.LENGTH_LONG).show()
                 }
                 return@launch
             }
@@ -3939,12 +3942,12 @@ class TabTerminalActivity : TabSSHActivity() {
                 if (newTab.connect(ssh)) {
                     splitTab = newTab
                     runOnUiThread {
-                        Toast.makeText(this@TabTerminalActivity, "Split: ${profile.getDisplayName()}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_split_display_fmt, profile.getDisplayName()), Toast.LENGTH_SHORT).show()
                     }
                 } else {
                     runOnUiThread {
                         pane.visibility = View.GONE
-                        Toast.makeText(this@TabTerminalActivity, "Split failed: ssh ${profile.username}@${profile.host}:${profile.port}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_split_failed_ssh_fmt, profile.username, profile.host, profile.port), Toast.LENGTH_LONG).show()
                     }
                 }
             } catch (e: CancellationException) {
@@ -3963,7 +3966,7 @@ class TabTerminalActivity : TabSSHActivity() {
     private fun closeSplitPane() {
         val tab = splitTab
         if (tab == null) {
-            Toast.makeText(this, "No split pane", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_no_split_pane), Toast.LENGTH_SHORT).show()
             return
         }
         // Disconnect work is blocking I/O (JSch socket teardown + termux
@@ -3980,7 +3983,7 @@ class TabTerminalActivity : TabSSHActivity() {
         bottomTerminalView = null
         bottomPaneFocused = false
         findViewById<View>(R.id.split_bottom_pane).visibility = View.GONE
-        Toast.makeText(this, "Split pane closed", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.terminal_split_pane_closed), Toast.LENGTH_SHORT).show()
     }
 
     private fun setBottomPaneFocused(focus: Boolean) {
@@ -3992,7 +3995,7 @@ class TabTerminalActivity : TabSSHActivity() {
         bottomPaneFocused = focus
         // No theme-aware tinting yet — just announce so user notices.
         if (changed) {
-            val msg = if (focus) "Bottom pane focused" else "Top pane focused"
+            val msg = if (focus) getString(R.string.terminal_bottom_pane_focused) else getString(R.string.terminal_top_pane_focused)
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
     }
@@ -4004,18 +4007,18 @@ class TabTerminalActivity : TabSSHActivity() {
      */
     private fun toggleMacroRecording() {
         val active = tabManager.getActiveTab() ?: run {
-            Toast.makeText(this, "No active tab", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_no_active_tab), Toast.LENGTH_SHORT).show()
             return
         }
         val bridge = active.termuxBridge
         if (!bridge.isRecordingMacro()) {
             bridge.startMacroRecording()
-            Toast.makeText(this, "Recording macro — replay menu to stop", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_recording_macro), Toast.LENGTH_SHORT).show()
             return
         }
         val bytes = bridge.stopMacroRecording()
         if (bytes.isEmpty()) {
-            Toast.makeText(this, "No keystrokes recorded", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_no_keystrokes_recorded), Toast.LENGTH_SHORT).show()
             return
         }
         val form = DialogFields.form(this)
@@ -4026,7 +4029,7 @@ class TabTerminalActivity : TabSSHActivity() {
             .setTitle(getString(R.string.terminal_save_macro_title, bytes.size))
             .setView(form.root)
             .setPositiveButton(R.string.save) { _, _ ->
-                val name = input.text.toString().trim().ifBlank { "Macro ${System.currentTimeMillis()}" }
+                val name = input.text.toString().trim().ifBlank { getString(R.string.terminal_macro_default_name_fmt, System.currentTimeMillis()) }
                 lifecycleScope.launch {
                     try {
                         withContext(Dispatchers.IO) {
@@ -4034,10 +4037,10 @@ class TabTerminalActivity : TabSSHActivity() {
                                 Macro.fromBytes(name, bytes)
                             )
                         }
-                        Toast.makeText(this@TabTerminalActivity, "Saved \"$name\"", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@TabTerminalActivity, getString(R.string.main_quick_connect_saved, name), Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
                         Logger.e("TabTerminalActivity", "Failed to save macro", e)
-                        showError("Failed to save macro: ${e.message}", "Macro error")
+                        showError(getString(R.string.terminal_error_failed_save_macro_fmt, e.message), getString(R.string.terminal_macro_error_title))
                     }
                 }
             }
@@ -4052,7 +4055,7 @@ class TabTerminalActivity : TabSSHActivity() {
      */
     private fun showMacroPicker() {
         val active = tabManager.getActiveTab() ?: run {
-            Toast.makeText(this, "No active tab", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_no_active_tab), Toast.LENGTH_SHORT).show()
             return
         }
         lifecycleScope.launch {
@@ -4062,7 +4065,7 @@ class TabTerminalActivity : TabSSHActivity() {
                     emptyList()
                 }
             if (macros.isEmpty()) {
-                Toast.makeText(this@TabTerminalActivity, "No saved macros — record one first", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_no_saved_macros), Toast.LENGTH_LONG).show()
                 return@launch
             }
             val labels = macros.map { "${it.name} (${it.decodedSequence().size}b)" }.toTypedArray()
@@ -4093,15 +4096,15 @@ class TabTerminalActivity : TabSSHActivity() {
     private fun showMoshHandoff() {
         val active = tabManager.getActiveTab()
         if (active == null) {
-            Toast.makeText(this, "No active tab", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_no_active_tab), Toast.LENGTH_SHORT).show()
             return
         }
         val ssh = active.connection
         if (ssh == null) {
-            Toast.makeText(this, "Mosh handoff needs an active SSH session", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.terminal_mosh_handoff_needs_ssh), Toast.LENGTH_LONG).show()
             return
         }
-        Toast.makeText(this, "Bootstrapping mosh-server…", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.terminal_bootstrapping_mosh_server), Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             val res = MoshHandoff.bootstrap(
                 ssh,
@@ -4134,12 +4137,12 @@ class TabTerminalActivity : TabSSHActivity() {
                                     )
                                     if (!ok) {
                                         Toast.makeText(this@TabTerminalActivity,
-                                            "Termux refused — check RUN_COMMAND permission + allow-external-apps", Toast.LENGTH_LONG).show()
+                                            getString(R.string.terminal_termux_refused), Toast.LENGTH_LONG).show()
                                     }
                                 }
                                 .setNeutralButton(R.string.terminal_copy_command) { _, _ ->
-                                    ClipboardHelper.copy(this@TabTerminalActivity, "mosh handoff", cmd, sensitive = false)
-                                    Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
+                                    ClipboardHelper.copy(this@TabTerminalActivity, getString(R.string.terminal_clip_label_mosh_handoff), cmd, sensitive = false)
+                                    Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_copied_toast), Toast.LENGTH_SHORT).show()
                                 }
                                 .setNegativeButton(R.string.close, null)
                             }
@@ -4148,8 +4151,8 @@ class TabTerminalActivity : TabSSHActivity() {
                                     getString(R.string.terminal_mosh_termux_no_mosh_message, info.port, cmd)
                                 )
                                 .setPositiveButton(R.string.terminal_copy_command) { _, _ ->
-                                    ClipboardHelper.copy(this@TabTerminalActivity, "mosh handoff", cmd, sensitive = false)
-                                    Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
+                                    ClipboardHelper.copy(this@TabTerminalActivity, getString(R.string.terminal_clip_label_mosh_handoff), cmd, sensitive = false)
+                                    Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_copied_toast), Toast.LENGTH_SHORT).show()
                                 }
                                 .setNegativeButton(R.string.close, null)
                             }
@@ -4161,8 +4164,8 @@ class TabTerminalActivity : TabSSHActivity() {
                                     termuxLauncher.openTermuxListing(this@TabTerminalActivity)
                                 }
                                 .setNeutralButton(R.string.terminal_copy_command) { _, _ ->
-                                    ClipboardHelper.copy(this@TabTerminalActivity, "mosh handoff", cmd, sensitive = false)
-                                    Toast.makeText(this@TabTerminalActivity, "Copied", Toast.LENGTH_SHORT).show()
+                                    ClipboardHelper.copy(this@TabTerminalActivity, getString(R.string.terminal_clip_label_mosh_handoff), cmd, sensitive = false)
+                                    Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_copied_toast), Toast.LENGTH_SHORT).show()
                                 }
                                 .setNegativeButton(R.string.close, null)
                             }
@@ -4170,7 +4173,7 @@ class TabTerminalActivity : TabSSHActivity() {
                         builder.show()
                     }
                     is MoshHandoff.Result.Error -> {
-                        showError(res.message, "Mosh handoff failed")
+                        showError(res.message, getString(R.string.terminal_mosh_handoff_failed_title))
                     }
                 }
             }
@@ -4180,7 +4183,7 @@ class TabTerminalActivity : TabSSHActivity() {
     private fun openPortForwarding() {
         val activeTab = tabManager.getActiveTab()
         if (activeTab == null) {
-            Toast.makeText(this, "No active connection", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_no_active_connection), Toast.LENGTH_SHORT).show()
             return
         }
         
@@ -4195,8 +4198,8 @@ class TabTerminalActivity : TabSSHActivity() {
         if (activeTab.sessionRecorder?.isRecording() == true) {
             // Stop recording
             activeTab.sessionRecorder?.stopRecording()
-            menuItem?.title = "Start Recording"
-            Toast.makeText(this, "Recording stopped", Toast.LENGTH_SHORT).show()
+            menuItem?.title = getString(R.string.terminal_start_recording)
+            Toast.makeText(this, getString(R.string.terminal_recording_stopped), Toast.LENGTH_SHORT).show()
         } else {
             // Start recording
             if (activeTab.sessionRecorder == null) {
@@ -4206,8 +4209,8 @@ class TabTerminalActivity : TabSSHActivity() {
                 )
             }
             activeTab.sessionRecorder?.startRecording()
-            menuItem?.title = "Stop Recording"
-            Toast.makeText(this, "Recording started", Toast.LENGTH_SHORT).show()
+            menuItem?.title = getString(R.string.terminal_stop_recording)
+            Toast.makeText(this, getString(R.string.terminal_recording_started), Toast.LENGTH_SHORT).show()
         }
         updateRecordingKeyIndicator()
     }
@@ -4466,41 +4469,41 @@ class TabTerminalActivity : TabSSHActivity() {
      */
     private fun showCommandPalette() {
         val items = mutableListOf<PaletteDialog.Item>()
-        items += PaletteDialog.Item("Settings", "Open settings") {
+        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_settings), getString(R.string.terminal_cmdpalette_settings_sub)) {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
-        items += PaletteDialog.Item("Theme Editor", "Create or edit a custom terminal theme") {
+        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_theme_editor), getString(R.string.terminal_cmdpalette_theme_editor_sub)) {
             startActivity(ThemeEditorActivity.createIntent(this))
         }
-        items += PaletteDialog.Item("SSH Keys", "Manage SSH private keys & certificates") {
+        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_ssh_keys), getString(R.string.terminal_cmdpalette_ssh_keys_sub)) {
             val intent = Intent(this, MainActivity::class.java)
             intent.putExtra("start_tab", 2)
             intent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             startActivity(intent)
         }
-        items += PaletteDialog.Item("Snippets", "Reusable command snippets") {
+        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_snippets), getString(R.string.terminal_cmdpalette_snippets_sub)) {
             startActivity(Intent(this, SnippetManagerActivity::class.java))
         }
-        items += PaletteDialog.Item("Port Forwarding", "Local / Remote / SOCKS tunnels") {
+        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_port_forwarding), getString(R.string.terminal_cmdpalette_port_forwarding_sub)) {
             startActivity(Intent(this, PortForwardingActivity::class.java))
         }
-        items += PaletteDialog.Item("Find in scrollback", "Search current tab's history") {
+        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_find_scrollback), getString(R.string.terminal_cmdpalette_find_scrollback_sub)) {
             showSearchOverlay()
         }
-        items += PaletteDialog.Item("Close current tab", null) { closeCurrentTab() }
-        items += PaletteDialog.Item("Increase font size", "Ctrl+= (or Volume Up)") { adjustFontSize(+2) }
-        items += PaletteDialog.Item("Decrease font size", "Ctrl+- (or Volume Down)") { adjustFontSize(-2) }
-        items += PaletteDialog.Item("Reset font size", "Ctrl+0") { resetFontSize() }
-        items += PaletteDialog.Item("Toggle keyboard", null) { toggleKeyboard() }
-        val barLabel = if (customKeyboardVisible) "Hide key bar" else "Show key bar"
-        items += PaletteDialog.Item(barLabel, "Show or hide the custom function-key bar") {
+        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_close_tab), null) { closeCurrentTab() }
+        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_increase_font), getString(R.string.terminal_cmdpalette_increase_font_sub)) { adjustFontSize(+2) }
+        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_decrease_font), getString(R.string.terminal_cmdpalette_decrease_font_sub)) { adjustFontSize(-2) }
+        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_reset_font), getString(R.string.terminal_cmdpalette_reset_font_sub)) { resetFontSize() }
+        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_toggle_keyboard), null) { toggleKeyboard() }
+        val barLabel = if (customKeyboardVisible) getString(R.string.terminal_cmdpalette_hide_key_bar) else getString(R.string.terminal_cmdpalette_show_key_bar)
+        items += PaletteDialog.Item(barLabel, getString(R.string.terminal_cmdpalette_key_bar_sub)) {
             if (customKeyboardVisible) hideCustomKeyboardBar() else showCustomKeyboardBar()
         }
-        items += PaletteDialog.Item("Paste from clipboard", null) { pasteFromClipboard() }
-        items += PaletteDialog.Item("Copy screen", "Copy visible terminal output to clipboard") { copyTerminalScreen() }
-        items += PaletteDialog.Item("Cluster: send to all sessions…", "Broadcast a command to every open tab") { showClusterBroadcastDialog() }
-        items += PaletteDialog.Item("Share connection info", "Share host / user details") { shareSession() }
-        PaletteDialog.show(this, "Command Palette", items)
+        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_paste_clipboard), null) { pasteFromClipboard() }
+        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_copy_screen), getString(R.string.terminal_cmdpalette_copy_screen_sub)) { copyTerminalScreen() }
+        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_cluster_send), getString(R.string.terminal_cmdpalette_cluster_send_sub)) { showClusterBroadcastDialog() }
+        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_share_connection), getString(R.string.terminal_cmdpalette_share_connection_sub)) { shareSession() }
+        PaletteDialog.show(this, getString(R.string.terminal_cmdpalette_title), items)
     }
 
     /**
@@ -4536,12 +4539,12 @@ class TabTerminalActivity : TabSSHActivity() {
                             lifecycleScope.launch { connectToProfile(profile, forceNew = true) }
                         }
                     }
-                    PaletteDialog.show(this@TabTerminalActivity, "Quick Switcher", items)
+                    PaletteDialog.show(this@TabTerminalActivity, getString(R.string.terminal_quick_switcher_title), items)
                 }
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Failed to load recent connections for switcher", e)
                 runOnUiThread {
-                    PaletteDialog.show(this@TabTerminalActivity, "Quick Switcher", items)
+                    PaletteDialog.show(this@TabTerminalActivity, getString(R.string.terminal_quick_switcher_title), items)
                 }
             }
         }
@@ -4558,7 +4561,7 @@ class TabTerminalActivity : TabSSHActivity() {
             // stays the user's Settings baseline so resetFontSize() has a
             // real value to return to. Persisting here would silently
             // redefine that baseline and make reset a no-op.
-            Toast.makeText(this, "Font Size: ${newSize}sp", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_font_size_fmt, newSize), Toast.LENGTH_SHORT).show()
 
             Logger.d("TabTerminalActivity", "Font size adjusted: $currentSize → $newSize")
         }
@@ -4571,7 +4574,7 @@ class TabTerminalActivity : TabSSHActivity() {
         // user never touched the slider.
         val baseline = app.preferencesManager.getInt("terminal_font_size", 14)
         view.setFontSize(baseline)
-        Toast.makeText(this, "Font Size: ${baseline}sp (your default)", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.terminal_font_size_default_fmt, baseline), Toast.LENGTH_SHORT).show()
         Logger.d("TabTerminalActivity", "Font size reset to baseline: $baseline")
     }
     
@@ -4651,7 +4654,7 @@ class TabTerminalActivity : TabSSHActivity() {
             }
             startActivity(intent)
         } else {
-            showToast("Connect to a server first")
+            showToast(getString(R.string.terminal_connect_to_server_first))
         }
     }
 
@@ -4668,9 +4671,13 @@ class TabTerminalActivity : TabSSHActivity() {
         // through the console text-input path on a graphical console tab.
         val consoleGraphical = getActiveConsoleTab()?.isGraphicalMode?.value == true
         val options = if (consoleGraphical) {
-            arrayOf("Paste")
+            arrayOf(getString(R.string.terminal_clipboard_menu_paste))
         } else {
-            arrayOf("Paste", "Select Text…", "Copy Screen")
+            arrayOf(
+                getString(R.string.terminal_clipboard_menu_paste),
+                getString(R.string.terminal_clipboard_menu_select_text),
+                getString(R.string.terminal_clipboard_menu_copy_screen)
+            )
         }
         MaterialAlertDialogBuilder(this)
             .setItems(options) { _, which ->
@@ -4678,7 +4685,7 @@ class TabTerminalActivity : TabSSHActivity() {
                     0 -> pasteFromClipboard()
                     1 -> {
                         getActiveTerminalView()?.armSelectionForNextDrag()
-                        Toast.makeText(this, "Drag to select, then tap Copy.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, getString(R.string.terminal_drag_to_select_hint), Toast.LENGTH_LONG).show()
                     }
                     2 -> copyTerminalScreen()
                 }
@@ -4701,7 +4708,7 @@ class TabTerminalActivity : TabSSHActivity() {
         val text = clipboard.primaryClip?.getItemAt(0)
             ?.coerceToText(this)?.toString()
         if (text.isNullOrEmpty()) {
-            Toast.makeText(this, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_clipboard_empty), Toast.LENGTH_SHORT).show()
             return
         }
         val consoleTab = getActiveConsoleTab()
@@ -4711,7 +4718,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 is SpiceView -> inputView.onTextInput?.invoke(text)
                 else -> {
                     Logger.w("TabTerminalActivity", "pasteFromClipboard: no active console view")
-                    Toast.makeText(this, "No active session", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.terminal_no_active_session), Toast.LENGTH_SHORT).show()
                 }
             }
             return
@@ -4719,7 +4726,7 @@ class TabTerminalActivity : TabSSHActivity() {
         val tv = getActiveTerminalView()
         if (tv == null) {
             Logger.w("TabTerminalActivity", "pasteFromClipboard: no active terminal view")
-            Toast.makeText(this, "No active session", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_no_active_session), Toast.LENGTH_SHORT).show()
             return
         }
         tv.pasteText(text)
@@ -4794,7 +4801,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 }
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Failed to load snippets", e)
-                showError("Failed to load snippets", "Error")
+                showError(getString(R.string.snippet_mgr_error_load_failed), getString(R.string.dialog_title_error))
             }
         }
     }
@@ -4821,7 +4828,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 }
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Failed to insert snippet", e)
-                showError("Failed to insert snippet", "Error")
+                showError(getString(R.string.terminal_error_failed_insert_snippet), getString(R.string.dialog_title_error))
             }
         }
     }
@@ -4935,7 +4942,7 @@ class TabTerminalActivity : TabSSHActivity() {
             .setPositiveButton(R.string.container_create) { _, _ ->
                 val name = inputName.text.toString().trim()
                 val command = inputCommand.text.toString().trim()
-                val category = inputCategory.text.toString().trim().ifBlank { "General" }
+                val category = inputCategory.text.toString().trim().ifBlank { getString(R.string.snippet_category_default) }
 
                 if (name.isNotBlank() && command.isNotBlank()) {
                     lifecycleScope.launch {
@@ -4963,7 +4970,7 @@ class TabTerminalActivity : TabSSHActivity() {
             val allSnippets = withContext(Dispatchers.IO) { app.database.snippetDao().getFrequentlyUsedSnippets(100) }
 
             if (allSnippets.isEmpty()) {
-                showToast("No snippets yet")
+                showToast(getString(R.string.terminal_no_snippets_yet))
                 return@launch
             }
 
@@ -5022,7 +5029,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 emptyList()
             }
             if (results.isEmpty()) {
-                showToast("No matching snippets")
+                showToast(getString(R.string.terminal_no_matching_snippets))
                 return@launch
             }
             if (isFinishing || isDestroyed) return@launch

@@ -19,7 +19,7 @@
         android:layout_marginStart="@dimen/space_md"
         android:layout_marginEnd="@dimen/space_md"
         android:layout_marginTop="@dimen/space_sm"
-        android:text="Active Sessions"
+        android:text="@string/connections_active_sessions_header"
         android:textStyle="bold"
         android:textColor="?attr/colorOnSurface"
         android:textSize="14sp" />

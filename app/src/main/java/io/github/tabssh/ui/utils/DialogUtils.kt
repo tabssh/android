@@ -7,6 +7,7 @@ import android.content.Context
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import io.github.tabssh.R
 
 object DialogUtils {
 
@@ -26,7 +27,7 @@ object DialogUtils {
      */
     fun showErrorDialog(
         context: Context,
-        title: String = "Error",
+        title: String = context.getString(R.string.dialog_title_error),
         message: String,
         onDismiss: (() -> Unit)? = null
     ) {
@@ -34,13 +35,13 @@ object DialogUtils {
         MaterialAlertDialogBuilder(context)
             .setTitle(title)
             .setMessage(message)
-            .setPositiveButton("OK") { dialog, _ ->
+            .setPositiveButton(context.getString(R.string.ok)) { dialog, _ ->
                 dialog.dismiss()
                 onDismiss?.invoke()
             }
-            .setNeutralButton("Copy") { _, _ ->
+            .setNeutralButton(context.getString(R.string.copy)) { _, _ ->
                 copyToClipboard(context, message)
-                Toast.makeText(context, "Error message copied to clipboard", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.dialog_error_message_copied_toast), Toast.LENGTH_SHORT).show()
             }
             .setCancelable(true)
             .show()
@@ -51,7 +52,7 @@ object DialogUtils {
      */
     fun showSuccessDialog(
         context: Context,
-        title: String = "Success",
+        title: String = context.getString(R.string.dialog_title_success),
         message: String,
         onDismiss: (() -> Unit)? = null
     ) {
@@ -59,7 +60,7 @@ object DialogUtils {
         MaterialAlertDialogBuilder(context)
             .setTitle(title)
             .setMessage(message)
-            .setPositiveButton("OK") { dialog, _ ->
+            .setPositiveButton(context.getString(R.string.ok)) { dialog, _ ->
                 dialog.dismiss()
                 onDismiss?.invoke()
             }
@@ -80,18 +81,18 @@ object DialogUtils {
         MaterialAlertDialogBuilder(context)
             .setTitle(title)
             .setMessage(message)
-            .setPositiveButton("Close") { dialog, _ ->
+            .setPositiveButton(context.getString(R.string.close)) { dialog, _ ->
                 dialog.dismiss()
                 onDismiss?.invoke()
             }
-            .setNeutralButton("Copy") { _, _ ->
+            .setNeutralButton(context.getString(R.string.copy)) { _, _ ->
                 copyToClipboard(context, message)
-                Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.dialog_copied_to_clipboard_toast), Toast.LENGTH_SHORT).show()
             }
             .setCancelable(true)
             .show()
     }
-    
+
     /**
      * Copies text to clipboard
      */

@@ -24,7 +24,7 @@
             android:layout_height="48dp"
             android:gravity="center"
             android:textSize="32sp"
-            android:text="☁️" />
+            android:text="@string/common_icon_cloud" />
 
         <!-- Info Column -->
         <LinearLayout
@@ -39,7 +39,7 @@
                 android:id="@+id/text_name"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Production Proxmox"
+                android:text="@string/item_hypervisor_placeholder_name"
                 android:textSize="16sp"
                 android:textStyle="bold"
                 android:textColor="?attr/colorOnSurface"
@@ -51,22 +51,22 @@
                 android:id="@+id/text_type"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="Proxmox"
+                android:layout_marginTop="@dimen/space_2dp"
+                android:text="@string/item_hypervisor_placeholder_type"
                 android:textSize="11sp"
                 android:textStyle="bold"
                 android:textColor="?attr/colorOnPrimary"
                 android:background="@drawable/badge_background"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="2dp" />
+                android:paddingHorizontal="@dimen/space_sm"
+                android:paddingVertical="@dimen/space_2dp" />
 
             <!-- Host -->
             <TextView
                 android:id="@+id/text_host"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="pve.example.com:8006"
+                android:layout_marginTop="@dimen/space_xs"
+                android:text="@string/item_hypervisor_placeholder_host"
                 android:textSize="13sp"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:maxLines="1"
@@ -77,8 +77,8 @@
                 android:id="@+id/text_last_connected"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="Last used: 2 hours ago"
+                android:layout_marginTop="@dimen/space_2dp"
+                android:text="@string/item_hypervisor_placeholder_last_used"
                 android:textSize="12sp"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:maxLines="1"

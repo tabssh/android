@@ -33,14 +33,14 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="&#x2601;&#xFE0F;"
+            android:text="@string/common_icon_cloud"
             android:textSize="64sp"
             android:gravity="center" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="No instances found"
+            android:text="@string/oci_no_instances"
             android:textSize="18sp"
             android:textStyle="bold"
             android:textColor="?attr/colorOnSurface"
@@ -50,7 +50,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Instances will appear here when the account is refreshed"
+            android:text="@string/cloud_manager_empty_hint"
             android:textSize="14sp"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:gravity="center"

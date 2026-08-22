@@ -21,15 +21,15 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="@dimen/space_md">
 
             <!-- Name -->
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/layout_name"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:hint="Name"
+                android:layout_marginBottom="@dimen/space_12dp"
+                android:hint="@string/container_name_hint"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -45,8 +45,8 @@
                 android:id="@+id/layout_host"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:hint="Host / IP"
+                android:layout_marginBottom="@dimen/space_12dp"
+                android:hint="@string/port_forward_host_ip_hint"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -62,7 +62,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:layout_marginBottom="12dp"
+                android:layout_marginBottom="@dimen/space_12dp"
                 android:gravity="center_vertical">
 
                 <com.google.android.material.textfield.TextInputLayout
@@ -70,7 +70,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:hint="Port"
+                    android:hint="@string/container_host_custom_port_hint"
                     style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                     <com.google.android.material.textfield.TextInputEditText
@@ -78,7 +78,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:inputType="number"
-                        android:text="5900" />
+                        android:text="@string/vnc_host_edit_port_default" />
 
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -86,8 +86,8 @@
                     android:id="@+id/switch_use_display"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:text="Display #" />
+                    android:layout_marginStart="@dimen/space_12dp"
+                    android:text="@string/vnc_host_edit_display_switch" />
 
             </LinearLayout>
 
@@ -96,8 +96,8 @@
                 android:id="@+id/layout_display"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:hint="Display number (e.g. 1 → port 5901)"
+                android:layout_marginBottom="@dimen/space_12dp"
+                android:hint="@string/vnc_host_edit_display_hint"
                 android:visibility="gone"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
@@ -114,8 +114,8 @@
                 android:id="@+id/layout_identity"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:hint="VNC Identity (optional)"
+                android:layout_marginBottom="@dimen/space_12dp"
+                android:hint="@string/vnc_host_edit_identity_hint"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
                 <com.google.android.material.textfield.MaterialAutoCompleteTextView
@@ -132,8 +132,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_sm"
-                android:hint="Password override"
-                app:helperText="Leave blank to use identity credentials"
+                android:hint="@string/vnc_host_edit_password_hint"
+                app:helperText="@string/vnc_host_edit_password_helper"
                 app:endIconMode="password_toggle">
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/edit_password"
@@ -147,8 +147,8 @@
                 android:id="@+id/layout_security"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:hint="Security type"
+                android:layout_marginBottom="@dimen/space_12dp"
+                android:hint="@string/vnc_host_edit_security_type_hint"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
                 <com.google.android.material.textfield.MaterialAutoCompleteTextView
@@ -164,23 +164,23 @@
                 android:id="@+id/switch_tls_verify"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:text="Verify TLS certificate" />
+                android:layout_marginBottom="@dimen/space_12dp"
+                android:text="@string/vnc_host_edit_tls_verify_switch" />
 
             <!-- Keep VNC session alive while the app is backgrounded -->
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/switch_keep_alive_in_background"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp"
+                android:layout_marginBottom="@dimen/space_xs"
                 android:checked="true"
-                android:text="Keep alive in background" />
+                android:text="@string/vnc_host_edit_keep_alive_switch" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:text="Holds the connection open when backgrounded instead of reconnecting, so switching tabs or apps doesn't retrigger the VNC handshake. After 10 minutes idle in the background it's fully suspended (socket closed, no wake lock) to save battery and data, and reconnects fresh the next time you open it."
+                android:layout_marginBottom="@dimen/space_12dp"
+                android:text="@string/vnc_host_edit_keep_alive_description"
                 android:textAppearance="?attr/textAppearanceCaption"
                 android:textColor="?android:attr/textColorSecondary" />
 
@@ -189,8 +189,8 @@
                 android:id="@+id/layout_color_tag"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:hint="Color tag (ARGB hex, e.g. 0xFFFF0000)"
+                android:layout_marginBottom="@dimen/space_12dp"
+                android:hint="@string/vnc_host_edit_color_tag_hint"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -206,8 +206,8 @@
                 android:id="@+id/layout_notes"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:hint="Notes"
+                android:layout_marginBottom="@dimen/space_12dp"
+                android:hint="@string/container_host_notes_hint"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -228,13 +228,13 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:padding="16dp">
+        android:padding="@dimen/space_md">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_delete"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Delete"
+            android:text="@string/delete"
             android:visibility="gone"
             style="@style/Widget.Material3.Button.TextButton" />
 
@@ -247,15 +247,15 @@
             android:id="@+id/btn_cancel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:text="Cancel"
+            android:layout_marginEnd="@dimen/space_sm"
+            android:text="@string/cancel"
             style="@style/Widget.Material3.Button.TonalButton" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_save"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Save"
+            android:text="@string/save"
             style="@style/Widget.Material3.Button" />
 
     </LinearLayout>
