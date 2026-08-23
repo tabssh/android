@@ -20,7 +20,7 @@ plugins {
 def termuxTerminalVersion = 'v0.118.1'
 
 // Resolve a build-time identifier for the current source. Preference:
-//   1. `git rev-parse --short HEAD` — works on dev machines AND F-Droid's
+//   1. `git rev-parse --short=7 HEAD` — works on dev machines AND F-Droid's
 //      builder (fdroidserver clones via git and checks out the recipe's
 //      commit SHA, so HEAD is the exact commit being built).
 //   2. release.txt contents — fallback when .git is absent (source
@@ -28,10 +28,15 @@ def termuxTerminalVersion = 'v0.118.1'
 //   3. "unknown" — last-resort sentinel.
 // Short SHA only — avoid `--dirty` or timestamps which break F-Droid
 // reproducibility (a stray file in the build dir would diverge HEAD).
+// Length pinned to 7 (`--short=7`, GitHub's own standard short-SHA length;
+// GitLab's is 8) so every identifier across the project (this BuildConfig
+// field, the devel-* release tag) is the same length — plain `--short`
+// grows past 7 chars once the repo needs more to stay unambiguous,
+// producing inconsistent lengths release to release.
 def resolveGitCommit = {
     try {
         def execResult = providers.exec {
-            commandLine 'git', 'rev-parse', '--short', 'HEAD'
+            commandLine 'git', 'rev-parse', '--short=7', 'HEAD'
             ignoreExitValue = true
         }
         def s = execResult.standardOutput.asText.get().trim()

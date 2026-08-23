@@ -140,7 +140,11 @@ jobs:
         # (AI.md PART 13) — real semver versions are reserved for tags.
         # BUILD_EPOCH is captured exactly once here and exported as
         # SOURCE_DATE_EPOCH so BuildConfig.BUILD_EPOCH matches version.txt.
-        COMMIT_HASH=$(git rev-parse --short HEAD)
+        # Length pinned to 7 (--short=7, GitHub's own standard short-SHA
+        # length) to match app/build.gradle's resolveGitCommit — plain
+        # --short grows past 7 chars once the repo needs more to stay
+        # unambiguous, producing inconsistent lengths release to release.
+        COMMIT_HASH=$(git rev-parse --short=7 HEAD)
         BUILD_EPOCH=$(date -u +%s)
         echo "COMMIT_HASH=${COMMIT_HASH}" >> "$GITHUB_OUTPUT"
         echo "BUILD_EPOCH=${BUILD_EPOCH}" >> "$GITHUB_OUTPUT"
@@ -292,7 +296,9 @@ jobs:
         ## Recent Commits
 
         EOF
-        git log --pretty=format:"- %s (%h)" -10 >> RELEASE_NOTES_DEV.md
+        # --abbrev=7 keeps commit ids here the same length as
+        # COMMIT_HASH/devel-* above and app/build.gradle's BuildConfig field.
+        git log --abbrev=7 --pretty=format:"- %s (%h)" -10 >> RELEASE_NOTES_DEV.md
         cat >> RELEASE_NOTES_DEV.md << 'EOF'
 
 
