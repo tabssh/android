@@ -914,14 +914,24 @@ Provider-specific file locations and syntax: the matching `*_conventions.md` glo
 
 ## Workflow set
 
-| Workflow | Trigger | Job |
-|---|---|---|
-| `ci.yml` | push + PR to main | `make check`-equivalent: compile, lint, unit tests, structure/security validation |
-| `development.yml` | daily schedule + push to main | canonical release flow (PART 13) on the `devel` variant → rolling `development` prerelease |
-| `beta.yml` | tag `*beta` | canonical release flow (PART 13) on the `release` variant → prerelease |
-| `release.yml` | tag `v*` | tests + DependencyCheck + coverage → canonical release flow (PART 13) on the `release` variant (+ `assembleFdroidRelease` smoke build if F-Droid flavor exists; + `bundleRelease` AAB only if `store_targets` includes `play`) → provider release |
+Every project targets all five CI/CD providers — same gates, different syntax, zero vendor lock-in. No `build-toolchain.yml` equivalent on any provider (`casjaysdev/android:latest` is maintained externally, see above).
 
-Creation order: security-only workflows first, `ci.yml` and the channel workflows (`release.yml`, `beta.yml`, `development.yml`) last; every staged workflow passes `act --list -W {file}` before commit.
+| Provider | Workflow location | Syntax / runner |
+|----------|------------------|-----------------|
+| GitHub | `.github/workflows/*.yml` | GitHub Actions |
+| GitLab | `.gitlab-ci.yml` (stages: build, test, security, release) | GitLab CI |
+| Gitea | `.gitea/workflows/*.yml` | GitHub Actions (act runner) |
+| Forgejo | `.forgejo/workflows/*.yml` | GitHub Actions (act runner) |
+| Jenkins | `Jenkinsfile` (parallel stages: Build / Test / Security / Release) | Declarative Pipeline |
+
+| Gate | GitHub | GitLab | Gitea / Forgejo | Jenkins | Trigger | Job |
+|---|---|---|---|---|---|---|
+| CI | `ci.yml` | `build` + `test` + `security` stages | `ci.yml` | `Build` + `Test` + `Security` stages | push + PR to main | `make check`-equivalent: compile, lint, unit tests, structure/security validation |
+| Development | `development.yml` | `development` stage (schedule + push-triggered) | `development.yml` | `Development` stage (schedule + push-triggered) | daily schedule + push to main | canonical release flow (PART 13) on the `devel` variant → rolling `development` prerelease |
+| Beta | `beta.yml` | `beta` stage (tag-triggered) | `beta.yml` | `Beta` stage (tag-triggered) | tag `*beta` | canonical release flow (PART 13) on the `release` variant → prerelease |
+| Release | `release.yml` | `release` stage (tag-triggered) | `release.yml` | `Release` stage (tag-triggered) | tag `v*` | tests + DependencyCheck + coverage → canonical release flow (PART 13) on the `release` variant (+ `assembleFdroidRelease` smoke build if F-Droid flavor exists; + `bundleRelease` AAB only if `store_targets` includes `play`) → provider release |
+
+Creation order: security-only workflows first, `ci.yml` and the channel workflows (`release.yml`, `beta.yml`, `development.yml`) last; every staged workflow passes `act --list -W {file}` before commit (GitHub Actions-syntax providers only — GitLab and Jenkins have no `act` equivalent, validate those with their own native lint: `gitlab-ci-lint` / Jenkins `Pipeline Linter`).
 
 ## Rules
 
@@ -979,6 +989,7 @@ build (`BUILD_EPOCH` captured once) → stage APK splits (PART 4 naming) + `mapp
 
 - Semver tags `vX.Y.Z`; `versionCode` monotonically increases (derive from semver: `X*10000 + Y*100 + Z` or maintain manually — pick once, record in IDEA.md).
 - Beta and development builds keep the in-tree `versionCode`/`versionName` — channel identity lives in the tag and `version.txt`, never in a mutated `versionCode`.
+- **Short commit id** (development channel's version identity, `version.txt`): `git rev-parse --short=7 HEAD` — pin the explicit 7-char length; git's unpinned `--short HEAD` auto-abbreviates and grows past 7 chars as the repo's commit count increases, producing inconsistent-length ids across builds.
 - **`BUILD_EPOCH` is embedded in every build, local and CI** — captured once per build (`date -u +%s`) and exposed as a `BuildConfig` field; the `fdroidRelease` flavor pins it to the last-commit epoch (`git log -1 --format=%ct`) to stay reproducible.
 - Release notes generated from `CHANGELOG.md [Unreleased]`, which moves to a versioned section at tag time.
 
@@ -1028,7 +1039,7 @@ Sample resolution step (applies identically to all three workflows):
     echo "Keystore decoded and ready"
 ```
 
-Never commit a fixed fallback password (local dev keystore excepted, since that keystore is itself a throwaway dev-only artifact already in the repo). Reference implementation: `/root/Projects/github/tabssh/android/.github/workflows/{beta,release,development}.yml` — all three now hard-fail identically on a missing `KEYSTORE_BASE64`/`KEYSTORE_PASSWORD`, with no ephemeral-keystore fallback in any channel.
+Never commit a fixed fallback password (local dev keystore excepted, since that keystore is itself a throwaway dev-only artifact already in the repo). Reference implementation: `/root/Projects/github/tabssh/android/.github/workflows/{beta,release}.yml` — note that as of this writing `development.yml` in that project still uses an ephemeral-keystore fallback, which is the pattern this spec explicitly rejects; that workflow is due for a follow-up update to match `beta.yml`/`release.yml`.
 
 ## R8 / ProGuard
 
