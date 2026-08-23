@@ -50,13 +50,26 @@ object PaneGroupEditDialog {
         onSaved: () -> Unit
     ) {
         scope.launch {
-            // Re-fetch live before showing the picker so Cloud Account instances
-            // are current (never trust a stale cache for the picker or launch path).
-            withContext(Dispatchers.IO) {
-                ConnectableHostRegistry.refreshAll(app.database, app)
-            }
-            val hosts = withContext(Dispatchers.IO) {
+            // Show the picker from whatever's already cached — refreshAll()
+            // hits live cloud-provider APIs and was previously awaited here,
+            // adding a ~2s stall to every tap on "+". Only block on a live
+            // refresh when the cache is empty (first-ever use, nothing to
+            // show yet); otherwise refresh in the background so the next
+            // open picks up fresh data without holding up this one.
+            var hosts = withContext(Dispatchers.IO) {
                 app.database.connectableHostDao().getAllList()
+            }
+            if (hosts.isEmpty()) {
+                withContext(Dispatchers.IO) {
+                    ConnectableHostRegistry.refreshAll(app.database, app)
+                }
+                hosts = withContext(Dispatchers.IO) {
+                    app.database.connectableHostDao().getAllList()
+                }
+            } else {
+                scope.launch(Dispatchers.IO) {
+                    ConnectableHostRegistry.refreshAll(app.database, app)
+                }
             }
             if (hosts.isEmpty()) {
                 Toast.makeText(context, R.string.terminal_connection_not_found, Toast.LENGTH_SHORT).show()
