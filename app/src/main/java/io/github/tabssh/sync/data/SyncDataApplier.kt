@@ -1688,8 +1688,11 @@ class SyncDataApplier {
      * Merge an incoming connection into an existing local row when the pair
      * matches by (host, port, username). Rules:
      *   - keep the local UUID (`id`) so foreign references stay intact
-     *   - sum `connectionCount` — every device tracked its own local runs
-     *     independently, so the true total across devices is the sum
+     *   - take max of `connectionCount` — summing is not idempotent across
+     *     repeated syncs between the same two devices (each pass would
+     *     re-add counts already folded in by the previous pass, doubling
+     *     the total every cycle and running away toward billions over
+     *     time); max() converges once both sides have seen the higher count
      *   - take max of `lastConnected`, `lastSyncedAt`, `syncVersion`, `modifiedAt`
      *   - for every other user-visible field, prefer whichever side has the
      *     newer `modifiedAt` (last-write-wins, matching MergeEngine semantics)
@@ -1702,7 +1705,7 @@ class SyncDataApplier {
             host            = local.host,
             port            = local.port,
             username        = local.username,
-            connectionCount = local.connectionCount + remote.connectionCount,
+            connectionCount = maxOf(local.connectionCount, remote.connectionCount),
             lastConnected   = maxOf(local.lastConnected,  remote.lastConnected),
             lastSyncedAt    = maxOf(local.lastSyncedAt,   remote.lastSyncedAt),
             syncVersion     = maxOf(local.syncVersion,    remote.syncVersion),

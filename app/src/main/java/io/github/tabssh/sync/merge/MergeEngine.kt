@@ -163,14 +163,21 @@ class MergeEngine {
     }
 
     /**
-     * Merge connection fields without conflicts
+     * Merge connection fields without conflicts.
+     *
+     * connectionCount takes max(local, remote), not a sum — summing is not
+     * idempotent across repeated syncs between the same two devices (each
+     * pass would re-add counts already folded in by the previous pass,
+     * doubling the total every cycle and running away toward billions over
+     * time). max() converges: once both sides have seen the higher count,
+     * further merges are no-ops.
      */
     private fun mergeConnectionFields(
         local: ConnectionProfile,
         remote: ConnectionProfile
     ): ConnectionProfile {
         return local.copy(
-            connectionCount = local.connectionCount + remote.connectionCount,
+            connectionCount = maxOf(local.connectionCount, remote.connectionCount),
             lastConnected = maxOf(local.lastConnected, remote.lastConnected),
             modifiedAt = maxOf(local.modifiedAt, remote.modifiedAt),
             syncVersion = maxOf(local.syncVersion, remote.syncVersion)
@@ -326,7 +333,12 @@ class MergeEngine {
     }
 
     /**
-     * Merge single theme
+     * Merge single theme.
+     *
+     * usageCount takes max(local, remote), not a sum — same non-idempotent
+     * runaway-growth bug as ConnectionProfile.connectionCount (see
+     * TabSSHDatabase MIGRATION_22_23): summing re-adds counts already
+     * folded in by a previous sync pass, doubling on every repeat cycle.
      */
     private fun mergeTheme(
         base: ThemeDefinition?,
@@ -341,7 +353,7 @@ class MergeEngine {
         if (local == remote) return local
 
         return local.copy(
-            usageCount = local.usageCount + remote.usageCount,
+            usageCount = maxOf(local.usageCount, remote.usageCount),
             lastModified = maxOf(local.lastModified, remote.lastModified),
             modifiedAt = maxOf(local.modifiedAt, remote.modifiedAt)
         )

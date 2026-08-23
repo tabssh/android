@@ -57,7 +57,7 @@ import io.github.tabssh.utils.logging.Logger
         PaneGroup::class,
         ConnectableHost::class
     ],
-    version = 22,
+    version = 23,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -1102,6 +1102,35 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v22 -> v23: data-repair migration for the runaway-growth bug in
+         * usage-count sync merging — `mergeConnectionFields`
+         * (`connections.connection_count`) and `mergeTheme`
+         * (`themes.usage_count`) used to sum `local + remote` on every sync
+         * merge, which is not idempotent across repeated syncs between the
+         * same two devices: each pass re-added counts already folded in by
+         * the previous pass, doubling the total every cycle. Frequently-
+         * synced rows could reach absurd values (millions/billions) within
+         * weeks. The merge logic now takes max() instead of summing, but
+         * that only stops future growth — rows already inflated by the old
+         * code need their stored value repaired too. No real usage count is
+         * recoverable at this point, so any count past a generous "no human
+         * does this that often" ceiling is clamped down to that ceiling,
+         * preserving relative "frequently used" ordering without the
+         * nonsensical magnitude. Counts below the ceiling (the vast
+         * majority, never bitten by the bug) are left untouched.
+         */
+        val MIGRATION_22_23 = object : Migration(22, 23) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "UPDATE `connections` SET `connection_count` = 9999 WHERE `connection_count` > 9999"
+                )
+                db.execSQL(
+                    "UPDATE `themes` SET `usage_count` = 9999 WHERE `usage_count` > 9999"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -1111,7 +1140,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23)
                 .build()
                 INSTANCE = instance
                 instance
