@@ -217,6 +217,81 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     }
 
     /**
+     * Create a new Panes tab — up to 6 tiled SSH sessions in one tab-strip
+     * slot. Same discipline as [createVncTab]/[createConsoleTab]: no
+     * [TabManagerListener] observer wiring (SSH-only) and no [saveTabState]
+     * persistence (session-only, matching VNC/Console precedent).
+     * [entries]' [SSHTab]s must already be connected by the caller
+     * (`TabTerminalActivity.connectPaneMember`) before this is called.
+     */
+    fun createPanesTab(groupId: String, groupName: String, entries: List<PaneEntry>): PanesTab? = synchronized(tabsLock) {
+        if (tabs.size >= maxTabs) {
+            Logger.w("TabManager", "Maximum tabs reached: $maxTabs")
+            return null
+        }
+
+        val tab = PanesTab(groupId, groupName, entries)
+        tabs.add(Tab.Panes(tab))
+        activeTabIndex = tabs.size - 1
+
+        Logger.d("TabManager", "Created new panes tab: ${tab.getDisplayTitle()} (${entries.size} panes)")
+        publishTabs()
+        return tab
+    }
+
+    /**
+     * Panes tabs kept alive in the background ("Keep Running in Background"
+     * — see AI.md Panes plan Step 4), keyed by [PaneGroup.id]/groupId. Unlike
+     * [VncBackgroundSessionStore]'s RFB-specific pause/resume/idle-sweep
+     * machinery, SSH sessions need no pause step — they're kept alive
+     * independently by `SSHConnectionService`/`SSHSessionManager` merely by
+     * staying connected, so a plain map is sufficient here.
+     */
+    private val parkedPanesTabs = mutableMapOf<String, PanesTab>()
+
+    /**
+     * Park a Panes tab: remove it from the tab strip without disconnecting
+     * any of its panes. Reverse of [reclaimParkedPanesTab]. The caller
+     * (`TabTerminalActivity`) is responsible for driving the "Disconnect
+     * All vs Keep Running in Background" choice and for the UI rebuild via
+     * the existing `onGraphicalTabClosed` callback, reused here unchanged.
+     */
+    fun parkPanesTab(tabId: String): Boolean = synchronized(tabsLock) {
+        val index = tabs.indexOfFirst { it.tabId == tabId }
+        if (index < 0) return false
+        val entry = tabs[index] as? Tab.Panes ?: return false
+        parkedPanesTabs[entry.panesTab.groupId] = entry.panesTab
+        tabs.removeAt(index)
+        tabObservers.remove(entry.tabId)?.cancel()
+        if (activeTabIndex >= index && activeTabIndex > 0) {
+            activeTabIndex--
+        }
+        Logger.d("TabManager", "Parked panes tab: ${entry.tabId} (group ${entry.panesTab.groupId})")
+        publishTabs()
+        notifyGraphicalTabClosed(entry, index)
+        return true
+    }
+
+    /**
+     * Reclaim a previously parked Panes tab (relaunch/reattach by
+     * `PaneGroup.id`), re-inserting it into the tab strip and switching to
+     * it. Returns null if [groupId] has no parked tab.
+     */
+    fun reclaimParkedPanesTab(groupId: String): PanesTab? = synchronized(tabsLock) {
+        val tab = parkedPanesTabs.remove(groupId) ?: return null
+        tabs.add(Tab.Panes(tab))
+        activeTabIndex = tabs.size - 1
+        Logger.d("TabManager", "Reclaimed parked panes tab: ${tab.tabId} (group $groupId)")
+        publishTabs()
+        return tab
+    }
+
+    /** True if a Panes tab for [groupId] is currently parked in the background. */
+    fun hasParkedPanesTab(groupId: String): Boolean = synchronized(tabsLock) {
+        parkedPanesTabs.containsKey(groupId)
+    }
+
+    /**
      * VNC-tab-swipe integration step 6e background-parking parity: pause
      * and park every live, connected `Tab.Vnc`/graphical `Tab.Console`
      * session into [VncBackgroundSessionStore], so [TabTerminalActivity]
@@ -274,6 +349,10 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
                     }
                 }
                 is Tab.Ssh -> Unit
+                // Panes tabs use their own park mechanism (parkPanesTab/
+                // reclaimParkedPanesTab) — SSH sessions need no RFB-style
+                // pause, so this VNC/console-specific path skips them.
+                is Tab.Panes -> Unit
             }
         }
         if (parkedAny) {
@@ -327,6 +406,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
                     reclaimOne(tab.storeKey) { tab.setConnectionState(it) }
                 }
                 is Tab.Ssh -> Unit
+                is Tab.Panes -> Unit
             }
         }
     }
@@ -376,6 +456,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
                 is Tab.Ssh -> entry.sshTab.cleanup()
                 is Tab.Vnc -> entry.vncTab.cleanup()
                 is Tab.Console -> entry.consoleTab.cleanup()
+                is Tab.Panes -> entry.panesTab.cleanup()
             }
             tabs.removeAt(index)
             tabObservers.remove(entry.tabId)?.cancel()
@@ -740,9 +821,12 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
                     is Tab.Ssh -> entry.sshTab.cleanup()
                     is Tab.Vnc -> entry.vncTab.cleanup()
                     is Tab.Console -> entry.consoleTab.cleanup()
+                    is Tab.Panes -> entry.panesTab.cleanup()
                 }
             }
             tabs.clear()
+            parkedPanesTabs.values.forEach { it.cleanup() }
+            parkedPanesTabs.clear()
         }
         listeners.clear()
         // Publish so the Connections-tab "Active Sessions" strip — and any

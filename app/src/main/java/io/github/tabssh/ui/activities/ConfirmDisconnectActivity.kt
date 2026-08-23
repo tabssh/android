@@ -76,6 +76,10 @@ class ConfirmDisconnectActivity : AppCompatActivity() {
                 displayName = tab.consoleTab.getDisplayTitle()
                 sessionKind = "console"
             }
+            is io.github.tabssh.ui.tabs.Tab.Panes -> {
+                displayName = tab.panesTab.getDisplayTitle()
+                sessionKind = "panes"
+            }
         }
 
         MaterialAlertDialogBuilder(this)

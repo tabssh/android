@@ -17,6 +17,7 @@ import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.storage.database.entities.Macro
 import io.github.tabssh.storage.database.entities.MonitorSlot
 import io.github.tabssh.storage.database.entities.NetworkRoute
+import io.github.tabssh.storage.database.entities.PaneGroup
 import io.github.tabssh.storage.database.entities.PortForward
 import io.github.tabssh.storage.database.entities.RegistryCredential
 import io.github.tabssh.storage.database.entities.SingleContainerConfig
@@ -134,6 +135,7 @@ class BackupExporter(
          * via their `route_id` column, which rides along in [FILE_CONNECTIONS].
          */
         const val FILE_NETWORK_ROUTES    = "network_routes.json"
+        const val FILE_PANE_GROUPS       = "pane_groups.json"
         /**
          * Container subsystem — hosts, private registry credentials, compose stacks,
          * single-container run configs, and container/stack auto-update policies.
@@ -211,6 +213,7 @@ class BackupExporter(
         out[FILE_VNC_IDENTITIES]   = exportVncIdentities()
         out[FILE_PORT_FORWARDS]    = exportPortForwards()
         out[FILE_NETWORK_ROUTES]   = exportNetworkRoutes()
+        out[FILE_PANE_GROUPS]      = exportPaneGroups()
         out[FILE_CONTAINER_HOSTS]  = exportContainerHosts()
         out[FILE_REGISTRY_CREDENTIALS] = exportRegistryCredentials()
         out[FILE_COMPOSE_STACKS]   = exportComposeStacks()
@@ -331,6 +334,10 @@ class BackupExporter(
     private suspend fun exportNetworkRoutes(): String =
         encodeEntities(ListSerializer(NetworkRoute.serializer()),
             database.networkRouteDao().getAllList())
+
+    private suspend fun exportPaneGroups(): String =
+        encodeEntities(ListSerializer(PaneGroup.serializer()),
+            database.paneGroupDao().getAllList())
 
     private suspend fun exportContainerHosts(): String =
         // No secret column — custom-endpoint passwords live in exportSecrets()

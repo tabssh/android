@@ -538,6 +538,9 @@
                         <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_containers" />
+                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <include layout="@layout/item_sync_toggle"
+                            android:id="@+id/row_sync_pane_groups" />
 
                     </LinearLayout>
 

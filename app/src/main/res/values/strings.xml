@@ -454,9 +454,10 @@
     <string name="conn_route_global_default">Use global default</string>
     <string name="conn_route_add_new">+ Add new route…</string>
 
-    <!-- Main tabs. Kept short: five labels have to fit one phone-width row. -->
+    <!-- Main tabs. Kept short: six labels have to fit one phone-width row. -->
     <string name="main_tab_frequent">Frequent</string>
     <string name="main_tab_hosts">Hosts</string>
+    <string name="main_tab_panes">Panes</string>
     <string name="main_tab_auth">Auth</string>
     <string name="main_tab_stats">Stats</string>
     <string name="auth_tab_ssh">SSH</string>
@@ -1015,6 +1016,8 @@
     <string name="identity_vnc_subtitle">Credentials for direct VNC and VeNCrypt connections</string>
     <string name="identity_vnc_add_content_description">Add VNC identity</string>
     <string name="identity_vnc_empty_message">No VNC identities yet — tap + to create one</string>
+    <string name="pane_groups_add_content_description">Add pane group</string>
+    <string name="pane_groups_empty_message">No pane groups yet — tap + to create one</string>
 
     <!-- Frequent connections fragment (fragment_frequent_connections.xml) -->
     <string name="frequent_connections_title">Frequently Used Connections</string>
@@ -2723,6 +2726,9 @@
     <!-- VNC identity item (item_vnc_identity.xml) -->
     <string name="item_vnc_identity_name_placeholder">VNC Identity name</string>
 
+    <!-- Pane group item (item_pane_group.xml) -->
+    <string name="item_pane_group_name_placeholder">Pane group name</string>
+
     <!-- SSH key item (item_ssh_key.xml) -->
     <string name="item_ssh_key_name_placeholder">Key Name</string>
     <string name="item_ssh_key_type_placeholder">RSA</string>
@@ -3306,6 +3312,7 @@
     <string name="sync_settings_title_monitor_slots">Monitor Slots</string>
     <string name="sync_settings_title_hypervisor_accounts">Hypervisor Accounts</string>
     <string name="sync_settings_title_certificates">Certificates</string>
+    <string name="sync_settings_title_pane_groups">Panes</string>
     <string name="sync_settings_subtitle_hypervisor_accounts">Hypervisor accounts</string>
     <string name="sync_settings_subtitle_connections">SSH connection profiles</string>
     <string name="sync_settings_subtitle_identities">Reusable credentials</string>
@@ -3324,6 +3331,7 @@
     <string name="sync_settings_subtitle_dashboard">Multi-host dashboard layout</string>
     <string name="sync_settings_subtitle_port_forwards">Saved port-forward rules</string>
     <string name="sync_settings_subtitle_containers">Container hosts, registries, stacks &amp; containers</string>
+    <string name="sync_settings_subtitle_pane_groups">Saved pane groups (up to 6 terminal connections tiled together)</string>
     <string name="sync_settings_force_upload_title">Force Upload</string>
     <string name="sync_settings_force_upload_message">Upload local data to the sync file, overwriting remote.\n\nContinue?</string>
     <string name="sync_settings_force_download_title">⚠️ Force Download</string>
@@ -3522,6 +3530,18 @@
     <string name="identity_vnc_edit_title">Edit VNC Identity</string>
     <string name="identity_vnc_delete_title">Delete VNC identity?</string>
     <string name="identity_vnc_delete_message_fmt">Delete \"%1$s\"?</string>
+    <string name="pane_group_member_count_fmt">%1$d members</string>
+    <string name="pane_group_add_title">Add Pane Group</string>
+    <string name="pane_group_edit_title">Edit Pane Group</string>
+    <string name="pane_group_delete_title">Delete pane group?</string>
+    <string name="pane_group_delete_message_fmt">Delete \"%1$s\"?</string>
+    <string name="pane_group_max_members_toast">Panes groups support up to 6 members</string>
+    <string name="pane_group_min_members_toast">Select at least 1 connection</string>
+    <string name="pane_group_members_label">Members (up to 6)</string>
+    <string name="panes_close_dialog_title">Close panes tab?</string>
+    <string name="panes_close_dialog_message">Disconnect all panes now, or keep them running in the background and reattach later from Panes.</string>
+    <string name="panes_disconnect_all">Disconnect All</string>
+    <string name="panes_keep_running_background">Keep Running in Background</string>
     <string name="identity_menu_edit">✏️ Edit</string>
     <string name="identity_menu_apply_to_connections">📋 Apply to Connections</string>
     <string name="identity_menu_view_linked_connections">🔗 View Linked Connections</string>

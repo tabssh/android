@@ -110,6 +110,7 @@ class SyncDataCollector {
         val syncDashboard          = preferenceManager.isSyncDashboardEnabled()
         val syncPortForwards       = preferenceManager.isSyncPortForwardsEnabled()
         val syncNetworkRoutes      = preferenceManager.isSyncNetworkRoutesEnabled()
+        val syncPaneGroups         = preferenceManager.isSyncPaneGroupsEnabled()
         val syncContainers         = preferenceManager.isSyncContainersEnabled()
 
         val connections        = if (syncConns)              collectConnections()        else emptyList()
@@ -133,6 +134,7 @@ class SyncDataCollector {
         val namedPrefFiles     = if (syncSettings)           collectNamedPreferenceFiles() else emptyMap()
         val portForwards       = if (syncPortForwards)       collectPortForwards()       else emptyList()
         val networkRoutes      = if (syncNetworkRoutes)      collectNetworkRoutes()      else emptyList()
+        val paneGroups         = if (syncPaneGroups)         collectPaneGroups()         else emptyList()
         val containerHosts              = if (syncContainers) collectContainerHosts()              else emptyList()
         val registryCredentials         = if (syncContainers) collectRegistryCredentials()         else emptyList()
         val composeStacks               = if (syncContainers) collectComposeStacks()               else emptyList()
@@ -160,6 +162,7 @@ class SyncDataCollector {
             dashboard          = dashboardConfig.size,
             portForwards       = portForwards.size,
             networkRoutes      = networkRoutes.size,
+            paneGroups         = paneGroups.size,
             containerHosts                  = containerHosts.size,
             registryCredentials             = registryCredentials.size,
             composeStacks                   = composeStacks.size,
@@ -196,6 +199,7 @@ class SyncDataCollector {
             namedPreferenceFiles = namedPrefFiles,
             portForwards       = portForwards,
             networkRoutes      = networkRoutes,
+            paneGroups         = paneGroups,
             containerHosts              = containerHosts,
             registryCredentials         = registryCredentials,
             composeStacks               = composeStacks,
@@ -315,6 +319,16 @@ class SyncDataCollector {
             database.networkRouteDao().getAllList()
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to collect network routes", e)
+            emptyList()
+        }
+    }
+
+    /** Saved pane groups (tiled multi-connection layouts). No secrets; all columns are safe to sync. */
+    private suspend fun collectPaneGroups(): List<io.github.tabssh.storage.database.entities.PaneGroup> {
+        return try {
+            database.paneGroupDao().getAllList()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect pane groups", e)
             emptyList()
         }
     }
@@ -461,6 +475,7 @@ class SyncDataCollector {
         val syncDashboard          = preferenceManager.isSyncDashboardEnabled()
         val syncPortForwards       = preferenceManager.isSyncPortForwardsEnabled()
         val syncNetworkRoutes      = preferenceManager.isSyncNetworkRoutesEnabled()
+        val syncPaneGroups         = preferenceManager.isSyncPaneGroupsEnabled()
         val syncContainers         = preferenceManager.isSyncContainersEnabled()
 
         val connections = if (syncConns)      collectConnections().filter { it.modifiedAt > timestamp } else emptyList()
@@ -494,6 +509,9 @@ class SyncDataCollector {
         // NetworkRoute has modifiedAt; delta-filter it like the other simple entities.
         val networkRoutes = if (syncNetworkRoutes)
             collectNetworkRoutes().filter { it.modifiedAt > timestamp } else emptyList()
+        // PaneGroup has modifiedAt; delta-filter it like the other simple entities.
+        val paneGroups = if (syncPaneGroups)
+            collectPaneGroups().filter { it.modifiedAt > timestamp } else emptyList()
         // ContainerHost/RegistryCredential/ContainerAutoUpdatePolicy have no modifiedAt
         // column — low-volume, always include in full like HypervisorProfile above.
         // ComposeStack/SingleContainerConfig have updatedAt, so delta-filter them.
@@ -535,6 +553,7 @@ class SyncDataCollector {
             dashboard          = dashboardConfig.size,
             portForwards       = portForwards.size,
             networkRoutes      = networkRoutes.size,
+            paneGroups         = paneGroups.size,
             containerHosts                  = containerHosts.size,
             registryCredentials             = registryCredentials.size,
             composeStacks                   = composeStacks.size,
@@ -574,6 +593,7 @@ class SyncDataCollector {
             namedPreferenceFiles = namedPrefFiles,
             portForwards       = portForwards,
             networkRoutes      = networkRoutes,
+            paneGroups         = paneGroups,
             containerHosts              = containerHosts,
             registryCredentials         = registryCredentials,
             composeStacks               = composeStacks,
@@ -623,6 +643,7 @@ class SyncDataCollector {
         if (preferenceManager.isSyncCloudAccountsEnabled())      out += TombstoneRecorder.CLOUD_ACCOUNT
         if (preferenceManager.isSyncPortForwardsEnabled())       out += TombstoneRecorder.PORT_FORWARD
         if (preferenceManager.isSyncNetworkRoutesEnabled())      out += TombstoneRecorder.NETWORK_ROUTE
+        if (preferenceManager.isSyncPaneGroupsEnabled())         out += TombstoneRecorder.PANE_GROUP
         if (preferenceManager.isSyncContainersEnabled()) {
             out += TombstoneRecorder.CONTAINER_HOST
             out += TombstoneRecorder.REGISTRY_CREDENTIAL
@@ -655,6 +676,7 @@ class SyncDataCollector {
         TombstoneRecorder.CLOUD_ACCOUNT     -> collectCloudAccounts().map { it.id }
         TombstoneRecorder.PORT_FORWARD      -> collectPortForwards().map { it.id }
         TombstoneRecorder.NETWORK_ROUTE     -> collectNetworkRoutes().map { it.id }
+        TombstoneRecorder.PANE_GROUP        -> collectPaneGroups().map { it.id }
         TombstoneRecorder.CONTAINER_HOST    -> collectContainerHosts().map { TombstoneRecorder.naturalKey(it) }
         TombstoneRecorder.REGISTRY_CREDENTIAL -> collectRegistryCredentials().map { TombstoneRecorder.naturalKey(it) }
         TombstoneRecorder.COMPOSE_STACK     -> collectComposeStacks().map { TombstoneRecorder.naturalKey(it) }
@@ -749,6 +771,7 @@ class SyncDataCollector {
             TombstoneRecorder.HYPERVISOR_ACCOUNT, TombstoneRecorder.VNC_HOST,
             TombstoneRecorder.VNC_IDENTITY, TombstoneRecorder.CLOUD_ACCOUNT,
             TombstoneRecorder.PORT_FORWARD, TombstoneRecorder.NETWORK_ROUTE,
+            TombstoneRecorder.PANE_GROUP,
             TombstoneRecorder.CONTAINER_HOST,
             TombstoneRecorder.REGISTRY_CREDENTIAL, TombstoneRecorder.COMPOSE_STACK,
             TombstoneRecorder.SINGLE_CONTAINER_CONFIG, TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY,
@@ -1112,6 +1135,7 @@ class SyncDataCollector {
             "syncDashboard"         to preferenceManager.isSyncDashboardEnabled(),
             "syncPortForwards"      to preferenceManager.isSyncPortForwardsEnabled(),
             "syncNetworkRoutes"     to preferenceManager.isSyncNetworkRoutesEnabled(),
+            "syncPaneGroups"        to preferenceManager.isSyncPaneGroupsEnabled(),
             "syncContainers"        to preferenceManager.isSyncContainersEnabled(),
             "autoResolve"           to preferenceManager.isAutoResolveConflictsEnabled()
         )
@@ -1274,6 +1298,7 @@ class SyncDataCollector {
             dashboard         = try { collectDashboardConfig().size } catch (_: Exception) { 0 },
             portForwards      = try { database.portForwardDao().getAllList().size } catch (_: Exception) { 0 },
             networkRoutes     = try { database.networkRouteDao().getAllList().size } catch (_: Exception) { 0 },
+            paneGroups        = try { database.paneGroupDao().getAllList().size } catch (_: Exception) { 0 },
             containerHosts    = try { database.containerHostDao().getAllList().size } catch (_: Exception) { 0 },
             registryCredentials = try { database.registryCredentialDao().getAllList().size } catch (_: Exception) { 0 },
             composeStacks     = try { database.composeStackDao().getAllList().size } catch (_: Exception) { 0 },

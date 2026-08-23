@@ -26,6 +26,10 @@ sealed class Tab {
     data class Console(val consoleTab: ConsoleTab) : Tab() {
         override val tabId: String get() = consoleTab.tabId
     }
+
+    data class Panes(val panesTab: PanesTab) : Tab() {
+        override val tabId: String get() = panesTab.tabId
+    }
 }
 
 /**
@@ -38,4 +42,5 @@ fun Tab.shortTitle(): String = when (this) {
     is Tab.Ssh -> sshTab.getShortTitle()
     is Tab.Vnc -> vncTab.getDisplayTitle()
     is Tab.Console -> consoleTab.getDisplayTitle()
+    is Tab.Panes -> panesTab.getDisplayTitle()
 }

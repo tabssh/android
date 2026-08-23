@@ -379,6 +379,19 @@ class SyncDataApplier {
                 }
             }
 
+            // Saved pane groups (last-write-wins REPLACE on UUID PK).
+            if (preferenceManager.isSyncPaneGroupsEnabled()) {
+                data.paneGroups.forEach { pg ->
+                    try {
+                        if (suppressed(TombstoneRecorder.PANE_GROUP, pg.id, pg.modifiedAt)) return@forEach
+                        database.paneGroupDao().insert(pg)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply pane group: ${pg.name}", e)
+                    }
+                }
+            }
+
             // Container subsystem — five Long-PK entities, applied by raw id (see
             // TombstoneRecorder KDoc); tombstone suppression keys on naturalKey().
             if (preferenceManager.isSyncContainersEnabled()) {
@@ -553,7 +566,15 @@ class SyncDataApplier {
                         TombstoneRecorder.CONNECTION -> {
                             val row = database.connectionDao().getConnectionById(t.entityKey)
                             if (row != null && row.modifiedAt > t.deletedAt) true
-                            else { if (row != null) database.connectionDao().deleteConnectionById(t.entityKey); false }
+                            else {
+                                if (row != null) {
+                                    database.connectionDao().deleteConnectionById(t.entityKey)
+                                    // Keep the Panes registry and any saved pane-group membership accurate.
+                                    io.github.tabssh.storage.registry.ConnectableHostRegistry
+                                        .removeConnectionProfile(database, t.entityKey)
+                                }
+                                false
+                            }
                         }
                         TombstoneRecorder.GROUP -> {
                             val row = database.connectionGroupDao().getGroupById(t.entityKey)
@@ -608,7 +629,15 @@ class SyncDataApplier {
                         TombstoneRecorder.CLOUD_ACCOUNT -> {
                             val row = database.cloudAccountDao().getById(t.entityKey)
                             if (row != null && row.modifiedAt > t.deletedAt) true
-                            else { if (row != null) database.cloudAccountDao().deleteById(t.entityKey); false }
+                            else {
+                                if (row != null) {
+                                    database.cloudAccountDao().deleteById(t.entityKey)
+                                    // Keep the Panes registry and any saved pane-group membership accurate.
+                                    io.github.tabssh.storage.registry.ConnectableHostRegistry
+                                        .removeCloudAccount(database, t.entityKey)
+                                }
+                                false
+                            }
                         }
                         TombstoneRecorder.PORT_FORWARD -> {
                             val row = database.portForwardDao().getById(t.entityKey)
@@ -884,6 +913,9 @@ class SyncDataApplier {
                 // Clean up orphan soft-FK references left by this connection.
                 database.monitorSlotDao().deleteByConnectionId(connectionId)
                 database.hypervisorDao().clearLinkedConnectionId(connectionId)
+                // Keep the Panes registry and any saved pane-group membership accurate.
+                io.github.tabssh.storage.registry.ConnectableHostRegistry
+                    .removeConnectionProfile(database, connectionId)
                 count++
                 Logger.d(TAG, "Deleted connection: $connectionId")
             } catch (e: Exception) {
@@ -1133,6 +1165,7 @@ class SyncDataApplier {
                     "syncDashboard"         -> preferenceManager.setSyncDashboardEnabled(value as Boolean)
                     "syncPortForwards"      -> preferenceManager.setSyncPortForwardsEnabled(value as Boolean)
                     "syncNetworkRoutes"     -> preferenceManager.setSyncNetworkRoutesEnabled(value as Boolean)
+                    "syncPaneGroups"        -> preferenceManager.setSyncPaneGroupsEnabled(value as Boolean)
                     "syncContainers"        -> preferenceManager.setSyncContainersEnabled(value as Boolean)
                     // Development-build read compatibility: payloads written before the container rename used `syncDocker`.
                     "syncDocker"            -> preferenceManager.setSyncContainersEnabled(value as Boolean)
@@ -1713,6 +1746,9 @@ class SyncDataApplier {
                 if (merged != survivor) database.connectionDao().updateConnection(merged)
                 duplicates.forEach { dup ->
                     database.connectionDao().deleteConnectionById(dup.id)
+                    // Keep the Panes registry and any saved pane-group membership accurate.
+                    io.github.tabssh.storage.registry.ConnectableHostRegistry
+                        .removeConnectionProfile(database, dup.id)
                     removed++
                 }
             }

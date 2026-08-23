@@ -14,8 +14,10 @@ import io.github.tabssh.hypervisor.vnc.console.VncConsoleChannel
 import io.github.tabssh.themes.definitions.Theme
 import io.github.tabssh.ui.tabs.ConsoleDisplayMode
 import io.github.tabssh.ui.tabs.ConsoleTab
+import io.github.tabssh.ui.tabs.PanesTab
 import io.github.tabssh.ui.tabs.Tab
 import io.github.tabssh.ui.tabs.VncTab
+import io.github.tabssh.ui.views.PanesGridView
 import io.github.tabssh.ui.views.SpiceView
 import io.github.tabssh.ui.views.TerminalView
 import io.github.tabssh.ui.views.VncView
@@ -68,6 +70,7 @@ class TerminalPagerAdapter(
         private const val VIEW_TYPE_SSH = 0
         private const val VIEW_TYPE_VNC = 1
         private const val VIEW_TYPE_CONSOLE = 2
+        private const val VIEW_TYPE_PANES = 3
     }
 
     // Track bound view holders (all kinds) for theme/pref updates and lookup.
@@ -138,10 +141,19 @@ class TerminalPagerAdapter(
         is Tab.Ssh -> VIEW_TYPE_SSH
         is Tab.Vnc -> VIEW_TYPE_VNC
         is Tab.Console -> VIEW_TYPE_CONSOLE
+        is Tab.Panes -> VIEW_TYPE_PANES
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         return when (viewType) {
+            VIEW_TYPE_PANES -> {
+                val gridView = PanesGridView(parent.context)
+                gridView.layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                PanesViewHolder(gridView, fontSize, fontValue, reverseScrollDirection, lineSpacingPercent)
+            }
             VIEW_TYPE_VNC -> {
                 val vncView = VncView(parent.context)
                 vncView.layoutParams = ViewGroup.LayoutParams(
@@ -224,6 +236,11 @@ class TerminalPagerAdapter(
                 holder.bind(tab.consoleTab)
                 currentTheme?.let { theme -> holder.applyTheme(theme) }
             }
+            is Tab.Panes -> {
+                if (holder !is PanesViewHolder) return
+                holder.bind(tab.panesTab)
+                currentTheme?.let { theme -> holder.applyTheme(theme) }
+            }
         }
         boundViewHolders.add(holder)
     }
@@ -232,6 +249,7 @@ class TerminalPagerAdapter(
         super.onViewRecycled(holder)
         if (holder is VncViewHolder) holder.unbind()
         if (holder is ConsoleViewHolder) holder.unbind()
+        if (holder is PanesViewHolder) holder.unbind()
         boundViewHolders.remove(holder)
     }
 
@@ -641,6 +659,98 @@ class TerminalPagerAdapter(
             vncView.onBackspace = null
             vncView.onViewSizeReady = null
             vncView.onContextMenuRequested = null
+        }
+    }
+
+    /**
+     * ViewHolder for a Panes page (up to 6 tiled SSH terminals in one
+     * tab-strip slot). Each pane's [TerminalView] is created lazily on
+     * first bind and reused across rebinds of the same [PanesTab]; click on
+     * a tile moves [PanesTab.focusedPaneIndex] and drives the highlighted
+     * border via [PanesGridView.setFocusedIndex].
+     */
+    class PanesViewHolder(
+        private val gridView: PanesGridView,
+        private val fontSize: Int,
+        private val fontValue: String,
+        private val reverseScrollDirection: Boolean,
+        private val lineSpacingPercent: Int
+    ) : RecyclerView.ViewHolder(gridView) {
+
+        private var boundPanesTab: PanesTab? = null
+        private var paneTerminalViews: MutableMap<String, TerminalView> = mutableMapOf()
+        private var focusJob: Job? = null
+        private var entriesJob: Job? = null
+        private val holderScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        private var currentTheme: Theme? = null
+
+        fun bind(panesTab: PanesTab) {
+            unbind()
+            boundPanesTab = panesTab
+            rebuildTiles(panesTab)
+            focusJob = holderScope.launch {
+                panesTab.focusedPaneIndex.collect { index -> gridView.setFocusedIndex(index) }
+            }
+            entriesJob = holderScope.launch {
+                panesTab.entries.collect { rebuildTiles(panesTab) }
+            }
+        }
+
+        fun applyTheme(theme: Theme) {
+            currentTheme = theme
+            paneTerminalViews.values.forEach { it.applyTheme(theme) }
+        }
+
+        private fun terminalViewFor(hostId: String): TerminalView =
+            paneTerminalViews.getOrPut(hostId) {
+                TerminalView(gridView.context).apply {
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    this.reverseScrollDirection = this@PanesViewHolder.reverseScrollDirection
+                    setLineSpacingPercent(this@PanesViewHolder.lineSpacingPercent)
+                    setFont(fontValue)
+                    setFontSize(fontSize)
+                }
+            }
+
+        private fun rebuildTiles(panesTab: PanesTab) {
+            val entries = panesTab.currentEntries()
+            // Drop terminal views for panes no longer present (e.g. a pane
+            // was closed independently), so their TermuxBridge attachment
+            // isn't held onto past its tile's lifetime.
+            val liveIds = entries.map { it.hostId }.toSet()
+            (paneTerminalViews.keys - liveIds).forEach { paneTerminalViews.remove(it) }
+
+            val contents = entries.map { entry ->
+                val terminalView = terminalViewFor(entry.hostId)
+                entry.sshTab?.let { sshTab -> terminalView.attachTerminalEmulator(sshTab.termuxBridge) }
+                currentTheme?.let { theme -> terminalView.applyTheme(theme) }
+                terminalView
+            }
+            gridView.setContents(contents) { index -> boundPanesTab?.setFocusedPane(index) }
+            gridView.setFocusedIndex(panesTab.focusedPaneIndex.value)
+        }
+
+        /**
+         * The currently-focused pane's [TerminalView], or null if nothing is
+         * bound/focused. Used by TabTerminalActivity's getActiveTerminalView/
+         * getActiveInputView so keyboard input and the PREFIX-key visual
+         * route to the right pane, not just "some" pane.
+         */
+        fun focusedTerminalView(): TerminalView? {
+            val entry = boundPanesTab?.focusedEntry() ?: return null
+            return paneTerminalViews[entry.hostId]
+        }
+
+        /** Called from [onViewRecycled] — drop the collectors so a recycled page can't drive a stale tab. */
+        fun unbind() {
+            focusJob?.cancel()
+            focusJob = null
+            entriesJob?.cancel()
+            entriesJob = null
+            boundPanesTab = null
         }
     }
 }

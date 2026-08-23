@@ -61,13 +61,15 @@ data class SyncItemCounts(
     val registryCredentials: Int = 0,
     val composeStacks: Int = 0,
     val singleContainerConfigs: Int = 0,
-    val containerAutoUpdatePolicies: Int = 0
+    val containerAutoUpdatePolicies: Int = 0,
+    /** Saved Panes groups (up to 6 terminal connections tiled together). */
+    val paneGroups: Int = 0
 ) {
     fun total(): Int = connections + keys + themes + preferences + hostKeys +
         workspaces + snippets + identities + groups + hypervisors + certificates +
         macros + monitorSlots + hypervisorAccounts + vncHosts + vncIdentities +
         cloudAccounts + dashboard + portForwards + networkRoutes + containerHosts + registryCredentials +
-        composeStacks + singleContainerConfigs + containerAutoUpdatePolicies
+        composeStacks + singleContainerConfigs + containerAutoUpdatePolicies + paneGroups
 }
 
 /**
@@ -168,7 +170,11 @@ data class SyncDataPackage(
      *  so a peer applying this payload removes its own copy instead of the
      *  upload-only union resurrecting it. Default empty so old sync files
      *  (without this field) deserialize cleanly. */
-    val tombstones: List<io.github.tabssh.storage.database.entities.SyncTombstone> = emptyList()
+    val tombstones: List<io.github.tabssh.storage.database.entities.SyncTombstone> = emptyList(),
+    /** Saved Panes groups (up to 6 terminal connections tiled together into one
+     *  terminal-tab-strip slot), last-write-wins REPLACE on UUID PK. Gated by the
+     *  sync_pane_groups toggle. */
+    val paneGroups: List<io.github.tabssh.storage.database.entities.PaneGroup> = emptyList()
 )
 
 /**

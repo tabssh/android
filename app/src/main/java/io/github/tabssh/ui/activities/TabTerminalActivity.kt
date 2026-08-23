@@ -115,6 +115,12 @@ import io.github.tabssh.ui.keyboard.KeyboardKey
 import io.github.tabssh.ui.keyboard.KeyboardLayoutManager
 import io.github.tabssh.ui.keyboard.MultiRowKeyboardView
 import io.github.tabssh.ui.tabs.VncTab
+import io.github.tabssh.cloud.CloudProviderType
+import io.github.tabssh.cloud.newClient
+import io.github.tabssh.storage.database.entities.ConnectableHost
+import io.github.tabssh.ui.tabs.PaneEntry
+import io.github.tabssh.ui.tabs.PanesTab
+import org.json.JSONObject
 import io.github.tabssh.ui.views.PaletteDialog
 import io.github.tabssh.ui.views.PerformanceOverlayView
 import io.github.tabssh.utils.ClipboardHelper
@@ -140,6 +146,7 @@ class TabTerminalActivity : TabSSHActivity() {
     companion object {
         const val EXTRA_CONNECTION_PROFILE_ID = "connection_profile_id"
         const val EXTRA_CONNECTION_PROFILE = "connection_profile"
+        const val EXTRA_PANE_GROUP_ID = "pane_group_id"
         const val EXTRA_AUTO_CONNECT = "auto_connect"
         // Issue #165 — used by the Connections-tab "Active Sessions" strip
         // to focus an already-running tab instead of (re)connecting. The
@@ -2098,6 +2105,16 @@ class TabTerminalActivity : TabSSHActivity() {
             }
         }
 
+        // Panes plan Step 3 — PanesFragment's "open" action passes the
+        // PaneGroup id. Reattach to an already-parked group's tab first
+        // (Step 4's "Keep Running in Background" relaunch path) before
+        // dialing fresh connections for every member.
+        val paneGroupId = intent.getStringExtra(EXTRA_PANE_GROUP_ID)
+        if (paneGroupId != null) {
+            openPaneGroup(paneGroupId)
+            return
+        }
+
         // Check for widget connection intent
         val widgetConnectionId = intent.getStringExtra("connection_id")
         if (widgetConnectionId != null) {
@@ -2993,6 +3010,25 @@ class TabTerminalActivity : TabSSHActivity() {
             .show()
     }
 
+    /**
+     * Panes plan Step 3 — [updatePrefixKeyVisual]'s "is PRE key disabled for
+     * this connection" check is keyed off [SSHTab.isPrefixKeyEnabled], which
+     * only exists on SSH tabs. `tabManager.getActiveTab()` already returns
+     * null for a Tab.Panes active tab (it's SSH-only by design), so without
+     * this resolver the PRE key would silently fall back to the generic
+     * "no mux" grey state for every Panes tab instead of reflecting the
+     * focused pane's actual SSHTab. One small resolver here — rather than
+     * threading a Panes-aware tab lookup through updatePrefixKeyVisual's
+     * ~11 call sites — keeps the fix isolated and additive.
+     */
+    private fun resolveActiveSshTabForPrefixKey(): SSHTab? {
+        return when (val entry = tabManager.getActiveTabSealed()) {
+            is Tab.Ssh -> entry.sshTab
+            is Tab.Panes -> entry.panesTab.focusedEntry()?.sshTab
+            else -> null
+        }
+    }
+
     private fun updatePrefixKeyVisual(multiplexerType: String?) {
         // Four distinct visual states:
         //   0. Disabled (picker's per-connection "Disable PRE key" row) → forced heavy dim,
@@ -3005,7 +3041,7 @@ class TabTerminalActivity : TabSSHActivity() {
         // The active=true solid fill is reserved for the armed state only so the user
         // can tell the difference between "mux running" and "about to send prefix".
         val MUX_GREEN = ContextCompat.getColor(this, R.color.status_success)
-        val activeTab = tabManager.getActiveTab()
+        val activeTab = resolveActiveSshTabForPrefixKey()
         when {
             activeTab != null && !activeTab.isPrefixKeyEnabled ->
                 binding.multiRowKeyboard.setKeyState(
@@ -3402,6 +3438,10 @@ class TabTerminalActivity : TabSSHActivity() {
                         is Tab.Ssh -> return@forEach
                         is Tab.Vnc -> tab.vncTab.connectionState
                         is Tab.Console -> tab.consoleTab.connectionState
+                        // Panes tabs have no single connection state to gate a
+                        // close policy on — each pane's own SSHTab already goes
+                        // through the SSH close-policy path independently.
+                        is Tab.Panes -> return@forEach
                     }
                     consoleGateObservers[tab.tabId] = lifecycleScope.launch {
                         var hasBeenConnected = false
@@ -3439,6 +3479,7 @@ class TabTerminalActivity : TabSSHActivity() {
             is Tab.Ssh -> return
             is Tab.Vnc -> Pair(tab.vncTab.lastDisconnectReason, tab.vncTab.lastDisconnectMessage)
             is Tab.Console -> Pair(tab.consoleTab.lastDisconnectReason, tab.consoleTab.lastDisconnectMessage)
+            is Tab.Panes -> return
         }
         Logger.i("TabTerminalActivity",
             "Console tab ${tab.tabId} disconnected (reason=$reason, detail=$detail)")
@@ -3482,6 +3523,7 @@ class TabTerminalActivity : TabSSHActivity() {
             is Tab.Ssh -> return
             is Tab.Vnc -> tab.vncTab.getDisplayTitle()
             is Tab.Console -> tab.consoleTab.getDisplayTitle()
+            is Tab.Panes -> return
         }
         val reconnectableHost = (tab as? Tab.Vnc)?.vncTab?.vncHost
         val body = buildString {
@@ -4010,6 +4052,205 @@ class TabTerminalActivity : TabSSHActivity() {
         Toast.makeText(this, getString(R.string.terminal_split_pane_closed), Toast.LENGTH_SHORT).show()
     }
 
+    /**
+     * SharedPreferences key for per-instance SSH credentials, scoped to the
+     * cloud account. Deliberately a private, self-contained copy of
+     * CloudAccountManagerActivity's own `hostCredKey` (same string format,
+     * same storage the group-edit picker's underlying ConnectableHost rows
+     * were built from) — NOT a call into that activity, per NO REGRESSIONS.
+     */
+    private fun paneCloudHostCredKey(accountId: String, instanceId: String) =
+        "cloud_host_creds_${accountId}_${instanceId}"
+
+    /**
+     * Panes plan Step 3 — resolve one [ConnectableHost] pane-group member
+     * into a connected [SSHTab]. Self-contained and NOT a refactor of
+     * connectToProfile/openSplitWithProfile/CloudAccountManagerActivity
+     * .handleConnect (NO REGRESSIONS) — it mirrors openSplitWithProfile's
+     * direct-SSHTab-construction style for connection-profile-backed
+     * members, and handleConnect's tempProfile pattern (live IP re-fetch +
+     * hostCredKey lookup) for cloud-instance-backed members. Returns null
+     * (never throws, except on cancellation) on any resolution/connect
+     * failure so the caller can skip this member and keep launching the
+     * rest of the group.
+     */
+    private suspend fun connectPaneMember(host: ConnectableHost): SSHTab? {
+        val profile: ConnectionProfile = when (host.sourceType) {
+            ConnectableHost.SOURCE_CONNECTION_PROFILE -> {
+                withContext(Dispatchers.IO) { app.database.connectionDao().getConnectionById(host.id) }
+                    ?: run {
+                        Logger.w("TabTerminalActivity", "connectPaneMember: connection profile ${host.id} not found")
+                        return null
+                    }
+            }
+            ConnectableHost.SOURCE_CLOUD_INSTANCE -> {
+                val accountId = host.cloudAccountId
+                val instanceId = host.instanceId
+                if (accountId == null || instanceId == null) {
+                    Logger.w("TabTerminalActivity", "connectPaneMember: cloud host ${host.id} missing accountId/instanceId")
+                    return null
+                }
+                val account = withContext(Dispatchers.IO) { app.database.cloudAccountDao().getById(accountId) }
+                if (account == null) {
+                    Logger.w("TabTerminalActivity", "connectPaneMember: cloud account $accountId not found")
+                    return null
+                }
+                val token = withContext(Dispatchers.IO) {
+                    app.securePasswordManager.retrievePassword("cloud_token_${account.id}")
+                }
+                if (token.isNullOrBlank()) {
+                    Logger.w("TabTerminalActivity", "connectPaneMember: no stored token for cloud account ${account.name}")
+                    return null
+                }
+                val providerType = CloudProviderType.fromTag(account.provider)
+                if (providerType == null) {
+                    Logger.w("TabTerminalActivity", "connectPaneMember: unknown provider tag ${account.provider}")
+                    return null
+                }
+                val liveInstance = try {
+                    withContext(Dispatchers.IO) { providerType.newClient().fetchLiveInstances(token) }
+                        .firstOrNull { it.id == instanceId }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Logger.w("TabTerminalActivity", "connectPaneMember: fetchLiveInstances failed for ${account.name}", e)
+                    null
+                }
+                val ip = liveInstance?.ip ?: liveInstance?.privateIp
+                if (liveInstance == null || ip.isNullOrBlank()) {
+                    Logger.w("TabTerminalActivity", "connectPaneMember: no live IP for cloud instance $instanceId")
+                    return null
+                }
+                val credsJson = withContext(Dispatchers.IO) {
+                    app.securePasswordManager.retrievePassword(paneCloudHostCredKey(account.id, instanceId))
+                }
+                val creds = credsJson?.let {
+                    runCatching { JSONObject(it) }
+                        .onFailure { e -> Logger.w("TabTerminalActivity", "connectPaneMember: stored creds JSON corrupt", e) }
+                        .getOrNull()
+                }
+                val username = creds?.optString("username").takeIf { !it.isNullOrBlank() } ?: "root"
+                val password = creds?.optString("password").takeIf { !it.isNullOrBlank() }
+                val identityId = creds?.optString("identityId").takeIf { !it.isNullOrBlank() }
+                val port = creds?.optInt("port", 22)?.takeIf { it in 1..65535 } ?: 22
+                if (password != null) {
+                    withContext(Dispatchers.IO) {
+                        app.securePasswordManager.storePassword(
+                            liveInstance.id, password, SecurePasswordManager.StorageLevel.SESSION_ONLY
+                        )
+                    }
+                }
+                ConnectionProfile(
+                    id = liveInstance.id,
+                    name = liveInstance.name,
+                    host = ip,
+                    port = port,
+                    username = username,
+                    identityId = identityId
+                )
+            }
+            else -> {
+                Logger.w("TabTerminalActivity", "connectPaneMember: unknown source type ${host.sourceType}")
+                return null
+            }
+        }
+
+        return try {
+            if (profile.protocol.equals("telnet", ignoreCase = true)) {
+                val telnet = TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23)
+                val newTab = SSHTab(
+                    profile,
+                    TermuxBridge(
+                        transcriptRows = app.preferencesManager.getTranscriptRows(),
+                        cursorStyle = app.preferencesManager.getCursorStyleInt()
+                    )
+                )
+                if (newTab.connect(telnet)) {
+                    newTab
+                } else {
+                    try { newTab.disconnect() } catch (_: Exception) {}
+                    null
+                }
+            } else {
+                val ssh = app.sshSessionManager.connectToServer(profile) ?: return null
+                val newTab = SSHTab(
+                    profile,
+                    TermuxBridge(
+                        transcriptRows = app.preferencesManager.getTranscriptRows(),
+                        cursorStyle = app.preferencesManager.getCursorStyleInt()
+                    )
+                )
+                if (newTab.connect(ssh)) {
+                    newTab
+                } else {
+                    try { newTab.disconnect() } catch (_: Exception) {}
+                    try { app.sshSessionManager.closeConnection(profile.id) } catch (_: Exception) {}
+                    null
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Logger.w("TabTerminalActivity", "connectPaneMember: connect failed for ${profile.getDisplayName()}", e)
+            null
+        }
+    }
+
+    /**
+     * Panes plan Step 3/4 — launch (or reattach to) a saved PaneGroup.
+     * Reattach path first: if the group has a parked PanesTab (Step 4's
+     * "Keep Running in Background"), reclaim it instead of dialing fresh
+     * connections. Reattach-matching is keyed by PaneEntry.hostId, not
+     * ConnectionProfile.id — the parked tab's existing entries are reused
+     * as-is; it is not re-diffed against the group's current memberHostIds.
+     */
+    private fun openPaneGroup(groupId: String) {
+        if (tabManager.hasParkedPanesTab(groupId)) {
+            val reclaimed = tabManager.reclaimParkedPanesTab(groupId)
+            if (reclaimed != null) {
+                Logger.i("TabTerminalActivity", "Reattached parked panes tab for group $groupId")
+                updateViewPagerAdapter()
+                return
+            }
+        }
+        lifecycleScope.launch {
+            val group = withContext(Dispatchers.IO) { app.database.paneGroupDao().getById(groupId) }
+            if (group == null) {
+                Logger.w("TabTerminalActivity", "openPaneGroup: group $groupId not found")
+                Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_connection_not_found), Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            val hosts = withContext(Dispatchers.IO) {
+                group.memberHostIds.mapNotNull { app.database.connectableHostDao().getById(it) }
+            }
+            if (hosts.isEmpty()) {
+                Logger.w("TabTerminalActivity", "openPaneGroup: no resolvable members for group ${group.name}")
+                Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_connection_not_found), Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            val entries = mutableListOf<PaneEntry>()
+            hosts.forEachIndexed { index, host ->
+                val sshTab = connectPaneMember(host)
+                if (sshTab == null) {
+                    Logger.w("TabTerminalActivity", "openPaneGroup: skipping unresolvable/failed member ${host.name}")
+                } else {
+                    entries.add(PaneEntry(hostId = host.id, sshTab = sshTab, gridPosition = index))
+                }
+            }
+            if (entries.isEmpty()) {
+                Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_connection_not_found), Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            val created = tabManager.createPanesTab(group.id, group.name, entries)
+            if (created == null) {
+                entries.forEach { entry -> try { entry.sshTab?.cleanup() } catch (_: Exception) {} }
+                Toast.makeText(this@TabTerminalActivity, getString(R.string.virt_viewer_max_tabs), Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            updateViewPagerAdapter()
+        }
+    }
+
     private fun setBottomPaneFocused(focus: Boolean) {
         if (focus && splitTab == null) return
         // Skip the toast (but still flip the focus flag) if we're moving
@@ -4361,8 +4602,12 @@ class TabTerminalActivity : TabSSHActivity() {
             // Get the currently visible page in ViewPager2
             val currentItem = viewPager?.currentItem ?: return null
             val holder = (viewPager?.getChildAt(0) as? RecyclerView)
-                ?.findViewHolderForAdapterPosition(currentItem) as? TerminalPagerAdapter.TerminalViewHolder
-            holder?.terminalView
+                ?.findViewHolderForAdapterPosition(currentItem)
+            when (holder) {
+                is TerminalPagerAdapter.TerminalViewHolder -> holder.terminalView
+                is TerminalPagerAdapter.PanesViewHolder -> holder.focusedTerminalView()
+                else -> null
+            }
         } else {
             terminalView
         }
@@ -4392,6 +4637,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 holder.isRfbMode -> holder.vncView
                 else -> holder.spiceView
             }
+            is TerminalPagerAdapter.PanesViewHolder -> holder.focusedTerminalView()
             else -> null
         }
     }
@@ -5089,9 +5335,33 @@ class TabTerminalActivity : TabSSHActivity() {
             when (val entry = tabManager.getActiveTabSealed()) {
                 is Tab.Ssh -> tabManager.closeTab(activeIndex)
                 is Tab.Vnc, is Tab.Console -> closeConsoleTab(entry.tabId)
+                is Tab.Panes -> showPanesCloseDialog(entry)
                 null -> Unit
             }
         }
+    }
+
+    /**
+     * Panes plan Step 4 — Disconnect All (full cleanup + tab removal) vs
+     * Keep Running in Background (park via TabManager.parkPanesTab; every
+     * pane's SSHTab/SSHConnectionService session stays alive, the tab is
+     * just removed from the strip). Mirrors [showConsoleReconnectDialog]'s
+     * dialog template.
+     */
+    private fun showPanesCloseDialog(tab: Tab.Panes) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.panes_close_dialog_title)
+            .setMessage(R.string.panes_close_dialog_message)
+            .setNegativeButton(R.string.panes_disconnect_all) { _, _ ->
+                Logger.i("TabTerminalActivity", "User chose Disconnect All for panes tab ${tab.tabId}")
+                tabManager.closeTabByIdSealed(tab.tabId)
+            }
+            .setPositiveButton(R.string.panes_keep_running_background) { _, _ ->
+                Logger.i("TabTerminalActivity", "User chose Keep Running in Background for panes tab ${tab.tabId}")
+                tabManager.parkPanesTab(tab.tabId)
+            }
+            .setNeutralButton(R.string.cancel, null)
+            .show()
     }
 
     private fun disconnectAllTabs() {

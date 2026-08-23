@@ -89,11 +89,11 @@ class MainActivity : TabSSHActivity() {
         val startup = prefs.getString("general_startup_behavior", "connections")
         // Explicit start_tab extra overrides the pref — used when another
         // activity (e.g. the command palette) navigates here to a specific tab.
-        val explicitTab = intent.getIntExtra("start_tab", -1).takeIf { it in 0..4 }
+        val explicitTab = intent.getIntExtra("start_tab", -1).takeIf { it in 0..5 }
         val initialTabIndex = explicitTab ?: when (startup) {
             // Frequent tab in MainPagerAdapter
             "frequent"    -> MainTab.FREQUENT
-            "last_tab"    -> prefs.getInt("ui_last_main_tab_index", MainTab.HOSTS).coerceIn(0, 4)
+            "last_tab"    -> prefs.getInt("ui_last_main_tab_index", MainTab.HOSTS).coerceIn(0, 5)
             // Connections tab (default)
             else          -> MainTab.HOSTS
         }
@@ -360,7 +360,7 @@ class MainActivity : TabSSHActivity() {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        val tab = intent.getIntExtra("start_tab", -1).takeIf { it in 0..4 }
+        val tab = intent.getIntExtra("start_tab", -1).takeIf { it in 0..5 }
         intent.getIntExtra("start_sub_tab", -1).takeIf { it >= 0 }?.let { subTab ->
             androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
                 .edit().putInt(io.github.tabssh.ui.fragments.AuthFragment.PREF_LAST_SUB_TAB, subTab).apply()

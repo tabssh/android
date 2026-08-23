@@ -14,7 +14,7 @@ import io.github.tabssh.utils.logging.Logger
 /**
  * Main Room database for TabSSH.
  *
- * Current version: 16.
+ * Current version: 17.
  * Versions 1 and 2 never shipped to real users, so v3 is the effective schema
  * baseline and no fallback path exists for them. Every version bump from v3
  * onward MUST register a real Migration object via addMigrations(); destructive
@@ -53,9 +53,11 @@ import io.github.tabssh.utils.logging.Logger
         PendingSyncConflict::class,
         SyncLogEntry::class,
         Domain::class,
-        VpsHost::class
+        VpsHost::class,
+        PaneGroup::class,
+        ConnectableHost::class
     ],
-    version = 16,
+    version = 17,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -93,6 +95,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun syncLogDao(): SyncLogDao
     abstract fun domainDao(): DomainDao
     abstract fun vpsHostDao(): VpsHostDao
+    abstract fun paneGroupDao(): PaneGroupDao
+    abstract fun connectableHostDao(): ConnectableHostDao
 
     companion object {
         @Volatile
@@ -816,6 +820,34 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `pane_groups` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`layout` TEXT NOT NULL, " +
+                        "`member_host_ids` TEXT NOT NULL, " +
+                        "`sort_order` INTEGER NOT NULL DEFAULT 0, " +
+                        "`created_at` INTEGER NOT NULL, " +
+                        "`modified_at` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `connectable_hosts` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`source_type` TEXT NOT NULL, " +
+                        "`cloud_account_id` TEXT, " +
+                        "`instance_id` TEXT, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`host_preview` TEXT NOT NULL, " +
+                        "`protocol` TEXT NOT NULL DEFAULT 'ssh', " +
+                        "`updated_at` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -825,7 +857,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17)
                 .build()
                 INSTANCE = instance
                 instance

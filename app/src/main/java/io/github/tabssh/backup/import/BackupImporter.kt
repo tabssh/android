@@ -19,6 +19,7 @@ import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.storage.database.entities.Macro
 import io.github.tabssh.storage.database.entities.MonitorSlot
 import io.github.tabssh.storage.database.entities.NetworkRoute
+import io.github.tabssh.storage.database.entities.PaneGroup
 import io.github.tabssh.storage.database.entities.PortForward
 import io.github.tabssh.storage.database.entities.RegistryCredential
 import io.github.tabssh.storage.database.entities.SingleContainerConfig
@@ -152,6 +153,8 @@ class BackupImporter(
             { restorePortForwards(it, effectiveOverwrite) }) { out["port_forwards"] = it; Logger.d(TAG, "Restored $it port forwards") }
         table(BackupExporter.FILE_NETWORK_ROUTES, "network_routes",
             { restoreNetworkRoutes(it, effectiveOverwrite) }) { out["network_routes"] = it; Logger.d(TAG, "Restored $it network routes") }
+        table(BackupExporter.FILE_PANE_GROUPS, "pane_groups",
+            { restorePaneGroups(it, effectiveOverwrite) }) { out["pane_groups"] = it; Logger.d(TAG, "Restored $it pane groups") }
         // Prefer the current entry name; fall back to the development build's
         // docker_hosts.json so an old archive still restores into container_hosts.
         val containerHostsKey =
@@ -249,6 +252,9 @@ class BackupImporter(
         }
         if (backupData.containsKey(BackupExporter.FILE_NETWORK_ROUTES)) {
             database.networkRouteDao().getAllList().forEach { database.networkRouteDao().delete(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_PANE_GROUPS)) {
+            database.paneGroupDao().getAllList().forEach { database.paneGroupDao().delete(it) }
         }
         if (backupData.containsKey(BackupExporter.FILE_CONTAINER_HOSTS) ||
             backupData.containsKey(LEGACY_FILE_DOCKER_HOSTS)
@@ -509,6 +515,15 @@ class BackupImporter(
             if (existing != null && !overwriteExisting) return@restoreEntityList false
             if (existing == null) database.networkRouteDao().insert(route)
             else database.networkRouteDao().update(route)
+            true
+        }
+
+    private suspend fun restorePaneGroups(data: String, overwriteExisting: Boolean): Int =
+        restoreEntityList(data, ListSerializer(PaneGroup.serializer())) { group ->
+            val existing = database.paneGroupDao().getById(group.id)
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
+            if (existing == null) database.paneGroupDao().insert(group)
+            else database.paneGroupDao().update(group)
             true
         }
 

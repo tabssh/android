@@ -680,6 +680,9 @@ class PreferenceManager(private val context: Context) {
     fun isSyncNetworkRoutesEnabled(): Boolean = getBoolean("sync_network_routes", true)
     fun setSyncNetworkRoutesEnabled(enabled: Boolean) = setBoolean("sync_network_routes", enabled)
 
+    fun isSyncPaneGroupsEnabled(): Boolean = getBoolean("sync_pane_groups", true)
+    fun setSyncPaneGroupsEnabled(enabled: Boolean) = setBoolean("sync_pane_groups", enabled)
+
     fun isSyncContainersEnabled(): Boolean = getBoolean("sync_containers", true)
     fun setSyncContainersEnabled(enabled: Boolean) = setBoolean("sync_containers", enabled)
 

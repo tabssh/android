@@ -62,6 +62,7 @@ class SyncSettingsActivity : TabSSHActivity() {
         private const val PREF_DASHBOARD            = "sync_dashboard"
         private const val PREF_PORT_FORWARDS        = "sync_port_forwards"
         private const val PREF_NETWORK_ROUTES       = "sync_network_routes"
+        private const val PREF_PANE_GROUPS          = "sync_pane_groups"
         private const val PREF_CONTAINERS           = "sync_containers"
         private const val PREF_FREQUENCY     = "sync_frequency"
         private val FREQUENCY_LABELS = mapOf(
@@ -214,21 +215,23 @@ class SyncSettingsActivity : TabSSHActivity() {
             Triple(findViewById(R.id.row_sync_dashboard),          PREF_DASHBOARD,           getString(R.string.sync_settings_subtitle_dashboard)),
             Triple(findViewById(R.id.row_sync_port_forwards),      PREF_PORT_FORWARDS,       getString(R.string.sync_settings_subtitle_port_forwards)),
             Triple(findViewById(R.id.row_sync_network_routes),     PREF_NETWORK_ROUTES,      getString(R.string.sync_network_routes_summary)),
-            Triple(findViewById(R.id.row_sync_containers),         PREF_CONTAINERS,          getString(R.string.sync_settings_subtitle_containers))
+            Triple(findViewById(R.id.row_sync_containers),         PREF_CONTAINERS,          getString(R.string.sync_settings_subtitle_containers)),
+            Triple(findViewById(R.id.row_sync_pane_groups),        PREF_PANE_GROUPS,         getString(R.string.sync_settings_subtitle_pane_groups))
         )
         val titles = listOf(
             getString(R.string.settings_connections), getString(R.string.sync_settings_title_identities), getString(R.string.identity_ssh_keys_title), getString(R.string.nav_item_snippets), getString(R.string.sync_settings_title_themes),
             getString(R.string.sync_settings_title_host_keys), getString(R.string.nav_item_groups), getString(R.string.sync_settings_title_workspaces), getString(R.string.sync_settings_title_macros), getString(R.string.sync_settings_title_monitor_slots),
             getString(R.string.infra_tab_hypervisors), getString(R.string.sync_settings_title_hypervisor_accounts), getString(R.string.nav_item_vnc_hosts), getString(R.string.identity_vnc_title),
             getString(R.string.activity_label_cloud_accounts), getString(R.string.sync_settings_title_certificates), getString(R.string.container_manager_tab_dashboard), getString(R.string.routing_section_forwards_title),
-            getString(R.string.sync_network_routes), getString(R.string.container_tab_title)
+            getString(R.string.sync_network_routes), getString(R.string.container_tab_title), getString(R.string.sync_settings_title_pane_groups)
         )
         val defaults = listOf(
             true, true, true, true, true,
             true, true, true, true, true,
             true, true, true, true,
             true, true,
-            false, true, true, true
+            false, true, true, true,
+            true
         )
         syncItems.forEachIndexed { i, (row, prefKey, subtitle) ->
             row.findViewById<TextView>(R.id.text_sync_item_title).text  = titles[i]

@@ -263,6 +263,7 @@ class ConnectionsFragment : Fragment() {
         is Tab.Ssh -> sshTab.title
         is Tab.Vnc -> vncTab.title
         is Tab.Console -> consoleTab.title
+        is Tab.Panes -> panesTab.title
     }
 
     /** Per-instance connection-state flow for any tab kind — drives the dot. */
@@ -270,6 +271,17 @@ class ConnectionsFragment : Fragment() {
         is Tab.Ssh -> sshTab.connectionState
         is Tab.Vnc -> vncTab.connectionState
         is Tab.Console -> consoleTab.connectionState
+        // A Panes tab has no single connection state — its own panes each
+        // track theirs. Surface CONNECTED whenever at least one pane is
+        // connected so the strip doesn't hide/misrepresent an active group;
+        // DISCONNECTED only once every pane has dropped.
+        is Tab.Panes -> kotlinx.coroutines.flow.MutableStateFlow(
+            if (panesTab.currentEntries().any {
+                    it.sshTab?.connectionState?.value == io.github.tabssh.ssh.connection.ConnectionState.CONNECTED
+                }
+            ) io.github.tabssh.ssh.connection.ConnectionState.CONNECTED
+            else io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED
+        )
     }
 
     /**
@@ -358,6 +370,7 @@ class ConnectionsFragment : Fragment() {
                 }
                 is Tab.Vnc -> tab.vncTab.getDisplayTitle()
                 is Tab.Console -> tab.consoleTab.getDisplayTitle()
+                is Tab.Panes -> tab.panesTab.getDisplayTitle()
             }
             tab to display
         }
@@ -494,6 +507,9 @@ class ConnectionsFragment : Fragment() {
                             // Clean up orphan soft-FK references left by this connection.
                             app.database.monitorSlotDao().deleteByConnectionId(connection.id)
                             app.database.hypervisorDao().clearLinkedConnectionId(connection.id)
+                            // Keep the Panes registry and any saved pane-group membership accurate.
+                            io.github.tabssh.storage.registry.ConnectableHostRegistry
+                                .removeConnectionProfile(app.database, connection.id)
                             // clearPassword is suspend + IO-dispatched (KeyStore HAL round-trip).
                             try { app.securePasswordManager.clearPassword(connection.id) } catch (_: Exception) {}
                         }
@@ -737,6 +753,9 @@ class ConnectionsFragment : Fragment() {
                                 // Clean up orphan soft-FK references left by this connection.
                                 app.database.monitorSlotDao().deleteByConnectionId(c.id)
                                 app.database.hypervisorDao().clearLinkedConnectionId(c.id)
+                                // Keep the Panes registry and any saved pane-group membership accurate.
+                                io.github.tabssh.storage.registry.ConnectableHostRegistry
+                                    .removeConnectionProfile(app.database, c.id)
                                 // clearPassword is suspend + IO-dispatched (KeyStore HAL round-trip).
                                 // Without IO dispatch, N deletions in a loop = N KeyStore round-trips on Main → ANR.
                                 try { app.securePasswordManager.clearPassword(c.id) } catch (_: Exception) {}

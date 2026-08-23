@@ -424,6 +424,9 @@ class CloudAccountsActivity : TabSSHActivity() {
                             // H6 — record the deletion so it propagates and is not resurrected.
                             TombstoneRecorder.record(app, TombstoneRecorder.CLOUD_ACCOUNT, account.id)
                             app.securePasswordManager.clearPassword("cloud_token_${account.id}")
+                            // Keep the Panes registry and any saved pane-group membership accurate.
+                            io.github.tabssh.storage.registry.ConnectableHostRegistry
+                                .removeCloudAccount(app.database, account.id)
                         }
                     } catch (e: Exception) {
                         Logger.e(TAG, "Delete failed", e)

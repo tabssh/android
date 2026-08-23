@@ -400,6 +400,42 @@ original plan). If full-motion video streaming becomes a requirement, the
 options are cross-building a static GStreamer subset with manual plugin
 registration, or an alternative in-tree video decoder.
 
+### Durable record — `ConnectableHost` registry: deferred source types + Cluster Commands migration
+
+During the Panes feature design, the user confirmed the new `ConnectableHost` registry
+(unified ssh/mosh/telnet lookup spanning Hosts-tab `ConnectionProfile` rows and live Cloud
+Account instances, backing the Panes member picker) should eventually also cover hypervisor
+VMs, Docker, Incus, Podman, and LXC/LXD hosts as additional `sourceType` values, and that
+`ClusterCommandActivity` (currently sourcing members only from
+`connectionDao().getAllConnections()`) should migrate to the same shared registry instead of
+querying `ConnectionProfile` directly. Both are explicitly endorsed future direction but out
+of scope for the Panes commit — the registry ships in this feature with only
+`connection_profile` and `cloud_instance` source types. Revisit once a hypervisor/container
+management surface exists to hang the new source types off of, and when Cluster Commands is
+next touched.
+
+### Durable record — Panes v1 gaps (Step 3/4 implementation)
+
+Panes shipped with a deliberately minimal v1 of a few plan items — logged here rather than
+left only in conversation:
+
+- **`PanesGridView` has no resize/reorder gestures.** Only a fixed near-square auto-grid
+  layout with click-to-focus is implemented. The plan's "draggable dividers to resize,
+  drag-to-swap to reorder" affordances are not built. Revisit if users want manual pane
+  layout control.
+- **`ConnectionsFragment`'s Panes state flow is one-shot, not reactive.** It is built fresh
+  per call and does not re-emit when pane state changes later (e.g. a member disconnecting).
+  Revisit to make it a proper observed `Flow` if the Panes list UI needs to reflect live pane
+  state.
+- **Exhaustive-`when`-over-`Tab` blast radius is wider than static grep audits catch.** Adding
+  the `Tab.Panes` sealed variant required three separate build-and-fix rounds to find all
+  call sites (`ConfirmDisconnectActivity.kt`, two more spots in `TabTerminalActivity.kt`,
+  three in `SSHConnectionService.kt`) beyond what pre-build grepping surfaced. Next time a new
+  `Tab` sealed variant is added, treat a full-tree `grep -rn "is Tab\.\|when (tab)\|when(tab)"`
+  (or equivalent) as mandatory before considering the change complete, not just the compiler's
+  exhaustiveness check — the compiler catches `when` blocks but not every place a specific
+  `Tab` subtype is handled via `is`/`as?` checks outside an exhaustive `when`.
+
 ### Durable record — SPICE cross-compile recipe (x86_64 verified)
 
 Verified locally in Docker: `spice/out/x86_64/libtabssh_native.so` (11 MB,

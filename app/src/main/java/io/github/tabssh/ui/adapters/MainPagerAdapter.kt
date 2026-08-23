@@ -8,7 +8,7 @@ import io.github.tabssh.R
 import io.github.tabssh.ui.fragments.*
 
 /**
- * ViewPager2 adapter for MainActivity's 5 tabs.
+ * ViewPager2 adapter for MainActivity's 6 tabs.
  *
  * Issue #158 — fragments are constructed lazily inside `createFragment`.
  * The previous `private val fragments = listOf(...)` field built all
@@ -19,14 +19,17 @@ import io.github.tabssh.ui.fragments.*
  */
 class MainPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activity) {
 
-    // Mobile-first labels — long words don't fit 5 tabs on a phone.
-    // "Connections" → "Hosts", "Performance" → "Stats". "Infra" combines
-    // Hypervisors and Cloud Accounts in sub-tabs; "Auth" (formerly
+    // Mobile-first labels — long words don't fit many tabs on a phone.
+    // "Connections" → "Hosts", "Performance" → "Stats". "Panes" manages
+    // saved multi-terminal pane groups (launched as tab-strip entries in
+    // TabTerminalActivity, not a live terminal surface itself). "Infra"
+    // combines Hypervisors and Cloud Accounts in sub-tabs; "Auth" (formerly
     // "Identities") combines SSH/VMs/VNC/Keys credentials in sub-tabs.
     // Auth is last since it's the least-visited main tab.
     private val tabTitles = listOf(
         R.string.main_tab_frequent,
         R.string.main_tab_hosts,
+        R.string.main_tab_panes,
         R.string.main_tab_stats,
         R.string.main_tab_infra,
         R.string.main_tab_auth
@@ -39,6 +42,7 @@ class MainPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activi
     override fun createFragment(position: Int): Fragment = when (position) {
         MainTab.FREQUENT -> FrequentConnectionsFragment.newInstance()
         MainTab.HOSTS -> ConnectionsFragment.newInstance()
+        MainTab.PANES -> PanesFragment.newInstance()
         MainTab.STATS -> PerformanceFragment.newInstance()
         MainTab.INFRA -> InfraFragment.newInstance()
         MainTab.AUTH -> AuthFragment.newInstance()

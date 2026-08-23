@@ -409,6 +409,7 @@ class SSHConnectionService : Service() {
                     entry.vncTab.connectionState.value == ConnectionState.CONNECTED
                 is io.github.tabssh.ui.tabs.Tab.Console ->
                     entry.consoleTab.connectionState.value == ConnectionState.CONNECTED
+                is io.github.tabssh.ui.tabs.Tab.Panes -> false
             }
         }
     } catch (_: Exception) { emptyList() }
@@ -424,6 +425,7 @@ class SSHConnectionService : Service() {
         is io.github.tabssh.ui.tabs.Tab.Console -> Triple(
             tab.consoleTab.getDisplayTitle(), "console", tab.consoleTab.connectionState.value
         )
+        is io.github.tabssh.ui.tabs.Tab.Panes -> null
     }
 
     /** startForeground() on a graphical tab's status notification. */
@@ -571,6 +573,7 @@ class SSHConnectionService : Service() {
                         is io.github.tabssh.ui.tabs.Tab.Ssh -> return@forEach
                         is io.github.tabssh.ui.tabs.Tab.Vnc -> entry.vncTab.connectionState
                         is io.github.tabssh.ui.tabs.Tab.Console -> entry.consoleTab.connectionState
+                        is io.github.tabssh.ui.tabs.Tab.Panes -> return@forEach
                     }
                     graphicalStateObservers[entry.tabId] = serviceScope.launch(Dispatchers.Main) {
                         var hasBeenConnected = false

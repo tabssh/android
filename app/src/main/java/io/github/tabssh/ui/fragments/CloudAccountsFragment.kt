@@ -522,6 +522,9 @@ class CloudAccountsFragment : Fragment() {
                         if (!stored) {
                             // Roll back the DB insert so there is no orphaned account row.
                             app.database.cloudAccountDao().delete(account)
+                            // Keep the Panes registry accurate (no-op if nothing was ever refreshed for it).
+                            io.github.tabssh.storage.registry.ConnectableHostRegistry
+                                .removeCloudAccount(app.database, account.id)
                             throw Exception(getString(R.string.cloud_credential_storage_failed))
                         }
                     }
@@ -679,6 +682,9 @@ class CloudAccountsFragment : Fragment() {
                             // H6 — record the deletion so it propagates and is not resurrected.
                             TombstoneRecorder.record(app, TombstoneRecorder.CLOUD_ACCOUNT, account.id)
                             app.securePasswordManager.clearPassword("cloud_token_${account.id}")
+                            // Keep the Panes registry and any saved pane-group membership accurate.
+                            io.github.tabssh.storage.registry.ConnectableHostRegistry
+                                .removeCloudAccount(app.database, account.id)
                         }
                     } catch (e: Exception) {
                         Logger.e(TAG, "Delete failed", e)
