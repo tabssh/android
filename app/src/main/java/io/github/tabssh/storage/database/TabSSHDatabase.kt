@@ -57,7 +57,7 @@ import io.github.tabssh.utils.logging.Logger
         PaneGroup::class,
         ConnectableHost::class
     ],
-    version = 19,
+    version = 20,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -894,6 +894,25 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        // v19 -> v20: no-op at the SQL level. 04304ea27cc8 added @ColumnInfo
+        // defaultValue annotations to 7 entities (ConnectableHost, Domain,
+        // MonitorSlot, RegistryCredential, TrustedCertificate, VncHost,
+        // VpsHost) without bumping the version, on the reasoning that the
+        // on-disk defaults already matched. That reasoning was wrong: Room's
+        // identity-hash check is computed from the entity annotations
+        // themselves, not just the resulting SQL, so any device already on
+        // v19 (with the pre-fix identity hash baked in) fails Room's
+        // "forgot to update the version number" validation on next launch
+        // after updating to a build with the corrected annotations, even
+        // though the actual table structure never changed. This migration
+        // exists purely to re-anchor the identity hash to a new version
+        // number — there is nothing to execute.
+        val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Intentionally empty — see comment above.
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -903,7 +922,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20)
                 .build()
                 INSTANCE = instance
                 instance
