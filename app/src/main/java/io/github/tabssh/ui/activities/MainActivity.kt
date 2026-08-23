@@ -22,6 +22,7 @@ import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.storage.database.entities.HypervisorType
 import io.github.tabssh.storage.database.entities.VncHost
 import io.github.tabssh.ui.adapters.MainPagerAdapter
+import io.github.tabssh.ui.adapters.MainTab
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +31,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Main activity with 5-tab JuiceSSH-inspired layout
- * Tabs: Frequent | Connections | Identities | Performance | Hypervisors
+ * Tabs: Frequent | Hosts | Stats | Infra | Auth
  */
 class MainActivity : TabSSHActivity() {
 
@@ -91,10 +92,17 @@ class MainActivity : TabSSHActivity() {
         val explicitTab = intent.getIntExtra("start_tab", -1).takeIf { it in 0..4 }
         val initialTabIndex = explicitTab ?: when (startup) {
             // Frequent tab in MainPagerAdapter
-            "frequent"    -> 0
-            "last_tab"    -> prefs.getInt("ui_last_main_tab_index", 1).coerceIn(0, 4)
+            "frequent"    -> MainTab.FREQUENT
+            "last_tab"    -> prefs.getInt("ui_last_main_tab_index", MainTab.HOSTS).coerceIn(0, 4)
             // Connections tab (default)
-            else          -> 1
+            else          -> MainTab.HOSTS
+        }
+        // Optional deep-link into Auth's sub-tabs (e.g. Configure OCI -> VMs,
+        // unresolved-keys Snackbar / Ctrl+K "SSH Keys" -> Keys). Written into
+        // AuthFragment's own persisted sub-tab index before the pager moves,
+        // so AuthFragment.onViewCreated picks it up via the normal read path.
+        intent.getIntExtra("start_sub_tab", -1).takeIf { it >= 0 }?.let { subTab ->
+            prefs.edit().putInt(io.github.tabssh.ui.fragments.AuthFragment.PREF_LAST_SUB_TAB, subTab).apply()
         }
         viewPager.setCurrentItem(initialTabIndex, /* smoothScroll = */ false)
         Logger.d("MainActivity", "Startup behavior: $startup → tab $initialTabIndex")
@@ -110,7 +118,7 @@ class MainActivity : TabSSHActivity() {
         // FAB — only active on the Hosts tab (tab 1); all other tabs manage
         // their own in-content add actions or are read-only.
         fab.setOnClickListener {
-            if (viewPager.currentItem == 1) {
+            if (viewPager.currentItem == MainTab.HOSTS) {
                 startActivity(Intent(this, ConnectionEditActivity::class.java))
             }
         }
@@ -119,9 +127,9 @@ class MainActivity : TabSSHActivity() {
         viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 super.onPageSelected(position)
-                // Show FAB only on Connections tab (position 1)
-                // Identities tab (position 2) has its own FAB in the fragment
-                fab.visibility = if (position == 1) {
+                // Show FAB only on Hosts tab — Auth's sub-tabs each have
+                // their own in-content add action, and Infra is read-only.
+                fab.visibility = if (position == MainTab.HOSTS) {
                     android.view.View.VISIBLE
                 } else {
                     android.view.View.GONE
@@ -136,7 +144,7 @@ class MainActivity : TabSSHActivity() {
         // user manually swiped away and back to the Hosts tab — even
         // though the empty-state UI literally says "Tap the + button to
         // add your first SSH server").
-        fab.visibility = if (viewPager.currentItem == 1) {
+        fab.visibility = if (viewPager.currentItem == MainTab.HOSTS) {
             android.view.View.VISIBLE
         } else {
             android.view.View.GONE
@@ -286,8 +294,8 @@ class MainActivity : TabSSHActivity() {
                             getString(R.string.main_no_hosts_configured, typeName),
                             android.widget.Toast.LENGTH_LONG
                         ).show()
-                        // Switch to Hypervisors tab
-                        viewPager.currentItem = 4
+                        // Switch to Infra tab (Hypervisors sub-tab)
+                        viewPager.currentItem = MainTab.INFRA
                     }
                     hypervisors.size == 1 -> {
                         // Only one hypervisor, open it directly
@@ -353,6 +361,10 @@ class MainActivity : TabSSHActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         val tab = intent.getIntExtra("start_tab", -1).takeIf { it in 0..4 }
+        intent.getIntExtra("start_sub_tab", -1).takeIf { it >= 0 }?.let { subTab ->
+            androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+                .edit().putInt(io.github.tabssh.ui.fragments.AuthFragment.PREF_LAST_SUB_TAB, subTab).apply()
+        }
         if (tab != null) viewPager.setCurrentItem(tab, /* smoothScroll = */ true)
         handleNavAction(intent)
     }

@@ -84,6 +84,7 @@ enterprise security, hypervisor management, and cloud provider integration.
 - ⏺️ **Macros** — Capture and replay raw byte sequences (escape codes, modifier-composed Ctrl/Alt)
 - 🎮 **Automation** — Tasker integration, intent-based actions, deep links
 - 📊 **Multi-Host Dashboard** — Side-by-side CPU/memory/disk metrics across hosts; dashboard groups independent from connection groups
+- 🗓️ **Domain & VPS Renewal Tracking** — Track domain/VPS renewal dates with CSV/Markdown import-export and reminder notifications as expiry approaches
 
 ### Hypervisor Management
 
@@ -107,19 +108,21 @@ Manage instances across 8 cloud providers from a single Cloud Accounts screen.
 - **Connect** shortcut — launches SSH session to running instances with a public IP
 - Accounts editable after creation; OCI credentials importable from `~/.oci/config` via file picker
 
-### Docker Management 🐳
+### Container Management 🐳
 
-Portainer-class Docker management over the SSH connections you already have — no agent, no exposed API port.
+Portainer-class container management over the SSH connections you already have — no agent, no exposed API port. **Docker, Incus, Podman, and LXC/LXD** are supported at full parity.
 
-- **Docker Hosts** section in the Hypervisors tab — add any saved SSH connection as a Docker host, or give the host its own custom SSH endpoint (address, port, username, password/key/identity — password Keystore-only) kept separate from your connection list
+- **Containers** section in the Infra tab — add any saved SSH connection as a container host, or give the host its own custom SSH endpoint (address, port, username, password/key/identity — password Keystore-only) kept separate from your connection list; pick the **Engine** (Docker, Incus, Podman, LXC/LXD) the same way you pick a hypervisor type
+- **Per-host dashboard** — opens on a Dashboard summarising the host, then Containers, Stacks, Images, Volumes, Networks (Incus/LXC also get Snapshots, Profiles, Projects, since Docker/Podman have no equivalent)
 - **Containers** — start/stop/restart/pause/kill/rename/remove, live-follow logs, live stats, inspect
-- **Enter Terminal** — one tap opens `docker exec` into a container as a normal swipeable terminal tab (shell auto-detected)
+- **Enter Terminal** — one tap opens an exec shell into a container as a normal swipeable terminal tab (shell auto-detected)
 - **Images / Volumes / Networks** — list, inspect, create, remove, prune; image pull with per-layer progress
 - **Compose stacks, paste-first** — paste a complete `compose.yaml` and it's saved to a configurable remote directory (default `/srv/$USER/tabssh/docker/compose/{name}`, created automatically) with up/down/pull/restart and per-service status
 - **Single-container run configs** — form-based `run.yml` editor mirroring `docker run` flags, with a raw-YAML advanced toggle
 - **Watchtower-style updates** — a background worker checks registry digests twice a day (per-host toggle and interval override, at most 2 hosts at a time) and flags stale containers (notification + badge); opt-in per-container auto-recreate updates them unattended with automatic rollback on failure
 - **Registry support** — Docker Hub (anonymous token flow) and private registries (Basic/Bearer); credentials stored in the Android Keystore only
-- **Hybrid transport** — Docker Engine API over an SSH unix-socket forward when sshd allows it (`AllowTcpForwarding` + `AllowStreamLocalForwarding`), automatic fallback to the docker CLI over SSH exec with actionable hints — works either way
+- **Hybrid transport** — engine API over an SSH unix-socket forward when sshd allows it (`AllowTcpForwarding` + `AllowStreamLocalForwarding`), automatic fallback to the CLI over SSH exec with actionable hints — works either way
+- **Socket auto-discovery** — leave the socket field blank to probe the engine's standard locations and remember what's found, or pin an exact path / `tcp://host:port` / `ssh://user@host` for unusual setups
 
 ### VNC Console *(alpha)* 🖥️
 
@@ -176,7 +179,7 @@ Add connection → Tap "+" → enter host/port/username → save
 Connect        → Tap profile → accept host key → connected
 New tab        → Tap "+" in TabBar, or Ctrl+T
 SFTP           → Tap the folder icon in an active session
-VNC console    → Hypervisors → tap VM → tap VNC/Console
+VNC console    → Infra → Hypervisors → tap VM → tap VNC/Console
 Cloud          → Cloud Accounts → tap account → view live instances
 ```
 
@@ -225,18 +228,19 @@ Cloud          → Cloud Accounts → tap account → view live instances
 
 | Metric | Value |
 |---|---|
-| Kotlin files | 352 |
-| Lines of code | ~117,000 |
-| Activities | 45 |
+| Kotlin files | 411 |
+| Lines of code | ~131,000 |
+| Activities | 50 |
 | Fragments | 24 |
 | Services | 2 (`SSHConnectionService`, `VncKeepAliveService`) |
 | Built-in themes | 23 |
 | Translations | 4 (EN/ES/FR/DE) |
 | APK variants | 5 (universal + 4 arch-specific) |
 | Hypervisor backends | 4 (Proxmox, XCP-ng, VMware, QEMU/libvirt) |
+| Container engines | 4 (Docker, Incus, Podman, LXC/LXD) |
 | Cloud providers | 8 (DO, Hetzner, Linode, Vultr, AWS, GCP, Azure, OCI) |
-| Room DB version | 11 (9 forward migrations from v2) |
-| Trackers | 0 |
+| Room DB version | 16 (13 forward migrations from v2) |
+| Trackers | 2 (Domain Tracker, VPS Hosting Tracker) |
 
 ---
 
@@ -305,14 +309,14 @@ android/
 │   ├── ssh/            # SSHConnection, SSHSessionManager, port forwarding, X11
 │   ├── sftp/           # SFTP browser and file transfer
 │   ├── terminal/       # TermuxBridge, TerminalView, VNC RFB client
-│   ├── storage/        # Room DB (v11, 9 migrations), DAOs, entities
+│   ├── storage/        # Room DB (v16, 13 migrations), DAOs, entities
 │   ├── sync/           # SAF-based 3-way merge sync
 │   ├── backup/         # Encrypted ZIP backup/restore
 │   └── ui/             # Activities, Fragments, Adapters, ViewModels
 ├── app/src/main/res/   # Layouts, strings, themes, drawables
 ├── app/schemas/        # Room migration JSON schemas
 ├── .github/workflows/  # CI/CD (ci, security, development, beta, release,
-│                       #        build-toolchain, mosh-binaries, spice-libs)
+│                       #        build-toolchain, mosh-binaries, spice-libs, tor-binaries)
 ├── docker/             # Dockerfile.build (toolchain image), docker-compose.yml
 ├── scripts/            # Build and automation scripts
 ├── metadata/           # F-Droid metadata

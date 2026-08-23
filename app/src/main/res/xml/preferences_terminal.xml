@@ -25,6 +25,12 @@
       android:title="@string/prefs_export_current_theme_title"
       android:summary="@string/prefs_export_current_theme_summary" />
 
+    <Preference
+      android:key="open_theme_editor"
+      android:title="@string/prefs_open_theme_editor_title"
+      android:summary="@string/prefs_open_theme_editor_summary"
+      android:icon="@drawable/ic_settings" />
+
     <ListPreference
       android:key="terminal_font"
       android:title="@string/prefs_terminal_font_title"

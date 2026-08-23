@@ -4,7 +4,7 @@
   duplicated here; the drawer covers everything that has no natural tab home.
 
   Groups: Quick → Accounts → Manage → Connect → Insights → Settings → Diagnostics
-  Tabs handle: Frequent | Hosts | Identities | Stats | VMs
+  Tabs handle: Frequent | Hosts | Stats | Infra | Auth
   Import/Export moved to Settings screen.
   Quick.Home always returns to MainActivity's last-used tab (see
   TabSSHActivity.goHome()) — the only drawer path back to the main tab UI

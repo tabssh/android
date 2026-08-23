@@ -35,9 +35,12 @@ import kotlinx.coroutines.withContext
  * List screen for the Domain Tracker: tracked domain registrations,
  * expirations, and renewal status, mirroring [VncHostsActivity]'s pattern.
  *
- * Rows wrap onto a second line instead of scrolling horizontally — a
- * clickable/long-clickable `HorizontalScrollView` root previously
- * swallowed tap and long-press gestures, silently breaking edit/delete.
+ * The detail line no longer wraps — it lives inside a `HorizontalScrollView`
+ * so long rows scroll horizontally instead. Because a `HorizontalScrollView`
+ * intercepts the touch stream for taps landing on it, the row's click/
+ * long-click listeners are duplicated onto it (see `onBindViewHolder`) so
+ * opening/deleting a domain still works no matter where in the row the
+ * user taps.
  */
 class DomainTrackerActivity : TabSSHActivity() {
 
@@ -290,6 +293,7 @@ class DomainTrackerActivity : TabSSHActivity() {
         inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val name: TextView = view.findViewById(R.id.text_domain_name)
             val detail: TextView = view.findViewById(R.id.text_domain_detail)
+            val detailScroll: View = view.findViewById(R.id.scroll_domain_detail)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -309,11 +313,29 @@ class DomainTrackerActivity : TabSSHActivity() {
                 getString(R.string.domain_tracker_col_auto_renew) + ": " + domain.autoRenew,
                 getString(R.string.domain_tracker_col_expires) + ": " + expiration
             ).joinToString("  ·  ")
-            holder.itemView.setOnClickListener { onClick?.invoke(domain) }
-            holder.itemView.setOnLongClickListener {
+
+            // Zebra-striped rows: the HorizontalScrollView wrapping the detail
+            // text intercepts the touch stream for any tap that lands on it, so
+            // the same click/long-click listeners must be attached there too —
+            // relying solely on itemView's listener silently swallows taps in
+            // that region (matches the pattern established in VpsTrackerActivity).
+            val zebraColorAttr = if (position % 2 == 0) {
+                com.google.android.material.R.attr.colorSurface
+            } else {
+                com.google.android.material.R.attr.colorSurfaceVariant
+            }
+            val zebraColor = com.google.android.material.color.MaterialColors.getColor(holder.itemView, zebraColorAttr)
+            holder.itemView.setBackgroundColor(zebraColor)
+
+            val clickListener = View.OnClickListener { onClick?.invoke(domain) }
+            val longClickListener = View.OnLongClickListener {
                 onLongPress(domain)
                 true
             }
+            holder.itemView.setOnClickListener(clickListener)
+            holder.itemView.setOnLongClickListener(longClickListener)
+            holder.detailScroll.setOnClickListener(clickListener)
+            holder.detailScroll.setOnLongClickListener(longClickListener)
         }
     }
 

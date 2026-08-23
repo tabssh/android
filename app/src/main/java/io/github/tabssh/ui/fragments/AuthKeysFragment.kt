@@ -1,16 +1,11 @@
 package io.github.tabssh.ui.fragments
 
 import io.github.tabssh.sync.tombstone.TombstoneRecorder
-import android.content.ClipboardManager
-import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ArrayAdapter
-import android.widget.AutoCompleteTextView
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
@@ -21,28 +16,19 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.room.withTransaction
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.textfield.TextInputEditText
 import io.github.tabssh.R
 import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.keys.GenerateResult
 import io.github.tabssh.crypto.keys.ImportResult
 import io.github.tabssh.crypto.keys.KeyType
-import io.github.tabssh.crypto.storage.HypervisorPasswordStore
-import io.github.tabssh.crypto.storage.SecurePasswordManager
-import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.crypto.SSHKeyGenerator
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.storage.database.entities.ConnectionProfile
-import io.github.tabssh.storage.database.entities.HypervisorAccount
-import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.storage.database.entities.StoredKey
-import io.github.tabssh.storage.database.entities.VncIdentity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.SupervisorJob
-import io.github.tabssh.ui.adapters.HypervisorAccountAdapter
-import io.github.tabssh.ui.adapters.IdentityAdapter
 import io.github.tabssh.ui.adapters.StoredKeyAdapter
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.showError
@@ -50,22 +36,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * Unified credentials screen — four sections on one scrollable page:
- *
- *   1. Host Identities  — SSH auth credential sets (username + auth method)
- *   2. SSH Keys         — Raw private keys used by host identities
- *   3. VM Credentials   — Hypervisor login credentials (Proxmox / VMware / XCP-ng)
- *   4. VNC Identities   — Credentials for direct VNC and VeNCrypt connections
- */
-class IdentitiesFragment : Fragment() {
+/** Auth tab — Keys sub-tab: raw SSH private keys used by host identities. */
+class AuthKeysFragment : Fragment() {
 
     private lateinit var app: TabSSHApplication
-
-    private lateinit var identityAdapter: IdentityAdapter
-    private lateinit var virtAdapter: HypervisorAccountAdapter
     private lateinit var keyAdapter: StoredKeyAdapter
-    private lateinit var vncIdentityAdapter: VncIdentityAdapter
 
     // ── SAF launchers — must be declared as field initializers (before onStart) ──
 
@@ -147,236 +122,15 @@ class IdentitiesFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        return inflater.inflate(R.layout.fragment_identities, container, false)
+        return inflater.inflate(R.layout.fragment_auth_keys, container, false)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         app = requireActivity().application as TabSSHApplication
 
-        setupHostIdentitiesSection(view)
         setupSshKeysSection(view)
-        setupVirtIdentitiesSection(view)
-        setupVncIdentitiesSection(view)
         observeData()
-    }
-
-    // ─── Host Identities ────────────────────────────────────────────────────
-
-    private fun setupHostIdentitiesSection(view: View) {
-        identityAdapter = IdentityAdapter(
-            onEdit = { identity -> showIdentityOptionsMenu(identity) },
-            onDelete = { identity -> confirmDeleteIdentity(identity) }
-        )
-        val rv = view.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recycler_identities)
-        rv.layoutManager = LinearLayoutManager(requireContext())
-        rv.adapter = identityAdapter
-
-        identityAdapter.registerAdapterDataObserver(object : androidx.recyclerview.widget.RecyclerView.AdapterDataObserver() {
-            override fun onChanged() { updateIdentitiesEmptyState(view) }
-            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) { updateIdentitiesEmptyState(view) }
-            override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) { updateIdentitiesEmptyState(view) }
-            override fun onItemRangeChanged(positionStart: Int, itemCount: Int) { updateIdentitiesEmptyState(view) }
-            override fun onItemRangeChanged(positionStart: Int, itemCount: Int, payload: Any?) { updateIdentitiesEmptyState(view) }
-        })
-        updateIdentitiesEmptyState(view)
-
-        view.findViewById<MaterialButton>(R.id.btn_add_identity).setOnClickListener {
-            showCreateIdentityDialog()
-        }
-    }
-
-    private fun updateIdentitiesEmptyState(view: View) {
-        val empty = identityAdapter.itemCount == 0
-        view.findViewById<View>(R.id.recycler_identities).visibility = if (empty) View.GONE else View.VISIBLE
-        view.findViewById<View>(R.id.text_identities_empty).visibility = if (empty) View.VISIBLE else View.GONE
-    }
-
-    // ─── Virtualization Identities ──────────────────────────────────────────
-
-    private fun setupVirtIdentitiesSection(view: View) {
-        virtAdapter = HypervisorAccountAdapter(
-            onEdit = { account -> showVirtAccountDialog(account) },
-            onDelete = { account -> confirmDeleteVirtAccount(account) }
-        )
-        val rv = view.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recycler_virt_identities)
-        rv.layoutManager = LinearLayoutManager(requireContext())
-        rv.adapter = virtAdapter
-
-        view.findViewById<MaterialButton>(R.id.btn_add_virt_identity).setOnClickListener {
-            showVirtAccountDialog(null)
-        }
-    }
-
-    private fun updateVirtEmptyState(view: View, count: Int) {
-        val empty = count == 0
-        view.findViewById<View>(R.id.recycler_virt_identities).visibility = if (empty) View.GONE else View.VISIBLE
-        view.findViewById<View>(R.id.text_virt_identities_empty).visibility = if (empty) View.VISIBLE else View.GONE
-    }
-
-    // ─── VNC Identities ─────────────────────────────────────────────────────
-
-    private fun setupVncIdentitiesSection(view: View) {
-        vncIdentityAdapter = VncIdentityAdapter(
-            onEdit = { identity -> showVncIdentityDialog(identity) },
-            onDelete = { identity -> confirmDeleteVncIdentity(identity) }
-        )
-        val rv = view.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recycler_vnc_identities)
-        rv.layoutManager = LinearLayoutManager(requireContext())
-        rv.adapter = vncIdentityAdapter
-        updateVncEmptyState(view, 0)
-
-        view.findViewById<MaterialButton>(R.id.btn_add_vnc_identity).setOnClickListener {
-            showVncIdentityDialog(null)
-        }
-    }
-
-    private fun updateVncEmptyState(view: View, count: Int) {
-        val empty = count == 0
-        view.findViewById<View>(R.id.recycler_vnc_identities).visibility = if (empty) View.GONE else View.VISIBLE
-        view.findViewById<View>(R.id.text_vnc_identities_empty).visibility = if (empty) View.VISIBLE else View.GONE
-    }
-
-    private fun showVncIdentityDialog(existing: VncIdentity?) {
-        val ctx = requireContext()
-        val dialogView = LayoutInflater.from(ctx).inflate(R.layout.dialog_edit_vnc_identity, null)
-
-        val nameInput     = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.edit_name)
-        val usernameInput = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.edit_username)
-        val passwordInput = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.edit_password)
-        val descInput     = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.edit_description)
-
-        existing?.let { id ->
-            nameInput.setText(id.name)
-            usernameInput.setText(id.username ?: "")
-            descInput.setText(id.description ?: "")
-        }
-        if (existing != null) {
-            lifecycleScope.launch(Dispatchers.IO) {
-                val hasPw = try {
-                    app.securePasswordManager.retrievePassword("vnc_identity_${existing.id}")?.isNotBlank() == true
-                } catch (_: Exception) { false }
-                withContext(Dispatchers.Main) {
-                    if (hasPw) {
-                        passwordInput.setText(PASSWORD_MASK)
-                        passwordInput.hint = getString(R.string.identity_password_set_hint)
-                    }
-                }
-            }
-        }
-
-        MaterialAlertDialogBuilder(ctx)
-            .setTitle(if (existing == null) getString(R.string.identity_vnc_add_title) else getString(R.string.identity_vnc_edit_title))
-            .setView(dialogView)
-            .setPositiveButton(getString(R.string.save)) { _, _ ->
-                val name = nameInput.text.toString().trim()
-                if (name.isBlank()) {
-                    Toast.makeText(ctx, getString(R.string.xcpng_name_required), Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                val now = System.currentTimeMillis()
-                val id  = existing?.id ?: java.util.UUID.randomUUID().toString()
-                val identity = VncIdentity(
-                    id          = id,
-                    name        = name,
-                    username    = usernameInput.text.toString().trim().takeIf { it.isNotBlank() },
-                    description = descInput.text.toString().trim().takeIf { it.isNotBlank() },
-                    createdAt   = existing?.createdAt ?: now,
-                    modifiedAt  = now
-                )
-                val password = passwordInput.text.toString()
-                lifecycleScope.launch {
-                    withContext(Dispatchers.IO) { app.database.vncIdentityDao().insert(identity) }
-                    val shouldSavePassword = when {
-                        password == PASSWORD_MASK -> false
-                        existing == null          -> password.isNotBlank()
-                        password.isNotBlank()     -> true
-                        else                      -> false
-                    }
-                    if (shouldSavePassword) {
-                        try {
-                            app.securePasswordManager.storePassword(
-                                "vnc_identity_$id",
-                                password,
-                                io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
-                            )
-                        } catch (e: Exception) {
-                            Logger.w(TAG, "Failed to store VNC identity password: ${e.message}")
-                        }
-                    }
-                    Toast.makeText(ctx, getString(R.string.remote_editor_saved), Toast.LENGTH_SHORT).show()
-                }
-            }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
-    }
-
-    private fun confirmDeleteVncIdentity(identity: VncIdentity) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(getString(R.string.identity_vnc_delete_title))
-            .setMessage(getString(R.string.identity_vnc_delete_message_fmt, identity.name))
-            .setPositiveButton(getString(R.string.delete)) { _, _ ->
-                lifecycleScope.launch {
-                    withContext(Dispatchers.IO) {
-                        app.database.vncIdentityDao().deleteById(identity.id)
-                        // H6 — record the deletion so it propagates and is not resurrected.
-                        TombstoneRecorder.record(app, TombstoneRecorder.VNC_IDENTITY, identity.id)
-                    }
-                    try {
-                        app.securePasswordManager.clearPassword("vnc_identity_${identity.id}")
-                    } catch (e: Exception) {
-                        Logger.w(TAG, "Failed to clear VNC identity password: ${e.message}")
-                    }
-                }
-            }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
-    }
-
-    // ─── VNC Identity adapter ────────────────────────────────────────────────
-
-    inner class VncIdentityAdapter(
-        private val onEdit: (VncIdentity) -> Unit,
-        private val onDelete: (VncIdentity) -> Unit
-    ) : androidx.recyclerview.widget.RecyclerView.Adapter<VncIdentityAdapter.VH>() {
-
-        private var items: List<VncIdentity> = emptyList()
-
-        fun submit(list: List<VncIdentity>) {
-            items = list
-            notifyDataSetChanged()
-        }
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-            val v = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_vnc_identity, parent, false)
-            return VH(v)
-        }
-
-        override fun getItemCount(): Int = items.size
-
-        override fun onBindViewHolder(holder: VH, position: Int) {
-            val identity = items[position]
-            holder.name.text = identity.name
-            if (!identity.description.isNullOrBlank()) {
-                holder.description.visibility = View.VISIBLE
-                holder.description.text = identity.description
-            } else if (!identity.username.isNullOrBlank()) {
-                holder.description.visibility = View.VISIBLE
-                holder.description.text = getString(R.string.hypervisor_account_username_fmt, identity.username)
-            } else {
-                holder.description.visibility = View.GONE
-            }
-            holder.btnEdit.setOnClickListener { onEdit(identity) }
-            holder.btnDelete.setOnClickListener { onDelete(identity) }
-        }
-
-        inner class VH(view: View) : androidx.recyclerview.widget.RecyclerView.ViewHolder(view) {
-            val name: android.widget.TextView = view.findViewById(R.id.text_name)
-            val description: android.widget.TextView = view.findViewById(R.id.text_description)
-            val btnEdit: android.widget.ImageButton = view.findViewById(R.id.btn_edit)
-            val btnDelete: android.widget.ImageButton = view.findViewById(R.id.btn_delete)
-        }
     }
 
     // ─── SSH Keys ────────────────────────────────────────────────────────────
@@ -413,472 +167,12 @@ class IdentitiesFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
-                    app.database.identityDao().getAllIdentities().collect { list ->
-                        identityAdapter.submitList(list)
-                        Logger.d(TAG, "Loaded ${list.size} host identities")
-                    }
-                }
-                launch {
-                    app.database.hypervisorAccountDao().getAllAccounts().collect { list ->
-                        // OCI accounts are managed through the dedicated OCI wizard; exclude them here
-                        val vmOnly = list.filter { it.authType != "oci_api_key" }
-                        virtAdapter.submit(vmOnly)
-                        view?.let { updateVirtEmptyState(it, vmOnly.size) }
-                        Logger.d(TAG, "Loaded ${vmOnly.size} VM credentials (${list.size - vmOnly.size} OCI excluded)")
-                    }
-                }
-                launch {
-                    app.database.vncIdentityDao().getAllIdentities().collect { list ->
-                        vncIdentityAdapter.submit(list)
-                        view?.let { updateVncEmptyState(it, list.size) }
-                        Logger.d(TAG, "Loaded ${list.size} VNC identities")
-                    }
-                }
-                launch {
                     app.database.keyDao().getAllKeys().collect { list ->
                         keyAdapter.submitList(list)
                         Logger.d(TAG, "Loaded ${list.size} SSH keys")
                     }
                 }
             }
-        }
-    }
-
-    // ─── Host Identity dialogs ───────────────────────────────────────────────
-
-    private fun showIdentityOptionsMenu(identity: Identity) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(identity.getDisplayName())
-            .setItems(arrayOf(
-                getString(R.string.identity_menu_edit),
-                getString(R.string.identity_menu_apply_to_connections),
-                getString(R.string.identity_menu_view_linked_connections),
-                getString(R.string.identity_menu_delete)
-            )) { _, which ->
-                when (which) {
-                    0 -> showEditIdentityDialog(identity)
-                    1 -> showApplyToConnectionsDialog(identity)
-                    2 -> showLinkedConnections(identity)
-                    3 -> confirmDeleteIdentity(identity)
-                }
-            }
-            .show()
-    }
-
-    private fun showCreateIdentityDialog() {
-        showIdentityDialog(existing = null)
-    }
-
-    private fun showEditIdentityDialog(identity: Identity) {
-        showIdentityDialog(existing = identity)
-    }
-
-    private fun showIdentityDialog(existing: Identity?) {
-        val dialogView = LayoutInflater.from(requireContext())
-            .inflate(R.layout.dialog_edit_identity, null)
-
-        val nameInput = dialogView.findViewById<TextInputEditText>(R.id.edit_name)
-        val usernameInput = dialogView.findViewById<TextInputEditText>(R.id.edit_username)
-        val descriptionInput = dialogView.findViewById<TextInputEditText>(R.id.edit_description)
-        val authTypeSpinner = dialogView.findViewById<android.widget.AutoCompleteTextView>(R.id.spinner_auth_type)
-        val passwordLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_password)
-        val passwordInput = dialogView.findViewById<TextInputEditText>(R.id.edit_password)
-        val sshKeyLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_ssh_key)
-        val sshKeySpinner = dialogView.findViewById<android.widget.AutoCompleteTextView>(R.id.spinner_ssh_key)
-
-        existing?.let { id ->
-            nameInput.setText(id.name)
-            usernameInput.setText(id.username)
-            descriptionInput.setText(id.description ?: "")
-        }
-
-        val authTypes = listOf(
-            getString(R.string.identity_auth_type_password),
-            getString(R.string.identity_auth_type_ssh_key),
-            getString(R.string.identity_auth_type_keyboard_interactive)
-        )
-        authTypeSpinner.setAdapter(
-            ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, authTypes)
-        )
-
-        val initAuthIndex = when (existing?.authType) {
-            AuthType.PASSWORD -> 0
-            AuthType.PUBLIC_KEY -> 1
-            AuthType.KEYBOARD_INTERACTIVE -> 2
-            null -> 0
-        }
-        authTypeSpinner.setText(authTypes[initAuthIndex], false)
-
-        var allKeysList = listOf<StoredKey>()
-        lifecycleScope.launch(Dispatchers.IO) {
-            allKeysList = app.database.keyDao().getAllKeysList()
-            val keyNames = listOf(getString(R.string.identity_no_key)) + allKeysList.map { "${it.name} (${it.keyType})" }
-            val currentKeyIndex = existing?.keyId?.let { kid ->
-                val idx = allKeysList.indexOfFirst { it.keyId == kid }
-                if (idx >= 0) idx + 1 else 0
-            } ?: 0
-
-            withContext(Dispatchers.Main) {
-                sshKeySpinner.setAdapter(
-                    ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, keyNames)
-                )
-                sshKeySpinner.setText(keyNames[currentKeyIndex], false)
-            }
-        }
-
-        fun applyAuthVisibility(position: Int) {
-            passwordLayout.visibility = if (position == 0) View.VISIBLE else View.GONE
-            sshKeyLayout.visibility = if (position == 1) View.VISIBLE else View.GONE
-        }
-        applyAuthVisibility(initAuthIndex)
-        authTypeSpinner.setOnItemClickListener { _, _, pos, _ -> applyAuthVisibility(pos) }
-
-        if (existing != null && !existing.password.isNullOrEmpty()) {
-            passwordInput.setText(PASSWORD_MASK)
-            passwordInput.hint = getString(R.string.identity_password_set_hint)
-        }
-
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(if (existing == null) getString(R.string.identity_create_title) else getString(R.string.identity_edit_title))
-            .setView(dialogView)
-            .setPositiveButton(if (existing == null) getString(R.string.container_create) else getString(R.string.save)) { _, _ ->
-                val name = nameInput.text.toString().trim()
-                val username = usernameInput.text.toString().trim()
-                val description = descriptionInput.text.toString().trim()
-                val passwordText = passwordInput.text.toString()
-                val authTypePos = authTypes.indexOf(authTypeSpinner.text.toString())
-                val authType = when (authTypePos) {
-                    1 -> AuthType.PUBLIC_KEY
-                    2 -> AuthType.KEYBOARD_INTERACTIVE
-                    else -> AuthType.PASSWORD
-                }
-                val selectedKeyId: String? = if (authType == AuthType.PUBLIC_KEY) {
-                    val sel = sshKeySpinner.text.toString()
-                    if (sel == getString(R.string.identity_no_key)) null
-                    else allKeysList.find { "${it.name} (${it.keyType})" == sel }?.keyId
-                } else null
-
-                if (name.isBlank() || username.isBlank()) {
-                    Toast.makeText(requireContext(), getString(R.string.identity_name_username_required), Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-
-                if (existing == null) {
-                    val password = if (authType == AuthType.PASSWORD) passwordText.ifBlank { null } else null
-                    createIdentity(name, username, authType, password, selectedKeyId, description.ifBlank { null })
-                } else {
-                    val newPassword = when {
-                        authType != AuthType.PASSWORD -> null
-                        passwordText == PASSWORD_MASK -> existing.password
-                        passwordText.isBlank() -> null
-                        else -> passwordText
-                    }
-                    updateIdentity(existing.copy(
-                        name = name,
-                        username = username,
-                        authType = authType,
-                        password = newPassword,
-                        keyId = selectedKeyId,
-                        description = description.ifBlank { null },
-                        modifiedAt = System.currentTimeMillis()
-                    ))
-                }
-            }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
-    }
-
-    private fun showApplyToConnectionsDialog(identity: Identity) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            val allConnections = app.database.connectionDao().getAllConnectionsList()
-            if (allConnections.isEmpty()) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(requireContext(), getString(R.string.identity_no_connections_available), Toast.LENGTH_SHORT).show()
-                }
-                return@launch
-            }
-            val linked = app.database.connectionDao()
-                .getConnectionsByIdentity(identity.id).map { it.id }.toSet()
-            val names = allConnections.map { "${it.name} (${it.username}@${it.host})" }.toTypedArray()
-            val checked = allConnections.map { it.id in linked }.toBooleanArray()
-
-            withContext(Dispatchers.Main) {
-                MaterialAlertDialogBuilder(requireContext())
-                    .setTitle(getString(R.string.identity_apply_to_title_fmt, identity.name))
-                    .setMultiChoiceItems(names, checked) { _, i, v -> checked[i] = v }
-                    .setPositiveButton(getString(R.string.identity_apply_button)) { _, _ ->
-                        val ids = allConnections.filterIndexed { i, _ -> checked[i] }.map { it.id }
-                        applyIdentityToConnections(identity, ids)
-                    }
-                    .setNeutralButton(getString(R.string.identity_select_all_button)) { dialog, _ ->
-                        checked.fill(true)
-                        (dialog as? androidx.appcompat.app.AlertDialog)?.listView?.let { lv ->
-                            for (i in 0 until lv.count) lv.setItemChecked(i, true)
-                        }
-                    }
-                    .setNegativeButton(getString(R.string.cancel), null)
-                    .show()
-            }
-        }
-    }
-
-    private fun applyIdentityToConnections(identity: Identity, connectionIds: List<String>) {
-        if (connectionIds.isEmpty()) {
-            Toast.makeText(requireContext(), getString(R.string.identity_no_connections_selected), Toast.LENGTH_SHORT).show()
-            return
-        }
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                app.database.connectionDao().applyIdentityToConnections(identity.id, connectionIds)
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        requireContext(),
-                        getString(R.string.identity_applied_to_connections_fmt, identity.name, connectionIds.size),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(requireContext(), getString(R.string.identity_apply_failed_fmt, e.message), Toast.LENGTH_SHORT).show()
-                }
-                Logger.e(TAG, "Failed to apply identity", e)
-            }
-        }
-    }
-
-    private fun showLinkedConnections(identity: Identity) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            val linked = app.database.connectionDao().getConnectionsByIdentity(identity.id)
-            withContext(Dispatchers.Main) {
-                if (linked.isEmpty()) {
-                    MaterialAlertDialogBuilder(requireContext())
-                        .setTitle(getString(R.string.identity_linked_connections_title))
-                        .setMessage(getString(R.string.identity_no_linked_connections_message))
-                        .setPositiveButton(getString(R.string.ok), null)
-                        .show()
-                } else {
-                    val list = linked.joinToString("\n") { getString(R.string.identity_linked_connection_line_fmt, it.name, it.host) }
-                    MaterialAlertDialogBuilder(requireContext())
-                        .setTitle(getString(R.string.identity_connections_using_title_fmt, identity.name))
-                        .setMessage(getString(R.string.identity_connections_count_message_fmt, linked.size, list))
-                        .setPositiveButton(getString(R.string.ok), null)
-                        .setNeutralButton(getString(R.string.identity_remove_all_button)) { _, _ -> removeIdentityFromAllConnections(identity) }
-                        .show()
-                }
-            }
-        }
-    }
-
-    private fun removeIdentityFromAllConnections(identity: Identity) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            app.database.connectionDao().removeIdentityFromAllConnections(identity.id)
-            withContext(Dispatchers.Main) {
-                Toast.makeText(requireContext(), getString(R.string.identity_removed_from_all_connections), Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    private fun confirmDeleteIdentity(identity: Identity) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(getString(R.string.identity_delete_title))
-            .setMessage(getString(R.string.identity_delete_message_fmt, identity.name))
-            .setPositiveButton(getString(R.string.delete)) { _, _ -> deleteIdentity(identity) }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
-    }
-
-    private fun createIdentity(
-        name: String, username: String, authType: AuthType,
-        password: String?, keyId: String?, description: String?
-    ) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            val identity = Identity(
-                name = name,
-                username = username,
-                authType = authType,
-                password = null,
-                keyId = keyId,
-                description = description
-            )
-            app.database.identityDao().insert(identity)
-            if (password != null) {
-                app.securePasswordManager.storePassword(
-                    "identity_${identity.id}", password,
-                    SecurePasswordManager.StorageLevel.ENCRYPTED
-                )
-            }
-            withContext(Dispatchers.Main) {
-                Toast.makeText(requireContext(), getString(R.string.identity_created_toast_fmt, name), Toast.LENGTH_SHORT).show()
-                Logger.d(TAG, "Created identity: $name")
-                // Immediately offer to link the new identity to connections so the
-                // user doesn't have to discover "Apply to Connections" separately.
-                showApplyToConnectionsDialog(identity)
-            }
-        }
-    }
-
-    private fun updateIdentity(identity: Identity) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            val legacyPassword = identity.password
-            val updated = identity.copy(password = null)
-            app.database.identityDao().update(updated)
-            if (legacyPassword != null) {
-                app.securePasswordManager.storePassword(
-                    "identity_${identity.id}", legacyPassword,
-                    SecurePasswordManager.StorageLevel.ENCRYPTED
-                )
-            }
-            withContext(Dispatchers.Main) {
-                Toast.makeText(requireContext(), getString(R.string.identity_updated_toast), Toast.LENGTH_SHORT).show()
-                Logger.d(TAG, "Updated identity: ${identity.name}")
-            }
-        }
-    }
-
-    private fun deleteIdentity(identity: Identity) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            app.database.withTransaction {
-                app.database.connectionDao().removeIdentityFromAllConnections(identity.id)
-                app.database.identityDao().delete(identity)
-                // H6 — record the deletion so it propagates and is not resurrected.
-                TombstoneRecorder.record(app, TombstoneRecorder.IDENTITY, identity.id)
-            }
-            try { app.securePasswordManager.clearPassword("identity_${identity.id}") } catch (_: Exception) {}
-            withContext(Dispatchers.Main) {
-                Toast.makeText(requireContext(), getString(R.string.identity_deleted_toast), Toast.LENGTH_SHORT).show()
-                Logger.d(TAG, "Deleted identity: ${identity.name}")
-            }
-        }
-    }
-
-    // ─── Virtualization Identity dialogs ────────────────────────────────────
-
-    private fun showVirtAccountDialog(existing: HypervisorAccount?) {
-        val dialogView = LayoutInflater.from(requireContext())
-            .inflate(R.layout.dialog_edit_virt_identity, null)
-
-        val editName     = dialogView.findViewById<TextInputEditText>(R.id.edit_name)
-        val editUsername = dialogView.findViewById<TextInputEditText>(R.id.edit_username)
-        val editPassword = dialogView.findViewById<TextInputEditText>(R.id.edit_password)
-        val editRealm    = dialogView.findViewById<TextInputEditText>(R.id.edit_realm)
-
-        existing?.let { acc ->
-            editName.setText(acc.name)
-            editUsername.setText(acc.username)
-            editRealm.setText(acc.realm ?: "")
-            lifecycleScope.launch(Dispatchers.IO) {
-                val hasPw = HypervisorPasswordStore
-                    .retrieveAccountPassword(requireContext(), acc.id)?.isNotBlank() == true
-                withContext(Dispatchers.Main) {
-                    if (hasPw) {
-                        editPassword.setText(PASSWORD_MASK)
-                        editPassword.hint = getString(R.string.identity_password_set_hint)
-                    }
-                }
-            }
-        }
-
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(if (existing == null) getString(R.string.identity_vm_cred_new_title) else getString(R.string.identity_vm_cred_edit_title))
-            .setView(dialogView)
-            .setPositiveButton(getString(R.string.save)) { _, _ ->
-                val name = editName.text?.toString()?.trim().orEmpty()
-                if (name.isBlank()) {
-                    Toast.makeText(requireContext(), getString(R.string.xcpng_name_required), Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                saveVirtAccount(existing, name, editUsername, editPassword, editRealm)
-            }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
-    }
-
-    /** Persist a [HypervisorAccount] credential. */
-    private fun saveVirtAccount(
-        existing: HypervisorAccount?,
-        name: String,
-        editUsername: TextInputEditText,
-        editPassword: TextInputEditText,
-        editRealm: TextInputEditText
-    ) {
-        val username = editUsername.text?.toString()?.trim().orEmpty()
-        val password = editPassword.text?.toString().orEmpty()
-        val realm = editRealm.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
-
-        if (username.isBlank()) {
-            Toast.makeText(requireContext(), getString(R.string.identity_username_required), Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        lifecycleScope.launch {
-            val savedId: Long = if (existing == null) {
-                app.database.hypervisorAccountDao().insert(
-                    HypervisorAccount(name = name, username = username, realm = realm)
-                )
-            } else {
-                app.database.hypervisorAccountDao().update(
-                    existing.copy(
-                        name = name,
-                        username = username,
-                        realm = realm,
-                        modifiedAt = System.currentTimeMillis()
-                    )
-                )
-                existing.id
-            }
-            // Only write to Keystore when a new password was typed (not the
-            // display mask) or when creating a new account.
-            val shouldSavePassword = when {
-                // user left the mask unchanged
-                password == PASSWORD_MASK -> false
-                // new account
-                existing == null          -> true
-                // user typed a replacement
-                password.isNotEmpty()     -> true
-                // edit + blank → keep existing
-                else                      -> false
-            }
-            if (shouldSavePassword) {
-                HypervisorPasswordStore.storeAccountPassword(requireContext(), savedId, password)
-            }
-            Logger.i(TAG, if (existing == null) "Created virt identity id=$savedId ($name)"
-                          else "Updated virt identity id=$savedId ($name)")
-        }
-    }
-
-    private fun confirmDeleteVirtAccount(account: HypervisorAccount) {
-        lifecycleScope.launch {
-            val linked = try {
-                app.database.hypervisorDao().getAllList().count { it.accountId == account.id }
-            } catch (_: Exception) { 0 }
-
-            val message = if (linked > 0) {
-                "$linked hypervisor${if (linked == 1) "" else "s"} still link to \"${account.name}\". " +
-                "Unlink them in their edit screen first."
-            } else {
-                "Delete \"${account.name}\"?\n\nThe stored password will be cleared from the Keystore."
-            }
-
-            MaterialAlertDialogBuilder(requireContext())
-                .setTitle(getString(R.string.identity_vm_cred_delete_title))
-                .setMessage(message)
-                .setPositiveButton(getString(R.string.delete)) { _, _ ->
-                    if (linked > 0) return@setPositiveButton
-                    lifecycleScope.launch {
-                        app.database.hypervisorAccountDao().delete(account)
-                        // H6 — Long PK is device-local; tombstone by natural key.
-                        TombstoneRecorder.record(app, TombstoneRecorder.HYPERVISOR_ACCOUNT, TombstoneRecorder.naturalKey(account))
-                        HypervisorPasswordStore.clearAccountPassword(requireContext(), account.id)
-                        // OCI accounts additionally own an API private key PEM and
-                        // (optionally) its passphrase under their own aliases. Drop
-                        // those too, or a reused account id would expose the previous
-                        // owner's private key.
-                        HypervisorPasswordStore.clearOciAccountSecrets(requireContext(), account.id)
-                        Logger.i(TAG, "Deleted VM credential id=${account.id} (${account.name})")
-                    }
-                }
-                .setNegativeButton(getString(R.string.cancel), null)
-                .show()
         }
     }
 
@@ -1038,14 +332,21 @@ class IdentitiesFragment : Fragment() {
                     Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
-                Logger.e("IdentitiesFragment", "installKeyOnServer failed: ${e.message}", e)
+                Logger.e(TAG, "installKeyOnServer failed: ${e.message}", e)
                 withContext(Dispatchers.Main) {
                     progressDialog.dismiss()
-                    Toast.makeText(
-                        requireContext(),
-                        getString(R.string.identity_install_key_failed_fmt, e.message),
-                        Toast.LENGTH_LONG
-                    ).show()
+                    // Chicken-and-egg bootstrap case: the connection's own
+                    // configured auth is this same not-yet-installed key, so
+                    // "Authentication failed" here can never resolve itself —
+                    // give an actionable message instead of a generic one.
+                    val message = if (e.message?.contains("Authentication failed") == true &&
+                        profile.keyId == key.keyId
+                    ) {
+                        getString(R.string.identity_install_key_bootstrap_failed_fmt, key.name, profile.host)
+                    } else {
+                        getString(R.string.identity_install_key_failed_fmt, e.message)
+                    }
+                    Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
                 }
             } finally {
                 try { connection?.disconnect() } catch (_: Exception) {}
@@ -1496,11 +797,7 @@ class IdentitiesFragment : Fragment() {
         filename.replace(Regex("\\.(pem|key|pub)$"), "").replace("_", " ").trim()
 
     companion object {
-        private const val TAG = "IdentitiesFragment"
-
-        /** Displayed in password fields for existing stored credentials. */
-        private const val PASSWORD_MASK = "••••••••"
-
-        fun newInstance() = IdentitiesFragment()
+        private const val TAG = "AuthKeysFragment"
+        fun newInstance() = AuthKeysFragment()
     }
 }

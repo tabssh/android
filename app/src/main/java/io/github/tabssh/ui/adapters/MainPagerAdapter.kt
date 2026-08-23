@@ -20,15 +20,16 @@ import io.github.tabssh.ui.fragments.*
 class MainPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activity) {
 
     // Mobile-first labels — long words don't fit 5 tabs on a phone.
-    // "Connections" → "Hosts", "Performance" → "Stats". The "VMs" tab is
-    // now "Infra" — it combines Hypervisors and Cloud Accounts in two
-    // sub-tabs so both live inside one main-tab slot.
+    // "Connections" → "Hosts", "Performance" → "Stats". "Infra" combines
+    // Hypervisors and Cloud Accounts in sub-tabs; "Auth" (formerly
+    // "Identities") combines SSH/VMs/VNC/Keys credentials in sub-tabs.
+    // Auth is last since it's the least-visited main tab.
     private val tabTitles = listOf(
         R.string.main_tab_frequent,
         R.string.main_tab_hosts,
-        R.string.main_tab_identities,
         R.string.main_tab_stats,
-        R.string.main_tab_infra
+        R.string.main_tab_infra,
+        R.string.main_tab_auth
     )
 
     private val context: Context = activity
@@ -36,11 +37,11 @@ class MainPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activi
     override fun getItemCount(): Int = tabTitles.size
 
     override fun createFragment(position: Int): Fragment = when (position) {
-        0 -> FrequentConnectionsFragment.newInstance()
-        1 -> ConnectionsFragment.newInstance()
-        2 -> IdentitiesFragment.newInstance()
-        3 -> PerformanceFragment.newInstance()
-        4 -> InfraFragment.newInstance()
+        MainTab.FREQUENT -> FrequentConnectionsFragment.newInstance()
+        MainTab.HOSTS -> ConnectionsFragment.newInstance()
+        MainTab.STATS -> PerformanceFragment.newInstance()
+        MainTab.INFRA -> InfraFragment.newInstance()
+        MainTab.AUTH -> AuthFragment.newInstance()
         else -> error("Invalid tab position $position")
     }
 

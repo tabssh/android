@@ -102,13 +102,18 @@ jobs:
     - name: Decode and setup keystore
       env:
         KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
+        KEYSTORE_PW: ${{ secrets.KEYSTORE_PASSWORD }}
       run: |
-        # Read the secret from the environment, never via GitHub expression
+        # Read secrets from the environment, never via GitHub expression
         # interpolation inside the script body — interpolation splices the
         # value into the generated shell text, where a newline or quote in
         # the secret becomes executable script.
         if [ -z "$KEYSTORE_B64" ]; then
-          echo "::error::KEYSTORE_BASE64 secret is not set" >&2
+          echo "::error::KEYSTORE_BASE64 secret is not set. Add it under repo Settings > Secrets and Variables > Actions." >&2
+          exit 1
+        fi
+        if [ -z "$KEYSTORE_PW" ]; then
+          echo "::error::KEYSTORE_BASE64 is set but KEYSTORE_PASSWORD is missing. Add it under repo Settings > Secrets and Variables > Actions." >&2
           exit 1
         fi
         printf '%s' "$KEYSTORE_B64" | base64 -d > keystore.jks

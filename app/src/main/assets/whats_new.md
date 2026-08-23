@@ -1,5 +1,42 @@
 # What's New
 
+## Wave 68 — Auth tab restructured, Frequent gets its own menu
+
+### Identities is now Auth
+
+- **The "Identities" tab is renamed to "Auth" and moved to the end of the
+  tab bar** (Frequent, Hosts, Stats, Infra, Auth), split into four proper
+  sub-tabs — SSH, VMs, VNC, Keys — instead of one long scrolling screen.
+  Every action you had (create/edit/delete, apply-to-connections, install
+  key on server, cert attach, export, and so on) works exactly as before;
+  only the layout changed.
+- **The app remembers which sub-tab you were on** — for both Auth and
+  Infra, switching away and back (or force-stopping and relaunching)
+  returns you to the same sub-tab instead of resetting to the first one.
+- **Deep links land on the right sub-tab** — "Configure OCI" now opens
+  straight to Auth → VMs, and the unresolved-keys prompt / Ctrl+K "SSH
+  Keys" now open straight to Auth → Keys, instead of just the Auth tab.
+
+### Frequent gets a long-press menu
+
+- **Long-pressing a card on the Frequent tab now opens a menu** — Connect,
+  Browse Files (SFTP), and Edit — matching the quick actions already
+  available on Hosts. Duplicate and Delete stay Hosts-only, since Frequent
+  is a shortlist, not where you manage the connection record itself.
+
+### Small cleanup
+
+- **The redundant "Connections" toolbar label under Hosts is gone** — the
+  tab label above already says "Hosts", so the toolbar no longer repeats
+  it.
+
+### Fixed
+
+- **Pasting multi-line text into a VNC or SPICE console only sent the
+  first line** — the rest of the paste silently turned into a single
+  Enter keypress. Line breaks in a VNC/SPICE paste now press Enter
+  correctly, just like they already did over SSH/Telnet.
+
 ## Wave 67 — Routing & Forwarding, built-in Tor
 
 ### Reusable network routes

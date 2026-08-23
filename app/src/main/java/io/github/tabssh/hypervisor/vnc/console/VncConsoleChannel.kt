@@ -353,12 +353,31 @@ class VncConsoleChannel internal constructor(
      * Send a string of plain text as a series of Unicode keysyms, preceded by
      * any armed one-shot modifiers (Ctrl/Alt/Win) which are automatically cleared
      * after sending.
+     *
+     * A multi-line clipboard paste (e.g. from pasteFromClipboard()) arrives here
+     * with embedded '\r'/'\n'. charToKeysym() maps '\n' (code point 10) to the
+     * raw Latin-1 value 10, not the X11 Return keysym — most keyboard layouts
+     * have no mapping for that raw value, so the line break was silently
+     * dropped, collapsing a multi-line paste down to its first line. Each line
+     * break is routed through KEY_RETURN instead, matching the whole-string
+     * '\r'/'\n' handling already used by sendSequenceDirect(); a "\r\n" pair
+     * is treated as one Enter, not two.
      * Safe to call from any thread including the main thread.
      */
     fun sendText(text: String) = io {
         val mods = consumeArmedMods()
         for (m in mods) rfbClient.sendKeyEvent(m, true)
-        text.forEach { sendCharDirect(it) }
+        var i = 0
+        while (i < text.length) {
+            val ch = text[i]
+            if (ch == '\r' || ch == '\n') {
+                sendKeyDirect(RfbConstants.KEY_RETURN)
+                i += if (ch == '\r' && i + 1 < text.length && text[i + 1] == '\n') 2 else 1
+            } else {
+                sendCharDirect(ch)
+                i++
+            }
+        }
         for (m in mods.reversed()) rfbClient.sendKeyEvent(m, false)
     }
 

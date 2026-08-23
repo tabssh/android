@@ -269,8 +269,6 @@
     <string name="conflict_button_keep_all_local">Keep All Local</string>
     <string name="conflict_button_keep_all_remote">Keep All Remote</string>
 
-    <!-- Home-screen page toolbars -->
-    <string name="connections_tab_title">Connections</string>
 
     <!-- QR pairing import -->
     <string name="import_from_qr_title">Pair from Desktop</string>
@@ -459,8 +457,13 @@
     <!-- Main tabs. Kept short: five labels have to fit one phone-width row. -->
     <string name="main_tab_frequent">Frequent</string>
     <string name="main_tab_hosts">Hosts</string>
-    <string name="main_tab_identities">Identities</string>
+    <string name="main_tab_auth">Auth</string>
     <string name="main_tab_stats">Stats</string>
+    <string name="auth_tab_ssh">SSH</string>
+    <string name="auth_tab_vms">VMs</string>
+    <string name="auth_tab_vnc">VNC</string>
+    <string name="auth_tab_keys">Keys</string>
+    <string name="sync_settings_title_identities">Identities</string>
     <string name="main_tab_infra">Infra</string>
 
     <!-- Infra tab (Containers / Hypervisors / Cloud sub-tabs) -->
@@ -604,7 +607,7 @@
     <string name="container_transport_mode_socket">Socket forward</string>
     <string name="container_transport_mode_stdio">Relayed socket</string>
     <string name="container_transport_mode_cli">Command line</string>
-    <string name="container_transport_mode_unknown">Connected</string>
+    <string name="container_transport_mode_unknown">Auto-detect</string>
     <string name="container_value_unknown">Unknown</string>
     <string name="container_action_retest">Retest</string>
     <string name="container_probe_failed_title">Cannot reach the container engine</string>
@@ -3584,6 +3587,7 @@
     <string name="identity_key_installed_fmt">Key installed on %1$s</string>
     <string name="identity_key_installation_completed_fmt">Key installation completed on %1$s</string>
     <string name="identity_install_key_failed_fmt">Failed to install key: %1$s</string>
+    <string name="identity_install_key_bootstrap_failed_fmt">Can\'t install \"%1$s\" on %2$s — this connection is already configured to authenticate with that same key, and it isn\'t on the server yet. Copy the public key (More… → Copy Public Key) and install it manually on %2$s, or temporarily switch this connection to a different working credential, then retry.</string>
     <string name="identity_read_public_key_failed_toast">Failed to read public key</string>
     <string name="identity_public_key_clip_label">SSH public key</string>
     <string name="identity_public_key_copied_toast">Public key copied to clipboard</string>

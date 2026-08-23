@@ -43,6 +43,7 @@ gradle: 8.14.5
 compile_sdk: 35
 target_sdk: 34
 version_code_scheme: manual
+http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with Retrofit/Ktor
 
 ## Business logic
 
@@ -114,7 +115,7 @@ version_code_scheme: manual
 - Portainer-class management of container hosts reached over the user's existing SSH connections — no host agent, no exposed engine API port required
 - Four engines at full parity: Docker, Incus, Podman, and LXC/LXD. The engine is chosen from a dropdown when the host is added — order Docker (preselected default), Incus, Podman, LXC/LXD — and every screen adapts to the engine instead of hiding behind a Docker-only assumption
 - Capability-driven UI: a concept an engine does not have is hidden, never shown empty. Docker and Podman get compose stacks and disk usage; Incus and LXC/LXD get snapshots plus dedicated profiles and projects tabs
-- A Container Hosts section in the Hypervisors tab; adding a host mirrors the hypervisor add flow but authenticates over SSH only — link a saved SSH connection or enter a custom endpoint (address, port, username, auth via password/SSH key/saved identity); the host name is optional, defaulting to the connection name or endpoint hostname
+- A Containers sub-tab alongside Hypervisors and Cloud Accounts under the Infra main tab; adding a host mirrors the hypervisor add flow but authenticates over SSH only — link a saved SSH connection or enter a custom endpoint (address, port, username, auth via password/SSH key/saved identity); the host name is optional, defaulting to the connection name or endpoint hostname
 - Containers are a separate domain like hypervisors: custom-endpoint sessions and container exec tabs never appear in the active-sessions list, recents, connection stats, or session restore; custom-endpoint passwords are Keystore-only, never a database column
 - Per-host view, tabs in order: Dashboard, Containers, Stacks, Images, Volumes, Networks. The dashboard is per host, and counts stack members even though the Containers list hides them — 3 standalone containers plus 2 stacks of 2 shows 2 stacks and 7 containers
 - Containers: list, inspect, start/stop/restart/pause/kill/rename/remove, live-follow logs, live stats; enter any running container as a normal terminal tab via the engine's exec (shell auto-detected)
@@ -135,6 +136,7 @@ version_code_scheme: manual
 - Full keyboard navigation
 - 23 built-in terminal themes; user-created custom themes; dark/light/auto per OS preference
 - Mobile-responsive; supports both phone and tablet layouts
+- Supported locales: English (default), German, Spanish, French — additional `values-xx/` folders added as translations arrive
 
 ### Automation and integrations
 - Tasker/Locale plugin for launching connections from external apps
@@ -165,6 +167,12 @@ version_code_scheme: manual
 - Embed cloud provider SDKs or require a cloud account for sync
 - Include analytics, crash reporting SDKs, or tracking pixels without explicit user opt-in
 - Require network access on first launch
+
+### Release
+
+- Keystore escrow: no production keystore file exists in the repo or on any dev machine (AI.md PART 13). It is escrowed as the `KEYSTORE_BASE64` + `KEYSTORE_PASSWORD` (and optional `KEY_PASSWORD`) repo secrets under Settings > Secrets and Variables > Actions; every channel (`development.yml`, `beta.yml`, `release.yml`) hard-fails with an actionable `::error::` if either required secret is missing, with no ephemeral/generated fallback keystore ever produced.
+- Release cadence: `stable` (`release.yml`) and `beta` (`beta.yml`) are on-demand, triggered by pushing a `vX.Y.Z` / `*beta` tag; `development` (`development.yml`) runs daily on a schedule plus on every push to `main`, with its rolling `development` tag/release deleted and recreated each run.
+- No ACRA-style crash-reporting endpoint is configured — crash reporting stays the AI.md PART 2 default (on-device log + user-triggered export) per the "no analytics/crash-reporting SDK without opt-in" constraint above.
 
 ### Accepted design decisions
 

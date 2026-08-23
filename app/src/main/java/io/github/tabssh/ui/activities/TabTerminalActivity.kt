@@ -4477,7 +4477,8 @@ class TabTerminalActivity : TabSSHActivity() {
         }
         items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_ssh_keys), getString(R.string.terminal_cmdpalette_ssh_keys_sub)) {
             val intent = Intent(this, MainActivity::class.java)
-            intent.putExtra("start_tab", 2)
+            intent.putExtra("start_tab", io.github.tabssh.ui.adapters.MainTab.AUTH)
+            intent.putExtra("start_sub_tab", io.github.tabssh.ui.adapters.AuthTab.KEYS)
             intent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             startActivity(intent)
         }

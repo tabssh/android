@@ -145,12 +145,6 @@ class GeneralSettingsFragment : PreferenceFragmentCompat() {
             true
         }
 
-        // Open Theme Editor
-        findPreference<Preference>("open_theme_editor")?.setOnPreferenceClickListener {
-            startActivity(ThemeEditorActivity.createIntent(requireContext()))
-            true
-        }
-
         // Open system notification settings
         findPreference<Preference>("open_system_notification_settings")?.setOnPreferenceClickListener {
             openSystemNotificationSettings()
@@ -371,6 +365,12 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
             val message = getString(R.string.settings_toast_terminal_theme_changed, themeName)
             android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
             Logger.i("Settings", "Terminal theme changed to: $themeName")
+            true
+        }
+
+        // Open Theme Editor
+        findPreference<Preference>("open_theme_editor")?.setOnPreferenceClickListener {
+            startActivity(ThemeEditorActivity.createIntent(requireContext()))
             true
         }
 

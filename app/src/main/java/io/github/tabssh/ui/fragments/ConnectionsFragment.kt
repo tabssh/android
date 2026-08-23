@@ -766,7 +766,9 @@ class ConnectionsFragment : Fragment() {
     private fun exitSelectionMode() {
         isSelectionMode = false
         selectedConnections.clear()
-        toolbar.setTitle(R.string.connections_tab_title)
+        // Hosts tab has no toolbar title (the "Hosts" tab label above already
+        // names the screen) — clear back to that, not the old "Connections" text.
+        toolbar.title = ""
         toolbar.navigationIcon = null
         toolbar.setNavigationOnClickListener(null)
 
@@ -1314,6 +1316,16 @@ class ConnectionsFragment : Fragment() {
                     }
                 }
             )
+            // filterConnections() switches recyclerView.adapter to the flat
+            // `adapter` while a search is active; if that happened, this call
+            // (returning to grouped view after the query is cleared, or on a
+            // Flow re-collect after a tab switch) must switch it back — the
+            // "if (groupedAdapter == null)" branch above only does this once,
+            // on first creation, otherwise recyclerView stays bound to the flat
+            // adapter's last (possibly empty, search-filtered) list forever.
+            if (recyclerView.adapter !== groupedAdapter) {
+                recyclerView.adapter = groupedAdapter
+            }
         }
         
         // Update empty state

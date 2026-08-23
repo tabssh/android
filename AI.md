@@ -1028,7 +1028,7 @@ Sample resolution step (applies identically to all three workflows):
     echo "Keystore decoded and ready"
 ```
 
-Never commit a fixed fallback password (local dev keystore excepted, since that keystore is itself a throwaway dev-only artifact already in the repo). Reference implementation: `/root/Projects/github/tabssh/android/.github/workflows/{beta,release}.yml` — note that as of this writing `development.yml` in that project still uses an ephemeral-keystore fallback, which is the pattern this spec explicitly rejects; that workflow is due for a follow-up update to match `beta.yml`/`release.yml`.
+Never commit a fixed fallback password (local dev keystore excepted, since that keystore is itself a throwaway dev-only artifact already in the repo). Reference implementation: `/root/Projects/github/tabssh/android/.github/workflows/{beta,release,development}.yml` — all three now hard-fail identically on a missing `KEYSTORE_BASE64`/`KEYSTORE_PASSWORD`, with no ephemeral-keystore fallback in any channel.
 
 ## R8 / ProGuard
 

@@ -37,8 +37,11 @@ object ContainerEngineLabels {
 
     /**
      * Plain-language name of a persisted `ContainerHost.transportMode` tier.
-     * An unrecognised value — a legacy tier, a corrupt row — reads as the
-     * generic "connected" rather than leaking the stored identifier.
+     * This is the configured/detected transport tier, never a live connection
+     * status — it must not be confused with `lastConnected` in the row below.
+     * The default tier ("auto") and any unrecognised value — a legacy tier, a
+     * corrupt row — both read as "Auto-detect" rather than leaking the stored
+     * identifier or implying a connection that hasn't happened yet.
      */
     @StringRes
     fun transportMode(mode: String): Int = when (mode) {

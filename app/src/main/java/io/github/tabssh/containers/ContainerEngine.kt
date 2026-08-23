@@ -40,8 +40,13 @@ enum class ContainerEngine(
     INCUS(
         id = "incus",
         cliBinary = "incus",
-        // The package socket first, then the path a source install uses.
+        // The upstream systemd units (incus.socket / incus-user.socket) both
+        // listen under /run/incus, which is what every systemd-based install
+        // actually creates; /var/lib/incus is kept as a fallback for older or
+        // non-systemd source installs that predate the /run layout.
         defaultSocketPaths = listOf(
+            "/run/incus/unix.socket",
+            "/run/incus/unix.socket.user",
             "/var/lib/incus/unix.socket",
             "/var/lib/incus/unix.socket.user"
         ),

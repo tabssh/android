@@ -353,24 +353,31 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
                     listeners.forEach { it.onTerminalError(e) }
                 }
             } finally {
-                if (_isActive.value) {
-                    _isActive.value = false
-                    runOnMain {
-                        listeners.forEach { it.onTerminalDisconnected() }
-                    }
-                }
-
-                closeStreams()
-                shutdownWriteExecutor(activeWriteExecutor)
-                // Only clear the field if it still points at THIS loop. A
-                // reconnect can install a new job before the dying loop's
-                // finally runs; clearing unconditionally orphaned the new read
-                // loop, so a later disconnect() cancelled nothing and the
-                // socket stayed open for the process lifetime.
+                // Only touch shared connection state if this loop is still
+                // the CURRENT one. A rapid reconnect calls connect(), which
+                // installs a new readJob and new streams, before this dying
+                // loop's finally runs (its blocking read() only unblocks once
+                // disconnect() closes ITS streams, which can race the new
+                // connect()'s stream assignment). Running closeStreams()/
+                // nulling readJob/notifying onTerminalDisconnected()
+                // unconditionally here would tear down the NEW connection's
+                // streams and misreport it as disconnected right after it
+                // was established.
                 val thisJob = coroutineContext[Job]
-                if (this@TerminalEmulator.readJob === thisJob) {
+                val isCurrentJob = this@TerminalEmulator.readJob === thisJob
+                if (isCurrentJob) {
+                    if (_isActive.value) {
+                        _isActive.value = false
+                        runOnMain {
+                            listeners.forEach { it.onTerminalDisconnected() }
+                        }
+                    }
+                    closeStreams()
                     this@TerminalEmulator.readJob = null
                 }
+                // Always safe: this shuts down the executor captured locally
+                // for THIS connection, never the (possibly reassigned) field.
+                shutdownWriteExecutor(activeWriteExecutor)
                 Logger.d("TerminalEmulator", "SSH read loop terminated")
             }
         }

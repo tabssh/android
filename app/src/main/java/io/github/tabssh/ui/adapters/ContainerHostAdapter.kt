@@ -113,8 +113,10 @@ class ContainerHostAdapter(
             val engineName = context.getString(ContainerEngineLabels.engineName(engine))
             textEngine.text = engineName
 
-            // Transport-tier badge: the detected tier in plain language, so an
-            // unstarted host reads "Connected" rather than the stored "auto".
+            // Transport-tier badge: the configured/detected tier in plain
+            // language — this is NOT a live connection status (that's
+            // textLastConnected below); an unstarted host reads "Auto-detect"
+            // rather than leaking the stored "auto" identifier.
             textTransportMode.text =
                 context.getString(ContainerEngineLabels.transportMode(host.transportMode))
 

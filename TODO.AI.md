@@ -315,6 +315,31 @@ request:
   (e.g. a scoped/expiring token they create themselves, or a disposable
   test VM) before this sub-feature can be tested end-to-end.
 
+## Resolved — 2026-08-22 multi-line clipboard paste truncated to first line (VNC/SPICE)
+
+Reported: pasting multi-line clipboard content (embedded newlines) into a
+console session only delivered the first line, as if the rest of the paste
+had turned into a single Enter keypress.
+
+- SSH/Telnet (text-terminal mode via `TermuxBridge`/`TerminalView`) were
+  already correct: `TerminalView.pasteText()` wraps the payload in bracketed
+  paste (`ESC[200~…ESC[201~`) and normalizes line endings itself, and the IME
+  `commitText()` path already detects embedded `\n`/`\r` and routes through
+  `pasteText()` instead of `sendText()`. No change needed here.
+- VNC (`VncConsoleChannel.sendText()`) sent every character — including
+  embedded newlines — through `charToKeysym()`, which maps `'\n'` to the raw
+  Latin-1 code point `10`, not the X11 Return keysym; most keyboard layouts
+  have no mapping for that raw value, so the line break was silently
+  dropped. Fixed by routing `\r`/`\n` through `sendKeyDirect(KEY_RETURN)`
+  inline in `sendText()`, treating a `\r\n` pair as one Enter — matching the
+  whole-string-only handling that already existed in `sendSequenceDirect()`.
+- SPICE (`TerminalPagerAdapter`'s `spiceView.onTextInput`) had the same gap:
+  `SpiceKeyMap.translateChar()` has no scancode entry for `'\n'`/`'\r'`, so
+  `sendChar()` returned false and the line break fell through to a
+  clipboard-update call instead of pressing Enter. Fixed by routing line
+  breaks through `SC_ENTER` key down/up explicitly, same `\r\n`-as-one-Enter
+  handling as VNC.
+
 ## Resolved, not a bug — 2026-08-22 Add Hypervisor form initial focus
 
 Manual test observation: after tapping "Add Hypervisor" (Infra >

@@ -343,10 +343,11 @@ class HypervisorEditActivity : TabSSHActivity() {
         }
 
         buttonConfigureOci.setOnClickListener {
-            // Take the user to the Identities tab (tab index 2) in MainActivity
+            // Take the user to the Auth tab's VMs sub-tab in MainActivity
             // to create or edit an OCI virtualization identity.
             val intent = android.content.Intent(this, MainActivity::class.java)
-            intent.putExtra("start_tab", 2)
+            intent.putExtra("start_tab", io.github.tabssh.ui.adapters.MainTab.AUTH)
+            intent.putExtra("start_sub_tab", io.github.tabssh.ui.adapters.AuthTab.VMS)
             intent.flags = android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             startActivity(intent)
         }

@@ -4,27 +4,50 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="@dimen/space_md"
-    android:background="?attr/selectableItemBackground"
+    android:foreground="?attr/selectableItemBackground"
     android:clickable="true"
     android:focusable="true">
 
-    <TextView
-        android:id="@+id/text_vps_hostname"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:typeface="monospace"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:textColor="?attr/colorOnSurface" />
+        android:orientation="vertical"
+        android:padding="@dimen/space_md">
 
-    <TextView
-        android:id="@+id/text_vps_detail"
+        <TextView
+            android:id="@+id/text_vps_hostname"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:typeface="monospace"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="?attr/colorOnSurface" />
+
+        <HorizontalScrollView
+            android:id="@+id/scroll_vps_detail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_xs"
+            android:scrollbars="horizontal"
+            android:overScrollMode="ifContentScrolls">
+
+            <TextView
+                android:id="@+id/text_vps_detail"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:singleLine="true"
+                android:ellipsize="none"
+                android:typeface="monospace"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+        </HorizontalScrollView>
+
+    </LinearLayout>
+
+    <View
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_xs"
-        android:typeface="monospace"
-        android:textSize="13sp"
-        android:textColor="?attr/colorOnSurfaceVariant" />
+        android:layout_height="1dp"
+        android:background="?attr/colorOutlineVariant" />
 
 </LinearLayout>

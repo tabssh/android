@@ -107,60 +107,31 @@ jobs:
           gradle-${{ runner.os }}-
 
     - name: Decode and setup keystore
-      id: keystore
       env:
         KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
         KEYSTORE_PW: ${{ secrets.KEYSTORE_PASSWORD }}
-        KEY_PW: ${{ secrets.KEY_PASSWORD }}
       run: |
-        # KEYSTORE_BASE64 is optional for dev builds. When set, decode it so
-        # APKs are signed with the real release key — required for the daily
-        # rolling `development` prerelease to be installable as an update
-        # over yesterday's build. When absent (e.g. a fork or before the
-        # secret is provisioned), generate a throwaway keystore with a
-        # random, never-reused password so the build still produces an
-        # installable APK. That keystore is a DIFFERENT key every run, so
-        # the resulting APK cannot update, and will not be updated by, any
-        # other development build — the "ephemeral" output drives an
-        # explicit warning in the release notes below instead of silently
-        # claiming update compatibility that doesn't exist.
-        if [ -n "$KEYSTORE_B64" ]; then
-          echo "$KEYSTORE_B64" | base64 -d > keystore.jks
-          if [ -z "$KEYSTORE_PW" ]; then
-            echo "::error::KEYSTORE_BASE64 is set but the KEYSTORE_PASSWORD secret is missing" >&2
-            exit 1
-          fi
-          # A keystore generated with -storepass and no separate -keypass
-          # gives the key the store's password, which is how this project's
-          # release keystore was made — so an absent KEY_PASSWORD secret is
-          # the normal case, not a misconfiguration. Only the store password
-          # is mandatory; KEY_PASSWORD overrides the fallback when present.
-          {
-            echo "KEYSTORE_PASSWORD=${KEYSTORE_PW}"
-            echo "KEY_PASSWORD=${KEY_PW:-$KEYSTORE_PW}"
-          } >> "$GITHUB_ENV"
-          echo "ephemeral=false" >> "$GITHUB_OUTPUT"
-          echo "✅ Keystore decoded from KEYSTORE_BASE64 secret"
-        else
-          echo "⚠️  KEYSTORE_BASE64 not set — generating a throwaway per-run keystore"
-          EPHEMERAL_PW="$(head -c32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c24)"
-          keytool -genkeypair \
-            -keystore keystore.jks \
-            -alias tabssh \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 365 \
-            -storepass "$EPHEMERAL_PW" \
-            -keypass "$EPHEMERAL_PW" \
-            -dname "CN=TabSSH Dev Build (ephemeral), OU=Dev, O=TabSSH, L=Unknown, ST=Unknown, C=US" \
-            -noprompt
-          {
-            echo "KEYSTORE_PASSWORD=${EPHEMERAL_PW}"
-            echo "KEY_PASSWORD=${EPHEMERAL_PW}"
-          } >> "$GITHUB_ENV"
-          echo "ephemeral=true" >> "$GITHUB_OUTPUT"
-          echo "⚠️  Ephemeral keystore generated for this run only — this build is NOT update-compatible with any other development build"
+        # Read secrets from the environment, never via GitHub expression
+        # interpolation inside the script body — interpolation splices the
+        # value into the generated shell text, where a newline or quote in
+        # the secret becomes executable script.
+        #
+        # Every channel — development, beta, release — is a release: every
+        # APK it produces must chain to the one escrowed production key, so
+        # missing KEYSTORE_BASE64/KEYSTORE_PASSWORD hard-fail here exactly
+        # as they do in beta.yml/release.yml (AI.md PART 13). No
+        # ephemeral/generated fallback keystore — that would be
+        # update-compatible with nothing and silently misleading.
+        if [ -z "$KEYSTORE_B64" ]; then
+          echo "::error::KEYSTORE_BASE64 secret is not set. Add it under repo Settings > Secrets and Variables > Actions." >&2
+          exit 1
         fi
+        if [ -z "$KEYSTORE_PW" ]; then
+          echo "::error::KEYSTORE_BASE64 is set but KEYSTORE_PASSWORD is missing. Add it under repo Settings > Secrets and Variables > Actions." >&2
+          exit 1
+        fi
+        printf '%s' "$KEYSTORE_B64" | base64 -d > keystore.jks
+        echo "✅ Keystore decoded and ready"
 
     - name: Capture build identity
       id: version
@@ -239,9 +210,12 @@ jobs:
       run: ./gradlew assembleDevel --no-daemon
       env:
         SOURCE_DATE_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
-        # KEYSTORE_PASSWORD / KEY_PASSWORD are exported to $GITHUB_ENV by the
-        # "Decode and setup keystore" step above (real secret or freshly
-        # generated ephemeral password) — no need to redeclare them here.
+        # KEYSTORE_PASSWORD is required to sign. KEY_PASSWORD is optional —
+        # when the secret is absent GitHub expands it to an empty string and
+        # build.gradle uses the store password for the key, which is how
+        # this project's release keystore was generated.
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
     - name: Generate SBOM
       run: ./gradlew :app:cyclonedxBom --no-daemon
@@ -287,7 +261,6 @@ jobs:
       env:
         RELEASE_TITLE: ${{ steps.version.outputs.RELEASE_TITLE }}
         COMMIT_HASH: ${{ steps.version.outputs.COMMIT_HASH }}
-        EPHEMERAL: ${{ steps.keystore.outputs.ephemeral }}
       run: |
         BUILD_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
 
@@ -304,20 +277,6 @@ jobs:
         - **Variant:** devel (release configuration + Debug Log enabled, not debuggable)
 
         EOF
-
-        if [ "$EPHEMERAL" = "true" ]; then
-          cat >> RELEASE_NOTES_DEV.md << 'EOF'
-        ## 🔑 NOT an update — throwaway signing key
-
-        `KEYSTORE_BASE64` was not configured for this run, so this APK was
-        signed with a random key generated only for this build. It will
-        **not** install over a previous development build (or be updatable
-        by the next one) — Android rejects updates signed by a different
-        key. **Uninstall any existing TabSSH devel build before installing
-        this one.**
-
-        EOF
-        fi
 
         cat >> RELEASE_NOTES_DEV.md << 'EOF'
         ## Downloads

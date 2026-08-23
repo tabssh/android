@@ -24,12 +24,6 @@
       android:defaultValue="en"
       app:useSimpleSummaryProvider="true" />
 
-    <Preference
-      android:key="open_theme_editor"
-      android:title="@string/prefs_open_theme_editor_title"
-      android:summary="@string/prefs_open_theme_editor_summary"
-      android:icon="@drawable/ic_settings" />
-
   </PreferenceCategory>
 
   <PreferenceCategory

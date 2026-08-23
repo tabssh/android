@@ -20,8 +20,8 @@ DOCKER_CPUS ?= 2
 # development.yml and release.yml all export KEYSTORE_PASSWORD from
 # GitHub secrets straight to ./gradlew — so this default cannot leak into
 # CI/CD signing (AI.md PART 4 / PART 13).
-KEYSTORE_PASSWORD ?= localdev123
-KEY_PASSWORD ?= localdev123
+KEYSTORE_PASSWORD ?= password
+KEY_PASSWORD ?= password
 KEYSTORE_ALIAS ?= tabssh
 export KEYSTORE_PASSWORD KEY_PASSWORD KEYSTORE_ALIAS
 

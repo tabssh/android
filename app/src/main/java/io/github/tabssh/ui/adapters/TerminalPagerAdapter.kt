@@ -560,9 +560,23 @@ class TerminalPagerAdapter(
             // Soft-keyboard text arrives as strings; each char maps to a PS/2
             // make/break pair when possible, otherwise the vdagent clipboard
             // carries it (covers non-Latin input the scancode table can't).
+            // SpiceKeyMap has no scancode entry for '\r'/'\n' — sendChar()
+            // returned false for a line break, so it silently fell through to
+            // the clipboard branch instead of pressing Enter, collapsing a
+            // multi-line paste onto one line. Route line breaks through
+            // SC_ENTER explicitly; a "\r\n" pair is treated as one Enter.
             spiceView.onTextInput = { text ->
-                text.forEach { ch ->
-                    if (!spiceView.sendChar(ch)) client.sendClipboardText(ch.toString())
+                var i = 0
+                while (i < text.length) {
+                    val ch = text[i]
+                    if (ch == '\r' || ch == '\n') {
+                        client.sendKeyEvent(SpiceConstants.SC_ENTER, true)
+                        client.sendKeyEvent(SpiceConstants.SC_ENTER, false)
+                        i += if (ch == '\r' && i + 1 < text.length && text[i + 1] == '\n') 2 else 1
+                    } else {
+                        if (!spiceView.sendChar(ch)) client.sendClipboardText(ch.toString())
+                        i++
+                    }
                 }
             }
             spiceView.onBackspace = {

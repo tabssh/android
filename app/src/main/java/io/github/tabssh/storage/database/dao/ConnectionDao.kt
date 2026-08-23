@@ -101,7 +101,7 @@ interface ConnectionDao {
 
     /**
      * Clear key_id on all connections that reference the deleted key.
-     * Called inside a transaction by IdentitiesFragment.deleteSshKey.
+     * Called inside a transaction by AuthKeysFragment.deleteSshKey.
      */
     @Query("UPDATE connections SET key_id = NULL WHERE key_id = :keyId")
     suspend fun clearKeyFromConnections(keyId: String)

@@ -5,6 +5,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
+import androidx.preference.PreferenceManager
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
@@ -48,6 +49,28 @@ class InfraFragment : Fragment() {
                 else -> ""
             }
         }.attach()
+
+        // Remember which sub-tab the user last had open, so returning to
+        // Infra from another main tab (or relaunching the app) restores it
+        // instead of always resetting to sub-tab 0.
+        //
+        // Note: this deliberately does NOT persist drill-down state inside
+        // detail Activities (ContainerHostManagerActivity, ProxmoxManagerActivity,
+        // CloudAccountManagerActivity, etc.) — those are separate Activities on
+        // the normal back stack, not reachable while this tab UI is in the
+        // foreground, so system Back and task-resume already restore them
+        // correctly once sub-tab position is preserved here. No app code path
+        // clears the back stack into a detail Activity, so no extra
+        // persistence is needed for that case.
+        val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+        val savedSubTab = prefs.getInt(PREF_LAST_SUB_TAB, 0)
+        viewPager.setCurrentItem(savedSubTab, false)
+        viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                super.onPageSelected(position)
+                prefs.edit().putInt(PREF_LAST_SUB_TAB, position).apply()
+            }
+        })
     }
 
     private inner class InfraPagerAdapter(fragment: Fragment) : FragmentStateAdapter(fragment) {
@@ -62,6 +85,7 @@ class InfraFragment : Fragment() {
     }
 
     companion object {
+        private const val PREF_LAST_SUB_TAB = "ui_last_infra_sub_tab_index"
         fun newInstance() = InfraFragment()
     }
 }

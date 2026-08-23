@@ -690,10 +690,11 @@ class ImportExportActivity : TabSSHActivity() {
                         getString(R.string.import_export_need_key_snackbar),
                         Snackbar.LENGTH_INDEFINITE
                     ).setAction(R.string.import_export_identities_action) {
-                        // Navigate to MainActivity and open the Identities tab (index 2).
+                        // Navigate to MainActivity and open the Auth tab's Keys sub-tab.
                         val intent = Intent(this@ImportExportActivity, MainActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                            putExtra("start_tab", 2)
+                            putExtra("start_tab", io.github.tabssh.ui.adapters.MainTab.AUTH)
+                            putExtra("start_sub_tab", io.github.tabssh.ui.adapters.AuthTab.KEYS)
                         }
                         startActivity(intent)
                     }.show()

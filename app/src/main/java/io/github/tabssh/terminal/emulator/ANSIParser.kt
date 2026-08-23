@@ -540,42 +540,27 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                 5 -> {
                     if (index + 2 < parameters.size) {
                         val colorIndex = parameters[index + 2]
-                        // Convert 256-color index to 16-color (simplified)
+                        // Convert 256-color index to the nearest of the 16
+                        // ANSI colors this (legacy, non-Termux) renderer can
+                        // display — via actual RGB distance rather than the
+                        // previous crude quadrant/threshold guesses.
                         val color16 = when {
-                            colorIndex < 8 -> colorIndex
                             colorIndex < 16 -> colorIndex
                             colorIndex < 232 -> {
-                                // 216-color cube - map to nearest 16-color
+                                // 216-color cube: 6x6x6, xterm step values.
                                 val adjusted = colorIndex - 16
-                                val r = (adjusted / 36) % 6
-                                val g = (adjusted / 6) % 6
-                                val b = adjusted % 6
-                                // Simple mapping to 16 colors
-                                when {
-                                    // Red
-                                    r > 3 && g <= 3 && b <= 3 -> 1
-                                    // Green
-                                    r <= 3 && g > 3 && b <= 3 -> 2
-                                    // Blue
-                                    r <= 3 && g <= 3 && b > 3 -> 4
-                                    // Yellow
-                                    r > 3 && g > 3 && b <= 3 -> 3
-                                    // Magenta
-                                    r > 3 && g <= 3 && b > 3 -> 5
-                                    // Cyan
-                                    r <= 3 && g > 3 && b > 3 -> 6
-                                    // White
-                                    r > 3 && g > 3 && b > 3 -> 7
-                                    // Black
-                                    else -> 0
-                                }
+                                val r = cubeStep((adjusted / 36) % 6)
+                                val g = cubeStep((adjusted / 6) % 6)
+                                val b = cubeStep(adjusted % 6)
+                                nearestAnsi16(r, g, b)
                             }
-                            // Grayscale
+                            // Grayscale ramp: 24 steps from near-black to near-white.
                             else -> {
-                                if (colorIndex < 244) 0 else 7
+                                val gray = 8 + (colorIndex - 232) * 10
+                                nearestAnsi16(gray, gray, gray)
                             }
                         }
-                        
+
                         if (isForeground) {
                             buffer.setCharacterAttributes(fgColor = color16)
                         } else {
@@ -590,27 +575,12 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                         val r = parameters[index + 2]
                         val g = parameters[index + 3]
                         val b = parameters[index + 4]
-                        
-                        // Convert RGB to nearest 16-color (simplified)
-                        val color16 = when {
-                            // Red
-                            r > 128 && g <= 128 && b <= 128 -> 1
-                            // Green
-                            r <= 128 && g > 128 && b <= 128 -> 2
-                            // Blue
-                            r <= 128 && g <= 128 && b > 128 -> 4
-                            // Yellow
-                            r > 128 && g > 128 && b <= 128 -> 3
-                            // Magenta
-                            r > 128 && g <= 128 && b > 128 -> 5
-                            // Cyan
-                            r <= 128 && g > 128 && b > 128 -> 6
-                            // White
-                            r > 128 && g > 128 && b > 128 -> 7
-                            // Black
-                            else -> 0
-                        }
-                        
+
+                        // Convert truecolor RGB to the nearest of the 16 ANSI
+                        // colors via RGB distance instead of the previous
+                        // crude midpoint-threshold guesses.
+                        val color16 = nearestAnsi16(r, g, b)
+
                         if (isForeground) {
                             buffer.setCharacterAttributes(fgColor = color16)
                         } else {
@@ -623,7 +593,53 @@ class ANSIParser(private val buffer: TerminalBuffer) {
         }
         return index + 1
     }
-    
+
+    /** xterm 216-color cube step value (0..5) → 8-bit channel level. */
+    private fun cubeStep(n: Int): Int = if (n == 0) 0 else 55 + n * 40
+
+    /** Standard xterm 16-color palette RGB values, indices 0-15. */
+    private val ansi16Palette = arrayOf(
+        intArrayOf(0, 0, 0),       // 0  black
+        intArrayOf(128, 0, 0),     // 1  red
+        intArrayOf(0, 128, 0),     // 2  green
+        intArrayOf(128, 128, 0),   // 3  yellow
+        intArrayOf(0, 0, 128),     // 4  blue
+        intArrayOf(128, 0, 128),   // 5  magenta
+        intArrayOf(0, 128, 128),   // 6  cyan
+        intArrayOf(192, 192, 192), // 7  white
+        intArrayOf(128, 128, 128), // 8  bright black (gray)
+        intArrayOf(255, 0, 0),     // 9  bright red
+        intArrayOf(0, 255, 0),     // 10 bright green
+        intArrayOf(255, 255, 0),   // 11 bright yellow
+        intArrayOf(0, 0, 255),     // 12 bright blue
+        intArrayOf(255, 0, 255),   // 13 bright magenta
+        intArrayOf(0, 255, 255),   // 14 bright cyan
+        intArrayOf(255, 255, 255)  // 15 bright white
+    )
+
+    /**
+     * Nearest of the 16 ANSI colors to (r, g, b) by squared Euclidean
+     * distance. Replaces the previous threshold/quadrant guesses, which
+     * ignored brightness entirely (never selected the bright 8-15 range)
+     * and mismapped many desaturated colors to black or white.
+     */
+    private fun nearestAnsi16(r: Int, g: Int, b: Int): Int {
+        var best = 0
+        var bestDist = Int.MAX_VALUE
+        for (i in ansi16Palette.indices) {
+            val (pr, pg, pb) = ansi16Palette[i]
+            val dr = r - pr
+            val dg = g - pg
+            val db = b - pb
+            val dist = dr * dr + dg * dg + db * db
+            if (dist < bestDist) {
+                bestDist = dist
+                best = i
+            }
+        }
+        return best
+    }
+
     /**
      * Handle SM (ESC[...h) and RM (ESC[...l).
      *

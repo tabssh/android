@@ -1,5 +1,6 @@
 package io.github.tabssh.ui.fragments
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -8,9 +9,11 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.ui.activities.ConnectionEditActivity
 import io.github.tabssh.ui.adapters.ConnectionAdapter
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
@@ -67,21 +70,65 @@ class FrequentConnectionsFragment : Fragment() {
     }
 
     private fun setupRecyclerView() {
-        // Frequent connects is a quick-launch surface; no long-press menu.
         adapter = ConnectionAdapter(
             onConnectionClick = { connection: ConnectionProfile ->
                 openConnection(connection)
             }
         )
+
+        // Long click for context menu — same mechanism as Hosts, but a
+        // reduced menu (no Duplicate/Delete): Frequent is a quick-launch
+        // surface, not where the user manages the connection record itself.
+        adapter.setOnItemLongClickListener { connection ->
+            showConnectionMenu(connection)
+            true
+        }
+
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.adapter = adapter
     }
-    
+
     private fun openConnection(connection: ConnectionProfile) {
         Logger.d("FrequentConnectionsFragment", "Opening connection: ${connection.name}")
         // Prompt to reattach if a tab already exists for this profile —
         // ConnectionLauncher handles the dialog + the no-existing-tab fast path.
         io.github.tabssh.ui.utils.ConnectionLauncher.launch(requireContext(), connection)
+    }
+
+    private fun showConnectionMenu(connection: ConnectionProfile) {
+        // Order: Connect → Browse Files → Edit. No Duplicate/Delete here —
+        // those are record-management actions that belong on Hosts, where
+        // the full connection list (not just the top-10 shortlist) lives.
+        val items = arrayOf(
+            getString(R.string.connections_menu_connect),
+            getString(R.string.connections_menu_browse_files),
+            getString(R.string.edit)
+        )
+
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(connection.name)
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> openConnection(connection)
+                    1 -> openSftpBrowser(connection)
+                    2 -> editConnection(connection)
+                }
+            }
+            .show()
+    }
+
+    private fun openSftpBrowser(connection: ConnectionProfile) {
+        Logger.d("FrequentConnectionsFragment", "Opening SFTP browser for ${connection.name}")
+        startActivity(io.github.tabssh.ui.activities.SFTPActivity.createIntent(
+            requireContext(), connection.id
+        ))
+    }
+
+    private fun editConnection(connection: ConnectionProfile) {
+        val intent = Intent(requireContext(), ConnectionEditActivity::class.java).apply {
+            putExtra(ConnectionEditActivity.EXTRA_CONNECTION_ID, connection.id)
+        }
+        startActivity(intent)
     }
     
     private fun loadFrequentConnections() {
