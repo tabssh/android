@@ -58,7 +58,7 @@ data class ConnectableHost(
     val hostPreview: String,
 
     /** "ssh" or "telnet" — mosh is [ConnectionProfile.moshMode], not a separate protocol. */
-    @ColumnInfo(name = "protocol")
+    @ColumnInfo(name = "protocol", defaultValue = "'ssh'")
     val protocol: String = "ssh",
 
     @ColumnInfo(name = "updated_at")

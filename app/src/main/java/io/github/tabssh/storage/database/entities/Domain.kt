@@ -36,7 +36,7 @@ data class Domain(
     val expirationDate: Long? = null,
 
     /** Days before expirationDate to fire the renewal reminder notification. */
-    @ColumnInfo(name = "reminder_days_before")
+    @ColumnInfo(name = "reminder_days_before", defaultValue = "7")
     val reminderDaysBefore: Int = 7,
 
     /** Epoch millis of the last reminder notification fired for the currently-set expirationDate, to avoid re-notifying daily. */

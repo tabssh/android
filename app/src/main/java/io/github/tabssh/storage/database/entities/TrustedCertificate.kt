@@ -85,7 +85,7 @@ data class TrustedCertificate(
     val notes: String? = null,
 
     /** Last local modification time, used for sync last-write-wins comparisons. */
-    @ColumnInfo(name = "modified_at")
+    @ColumnInfo(name = "modified_at", defaultValue = "0")
     val modifiedAt: Long = 0
 ) {
     companion object {

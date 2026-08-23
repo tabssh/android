@@ -58,7 +58,7 @@ data class VpsHost(
     val description: String? = null,
 
     /** Days before renewalDate to fire the renewal reminder notification. */
-    @ColumnInfo(name = "reminder_days_before")
+    @ColumnInfo(name = "reminder_days_before", defaultValue = "7")
     val reminderDaysBefore: Int = 7,
 
     /** Epoch millis of the last reminder notification fired for the currently-set renewalDate, to avoid re-notifying daily. */

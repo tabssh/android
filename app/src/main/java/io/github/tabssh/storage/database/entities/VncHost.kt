@@ -74,7 +74,7 @@ data class VncHost(
      * see `VncBackgroundSessionStore.sweepIdle()`. A suspended session simply
      * reconnects fresh on the next `onResume()`.
      */
-    @ColumnInfo(name = "keep_alive_in_background")
+    @ColumnInfo(name = "keep_alive_in_background", defaultValue = "0")
     val keepAliveInBackground: Boolean = true,
 
     /** FK to connection_groups — optional folder assignment. */

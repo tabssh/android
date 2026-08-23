@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 19,
-    "identityHash": "8ea0b5ebcb02c628d4f04b34dc84f01f",
+    "identityHash": "48f17ef9433f20817893957763e82eed",
     "entities": [
       {
         "tableName": "connections",
@@ -967,7 +967,7 @@
       },
       {
         "tableName": "trusted_certificates",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `hostname` TEXT NOT NULL, `port` INTEGER NOT NULL, `fingerprint` TEXT NOT NULL, `algorithm` TEXT NOT NULL, `certificate_data` TEXT NOT NULL, `subject` TEXT NOT NULL, `issuer` TEXT NOT NULL, `serial_number` TEXT NOT NULL, `not_before` INTEGER NOT NULL, `not_after` INTEGER NOT NULL, `expires_at` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `last_used` INTEGER NOT NULL, `trust_level` TEXT NOT NULL, `is_self_signed` INTEGER NOT NULL, `is_ca_signed` INTEGER NOT NULL, `key_usage` TEXT, `extended_key_usage` TEXT, `subject_alternative_names` TEXT, `verification_status` TEXT NOT NULL, `notes` TEXT, `modified_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `hostname` TEXT NOT NULL, `port` INTEGER NOT NULL, `fingerprint` TEXT NOT NULL, `algorithm` TEXT NOT NULL, `certificate_data` TEXT NOT NULL, `subject` TEXT NOT NULL, `issuer` TEXT NOT NULL, `serial_number` TEXT NOT NULL, `not_before` INTEGER NOT NULL, `not_after` INTEGER NOT NULL, `expires_at` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `last_used` INTEGER NOT NULL, `trust_level` TEXT NOT NULL, `is_self_signed` INTEGER NOT NULL, `is_ca_signed` INTEGER NOT NULL, `key_usage` TEXT, `extended_key_usage` TEXT, `subject_alternative_names` TEXT, `verification_status` TEXT NOT NULL, `notes` TEXT, `modified_at` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -1101,7 +1101,8 @@
             "fieldPath": "modifiedAt",
             "columnName": "modified_at",
             "affinity": "INTEGER",
-            "notNull": true
+            "notNull": true,
+            "defaultValue": "0"
           }
         ],
         "primaryKey": {
@@ -2074,7 +2075,7 @@
       },
       {
         "tableName": "monitor_slots",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `connection_id` TEXT NOT NULL, `enabled` INTEGER NOT NULL, `alert_on_down` INTEGER NOT NULL, `alert_on_recovery` INTEGER NOT NULL, `cpu_threshold` INTEGER, `memory_threshold` INTEGER, `disk_threshold` INTEGER, `load_threshold` REAL, `enable_performance_checks` INTEGER NOT NULL, `check_interval_minutes` INTEGER NOT NULL, `alert_cooldown_minutes` INTEGER NOT NULL, `last_checked_at` INTEGER NOT NULL, `last_seen_up` INTEGER NOT NULL, `last_notified_down_at` INTEGER NOT NULL, `last_notified_up_at` INTEGER NOT NULL, `is_currently_down` INTEGER NOT NULL, `consecutive_failures` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `connection_id` TEXT NOT NULL, `enabled` INTEGER NOT NULL, `alert_on_down` INTEGER NOT NULL, `alert_on_recovery` INTEGER NOT NULL, `cpu_threshold` INTEGER, `memory_threshold` INTEGER, `disk_threshold` INTEGER, `load_threshold` REAL, `enable_performance_checks` INTEGER NOT NULL, `check_interval_minutes` INTEGER NOT NULL, `alert_cooldown_minutes` INTEGER NOT NULL, `last_checked_at` INTEGER NOT NULL, `last_seen_up` INTEGER NOT NULL, `last_notified_down_at` INTEGER NOT NULL, `last_notified_up_at` INTEGER NOT NULL, `is_currently_down` INTEGER NOT NULL, `consecutive_failures` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -2184,7 +2185,8 @@
             "fieldPath": "modifiedAt",
             "columnName": "modified_at",
             "affinity": "INTEGER",
-            "notNull": true
+            "notNull": true,
+            "defaultValue": "0"
           }
         ],
         "primaryKey": {
@@ -2216,7 +2218,7 @@
       },
       {
         "tableName": "vnc_hosts",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `host` TEXT NOT NULL, `port` INTEGER NOT NULL, `display_number` INTEGER, `identity_id` TEXT, `security_type` TEXT NOT NULL, `tls_verify` INTEGER NOT NULL, `pinned_cert_sha256` TEXT, `keep_alive_in_background` INTEGER NOT NULL, `group_id` TEXT, `color_tag` INTEGER NOT NULL, `notes` TEXT, `last_connected` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `host` TEXT NOT NULL, `port` INTEGER NOT NULL, `display_number` INTEGER, `identity_id` TEXT, `security_type` TEXT NOT NULL, `tls_verify` INTEGER NOT NULL, `pinned_cert_sha256` TEXT, `keep_alive_in_background` INTEGER NOT NULL DEFAULT 0, `group_id` TEXT, `color_tag` INTEGER NOT NULL, `notes` TEXT, `last_connected` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -2273,7 +2275,8 @@
             "fieldPath": "keepAliveInBackground",
             "columnName": "keep_alive_in_background",
             "affinity": "INTEGER",
-            "notNull": true
+            "notNull": true,
+            "defaultValue": "0"
           },
           {
             "fieldPath": "groupId",
@@ -2984,7 +2987,7 @@
       },
       {
         "tableName": "registry_credentials",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `registry_host` TEXT NOT NULL, `username` TEXT NOT NULL, `auth_type` TEXT NOT NULL, `modified_at` INTEGER NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `registry_host` TEXT NOT NULL, `username` TEXT NOT NULL, `auth_type` TEXT NOT NULL, `modified_at` INTEGER NOT NULL DEFAULT 0)",
         "fields": [
           {
             "fieldPath": "id",
@@ -3014,7 +3017,8 @@
             "fieldPath": "modifiedAt",
             "columnName": "modified_at",
             "affinity": "INTEGER",
-            "notNull": true
+            "notNull": true,
+            "defaultValue": "0"
           }
         ],
         "primaryKey": {
@@ -3313,7 +3317,7 @@
       },
       {
         "tableName": "domains",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `domain_name` TEXT NOT NULL, `privacy_protection` TEXT NOT NULL, `status_at_registrar` TEXT NOT NULL, `auto_renew` TEXT NOT NULL, `expiration_date` INTEGER, `reminder_days_before` INTEGER NOT NULL, `last_reminder_sent_at` INTEGER, `notes` TEXT, `created_at` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `domain_name` TEXT NOT NULL, `privacy_protection` TEXT NOT NULL, `status_at_registrar` TEXT NOT NULL, `auto_renew` TEXT NOT NULL, `expiration_date` INTEGER, `reminder_days_before` INTEGER NOT NULL DEFAULT 7, `last_reminder_sent_at` INTEGER, `notes` TEXT, `created_at` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -3354,7 +3358,8 @@
             "fieldPath": "reminderDaysBefore",
             "columnName": "reminder_days_before",
             "affinity": "INTEGER",
-            "notNull": true
+            "notNull": true,
+            "defaultValue": "7"
           },
           {
             "fieldPath": "lastReminderSentAt",
@@ -3388,7 +3393,7 @@
       },
       {
         "tableName": "vps_hosts",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `tenant` TEXT NOT NULL, `hostname` TEXT NOT NULL, `ipv4` TEXT, `ipv6` TEXT, `specs` TEXT, `linked_domain` TEXT, `renewal_raw` TEXT, `renewal_date` INTEGER, `billing_cycle` TEXT, `price` TEXT, `description` TEXT, `reminder_days_before` INTEGER NOT NULL, `last_reminder_sent_at` INTEGER, `created_at` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `tenant` TEXT NOT NULL, `hostname` TEXT NOT NULL, `ipv4` TEXT, `ipv6` TEXT, `specs` TEXT, `linked_domain` TEXT, `renewal_raw` TEXT, `renewal_date` INTEGER, `billing_cycle` TEXT, `price` TEXT, `description` TEXT, `reminder_days_before` INTEGER NOT NULL DEFAULT 7, `last_reminder_sent_at` INTEGER, `created_at` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -3457,7 +3462,8 @@
             "fieldPath": "reminderDaysBefore",
             "columnName": "reminder_days_before",
             "affinity": "INTEGER",
-            "notNull": true
+            "notNull": true,
+            "defaultValue": "7"
           },
           {
             "fieldPath": "lastReminderSentAt",
@@ -3548,7 +3554,7 @@
       },
       {
         "tableName": "connectable_hosts",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `source_type` TEXT NOT NULL, `cloud_account_id` TEXT, `instance_id` TEXT, `name` TEXT NOT NULL, `host_preview` TEXT NOT NULL, `protocol` TEXT NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `source_type` TEXT NOT NULL, `cloud_account_id` TEXT, `instance_id` TEXT, `name` TEXT NOT NULL, `host_preview` TEXT NOT NULL, `protocol` TEXT NOT NULL DEFAULT 'ssh', `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -3588,7 +3594,8 @@
             "fieldPath": "protocol",
             "columnName": "protocol",
             "affinity": "TEXT",
-            "notNull": true
+            "notNull": true,
+            "defaultValue": "'ssh'"
           },
           {
             "fieldPath": "updatedAt",
@@ -3607,7 +3614,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8ea0b5ebcb02c628d4f04b34dc84f01f')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '48f17ef9433f20817893957763e82eed')"
     ]
   }
 }
