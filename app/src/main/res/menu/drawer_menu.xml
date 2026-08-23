@@ -4,7 +4,9 @@
   duplicated here; the drawer covers everything that has no natural tab home.
 
   Groups: Quick → Accounts → Manage → Connect → Insights → Settings → Diagnostics
-  Tabs handle: Frequent | Hosts | Stats | Infra | Auth
+  Tabs handle: Frequent | Hosts | Panes | Infra | Auth
+  Stats moved here (Insights group, above Multi-host Dashboard) — it is no
+  longer a main tab.
   Import/Export moved to Settings screen.
   Quick.Home always returns to MainActivity's last-used tab (see
   TabSSHActivity.goHome()) — the only drawer path back to the main tab UI
@@ -64,6 +66,10 @@
 
     <item android:title="@string/nav_group_insights">
         <menu>
+            <item
+                android:id="@+id/nav_stats"
+                android:icon="@android:drawable/ic_menu_sort_by_size"
+                android:title="@string/main_tab_stats" />
             <item
                 android:id="@+id/nav_multi_dashboard"
                 android:icon="@android:drawable/ic_menu_view"

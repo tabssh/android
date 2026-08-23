@@ -409,6 +409,14 @@
             android:launchMode="singleTask"
             android:label="@string/activity_label_app_lock" />
 
+        <!-- Server performance monitoring, relocated from the main tab strip
+             into the nav drawer's Insights group -->
+        <activity
+            android:name=".ui.activities.StatsActivity"
+            android:exported="false"
+            android:label="@string/main_tab_stats"
+            android:parentActivityName=".ui.activities.MainActivity" />
+
         <!-- Wave 4.g — Multi-host performance dashboard -->
         <activity
             android:name=".ui.activities.MultiHostDashboardActivity"

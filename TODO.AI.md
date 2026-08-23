@@ -490,3 +490,30 @@ Fixes baked into the recipe: pkg-config search path includes
 `python3-six`/`python3-pyparsing` for spice-common codegen; static
 libjpeg-turbo (spice-gtk requires libjpeg); GStreamer patched out (see
 limitation above).
+
+### Durable record — Stats tab moved to nav drawer (TODO.md item)
+
+Moved the Stats tab (`PerformanceFragment`, server performance monitoring)
+out of the main tab strip into the nav drawer's Insights group, as the first
+item above Multi-host Dashboard, per the sole `TODO.md` item. New
+`StatsActivity` (`ui/activities/StatsActivity.kt` +
+`res/layout/activity_stats.xml`) hosts the fragment unmodified — only
+chrome/hosting changed, no changes to `PerformanceFragment.kt` itself (it
+had no ViewPager/MainActivity coupling to adapt). `MainTab.kt` lost `STATS`
+and renumbered `INFRA`/`AUTH` down by one (5 tabs → 4); `MainPagerAdapter.kt`
+dropped the branch and title; `MainActivity.kt`'s `start_tab` range checks
+narrowed from `0..5`/`coerceIn(0, 5)` to `0..4`/`coerceIn(0, 4)`. Confirmed
+via grep that all 3 deep-link callers (`ImportExportActivity`,
+`HypervisorEditActivity`, `TabTerminalActivity`) already address `start_tab`
+via the symbolic `MainTab.AUTH` constant, not a literal, so they needed no
+change. No existing chart/stats-themed drawable icon existed in the project
+(every other current drawer item has one); used the stock
+`@android:drawable/ic_menu_sort_by_size` icon for visual consistency with
+the rest of the Insights group rather than adding a new vector asset —
+revisit if a dedicated Stats icon is ever designed. Drawer item title and
+the new Activity's toolbar title/manifest label all reuse the existing
+`main_tab_stats` string ("Stats") rather than adding a duplicate string.
+No new unit tests added (none existed for tab-strip composition or drawer
+dispatch before this change either). `make check` passed clean
+(`kspDebugKotlin compileDebugKotlin lintDebug testDebugUnitTest`, 16m15s,
+no new warnings introduced).

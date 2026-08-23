@@ -181,6 +181,7 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
             R.id.nav_manage_groups -> startDestination(GroupManagementActivity::class.java)
             R.id.nav_port_forwarding -> startDestination(PortForwardingActivity::class.java)
             R.id.nav_cluster_commands -> startDestination(ClusterCommandActivity::class.java)
+            R.id.nav_stats -> startDestination(StatsActivity::class.java)
             R.id.nav_multi_dashboard -> startDestination(MultiHostDashboardActivity::class.java)
             R.id.nav_connection_history -> startDestination(ConnectionHistoryActivity::class.java)
             R.id.nav_vnc_hosts -> startDestination(VncHostsActivity::class.java)
@@ -217,7 +218,7 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
     }
 
     /**
-     * "Home" always lands back on the main Frequent/Hosts/Identities/Stats/VMs
+     * "Home" always lands back on the main Frequent/Hosts/Panes/Infra/Auth
      * tab UI, the same way reopening the app does — there was previously no
      * drawer path back to it once you'd drilled into a tracker/manager screen.
      * CLEAR_TOP+SINGLE_TOP reuses the existing MainActivity instance (or
