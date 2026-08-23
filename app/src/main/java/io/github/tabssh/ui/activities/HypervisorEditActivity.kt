@@ -375,7 +375,7 @@ class HypervisorEditActivity : TabSSHActivity() {
 
                 // Build display list
                 val connectionNames = connections.map { conn: io.github.tabssh.storage.database.entities.ConnectionProfile ->
-                    getString(R.string.hypervisor_edit_connection_list_item, conn.name ?: conn.getDisplayName(), conn.host)
+                    getString(R.string.hypervisor_edit_connection_list_item, conn.getDisplayName(), conn.host)
                 }.toTypedArray()
 
                 MaterialAlertDialogBuilder(this@HypervisorEditActivity)
@@ -408,7 +408,7 @@ class HypervisorEditActivity : TabSSHActivity() {
         linkedConnectionId = connection.id
 
         // Pre-fill fields from the connection
-        editName.setText(connection.name ?: connection.getDisplayName())
+        editName.setText(connection.getDisplayName())
         editHost.setText(connection.host)
         editUsername.setText(connection.username)
 

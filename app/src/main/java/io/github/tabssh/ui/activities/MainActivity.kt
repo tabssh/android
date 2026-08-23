@@ -330,7 +330,6 @@ class MainActivity : TabSSHActivity() {
             HypervisorType.XCPNG -> Intent(this, XCPngManagerActivity::class.java)
             HypervisorType.VMWARE -> Intent(this, VMwareManagerActivity::class.java)
             HypervisorType.LIBVIRT -> Intent(this, LibvirtManagerActivity::class.java)
-            else -> return
         }
         intent.putExtra("hypervisor_id", hypervisor.id)
         startActivity(intent)

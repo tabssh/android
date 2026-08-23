@@ -890,9 +890,14 @@ class TabSSHApplication : Application() {
         super.onTerminate()
     }
     
+    // TRIM_MEMORY_MODERATE/TRIM_MEMORY_COMPLETE are deprecated (API 34) with no
+    // replacement constant carrying the same meaning — apps targeting SDK 34+
+    // simply stop receiving them reliably, so this branch is kept as a
+    // best-effort trim for devices/configurations that still deliver them.
+    @Suppress("DEPRECATION")
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        
+
         when (level) {
             TRIM_MEMORY_BACKGROUND,
             TRIM_MEMORY_MODERATE,

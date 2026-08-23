@@ -102,10 +102,9 @@ class SettingsMainFragment : PreferenceFragmentCompat() {
 
         findPreference<Preference>("about_build")?.apply {
             try {
-                val unknown = getString(R.string.settings_value_unknown)
-                val commitId = io.github.tabssh.BuildConfig.GIT_COMMIT_ID ?: unknown
-                val buildDate = io.github.tabssh.BuildConfig.BUILD_DATE ?: unknown
-                val buildType = io.github.tabssh.BuildConfig.BUILD_TYPE ?: unknown
+                val commitId = io.github.tabssh.BuildConfig.GIT_COMMIT_ID
+                val buildDate = io.github.tabssh.BuildConfig.BUILD_DATE
+                val buildType = io.github.tabssh.BuildConfig.BUILD_TYPE
                 summary = getString(
                     R.string.settings_summary_build_info,
                     commitId,
@@ -906,7 +905,7 @@ class TaskerSettingsFragment : PreferenceFragmentCompat() {
                 .flowOn(Dispatchers.IO)
                 .collect { connections ->
                     val entries = connections.map { it.name }.toTypedArray()
-                    val values = connections.map { it.id.toString() }.toTypedArray()
+                    val values = connections.map { it.id }.toTypedArray()
 
                     findPreference<androidx.preference.MultiSelectListPreference>("tasker_allowed_connections")?.apply {
                         this.entries = entries

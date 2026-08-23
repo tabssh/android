@@ -1423,7 +1423,6 @@
 
     <!-- About dialog -->
     <string name="about_title">About TabSSH</string>
-    <string name="about_commit_unknown">unknown</string>
     <string name="about_abi_unknown">unknown</string>
     <string name="about_component_included">included</string>
     <string name="about_component_not_bundled">not bundled</string>

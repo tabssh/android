@@ -1007,7 +1007,7 @@ class XCPngManagerActivity : TabSSHActivity() {
         lifecycleScope.launch {
             try {
                 progressBar.visibility = View.VISIBLE
-                val snapshots = xoClient.listSnapshots(vm.uuid) ?: emptyList()
+                val snapshots = xoClient.listSnapshots(vm.uuid)
                 progressBar.visibility = View.GONE
                 
                 if (snapshots.isEmpty()) {
@@ -1212,7 +1212,7 @@ class XCPngManagerActivity : TabSSHActivity() {
             lifecycleScope.launch {
                 try {
                     progressBar.visibility = View.VISIBLE
-                    val jobs = xoClient.listBackupJobs() ?: emptyList()
+                    val jobs = xoClient.listBackupJobs()
                     progressBar.visibility = View.GONE
                     
                     if (jobs.isEmpty()) {
@@ -1316,7 +1316,7 @@ class XCPngManagerActivity : TabSSHActivity() {
             holder.status.text = if (job.enabled) getString(R.string.xcpng_job_enabled) else getString(R.string.xcpng_job_disabled)
             holder.status.setTextColor(if (job.enabled) androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.status_success) else androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.status_warning))
             holder.schedule.text = getString(R.string.xcpng_job_schedule_fmt, job.schedule?.let { safeText(it, 48) } ?: getString(R.string.xcpng_schedule_manual))
-            holder.vms.text = getString(R.string.xcpng_job_vms_fmt, job.vms?.size ?: 0)
+            holder.vms.text = getString(R.string.xcpng_job_vms_fmt, job.vms.size)
             
             holder.triggerButton.setOnClickListener { onAction(job, "trigger") }
             holder.viewRunsButton.setOnClickListener { onAction(job, "view_runs") }
@@ -1352,7 +1352,7 @@ class XCPngManagerActivity : TabSSHActivity() {
             lifecycleScope.launch {
                 try {
                     progressBar.visibility = View.VISIBLE
-                    val runs = xoClient.getBackupRuns(job.id) ?: emptyList()
+                    val runs = xoClient.getBackupRuns(job.id)
                     progressBar.visibility = View.GONE
                     
                     if (runs.isEmpty()) {

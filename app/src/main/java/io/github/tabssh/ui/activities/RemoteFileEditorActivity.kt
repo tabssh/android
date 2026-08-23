@@ -71,6 +71,17 @@ class RemoteFileEditorActivity : TabSSHActivity() {
         super.onCreate(savedInstanceState)
         app = application as TabSSHApplication
 
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (!dirty) {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                    return
+                }
+                promptUnsavedChanges()
+            }
+        })
+
         val connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID)
         remotePath = intent.getStringExtra(EXTRA_REMOTE_PATH).orEmpty()
         val fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: remotePath.substringAfterLast('/')
@@ -168,15 +179,6 @@ class RemoteFileEditorActivity : TabSSHActivity() {
             1 -> { saveFile(); true }
             else -> super.onOptionsItemSelected(item)
         }
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        if (!dirty) {
-            super.onBackPressed()
-            return
-        }
-        promptUnsavedChanges()
     }
 
     private fun promptUnsavedChanges() {

@@ -186,7 +186,6 @@ class HypervisorsFragment : Fragment() {
             HypervisorType.VMWARE  -> Intent(requireContext(), VMwareManagerActivity::class.java)
             HypervisorType.XCPNG   -> Intent(requireContext(), XCPngManagerActivity::class.java)
             HypervisorType.LIBVIRT -> Intent(requireContext(), LibvirtManagerActivity::class.java)
-            else -> return
         }
         intent.putExtra("hypervisor_id", hypervisor.id)
         startActivity(intent)

@@ -144,6 +144,10 @@ class TabTerminalActivity : TabSSHActivity() {
     override val drawerMode: DrawerMode = DrawerMode.TOOLBAR_ONLY
 
     companion object {
+        // Shared instance for quick-connect embedded-profile JSON decoding —
+        // creating a new Json{} per call is measurably slower under repeated use.
+        private val quickConnectJson = Json { ignoreUnknownKeys = true }
+
         const val EXTRA_CONNECTION_PROFILE_ID = "connection_profile_id"
         const val EXTRA_CONNECTION_PROFILE = "connection_profile"
         const val EXTRA_PANE_GROUP_ID = "pane_group_id"
@@ -1109,10 +1113,9 @@ class TabTerminalActivity : TabSSHActivity() {
     // from a bug. CLOCK_TICK is used (not REJECT) because REJECT requires
     // API 30+ and this app's minSdk is 21.
     private fun showSwipeEdgeRejectionFeedback(downX: Float, containerWidth: Int) {
-        binding.viewPager.performHapticFeedback(
-            HapticFeedbackConstants.CLOCK_TICK,
-            HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING
-        )
+        // FLAG_IGNORE_GLOBAL_SETTING is deprecated (API 33) and no longer has
+        // any effect — haptic feedback settings are always respected now.
+        binding.viewPager.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
         val nearStart = downX <= containerWidth - downX
         val glow = if (nearStart) binding.swipeEdgeGlowStart else binding.swipeEdgeGlowEnd
         glow.animate().cancel()
@@ -1584,7 +1587,7 @@ class TabTerminalActivity : TabSSHActivity() {
         
         // Populate connection details
         dialogView.findViewById<TextView>(R.id.text_connection_name)?.text = 
-            "Connection: ${profile.name ?: profile.getDisplayName()}"
+            "Connection: ${profile.getDisplayName()}"
         dialogView.findViewById<TextView>(R.id.text_connection_host)?.text = 
             "Host: ${profile.host}:${profile.port}"
         dialogView.findViewById<TextView>(R.id.text_connection_username)?.text = 
@@ -1627,7 +1630,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 val fullError = buildString {
                     appendLine(getString(R.string.terminal_error_report_header))
                     appendLine()
-                    appendLine(getString(R.string.terminal_error_report_connection_fmt, profile.name ?: profile.getDisplayName()))
+                    appendLine(getString(R.string.terminal_error_report_connection_fmt, profile.getDisplayName()))
                     appendLine(getString(R.string.terminal_error_report_host_fmt, profile.host, profile.port))
                     appendLine(getString(R.string.terminal_error_report_username_fmt, profile.username))
                     appendLine(getString(R.string.terminal_error_report_auth_fmt, profile.authType))
@@ -2152,7 +2155,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 // If not in DB, try embedded JSON (for quick-connect)
                 if (profile == null && connectionProfileJson != null) {
                     try {
-                        profile = Json { ignoreUnknownKeys = true }
+                        profile = quickConnectJson
                             .decodeFromString(ConnectionProfile.serializer(), connectionProfileJson)
                         Logger.d("TabTerminalActivity", "Using embedded profile (quick-connect)")
                     } catch (e: Exception) {
@@ -2294,7 +2297,7 @@ class TabTerminalActivity : TabSSHActivity() {
             val linkedIdentity = if (profile.identityId != null) {
                 withContext(Dispatchers.IO) {
                     try {
-                        app.database.identityDao().getIdentityById(profile.identityId!!)?.also {
+                        app.database.identityDao().getIdentityById(profile.identityId)?.also {
                             Logger.i("TabTerminalActivity", "Using identity '${it.name}' for connection")
                         }
                     } catch (e: Exception) {
@@ -3542,7 +3545,7 @@ class TabTerminalActivity : TabSSHActivity() {
         if (reconnectableHost != null) {
             builder.setPositiveButton(R.string.terminal_reconnect) { _, _ ->
                 Logger.i("TabTerminalActivity", "User chose RECONNECT for VNC tab ${tab.tabId}")
-                reconnectVncTab((tab as Tab.Vnc).vncTab)
+                reconnectVncTab(tab.vncTab)
             }
         }
         builder.show()
@@ -5427,10 +5430,10 @@ class TabTerminalActivity : TabSSHActivity() {
                 .setTitle(R.string.terminal_auth_required_title)
                 .setView(form.root)
                 .setPositiveButton(R.string.connect_button) { _, _ ->
-                    if (cont.isActive) cont.resume(editText.text.toString()) {}
+                    if (cont.isActive) cont.resume(editText.text.toString()) { _, _, _ -> }
                 }
                 .setNegativeButton(R.string.cancel) { _, _ ->
-                    if (cont.isActive) cont.resume(null) {}
+                    if (cont.isActive) cont.resume(null) { _, _, _ -> }
                 }
                 .setCancelable(false)
                 .create()
@@ -5802,7 +5805,7 @@ class TabTerminalActivity : TabSSHActivity() {
                     } else {
                         showMultiplexerPickerDialog()
                     }
-                } else if (tab?.isPrefixKeyEnabled == false) {
+                } else if (tab.isPrefixKeyEnabled == false) {
                     // User disabled the PREFIX shortcut for this connection
                     // (long-press picker's "Disable PRE key" row) — tap is a
                     // no-op until re-enabled; long-press still works

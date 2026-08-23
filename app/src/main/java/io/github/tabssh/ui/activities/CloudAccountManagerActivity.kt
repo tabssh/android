@@ -416,7 +416,7 @@ class CloudAccountManagerActivity : TabSSHActivity() {
                         android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
                         android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
                     ).also { it.bottomMargin = (8 * dp).toInt() }
-                    if (password) isPasswordVisibilityToggleEnabled = true
+                    if (password) endIconMode = TextInputLayout.END_ICON_PASSWORD_TOGGLE
                 }
                 val edit = TextInputEditText(til.context).apply {
                     layoutParams = android.widget.LinearLayout.LayoutParams(

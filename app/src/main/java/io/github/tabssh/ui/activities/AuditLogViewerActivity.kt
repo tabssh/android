@@ -97,7 +97,7 @@ class AuditLogViewerActivity : TabSSHActivity() {
                     append("=".repeat(60) + "\n\n")
 
                     logs.forEach { log ->
-                        append("${log.timestamp} [${log.eventType}] ${log.connectionId ?: "N/A"}: ${log.command ?: ""}\n")
+                        append("${log.timestamp} [${log.eventType}] ${log.connectionId}: ${log.command ?: ""}\n")
                         if (!log.output.isNullOrEmpty()) {
                             append("  Output: ${log.output}\n")
                         }

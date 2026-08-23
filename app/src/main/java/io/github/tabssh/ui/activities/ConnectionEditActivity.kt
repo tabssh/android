@@ -619,11 +619,6 @@ class ConnectionEditActivity : TabSSHActivity() {
                 binding.layoutSshKey.visibility = View.GONE
                 binding.layoutSavePassword.visibility = View.VISIBLE
             }
-            else -> {
-                binding.layoutPassword.visibility = View.GONE
-                binding.layoutSshKey.visibility = View.GONE
-                binding.layoutSavePassword.visibility = View.GONE
-            }
         }
     }
 

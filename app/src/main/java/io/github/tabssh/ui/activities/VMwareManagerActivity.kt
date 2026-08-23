@@ -245,7 +245,7 @@ class VMwareManagerActivity : TabSSHActivity() {
     private suspend fun loadVMs(client: VMwareApiClient) {
         showProgress(getString(R.string.vmware_loading_vms))
         try {
-            val vmList = client.getAllVMs() ?: emptyList()
+            val vmList = client.getAllVMs()
             // The awaited API hop can land after the user has left the screen.
             if (isFinishing || isDestroyed) return
             adapter.replaceAllWithDiff(

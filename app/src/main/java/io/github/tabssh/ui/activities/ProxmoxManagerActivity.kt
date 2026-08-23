@@ -237,7 +237,7 @@ class ProxmoxManagerActivity : TabSSHActivity() {
     private suspend fun loadVMs(client: ProxmoxApiClient) {
         showProgress(getString(R.string.proxmox_loading_vms))
         try {
-            val vmList = client.getAllVMs() ?: emptyList()
+            val vmList = client.getAllVMs()
             // Fetch IPs for running VMs concurrently — guest-agent queries can
             // take up to ~4 s each; serial would stall the list for N×4 s.
             val vmsWithIPs = coroutineScope {

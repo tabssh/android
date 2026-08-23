@@ -251,7 +251,7 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
         // hard-coded version.
         val versionName = BuildConfig.VERSION_NAME
         val versionCode = BuildConfig.VERSION_CODE
-        val commit = BuildConfig.GIT_COMMIT_ID ?: getString(R.string.about_commit_unknown)
+        val commit = BuildConfig.GIT_COMMIT_ID
         val flavor = BuildConfig.BUILD_TYPE
         // Native components are cross-compiled per ABI, so report their live
         // availability rather than assuming this build bundles them.
