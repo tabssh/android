@@ -14,7 +14,7 @@ import io.github.tabssh.utils.logging.Logger
 /**
  * Main Room database for TabSSH.
  *
- * Current version: 17.
+ * Current version: 21.
  * Versions 1 and 2 never shipped to real users, so v3 is the effective schema
  * baseline and no fallback path exists for them. Every version bump from v3
  * onward MUST register a real Migration object via addMigrations(); destructive
@@ -57,7 +57,7 @@ import io.github.tabssh.utils.logging.Logger
         PaneGroup::class,
         ConnectableHost::class
     ],
-    version = 20,
+    version = 21,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -913,6 +913,182 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        // v20 -> v21: MIGRATION_19_20's "no-op, just re-anchor the identity
+        // hash" reasoning turned out to be only half right. On real devices
+        // (confirmed via a crash report: "Migration didn't properly handle:
+        // trusted_certificates", Expected `modified_at` defaultValue = '0',
+        // Found = 'undefined'), the DEFAULT clause on a column added via
+        // `ALTER TABLE ... ADD COLUMN ... DEFAULT 0` is not always reflected
+        // back by `PRAGMA table_info` on-device, even though the ALTER SQL
+        // itself is correct — so the actual on-disk schema for these 7
+        // tables (all ALTER-column-added in MIGRATION_12_13/14_15) can
+        // genuinely lack the default Room's entity annotations now require,
+        // not just carry a stale identity hash. A no-op migration cannot fix
+        // a real on-disk mismatch, so each affected table is fully recreated
+        // here (SQLite has no ALTER COLUMN, same technique as
+        // MIGRATION_13_14): new table with the DEFAULT baked into its CREATE
+        // TABLE statement (which PRAGMA table_info always reads correctly,
+        // unlike ALTER-added defaults), copy every row verbatim, drop, and
+        // rename back. Column lists and indices verified against
+        // app/schemas/.../20.json (Room's own exported expected schema) so
+        // the recreated DDL matches exactly.
+        val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE `trusted_certificates_new` (" +
+                        "`id` TEXT NOT NULL, `hostname` TEXT NOT NULL, `port` INTEGER NOT NULL, " +
+                        "`fingerprint` TEXT NOT NULL, `algorithm` TEXT NOT NULL, `certificate_data` TEXT NOT NULL, " +
+                        "`subject` TEXT NOT NULL, `issuer` TEXT NOT NULL, `serial_number` TEXT NOT NULL, " +
+                        "`not_before` INTEGER NOT NULL, `not_after` INTEGER NOT NULL, `expires_at` INTEGER NOT NULL, " +
+                        "`created_at` INTEGER NOT NULL, `last_used` INTEGER NOT NULL, `trust_level` TEXT NOT NULL, " +
+                        "`is_self_signed` INTEGER NOT NULL, `is_ca_signed` INTEGER NOT NULL, `key_usage` TEXT, " +
+                        "`extended_key_usage` TEXT, `subject_alternative_names` TEXT, `verification_status` TEXT NOT NULL, " +
+                        "`notes` TEXT, `modified_at` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "INSERT INTO `trusted_certificates_new` SELECT " +
+                        "`id`, `hostname`, `port`, `fingerprint`, `algorithm`, `certificate_data`, `subject`, " +
+                        "`issuer`, `serial_number`, `not_before`, `not_after`, `expires_at`, `created_at`, " +
+                        "`last_used`, `trust_level`, `is_self_signed`, `is_ca_signed`, `key_usage`, " +
+                        "`extended_key_usage`, `subject_alternative_names`, `verification_status`, `notes`, " +
+                        "`modified_at` FROM `trusted_certificates`"
+                )
+                db.execSQL("DROP TABLE `trusted_certificates`")
+                db.execSQL("ALTER TABLE `trusted_certificates_new` RENAME TO `trusted_certificates`")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_trusted_certificates_hostname` " +
+                        "ON `trusted_certificates` (`hostname`)"
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_trusted_certificates_fingerprint` " +
+                        "ON `trusted_certificates` (`fingerprint`)"
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_trusted_certificates_hostname_port` " +
+                        "ON `trusted_certificates` (`hostname`, `port`)"
+                )
+
+                db.execSQL(
+                    "CREATE TABLE `monitor_slots_new` (" +
+                        "`id` TEXT NOT NULL, `connection_id` TEXT NOT NULL, `enabled` INTEGER NOT NULL, " +
+                        "`alert_on_down` INTEGER NOT NULL, `alert_on_recovery` INTEGER NOT NULL, " +
+                        "`cpu_threshold` INTEGER, `memory_threshold` INTEGER, `disk_threshold` INTEGER, " +
+                        "`load_threshold` REAL, `enable_performance_checks` INTEGER NOT NULL, " +
+                        "`check_interval_minutes` INTEGER NOT NULL, `alert_cooldown_minutes` INTEGER NOT NULL, " +
+                        "`last_checked_at` INTEGER NOT NULL, `last_seen_up` INTEGER NOT NULL, " +
+                        "`last_notified_down_at` INTEGER NOT NULL, `last_notified_up_at` INTEGER NOT NULL, " +
+                        "`is_currently_down` INTEGER NOT NULL, `consecutive_failures` INTEGER NOT NULL, " +
+                        "`modified_at` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "INSERT INTO `monitor_slots_new` SELECT " +
+                        "`id`, `connection_id`, `enabled`, `alert_on_down`, `alert_on_recovery`, `cpu_threshold`, " +
+                        "`memory_threshold`, `disk_threshold`, `load_threshold`, `enable_performance_checks`, " +
+                        "`check_interval_minutes`, `alert_cooldown_minutes`, `last_checked_at`, `last_seen_up`, " +
+                        "`last_notified_down_at`, `last_notified_up_at`, `is_currently_down`, " +
+                        "`consecutive_failures`, `modified_at` FROM `monitor_slots`"
+                )
+                db.execSQL("DROP TABLE `monitor_slots`")
+                db.execSQL("ALTER TABLE `monitor_slots_new` RENAME TO `monitor_slots`")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_monitor_slots_connection_id` " +
+                        "ON `monitor_slots` (`connection_id`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_monitor_slots_enabled` " +
+                        "ON `monitor_slots` (`enabled`)"
+                )
+
+                db.execSQL(
+                    "CREATE TABLE `vnc_hosts_new` (" +
+                        "`id` TEXT NOT NULL, `name` TEXT NOT NULL, `host` TEXT NOT NULL, `port` INTEGER NOT NULL, " +
+                        "`display_number` INTEGER, `identity_id` TEXT, `security_type` TEXT NOT NULL, " +
+                        "`tls_verify` INTEGER NOT NULL, `pinned_cert_sha256` TEXT, " +
+                        "`keep_alive_in_background` INTEGER NOT NULL DEFAULT 0, `group_id` TEXT, " +
+                        "`color_tag` INTEGER NOT NULL, `notes` TEXT, `last_connected` INTEGER NOT NULL, " +
+                        "`created_at` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "INSERT INTO `vnc_hosts_new` SELECT " +
+                        "`id`, `name`, `host`, `port`, `display_number`, `identity_id`, `security_type`, " +
+                        "`tls_verify`, `pinned_cert_sha256`, `keep_alive_in_background`, `group_id`, `color_tag`, " +
+                        "`notes`, `last_connected`, `created_at`, `modified_at` FROM `vnc_hosts`"
+                )
+                db.execSQL("DROP TABLE `vnc_hosts`")
+                db.execSQL("ALTER TABLE `vnc_hosts_new` RENAME TO `vnc_hosts`")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_vnc_hosts_identity_id` " +
+                        "ON `vnc_hosts` (`identity_id`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_vnc_hosts_group_id` " +
+                        "ON `vnc_hosts` (`group_id`)"
+                )
+
+                db.execSQL(
+                    "CREATE TABLE `registry_credentials_new` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `registry_host` TEXT NOT NULL, " +
+                        "`username` TEXT NOT NULL, `auth_type` TEXT NOT NULL, " +
+                        "`modified_at` INTEGER NOT NULL DEFAULT 0)"
+                )
+                db.execSQL(
+                    "INSERT INTO `registry_credentials_new` " +
+                        "(`id`, `registry_host`, `username`, `auth_type`, `modified_at`) SELECT " +
+                        "`id`, `registry_host`, `username`, `auth_type`, `modified_at` FROM `registry_credentials`"
+                )
+                db.execSQL("DROP TABLE `registry_credentials`")
+                db.execSQL("ALTER TABLE `registry_credentials_new` RENAME TO `registry_credentials`")
+
+                db.execSQL(
+                    "CREATE TABLE `domains_new` (" +
+                        "`id` TEXT NOT NULL, `domain_name` TEXT NOT NULL, `privacy_protection` TEXT NOT NULL, " +
+                        "`status_at_registrar` TEXT NOT NULL, `auto_renew` TEXT NOT NULL, `expiration_date` INTEGER, " +
+                        "`reminder_days_before` INTEGER NOT NULL DEFAULT 7, `last_reminder_sent_at` INTEGER, " +
+                        "`notes` TEXT, `created_at` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "INSERT INTO `domains_new` SELECT " +
+                        "`id`, `domain_name`, `privacy_protection`, `status_at_registrar`, `auto_renew`, " +
+                        "`expiration_date`, `reminder_days_before`, `last_reminder_sent_at`, `notes`, " +
+                        "`created_at`, `modified_at` FROM `domains`"
+                )
+                db.execSQL("DROP TABLE `domains`")
+                db.execSQL("ALTER TABLE `domains_new` RENAME TO `domains`")
+
+                db.execSQL(
+                    "CREATE TABLE `vps_hosts_new` (" +
+                        "`id` TEXT NOT NULL, `tenant` TEXT NOT NULL, `hostname` TEXT NOT NULL, `ipv4` TEXT, " +
+                        "`ipv6` TEXT, `specs` TEXT, `linked_domain` TEXT, `renewal_raw` TEXT, `renewal_date` INTEGER, " +
+                        "`billing_cycle` TEXT, `price` TEXT, `description` TEXT, " +
+                        "`reminder_days_before` INTEGER NOT NULL DEFAULT 7, `last_reminder_sent_at` INTEGER, " +
+                        "`created_at` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "INSERT INTO `vps_hosts_new` SELECT " +
+                        "`id`, `tenant`, `hostname`, `ipv4`, `ipv6`, `specs`, `linked_domain`, `renewal_raw`, " +
+                        "`renewal_date`, `billing_cycle`, `price`, `description`, `reminder_days_before`, " +
+                        "`last_reminder_sent_at`, `created_at`, `modified_at` FROM `vps_hosts`"
+                )
+                db.execSQL("DROP TABLE `vps_hosts`")
+                db.execSQL("ALTER TABLE `vps_hosts_new` RENAME TO `vps_hosts`")
+
+                db.execSQL(
+                    "CREATE TABLE `connectable_hosts_new` (" +
+                        "`id` TEXT NOT NULL, `source_type` TEXT NOT NULL, `cloud_account_id` TEXT, " +
+                        "`instance_id` TEXT, `name` TEXT NOT NULL, `host_preview` TEXT NOT NULL, " +
+                        "`protocol` TEXT NOT NULL DEFAULT 'ssh', `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "INSERT INTO `connectable_hosts_new` SELECT " +
+                        "`id`, `source_type`, `cloud_account_id`, `instance_id`, `name`, `host_preview`, " +
+                        "`protocol`, `updated_at` FROM `connectable_hosts`"
+                )
+                db.execSQL("DROP TABLE `connectable_hosts`")
+                db.execSQL("ALTER TABLE `connectable_hosts_new` RENAME TO `connectable_hosts`")
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -922,7 +1098,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21)
                 .build()
                 INSTANCE = instance
                 instance

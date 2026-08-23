@@ -627,7 +627,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
      */
     private fun resolveActivity(): android.app.Activity? {
         val direct = when (context) {
-            is android.app.Activity -> context as android.app.Activity
+            is android.app.Activity -> context
             is android.content.ContextWrapper -> {
                 var ctx = context
                 while (ctx is android.content.ContextWrapper) {

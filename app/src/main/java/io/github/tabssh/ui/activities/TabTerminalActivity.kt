@@ -48,6 +48,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import kotlin.math.abs
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.firstOrNull
@@ -1618,6 +1619,24 @@ class TabTerminalActivity : TabSSHActivity() {
             }
         }
         
+        // Inline credential re-entry — only offered for a rejected auth attempt,
+        // since connectToProfile() only auto-prompts when no credential is
+        // stored at all (an existing wrong stored password/passphrase is
+        // otherwise never re-prompted). Storage key mirrors the convention
+        // already used by connectToProfile()/SSHConnection: an encrypted key's
+        // passphrase lives under "key_passphrase_$keyId"; everything else
+        // (plain password, keyboard-interactive) lives under profile.id.
+        val retryCredentialLayout = dialogView.findViewById<TextInputLayout>(R.id.layout_retry_credential)
+        val retryCredentialInput = dialogView.findViewById<TextInputEditText>(R.id.input_retry_credential)
+        val isKeyPassphrase = profile.authType == AuthType.PUBLIC_KEY.name && !profile.keyId.isNullOrBlank()
+        val retryCredentialStorageKey = if (isKeyPassphrase) "key_passphrase_${profile.keyId}" else profile.id
+        if (errorInfo.errorType == "Authentication Failed") {
+            retryCredentialLayout?.visibility = View.VISIBLE
+            retryCredentialLayout?.hint = getString(
+                if (isKeyPassphrase) R.string.key_passphrase_hint else R.string.password_hint
+            )
+        }
+
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.terminal_ssh_failed_title, errorInfo.errorType))
             .setView(dialogView)
@@ -1665,11 +1684,24 @@ class TabTerminalActivity : TabSSHActivity() {
                 finish()
             }
 
-        // Retry button
+        // Retry button — if the inline credential field is showing and the user
+        // typed a replacement, store it under the same key connectToProfile()
+        // itself reads/writes before retrying, so the new value is what the
+        // retry attempt actually uses instead of the stale rejected one.
         dialogView.findViewById<MaterialButton>(R.id.button_retry)
             ?.setOnClickListener {
+                val newCredential = retryCredentialInput?.text?.toString()?.takeIf { it.isNotBlank() }
                 dialog.dismiss()
                 lifecycleScope.launch {
+                    if (newCredential != null) {
+                        withContext(Dispatchers.IO) {
+                            app.securePasswordManager.storePassword(
+                                retryCredentialStorageKey,
+                                newCredential,
+                                SecurePasswordManager.StorageLevel.SESSION_ONLY
+                            )
+                        }
+                    }
                     // forceNew=true: the failed tab is gone; always open a fresh session.
                     connectToProfile(profile, forceNew = true)
                 }

@@ -151,6 +151,24 @@
             android:textIsSelectable="true"
             android:layout_marginBottom="@dimen/space_md" />
 
+        <!-- Credential Re-entry (Authentication Failed only) -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/layout_retry_credential"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="@dimen/space_md"
+            android:visibility="gone"
+            app:endIconMode="password_toggle"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/input_retry_credential"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textPassword" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
         <!-- Action Buttons -->
         <LinearLayout
             android:layout_width="match_parent"
