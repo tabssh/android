@@ -57,7 +57,7 @@ import io.github.tabssh.utils.logging.Logger
         PaneGroup::class,
         ConnectableHost::class
     ],
-    version = 18,
+    version = 19,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -857,6 +857,43 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        // Fixes a schema bug shipped in MIGRATION_17_18: `windows` was added
+        // as a nullable column with no default, but the PaneGroup entity
+        // declares it NOT NULL (List<PaneWindowConfig> = emptyList()) — this
+        // mismatch fails Room's schema validation with an
+        // IllegalStateException on every app launch for any device that
+        // already ran 17->18. `sort_order` has the same class of gap: its
+        // CREATE TABLE (MIGRATION_16_17) always had `DEFAULT 0`, but the
+        // entity never declared a matching @ColumnInfo default. SQLite
+        // cannot ALTER a column's NOT NULL/default in place, so this rebuilds
+        // `pane_groups` with the corrected schema, preserving every existing
+        // row (any null `windows` becomes '[]', matching
+        // PaneGroup.resolvedWindows()'s empty-list fallback).
+        val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE `pane_groups_new` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`layout` TEXT NOT NULL, " +
+                        "`member_host_ids` TEXT NOT NULL, " +
+                        "`windows` TEXT NOT NULL DEFAULT '[]', " +
+                        "`sort_order` INTEGER NOT NULL DEFAULT 0, " +
+                        "`created_at` INTEGER NOT NULL, " +
+                        "`modified_at` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "INSERT INTO `pane_groups_new` " +
+                        "(`id`, `name`, `layout`, `member_host_ids`, `windows`, `sort_order`, `created_at`, `modified_at`) " +
+                        "SELECT `id`, `name`, `layout`, `member_host_ids`, COALESCE(`windows`, '[]'), `sort_order`, `created_at`, `modified_at` " +
+                        "FROM `pane_groups`"
+                )
+                db.execSQL("DROP TABLE `pane_groups`")
+                db.execSQL("ALTER TABLE `pane_groups_new` RENAME TO `pane_groups`")
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -866,7 +903,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19)
                 .build()
                 INSTANCE = instance
                 instance

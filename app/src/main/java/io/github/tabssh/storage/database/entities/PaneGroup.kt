@@ -61,10 +61,10 @@ data class PaneGroup(
     // custom title). Added in DB version 18 as an additive column; may be
     // empty on rows written before this field existed — see
     // [resolvedWindows] for the legacy-compat synthesis path.
-    @ColumnInfo(name = "windows")
+    @ColumnInfo(name = "windows", defaultValue = "[]")
     val windows: List<PaneWindowConfig> = emptyList(),
 
-    @ColumnInfo(name = "sort_order")
+    @ColumnInfo(name = "sort_order", defaultValue = "0")
     val sortOrder: Int = 0,
 
     @ColumnInfo(name = "created_at")
