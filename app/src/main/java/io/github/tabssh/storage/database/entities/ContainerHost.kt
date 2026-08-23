@@ -99,11 +99,11 @@ data class ContainerHost(
 
     /** Remote base dir for compose stacks — `{composeBasePath}/{name}/compose.yaml`. */
     @ColumnInfo(name = "compose_base_path")
-    val composeBasePath: String = "/srv/\$USER/tabssh/docker/compose",
+    val composeBasePath: String = "/srv/\$USER/compose",
 
     /** Remote base dir for single-container run configs — `{runConfigBasePath}/{name}/`. */
     @ColumnInfo(name = "run_config_base_path")
-    val runConfigBasePath: String = "/srv/\$USER/tabssh/docker/docker",
+    val runConfigBasePath: String = "/srv/\$USER/docker",
 
     /** Per-host image-update-check opt-out — false skips this host entirely. */
     @ColumnInfo(name = "update_check_enabled", defaultValue = "1")
