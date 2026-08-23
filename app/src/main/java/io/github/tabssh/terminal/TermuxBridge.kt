@@ -350,8 +350,17 @@ class TermuxBridge(
     // Serializes disconnect() so it is atomic and idempotent across threads.
     private val disconnectLock = Any()
 
-    // Coroutine scope for write operations (IO thread)
-    private val writeScope = CoroutineScope(Dispatchers.IO + Job())
+    // Coroutine scope for write operations. Deliberately limited to a single
+    // thread (Issue: intermittent single-character drop/reorder near the
+    // cursor during history-recall + Enter): plain Dispatchers.IO is a
+    // multi-thread pool, and while writeLock (below) guarantees mutual
+    // exclusion on the actual stream write, it does NOT guarantee the
+    // *order* in which concurrently-launched callers acquire it — that was
+    // left to IO-pool thread scheduling, independent of the order write()
+    // was originally called. limitedParallelism(1) makes this scope's own
+    // task queue FIFO, so writes execute in strict call order without
+    // needing a dedicated Thread or changing the public API.
+    private val writeScope = CoroutineScope(Dispatchers.IO.limitedParallelism(1) + Job())
 
     // Session-lifecycle scope for the read loop and Mosh watchdog. Both used to
     // launch on ad-hoc CoroutineScope(Dispatchers.IO) instances whose root Job
@@ -372,12 +381,18 @@ class TermuxBridge(
      * AlmaLinux 9.7 servers — see commit message).
      *
      * The race window opens whenever two `write()` calls land within
-     * the same flush window, which on Dispatchers.IO (a multi-thread
-     * pool) is trivial — the broadcast-input fan-out, post-connect
+     * the same flush window — the broadcast-input fan-out, post-connect
      * script writes, and a fast typist plus the macro recorder are
      * all routine producers. Funnelling every write through this
      * Mutex closes the window without changing the public API or
      * adding a dedicated thread.
+     *
+     * Kept as defense-in-depth now that writeScope itself is a
+     * single-threaded dispatcher (see writeScope's doc comment) — the
+     * dispatcher already serializes and orders every write, so this
+     * Mutex can never actually contend, but removing it would re-open
+     * the GCM-cipher-corruption risk if writeScope's dispatcher ever
+     * changes back to a multi-thread pool.
      */
     private val writeLock = Mutex()
 
