@@ -899,7 +899,16 @@ class SyncDataApplier {
 
         result.updated.forEach { connection ->
             try {
-                database.connectionDao().updateConnection(connection)
+                // Same-UUID sync update — the common case once a connection has
+                // synced once. Must go through mergeConnectionFields (not a raw
+                // overwrite): connectionCount/lastConnected are per-device usage
+                // stats, and blindly replacing the local row with the incoming
+                // one reset them to the remote device's (often lower or zero)
+                // values on every sync, silently dropping hosts out of the
+                // Frequent tab's `connection_count > 0` filter.
+                val existing = database.connectionDao().getConnectionById(connection.id)
+                val merged = if (existing != null) mergeConnectionFields(existing, connection) else connection
+                database.connectionDao().updateConnection(merged)
                 count++
                 Logger.d(TAG, "Updated connection: ${connection.name}")
             } catch (e: Exception) {
