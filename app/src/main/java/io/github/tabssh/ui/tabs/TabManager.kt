@@ -224,7 +224,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
      * [entries]' [SSHTab]s must already be connected by the caller
      * (`TabTerminalActivity.connectPaneMember`) before this is called.
      */
-    fun createPanesTab(groupId: String, groupName: String, entries: List<PaneEntry>): PanesTab? = synchronized(tabsLock) {
+    fun createPanesTab(groupId: String, groupName: String, entries: List<PaneWindow>): PanesTab? = synchronized(tabsLock) {
         if (tabs.size >= maxTabs) {
             Logger.w("TabManager", "Maximum tabs reached: $maxTabs")
             return null

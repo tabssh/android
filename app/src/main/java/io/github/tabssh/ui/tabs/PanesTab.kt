@@ -7,18 +7,26 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
 
 /**
- * One tile inside a [PanesTab]'s grid. [hostId] is the [io.github.tabssh.storage.database.entities.ConnectableHost]
- * id this pane was opened from — the stable key used to re-match a pane
- * against `PaneGroup.memberHostIds` on relaunch/reattach (NOT
- * `ConnectionProfile.id`, which cloud-instance-sourced hosts don't have).
+ * One tile (a tiling-window-manager "window") inside a [PanesTab]'s grid.
+ * [hostId] is the [io.github.tabssh.storage.database.entities.ConnectableHost]
+ * id this window was opened from — the stable key used to re-match a window
+ * against `PaneGroup.resolvedWindows()` on relaunch/reattach (NOT
+ * `ConnectionProfile.id`, which cloud-instance-sourced hosts don't have). The
+ * same [hostId] may appear in more than one window (e.g. the same host open
+ * twice with different working directories) — [gridPosition] is what
+ * disambiguates windows, not [hostId].
  * [sshTab] is the live connected session backing this tile; null only in
  * the brief window between resolving a member and finishing its connect.
- * [gridPosition] is this pane's index in the grid (0-based, row-major).
+ * [workingDir] is the directory this window's shell was `cd`'d into at
+ * connect time (display/debug only — the `cd` itself already ran via the
+ * session's postConnectScript, this field is not re-applied on its own).
+ * [gridPosition] is this window's index in the grid (0-based, row-major).
  */
-data class PaneEntry(
+data class PaneWindow(
     val hostId: String,
     var sshTab: SSHTab?,
     var customTitle: String? = null,
+    var workingDir: String? = null,
     var gridPosition: Int = 0
 )
 
@@ -29,7 +37,7 @@ data class PaneEntry(
  * [Tab] can treat all variants uniformly.
  *
  * Unlike [ConsoleTab], a Panes tab has no single [io.github.tabssh.ssh.connection.ConnectionState] —
- * each [PaneEntry.sshTab] tracks its own. Focus routing (which pane
+ * each [PaneWindow.sshTab] tracks its own. Focus routing (which window
  * receives keyboard input / the PREFIX key) is tracked here via
  * [focusedPaneIndex] and consulted by `TabTerminalActivity` for
  * `getActiveTerminalView()`/`getActiveInputView()`/`updatePrefixKeyVisual()`.
@@ -37,13 +45,13 @@ data class PaneEntry(
 class PanesTab(
     val groupId: String,
     groupName: String,
-    initialEntries: List<PaneEntry>
+    initialEntries: List<PaneWindow>
 ) {
 
     val tabId: String = UUID.randomUUID().toString()
 
     private val _entries = MutableStateFlow(initialEntries)
-    val entries: StateFlow<List<PaneEntry>> = _entries.asStateFlow()
+    val entries: StateFlow<List<PaneWindow>> = _entries.asStateFlow()
 
     private val _title = MutableStateFlow(groupName.ifBlank { "Panes" })
     val title: StateFlow<String> = _title.asStateFlow()
@@ -58,16 +66,16 @@ class PanesTab(
     var tabIndex: Int = 0
         internal set
 
-    /** Current snapshot of this tab's pane entries. */
-    fun currentEntries(): List<PaneEntry> = _entries.value
+    /** Current snapshot of this tab's windows. */
+    fun currentEntries(): List<PaneWindow> = _entries.value
 
-    /** Replace the full entry list (e.g. after resolving/attaching a pane's SSHTab). */
-    fun updateEntries(newEntries: List<PaneEntry>) {
+    /** Replace the full window list (e.g. after resolving/attaching a window's SSHTab). */
+    fun updateEntries(newEntries: List<PaneWindow>) {
         _entries.value = newEntries
     }
 
-    /** The [PaneEntry] currently focused for keyboard input, if any. */
-    fun focusedEntry(): PaneEntry? = _entries.value.getOrNull(_focusedPaneIndex.value)
+    /** The [PaneWindow] currently focused for keyboard input, if any. */
+    fun focusedEntry(): PaneWindow? = _entries.value.getOrNull(_focusedPaneIndex.value)
 
     /** Move focus to the pane at [index], clamped to the valid entry range. */
     fun setFocusedPane(index: Int) {

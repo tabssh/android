@@ -20,6 +20,23 @@ import java.util.UUID
  * geometry string (pane count plus per-pane row/col/span) owned entirely by
  * the Panes UI layer; this entity does not interpret it.
  */
+/**
+ * One tiling-window-manager "window" slot within a [PaneGroup] — the
+ * per-window config saved alongside the group so it can be replayed on
+ * every open. [hostId] may repeat across windows in the same group (the
+ * same host opened twice with different working directories) — order in
+ * [PaneGroup.windows] is the grid fill order, not [hostId] uniqueness.
+ * [workingDir] (optional) is `cd`'d into after connect via the session's
+ * `postConnectScript`. [customTitle] (optional) overrides this window's
+ * tile label.
+ */
+@Serializable
+data class PaneWindowConfig(
+    val hostId: String,
+    val workingDir: String? = null,
+    val customTitle: String? = null
+)
+
 @Serializable
 @Entity(tableName = "pane_groups")
 data class PaneGroup(
@@ -33,8 +50,19 @@ data class PaneGroup(
     @ColumnInfo(name = "layout")
     val layout: String = "",
 
+    // Legacy flat member list — superseded by [windows], kept only as a
+    // migration-compat read path (see [resolvedWindows]). Never written to
+    // by new code; do not drop the column (SQLite can't cheaply drop
+    // columns and the migration protocol forbids destructive changes).
     @ColumnInfo(name = "member_host_ids")
     val memberHostIds: List<String> = emptyList(),
+
+    // Ordered per-window configs (host + optional working dir + optional
+    // custom title). Added in DB version 18 as an additive column; may be
+    // empty on rows written before this field existed — see
+    // [resolvedWindows] for the legacy-compat synthesis path.
+    @ColumnInfo(name = "windows")
+    val windows: List<PaneWindowConfig> = emptyList(),
 
     @ColumnInfo(name = "sort_order")
     val sortOrder: Int = 0,
@@ -44,4 +72,14 @@ data class PaneGroup(
 
     @ColumnInfo(name = "modified_at")
     val modifiedAt: Long = System.currentTimeMillis()
-)
+) {
+    /**
+     * The effective per-window config list: [windows] if non-empty,
+     * otherwise synthesized from the legacy [memberHostIds] (each host
+     * becomes one window with no working dir / no custom title). Callers
+     * should always read through this rather than [windows] directly, so
+     * rows written before the [windows] column existed keep working.
+     */
+    fun resolvedWindows(): List<PaneWindowConfig> =
+        windows.ifEmpty { memberHostIds.map { PaneWindowConfig(hostId = it) } }
+}

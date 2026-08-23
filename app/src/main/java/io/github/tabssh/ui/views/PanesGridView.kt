@@ -17,7 +17,7 @@ import android.widget.LinearLayout
  * focused tile's border on tap.
  *
  * Reordering/resizing beyond the auto grid is intentionally out of scope
- * for this cut — panes are laid out in [PaneEntry.gridPosition] order in a
+ * for this cut — windows are laid out in [PaneWindow.gridPosition] order in a
  * fixed near-square grid; see TODO.AI.md for drag-to-resize/reorder as a
  * follow-up.
  */

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="400dp">
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recycler_pane_group_windows"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:paddingHorizontal="@dimen/space_md"
+        android:paddingVertical="@dimen/space_sm"
+        android:nestedScrollingEnabled="true"
+        android:clipToPadding="false" />
+
+</FrameLayout>

@@ -28,23 +28,16 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="@dimen/space_xs"
-            android:text="@string/pane_group_members_label"
+            android:text="@string/pane_group_window_count_label"
             android:textSize="14sp"
             android:textStyle="bold"
             android:textColor="?attr/colorOnSurface" />
 
-        <FrameLayout
+        <Spinner
+            android:id="@+id/spinner_pane_group_window_count"
             android:layout_width="match_parent"
-            android:layout_height="240dp">
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/recycler_pane_group_members"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:nestedScrollingEnabled="true"
-                android:clipToPadding="false" />
-
-        </FrameLayout>
+            android:layout_height="48dp"
+            android:background="@drawable/spinner_background" />
 
     </LinearLayout>
 

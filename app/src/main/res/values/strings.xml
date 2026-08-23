@@ -3542,6 +3542,13 @@
     <string name="panes_close_dialog_message">Disconnect all panes now, or keep them running in the background and reattach later from Panes.</string>
     <string name="panes_disconnect_all">Disconnect All</string>
     <string name="panes_keep_running_background">Keep Running in Background</string>
+    <string name="pane_group_window_count_label">Number of windows</string>
+    <string name="pane_group_window_n_fmt">Window %1$d</string>
+    <string name="pane_group_window_host_placeholder">Choose a connection</string>
+    <string name="pane_group_window_working_dir_placeholder">Working directory (optional)</string>
+    <string name="pane_group_window_custom_title_placeholder">Custom title (optional)</string>
+    <string name="pane_group_window_host_required_toast">Choose a connection for every window</string>
+    <string name="pane_group_step2_title_fmt">%1$s — Windows</string>
     <string name="identity_menu_edit">✏️ Edit</string>
     <string name="identity_menu_apply_to_connections">📋 Apply to Connections</string>
     <string name="identity_menu_view_linked_connections">🔗 View Linked Connections</string>

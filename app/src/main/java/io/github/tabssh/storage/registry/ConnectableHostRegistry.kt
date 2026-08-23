@@ -141,9 +141,20 @@ object ConnectableHostRegistry {
     }
 
     private suspend fun stripMemberHostId(db: TabSSHDatabase, hostId: String) {
-        val affectedGroups = db.paneGroupDao().getAllList().filter { hostId in it.memberHostIds }
+        val allGroups = db.paneGroupDao().getAllList()
+        val affectedGroups = allGroups.filter { group ->
+            hostId in group.memberHostIds || group.windows.any { it.hostId == hostId }
+        }
         for (group in affectedGroups) {
-            db.paneGroupDao().update(group.copy(memberHostIds = group.memberHostIds - hostId))
+            // Strip every window referencing this host (a host may appear in
+            // more than one window), plus the legacy flat list so
+            // resolvedWindows() compat synthesis doesn't resurrect it.
+            db.paneGroupDao().update(
+                group.copy(
+                    memberHostIds = group.memberHostIds - hostId,
+                    windows = group.windows.filterNot { it.hostId == hostId }
+                )
+            )
         }
     }
 }

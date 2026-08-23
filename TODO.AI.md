@@ -436,6 +436,49 @@ left only in conversation:
   exhaustiveness check — the compiler catches `when` blocks but not every place a specific
   `Tab` subtype is handled via `is`/`as?` checks outside an exhaustive `when`.
 
+### Durable record — Panes follow-up (per-window rename, multi-window-per-host, working dir)
+
+Implemented: `PaneEntry` renamed to `PaneWindow` (per-slot term only — feature stays
+"Panes"); `PaneGroup` gained `windows: List<PaneWindowConfig>` (host + optional working
+dir + optional custom title, duplicate `hostId` across windows supported); additive DB
+migration 17→18 (`windows TEXT` column on `pane_groups`, legacy `member_host_ids` kept,
+`PaneGroup.resolvedWindows()` compat-synthesis path); working-dir injection reuses
+`postConnectScript`/`SSHTab.runPostConnectCommands()` (no `SSHTab.kt` changes); two-step
+add/edit dialog (name+count, then per-window host/workingDir/customTitle editor) replacing
+the old exclusive-checkbox member picker. Gaps found while building this, logged here
+rather than left only in conversation:
+
+- **Room-KSP2 + kotlinx-serialization-compiler-plugin interaction limit.** A Room
+  `@TypeConverters` class cannot call a custom `@Serializable` class's
+  compiler-plugin-generated `.serializer()` companion method directly — it trips
+  `[ksp] [MissingType]: Element 'Converters' references a type that is not present`
+  during `kspDebugKotlin` (Room's KSP resolution pass can't see the synthetic member).
+  Worked around in `Converters.kt`'s `fromPaneWindowConfigList`/`toPaneWindowConfigList`
+  by hand-rolling `org.json.JSONArray`/`JSONObject` encoding instead of
+  `ListSerializer(PaneWindowConfig.serializer())` (the built-in-type converters in the
+  same file, e.g. `fromStringList`, are unaffected — only custom `@Serializable` classes
+  hit this). `PaneWindowConfig` stays `@Serializable` for `BackupExporter`/
+  `BackupImporter`, which serialize the whole `PaneGroup` at ordinary `compileKotlin`
+  time, outside Room/KSP's pass. **Any future custom-object Room `@TypeConverters`
+  pair in this project should default straight to the `org.json` pattern** rather than
+  re-discovering this KSP failure.
+- **Unused leftover strings in `strings.xml`.** `pane_group_max_members_toast`,
+  `pane_group_min_members_toast`, and `pane_group_members_label` were used by the old
+  exclusive-checkbox `PaneMemberSelectionAdapter` dialog and are no longer referenced
+  now that `PaneGroupEditDialog.kt` uses the two-step flow / `PaneWindowSlotAdapter`.
+  Left in place rather than deleted (out of scope for that change) — safe to remove in
+  a follow-up cleanup pass once confirmed unused elsewhere.
+- **Step-2 host list is a static snapshot.** `PaneGroupEditDialog.show()` fetches
+  `hosts` once (after a `ConnectableHostRegistry.refreshAll` call) and passes the same
+  list through both dialog steps; a host added/removed by some other UI path while this
+  dialog is open won't be reflected until the dialog is reopened. Matches the prior
+  single-step dialog's behavior (not a regression), just worth noting as a known,
+  pre-existing limitation of this flow.
+- **No new unit tests added for `PaneWindowConfig`/`resolvedWindows()`/the migration.**
+  `make check`'s `testDebugUnitTest` gate passed (existing tests only) — this feature
+  shipped without dedicated new-behavior tests. Revisit if a DAO/migration test harness
+  exists elsewhere in the project to extend, or add one if this area sees more churn.
+
 ### Durable record — SPICE cross-compile recipe (x86_64 verified)
 
 Verified locally in Docker: `spice/out/x86_64/libtabssh_native.so` (11 MB,

@@ -2,11 +2,14 @@ package io.github.tabssh.storage.database
 
 import android.util.Base64
 import androidx.room.TypeConverter
+import io.github.tabssh.storage.database.entities.PaneWindowConfig
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.SetSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.*
 
 /**
@@ -75,6 +78,48 @@ class Converters {
     @TypeConverter
     fun toIntList(value: String?): List<Int>? {
         return value?.let { json.decodeFromString(intListSerializer, it) }
+    }
+
+    // Manual org.json encoding here — not the kotlinx.serialization path used
+    // above for built-in types. Referencing a custom @Serializable class's
+    // compiler-plugin-generated PaneWindowConfig.serializer() directly from
+    // this Room @TypeConverters class trips a Room-KSP/kotlinx-serialization
+    // plugin resolution ordering issue ("MissingType" during kspDebugKotlin).
+    // org.json is already used elsewhere in this codebase (e.g.
+    // TabTerminalActivity's cloud-host credential JSON) and sidesteps the
+    // interaction entirely. PaneWindowConfig itself stays @Serializable for
+    // BackupExporter/BackupImporter, which serialize the whole PaneGroup at
+    // ordinary compileKotlin time (unaffected by this Room/KSP-only issue).
+    @TypeConverter
+    fun fromPaneWindowConfigList(value: List<PaneWindowConfig>?): String? {
+        if (value == null) return null
+        val array = JSONArray()
+        for (window in value) {
+            val obj = JSONObject()
+            obj.put("hostId", window.hostId)
+            if (!window.workingDir.isNullOrBlank()) obj.put("workingDir", window.workingDir)
+            if (!window.customTitle.isNullOrBlank()) obj.put("customTitle", window.customTitle)
+            array.put(obj)
+        }
+        return array.toString()
+    }
+
+    @TypeConverter
+    fun toPaneWindowConfigList(value: String?): List<PaneWindowConfig>? {
+        if (value.isNullOrBlank()) return value?.let { emptyList() }
+        val array = JSONArray(value)
+        val result = mutableListOf<PaneWindowConfig>()
+        for (i in 0 until array.length()) {
+            val obj = array.getJSONObject(i)
+            result.add(
+                PaneWindowConfig(
+                    hostId = obj.getString("hostId"),
+                    workingDir = obj.optString("workingDir").takeUnless { it.isNullOrBlank() },
+                    customTitle = obj.optString("customTitle").takeUnless { it.isNullOrBlank() }
+                )
+            )
+        }
+        return result
     }
 
     @TypeConverter

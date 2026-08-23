@@ -35,7 +35,7 @@ class PaneGroupAdapter(
         val context = holder.itemView.context
         holder.name.text = group.name
         holder.description.text = context.getString(
-            R.string.pane_group_member_count_fmt, group.memberHostIds.size
+            R.string.pane_group_member_count_fmt, group.resolvedWindows().size
         )
         holder.itemView.setOnClickListener { onLaunch(group) }
         holder.btnEdit.setOnClickListener { onEdit(group) }

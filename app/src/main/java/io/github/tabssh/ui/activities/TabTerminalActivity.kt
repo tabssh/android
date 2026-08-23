@@ -118,7 +118,7 @@ import io.github.tabssh.ui.tabs.VncTab
 import io.github.tabssh.cloud.CloudProviderType
 import io.github.tabssh.cloud.newClient
 import io.github.tabssh.storage.database.entities.ConnectableHost
-import io.github.tabssh.ui.tabs.PaneEntry
+import io.github.tabssh.ui.tabs.PaneWindow
 import io.github.tabssh.ui.tabs.PanesTab
 import org.json.JSONObject
 import io.github.tabssh.ui.views.PaletteDialog
@@ -4072,10 +4072,14 @@ class TabTerminalActivity : TabSSHActivity() {
      * hostCredKey lookup) for cloud-instance-backed members. Returns null
      * (never throws, except on cancellation) on any resolution/connect
      * failure so the caller can skip this member and keep launching the
-     * rest of the group.
+     * rest of the group. [workingDir], if non-blank, is applied via the
+     * existing `postConnectScript` auto-send pipeline (`SSHTab
+     * .runPostConnectCommands()`) rather than any new write path — same
+     * mechanism already used for post-connect shell commands, transport
+     * agnostic (SSH/Telnet/Mosh). NO changes to SSHTab.kt itself.
      */
-    private suspend fun connectPaneMember(host: ConnectableHost): SSHTab? {
-        val profile: ConnectionProfile = when (host.sourceType) {
+    private suspend fun connectPaneMember(host: ConnectableHost, workingDir: String? = null): SSHTab? {
+        var profile: ConnectionProfile = when (host.sourceType) {
             ConnectableHost.SOURCE_CONNECTION_PROFILE -> {
                 withContext(Dispatchers.IO) { app.database.connectionDao().getConnectionById(host.id) }
                     ?: run {
@@ -4155,6 +4159,14 @@ class TabTerminalActivity : TabSSHActivity() {
             }
         }
 
+        if (!workingDir.isNullOrBlank()) {
+            val cdCommand = "cd -- ${'"'}$workingDir${'"'}"
+            profile = profile.copy(
+                postConnectScript = listOfNotNull(profile.postConnectScript, cdCommand)
+                    .joinToString("\n")
+            )
+        }
+
         return try {
             if (profile.protocol.equals("telnet", ignoreCase = true)) {
                 val telnet = TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23)
@@ -4200,9 +4212,12 @@ class TabTerminalActivity : TabSSHActivity() {
      * Panes plan Step 3/4 — launch (or reattach to) a saved PaneGroup.
      * Reattach path first: if the group has a parked PanesTab (Step 4's
      * "Keep Running in Background"), reclaim it instead of dialing fresh
-     * connections. Reattach-matching is keyed by PaneEntry.hostId, not
-     * ConnectionProfile.id — the parked tab's existing entries are reused
-     * as-is; it is not re-diffed against the group's current memberHostIds.
+     * connections. Reattach-matching is keyed by PaneWindow.hostId, not
+     * ConnectionProfile.id — the parked tab's existing windows are reused
+     * as-is; it is not re-diffed against the group's current
+     * resolvedWindows(). Window order = grid fill order = resolvedWindows()
+     * order; a hostId may repeat across windows (same host, different
+     * working directories) — each occurrence is dialed independently.
      */
     private fun openPaneGroup(groupId: String) {
         if (tabManager.hasParkedPanesTab(groupId)) {
@@ -4220,21 +4235,37 @@ class TabTerminalActivity : TabSSHActivity() {
                 Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_connection_not_found), Toast.LENGTH_SHORT).show()
                 return@launch
             }
-            val hosts = withContext(Dispatchers.IO) {
-                group.memberHostIds.mapNotNull { app.database.connectableHostDao().getById(it) }
+            val windowConfigs = group.resolvedWindows()
+            val hostsById = withContext(Dispatchers.IO) {
+                windowConfigs.map { it.hostId }.distinct()
+                    .mapNotNull { hostId -> app.database.connectableHostDao().getById(hostId)?.let { hostId to it } }
+                    .toMap()
             }
-            if (hosts.isEmpty()) {
+            if (hostsById.isEmpty()) {
                 Logger.w("TabTerminalActivity", "openPaneGroup: no resolvable members for group ${group.name}")
                 Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_connection_not_found), Toast.LENGTH_SHORT).show()
                 return@launch
             }
-            val entries = mutableListOf<PaneEntry>()
-            hosts.forEachIndexed { index, host ->
-                val sshTab = connectPaneMember(host)
+            val entries = mutableListOf<PaneWindow>()
+            windowConfigs.forEachIndexed { index, windowConfig ->
+                val host = hostsById[windowConfig.hostId]
+                if (host == null) {
+                    Logger.w("TabTerminalActivity", "openPaneGroup: skipping unresolvable member ${windowConfig.hostId}")
+                    return@forEachIndexed
+                }
+                val sshTab = connectPaneMember(host, windowConfig.workingDir)
                 if (sshTab == null) {
                     Logger.w("TabTerminalActivity", "openPaneGroup: skipping unresolvable/failed member ${host.name}")
                 } else {
-                    entries.add(PaneEntry(hostId = host.id, sshTab = sshTab, gridPosition = index))
+                    entries.add(
+                        PaneWindow(
+                            hostId = host.id,
+                            sshTab = sshTab,
+                            customTitle = windowConfig.customTitle,
+                            workingDir = windowConfig.workingDir,
+                            gridPosition = index
+                        )
+                    )
                 }
             }
             if (entries.isEmpty()) {
