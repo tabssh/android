@@ -4255,10 +4255,23 @@ class TabTerminalActivity : TabSSHActivity() {
      * working directories) — each occurrence is dialed independently.
      */
     private fun openPaneGroup(groupId: String) {
+        // Only one live session per group at a time — attach to whichever
+        // is already open in the strip rather than dialing a duplicate set
+        // of connections (e.g. relaunching the same group twice used to
+        // leave two independent sessions to the same host running side by
+        // side).
+        val activeIndex = tabManager.findActivePanesTabIndex(groupId)
+        if (activeIndex >= 0) {
+            Logger.i("TabTerminalActivity", "Panes group $groupId already open at index $activeIndex; switching to it")
+            tabManager.setActiveTab(activeIndex)
+            switchToTab(activeIndex)
+            return
+        }
         if (tabManager.hasParkedPanesTab(groupId)) {
             val reclaimed = tabManager.reclaimParkedPanesTab(groupId)
             if (reclaimed != null) {
                 Logger.i("TabTerminalActivity", "Reattached parked panes tab for group $groupId")
+                observePanesEmptyAutoClose(reclaimed)
                 updateViewPagerAdapter()
                 return
             }
@@ -4307,13 +4320,34 @@ class TabTerminalActivity : TabSSHActivity() {
                 Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_connection_not_found), Toast.LENGTH_SHORT).show()
                 return@launch
             }
-            val created = tabManager.createPanesTab(group.id, group.name, entries)
+            val created = tabManager.createPanesTab(group.id, group.name, entries, group.splitDirection)
             if (created == null) {
                 entries.forEach { entry -> try { entry.sshTab?.cleanup() } catch (_: Exception) {} }
                 Toast.makeText(this@TabTerminalActivity, getString(R.string.virt_viewer_max_tabs), Toast.LENGTH_SHORT).show()
                 return@launch
             }
+            observePanesEmptyAutoClose(created)
             updateViewPagerAdapter()
+        }
+    }
+
+    /**
+     * Closing individual panes one at a time (see `PanesTab.closeWindow`,
+     * wired from each tile's own close button) can leave a Panes tab with
+     * zero windows — there is otherwise no separate "kill the last
+     * connection" affordance for that state, so once the window list goes
+     * empty the whole tab is removed automatically (its sessions are
+     * already disconnected by `closeWindow`, so this is pure bookkeeping,
+     * not another disconnect).
+     */
+    private fun observePanesEmptyAutoClose(panesTab: PanesTab) {
+        lifecycleScope.launch {
+            panesTab.entries.collect { entries ->
+                if (entries.isEmpty()) {
+                    tabManager.closeTabByIdSealed(panesTab.tabId)
+                    updateViewPagerAdapter()
+                }
+            }
         }
     }
 

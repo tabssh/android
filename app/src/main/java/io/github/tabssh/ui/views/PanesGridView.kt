@@ -3,11 +3,21 @@ package io.github.tabssh.ui.views
 import android.content.Context
 import android.graphics.Color
 import android.util.AttributeSet
+import android.view.Gravity
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ScrollView
 import android.widget.LinearLayout
+import android.widget.TextView
+import io.github.tabssh.R
+
+/** Split direction for a 2-window Panes group. Persisted on [io.github.tabssh.storage.database.entities.PaneGroup.splitDirection]. */
+object PanesSplitDirection {
+    const val HORIZONTAL = "horizontal"
+    const val VERTICAL = "vertical"
+}
 
 /**
  * Tiled grid ViewGroup for a Panes tab (up to 6 [TerminalView]s in one
@@ -15,6 +25,10 @@ import android.widget.LinearLayout
  * auto-stacks to a single scrollable column below `screenWidthDp < 600`
  * (matching the plan's narrow-screen requirement), and highlights the
  * focused tile's border on tap.
+ *
+ * For exactly 2 windows, [PanesSplitDirection.HORIZONTAL] (default) keeps
+ * the original side-by-side (1 row x 2 columns) layout; VERTICAL stacks
+ * them (2 rows x 1 column) — see `PaneGroup.splitDirection`.
  *
  * Reordering/resizing beyond the auto grid is intentionally out of scope
  * for this cut — windows are laid out in [PaneWindow.gridPosition] order in a
@@ -32,14 +46,32 @@ class PanesGridView @JvmOverloads constructor(
         private const val UNFOCUSED_BORDER_COLOR = Color.TRANSPARENT
         private const val BORDER_WIDTH_DP = 2
         private const val NARROW_WIDTH_DP = 600
+        private const val CLOSE_BUTTON_SIZE_DP = 28
     }
 
-    /** One tile: the border frame wrapping a caller-supplied content view. */
-    private class Tile(context: Context, val content: android.view.View) : FrameLayout(context) {
+    /** One tile: the border frame wrapping a caller-supplied content view, plus a per-window close button. */
+    private class Tile(
+        context: Context,
+        val content: View,
+        onClose: () -> Unit
+    ) : FrameLayout(context) {
         init {
             addView(
                 content,
                 LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+            )
+            val closeSizePx = (CLOSE_BUTTON_SIZE_DP * resources.displayMetrics.density).toInt()
+            val closeButton = TextView(context).apply {
+                text = "✕"
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                setBackgroundColor(0x99000000.toInt())
+                contentDescription = context.getString(R.string.pane_window_close_content_description)
+                setOnClickListener { onClose() }
+            }
+            addView(
+                closeButton,
+                LayoutParams(closeSizePx, closeSizePx, Gravity.TOP or Gravity.END)
             )
             setPadding(borderPx(), borderPx(), borderPx(), borderPx())
             setBackgroundColor(UNFOCUSED_BORDER_COLOR)
@@ -59,25 +91,36 @@ class PanesGridView @JvmOverloads constructor(
 
     private var tiles: List<Tile> = emptyList()
     private var onTileClicked: ((Int) -> Unit)? = null
+    private var splitDirection: String = PanesSplitDirection.HORIZONTAL
 
     init {
         addView(gridContainer, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         stackScroll.addView(
             stackContainer,
-            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
         )
     }
 
-    /** Set the pane content views (in grid order) and the focus-tap callback. */
-    fun setContents(contents: List<android.view.View>, onTileClicked: (Int) -> Unit) {
+    /**
+     * Set the pane content views (in grid order), the focus-tap callback,
+     * the per-window close callback, and (for exactly 2 windows) the split
+     * direction to use.
+     */
+    fun setContents(
+        contents: List<View>,
+        splitDirection: String = PanesSplitDirection.HORIZONTAL,
+        onTileClicked: (Int) -> Unit,
+        onTileClosed: (Int) -> Unit
+    ) {
         this.onTileClicked = onTileClicked
+        this.splitDirection = splitDirection
         gridContainer.removeAllViews()
         stackContainer.removeAllViews()
         removeView(stackScroll)
 
         tiles = contents.mapIndexed { index, content ->
             (content.parent as? ViewGroup)?.removeView(content)
-            Tile(context, content).also { tile ->
+            Tile(context, content, onClose = { onTileClosed(index) }).also { tile ->
                 tile.setOnClickListener {
                     // MotionEvent-based hit testing isn't needed — the whole
                     // tile is the tap target, matching the plan's "click to
@@ -115,11 +158,12 @@ class PanesGridView @JvmOverloads constructor(
 
     /**
      * Near-square row/column split for [count] panes (1..6):
-     * 1→1x1, 2→1x2, 3→1x3, 4→2x2, 5→2x3(last row 2), 6→2x3.
+     * 1→1x1, 2→1x2 (or 2x1 if [splitDirection] is vertical), 3→1x3,
+     * 4→2x2, 5→2x3(last row 2), 6→2x3.
      */
     private fun gridDimensions(count: Int): Pair<Int, Int> = when (count) {
         1 -> 1 to 1
-        2 -> 1 to 2
+        2 -> if (splitDirection == PanesSplitDirection.VERTICAL) 2 to 1 else 1 to 2
         3 -> 1 to 3
         4 -> 2 to 2
         5 -> 2 to 3
@@ -164,6 +208,17 @@ class PanesGridView @JvmOverloads constructor(
                 val tile = tiles.getOrNull(index) ?: continue
                 val tileLeft = col * colWidth
                 val tileTop = row * rowHeight
+                // Bug fix: children added to gridContainer via LayoutParams(0, 0)
+                // (an exact-zero measure request) were never re-measured before
+                // this manual layout() call — View.layout() sets final bounds
+                // but does NOT re-trigger measurement, so every tile's content
+                // stayed permanently measured at 0x0 and never rendered,
+                // regardless of connection state. Explicitly re-measure each
+                // tile to its final size immediately before positioning it.
+                tile.measure(
+                    MeasureSpec.makeMeasureSpec(colWidth, MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(rowHeight, MeasureSpec.EXACTLY)
+                )
                 tile.layout(tileLeft, tileTop, tileLeft + colWidth, tileTop + rowHeight)
                 index++
             }

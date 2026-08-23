@@ -64,6 +64,13 @@ data class PaneGroup(
     @ColumnInfo(name = "windows", defaultValue = "[]")
     val windows: List<PaneWindowConfig> = emptyList(),
 
+    // Split direction consulted only when this group has exactly 2
+    // resolved windows — "horizontal" (default, side by side, 1 row x 2
+    // columns) or "vertical" (stacked, 2 rows x 1 column). Ignored for any
+    // other window count. See PanesSplitDirection in PanesGridView.kt.
+    @ColumnInfo(name = "split_direction", defaultValue = "horizontal")
+    val splitDirection: String = "horizontal",
+
     @ColumnInfo(name = "sort_order", defaultValue = "0")
     val sortOrder: Int = 0,
 

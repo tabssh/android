@@ -678,7 +678,12 @@ class TerminalPagerAdapter(
     ) : RecyclerView.ViewHolder(gridView) {
 
         private var boundPanesTab: PanesTab? = null
-        private var paneTerminalViews: MutableMap<String, TerminalView> = mutableMapOf()
+        // Keyed by grid index, not hostId — the same hostId can legitimately
+        // appear in more than one window (same host, different working
+        // directories; see PaneWindowConfig's doc comment), and keying by
+        // hostId collapsed those into a single shared TerminalView/bridge
+        // attachment.
+        private var paneTerminalViews: MutableMap<Int, TerminalView> = mutableMapOf()
         private var focusJob: Job? = null
         private var entriesJob: Job? = null
         private val holderScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -701,8 +706,8 @@ class TerminalPagerAdapter(
             paneTerminalViews.values.forEach { it.applyTheme(theme) }
         }
 
-        private fun terminalViewFor(hostId: String): TerminalView =
-            paneTerminalViews.getOrPut(hostId) {
+        private fun terminalViewFor(index: Int): TerminalView =
+            paneTerminalViews.getOrPut(index) {
                 TerminalView(gridView.context).apply {
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -717,19 +722,24 @@ class TerminalPagerAdapter(
 
         private fun rebuildTiles(panesTab: PanesTab) {
             val entries = panesTab.currentEntries()
-            // Drop terminal views for panes no longer present (e.g. a pane
-            // was closed independently), so their TermuxBridge attachment
-            // isn't held onto past its tile's lifetime.
-            val liveIds = entries.map { it.hostId }.toSet()
-            (paneTerminalViews.keys - liveIds).forEach { paneTerminalViews.remove(it) }
+            // Drop terminal views for grid slots no longer present (e.g. a
+            // pane was closed independently), so their TermuxBridge
+            // attachment isn't held onto past its tile's lifetime.
+            val liveIndices = entries.indices.toSet()
+            (paneTerminalViews.keys - liveIndices).forEach { paneTerminalViews.remove(it) }
 
-            val contents = entries.map { entry ->
-                val terminalView = terminalViewFor(entry.hostId)
+            val contents = entries.mapIndexed { index, entry ->
+                val terminalView = terminalViewFor(index)
                 entry.sshTab?.let { sshTab -> terminalView.attachTerminalEmulator(sshTab.termuxBridge) }
                 currentTheme?.let { theme -> terminalView.applyTheme(theme) }
                 terminalView
             }
-            gridView.setContents(contents) { index -> boundPanesTab?.setFocusedPane(index) }
+            gridView.setContents(
+                contents,
+                splitDirection = panesTab.splitDirection,
+                onTileClicked = { index -> boundPanesTab?.setFocusedPane(index) },
+                onTileClosed = { index -> boundPanesTab?.closeWindow(index) }
+            )
             gridView.setFocusedIndex(panesTab.focusedPaneIndex.value)
         }
 
@@ -740,8 +750,9 @@ class TerminalPagerAdapter(
          * route to the right pane, not just "some" pane.
          */
         fun focusedTerminalView(): TerminalView? {
-            val entry = boundPanesTab?.focusedEntry() ?: return null
-            return paneTerminalViews[entry.hostId]
+            val tab = boundPanesTab ?: return null
+            tab.focusedEntry() ?: return null
+            return paneTerminalViews[tab.focusedPaneIndex.value]
         }
 
         /** Called from [onViewRecycled] — drop the collectors so a recycled page can't drive a stale tab. */

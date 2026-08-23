@@ -20,6 +20,7 @@ import io.github.tabssh.storage.database.entities.ConnectableHost
 import io.github.tabssh.storage.database.entities.PaneGroup
 import io.github.tabssh.storage.database.entities.PaneWindowConfig
 import io.github.tabssh.storage.registry.ConnectableHostRegistry
+import io.github.tabssh.ui.views.PanesSplitDirection
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -121,8 +122,17 @@ object PaneGroupEditDialog {
                 return@setOnClickListener
             }
             val windowCount = counts[countSpinner.selectedItemPosition]
+            // Bug fix: dismissing this dialog and immediately (synchronously)
+            // showing the Step 2 dialog raced the first dialog's window
+            // teardown against the second dialog's IME focus request — the
+            // Step 2 EditTexts visually gained focus (blinking cursor) but
+            // the soft keyboard never actually appeared. Deferring the
+            // Step 2 show to this dialog's dismiss callback lets its window
+            // finish tearing down first.
+            dialog.setOnDismissListener {
+                showStep2(context, app, scope, existing, hosts, existingWindows, name, windowCount, onSaved)
+            }
             dialog.dismiss()
-            showStep2(context, app, scope, existing, hosts, existingWindows, name, windowCount, onSaved)
         }
     }
 
@@ -141,6 +151,21 @@ object PaneGroupEditDialog {
             .inflate(R.layout.dialog_edit_pane_group_step2, null)
         val windowsRecycler =
             dialogView.findViewById<RecyclerView>(R.id.recycler_pane_group_windows)
+        val splitDirectionSection =
+            dialogView.findViewById<View>(R.id.group_pane_split_direction)
+        val splitDirectionRadioGroup =
+            dialogView.findViewById<android.widget.RadioGroup>(R.id.radio_pane_split_direction)
+        val radioVertical =
+            dialogView.findViewById<android.widget.RadioButton>(R.id.radio_pane_split_vertical)
+
+        // Split direction only makes sense for exactly 2 windows — see
+        // PanesSplitDirection in PanesGridView.kt.
+        if (windowCount == 2) {
+            splitDirectionSection.visibility = View.VISIBLE
+            if ((existing?.splitDirection ?: PanesSplitDirection.HORIZONTAL) == PanesSplitDirection.VERTICAL) {
+                radioVertical.isChecked = true
+            }
+        }
 
         // Seed each slot from the existing window at that index, if any —
         // preserves prior host/workingDir/customTitle when just editing the
@@ -166,6 +191,11 @@ object PaneGroupEditDialog {
                 Toast.makeText(context, R.string.pane_group_window_host_required_toast, Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
+            val splitDirection = if (windowCount == 2 && splitDirectionRadioGroup.checkedRadioButtonId == R.id.radio_pane_split_vertical) {
+                PanesSplitDirection.VERTICAL
+            } else {
+                PanesSplitDirection.HORIZONTAL
+            }
             dialog.dismiss()
             val now = System.currentTimeMillis()
             val paneGroup = PaneGroup(
@@ -174,6 +204,7 @@ object PaneGroupEditDialog {
                 layout = existing?.layout ?: "",
                 memberHostIds = slots.map { it.hostId },
                 windows = slots.toList(),
+                splitDirection = splitDirection,
                 sortOrder = existing?.sortOrder ?: 0,
                 createdAt = existing?.createdAt ?: now,
                 modifiedAt = now

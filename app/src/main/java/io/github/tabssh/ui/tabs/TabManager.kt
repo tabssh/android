@@ -224,13 +224,18 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
      * [entries]' [SSHTab]s must already be connected by the caller
      * (`TabTerminalActivity.connectPaneMember`) before this is called.
      */
-    fun createPanesTab(groupId: String, groupName: String, entries: List<PaneWindow>): PanesTab? = synchronized(tabsLock) {
+    fun createPanesTab(
+        groupId: String,
+        groupName: String,
+        entries: List<PaneWindow>,
+        splitDirection: String = "horizontal"
+    ): PanesTab? = synchronized(tabsLock) {
         if (tabs.size >= maxTabs) {
             Logger.w("TabManager", "Maximum tabs reached: $maxTabs")
             return null
         }
 
-        val tab = PanesTab(groupId, groupName, entries)
+        val tab = PanesTab(groupId, groupName, entries, splitDirection)
         tabs.add(Tab.Panes(tab))
         activeTabIndex = tabs.size - 1
 
@@ -289,6 +294,17 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     /** True if a Panes tab for [groupId] is currently parked in the background. */
     fun hasParkedPanesTab(groupId: String): Boolean = synchronized(tabsLock) {
         parkedPanesTabs.containsKey(groupId)
+    }
+
+    /**
+     * Index in the live tab strip of an already-open (not parked) Panes tab
+     * for [groupId], or -1 if none. Used so relaunching a saved group from
+     * the Panes list attaches to the session already open in the strip
+     * instead of dialing a second, duplicate set of connections — see
+     * `TabTerminalActivity.openPaneGroup`.
+     */
+    fun findActivePanesTabIndex(groupId: String): Int = synchronized(tabsLock) {
+        tabs.indexOfFirst { it is Tab.Panes && it.panesTab.groupId == groupId }
     }
 
     /**

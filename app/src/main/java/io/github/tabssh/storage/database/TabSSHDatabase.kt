@@ -57,7 +57,7 @@ import io.github.tabssh.utils.logging.Logger
         PaneGroup::class,
         ConnectableHost::class
     ],
-    version = 21,
+    version = 22,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -1089,6 +1089,19 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v21 -> v22: adds `PaneGroup.splitDirection` — additive column,
+         * consulted only when a group has exactly 2 resolved windows
+         * ("horizontal" side-by-side default, or "vertical" stacked).
+         */
+        val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `pane_groups` ADD COLUMN `split_direction` TEXT NOT NULL DEFAULT 'horizontal'"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -1098,7 +1111,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22)
                 .build()
                 INSTANCE = instance
                 instance

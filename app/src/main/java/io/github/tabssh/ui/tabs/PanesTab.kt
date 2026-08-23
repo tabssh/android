@@ -45,7 +45,11 @@ data class PaneWindow(
 class PanesTab(
     val groupId: String,
     groupName: String,
-    initialEntries: List<PaneWindow>
+    initialEntries: List<PaneWindow>,
+    // Consulted only when this tab has exactly 2 windows — "horizontal"
+    // (default, side by side) or "vertical" (stacked). See
+    // PanesSplitDirection in PanesGridView.kt / PaneGroup.splitDirection.
+    val splitDirection: String = "horizontal"
 ) {
 
     val tabId: String = UUID.randomUUID().toString()
@@ -84,6 +88,31 @@ class PanesTab(
         val clamped = index.coerceIn(0, entries.lastIndex)
         _focusedPaneIndex.value = clamped
         Logger.d("PanesTab", "Focused pane $clamped in group $groupId")
+    }
+
+    /**
+     * Disconnect and remove a single window's live session from the grid
+     * (the per-pane "close this connection" action — closing the whole
+     * Panes tab is a separate action, see `TabTerminalActivity.closeCurrentTab`).
+     * No-ops silently on an out-of-range [index]. Remaining windows'
+     * [PaneWindow.gridPosition] are renumbered to stay contiguous; focus is
+     * re-clamped to the new entry list.
+     */
+    fun closeWindow(index: Int) {
+        val current = _entries.value
+        val window = current.getOrNull(index) ?: return
+        try {
+            window.sshTab?.cleanup()
+        } catch (e: Exception) {
+            Logger.d("PanesTab", "closeWindow sshTab.cleanup() suppressed: ${e.message}")
+        }
+        val remaining = current.filterIndexed { i, _ -> i != index }
+            .mapIndexed { i, w -> w.also { it.gridPosition = i } }
+        _entries.value = remaining
+        if (remaining.isNotEmpty()) {
+            setFocusedPane(_focusedPaneIndex.value)
+        }
+        Logger.d("PanesTab", "Closed window $index in group $groupId (${remaining.size} remaining)")
     }
 
     /** Set custom title (user-defined), same contract as SSHTab/VncTab/ConsoleTab. */

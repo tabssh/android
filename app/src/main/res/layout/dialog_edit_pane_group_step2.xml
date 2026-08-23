@@ -1,15 +1,60 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="400dp">
+    android:layout_height="440dp"
+    android:orientation="vertical">
+
+    <!-- Only shown when the group has exactly 2 windows, see
+         PaneGroupEditDialog.showStep2; default "horizontal" matches the
+         original side-by-side layout. -->
+    <LinearLayout
+        android:id="@+id/group_pane_split_direction"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/space_md"
+        android:paddingTop="@dimen/space_sm"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/pane_group_split_direction_label"
+            android:textStyle="bold" />
+
+        <RadioGroup
+            android:id="@+id/radio_pane_split_direction"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/radio_pane_split_horizontal"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:checked="true"
+                android:text="@string/pane_group_split_horizontal" />
+
+            <RadioButton
+                android:id="@+id/radio_pane_split_vertical"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/pane_group_split_vertical" />
+
+        </RadioGroup>
+
+    </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_pane_group_windows"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:paddingHorizontal="@dimen/space_md"
         android:paddingVertical="@dimen/space_sm"
         android:nestedScrollingEnabled="true"
         android:clipToPadding="false" />
 
-</FrameLayout>
+</LinearLayout>

@@ -3551,6 +3551,10 @@
     <string name="pane_group_window_custom_title_placeholder">Custom title (optional)</string>
     <string name="pane_group_window_host_required_toast">Choose a connection for every window</string>
     <string name="pane_group_step2_title_fmt">%1$s — Windows</string>
+    <string name="pane_window_close_content_description">Close this pane</string>
+    <string name="pane_group_split_direction_label">Split direction</string>
+    <string name="pane_group_split_horizontal">Horizontal (side by side)</string>
+    <string name="pane_group_split_vertical">Vertical (stacked)</string>
     <string name="identity_menu_edit">✏️ Edit</string>
     <string name="identity_menu_apply_to_connections">📋 Apply to Connections</string>
     <string name="identity_menu_view_linked_connections">🔗 View Linked Connections</string>
