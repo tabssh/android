@@ -508,10 +508,17 @@ class TabTerminalActivity : TabSSHActivity() {
                     // to this page, onPageSelected already fired and ViewPager is
                     // settled on the target. Calling setCurrentItem here would
                     // re-fire onPageSelected → tabManager.switchToTab → this
-                    // callback → setCurrentItem indefinitely. Skip if the pager
-                    // is already on the requested page.
+                    // callback → setCurrentItem indefinitely. Skip the pager move
+                    // if it's already on the requested page — but the per-tab UI
+                    // sync (PREFIX key visual/latch, recording indicator, focus)
+                    // must still run either way, since a real swipe only goes
+                    // through this path and previously got skipped entirely by
+                    // this guard, leaving the PREFIX key showing the previous
+                    // tab's enable/armed state after every swipe.
                     if (viewPager?.currentItem != index) {
                         switchToTab(index)
+                    } else {
+                        syncActiveTabUi(index)
                     }
                 }
             }
@@ -3142,6 +3149,23 @@ class TabTerminalActivity : TabSSHActivity() {
                 Logger.d("TabTerminalActivity", "Switched to tab: ${tab.profile.getDisplayName()}")
             }
         }
+        syncActiveTabUi(index)
+    }
+
+    /**
+     * Re-sync all per-tab UI state (PREFIX key visual/armed-latch, recording
+     * indicator, input focus) to whichever tab is now active. Split out from
+     * [switchToTab] because `onActiveTabChanged`'s re-entrancy guard skips
+     * calling `switchToTab` whenever the ViewPager2 already landed on the
+     * target page itself (every real user swipe — `onPageSelected` moves
+     * `viewPager.currentItem` before this fires) — without this as a
+     * standalone call, that guard silently starved the PREFIX key's visual
+     * (and recording indicator) of ever re-syncing on a swipe, so it kept
+     * showing whichever tab's state was last synced by a programmatic
+     * switch, making PRE's enable/disable state appear to "follow" across
+     * every tab instead of being per-tab.
+     */
+    private fun syncActiveTabUi(index: Int) {
         // Disarm any pending PREFIX latch — the latch belongs to the previous tab's
         // terminal session and must not bleed into the new tab.
         if (prefixArmed) {
