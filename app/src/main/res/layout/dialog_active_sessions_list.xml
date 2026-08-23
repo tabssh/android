@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Issue #165 follow-up — "See all" expansion for the Active Sessions
+    strip. The strip itself is a horizontal preview; this dialog lists
+    every active session (SSH/VNC/Console/Panes) vertically, unclipped.
+-->
+<androidx.recyclerview.widget.RecyclerView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/recycler_all_active_sessions"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingTop="@dimen/space_xs"
+    android:paddingBottom="@dimen/space_xs"
+    tools:listitem="@layout/item_active_session_full"
+    tools:itemCount="6" />

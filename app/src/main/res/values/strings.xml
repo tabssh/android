@@ -2857,6 +2857,9 @@
 
     <!-- Active sessions strip (view_active_sessions_strip.xml) -->
     <string name="connections_active_sessions_header">Active Sessions</string>
+    <string name="connections_active_sessions_see_all">See all</string>
+    <string name="connections_active_sessions_dialog_title">All Active Sessions</string>
+    <string name="connections_session_type_console">Console</string>
 
     <!-- VNC toolbar (view_vnc_toolbar.xml) -->
     <string name="vnc_toolbar_toggle_keyboard_description">Toggle keyboard</string>

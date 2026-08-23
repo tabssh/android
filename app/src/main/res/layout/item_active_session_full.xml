@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Full-width row for the "See all" Active Sessions dialog (Issue #165
+    follow-up) — same data as item_active_session.xml's chip but rendered
+    as a vertical list row with a type subtitle so every active session is
+    reachable regardless of how many fit in the horizontal strip preview.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="48dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:clickable="true"
+    android:focusable="true"
+    android:background="?attr/selectableItemBackground"
+    android:paddingStart="@dimen/space_md"
+    android:paddingEnd="@dimen/space_md"
+    android:paddingTop="@dimen/space_sm"
+    android:paddingBottom="@dimen/space_sm">
+
+    <View
+        android:id="@+id/state_dot"
+        android:layout_width="8dp"
+        android:layout_height="8dp"
+        android:layout_marginEnd="@dimen/space_sm"
+        android:background="@drawable/state_dot_connected" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/text_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:textSize="14sp"
+            android:textColor="?attr/colorOnSurface"
+            tools:text="server20" />
+
+        <TextView
+            android:id="@+id/text_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:textSize="12sp"
+            android:textColor="?android:textColorSecondary"
+            tools:text="SSH" />
+
+    </LinearLayout>
+
+</LinearLayout>

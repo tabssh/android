@@ -103,7 +103,13 @@ class VncTab(
     @Volatile
     var lastDisconnectMessage: String? = null
 
-    private val _title = MutableStateFlow(ephemeralDisplayName ?: vncHost?.name ?: "VNC")
+    // Name whenever possible, else the server/host — "VNC" is a last-resort
+    // fallback that should be unreachable in practice since VncHost.name is
+    // a required non-null column, but is kept for the ephemeral (host-less)
+    // case where even vncHost is null.
+    private val _title = MutableStateFlow(
+        ephemeralDisplayName ?: vncHost?.name?.takeIf { it.isNotBlank() } ?: vncHost?.host ?: "VNC"
+    )
     val title: StateFlow<String> = _title.asStateFlow()
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)

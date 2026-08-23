@@ -87,6 +87,40 @@ connection, its app-generated key, and the corresponding
 around to reuse for the libvirt/Incus testing above — remove all three
 once that follow-on testing is done.
 
+## Open — 2026-08-23 Active Sessions strip follow-ups (Issue #165)
+
+1. **VNC/SPICE "missing from strip" — unreproduced.** User reported VNC/SPICE
+   sessions missing from the Active Sessions strip. Code audit this session
+   found every VNC/console tab-creation call site (`VncHostsActivity`,
+   `VMwareManagerActivity`, `LibvirtManagerActivity`, `ProxmoxManagerActivity`,
+   `XCPngManagerActivity`, `LinkHandlerActivity`) correctly calls
+   `TabManager.createVncTab`/`createConsoleTab`, both of which call
+   `publishTabs()` (confirmed at `TabManager.kt` lines 193/215) which sets
+   `_allTabsFlow.value`; `ConnectionsFragment.renderActiveSessionRows()`
+   explicitly handles `Tab.Vnc`/`Tab.Console` with no filtering that would
+   exclude them; `VncTab`/`ConsoleTab.connectionState` are real `StateFlow`s
+   correctly set to `CONNECTED` post-connect. No mechanism found that would
+   hide a live VNC/console session from the strip. Needs a concrete repro
+   from the user (logcat around the connect, or exact steps) to continue —
+   static reading is exhausted.
+2. **"Stale/incorrect state"** — no concrete failure scenario identified yet.
+   `rebindActiveSessions()`'s per-tab observer subscribe/cancel looked
+   structurally sound on read but was not stress-tested. Needs a reproduction
+   scenario (e.g. rapid connect/disconnect, backgrounding mid-connect) to
+   investigate further.
+3. **"Layout/visual issues"** — `item_active_session.xml`/
+   `view_active_sessions_strip.xml` were read and look structurally fine
+   (proper ellipsize/singleLine, card touch target). No specific visual
+   defect identified from static reading; needs a screenshot or concrete
+   description from the user to act on.
+
+Done this session: added a "See all" link/dialog listing every active
+session vertically (`AllActiveSessionsAdapter`,
+`dialog_active_sessions_list.xml`, `item_active_session_full.xml`); fixed
+`VncTab`/`ConsoleTab` title fallback chains to use host (`vncHost.host`/
+`connectParams.host`) instead of a literal `"VNC"` placeholder, per the
+"name whenever possible, else server/host" rule.
+
 ## Needs verification
 
 ### Manual console smoke tests (user-side — no hypervisor hosts available here)

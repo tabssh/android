@@ -147,7 +147,8 @@ class ConsoleTab(val connectParams: ConsoleConnectParams) {
         setConnectionState(ConnectionState.DISCONNECTED)
     }
 
-    private val _title = MutableStateFlow(connectParams.vmName)
+    // Name whenever possible, else the server/host.
+    private val _title = MutableStateFlow(connectParams.vmName.ifBlank { connectParams.host })
     val title: StateFlow<String> = _title.asStateFlow()
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)

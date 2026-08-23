@@ -307,6 +307,97 @@ class ConnectionsFragment : Fragment() {
         )
         recycler.adapter = adapter
         activeSessionAdapter = adapter
+        inflated.findViewById<View>(R.id.text_active_sessions_see_all)
+            .setOnClickListener { showAllActiveSessionsDialog() }
+    }
+
+    /**
+     * "See all" expansion — the strip is a horizontal preview that clips
+     * once there are more active sessions than fit on screen. This dialog
+     * lists every active session (SSH/VNC/Console/Panes) vertically,
+     * unclipped, reusing the same label logic as the strip.
+     */
+    private fun showAllActiveSessionsDialog() {
+        val tabs = app.tabManager.getAllTabsSealed().filter { tab ->
+            tab.stateFlow().value != io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED &&
+                (tab as? Tab.Ssh)?.sshTab?.profile?.id?.startsWith("docker-exec:") != true
+        }
+        if (tabs.isEmpty()) return
+
+        val labels = disambiguatedActiveSessionLabels(tabs)
+        val rows = tabs.map { tab ->
+            io.github.tabssh.ui.adapters.AllActiveSessionsAdapter.Row(
+                tabId = tab.tabId,
+                title = labels.getValue(tab.tabId),
+                subtitle = when (tab) {
+                    is Tab.Ssh -> getString(R.string.auth_tab_ssh)
+                    is Tab.Vnc -> getString(R.string.auth_tab_vnc)
+                    is Tab.Console -> getString(R.string.connections_session_type_console)
+                    is Tab.Panes -> getString(R.string.main_tab_panes)
+                },
+                state = tab.stateFlow().value
+            )
+        }
+
+        val dialogView = layoutInflater.inflate(R.layout.dialog_active_sessions_list, null, false)
+        val dialogRecycler = dialogView.findViewById<androidx.recyclerview.widget.RecyclerView>(
+            R.id.recycler_all_active_sessions
+        )
+        dialogRecycler.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(requireContext())
+        var dialogRef: androidx.appcompat.app.AlertDialog? = null
+        val dialogAdapter = io.github.tabssh.ui.adapters.AllActiveSessionsAdapter { tabId ->
+            dialogRef?.dismiss()
+            val intent = android.content.Intent(requireContext(), TabTerminalActivity::class.java).apply {
+                putExtra(TabTerminalActivity.EXTRA_TAB_ID, tabId)
+                addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            }
+            startActivity(intent)
+        }
+        dialogRecycler.adapter = dialogAdapter
+        dialogAdapter.submit(rows)
+
+        dialogRef = com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.connections_active_sessions_dialog_title)
+            .setView(dialogView)
+            .setNegativeButton(R.string.close, null)
+            .show()
+    }
+
+    /**
+     * Shared label logic for the Active Sessions strip and its "See all"
+     * dialog. SSH: profile name else user@host (never the OSC terminal
+     * title). VNC/Console/Panes: the tab's own display title. Identical
+     * labels are disambiguated with a stable `(#N)` suffix.
+     */
+    private fun disambiguatedActiveSessionLabels(tabs: List<Tab>): Map<String, String> {
+        val rawDisplays = tabs.map { tab ->
+            val display = when (tab) {
+                is Tab.Ssh -> {
+                    val profileName = tab.sshTab.profile.name.trim()
+                    val user = tab.sshTab.profile.username
+                    val host = tab.sshTab.profile.host
+                    val userHost = if (user.isNotBlank() && host.isNotBlank()) "$user@$host" else host
+                    if (profileName.isNotBlank() && profileName != userHost) profileName else userHost
+                }
+                is Tab.Vnc -> tab.vncTab.getDisplayTitle()
+                is Tab.Console -> tab.consoleTab.getDisplayTitle()
+                is Tab.Panes -> tab.panesTab.getDisplayTitle()
+            }
+            tab to display
+        }
+        val occurrences = rawDisplays.groupingBy { it.second }.eachCount()
+        val seen = mutableMapOf<String, Int>()
+        return rawDisplays.associate { (tab, display) ->
+            val total = occurrences[display] ?: 1
+            val label = if (total > 1) {
+                val n = (seen[display] ?: 0) + 1
+                seen[display] = n
+                getString(R.string.connections_session_duplicate_fmt, display, n)
+            } else {
+                display
+            }
+            tab.tabId to label
+        }
     }
 
     private fun rebindActiveSessions(tabs: List<Tab>) {
@@ -351,46 +442,15 @@ class ConnectionsFragment : Fragment() {
         ensureActiveSessionsInflated()
         activeSessionsContainer?.visibility = View.VISIBLE
 
-        // Build chip labels for the active sessions strip.
-        // SSH: use the connection profile name as the primary label — it is
-        // always short and human-readable (e.g. "server20", "Production DB");
-        // fall back to user@host when the profile has no custom name. Never
-        // use the OSC terminal title here: it is set by the remote shell and
-        // can be arbitrarily long (e.g. "root@ip:root@hostname:~/deep/path").
-        // VNC/console: the tab's own display title (host name / VM name) is
-        // already short and human-chosen, so it is used directly.
-        val rawDisplays = tabs.map { tab ->
-            val display = when (tab) {
-                is Tab.Ssh -> {
-                    val profileName = tab.sshTab.profile.name.trim()
-                    val user = tab.sshTab.profile.username
-                    val host = tab.sshTab.profile.host
-                    val userHost = if (user.isNotBlank() && host.isNotBlank()) "$user@$host" else host
-                    if (profileName.isNotBlank() && profileName != userHost) profileName else userHost
-                }
-                is Tab.Vnc -> tab.vncTab.getDisplayTitle()
-                is Tab.Console -> tab.consoleTab.getDisplayTitle()
-                is Tab.Panes -> tab.panesTab.getDisplayTitle()
-            }
-            tab to display
-        }
-
-        // Disambiguate exact-duplicate displays (same user@host with no
-        // OSC title) by appending (#N) — N is the 1-based running index.
-        val occurrences = rawDisplays.groupingBy { it.second }.eachCount()
-        val seen = mutableMapOf<String, Int>()
-        val rows = rawDisplays.map { (tab, display) ->
-            val total = occurrences[display] ?: 1
-            val label = if (total > 1) {
-                val n = (seen[display] ?: 0) + 1
-                seen[display] = n
-                getString(R.string.connections_session_duplicate_fmt, display, n)
-            } else {
-                display
-            }
+        // Build chip labels for the active sessions strip. SSH: profile name
+        // else user@host, never the OSC terminal title (see
+        // disambiguatedActiveSessionLabels doc). VNC/Console/Panes: the
+        // tab's own display title.
+        val labels = disambiguatedActiveSessionLabels(tabs)
+        val rows = tabs.map { tab ->
             io.github.tabssh.ui.adapters.ActiveSessionAdapter.Row(
                 tabId = tab.tabId,
-                title = label,
+                title = labels.getValue(tab.tabId),
                 state = tab.stateFlow().value
             )
         }
