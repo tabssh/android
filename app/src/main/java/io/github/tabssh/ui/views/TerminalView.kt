@@ -570,6 +570,7 @@ class TerminalView @JvmOverloads constructor(
             terminalEmulator?.removeListener(listener)
         }
         terminalListener = null
+        resetPerTabTransientState()
 
         terminalEmulator = emulator
         terminalBuffer = emulator.getBuffer()
@@ -613,6 +614,7 @@ class TerminalView @JvmOverloads constructor(
             Logger.d("TerminalView", "Removed previously registered bridge listener")
         }
         currentBridgeListener = null
+        resetPerTabTransientState()
 
         // Set up Termux bridge
         termuxBridge = bridge
@@ -970,6 +972,34 @@ class TerminalView @JvmOverloads constructor(
 
     /** Arm/clear the PREFIX visual-disarm latch (bytes already sent by the caller). */
     fun setPendingPrefix(bytes: ByteArray?) { pendingPrefixArmed = bytes != null }
+
+    /**
+     * Clear every per-tab transient latch (PREFIX armed state + its consumed
+     * callback, and the bar's one-shot CTL/ALT/SFT modifiers) before this
+     * view is (re)bound to a terminal session.
+     *
+     * [TerminalView] instances are recycled by ViewPager2's RecyclerView —
+     * both [attachTerminalEmulator] overloads rebind the SAME instance to a
+     * different tab's session as the user swipes past the offscreen page
+     * limit. Without this reset, a PREFIX latch armed on tab A (never
+     * consumed because the user swiped away before pressing another key)
+     * stayed on this instance's [pendingPrefixArmed]/[onPrefixConsumed], so
+     * the very next keystroke on whichever unrelated tab this view got
+     * rebound to fired the stale tab-A [onPrefixConsumed] closure — and the
+     * Activity's own `prefixArmed` disarm in `syncActiveTabUi()` only
+     * touches `getActiveTerminalView()`'s CURRENT resolution, not the
+     * specific instance that was actually armed, so it does not reliably
+     * reach the recycled view either. The same leak applied to the bar's
+     * sticky CTL/ALT/SFT modifiers.
+     */
+    private fun resetPerTabTransientState() {
+        pendingPrefixArmed = false
+        onPrefixConsumed = null
+        pendingCtrl = false
+        pendingAlt = false
+        pendingShift = false
+        onModifierConsumed = null
+    }
 
     /**
      * If the PREFIX visual latch is armed, clear it and notify
