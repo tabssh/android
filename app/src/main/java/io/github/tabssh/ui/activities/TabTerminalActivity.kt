@@ -4981,7 +4981,14 @@ class TabTerminalActivity : TabSSHActivity() {
         // depending on tab type and console display mode — VncView and
         // SpiceView both implement onCreateInputConnection so the IME
         // attaches to them exactly like it does to a TerminalView.
-        val inputView = getActiveInputView() ?: return
+        val inputView = getActiveInputView() ?: run {
+            // No resolvable input view (e.g. a Panes tab whose focused pane
+            // hasn't finished binding yet) — log it instead of silently
+            // no-oping, so a debug log actually shows why a tap on
+            // "Toggle System Keyboard" appeared to do nothing.
+            Logger.d("TabTerminalActivity", "toggleKeyboard: no active input view resolved — no-op")
+            return
+        }
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE)
             as InputMethodManager
 

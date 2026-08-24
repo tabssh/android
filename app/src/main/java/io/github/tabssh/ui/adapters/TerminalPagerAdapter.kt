@@ -780,13 +780,22 @@ class TerminalPagerAdapter(
             return paneTerminalViews[tab.focusedPaneIndex.value]
         }
 
-        /** Called from [onViewRecycled] — drop the collectors so a recycled page can't drive a stale tab. */
+        /**
+         * Called from [onViewRecycled] — drop the collectors so a recycled
+         * page can't drive a stale tab, and clear [paneTerminalViews] so a
+         * rebind never hands [focusedTerminalView] a `TerminalView` that was
+         * built for a since-recycled page (and may no longer be attached to
+         * a window, silently breaking [toggleKeyboard]'s `showSoftInput`
+         * call). [rebuildTiles] repopulates the map from scratch via
+         * [terminalViewFor] on the next [bind].
+         */
         fun unbind() {
             focusJob?.cancel()
             focusJob = null
             entriesJob?.cancel()
             entriesJob = null
             boundPanesTab = null
+            paneTerminalViews.clear()
         }
     }
 }
