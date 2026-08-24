@@ -4744,14 +4744,34 @@ class TabTerminalActivity : TabSSHActivity() {
 
     /**
      * Get the active tab's [ConsoleTab], or null when the active tab is not
-     * a console tab. Used by [handleCustomKeyPress] to decide whether a bar
-     * key must be routed to the RFB/SPICE session instead of a TerminalView.
+     * a console tab. Kept for call sites that specifically need console-only
+     * state (e.g. multiplexer prefix key); graphical-mode gating must go
+     * through [activeGraphicalDisplayMode] instead, since that also covers
+     * standalone [Tab.Vnc] tabs, which this narrower helper never matches.
      */
     private fun getActiveConsoleTab(): ConsoleTab? =
         (tabManager.getActiveTabSealed() as? Tab.Console)?.consoleTab
 
     /**
-     * Route a custom-keyboard-bar key press to a console tab's graphical
+     * The active tab's graphical display mode, or null when the active tab
+     * has a text buffer (TerminalView) instead — either an SSH/Telnet/Mosh/
+     * Panes tab, or a console tab still in TEXT mode. A standalone
+     * [Tab.Vnc] tab is always RFB. Used by [showClipboardMenu],
+     * [pasteFromClipboard], and [handleCustomKeyPress] to decide whether
+     * input must be routed to the RFB/SPICE session instead of a
+     * TerminalView — checking [Tab.Vnc] here (which [getActiveConsoleTab]
+     * never matches) is the fix for standalone VNC tabs wrongly falling
+     * through to "No active session" for paste/copy/custom-keyboard input.
+     */
+    private fun activeGraphicalDisplayMode(): ConsoleDisplayMode? =
+        when (val tab = tabManager.getActiveTabSealed()) {
+            is Tab.Vnc -> ConsoleDisplayMode.RFB
+            is Tab.Console -> tab.consoleTab.displayMode.value.takeIf { tab.consoleTab.isGraphicalMode.value }
+            else -> null
+        }
+
+    /**
+     * Route a custom-keyboard-bar key press to the active tab's graphical
      * (RFB or SPICE) session. Named keys ([ConsoleKeyMapper.RFB_KEYSYM_BY_ID] /
      * [ConsoleKeyMapper.SPICE_SCANCODE_BY_ID]) are sent as a press+release
      * pair through the resolved [VncView] / [SpiceView]; single printable
@@ -4760,8 +4780,11 @@ class TabTerminalActivity : TabSSHActivity() {
      * press/release, modifier-up, then is cleared (along with the bar's
      * highlight) — mirroring TerminalView's pending-modifier contract. Keys
      * with no console mapping are logged at debug and dropped; never crash.
+     * [mode] is the resolved display mode ([activeGraphicalDisplayMode]),
+     * not a [ConsoleTab] — this also serves standalone [Tab.Vnc] tabs,
+     * which are always RFB and have no [ConsoleTab] of their own.
      */
-    private fun sendConsoleKeyPress(consoleTab: ConsoleTab, key: KeyboardKey) {
+    private fun sendConsoleKeyPress(mode: ConsoleDisplayMode, key: KeyboardKey) {
         val inputView = getActiveInputView()
         val modifier = consolePendingModifier
         // When LOCKED, keep the modifier armed for the next console key; otherwise
@@ -4771,7 +4794,7 @@ class TabTerminalActivity : TabSSHActivity() {
             if (modifier != null) binding.multiRowKeyboard.clearModifier()
         }
 
-        when (consoleTab.displayMode.value) {
+        when (mode) {
             ConsoleDisplayMode.RFB -> {
                 val vncView = inputView as? VncView
                 if (vncView == null) {
@@ -5040,7 +5063,7 @@ class TabTerminalActivity : TabSSHActivity() {
         // against a TerminalView, so they're dropped from the menu entirely
         // rather than shown disabled. Paste still works everywhere: it goes
         // through the console text-input path on a graphical console tab.
-        val consoleGraphical = getActiveConsoleTab()?.isGraphicalMode?.value == true
+        val consoleGraphical = activeGraphicalDisplayMode() != null
         val options = if (consoleGraphical) {
             arrayOf(getString(R.string.terminal_clipboard_menu_paste))
         } else {
@@ -5082,8 +5105,7 @@ class TabTerminalActivity : TabSSHActivity() {
             Toast.makeText(this, getString(R.string.terminal_clipboard_empty), Toast.LENGTH_SHORT).show()
             return
         }
-        val consoleTab = getActiveConsoleTab()
-        if (consoleTab != null && consoleTab.isGraphicalMode.value) {
+        if (activeGraphicalDisplayMode() != null) {
             when (val inputView = getActiveInputView()) {
                 is VncView -> inputView.onTextInput?.invoke(text)
                 is SpiceView -> inputView.onTextInput?.invoke(text)
@@ -5795,18 +5817,17 @@ class TabTerminalActivity : TabSSHActivity() {
         // of an in-flight composition and silently drop it.
         getActiveTerminalView()?.flushPendingComposing()
 
-        // Console tabs in RFB/SPICE mode have no TerminalView — everything
-        // except the bar's own activity-level actions (clipboard menu,
-        // terminal menu, keyboard toggle, recording, multiplexer prefix —
-        // none of which are terminal-text-input keys) must be sent to the
-        // graphical session instead of falling through to the TerminalView
-        // path below. Text-mode console tabs (getActiveConsoleTab() with
-        // isGraphicalMode == false) fall through unchanged, same as SSH tabs.
-        val consoleTab = getActiveConsoleTab()
-        if (consoleTab != null && consoleTab.isGraphicalMode.value &&
-            key.id !in CONSOLE_BAR_ACTION_KEY_IDS
-        ) {
-            sendConsoleKeyPress(consoleTab, key)
+        // Graphical tabs (a standalone VNC tab, or a console tab in RFB/
+        // SPICE mode) have no TerminalView — everything except the bar's
+        // own activity-level actions (clipboard menu, terminal menu,
+        // keyboard toggle, recording, multiplexer prefix — none of which
+        // are terminal-text-input keys) must be sent to the graphical
+        // session instead of falling through to the TerminalView path
+        // below. Text-mode console tabs (activeGraphicalDisplayMode() ==
+        // null) fall through unchanged, same as SSH/Telnet/Mosh/Panes tabs.
+        val graphicalMode = activeGraphicalDisplayMode()
+        if (graphicalMode != null && key.id !in CONSOLE_BAR_ACTION_KEY_IDS) {
+            sendConsoleKeyPress(graphicalMode, key)
             return
         }
 
