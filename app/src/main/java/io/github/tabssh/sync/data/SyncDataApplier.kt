@@ -224,7 +224,10 @@ class SyncDataApplier {
                 data.snippets.forEach { s ->
                     try {
                         if (suppressed(TombstoneRecorder.SNIPPET, s.id, s.modifiedAt)) return@forEach
-                        database.snippetDao().insertSnippet(s)
+                        // usageCount is local-only — never synced. Preserve the
+                        // existing local value across this whole-row REPLACE.
+                        val localUsageCount = database.snippetDao().getSnippetById(s.id)?.usageCount ?: 0
+                        database.snippetDao().insertSnippet(s.copy(usageCount = localUsageCount))
                         appliedCount++
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply snippet: ${s.name}", e)
@@ -250,7 +253,10 @@ class SyncDataApplier {
                 data.hypervisors.forEach { h ->
                     try {
                         if (suppressed(TombstoneRecorder.HYPERVISOR, TombstoneRecorder.naturalKey(h), h.modifiedAt)) return@forEach
-                        database.hypervisorDao().upsertForSync(h)
+                        // connectionCount is local-only — never synced. Preserve
+                        // the existing local value across this whole-row REPLACE.
+                        val localConnectionCount = database.hypervisorDao().getById(h.id)?.connectionCount ?: 0
+                        database.hypervisorDao().upsertForSync(h.copy(connectionCount = localConnectionCount))
                         appliedCount++
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply hypervisor: ${h.name}", e)
@@ -274,7 +280,10 @@ class SyncDataApplier {
                 data.macros.forEach { m ->
                     try {
                         if (suppressed(TombstoneRecorder.MACRO, m.id, m.modifiedAt)) return@forEach
-                        database.macroDao().insertMacro(m)
+                        // usageCount is local-only — never synced. Preserve the
+                        // existing local value across this whole-row REPLACE.
+                        val localUsageCount = database.macroDao().getMacroById(m.id)?.usageCount ?: 0
+                        database.macroDao().insertMacro(m.copy(usageCount = localUsageCount))
                         appliedCount++
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply macro: ${m.id}", e)
@@ -319,7 +328,10 @@ class SyncDataApplier {
                 data.vncHosts.forEach { h ->
                     try {
                         if (suppressed(TombstoneRecorder.VNC_HOST, h.id, h.modifiedAt)) return@forEach
-                        database.vncHostDao().insert(h)
+                        // connectionCount is local-only — never synced. Preserve
+                        // the existing local value across this whole-row REPLACE.
+                        val localConnectionCount = database.vncHostDao().getById(h.id)?.connectionCount ?: 0
+                        database.vncHostDao().insert(h.copy(connectionCount = localConnectionCount))
                         appliedCount++
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply VNC host: ${h.name}", e)
@@ -345,7 +357,16 @@ class SyncDataApplier {
                 data.cloudAccounts.forEach { ca ->
                     try {
                         if (suppressed(TombstoneRecorder.CLOUD_ACCOUNT, ca.id, ca.modifiedAt)) return@forEach
-                        database.cloudAccountDao().upsert(ca)
+                        // connectionCount/lastConnected are local-only — never
+                        // synced. Preserve the existing local values across
+                        // this whole-row REPLACE.
+                        val localCa = database.cloudAccountDao().getById(ca.id)
+                        database.cloudAccountDao().upsert(
+                            ca.copy(
+                                connectionCount = localCa?.connectionCount ?: 0,
+                                lastConnected = localCa?.lastConnected ?: 0
+                            )
+                        )
                         appliedCount++
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply cloud account: ${ca.name}", e)
@@ -398,9 +419,12 @@ class SyncDataApplier {
                 data.containerHosts.forEach { h ->
                     try {
                         if (suppressed(TombstoneRecorder.CONTAINER_HOST, TombstoneRecorder.naturalKey(h), h.modifiedAt)) return@forEach
+                        // connectionCount is local-only — never synced. Preserve
+                        // the existing local value across this whole-row apply.
                         val existing = database.containerHostDao().getById(h.id)
-                        if (existing == null) database.containerHostDao().insert(h)
-                        else database.containerHostDao().update(h)
+                        val incoming = h.copy(connectionCount = existing?.connectionCount ?: 0)
+                        if (existing == null) database.containerHostDao().insert(incoming)
+                        else database.containerHostDao().update(incoming)
                         appliedCount++
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply container host: ${h.name}", e)

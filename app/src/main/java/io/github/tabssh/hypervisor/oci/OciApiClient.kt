@@ -295,8 +295,16 @@ class OciApiClient(
         val url = "$iaasBaseUrl/instances/${requireValidOcid(instanceOcid)}".toHttpUrl().newBuilder()
             .addQueryParameter("action", action.wireValue)
             .build()
-        // Empty JSON body — OCI requires Content-Length even for actionless POSTs.
-        val body = "{}".toRequestBody("application/json".toMediaTypeOrNull())
+        // OCI's InstanceAction API takes NO request body — sending the literal
+        // "{}" (a 2-byte JSON payload) was previously rejected by OCI's
+        // request validator with HTTP 400, since this endpoint declares no
+        // request-body schema at all. A genuinely zero-length body still
+        // gets a correct Content-Length/x-content-sha256 signed (OciSigner
+        // triggers its body-digest triplet purely off the POST/PUT/PATCH
+        // method, computed over whatever bytes are actually present — an
+        // empty ByteArray hashes/sizes correctly), matching what OCI expects
+        // for a body-less POST action.
+        val body = "".toRequestBody("application/json".toMediaTypeOrNull())
         val request = Request.Builder().url(url).post(body).build()
         iaasClient.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) {

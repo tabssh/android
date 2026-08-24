@@ -14,7 +14,7 @@ import io.github.tabssh.utils.logging.Logger
 /**
  * Main Room database for TabSSH.
  *
- * Current version: 21.
+ * Current version: 24.
  * Versions 1 and 2 never shipped to real users, so v3 is the effective schema
  * baseline and no fallback path exists for them. Every version bump from v3
  * onward MUST register a real Migration object via addMigrations(); destructive
@@ -57,7 +57,7 @@ import io.github.tabssh.utils.logging.Logger
         PaneGroup::class,
         ConnectableHost::class
     ],
-    version = 23,
+    version = 24,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -1131,6 +1131,49 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v23 -> v24: connection/usage counters become local-only.
+         *
+         * `connections.connection_count` was fixed to a max()-merge in v22->23
+         * but is still architecturally wrong for a per-device usage stat — it
+         * keeps syncing at all, and was separately found to be incremented
+         * TWICE per SSH connect (TabTerminalActivity's direct call plus
+         * SSHConnectionService's onConnectionEstablished listener call). Both
+         * bugs are now fixed in code; this migration resets the already-
+         * double-counted values to 0 rather than trying to reconstruct a real
+         * count from corrupted data.
+         *
+         * The same "track locally, never sync" treatment is extended to the
+         * three other connect-tracked entities that had a `last_connected`
+         * column but no `connection_count` at all — vnc_hosts, hypervisors
+         * (per-VM), and container_hosts each gain the column here, defaulted
+         * to 0. cloud_accounts gains BOTH `connection_count` and
+         * `last_connected` — it previously tracked neither at the account
+         * level.
+         */
+        val MIGRATION_23_24 = object : Migration(23, 24) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "UPDATE `connections` SET `connection_count` = 0"
+                )
+                db.execSQL(
+                    "ALTER TABLE `vnc_hosts` ADD COLUMN `connection_count` INTEGER NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "ALTER TABLE `hypervisors` ADD COLUMN `connection_count` INTEGER NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "ALTER TABLE `container_hosts` ADD COLUMN `connection_count` INTEGER NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "ALTER TABLE `cloud_accounts` ADD COLUMN `connection_count` INTEGER NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "ALTER TABLE `cloud_accounts` ADD COLUMN `last_connected` INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -1140,7 +1183,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24)
                 .build()
                 INSTANCE = instance
                 instance

@@ -330,6 +330,13 @@ class CloudAccountManagerActivity : TabSSHActivity() {
                 }
             }
 
+            // Tracked at tap-Connect, not a confirmed SSH round trip — cloud
+            // connects are a fire-and-forget Intent launch with no success
+            // callback available. Local-only usage stat, never synced.
+            withContext(Dispatchers.IO) {
+                app.database.cloudAccountDao().updateLastConnected(acct.id)
+            }
+
             startActivity(
                 TabTerminalActivity.createIntent(this@CloudAccountManagerActivity, tempProfile, autoConnect = true)
             )

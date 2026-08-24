@@ -87,10 +87,24 @@ class ConnectionAdapter(
                     append(" • ${getAuthTypeDisplay(connection.getAuthTypeEnum())}")
                 }
 
-                // Show connection count if > 0
+                // Show connection count + last-connected relative time if > 0.
+                // Reuses this single existing TextView rather than adding a
+                // new layout view for the relative-time subtitle.
                 if (connection.connectionCount > 0) {
                     textConnectionCount.visibility = android.view.View.VISIBLE
-                    textConnectionCount.text = "Connected ${connection.connectionCount} times"
+                    textConnectionCount.text = buildString {
+                        append("Connected ${connection.connectionCount} times")
+                        if (connection.lastConnected > 0) {
+                            append(" • ")
+                            append(
+                                android.text.format.DateUtils.getRelativeTimeSpanString(
+                                    connection.lastConnected,
+                                    System.currentTimeMillis(),
+                                    android.text.format.DateUtils.MINUTE_IN_MILLIS
+                                )
+                            )
+                        }
+                    }
                 } else {
                     textConnectionCount.visibility = android.view.View.GONE
                 }

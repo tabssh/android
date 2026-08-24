@@ -627,16 +627,11 @@ class SSHConnectionService : Service() {
             override fun onConnectionEstablished(profileId: String) {
                 updateConnectionCount()
                 disconnectedProfiles.remove(profileId)
-                // Increment the per-profile connection count and last-connected timestamp.
-                // updateLastConnected uses a single atomic SQL UPDATE (count+1) so there
-                // is no read-modify-write race under concurrent sessions.
-                serviceScope.launch(Dispatchers.IO) {
-                    try {
-                        app.database.connectionDao().updateLastConnected(profileId)
-                    } catch (e: Exception) {
-                        Logger.w(TAG, "Failed to update connection stats for $profileId", e)
-                    }
-                }
+                // Connection-count/last-connected tracking is owned solely by
+                // TabTerminalActivity's own direct updateLastConnected calls
+                // (SSH and Telnet connect paths). This listener previously
+                // made a second, duplicate call for every SSH connect, double-
+                // incrementing connection_count for every session.
                 serviceScope.launch(Dispatchers.Main) {
                     val conn = app.sshSessionManager.getConnection(profileId)
                     if (conn != null) {

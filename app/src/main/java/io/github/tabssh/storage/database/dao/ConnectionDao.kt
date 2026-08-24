@@ -31,8 +31,13 @@ interface ConnectionDao {
     @Query("SELECT * FROM connections ORDER BY last_connected DESC LIMIT :limit")
     suspend fun getRecentConnections(limit: Int = 10): List<ConnectionProfile>
 
-    @Query("SELECT * FROM connections WHERE connection_count > 0 ORDER BY connection_count DESC, last_connected DESC LIMIT :limit")
-    suspend fun getFrequentlyUsedConnections(limit: Int = 10): List<ConnectionProfile>
+    /**
+     * All candidates for the Frequent list, unordered — SQLite has no native
+     * exponential function, so the count x recency-decay hybrid score is
+     * computed in Kotlin (see FrequentConnectionsFragment) rather than here.
+     */
+    @Query("SELECT * FROM connections WHERE connection_count > 0")
+    suspend fun getFrequentlyUsedConnectionCandidates(): List<ConnectionProfile>
     
     @Query("SELECT * FROM connections WHERE group_id IS NULL ORDER BY name ASC")
     fun getUngroupedConnections(): Flow<List<ConnectionProfile>>

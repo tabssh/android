@@ -15,6 +15,7 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.ui.activities.ConnectionEditActivity
 import io.github.tabssh.ui.adapters.ConnectionAdapter
+import io.github.tabssh.utils.FrequencyScore
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -137,9 +138,10 @@ class FrequentConnectionsFragment : Fragment() {
         // instance survives (viewpager off-screen, nav back-stack).
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // Get top 10 connections by hybrid score
+                // Get top 10 connections by hybrid score (count x recency decay)
                 val connections = withContext(Dispatchers.IO) {
-                    app.database.connectionDao().getFrequentlyUsedConnections(10)
+                    val candidates = app.database.connectionDao().getFrequentlyUsedConnectionCandidates()
+                    FrequencyScore.rank(candidates, 10)
                 }
 
                 if (connections.isEmpty()) {

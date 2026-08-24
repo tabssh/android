@@ -31,7 +31,7 @@ interface VncHostDao {
     @Query("DELETE FROM vnc_hosts WHERE id = :id")
     suspend fun deleteById(id: String)
 
-    @Query("UPDATE vnc_hosts SET last_connected = :timestamp WHERE id = :id")
+    @Query("UPDATE vnc_hosts SET last_connected = :timestamp, connection_count = connection_count + 1 WHERE id = :id")
     suspend fun updateLastConnected(id: String, timestamp: Long)
 
     @Query("SELECT COUNT(*) FROM vnc_hosts")

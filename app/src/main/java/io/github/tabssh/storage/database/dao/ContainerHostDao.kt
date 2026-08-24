@@ -28,7 +28,7 @@ interface ContainerHostDao {
     @Query("DELETE FROM container_hosts WHERE id = :id")
     suspend fun deleteById(id: Long)
 
-    @Query("UPDATE container_hosts SET last_connected = :timestamp WHERE id = :id")
+    @Query("UPDATE container_hosts SET last_connected = :timestamp, connection_count = connection_count + 1 WHERE id = :id")
     suspend fun updateLastConnected(id: Long, timestamp: Long)
 
     @Query("UPDATE container_hosts SET last_update_check = :timestamp WHERE id = :id")

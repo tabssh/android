@@ -47,6 +47,14 @@ data class CloudAccount(
     @ColumnInfo(name = "last_count")
     val lastCount: Int = 0,
 
+    /** Local-only usage counter — never synced across devices. */
+    @ColumnInfo(name = "connection_count", defaultValue = "0")
+    val connectionCount: Int = 0,
+
+    /** Millis timestamp of the last tap-Connect for this account. Local-only. */
+    @ColumnInfo(name = "last_connected", defaultValue = "0")
+    val lastConnected: Long = 0,
+
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
 

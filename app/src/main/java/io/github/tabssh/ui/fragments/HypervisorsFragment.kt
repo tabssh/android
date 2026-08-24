@@ -137,9 +137,20 @@ class HypervisorsFragment : Fragment() {
                     // Check if fragment is still attached before updating UI
                     if (!isAdded) return@collect
 
+                    // Diff against the fresh Flow-emitted `list`, not the
+                    // Fragment's own `hypervisors` field — that field is the
+                    // exact same List instance the adapter stores internally
+                    // as its diff base. Clearing/re-filling it in place before
+                    // calling updateList() made the adapter's "old" and "new"
+                    // lists literally the same object by the time DiffUtil ran,
+                    // so it always computed zero differences and never issued
+                    // the notify calls needed to rebind stale ViewHolders —
+                    // rows kept showing a previous item's name/type/host
+                    // (looking like "wrong name" or duplicate entries) even
+                    // though the underlying data had changed.
+                    adapter.updateList(list)
                     hypervisors.clear()
                     hypervisors.addAll(list)
-                    adapter.updateList(hypervisors)
 
                     // Update UI visibility
                     if (hypervisors.isEmpty()) {

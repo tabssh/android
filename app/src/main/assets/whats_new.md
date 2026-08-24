@@ -1,5 +1,73 @@
 # What's New
 
+## Wave 69 — Panes, Stats moves to Insights, connection stats overhaul
+
+### Panes: tiled multi-terminal tabs
+
+- **Up to 6 SSH/Telnet/Mosh sessions in one tab, tiled in a resizable
+  grid** — build a named group of hosts once, launch it as a single entry
+  in the terminal tab strip, and click any pane to focus it. The custom
+  keyboard bar (including the PRE key) always targets whichever pane is
+  focused. Duplicate hosts and a per-window working directory are both
+  supported, and each pane can be closed individually without tearing
+  down the whole group. Below a narrow screen width the grid auto-stacks
+  into a scrollable single column.
+- **Closing a Panes tab asks Disconnect All or Keep Running in
+  Background** — the latter detaches the tab from the strip but leaves
+  the sessions alive, so relaunching the saved group reattaches instead
+  of reconnecting from scratch.
+- Saved pane groups back up and sync like any other saved item, with
+  their own independent sync toggle.
+
+### Stats moved to the nav drawer, under Insights
+
+- **The Stats tab is no longer a top-level tab** — it now lives in the
+  nav drawer under a new "Insights" entry, freeing up space in the main
+  tab bar.
+
+### Connection stats overhaul
+
+- **"Last connected" is now visible, not just for screen readers** — the
+  existing "Connected N times" line under a host now also shows a
+  relative time, e.g. "Connected 42 times • 2h ago".
+- **The Frequent list now uses a real hybrid score** — count and recency
+  are both weighted (an exponential recency decay on top of connection
+  count) instead of a flat "most-used first" sort that gave zero weight
+  to how recently a host was actually used.
+- **Connection counts are now tracked per device and never overwritten
+  by sync** — usage counters (host connection counts, macro/snippet
+  usage counts, theme usage counts) are local stats about this device,
+  not shared state, so syncing another device no longer resets or
+  overwrites them.
+- **VNC hosts, Cloud Account instances, Hypervisor VMs, and Container
+  hosts now all track connection count and last-connected**, matching
+  what SSH/Telnet/Mosh hosts already had — visible the same way, and
+  also never synced.
+- **Fixed: every SSH connect was incrementing the connection count
+  twice** — a duplicate increment fired from both the session-established
+  listener and the tab's own connect path.
+
+### Fixed
+
+- **Pasting, the clipboard menu, and the custom keyboard bar didn't work
+  on a standalone VNC tab** — they were gated on a check that only
+  matched console (multiplexer) tabs, so a plain VNC tab always reported
+  "No active session" for those actions.
+- **The PRE key's visual state could bleed across terminal tabs** when
+  swiping between them.
+- **A rare intermittent character drop/reorder near the cursor** when
+  recalling terminal history.
+- **Several Panes-specific bugs**: rendering glitches, keyboard routing,
+  split direction, duplicate-host handling, and per-window close all
+  fixed after the initial release.
+- **A ~2 second delay opening the Panes add-member picker.**
+- **A Room migration crash on some upgrade paths**, plus the app now
+  asks to re-enter credentials on an auth failure instead of failing
+  silently.
+- **The default remote path for container compose/run configs** changed
+  to `/srv/$USER/{compose,docker}` for a cleaner, more predictable
+  layout.
+
 ## Wave 68 — Auth tab restructured, Frequent gets its own menu
 
 ### Identities is now Auth

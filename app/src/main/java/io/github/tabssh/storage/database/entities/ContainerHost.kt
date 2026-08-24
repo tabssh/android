@@ -123,6 +123,10 @@ data class ContainerHost(
     @ColumnInfo(name = "last_connected")
     val lastConnected: Long = 0,
 
+    /** Local-only usage counter — never synced across devices. */
+    @ColumnInfo(name = "connection_count", defaultValue = "0")
+    val connectionCount: Int = 0,
+
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
 

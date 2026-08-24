@@ -165,19 +165,18 @@ class MergeEngine {
     /**
      * Merge connection fields without conflicts.
      *
-     * connectionCount takes max(local, remote), not a sum — summing is not
-     * idempotent across repeated syncs between the same two devices (each
-     * pass would re-add counts already folded in by the previous pass,
-     * doubling the total every cycle and running away toward billions over
-     * time). max() converges: once both sides have seen the higher count,
-     * further merges are no-ops.
+     * connectionCount is local-only — it never syncs. It's a per-device usage
+     * stat, not shared state, and previously took max(local, remote) which
+     * was still wrong: every SSH connect was independently incrementing it
+     * on each device, so max() just kept whichever device had connected more
+     * often instead of reflecting either device's true count.
      */
     private fun mergeConnectionFields(
         local: ConnectionProfile,
         remote: ConnectionProfile
     ): ConnectionProfile {
         return local.copy(
-            connectionCount = maxOf(local.connectionCount, remote.connectionCount),
+            connectionCount = local.connectionCount,
             lastConnected = maxOf(local.lastConnected, remote.lastConnected),
             modifiedAt = maxOf(local.modifiedAt, remote.modifiedAt),
             syncVersion = maxOf(local.syncVersion, remote.syncVersion)
@@ -335,10 +334,11 @@ class MergeEngine {
     /**
      * Merge single theme.
      *
-     * usageCount takes max(local, remote), not a sum — same non-idempotent
-     * runaway-growth bug as ConnectionProfile.connectionCount (see
-     * TabSSHDatabase MIGRATION_22_23): summing re-adds counts already
-     * folded in by a previous sync pass, doubling on every repeat cycle.
+     * usageCount is local-only — it never syncs, same treatment as
+     * ConnectionProfile.connectionCount (see TabSSHDatabase MIGRATION_23_24).
+     * The base==null branch can pick remote wholesale as the winner, so
+     * usageCount is force-restored to the local value afterward in every
+     * branch, not just the local.copy() path.
      */
     private fun mergeTheme(
         base: ThemeDefinition?,
@@ -347,13 +347,14 @@ class MergeEngine {
         conflicts: MutableList<Conflict>
     ): ThemeDefinition {
         if (base == null) {
-            return if (local.modifiedAt > remote.modifiedAt) local else remote
+            val winner = if (local.modifiedAt > remote.modifiedAt) local else remote
+            return winner.copy(usageCount = local.usageCount)
         }
 
         if (local == remote) return local
 
         return local.copy(
-            usageCount = maxOf(local.usageCount, remote.usageCount),
+            usageCount = local.usageCount,
             lastModified = maxOf(local.lastModified, remote.lastModified),
             modifiedAt = maxOf(local.modifiedAt, remote.modifiedAt)
         )

@@ -38,6 +38,7 @@ enterprise security, hypervisor management, and cloud provider integration.
 - 🌐 **IPv4 / IPv6 selection** — Per-host auto/ipv4/ipv6 with fallback toast
 - 🔗 **ProxyJump** — Multi-hop connections through bastion hosts
 - ⏺️ **Session Recording** — Capture and replay raw terminal sessions
+- 🪟 **Panes** — Up to 6 SSH/Telnet/Mosh sessions tiled in a resizable grid inside one terminal tab; tap a pane to focus it, close individually or as a group (Disconnect All / Keep Running in Background), auto-stacks to a single column on narrow screens
 
 ### Security
 
@@ -79,7 +80,7 @@ enterprise security, hypervisor management, and cloud provider integration.
 - 🏠 **Home Screen Widgets** — Quick-connect from launcher
 - 📂 **Connection Groups** — Folders with expand/collapse; group badges in search
 - 🔍 **Search & Sort** — Real-time search, 8 sort options
-- 📊 **Connection Statistics** — Last connected, usage count, per-host logs
+- 📊 **Connection Statistics** — Visible "Connected N times • 2h ago" subtitle with relative last-connected time; connection counts are local-only per-device stats and never overwritten by sync; the Frequent list ranks hosts by a hybrid of usage count and recency decay; VNC hosts, Cloud Account instances, Hypervisor VMs, and Container hosts all track connection count and last-connected too, not just SSH/Telnet/Mosh hosts
 - 📝 **Snippets** — Quick command library with `{?name:default|hint}` variable placeholders
 - ⏺️ **Macros** — Capture and replay raw byte sequences (escape codes, modifier-composed Ctrl/Alt)
 - 🎮 **Automation** — Tasker integration, intent-based actions, deep links
@@ -239,7 +240,7 @@ Cloud          → Cloud Accounts → tap account → view live instances
 | Hypervisor backends | 4 (Proxmox, XCP-ng, VMware, QEMU/libvirt) |
 | Container engines | 4 (Docker, Incus, Podman, LXC/LXD) |
 | Cloud providers | 8 (DO, Hetzner, Linode, Vultr, AWS, GCP, Azure, OCI) |
-| Room DB version | 16 (13 forward migrations from v2) |
+| Room DB version | 24 (21 forward migrations from v2) |
 | Trackers | 2 (Domain Tracker, VPS Hosting Tracker) |
 
 ---

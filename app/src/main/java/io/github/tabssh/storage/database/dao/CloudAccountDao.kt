@@ -32,4 +32,7 @@ interface CloudAccountDao {
 
     @Query("DELETE FROM cloud_accounts WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    @Query("UPDATE cloud_accounts SET last_connected = :timestamp, connection_count = connection_count + 1 WHERE id = :id")
+    suspend fun updateLastConnected(id: String, timestamp: Long = System.currentTimeMillis())
 }

@@ -3956,7 +3956,10 @@ class TabTerminalActivity : TabSSHActivity() {
         }
         lifecycleScope.launch {
             val recent = try {
-                withContext(Dispatchers.IO) { app.database.connectionDao().getFrequentlyUsedConnections(20) }
+                withContext(Dispatchers.IO) {
+                    val candidates = app.database.connectionDao().getFrequentlyUsedConnectionCandidates()
+                    io.github.tabssh.utils.FrequencyScore.rank(candidates, 20)
+                }
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Recent fetch failed for split picker", e)
                 emptyList()
@@ -4920,7 +4923,8 @@ class TabTerminalActivity : TabSSHActivity() {
         lifecycleScope.launch {
             try {
                 val recent = withContext(Dispatchers.IO) {
-                    app.database.connectionDao().getFrequentlyUsedConnections(20)
+                    val candidates = app.database.connectionDao().getFrequentlyUsedConnectionCandidates()
+                    io.github.tabssh.utils.FrequencyScore.rank(candidates, 20)
                 }
                 runOnUiThread {
                     recent.forEach { profile ->

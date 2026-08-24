@@ -152,7 +152,14 @@ class TerminalPagerAdapter(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
-                PanesViewHolder(gridView, fontSize, fontValue, reverseScrollDirection, lineSpacingPercent)
+                PanesViewHolder(
+                    gridView,
+                    fontSize,
+                    fontValue,
+                    reverseScrollDirection,
+                    lineSpacingPercent,
+                    onContextMenuRequested
+                )
             }
             VIEW_TYPE_VNC -> {
                 val vncView = VncView(parent.context)
@@ -674,7 +681,13 @@ class TerminalPagerAdapter(
         private val fontSize: Int,
         private val fontValue: String,
         private val reverseScrollDirection: Boolean,
-        private val lineSpacingPercent: Int
+        private val lineSpacingPercent: Int,
+        // Wired to showTerminalMenu() by TabTerminalActivity, same as every
+        // other ViewHolder type (Ssh/Vnc/Console/Split). Previously omitted
+        // here, so long-pressing a pane opened nothing — the bottom-sheet
+        // terminal menu (tab list, Toggle System Keyboard, Close Current
+        // Tab, etc.) was unreachable from inside a Panes tile.
+        private val onContextMenuRequested: ((Float, Float) -> Unit)? = null
     ) : RecyclerView.ViewHolder(gridView) {
 
         private var boundPanesTab: PanesTab? = null
@@ -717,6 +730,18 @@ class TerminalPagerAdapter(
                     setLineSpacingPercent(this@PanesViewHolder.lineSpacingPercent)
                     setFont(fontValue)
                     setFontSize(fontSize)
+                    // This TerminalView's own tap gesture (see onPaneTapped's
+                    // doc comment) consumes every touch, so PanesGridView.Tile's
+                    // OnClickListener never fires — route pane-focus selection
+                    // through this callback instead so a tap both selects the
+                    // pane (updating the highlighted border) and no longer
+                    // toggles the keyboard as an uncoordinated side effect.
+                    onPaneTapped = { boundPanesTab?.setFocusedPane(index) }
+                    // Long-press opens the same bottom-sheet terminal menu
+                    // (tab list, Toggle System Keyboard, Close Current Tab,
+                    // etc.) every other tab type already gets — see the
+                    // PanesViewHolder constructor doc comment.
+                    onContextMenuRequested = { _, _ -> this@PanesViewHolder.onContextMenuRequested?.invoke(0f, 0f) }
                 }
             }
 
