@@ -48,6 +48,31 @@ fun Tab.shortTitle(): String = when (this) {
 }
 
 /**
+ * Connection-identity label shared by any full-width tab list (the "OPEN
+ * TABS" long-press menu, the Active sub-tab's session strip/"see all"
+ * dialog). Unlike [shortTitle], SSH never falls back to the remote's OSC
+ * 0/2 terminal title here — a shell/mosh-set title (e.g. mosh's own
+ * "[mosh]" placeholder before the shell prompt overwrites it) is not the
+ * connection, and showing it in a list meant to identify *which host* a
+ * tab belongs to is actively misleading. SSH instead shows the saved
+ * profile name, or `user@host` when the profile has no name (or the name
+ * duplicates it). VNC/Console/Panes have no OSC-title ambiguity, so they
+ * keep using their own `getDisplayTitle()`.
+ */
+fun Tab.connectionDisplayName(): String = when (this) {
+    is Tab.Ssh -> {
+        val profileName = sshTab.profile.name.trim()
+        val user = sshTab.profile.username
+        val host = sshTab.profile.host
+        val userHost = if (user.isNotBlank() && host.isNotBlank()) "$user@$host" else host
+        if (profileName.isNotBlank() && profileName != userHost) profileName else userHost
+    }
+    is Tab.Vnc -> vncTab.getDisplayTitle()
+    is Tab.Console -> consoleTab.getDisplayTitle()
+    is Tab.Panes -> panesTab.getDisplayTitle()
+}
+
+/**
  * Single representative [ConnectionState] shared by all variants — lets any
  * unified tab-list UI (e.g. the "OPEN TABS" list in the long-press terminal
  * menu) show a consistent state dot regardless of tab type, instead of only

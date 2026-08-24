@@ -76,6 +76,7 @@ import io.github.tabssh.ui.tabs.SSHTab
 import io.github.tabssh.ui.tabs.Tab
 import io.github.tabssh.ui.tabs.TabManager
 import io.github.tabssh.ui.tabs.TabManagerListener
+import io.github.tabssh.ui.tabs.connectionDisplayName
 import io.github.tabssh.ui.tabs.connectionState
 import io.github.tabssh.ui.tabs.shortTitle
 import io.github.tabssh.utils.logging.Logger
@@ -706,6 +707,27 @@ class TabTerminalActivity : TabSSHActivity() {
         val tabs = tabManager.getAllTabsSealed()
         val activeIndex = tabManager.getActiveTabIndex()
 
+        // Connection-identity labels, not raw OSC tab titles — a mosh/shell
+        // -set title (e.g. mosh's own "[mosh]" placeholder) doesn't tell the
+        // user which host a row is, so this list shows the same profile-
+        // name/user@host label as the Active sub-tab's session strip
+        // (see Tab.connectionDisplayName doc). Same "(#N)" disambiguation
+        // for multiple tabs to the same-looking label.
+        val rawLabels = tabs.map { it to it.connectionDisplayName() }
+        val labelOccurrences = rawLabels.groupingBy { it.second }.eachCount()
+        val labelSeen = mutableMapOf<String, Int>()
+        val tabLabels = rawLabels.associate { (tab, label) ->
+            val total = labelOccurrences[label] ?: 1
+            val finalLabel = if (total > 1) {
+                val n = (labelSeen[label] ?: 0) + 1
+                labelSeen[label] = n
+                getString(R.string.connections_session_duplicate_fmt, label, n)
+            } else {
+                label
+            }
+            tab.tabId to finalLabel
+        }
+
         // Build the tab rows programmatically inside the RecyclerView.
         val tabsRecyclerView = view.findViewById<RecyclerView>(R.id.tabs_recycler_view)
         tabsRecyclerView.layoutManager = LinearLayoutManager(this)
@@ -844,9 +866,9 @@ class TabTerminalActivity : TabSSHActivity() {
                     }
                 }
 
-                // Tab name: bold when active. shortTitle() is the same
-                // unified-across-variants extension the tab strip itself uses.
-                val displayName = tab.shortTitle()
+                // Tab name: bold when active. Connection-identity label, not
+                // the tab strip's shortTitle() — see the tabLabels doc above.
+                val displayName = tabLabels.getValue(tab.tabId)
                 nameView.text = displayName
                 nameView.setTypeface(
                     nameView.typeface,

@@ -37,6 +37,7 @@ import io.github.tabssh.ui.adapters.ConnectionAdapter
 import io.github.tabssh.ui.adapters.GroupedConnectionAdapter
 import io.github.tabssh.ui.models.ConnectionListItem
 import io.github.tabssh.ui.tabs.Tab
+import io.github.tabssh.ui.tabs.connectionDisplayName
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
 import androidx.room.withTransaction
@@ -356,21 +357,7 @@ class SshHostsFragment : Fragment() {
      * labels are disambiguated with a stable `(#N)` suffix.
      */
     private fun disambiguatedActiveSessionLabels(tabs: List<Tab>): Map<String, String> {
-        val rawDisplays = tabs.map { tab ->
-            val display = when (tab) {
-                is Tab.Ssh -> {
-                    val profileName = tab.sshTab.profile.name.trim()
-                    val user = tab.sshTab.profile.username
-                    val host = tab.sshTab.profile.host
-                    val userHost = if (user.isNotBlank() && host.isNotBlank()) "$user@$host" else host
-                    if (profileName.isNotBlank() && profileName != userHost) profileName else userHost
-                }
-                is Tab.Vnc -> tab.vncTab.getDisplayTitle()
-                is Tab.Console -> tab.consoleTab.getDisplayTitle()
-                is Tab.Panes -> tab.panesTab.getDisplayTitle()
-            }
-            tab to display
-        }
+        val rawDisplays = tabs.map { tab -> tab to tab.connectionDisplayName() }
         val occurrences = rawDisplays.groupingBy { it.second }.eachCount()
         val seen = mutableMapOf<String, Int>()
         return rawDisplays.associate { (tab, display) ->
