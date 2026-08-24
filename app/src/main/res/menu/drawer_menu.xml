@@ -3,8 +3,10 @@
   Navigation drawer — items that are accessible via a main tab are NOT
   duplicated here; the drawer covers everything that has no natural tab home.
 
-  Groups: Quick → Accounts → Manage → Connect → Insights → Settings → Diagnostics
+  Groups: Quick → Manage → Connect → Insights → Settings → Diagnostics
   Tabs handle: Frequent | Hosts | Panes | Infra | Auth
+  VNC Hosts management moved into the Hosts tab's VNC sub-tab — no longer a
+  drawer entry.
   Stats moved here (Insights group, above Multi-host Dashboard) — it is no
   longer a main tab.
   Import/Export moved to Settings screen.
@@ -28,15 +30,6 @@
             android:icon="@drawable/ic_flash"
             android:title="@string/nav_item_quick_connect" />
     </group>
-
-    <item android:title="@string/nav_group_accounts">
-        <menu>
-            <item
-                android:id="@+id/nav_vnc_hosts"
-                android:icon="@android:drawable/ic_menu_view"
-                android:title="@string/nav_item_vnc_hosts" />
-        </menu>
-    </item>
 
     <item android:title="@string/nav_group_manage">
         <menu>

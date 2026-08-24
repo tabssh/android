@@ -112,6 +112,7 @@ class SyncDataCollector {
         val syncNetworkRoutes      = preferenceManager.isSyncNetworkRoutesEnabled()
         val syncPaneGroups         = preferenceManager.isSyncPaneGroupsEnabled()
         val syncContainers         = preferenceManager.isSyncContainersEnabled()
+        val syncTelnetHosts        = preferenceManager.isSyncTelnetHostsEnabled()
 
         val connections        = if (syncConns)              collectConnections()        else emptyList()
         val keys               = if (syncKeys)               collectKeys()               else emptyList()
@@ -140,6 +141,7 @@ class SyncDataCollector {
         val composeStacks               = if (syncContainers) collectComposeStacks()               else emptyList()
         val singleContainerConfigs      = if (syncContainers) collectSingleContainerConfigs()      else emptyList()
         val containerAutoUpdatePolicies = if (syncContainers) collectContainerAutoUpdatePolicies() else emptyList()
+        val telnetHosts         = if (syncTelnetHosts)        collectTelnetHosts()        else emptyList()
 
         val itemCounts = SyncItemCounts(
             connections        = connections.size,
@@ -167,7 +169,8 @@ class SyncDataCollector {
             registryCredentials             = registryCredentials.size,
             composeStacks                   = composeStacks.size,
             singleContainerConfigs          = singleContainerConfigs.size,
-            containerAutoUpdatePolicies     = containerAutoUpdatePolicies.size
+            containerAutoUpdatePolicies     = containerAutoUpdatePolicies.size,
+            telnetHosts        = telnetHosts.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -205,6 +208,7 @@ class SyncDataCollector {
             composeStacks               = composeStacks,
             singleContainerConfigs      = singleContainerConfigs,
             containerAutoUpdatePolicies = containerAutoUpdatePolicies,
+            telnetHosts        = telnetHosts,
             secrets            = secrets,
             tombstones         = tombstones
         )
@@ -309,6 +313,18 @@ class SyncDataCollector {
             database.portForwardDao().getAllList()
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to collect port forwards", e)
+            emptyList()
+        }
+    }
+
+    /** Direct Telnet hosts, split out of `connections` by MIGRATION_24_25. Password
+     *  (when saved) stays Keystore-bound under the bare host id and travels via the
+     *  secrets map only (see collectSecrets' `telnet_pw_` block). */
+    private suspend fun collectTelnetHosts(): List<io.github.tabssh.storage.database.entities.TelnetHost> {
+        return try {
+            database.telnetHostDao().getAllList()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to collect telnet hosts", e)
             emptyList()
         }
     }
@@ -477,6 +493,7 @@ class SyncDataCollector {
         val syncNetworkRoutes      = preferenceManager.isSyncNetworkRoutesEnabled()
         val syncPaneGroups         = preferenceManager.isSyncPaneGroupsEnabled()
         val syncContainers         = preferenceManager.isSyncContainersEnabled()
+        val syncTelnetHosts        = preferenceManager.isSyncTelnetHostsEnabled()
 
         val connections = if (syncConns)      collectConnections().filter { it.modifiedAt > timestamp } else emptyList()
         val keys        = if (syncKeys)       collectKeys().filter { it.modifiedAt > timestamp }        else emptyList()
@@ -522,6 +539,9 @@ class SyncDataCollector {
         val singleContainerConfigs = if (syncContainers)
             collectSingleContainerConfigs().filter { it.updatedAt > timestamp } else emptyList()
         val containerAutoUpdatePolicies = if (syncContainers) collectContainerAutoUpdatePolicies() else emptyList()
+        // TelnetHost has modifiedAt; delta-filter it like the other simple entities.
+        val telnetHosts = if (syncTelnetHosts)
+            collectTelnetHosts().filter { it.modifiedAt > timestamp } else emptyList()
 
         val preferences = if (syncSettings && hasPreferencesChanged(timestamp)) {
             collectPreferences()
@@ -558,7 +578,8 @@ class SyncDataCollector {
             registryCredentials             = registryCredentials.size,
             composeStacks                   = composeStacks.size,
             singleContainerConfigs          = singleContainerConfigs.size,
-            containerAutoUpdatePolicies     = containerAutoUpdatePolicies.size
+            containerAutoUpdatePolicies     = containerAutoUpdatePolicies.size,
+            telnetHosts        = telnetHosts.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -599,6 +620,7 @@ class SyncDataCollector {
             composeStacks               = composeStacks,
             singleContainerConfigs      = singleContainerConfigs,
             containerAutoUpdatePolicies = containerAutoUpdatePolicies,
+            telnetHosts        = telnetHosts,
             secrets            = secrets,
             tombstones         = tombstones
         )
@@ -651,6 +673,7 @@ class SyncDataCollector {
             out += TombstoneRecorder.SINGLE_CONTAINER_CONFIG
             out += TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY
         }
+        if (preferenceManager.isSyncTelnetHostsEnabled())        out += TombstoneRecorder.TELNET_HOST
         return out
     }
 
@@ -682,6 +705,7 @@ class SyncDataCollector {
         TombstoneRecorder.COMPOSE_STACK     -> collectComposeStacks().map { TombstoneRecorder.naturalKey(it) }
         TombstoneRecorder.SINGLE_CONTAINER_CONFIG -> collectSingleContainerConfigs().map { TombstoneRecorder.naturalKey(it) }
         TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY -> collectContainerAutoUpdatePolicies().map { TombstoneRecorder.naturalKey(it) }
+        TombstoneRecorder.TELNET_HOST       -> collectTelnetHosts().map { it.id }
         TombstoneRecorder.SECRET            -> liveSecretAliases()
         else -> emptyList()
     }
@@ -775,6 +799,7 @@ class SyncDataCollector {
             TombstoneRecorder.CONTAINER_HOST,
             TombstoneRecorder.REGISTRY_CREDENTIAL, TombstoneRecorder.COMPOSE_STACK,
             TombstoneRecorder.SINGLE_CONTAINER_CONFIG, TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY,
+            TombstoneRecorder.TELNET_HOST,
             TombstoneRecorder.SECRET
         )
         for (type in allTypes) {
@@ -815,6 +840,7 @@ class SyncDataCollector {
         val syncVncIdentities = preferenceManager.isSyncVncIdentitiesEnabled()
         val syncCloudAccounts = preferenceManager.isSyncCloudAccountsEnabled()
         val syncContainers = preferenceManager.isSyncContainersEnabled()
+        val syncTelnetHosts = preferenceManager.isSyncTelnetHostsEnabled()
         try {
             if (pm != null) {
                 // Identity passwords — alias: identity_{id}
@@ -917,6 +943,18 @@ class SyncDataCollector {
                             pm.retrievePassword(c.id)
                                 ?.takeIf { it.isNotEmpty() }
                                 ?.let { out["conn_pw_${c.id}"] = it }
+                        }
+                }
+
+                // Telnet host passwords — the Keystore alias is the bare host id
+                // (same convention as connections). Wire alias: telnet_pw_{id}.
+                if (syncTelnetHosts) {
+                    database.telnetHostDao().getAllList()
+                        .filter { it.savePassword }
+                        .forEach { th ->
+                            pm.retrievePassword(th.id)
+                                ?.takeIf { it.isNotEmpty() }
+                                ?.let { out["telnet_pw_${th.id}"] = it }
                         }
                 }
             }
@@ -1137,6 +1175,7 @@ class SyncDataCollector {
             "syncNetworkRoutes"     to preferenceManager.isSyncNetworkRoutesEnabled(),
             "syncPaneGroups"        to preferenceManager.isSyncPaneGroupsEnabled(),
             "syncContainers"        to preferenceManager.isSyncContainersEnabled(),
+            "syncTelnetHosts"       to preferenceManager.isSyncTelnetHostsEnabled(),
             "autoResolve"           to preferenceManager.isAutoResolveConflictsEnabled()
         )
     }
@@ -1303,7 +1342,8 @@ class SyncDataCollector {
             registryCredentials = try { database.registryCredentialDao().getAllList().size } catch (_: Exception) { 0 },
             composeStacks     = try { database.composeStackDao().getAllList().size } catch (_: Exception) { 0 },
             singleContainerConfigs = try { database.singleContainerConfigDao().getAllList().size } catch (_: Exception) { 0 },
-            containerAutoUpdatePolicies = try { database.containerAutoUpdatePolicyDao().getAllList().size } catch (_: Exception) { 0 }
+            containerAutoUpdatePolicies = try { database.containerAutoUpdatePolicyDao().getAllList().size } catch (_: Exception) { 0 },
+            telnetHosts       = try { database.telnetHostDao().getAllList().size } catch (_: Exception) { 0 }
         )
     }
 

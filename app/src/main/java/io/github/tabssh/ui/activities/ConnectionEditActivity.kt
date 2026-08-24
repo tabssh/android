@@ -14,6 +14,7 @@ import io.github.tabssh.databinding.ActivityConnectionEditBinding
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.NetworkRoute
 import io.github.tabssh.storage.database.entities.StoredKey
+import io.github.tabssh.storage.database.entities.TelnetHost
 import io.github.tabssh.storage.database.entities.VncHost
 import io.github.tabssh.storage.database.entities.VncIdentity
 import io.github.tabssh.ssh.auth.AuthType
@@ -56,6 +57,8 @@ class ConnectionEditActivity : TabSSHActivity() {
         const val EXTRA_IS_EDIT_MODE = "is_edit_mode"
         /** When present, load + save as [VncHost] regardless of protocol spinner. */
         const val EXTRA_VNC_HOST_ID = "vnc_host_id"
+        /** New-connection only — pre-selects the protocol spinner ("ssh"/"vnc"/"telnet"). */
+        const val EXTRA_DEFAULT_PROTOCOL = "default_protocol"
         private const val REQUEST_CODE_IMPORT_KEY = 1001
 
         // Fixed positions in the network route spinner. Saved routes start at
@@ -90,6 +93,15 @@ class ConnectionEditActivity : TabSSHActivity() {
                 putExtra(EXTRA_IS_EDIT_MODE, vncHostId != null)
             }
         }
+
+        /** Launch to create a new [TelnetHost] with the Telnet protocol pre-selected. */
+        fun createTelnetIntent(context: Context, telnetHostId: String? = null): Intent {
+            return Intent(context, ConnectionEditActivity::class.java).apply {
+                telnetHostId?.let { putExtra(EXTRA_CONNECTION_ID, it) }
+                putExtra(EXTRA_IS_EDIT_MODE, telnetHostId != null)
+                if (telnetHostId == null) putExtra(EXTRA_DEFAULT_PROTOCOL, "telnet")
+            }
+        }
     }
 
     private lateinit var binding: ActivityConnectionEditBinding
@@ -97,6 +109,9 @@ class ConnectionEditActivity : TabSSHActivity() {
 
     private var existingProfile: ConnectionProfile? = null
     private var editingVncHostId: String? = null
+    // Set when loadConnection() falls back to telnet_hosts (post-MIGRATION_24_25,
+    // telnet rows are no longer ConnectionProfile rows).
+    private var editingTelnetHostId: String? = null
     private var isEditMode = false
 
     // Protocol state — "ssh" | "vnc" | "telnet".
@@ -219,6 +234,14 @@ class ConnectionEditActivity : TabSSHActivity() {
                 if (defaultUser.isNotBlank()) {
                     binding.editUsername.setText(defaultUser)
                 }
+                // Hosts tab's Telnet sub-tab launches "Add" with this extra so the
+                // form opens already on the Telnet protocol instead of SSH.
+                val defaultProtocol = intent.getStringExtra(EXTRA_DEFAULT_PROTOCOL)
+                if (defaultProtocol != null) {
+                    val values = resources.getStringArray(R.array.protocol_values)
+                    val index = values.indexOf(defaultProtocol)
+                    if (index >= 0) binding.spinnerProtocol.setSelection(index)
+                }
             }
         }
 
@@ -329,12 +352,15 @@ class ConnectionEditActivity : TabSSHActivity() {
                 loadVncIdentities()
             }
             "telnet" -> {
+                // TelnetHost only stores shared metadata (name/host/port/username/
+                // group/color/notes) plus a Keystore-bound password — advanced SSH
+                // settings, notifications, appearance, multiplexer and proxy have no
+                // backing column and would silently be dropped on save, so hide them.
                 binding.cardAuthentication.visibility = View.VISIBLE
-                binding.cardAdvancedSettings.visibility = View.VISIBLE
-                binding.cardNotificationsSection.visibility = View.VISIBLE
-                // Multiplexer and proxy are not applicable to Telnet
+                binding.cardAdvancedSettings.visibility = View.GONE
+                binding.cardNotificationsSection.visibility = View.GONE
                 binding.cardMultiplexer.visibility = View.GONE
-                binding.cardAppearance.visibility = View.VISIBLE
+                binding.cardAppearance.visibility = View.GONE
                 binding.cardProxy.visibility = View.GONE
                 binding.layoutUsernameInput.visibility = View.VISIBLE
                 // Hide identity picker and VNC password — Telnet uses inline user/pass only
@@ -920,12 +946,29 @@ class ConnectionEditActivity : TabSSHActivity() {
     private fun loadConnection(connectionId: String) {
         lifecycleScope.launch {
             try {
-                existingProfile = withContext(Dispatchers.IO) {
+                val profile = withContext(Dispatchers.IO) {
                     app.database.connectionDao().getConnectionById(connectionId)
                 }
-                existingProfile?.let { profile ->
+                if (profile != null) {
+                    existingProfile = profile
                     populateFields(profile)
                     supportActionBar?.title = getString(R.string.conn_edit_title_edit_named, profile.name)
+                    return@launch
+                }
+                // Post-MIGRATION_24_25 telnet rows are no longer ConnectionProfile
+                // rows — callers (ConnectionsFragment, FrequentConnectionsFragment,
+                // TabTerminalActivity, LibvirtManagerActivity) pass a bare id without
+                // knowing its protocol, so fall back to telnet_hosts before failing.
+                val telnetHost = withContext(Dispatchers.IO) {
+                    app.database.telnetHostDao().getById(connectionId)
+                }
+                if (telnetHost != null) {
+                    editingTelnetHostId = telnetHost.id
+                    populateTelnetFields(telnetHost)
+                    supportActionBar?.title = getString(R.string.conn_edit_title_edit_named, telnetHost.name)
+                } else {
+                    showError(getString(R.string.conn_edit_load_connection_failed), getString(R.string.dialog_title_error))
+                    finish()
                 }
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to load connection", e)
@@ -933,6 +976,52 @@ class ConnectionEditActivity : TabSSHActivity() {
                 finish()
             }
         }
+    }
+
+    private suspend fun populateTelnetFields(telnetHost: TelnetHost) {
+        binding.editName.setText(telnetHost.name)
+        binding.editHost.setText(telnetHost.host)
+        binding.editPort.setText(telnetHost.port.toString())
+        binding.editUsername.setText(telnetHost.username)
+        // Set protocol spinner to Telnet (index 2) — triggers onItemSelected ->
+        // updateProtocolUI("telnet"). Guard flag mirrors populateVncFields (UX-08).
+        isPopulatingFields = true
+        binding.spinnerProtocol.setSelection(2)
+        selectedGroupId = telnetHost.groupId
+        val resolvedGroup = selectedGroupId?.let { gid ->
+            withContext(Dispatchers.IO) { app.database.connectionGroupDao().getGroupById(gid) }
+        }
+        if (resolvedGroup != null) {
+            selectedGroupName = resolvedGroup.name
+            binding.spinnerGroup.setText(resolvedGroup.name, false)
+            supportActionBar?.subtitle = resolvedGroup.name
+        } else {
+            selectedGroupId = null
+            selectedGroupName = getString(R.string.conn_edit_no_group)
+            binding.spinnerGroup.setText(getString(R.string.conn_edit_no_group), false)
+            supportActionBar?.subtitle = null
+        }
+        currentColorTag = telnetHost.colorTag
+        renderColorTagPreview()
+        // Telnet is always password auth (TelnetHost has no authType column) —
+        // pre-populate the shared password field the same way SSH does.
+        if (telnetHost.savePassword) {
+            val stored = try {
+                withContext(Dispatchers.IO) {
+                    app.securePasswordManager.retrievePassword(telnetHost.id)
+                }
+            } catch (e: Exception) {
+                Logger.w("ConnectionEditActivity", "No stored telnet password: ${e.message}")
+                null
+            }
+            if (!stored.isNullOrEmpty()) {
+                binding.editPassword.setText(stored)
+                binding.switchSavePassword.isChecked = true
+            }
+        }
+        // After all fields are populated, clear the dirty flag so the back-press
+        // guard does not trigger on TextWatcher fires from setText (UX-13).
+        hasUnsavedChanges = false
     }
 
     private suspend fun populateFields(profile: ConnectionProfile) {
@@ -1216,7 +1305,82 @@ class ConnectionEditActivity : TabSSHActivity() {
             saveVncHost()
             return
         }
+        if (currentProtocol == "telnet") {
+            saveTelnetHost()
+            return
+        }
         saveConnectionProfile()
+    }
+
+    private fun saveTelnetHost() {
+        lifecycleScope.launch {
+            try {
+                val name = binding.editName.text.toString().trim()
+                val host = binding.editHost.text.toString().trim()
+                val port = binding.editPort.text.toString().toIntOrNull() ?: 23
+                val username = binding.editUsername.text.toString().trim()
+                val password = binding.editPassword.text.toString()
+                val savePasswordChecked = binding.switchSavePassword.isChecked && password.isNotEmpty()
+                val now = System.currentTimeMillis()
+                val hostId = editingTelnetHostId ?: UUID.randomUUID().toString()
+
+                val existing = if (editingTelnetHostId != null) {
+                    app.database.telnetHostDao().getById(editingTelnetHostId!!)
+                } else null
+
+                val telnetHost = existing?.copy(
+                    name = name,
+                    host = host,
+                    port = port,
+                    username = username,
+                    savePassword = savePasswordChecked,
+                    groupId = selectedGroupId,
+                    colorTag = currentColorTag,
+                    modifiedAt = now
+                ) ?: TelnetHost(
+                    id = hostId,
+                    name = name,
+                    host = host,
+                    port = port,
+                    username = username,
+                    savePassword = savePasswordChecked,
+                    groupId = selectedGroupId,
+                    colorTag = currentColorTag,
+                    createdAt = now,
+                    modifiedAt = now
+                )
+
+                if (existing != null) {
+                    app.database.telnetHostDao().update(telnetHost)
+                    Logger.i("ConnectionEditActivity", "Updated telnet host: $name")
+                    showToast(getString(R.string.conn_edit_connection_updated))
+                } else {
+                    app.database.telnetHostDao().insert(telnetHost)
+                    Logger.i("ConnectionEditActivity", "Saved telnet host: $name")
+                    showToast(getString(R.string.conn_edit_connection_saved))
+                }
+
+                // Persist or clear the Keystore-bound password, keyed by the bare
+                // host id — same convention ConnectionProfile uses (doSave()).
+                if (savePasswordChecked) {
+                    val storageLevel = if (app.securePasswordManager.requiresEnhancedSecurity(host)) {
+                        SecurePasswordManager.StorageLevel.BIOMETRIC
+                    } else {
+                        SecurePasswordManager.StorageLevel.ENCRYPTED
+                    }
+                    app.securePasswordManager.storePassword(hostId, password, storageLevel)
+                } else {
+                    try { app.securePasswordManager.clearPassword(hostId) } catch (_: Exception) {}
+                }
+
+                hasUnsavedChanges = false
+                setResult(RESULT_OK)
+                finish()
+            } catch (e: Exception) {
+                Logger.e("ConnectionEditActivity", "Failed to save telnet host", e)
+                showError(getString(R.string.conn_edit_save_connection_failed, e.message.toString()), getString(R.string.dialog_title_error))
+            }
+        }
     }
 
     private fun saveVncHost() {

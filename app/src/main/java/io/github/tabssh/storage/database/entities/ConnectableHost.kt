@@ -7,15 +7,17 @@ import kotlinx.serialization.Serializable
 
 /**
  * ConnectableHost — an internal-only cross-feature lookup row unifying the
- * two sources of terminal-capable (SSH/Telnet/Mosh) hosts: Hosts-tab
- * [ConnectionProfile] rows and live Cloud Account instances. It exists so
+ * sources of terminal-capable (SSH/Telnet/Mosh) hosts: Hosts-tab
+ * [ConnectionProfile] rows, direct [TelnetHost] rows, and live Cloud Account
+ * instances. It exists so
  * Panes (and later Cluster Commands) can offer one stable, queryable ID
  * space across both sources without merging the Hosts and Cloud Accounts
  * tabs into one visible list — this table is never rendered as its own
  * user-facing list.
  *
- * For a connection-profile-backed row, [id] IS the [ConnectionProfile.id]
- * (1:1 reuse, simplifies refresh/dedup). For a cloud-instance-backed row,
+ * For a connection-profile-backed or [TelnetHost]-backed row, [id] IS the
+ * source row's own id (1:1 reuse, simplifies refresh/dedup). For a
+ * cloud-instance-backed row,
  * [id] is `"cloud:${cloudAccountId}:${instanceId}"`. Cloud instances are
  * NEVER auto-imported into [ConnectionProfile] — [hostPreview] is display
  * text only, never used as connection truth; launch-time connection for a
@@ -67,5 +69,6 @@ data class ConnectableHost(
     companion object {
         const val SOURCE_CONNECTION_PROFILE = "connection_profile"
         const val SOURCE_CLOUD_INSTANCE = "cloud_instance"
+        const val SOURCE_TELNET_HOST = "telnet_host"
     }
 }

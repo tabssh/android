@@ -12,6 +12,7 @@ import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy
 import io.github.tabssh.storage.database.entities.ContainerHost
+import io.github.tabssh.storage.database.entities.Domain
 import io.github.tabssh.storage.database.entities.HostKeyEntry
 import io.github.tabssh.storage.database.entities.HypervisorAccount
 import io.github.tabssh.storage.database.entities.HypervisorProfile
@@ -26,10 +27,12 @@ import io.github.tabssh.storage.database.entities.SingleContainerConfig
 import io.github.tabssh.storage.database.entities.Snippet
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.storage.database.entities.TabSession
+import io.github.tabssh.storage.database.entities.TelnetHost
 import io.github.tabssh.storage.database.entities.ThemeDefinition
 import io.github.tabssh.storage.database.entities.TrustedCertificate
 import io.github.tabssh.storage.database.entities.VncHost
 import io.github.tabssh.storage.database.entities.VncIdentity
+import io.github.tabssh.storage.database.entities.VpsHost
 import io.github.tabssh.storage.database.entities.Workspace
 import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.utils.logging.Logger
@@ -149,12 +152,18 @@ class BackupImporter(
             { restoreVncHosts(it, effectiveOverwrite) }) { out["vnc_hosts"] = it; Logger.d(TAG, "Restored $it VNC hosts") }
         table(BackupExporter.FILE_VNC_IDENTITIES, "vnc_identities",
             { restoreVncIdentities(it, effectiveOverwrite) }) { out["vnc_identities"] = it; Logger.d(TAG, "Restored $it VNC identities") }
+        table(BackupExporter.FILE_TELNET_HOSTS, "telnet_hosts",
+            { restoreTelnetHosts(it, effectiveOverwrite) }) { out["telnet_hosts"] = it; Logger.d(TAG, "Restored $it telnet hosts") }
         table(BackupExporter.FILE_PORT_FORWARDS, "port_forwards",
             { restorePortForwards(it, effectiveOverwrite) }) { out["port_forwards"] = it; Logger.d(TAG, "Restored $it port forwards") }
         table(BackupExporter.FILE_NETWORK_ROUTES, "network_routes",
             { restoreNetworkRoutes(it, effectiveOverwrite) }) { out["network_routes"] = it; Logger.d(TAG, "Restored $it network routes") }
         table(BackupExporter.FILE_PANE_GROUPS, "pane_groups",
             { restorePaneGroups(it, effectiveOverwrite) }) { out["pane_groups"] = it; Logger.d(TAG, "Restored $it pane groups") }
+        table(BackupExporter.FILE_DOMAINS, "domains",
+            { restoreDomains(it, effectiveOverwrite) }) { out["domains"] = it; Logger.d(TAG, "Restored $it domains") }
+        table(BackupExporter.FILE_VPS_HOSTS, "vps_hosts",
+            { restoreVpsHosts(it, effectiveOverwrite) }) { out["vps_hosts"] = it; Logger.d(TAG, "Restored $it VPS hosts") }
         // Prefer the current entry name; fall back to the development build's
         // docker_hosts.json so an old archive still restores into container_hosts.
         val containerHostsKey =
@@ -247,6 +256,9 @@ class BackupImporter(
         if (backupData.containsKey(BackupExporter.FILE_VNC_IDENTITIES)) {
             database.vncIdentityDao().getAllIdentitiesList().forEach { database.vncIdentityDao().delete(it) }
         }
+        if (backupData.containsKey(BackupExporter.FILE_TELNET_HOSTS)) {
+            database.telnetHostDao().getAllList().forEach { database.telnetHostDao().delete(it) }
+        }
         if (backupData.containsKey(BackupExporter.FILE_PORT_FORWARDS)) {
             database.portForwardDao().getAllList().forEach { database.portForwardDao().delete(it) }
         }
@@ -255,6 +267,12 @@ class BackupImporter(
         }
         if (backupData.containsKey(BackupExporter.FILE_PANE_GROUPS)) {
             database.paneGroupDao().getAllList().forEach { database.paneGroupDao().delete(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_DOMAINS)) {
+            database.domainDao().getAllList().forEach { database.domainDao().delete(it) }
+        }
+        if (backupData.containsKey(BackupExporter.FILE_VPS_HOSTS)) {
+            database.vpsHostDao().getAllList().forEach { database.vpsHostDao().delete(it) }
         }
         if (backupData.containsKey(BackupExporter.FILE_CONTAINER_HOSTS) ||
             backupData.containsKey(LEGACY_FILE_DOCKER_HOSTS)
@@ -499,6 +517,15 @@ class BackupImporter(
             database.vncIdentityDao().insert(vi); true
         }
 
+    private suspend fun restoreTelnetHosts(data: String, overwriteExisting: Boolean): Int =
+        // Password is NOT in this entity (it lives in SecurePasswordManager under
+        // the bare host id); restored from the secrets file's telnet_pw_{id} alias.
+        restoreEntityList(data, ListSerializer(TelnetHost.serializer())) { th ->
+            val existing = database.telnetHostDao().getById(th.id)
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
+            database.telnetHostDao().insert(th); true
+        }
+
     private suspend fun restorePortForwards(data: String, overwriteExisting: Boolean): Int =
         restoreEntityList(data, ListSerializer(PortForward.serializer())) { pf ->
             val existing = database.portForwardDao().getById(pf.id)
@@ -524,6 +551,27 @@ class BackupImporter(
             if (existing != null && !overwriteExisting) return@restoreEntityList false
             if (existing == null) database.paneGroupDao().insert(group)
             else database.paneGroupDao().update(group)
+            true
+        }
+
+    private suspend fun restoreDomains(data: String, overwriteExisting: Boolean): Int =
+        // No secret column — registrar credentials are never stored on-device.
+        restoreEntityList(data, ListSerializer(Domain.serializer())) { domain ->
+            val existing = database.domainDao().getById(domain.id)
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
+            if (existing == null) database.domainDao().insert(domain)
+            else database.domainDao().update(domain)
+            true
+        }
+
+    private suspend fun restoreVpsHosts(data: String, overwriteExisting: Boolean): Int =
+        // No secret column — a host's own SSH credentials, if tracked, live
+        // as a separate ConnectionProfile row, not on this row.
+        restoreEntityList(data, ListSerializer(VpsHost.serializer())) { host ->
+            val existing = database.vpsHostDao().getById(host.id)
+            if (existing != null && !overwriteExisting) return@restoreEntityList false
+            if (existing == null) database.vpsHostDao().insert(host)
+            else database.vpsHostDao().update(host)
             true
         }
 
@@ -649,6 +697,13 @@ class BackupImporter(
                         pm?.storePassword(connId, value,
                             SecurePasswordManager.StorageLevel.ENCRYPTED)
                         Logger.d(TAG, "Restored connection password: $connId")
+                    } else if (alias.startsWith("telnet_pw_")) {
+                        // Wire alias is telnet_pw_{id}; the Keystore alias is the
+                        // bare telnet host id, same convention as conn_pw_.
+                        val telnetId = alias.removePrefix("telnet_pw_")
+                        pm?.storePassword(telnetId, value,
+                            SecurePasswordManager.StorageLevel.ENCRYPTED)
+                        Logger.d(TAG, "Restored telnet host password: $telnetId")
                     } else if (pm != null) {
                         pm.storePassword(alias, value,
                             SecurePasswordManager.StorageLevel.ENCRYPTED)
@@ -797,6 +852,7 @@ class BackupImporter(
             preferenceManager.setSyncHypervisorAccountsEnabled(s.optBoolean("syncHypervisorAccounts", true))
             preferenceManager.setSyncVncHostsEnabled(s.optBoolean("syncVncHosts", true))
             preferenceManager.setSyncVncIdentitiesEnabled(s.optBoolean("syncVncIdentities", true))
+            preferenceManager.setSyncTelnetHostsEnabled(s.optBoolean("syncTelnetHosts", true))
             preferenceManager.setSyncCloudAccountsEnabled(s.optBoolean("syncCloudAccounts", true))
             preferenceManager.setSyncCertificatesEnabled(s.optBoolean("syncCertificates", true))
             preferenceManager.setSyncDashboardEnabled(s.optBoolean("syncDashboard", false))
@@ -804,6 +860,11 @@ class BackupImporter(
             preferenceManager.setSyncContainersEnabled(s.optBoolean("syncContainers", s.optBoolean("syncDocker", true)))
             preferenceManager.setSyncPortForwardsEnabled(s.optBoolean("syncPortForwards", true))
             preferenceManager.setSyncNetworkRoutesEnabled(s.optBoolean("syncNetworkRoutes", true))
+            preferenceManager.setSyncPaneGroupsEnabled(s.optBoolean("syncPaneGroups", true))
+            preferenceManager.setSyncRegistryCredentialsEnabled(s.optBoolean("syncRegistryCredentials", true))
+            preferenceManager.setSyncComposeStacksEnabled(s.optBoolean("syncComposeStacks", true))
+            preferenceManager.setSyncSingleContainerConfigsEnabled(s.optBoolean("syncSingleContainerConfigs", true))
+            preferenceManager.setSyncContainerAutoUpdatePoliciesEnabled(s.optBoolean("syncContainerAutoUpdatePolicies", true))
             preferenceManager.setAutoResolveConflicts(s.optBoolean("autoResolve", true))
         }
         root.optJSONObject("multiplexer")?.let { m ->

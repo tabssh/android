@@ -295,6 +295,9 @@ class GroupManagementActivity : TabSSHActivity() {
                     // Nullify group_id on any VNC hosts assigned to this group
                     app.database.vncHostDao().nullifyGroupId(group.id)
 
+                    // Nullify group_id on any telnet hosts assigned to this group
+                    app.database.telnetHostDao().nullifyGroupId(group.id)
+
                     // Delete the group
                     app.database.connectionGroupDao().deleteGroup(group)
                     // H6 — record the deletion so it propagates and is not resurrected.

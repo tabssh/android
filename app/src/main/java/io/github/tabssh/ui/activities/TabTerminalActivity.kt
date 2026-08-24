@@ -4272,6 +4272,25 @@ class TabTerminalActivity : TabSSHActivity() {
                     identityId = identityId
                 )
             }
+            ConnectableHost.SOURCE_TELNET_HOST -> {
+                val telnetHost = withContext(Dispatchers.IO) { app.database.telnetHostDao().getById(host.id) }
+                    ?: run {
+                        Logger.w("TabTerminalActivity", "connectPaneMember: telnet host ${host.id} not found")
+                        return null
+                    }
+                // Ephemeral, unsaved ConnectionProfile — same id as the TelnetHost
+                // row so a saved password (Keystore alias = bare id) is picked up
+                // transparently by the normal SSH/Telnet connect path.
+                ConnectionProfile(
+                    id = telnetHost.id,
+                    name = telnetHost.name,
+                    host = telnetHost.host,
+                    port = telnetHost.port,
+                    username = telnetHost.username,
+                    protocol = "telnet",
+                    savePassword = telnetHost.savePassword
+                )
+            }
             else -> {
                 Logger.w("TabTerminalActivity", "connectPaneMember: unknown source type ${host.sourceType}")
                 return null

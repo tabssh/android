@@ -115,6 +115,10 @@ class VncTab(
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
+    /** Wall-clock time this tab last transitioned into CONNECTED; null while not connected. */
+    var connectedAt: Long? = null
+        private set
+
     private val _isActive = MutableStateFlow(false)
     val isActive: StateFlow<Boolean> = _isActive.asStateFlow()
 
@@ -124,6 +128,23 @@ class VncTab(
 
     /** Set by the connect/reconnect path once wired (step 6). */
     fun setConnectionState(state: ConnectionState) {
+        setState(state)
+    }
+
+    /**
+     * Single write path for [_connectionState] — stamps [connectedAt] on
+     * transition into CONNECTED and clears it otherwise, so the Active
+     * sub-tab (Hosts tab restructure) can show a connected-since timer
+     * without every call site having to remember to set it.
+     */
+    private fun setState(state: ConnectionState) {
+        if (state == ConnectionState.CONNECTED) {
+            if (_connectionState.value != ConnectionState.CONNECTED) {
+                connectedAt = System.currentTimeMillis()
+            }
+        } else {
+            connectedAt = null
+        }
         _connectionState.value = state
     }
 
@@ -180,7 +201,7 @@ class VncTab(
             Logger.d("VncTab", "onCleanup hook suppressed: ${e.message}")
         }
         onCleanup = null
-        _connectionState.value = ConnectionState.DISCONNECTED
+        setState(ConnectionState.DISCONNECTED)
     }
 
     override fun equals(other: Any?): Boolean {

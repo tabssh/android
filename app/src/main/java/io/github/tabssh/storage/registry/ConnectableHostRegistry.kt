@@ -44,6 +44,29 @@ object ConnectableHostRegistry {
     }
 
     /**
+     * Reads every [io.github.tabssh.storage.database.entities.TelnetHost] and
+     * replaces all `telnet_host`-sourced rows in the registry. Same cheap
+     * full-table-read pattern as [refreshConnectionProfiles].
+     */
+    suspend fun refreshTelnetHosts(db: TabSSHDatabase) {
+        val telnetHosts = db.telnetHostDao().getAllList()
+        val hosts = telnetHosts.map { host ->
+            ConnectableHost(
+                id = host.id,
+                sourceType = ConnectableHost.SOURCE_TELNET_HOST,
+                cloudAccountId = null,
+                instanceId = null,
+                name = host.name,
+                hostPreview = "${host.username}@${host.host}:${host.port}",
+                protocol = "telnet"
+            )
+        }
+        db.connectableHostDao().deleteBySourceType(ConnectableHost.SOURCE_TELNET_HOST)
+        db.connectableHostDao().insertAll(hosts)
+        Logger.d(TAG, "Refreshed ${hosts.size} telnet-host-backed connectable hosts")
+    }
+
+    /**
      * Mirrors the exact token + client pattern used by
      * `CloudAccountsFragment.refreshAccount()`: retrieves the stored bearer
      * token, resolves the provider client, fetches live instances, keeps
@@ -98,6 +121,7 @@ object ConnectableHostRegistry {
      */
     suspend fun refreshAll(db: TabSSHDatabase, app: TabSSHApplication) {
         refreshConnectionProfiles(db)
+        refreshTelnetHosts(db)
         val enabledAccounts = db.cloudAccountDao().getAll().filter { it.enabled }
         for (account in enabledAccounts) {
             refreshCloudInstances(db, app, account.id)
@@ -120,6 +144,18 @@ object ConnectableHostRegistry {
         db.connectableHostDao().deleteById(connectionId)
         stripMemberHostId(db, connectionId)
         Logger.d(TAG, "Removed connection-profile-backed connectable host id=$connectionId")
+    }
+
+    /**
+     * Eager cascade for a deleted [io.github.tabssh.storage.database.entities
+     * .TelnetHost]: removes its `connectable_hosts` row and strips its id out
+     * of every saved PaneGroup's `memberHostIds`. Same call-site rule as
+     * [removeConnectionProfile].
+     */
+    suspend fun removeTelnetHost(db: TabSSHDatabase, telnetHostId: String) {
+        db.connectableHostDao().deleteById(telnetHostId)
+        stripMemberHostId(db, telnetHostId)
+        Logger.d(TAG, "Removed telnet-host-backed connectable host id=$telnetHostId")
     }
 
     /**

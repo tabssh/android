@@ -683,8 +683,23 @@ class PreferenceManager(private val context: Context) {
     fun isSyncPaneGroupsEnabled(): Boolean = getBoolean("sync_pane_groups", true)
     fun setSyncPaneGroupsEnabled(enabled: Boolean) = setBoolean("sync_pane_groups", enabled)
 
+    fun isSyncTelnetHostsEnabled(): Boolean = getBoolean("sync_telnet_hosts", true)
+    fun setSyncTelnetHostsEnabled(enabled: Boolean) = setBoolean("sync_telnet_hosts", enabled)
+
     fun isSyncContainersEnabled(): Boolean = getBoolean("sync_containers", true)
     fun setSyncContainersEnabled(enabled: Boolean) = setBoolean("sync_containers", enabled)
+
+    fun isSyncRegistryCredentialsEnabled(): Boolean = getBoolean("sync_registry_credentials", true)
+    fun setSyncRegistryCredentialsEnabled(enabled: Boolean) = setBoolean("sync_registry_credentials", enabled)
+
+    fun isSyncComposeStacksEnabled(): Boolean = getBoolean("sync_compose_stacks", true)
+    fun setSyncComposeStacksEnabled(enabled: Boolean) = setBoolean("sync_compose_stacks", enabled)
+
+    fun isSyncSingleContainerConfigsEnabled(): Boolean = getBoolean("sync_single_container_configs", true)
+    fun setSyncSingleContainerConfigsEnabled(enabled: Boolean) = setBoolean("sync_single_container_configs", enabled)
+
+    fun isSyncContainerAutoUpdatePoliciesEnabled(): Boolean = getBoolean("sync_container_auto_update_policies", true)
+    fun setSyncContainerAutoUpdatePoliciesEnabled(enabled: Boolean) = setBoolean("sync_container_auto_update_policies", enabled)
 
     // Dashboard config is per-device by default — the user must explicitly opt in to sync it
     // so that each device keeps its own dashboard layout. Useful for migrating to a new device.

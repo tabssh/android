@@ -454,10 +454,6 @@
             android:parentActivityName=".ui.activities.SettingsActivity" />
 
         <activity
-            android:name=".ui.activities.VncHostsActivity"
-            android:exported="false" />
-
-        <activity
             android:name=".ui.activities.DomainTrackerActivity"
             android:exported="false"
             android:parentActivityName=".ui.activities.MainActivity" />

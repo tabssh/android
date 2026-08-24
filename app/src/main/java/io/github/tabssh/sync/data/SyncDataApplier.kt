@@ -387,6 +387,20 @@ class SyncDataApplier {
                 }
             }
 
+            // Direct Telnet hosts (last-write-wins REPLACE on UUID PK). Password stays
+            // Keystore-bound and is applied separately via applySecrets' telnet_pw_ branch.
+            if (preferenceManager.isSyncTelnetHostsEnabled()) {
+                data.telnetHosts.forEach { th ->
+                    try {
+                        if (suppressed(TombstoneRecorder.TELNET_HOST, th.id, th.modifiedAt)) return@forEach
+                        database.telnetHostDao().insert(th)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply telnet host: ${th.name}", e)
+                    }
+                }
+            }
+
             // Reusable network routes (last-write-wins REPLACE on UUID PK).
             if (preferenceManager.isSyncNetworkRoutesEnabled()) {
                 data.networkRoutes.forEach { nr ->
@@ -673,6 +687,19 @@ class SyncDataApplier {
                             if (row != null && row.modifiedAt > t.deletedAt) true
                             else { if (row != null) database.networkRouteDao().deleteById(t.entityKey); false }
                         }
+                        TombstoneRecorder.TELNET_HOST -> {
+                            val row = database.telnetHostDao().getById(t.entityKey)
+                            if (row != null && row.modifiedAt > t.deletedAt) true
+                            else {
+                                if (row != null) {
+                                    database.telnetHostDao().deleteById(t.entityKey)
+                                    // Keep the Panes registry and any saved pane-group membership accurate.
+                                    io.github.tabssh.storage.registry.ConnectableHostRegistry
+                                        .removeTelnetHost(database, t.entityKey)
+                                }
+                                false
+                            }
+                        }
                         TombstoneRecorder.HYPERVISOR_ACCOUNT -> {
                             val row = accountsByKey[t.entityKey]
                             if (row != null && row.modifiedAt > t.deletedAt) true
@@ -766,6 +793,8 @@ class SyncDataApplier {
                     alias.startsWith("ssh_key_") -> ks?.deleteKey(alias.removePrefix("ssh_key_"))
                     // Wire alias is conn_pw_{id}; the Keystore alias is the bare id.
                     alias.startsWith("conn_pw_") -> pm?.clearPassword(alias.removePrefix("conn_pw_"))
+                    // Wire alias is telnet_pw_{id}; the Keystore alias is the bare id.
+                    alias.startsWith("telnet_pw_") -> pm?.clearPassword(alias.removePrefix("telnet_pw_"))
                     else -> pm?.clearPassword(alias)
                 }
                 // Persist for transitive propagation to a third device.
@@ -815,6 +844,15 @@ class SyncDataApplier {
                             SecurePasswordManager.StorageLevel.ENCRYPTED)
                         passwordCount++
                     }
+                } else if (alias.startsWith("telnet_pw_")) {
+                    // Wire alias is telnet_pw_{id}; the Keystore alias is the bare
+                    // telnet host id, which is what the connect-time ephemeral
+                    // ConnectionProfile synthesis reads.
+                    if (pm != null) {
+                        pm.storePassword(alias.removePrefix("telnet_pw_"), value,
+                            SecurePasswordManager.StorageLevel.ENCRYPTED)
+                        passwordCount++
+                    }
                 } else {
                     if (pm != null) {
                         pm.storePassword(alias, value,
@@ -851,6 +889,7 @@ class SyncDataApplier {
         alias.startsWith("cloud_token_") -> preferenceManager.isSyncCloudAccountsEnabled()
         alias.startsWith("container_host_") || alias.startsWith("registry_credential_") ->
             preferenceManager.isSyncContainersEnabled()
+        alias.startsWith("telnet_pw_") -> preferenceManager.isSyncTelnetHostsEnabled()
         else -> false
     }
 
@@ -1202,6 +1241,7 @@ class SyncDataApplier {
                     "syncContainers"        -> preferenceManager.setSyncContainersEnabled(value as Boolean)
                     // Development-build read compatibility: payloads written before the container rename used `syncDocker`.
                     "syncDocker"            -> preferenceManager.setSyncContainersEnabled(value as Boolean)
+                    "syncTelnetHosts"       -> preferenceManager.setSyncTelnetHostsEnabled(value as Boolean)
                     "autoResolve"           -> preferenceManager.setAutoResolveConflicts(value as Boolean)
                 }
                 count++

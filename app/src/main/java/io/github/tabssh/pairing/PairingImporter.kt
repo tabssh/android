@@ -6,6 +6,7 @@ import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.Identity
+import io.github.tabssh.storage.database.entities.TelnetHost
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.flow.first
 import java.util.UUID
@@ -38,6 +39,7 @@ object PairingImporter {
         val db = app.database
 
         val connectionDao = db.connectionDao()
+        val telnetHostDao = db.telnetHostDao()
         val groupDao = db.connectionGroupDao()
         val identityDao = db.identityDao()
 
@@ -99,50 +101,71 @@ object PairingImporter {
             identityDao.insertAll(rows)
         }
 
-        // Insert the connections — always fresh UUIDs.
+        // Insert the connections — always fresh UUIDs. Telnet entries are split
+        // out to telnet_hosts by MIGRATION_24_25, so they build TelnetHost rows
+        // instead of ConnectionProfile rows (no password import either way).
         var connectionsImported = 0
         if (payload.connections.isNotEmpty()) {
-            val rows = payload.connections.mapNotNull { exported ->
+            val connectionRows = mutableListOf<ConnectionProfile>()
+            val telnetRows = mutableListOf<TelnetHost>()
+            payload.connections.forEach { exported ->
                 try {
-                    ConnectionProfile(
-                        id = UUID.randomUUID().toString(),
-                        name = exported.name,
-                        host = exported.host,
-                        port = exported.port,
-                        username = exported.username,
-                        protocol = exported.protocol,
-                        authType = AuthType.fromString(exported.authType).name,
-                        // user re-associates after import
-                        keyId = null,
-                        savePassword = false,
-                        terminalType = exported.terminalType,
-                        encoding = exported.encoding,
-                        compression = exported.compression,
-                        keepAlive = exported.keepAlive,
-                        x11Forwarding = exported.x11Forwarding,
-                        moshMode = exported.moshMode,
-                        proxyHost = exported.proxyHost,
-                        proxyPort = exported.proxyPort,
-                        proxyType = exported.proxyType,
-                        proxyUsername = exported.proxyUsername,
-                        proxyAuthType = exported.proxyAuthType,
-                        proxyKeyId = null,
-                        identityId = exported.identityName?.let { identitiesByName[it] },
-                        theme = exported.theme,
-                        postConnectScript = exported.postConnectScript,
-                        envVars = exported.envVars,
-                        agentForwarding = exported.agentForwarding,
-                        colorTag = exported.colorTag,
-                        groupId = exported.groupName?.let { groupsByName[it] },
-                    )
+                    if (exported.protocol.equals("telnet", ignoreCase = true)) {
+                        telnetRows.add(
+                            TelnetHost(
+                                id = UUID.randomUUID().toString(),
+                                name = exported.name,
+                                host = exported.host,
+                                port = exported.port,
+                                username = exported.username,
+                                savePassword = false,
+                                groupId = exported.groupName?.let { groupsByName[it] },
+                                colorTag = exported.colorTag,
+                            )
+                        )
+                    } else {
+                        connectionRows.add(
+                            ConnectionProfile(
+                                id = UUID.randomUUID().toString(),
+                                name = exported.name,
+                                host = exported.host,
+                                port = exported.port,
+                                username = exported.username,
+                                protocol = exported.protocol,
+                                authType = AuthType.fromString(exported.authType).name,
+                                // user re-associates after import
+                                keyId = null,
+                                savePassword = false,
+                                terminalType = exported.terminalType,
+                                encoding = exported.encoding,
+                                compression = exported.compression,
+                                keepAlive = exported.keepAlive,
+                                x11Forwarding = exported.x11Forwarding,
+                                moshMode = exported.moshMode,
+                                proxyHost = exported.proxyHost,
+                                proxyPort = exported.proxyPort,
+                                proxyType = exported.proxyType,
+                                proxyUsername = exported.proxyUsername,
+                                proxyAuthType = exported.proxyAuthType,
+                                proxyKeyId = null,
+                                identityId = exported.identityName?.let { identitiesByName[it] },
+                                theme = exported.theme,
+                                postConnectScript = exported.postConnectScript,
+                                envVars = exported.envVars,
+                                agentForwarding = exported.agentForwarding,
+                                colorTag = exported.colorTag,
+                                groupId = exported.groupName?.let { groupsByName[it] },
+                            )
+                        )
+                    }
                 } catch (e: Exception) {
                     Logger.w("PairingImporter", "Skipped connection '${exported.name}': ${e.message}")
                     skipped.add(exported.name)
-                    null
                 }
             }
-            connectionDao.insertConnections(rows)
-            connectionsImported = rows.size
+            if (connectionRows.isNotEmpty()) connectionDao.insertConnections(connectionRows)
+            telnetRows.forEach { telnetHostDao.insert(it) }
+            connectionsImported = connectionRows.size + telnetRows.size
         }
 
         Logger.i(

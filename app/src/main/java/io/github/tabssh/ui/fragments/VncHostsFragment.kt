@@ -1,6 +1,4 @@
-package io.github.tabssh.ui.activities
-
-import io.github.tabssh.sync.tombstone.TombstoneRecorder
+package io.github.tabssh.ui.fragments
 
 import android.content.Intent
 import android.os.Bundle
@@ -9,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
+import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -20,113 +19,97 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
-import io.github.tabssh.databinding.ActivityVncHostsBinding
 import io.github.tabssh.storage.database.entities.VncHost
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
+import io.github.tabssh.ui.activities.TabTerminalActivity
+import io.github.tabssh.ui.activities.VncHostEditActivity
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Dedicated list screen for direct VNC host connections.
- * Moved out of the Connections fragment into its own Activity so VNC hosts
- * can be managed independently and have a top-level drawer entry.
+ * Hosts tab's VNC sub-tab — relocated from the standalone `VncHostsActivity`
+ * (formerly reachable from the drawer's "Accounts" group) so VNC hosts live
+ * alongside SSH/Telnet/Active in one Hosts tab. Reuses [VncHost]/[VncHostDao]
+ * and [VncHostEditActivity] as-is; only the list/CRUD host moved.
  */
-class VncHostsActivity : TabSSHActivity() {
+class VncHostsFragment : Fragment() {
 
-    private companion object {
-        private const val TAG = "VncHostsActivity"
-    }
-
-    private lateinit var binding: ActivityVncHostsBinding
     private lateinit var app: TabSSHApplication
+    private lateinit var recyclerView: RecyclerView
+    private lateinit var emptyState: View
     private lateinit var adapter: VncHostAdapter
 
-    // Connecting suspends through the whole RFB handshake while the Connect
-    // button stays tappable — a double tap would open two sockets and burn two
-    // tab slots for one host.
+    // Connecting suspends through the whole RFB handshake while the row's
+    // connect button stays tappable — a double tap would open two sockets.
     private var connecting = false
 
-    /** False once the activity is tearing down — toasts must not be shown then. */
     private val isAlive: Boolean
-        get() = !isFinishing && !isDestroyed
+        get() = isAdded && !requireActivity().isFinishing && !requireActivity().isDestroyed
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        app = application as TabSSHApplication
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View = inflater.inflate(R.layout.fragment_vnc_hosts, container, false)
 
-        binding = ActivityVncHostsBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
 
-        setSupportActionBar(binding.appBar.toolbar)
-        supportActionBar?.setTitle(R.string.nav_item_vnc_hosts)
+        app = requireActivity().application as TabSSHApplication
 
-        binding.sectionHeader.textHeaderEmoji.text = getString(R.string.vnc_hosts_header_emoji)
-        binding.sectionHeader.textHeaderTitle.text = getString(R.string.nav_item_vnc_hosts)
-        binding.sectionHeader.textHeaderSubtitle.text = getString(R.string.vnc_hosts_header_subtitle)
+        recyclerView = view.findViewById(R.id.recycler_vnc_hosts)
+        emptyState = view.findViewById(R.id.empty_state)
 
         adapter = VncHostAdapter(
-            onConnect  = { host -> openVncConsole(host) },
+            onConnect = { host -> openVncConsole(host) },
             onLongPress = { host -> showHostMenu(host) }
         )
-        binding.recyclerVncHosts.layoutManager = LinearLayoutManager(this)
-        binding.recyclerVncHosts.adapter = adapter
+        recyclerView.layoutManager = LinearLayoutManager(requireContext())
+        recyclerView.adapter = adapter
 
-        binding.fabAdd.setOnClickListener { launchAddHost() }
+        view.findViewById<View>(R.id.fab_add_vnc_host).setOnClickListener { launchAddHost() }
 
-        // Observe the database and update the list whenever it changes.
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 app.database.vncHostDao().getAllHosts().collect { hosts ->
                     adapter.submitList(hosts)
                     if (hosts.isEmpty()) {
-                        binding.recyclerVncHosts.visibility = View.GONE
-                        binding.emptyState.visibility = View.VISIBLE
+                        recyclerView.visibility = View.GONE
+                        emptyState.visibility = View.VISIBLE
                     } else {
-                        binding.emptyState.visibility = View.GONE
-                        binding.recyclerVncHosts.visibility = View.VISIBLE
+                        emptyState.visibility = View.GONE
+                        recyclerView.visibility = View.VISIBLE
                     }
                 }
             }
         }
     }
 
-    // ── Navigation helpers ────────────────────────────────────────────────────
-
-    /** Launch VncHostEditActivity in "add new host" mode (no extra). */
     private fun launchAddHost() {
-        startActivity(Intent(this, VncHostEditActivity::class.java))
+        startActivity(Intent(requireContext(), VncHostEditActivity::class.java))
     }
 
-    /** Launch VncHostEditActivity in "edit existing host" mode. */
     private fun launchEditHost(host: VncHost) {
         startActivity(
-            Intent(this, VncHostEditActivity::class.java).apply {
+            Intent(requireContext(), VncHostEditActivity::class.java).apply {
                 putExtra(VncHostEditActivity.EXTRA_VNC_HOST_ID, host.id)
             }
         )
     }
 
     /**
-     * Open the VNC console for the given host (VNC-tab-swipe integration
-     * step 6c). Resolves credentials and connects the same way
-     * [VMConsoleActivity.connectVncHost] does, then creates a [Tab.Vnc] on
-     * the shared, application-scoped `TabManager` and focuses it in
-     * [TabTerminalActivity] via [TabTerminalActivity.EXTRA_TAB_ID] — the
-     * same "focus an existing/just-created tab" path already used for the
-     * SSH "Active Sessions" tap (Issue #165). `TabTerminalActivity` never
-     * needs to know how a VNC tab's session was established; it only
-     * renders whatever [io.github.tabssh.ui.tabs.VncTab.rfbClient] is
-     * already attached when the page binds.
+     * Same "resolve credentials, connect, create a [io.github.tabssh.ui.tabs.Tab.Vnc],
+     * focus it in TabTerminalActivity" flow that `VncHostsActivity` used.
      */
     private fun openVncConsole(host: VncHost) {
         if (connecting) return
         connecting = true
-        lifecycleScope.launch {
+        viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val (password, username) = withContext(Dispatchers.IO) {
                     val identityId = host.identityId
-                    // Per-host password override always takes priority.
                     val hostPw = try {
                         app.securePasswordManager.retrievePassword("vnc_host_${host.id}")
                     } catch (e: kotlinx.coroutines.CancellationException) {
@@ -156,7 +139,7 @@ class VncHostsActivity : TabSSHActivity() {
                     }
                 }
                 val (rfbClient, _) = withContext(Dispatchers.IO) {
-                    io.github.tabssh.hypervisor.vnc.VncDirectConnector.connect(host, password, username, this@VncHostsActivity)
+                    io.github.tabssh.hypervisor.vnc.VncDirectConnector.connect(host, password, username, requireContext())
                 }
                 val tab = app.tabManager.createVncTab(host)
                 if (tab == null) {
@@ -164,7 +147,7 @@ class VncHostsActivity : TabSSHActivity() {
                         Logger.d(TAG, "rfbClient.stop() suppressed after max-tabs reject: ${e.message}")
                     }
                     if (!isAlive) return@launch
-                    Toast.makeText(this@VncHostsActivity, getString(R.string.virt_viewer_max_tabs), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), R.string.virt_viewer_max_tabs, Toast.LENGTH_SHORT).show()
                     return@launch
                 }
                 tab.rfbClient = rfbClient
@@ -174,32 +157,24 @@ class VncHostsActivity : TabSSHActivity() {
                 }
                 if (!isAlive) return@launch
                 startActivity(
-                    Intent(this@VncHostsActivity, TabTerminalActivity::class.java).apply {
+                    Intent(requireContext(), TabTerminalActivity::class.java).apply {
                         putExtra(TabTerminalActivity.EXTRA_TAB_ID, tab.tabId)
                     }
                 )
             } catch (e: kotlinx.coroutines.CancellationException) {
-                // Leaving the screen mid-handshake cancels this scope; the
-                // generic handler below would report it as a failed connection.
                 throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to connect to VNC host '${host.name}'", e)
                 if (!isAlive) return@launch
-                Toast.makeText(this@VncHostsActivity, getString(R.string.virt_viewer_connect_failed, e.message), Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), getString(R.string.virt_viewer_connect_failed, e.message), Toast.LENGTH_LONG).show()
             } finally {
                 connecting = false
             }
         }
     }
 
-    // ── Long-press menu ───────────────────────────────────────────────────────
-
-    /**
-     * Show Edit / Delete options for a VNC host.
-     * Delete shows a confirmation dialog before removing the row.
-     */
     private fun showHostMenu(host: VncHost) {
-        MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle(host.name)
             .setItems(arrayOf(getString(R.string.edit), getString(R.string.delete))) { _, which ->
                 when (which) {
@@ -211,20 +186,15 @@ class VncHostsActivity : TabSSHActivity() {
     }
 
     private fun confirmDelete(host: VncHost) {
-        MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle(getString(R.string.vnc_host_delete_title, host.name))
             .setMessage(getString(R.string.vnc_host_delete_message))
             .setPositiveButton(getString(R.string.delete)) { _, _ ->
-                lifecycleScope.launch {
+                viewLifecycleOwner.lifecycleScope.launch {
                     try {
                         withContext(Dispatchers.IO) {
                             app.database.vncHostDao().deleteById(host.id)
-                            // Drop the Keystore secret with the record. Leaving it
-                            // behind orphans the ciphertext forever, and a host
-                            // later re-imported under the same id would silently
-                            // inherit the dead password.
                             app.securePasswordManager.clearPassword("vnc_host_${host.id}")
-                            // H6 — record the deletion so it propagates and is not resurrected.
                             TombstoneRecorder.record(app, TombstoneRecorder.VNC_HOST, host.id)
                         }
                         Logger.d(TAG, "Deleted VNC host: ${host.name}")
@@ -233,7 +203,7 @@ class VncHostsActivity : TabSSHActivity() {
                     } catch (e: Exception) {
                         Logger.e(TAG, "Failed to delete VNC host", e)
                         if (!isAlive) return@launch
-                        Toast.makeText(this@VncHostsActivity, getString(R.string.vnc_host_delete_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                        Toast.makeText(requireContext(), getString(R.string.vnc_host_delete_failed_fmt, e.message), Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -241,17 +211,15 @@ class VncHostsActivity : TabSSHActivity() {
             .show()
     }
 
-    // ── RecyclerView adapter ─────────────────────────────────────────────────
-
     private inner class VncHostAdapter(
-        private val onConnect:   (VncHost) -> Unit,
+        private val onConnect: (VncHost) -> Unit,
         private val onLongPress: (VncHost) -> Unit
     ) : ListAdapter<VncHost, VncHostAdapter.ViewHolder>(HostDiff) {
 
         inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-            val textName:    TextView      = view.findViewById(R.id.text_host_name)
-            val textDetail:  TextView      = view.findViewById(R.id.text_host_detail)
-            val btnConnect:  MaterialButton = view.findViewById(R.id.btn_connect)
+            val textName: TextView = view.findViewById(R.id.text_host_name)
+            val textDetail: TextView = view.findViewById(R.id.text_host_detail)
+            val btnConnect: MaterialButton = view.findViewById(R.id.btn_connect)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -275,5 +243,10 @@ class VncHostsActivity : TabSSHActivity() {
     private object HostDiff : DiffUtil.ItemCallback<VncHost>() {
         override fun areItemsTheSame(old: VncHost, new: VncHost) = old.id == new.id
         override fun areContentsTheSame(old: VncHost, new: VncHost) = old == new
+    }
+
+    companion object {
+        private const val TAG = "VncHostsFragment"
+        fun newInstance() = VncHostsFragment()
     }
 }

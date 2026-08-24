@@ -1203,6 +1203,28 @@
     <string name="vnc_host_delete_message">This removes the VNC host record. Any linked identity is not deleted.</string>
     <string name="vnc_host_delete_failed_fmt">Delete failed: %1$s</string>
 
+    <!-- Hosts tab sub-tabs (Active / SSH / VNC / Telnet restructure) -->
+    <string name="hosts_sub_tab_active">Active</string>
+    <string name="hosts_sub_tab_ssh">SSH</string>
+    <string name="hosts_sub_tab_vnc">VNC</string>
+    <string name="hosts_sub_tab_telnet">Telnet</string>
+    <string name="hosts_search_no_results">No matching hosts or sessions</string>
+    <string name="active_hosts_empty_title">No active sessions</string>
+    <string name="hosts_search_badge_ssh">SSH</string>
+    <string name="hosts_search_badge_vnc">VNC</string>
+    <string name="hosts_search_badge_telnet">Telnet</string>
+    <string name="hosts_search_badge_active">Active</string>
+    <string name="active_host_subtitle_fmt">%1$s · %2$s</string>
+
+    <!-- Telnet hosts list -->
+    <string name="telnet_hosts_empty_emoji">📟</string>
+    <string name="telnet_hosts_empty_title">No Telnet Hosts</string>
+    <string name="telnet_hosts_empty_message">Add a direct Telnet connection to a remote host</string>
+    <string name="telnet_host_add">Add Telnet Host</string>
+    <string name="telnet_host_delete_title">Delete \'%1$s\'?</string>
+    <string name="telnet_host_delete_message">This removes the Telnet host record.</string>
+    <string name="telnet_host_delete_failed_fmt">Delete failed: %1$s</string>
+
     <!-- OCI manager -->
     <string name="oci_manager_title">OCI</string>
     <string name="oci_loading_credentials">Loading credentials…</string>
@@ -3320,6 +3342,7 @@
     <string name="sync_settings_title_hypervisor_accounts">Hypervisor Accounts</string>
     <string name="sync_settings_title_certificates">Certificates</string>
     <string name="sync_settings_title_pane_groups">Panes</string>
+    <string name="sync_settings_title_telnet_hosts">Telnet Hosts</string>
     <string name="sync_settings_subtitle_hypervisor_accounts">Hypervisor accounts</string>
     <string name="sync_settings_subtitle_connections">SSH connection profiles</string>
     <string name="sync_settings_subtitle_identities">Reusable credentials</string>
@@ -3339,6 +3362,7 @@
     <string name="sync_settings_subtitle_port_forwards">Saved port-forward rules</string>
     <string name="sync_settings_subtitle_containers">Container hosts, registries, stacks &amp; containers</string>
     <string name="sync_settings_subtitle_pane_groups">Saved pane groups (up to 6 terminal connections tiled together)</string>
+    <string name="sync_settings_subtitle_telnet_hosts">Saved telnet host profiles</string>
     <string name="sync_settings_force_upload_title">Force Upload</string>
     <string name="sync_settings_force_upload_message">Upload local data to the sync file, overwriting remote.\n\nContinue?</string>
     <string name="sync_settings_force_download_title">⚠️ Force Download</string>

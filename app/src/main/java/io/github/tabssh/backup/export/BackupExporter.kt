@@ -10,6 +10,7 @@ import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy
 import io.github.tabssh.storage.database.entities.ContainerHost
+import io.github.tabssh.storage.database.entities.Domain
 import io.github.tabssh.storage.database.entities.HostKeyEntry
 import io.github.tabssh.storage.database.entities.HypervisorAccount
 import io.github.tabssh.storage.database.entities.HypervisorProfile
@@ -24,10 +25,12 @@ import io.github.tabssh.storage.database.entities.SingleContainerConfig
 import io.github.tabssh.storage.database.entities.Snippet
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.storage.database.entities.TabSession
+import io.github.tabssh.storage.database.entities.TelnetHost
 import io.github.tabssh.storage.database.entities.ThemeDefinition
 import io.github.tabssh.storage.database.entities.TrustedCertificate
 import io.github.tabssh.storage.database.entities.VncHost
 import io.github.tabssh.storage.database.entities.VncIdentity
+import io.github.tabssh.storage.database.entities.VpsHost
 import io.github.tabssh.storage.database.entities.Workspace
 import io.github.tabssh.crypto.keys.KeyStorage
 import io.github.tabssh.crypto.storage.SecurePasswordManager
@@ -75,6 +78,7 @@ import org.json.JSONObject
  *                                                   (oci_private_key_account_{id} /
  *                                                   oci_passphrase_account_{id}).
  *   - VNC host/identity passwords                 — exported in secrets.json (vnc_host_{id} / vnc_identity_{id}).
+ *   - Telnet host password                        — exported in secrets.json (telnet_pw_{id}).
  *   - Container host + registry credentials       — exported in secrets.json (container_host_{id} / registry_credential_{id}).
  *
  * Tables intentionally excluded from backup:
@@ -126,6 +130,11 @@ class BackupExporter(
         const val FILE_MONITOR_SLOTS     = "monitor_slots.json"
         const val FILE_VNC_HOSTS         = "vnc_hosts.json"
         const val FILE_VNC_IDENTITIES    = "vnc_identities.json"
+        /**
+         * Direct Telnet hosts, split out of `connections` by MIGRATION_24_25.
+         * Password lives in secrets.json under `telnet_pw_{id}`.
+         */
+        const val FILE_TELNET_HOSTS      = "telnet_hosts.json"
         const val FILE_PORT_FORWARDS     = "port_forwards.json"
         /**
          * Reusable network routes (proxies + SSH jump hosts) for the Routing &
@@ -136,6 +145,17 @@ class BackupExporter(
          */
         const val FILE_NETWORK_ROUTES    = "network_routes.json"
         const val FILE_PANE_GROUPS       = "pane_groups.json"
+        /**
+         * Tracked domain registrations (mirrors NameCheap's Domain List CSV).
+         * No secrets — registrar credentials are never stored on-device.
+         */
+        const val FILE_DOMAINS           = "domains.json"
+        /**
+         * Tracked VPS/hosting instances (mirrors VPS.md's grouped-by-tenant
+         * layout). No secrets — the host's own SSH credentials, if any, live
+         * separately as a [FILE_CONNECTIONS] row keyed by hostname, not here.
+         */
+        const val FILE_VPS_HOSTS         = "vps_hosts.json"
         /**
          * Container subsystem — hosts, private registry credentials, compose stacks,
          * single-container run configs, and container/stack auto-update policies.
@@ -211,9 +231,12 @@ class BackupExporter(
         out[FILE_MONITOR_SLOTS]    = exportMonitorSlots()
         out[FILE_VNC_HOSTS]        = exportVncHosts()
         out[FILE_VNC_IDENTITIES]   = exportVncIdentities()
+        out[FILE_TELNET_HOSTS]     = exportTelnetHosts()
         out[FILE_PORT_FORWARDS]    = exportPortForwards()
         out[FILE_NETWORK_ROUTES]   = exportNetworkRoutes()
         out[FILE_PANE_GROUPS]      = exportPaneGroups()
+        out[FILE_DOMAINS]          = exportDomains()
+        out[FILE_VPS_HOSTS]        = exportVpsHosts()
         out[FILE_CONTAINER_HOSTS]  = exportContainerHosts()
         out[FILE_REGISTRY_CREDENTIALS] = exportRegistryCredentials()
         out[FILE_COMPOSE_STACKS]   = exportComposeStacks()
@@ -317,6 +340,12 @@ class BackupExporter(
         encodeEntities(ListSerializer(VncIdentity.serializer()),
             database.vncIdentityDao().getAllIdentitiesList())
 
+    private suspend fun exportTelnetHosts(): String =
+        // Password lives in Keystore under the bare host id — carried in
+        // secrets.json under `telnet_pw_{id}`, same convention as connections.
+        encodeEntities(ListSerializer(TelnetHost.serializer()),
+            database.telnetHostDao().getAllList())
+
     private suspend fun exportTabSessions(): String =
         // Backup-only: open tabs are local-device state, never synced.
         encodeEntities(ListSerializer(TabSession.serializer()),
@@ -338,6 +367,17 @@ class BackupExporter(
     private suspend fun exportPaneGroups(): String =
         encodeEntities(ListSerializer(PaneGroup.serializer()),
             database.paneGroupDao().getAllList())
+
+    private suspend fun exportDomains(): String =
+        // No secret column — registrar credentials are never stored on-device.
+        encodeEntities(ListSerializer(Domain.serializer()),
+            database.domainDao().getAllList())
+
+    private suspend fun exportVpsHosts(): String =
+        // No secret column — a host's own SSH credentials, if tracked, live
+        // as a separate ConnectionProfile row, not on this row.
+        encodeEntities(ListSerializer(VpsHost.serializer()),
+            database.vpsHostDao().getAllList())
 
     private suspend fun exportContainerHosts(): String =
         // No secret column — custom-endpoint passwords live in exportSecrets()
@@ -478,6 +518,15 @@ class BackupExporter(
                     ?.takeIf { it.isNotEmpty() }
                     ?.let { passwords["vnc_host_${vh.id}"] = it }
             }
+
+            // Telnet host passwords — alias: telnet_pw_{id} (bare id in Keystore)
+            database.telnetHostDao().getAllList()
+                .filter { it.savePassword }
+                .forEach { th ->
+                    pm.retrievePassword(th.id)
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { passwords["telnet_pw_${th.id}"] = it }
+                }
 
             // Cloud account tokens — alias: cloud_token_{id}
             database.cloudAccountDao().getAll().forEach { ca ->
@@ -668,12 +717,18 @@ class BackupExporter(
             put("syncHypervisorAccounts", preferenceManager.isSyncHypervisorAccountsEnabled())
             put("syncVncHosts",           preferenceManager.isSyncVncHostsEnabled())
             put("syncVncIdentities",      preferenceManager.isSyncVncIdentitiesEnabled())
+            put("syncTelnetHosts",        preferenceManager.isSyncTelnetHostsEnabled())
             put("syncCloudAccounts",      preferenceManager.isSyncCloudAccountsEnabled())
             put("syncCertificates",       preferenceManager.isSyncCertificatesEnabled())
             put("syncDashboard",          preferenceManager.isSyncDashboardEnabled())
             put("syncContainers",             preferenceManager.isSyncContainersEnabled())
             put("syncPortForwards",       preferenceManager.isSyncPortForwardsEnabled())
             put("syncNetworkRoutes",      preferenceManager.isSyncNetworkRoutesEnabled())
+            put("syncPaneGroups",         preferenceManager.isSyncPaneGroupsEnabled())
+            put("syncRegistryCredentials", preferenceManager.isSyncRegistryCredentialsEnabled())
+            put("syncComposeStacks",      preferenceManager.isSyncComposeStacksEnabled())
+            put("syncSingleContainerConfigs", preferenceManager.isSyncSingleContainerConfigsEnabled())
+            put("syncContainerAutoUpdatePolicies", preferenceManager.isSyncContainerAutoUpdatePoliciesEnabled())
             put("autoResolve",            preferenceManager.isAutoResolveConflictsEnabled())
         })
 

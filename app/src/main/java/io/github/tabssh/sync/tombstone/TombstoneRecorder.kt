@@ -64,6 +64,7 @@ object TombstoneRecorder {
     const val CONTAINER_AUTO_UPDATE_POLICY = "container_auto_update_policy"
     const val DOMAIN = "domain"
     const val VPS_HOST = "vps_host"
+    const val TELNET_HOST = "telnet_host"
 
     /**
      * Keystore/KeyStorage secrets, keyed by their sync wire alias. A removed

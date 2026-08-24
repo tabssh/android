@@ -184,7 +184,6 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
             R.id.nav_stats -> startDestination(StatsActivity::class.java)
             R.id.nav_multi_dashboard -> startDestination(MultiHostDashboardActivity::class.java)
             R.id.nav_connection_history -> startDestination(ConnectionHistoryActivity::class.java)
-            R.id.nav_vnc_hosts -> startDestination(VncHostsActivity::class.java)
             R.id.nav_settings -> startDestination(SettingsActivity::class.java)
             R.id.nav_whats_new -> startDestination(WhatsNewActivity::class.java)
             R.id.nav_copy_app_log -> copyAppLog()

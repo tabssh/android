@@ -6,24 +6,22 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Main Content with Search -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- Toolbar with Sort + Bulk Edit. The menu is inflated via the
-             fragment's MenuProvider (lifecycle-aware) — DON'T set
-             `app:menu` here, that double-inflates and gives you two of
-             every icon. -->
+        <!-- Outer Hosts toolbar — no menu of its own; sort/bulk-edit live
+             on the SSH sub-tab's own toolbar. -->
         <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar_connections"
+            android:id="@+id/toolbar_hosts"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             android:elevation="4dp"
             style="@style/Widget.TabSSH.Toolbar.Section" />
 
-        <!-- Search Bar -->
+        <!-- Unified search — queries SSH + VNC + Telnet hosts and active
+             sessions together, regardless of which sub-tab is showing. -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -32,7 +30,7 @@
             app:cardCornerRadius="8dp">
 
             <androidx.appcompat.widget.SearchView
-                android:id="@+id/search_view"
+                android:id="@+id/search_view_hosts"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 app:queryHint="@string/fragment_connections_search_hint"
@@ -41,66 +39,67 @@
 
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Issue #165 + #175 — Active sessions strip behind a ViewStub
-             so its layout cost is paid only when there's actually a
-             running tab to show. Empty-on-cold-start (the common case)
-             is now zero-cost. -->
-        <ViewStub
-            android:id="@+id/stub_active_sessions"
-            android:layout="@layout/view_active_sessions_strip"
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/tab_layout_hosts"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inflatedId="@+id/active_sessions_container" />
+            app:tabMode="fixed"
+            app:tabGravity="fill" />
 
-        <!-- All Connections RecyclerView -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/recycler_connections"
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1"
-            android:paddingStart="@dimen/space_md"
-            android:paddingEnd="@dimen/space_md"
-            android:clipToPadding="false"
-            tools:listitem="@layout/item_connection"
-            tools:itemCount="10" />
+            android:layout_weight="1">
 
-        <!-- Empty State -->
-        <LinearLayout
-            android:id="@+id/layout_empty_connections"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="@dimen/space_xl"
-            android:visibility="gone">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/fragment_connections_empty_emoji"
-                android:textSize="64sp"
-                android:paddingBottom="@dimen/space_md" />
-
-            <TextView
+            <androidx.viewpager2.widget.ViewPager2
+                android:id="@+id/view_pager_hosts"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/fragment_connections_empty_title"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:gravity="center"
-                android:textColor="?attr/colorOnSurface"
-                android:paddingBottom="@dimen/space_sm" />
+                android:layout_height="match_parent" />
 
-            <TextView
+            <!-- Search results overlay — shown instead of the pager while
+                 the unified search box has a non-empty query. -->
+            <LinearLayout
+                android:id="@+id/layout_search_results"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/fragment_connections_empty_message"
-                android:textSize="14sp"
-                android:gravity="center"
-                android:textColor="?attr/colorOnSurfaceVariant" />
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:background="?attr/colorSurface"
+                android:visibility="gone">
 
-        </LinearLayout>
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/recycler_search_results"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:paddingStart="@dimen/space_md"
+                    android:paddingEnd="@dimen/space_md"
+                    android:clipToPadding="false"
+                    tools:listitem="@layout/item_search_result"
+                    tools:itemCount="6" />
+
+                <LinearLayout
+                    android:id="@+id/layout_search_empty"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:padding="@dimen/space_xl"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/hosts_search_no_results"
+                        android:textSize="16sp"
+                        android:gravity="center"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </FrameLayout>
 
     </LinearLayout>
 

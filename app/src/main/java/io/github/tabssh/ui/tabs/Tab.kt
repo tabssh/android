@@ -61,3 +61,18 @@ fun Tab.connectionState(): ConnectionState = when (this) {
     is Tab.Console -> consoleTab.connectionState.value
     is Tab.Panes -> panesTab.aggregateConnectionState()
 }
+
+/**
+ * Wall-clock time this tab most recently became CONNECTED, used by the
+ * Hosts tab's Active sub-tab to render a connected-since timer. A
+ * [Tab.Panes] has no single connection of its own, so it reports the
+ * earliest `connectedAt` among its currently-connected panes.
+ */
+fun Tab.connectedAt(): Long? = when (this) {
+    is Tab.Ssh -> sshTab.connectedAt
+    is Tab.Vnc -> vncTab.connectedAt
+    is Tab.Console -> consoleTab.connectedAt
+    is Tab.Panes -> panesTab.currentEntries()
+        .mapNotNull { it.sshTab?.takeIf { tab -> tab.connectionState.value == ConnectionState.CONNECTED }?.connectedAt }
+        .minOrNull()
+}

@@ -100,6 +100,27 @@ class SSHTab(
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
+    /** Wall-clock time this tab last transitioned into CONNECTED; null while not connected. */
+    var connectedAt: Long? = null
+        private set
+
+    /**
+     * Single write path for [_connectionState] — stamps [connectedAt] on
+     * transition into CONNECTED and clears it otherwise, so the Active
+     * sub-tab (Hosts tab restructure) can show a connected-since timer
+     * without every call site having to remember to set it.
+     */
+    private fun setState(state: ConnectionState) {
+        if (state == ConnectionState.CONNECTED) {
+            if (_connectionState.value != ConnectionState.CONNECTED) {
+                connectedAt = System.currentTimeMillis()
+            }
+        } else {
+            connectedAt = null
+        }
+        _connectionState.value = state
+    }
+
     private val _isActive = MutableStateFlow(false)
     val isActive: StateFlow<Boolean> = _isActive.asStateFlow()
 
@@ -246,7 +267,7 @@ class SSHTab(
         termuxBridge.addListener(object : TermuxBridgeListener {
             override fun onConnected() {
                 sessionStartTime = System.currentTimeMillis()
-                _connectionState.value = ConnectionState.CONNECTED
+                setState(ConnectionState.CONNECTED)
                 _hasError.value = false
                 updateTitleWithStatus(ConnectionState.CONNECTED)
                 Logger.i("SSHTab", "Terminal connected for ${profile.getDisplayName()}")
@@ -273,7 +294,7 @@ class SSHTab(
                     // Emit DISCONNECTED after exit status has been captured so
                     // the reconnect-dialog gate in TabTerminalActivity reads the
                     // correct status (0 = clean exit, -1 = unexpected drop).
-                    _connectionState.value = ConnectionState.DISCONNECTED
+                    setState(ConnectionState.DISCONNECTED)
                     updateTitleWithStatus(ConnectionState.DISCONNECTED)
 
                     // SourceForge shell init — `create` runs as a ChannelExec,
@@ -353,7 +374,7 @@ class SSHTab(
                         Logger.d("SSHTab", "Ignoring stale disconnect: mosh session still alive")
                         return
                     }
-                    _connectionState.value = ConnectionState.DISCONNECTED
+                    setState(ConnectionState.DISCONNECTED)
                     updateTitleWithStatus(ConnectionState.DISCONNECTED)
                 }
             }
@@ -442,7 +463,7 @@ class SSHTab(
         stateCollectorJob?.cancel()
         stateCollectorJob = connectionScope.launch {
             sshConnection.connectionState.collect { state ->
-                _connectionState.value = state
+                setState(state)
                 updateTitleWithStatus(state)
                 if (state == ConnectionState.ERROR) _hasError.value = true
             }
@@ -477,7 +498,7 @@ class SSHTab(
             stateCollectorJob = connectionScope.launch {
                 var previousState: ConnectionState? = null
                 sshConnection.connectionState.collect { state ->
-                    _connectionState.value = state
+                    setState(state)
                     updateTitleWithStatus(state)
                     Logger.d("SSHTab", "Connection state changed to: $state")
                     if (state == ConnectionState.ERROR) {
@@ -632,15 +653,15 @@ class SSHTab(
         return try {
             Logger.i("SSHTab", "=== CONNECTING TELNET TAB for ${profile.getDisplayName()} ===")
             telnetConnection = telnet
-            _connectionState.value = ConnectionState.CONNECTING
+            setState(ConnectionState.CONNECTING)
             val ok = telnet.connect()
             if (!ok) {
-                _connectionState.value = ConnectionState.ERROR
+                setState(ConnectionState.ERROR)
                 _hasError.value = true
                 return false
             }
             termuxBridge.connect(telnet.inputStream, telnet.outputStream)
-            _connectionState.value = ConnectionState.CONNECTED
+            setState(ConnectionState.CONNECTED)
             updateTitleWithStatus(ConnectionState.CONNECTED)
             // Push initial NAWS using the bridge's current size.
             telnet.setWindowSize(termuxBridge.getCols(), termuxBridge.getRows())
@@ -651,7 +672,7 @@ class SSHTab(
         } catch (e: Exception) {
             Logger.e("SSHTab", "ERROR connecting telnet tab ${profile.getDisplayName()}", e)
             _hasError.value = true
-            _connectionState.value = ConnectionState.ERROR
+            setState(ConnectionState.ERROR)
             false
         }
     }
@@ -674,7 +695,7 @@ class SSHTab(
     ): Boolean {
         return try {
             Logger.i("SSHTab", "=== CONNECTING MOSH TAB (PTY) for ${profile.getDisplayName()} ($host:$port) ===")
-            _connectionState.value = ConnectionState.CONNECTING
+            setState(ConnectionState.CONNECTING)
             // B-12 — use the PTY-backed path via TermuxBridge.connectMoshClient()
             // instead of ProcessBuilder. mosh-client calls tcgetattr() at startup;
             // a plain pipe would cause ENOTTY and immediate exit. The JNI forkpty()
@@ -683,7 +704,7 @@ class SSHTab(
             if (!ok) {
                 Logger.e("SSHTab", "mosh-client binary not available for this ABI")
                 _hasError.value = true
-                _connectionState.value = ConnectionState.ERROR
+                setState(ConnectionState.ERROR)
                 return false
             }
             // moshSession (MoshNativeClient.Session) is not used in the PTY path —
@@ -723,7 +744,7 @@ class SSHTab(
             stateCollectorJob = null
             connection = null
 
-            _connectionState.value = ConnectionState.CONNECTED
+            setState(ConnectionState.CONNECTED)
             updateTitleWithStatus(ConnectionState.CONNECTED)
             Logger.i("SSHTab", "=== MOSH TAB WIRED (PTY) for ${profile.getDisplayName()} ===")
             true
@@ -732,7 +753,7 @@ class SSHTab(
         } catch (e: Exception) {
             Logger.e("SSHTab", "ERROR connecting mosh tab ${profile.getDisplayName()}", e)
             _hasError.value = true
-            _connectionState.value = ConnectionState.ERROR
+            setState(ConnectionState.ERROR)
             false
         }
     }
@@ -797,7 +818,7 @@ class SSHTab(
             Logger.d("SSHTab", "moshSession.close suppressed: ${e.message}")
         }
         moshSession = null
-        _connectionState.value = ConnectionState.DISCONNECTED
+        setState(ConnectionState.DISCONNECTED)
     }
 
     /**

@@ -63,13 +63,15 @@ data class SyncItemCounts(
     val singleContainerConfigs: Int = 0,
     val containerAutoUpdatePolicies: Int = 0,
     /** Saved Panes groups (up to 6 terminal connections tiled together). */
-    val paneGroups: Int = 0
+    val paneGroups: Int = 0,
+    /** Wave 15 — direct Telnet hosts, split out of `connections` (protocol == "telnet"). */
+    val telnetHosts: Int = 0
 ) {
     fun total(): Int = connections + keys + themes + preferences + hostKeys +
         workspaces + snippets + identities + groups + hypervisors + certificates +
         macros + monitorSlots + hypervisorAccounts + vncHosts + vncIdentities +
         cloudAccounts + dashboard + portForwards + networkRoutes + containerHosts + registryCredentials +
-        composeStacks + singleContainerConfigs + containerAutoUpdatePolicies + paneGroups
+        composeStacks + singleContainerConfigs + containerAutoUpdatePolicies + paneGroups + telnetHosts
 }
 
 /**
@@ -174,7 +176,10 @@ data class SyncDataPackage(
     /** Saved Panes groups (up to 6 terminal connections tiled together into one
      *  terminal-tab-strip slot), last-write-wins REPLACE on UUID PK. Gated by the
      *  sync_pane_groups toggle. */
-    val paneGroups: List<io.github.tabssh.storage.database.entities.PaneGroup> = emptyList()
+    val paneGroups: List<io.github.tabssh.storage.database.entities.PaneGroup> = emptyList(),
+    /** Wave 15 — direct Telnet hosts (metadata only; Keystore password not transferred),
+     *  last-write-wins REPLACE on UUID PK. Gated by the sync_telnet_hosts toggle. */
+    val telnetHosts: List<io.github.tabssh.storage.database.entities.TelnetHost> = emptyList()
 )
 
 /**
