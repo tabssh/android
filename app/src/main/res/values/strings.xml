@@ -797,6 +797,11 @@
     <string name="terminal_confirm_broadcast_title">Confirm broadcast</string>
     <string name="terminal_confirm_broadcast_message">Send to %1$d session(s)?\n\nCommand: %2$s\n\n%3$s</string>
     <string name="terminal_send_to_all">Send to all</string>
+    <string name="terminal_menu_broadcast_to_pane_windows">Broadcast to All Windows in Pane…</string>
+    <string name="pane_broadcast_command_hint">Command → %1$d window(s)</string>
+    <string name="terminal_pane_broadcast_title">Broadcast to pane (%1$d windows)</string>
+    <string name="terminal_confirm_pane_broadcast_message">Send to %1$d window(s) in this pane?\n\nCommand: %2$s\n\n%3$s</string>
+    <string name="terminal_no_pane_windows">No connected windows in this pane</string>
     <string name="terminal_multiple_sessions_title">Multiple sessions open for %1$s</string>
     <string name="terminal_open_new">Open new</string>
     <string name="terminal_multiplexer_sessions_title">%1$s sessions on %2$s</string>

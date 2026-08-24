@@ -1,5 +1,6 @@
 package io.github.tabssh.ui.tabs
 
+import io.github.tabssh.ssh.connection.ConnectionState
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -124,6 +125,27 @@ class PanesTab(
 
     /** Get display title for tab bar. */
     fun getDisplayTitle(): String = _title.value
+
+    /**
+     * Single representative [ConnectionState] for the whole tab, since unlike
+     * [SSHTab]/[VncTab]/[ConsoleTab] this tab has no one connection of its
+     * own — used anywhere a single state dot/color must summarize all of
+     * this tab's windows (e.g. the "OPEN TABS" list in the long-press
+     * terminal menu). Worst-state-wins: any window in ERROR reports ERROR,
+     * else any window still CONNECTING/AUTHENTICATING reports CONNECTING,
+     * else CONNECTED only if every window is CONNECTED, else DISCONNECTED
+     * (covers both "no windows yet" and "all windows disconnected").
+     */
+    fun aggregateConnectionState(): ConnectionState {
+        val states = _entries.value.mapNotNull { it.sshTab?.connectionState?.value }
+        return when {
+            states.isEmpty() -> ConnectionState.DISCONNECTED
+            states.any { it == ConnectionState.ERROR } -> ConnectionState.ERROR
+            states.any { it == ConnectionState.CONNECTING || it == ConnectionState.AUTHENTICATING } -> ConnectionState.CONNECTING
+            states.all { it == ConnectionState.CONNECTED } -> ConnectionState.CONNECTED
+            else -> ConnectionState.DISCONNECTED
+        }
+    }
 
     /** Activate this tab (mark as current/visible). */
     fun activate() {

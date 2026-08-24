@@ -76,6 +76,7 @@ import io.github.tabssh.ui.tabs.SSHTab
 import io.github.tabssh.ui.tabs.Tab
 import io.github.tabssh.ui.tabs.TabManager
 import io.github.tabssh.ui.tabs.TabManagerListener
+import io.github.tabssh.ui.tabs.connectionState
 import io.github.tabssh.ui.tabs.shortTitle
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
@@ -697,7 +698,12 @@ class TabTerminalActivity : TabSSHActivity() {
         val view = layoutInflater.inflate(R.layout.bottom_sheet_terminal_menu, null)
 
         // Snapshot tab state at open time so the list is stable while the sheet is open.
-        val tabs = tabManager.getAllTabs()
+        // getAllTabsSealed() (not the SSH-only getAllTabs()) so VNC/console/
+        // Panes tabs all show up here too — getActiveTabIndex() is already
+        // an index into this same unified list, so this also fixes the
+        // active-row highlight being wrong whenever a non-SSH tab preceded
+        // the active one.
+        val tabs = tabManager.getAllTabsSealed()
         val activeIndex = tabManager.getActiveTabIndex()
 
         // Build the tab rows programmatically inside the RecyclerView.
@@ -795,8 +801,10 @@ class TabTerminalActivity : TabSSHActivity() {
                 val rightView = rightIcon as ImageView
                 val isActive = position == activeIndex
 
-                // Connection-state dot with semantic tint.
-                val connectionState = tab.connectionState.value
+                // Connection-state dot with semantic tint. connectionState()
+                // is a unified extension covering all four Tab variants
+                // (Ssh/Vnc/Console/Panes) — see Tab.kt.
+                val connectionState = tab.connectionState()
                 when (connectionState) {
                     ConnectionState.CONNECTED -> {
                         stateView.setImageResource(R.drawable.ic_connected)
@@ -836,8 +844,10 @@ class TabTerminalActivity : TabSSHActivity() {
                     }
                 }
 
-                // Tab name: bold when active.
-                nameView.text = tab.profile.getDisplayName()
+                // Tab name: bold when active. shortTitle() is the same
+                // unified-across-variants extension the tab strip itself uses.
+                val displayName = tab.shortTitle()
+                nameView.text = displayName
                 nameView.setTypeface(
                     nameView.typeface,
                     if (isActive) Typeface.BOLD else Typeface.NORMAL
@@ -845,7 +855,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 // Content description for the whole row assists TalkBack.
                 val stateDesc = stateView.contentDescription
                 rowHolder.row.contentDescription =
-                    "${tab.profile.getDisplayName()}, $stateDesc${if (isActive) getString(R.string.terminal_tab_row_active_suffix) else ""}"
+                    "$displayName, $stateDesc${if (isActive) getString(R.string.terminal_tab_row_active_suffix) else ""}"
 
                 // Right icon: filled checkmark for active row, chevron for others.
                 if (isActive) {
@@ -866,13 +876,10 @@ class TabTerminalActivity : TabSSHActivity() {
                 }
 
                 rowHolder.row.setOnClickListener {
-                    // Switch by tabId — tabs may have been closed or reordered
-                    // while the sheet was open, so the snapshot position could
-                    // point to the wrong tab in the live list. tabId also
-                    // avoids the SSH-only/unified dual-index-space bug: this
-                    // row's `tabs` snapshot came from getAllTabs() (SSH-only),
-                    // which is not a valid unified-list index once VNC/console
-                    // tabs exist.
+                    // Switch by tabId, not the snapshot position — tabs may
+                    // have been closed or reordered while the sheet was open,
+                    // so the snapshot position could point to the wrong tab
+                    // in the live list by the time this fires.
                     if (tabManager.switchToTabById(tab.tabId)) {
                         val liveIdx = tabManager.getAllTabsSealed()
                             .indexOfFirst { it.tabId == tab.tabId }
@@ -932,12 +939,25 @@ class TabTerminalActivity : TabSSHActivity() {
                 }
             }
 
-        // Session section.
-        view.findViewById<MaterialButton>(R.id.btn_cluster_broadcast)
-            ?.setOnClickListener {
+        // Session section. When opened from inside a Panes tab, broadcasting
+        // "to all tabs" is misleading — getAllTabs() only returns top-level
+        // Tab.Ssh entries and silently excludes every window living inside a
+        // Panes tab. Swap the action (and its label) for a pane-scoped
+        // broadcast instead, matching what the user is actually looking at.
+        val activeTabSealed = tabManager.getActiveTabSealed()
+        val broadcastButton = view.findViewById<MaterialButton>(R.id.btn_cluster_broadcast)
+        if (activeTabSealed is Tab.Panes) {
+            broadcastButton?.text = getString(R.string.terminal_menu_broadcast_to_pane_windows)
+            broadcastButton?.setOnClickListener {
+                bottomSheet.dismiss()
+                showPanesBroadcastDialog(activeTabSealed.panesTab)
+            }
+        } else {
+            broadcastButton?.setOnClickListener {
                 bottomSheet.dismiss()
                 showClusterBroadcastDialog()
             }
+        }
 
         view.findViewById<MaterialButton>(R.id.btn_port_forwarding)
             ?.setOnClickListener {
@@ -1776,6 +1796,67 @@ class TabTerminalActivity : TabSSHActivity() {
                             }
                         }
                         Toast.makeText(this, getString(R.string.terminal_sent_to_fmt, sent, tabs.size), Toast.LENGTH_SHORT).show()
+                    }
+                    .show()
+            }
+            .show()
+    }
+
+    /**
+     * Pane broadcast — the Panes-tab counterpart of [showClusterBroadcastDialog].
+     * [tabManager.getAllTabs] only surfaces top-level [Tab.Ssh] entries, so a
+     * Panes tab's windows are invisible to the tab-wide broadcast; this
+     * targets every currently-connected [io.github.tabssh.ui.tabs.PaneWindow]
+     * in [panesTab] instead, scoped to the pane the user is actually looking
+     * at rather than every open tab in the app.
+     */
+    private fun showPanesBroadcastDialog(panesTab: io.github.tabssh.ui.tabs.PanesTab) {
+        val windows = panesTab.currentEntries().filter { it.sshTab != null }
+        if (windows.isEmpty()) {
+            Toast.makeText(this, getString(R.string.terminal_no_pane_windows), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val form = DialogFields.form(this)
+        val input = DialogFields.addText(
+            form,
+            hint = getString(R.string.pane_broadcast_command_hint, windows.size),
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS,
+            monospace = true
+        )
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.terminal_pane_broadcast_title, windows.size))
+            .setView(form.root)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.next) { _, _ ->
+                val cmd = input.text.toString()
+                if (cmd.isBlank()) {
+                    Toast.makeText(this, getString(R.string.terminal_empty_command), Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                val windowList = windows.joinToString("\n") {
+                    "• ${it.customTitle ?: it.sshTab?.profile?.getDisplayName() ?: it.hostId}"
+                }
+                MaterialAlertDialogBuilder(this)
+                    .setTitle(R.string.terminal_confirm_broadcast_title)
+                    .setMessage(getString(R.string.terminal_confirm_pane_broadcast_message, windows.size, cmd, windowList))
+                    .setNegativeButton(R.string.cancel, null)
+                    .setPositiveButton(R.string.terminal_send_to_all) { _, _ ->
+                        val payload = (cmd + "\n").toByteArray(Charsets.UTF_8)
+                        // Same reasoning as showClusterBroadcastDialog: route
+                        // through each SSHTab's TermuxBridge write funnel
+                        // rather than writing to the channel stream directly.
+                        var sent = 0
+                        windows.forEach { window ->
+                            val sshTab = window.sshTab ?: return@forEach
+                            try {
+                                sshTab.termuxBridge.write(payload)
+                                sent++
+                            } catch (e: Exception) {
+                                Logger.w("TabTerminalActivity", "Pane broadcast to ${window.customTitle ?: window.hostId} failed", e)
+                            }
+                        }
+                        Toast.makeText(this, getString(R.string.terminal_sent_to_fmt, sent, windows.size), Toast.LENGTH_SHORT).show()
                     }
                     .show()
             }

@@ -1,5 +1,7 @@
 package io.github.tabssh.ui.tabs
 
+import io.github.tabssh.ssh.connection.ConnectionState
+
 /**
  * VNC-tab-swipe integration step 2 — unified tab type.
  *
@@ -43,4 +45,19 @@ fun Tab.shortTitle(): String = when (this) {
     is Tab.Vnc -> vncTab.getDisplayTitle()
     is Tab.Console -> consoleTab.getDisplayTitle()
     is Tab.Panes -> panesTab.getDisplayTitle()
+}
+
+/**
+ * Single representative [ConnectionState] shared by all variants — lets any
+ * unified tab-list UI (e.g. the "OPEN TABS" list in the long-press terminal
+ * menu) show a consistent state dot regardless of tab type, instead of only
+ * handling [Tab.Ssh] and silently dropping every other variant.
+ * [Tab.Panes] has no single connection of its own; see
+ * [PanesTab.aggregateConnectionState] for how it's summarized.
+ */
+fun Tab.connectionState(): ConnectionState = when (this) {
+    is Tab.Ssh -> sshTab.connectionState.value
+    is Tab.Vnc -> vncTab.connectionState.value
+    is Tab.Console -> consoleTab.connectionState.value
+    is Tab.Panes -> panesTab.aggregateConnectionState()
 }
