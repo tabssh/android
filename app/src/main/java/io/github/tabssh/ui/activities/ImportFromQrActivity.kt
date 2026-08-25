@@ -250,7 +250,7 @@ class ImportFromQrActivity : TabSSHActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(title)
             .setView(container)
-            .setPositiveButton(R.string.import_qr_confirm) { _, _ -> runImport(payload) }
+            .setPositiveButton(R.string.menu_import) { _, _ -> runImport(payload) }
             .setNegativeButton(R.string.cancel) { _, _ -> finish() }
             .setCancelable(false)
             .show()

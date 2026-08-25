@@ -102,7 +102,7 @@ class ConflictResolutionDialog(
         return MaterialAlertDialogBuilder(context)
             .setView(view)
             .setTitle(context.getString(R.string.conflict_dialog_title_format, currentConflictIndex + 1, conflicts.size))
-            .setPositiveButton(R.string.conflict_button_apply) { _, _ ->
+            .setPositiveButton(R.string.terminal_apply) { _, _ ->
                 val selectedId = resolutionGroup.checkedRadioButtonId
                 val resolutionOption = when (selectedId) {
                     R.id.radio_keep_local -> ConflictResolutionOption.KEEP_LOCAL

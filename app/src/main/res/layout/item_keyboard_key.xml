@@ -30,7 +30,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/kbdcustom_key_description_placeholder"
-            android:textSize="11sp"
+            android:textSize="@dimen/text_size_overline"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:paddingTop="@dimen/space_2dp" />
 

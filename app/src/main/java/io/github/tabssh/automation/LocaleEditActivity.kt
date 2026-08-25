@@ -16,6 +16,7 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import kotlinx.coroutines.launch
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Locale/Tasker plugin configuration screen (ACTION_EDIT_SETTING).
@@ -54,7 +55,7 @@ class LocaleEditActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setResult(RESULT_CANCELED)
         setContentView(R.layout.activity_locale_edit)
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         actionSpinner = findViewById(R.id.spinner_action)
         connectionSpinner = findViewById(R.id.spinner_connection)

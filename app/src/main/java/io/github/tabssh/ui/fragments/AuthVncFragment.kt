@@ -23,6 +23,7 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /** Auth tab — VNC sub-tab: credentials for direct VNC and VeNCrypt connections. */
 class AuthVncFragment : Fragment() {
@@ -38,7 +39,7 @@ class AuthVncFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        app = requireActivity().application as TabSSHApplication
+        app = tabSSHApp
 
         setupVncIdentitiesSection(view)
         observeData()
@@ -57,12 +58,16 @@ class AuthVncFragment : Fragment() {
         view.findViewById<MaterialButton>(R.id.btn_add_vnc_identity).setOnClickListener {
             showVncIdentityDialog(null)
         }
+        view.findViewById<MaterialButton>(R.id.button_vnc_identities_empty_cta).setOnClickListener {
+            showVncIdentityDialog(null)
+        }
     }
 
     private fun updateVncEmptyState(view: View, count: Int) {
         val empty = count == 0
         view.findViewById<View>(R.id.recycler_vnc_identities).visibility = if (empty) View.GONE else View.VISIBLE
         view.findViewById<View>(R.id.text_vnc_identities_empty).visibility = if (empty) View.VISIBLE else View.GONE
+        view.findViewById<View>(R.id.button_vnc_identities_empty_cta).visibility = if (empty) View.VISIBLE else View.GONE
     }
 
     private fun showVncIdentityDialog(existing: VncIdentity?) {

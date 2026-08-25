@@ -53,7 +53,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="@dimen/space_xs"
-        android:hint="@string/connection_edit_mosh_custom_desc_hint"
+        android:hint="@string/snippet_edit_description_hint"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/edit_description"

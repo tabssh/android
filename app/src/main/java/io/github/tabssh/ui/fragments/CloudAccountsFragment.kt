@@ -36,13 +36,16 @@ import io.github.tabssh.databinding.ItemCloudAccountBinding
 import io.github.tabssh.storage.database.entities.CloudAccount
 import io.github.tabssh.ui.activities.CloudAccountManagerActivity
 import io.github.tabssh.ui.dialogs.DialogFields
+import io.github.tabssh.utils.ThrowableMapper
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Fragment equivalent of CloudAccountsActivity — shown as the "Cloud" sub-tab
@@ -195,7 +198,7 @@ class CloudAccountsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        app = requireActivity().application as TabSSHApplication
+        app = tabSSHApp
 
         recycler    = view.findViewById(R.id.recycler_accounts)
         emptyState  = view.findViewById(R.id.layout_empty_state)
@@ -386,7 +389,7 @@ class CloudAccountsFragment : Fragment() {
         val editPem = DialogFields.addMultiline(form,
             getString(R.string.cloud_oci_pem_hint), state.pem, monospace = true)
         val editPassphrase = DialogFields.addSecret(form,
-            getString(R.string.cloud_oci_passphrase_hint), state.passphrase,
+            getString(R.string.key_passphrase_hint), state.passphrase,
             getString(R.string.cloud_oci_passphrase_helper))
         val ll = form.column
 
@@ -537,10 +540,13 @@ class CloudAccountsFragment : Fragment() {
                 }
                 Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Logger.e(TAG, "OCI account save failed", e)
+                val mapped = ThrowableMapper.map(requireContext(), TAG, e, "OCI account save failed")
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(),
-                    getString(R.string.cloud_save_failed, e.message), Toast.LENGTH_LONG).show()
+                showError(
+                    getString(R.string.cloud_save_failed, mapped.message),
+                    copyText = mapped.technicalDetail,
+                    onRetry = { saveOrUpdateOciAccount(name, existing, tokenJson) }
+                )
             }
         }
     }
@@ -562,10 +568,13 @@ class CloudAccountsFragment : Fragment() {
                 Toast.makeText(requireContext(),
                     getString(R.string.cloud_saved, account.name), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Logger.e(TAG, "Save cloud account failed", e)
+                val mapped = ThrowableMapper.map(requireContext(), TAG, e, "Save cloud account failed")
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(),
-                    getString(R.string.cloud_save_failed, e.message), Toast.LENGTH_LONG).show()
+                showError(
+                    getString(R.string.cloud_save_failed, mapped.message),
+                    copyText = mapped.technicalDetail,
+                    onRetry = { saveAccount(name, provider, token) }
+                )
             }
         }
     }
@@ -600,10 +609,13 @@ class CloudAccountsFragment : Fragment() {
                     Toast.LENGTH_SHORT
                 ).show()
             } catch (e: Exception) {
-                Logger.e(TAG, "Toggle enabled failed for ${account.name}", e)
+                val mapped = ThrowableMapper.map(requireContext(), TAG, e, "Toggle enabled failed for ${account.name}")
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(),
-                    getString(R.string.cloud_save_failed, e.message), Toast.LENGTH_LONG).show()
+                showError(
+                    getString(R.string.cloud_save_failed, mapped.message),
+                    copyText = mapped.technicalDetail,
+                    onRetry = { setAccountEnabled(account, enabled) }
+                )
             }
         }
     }
@@ -638,16 +650,22 @@ class CloudAccountsFragment : Fragment() {
                     providerType.newClient().fetchInventory(token, account.name).size
                 }
             } catch (e: io.github.tabssh.cloud.CloudAuthException) {
-                Logger.e(TAG, "Inventory auth failed for ${account.name}", e)
+                val mapped = ThrowableMapper.map(requireContext(), TAG, e, "Inventory auth failed for ${account.name}")
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(),
-                    getString(R.string.cloud_token_invalid, e.message), Toast.LENGTH_LONG).show()
+                showError(
+                    getString(R.string.cloud_token_invalid, mapped.message),
+                    copyText = mapped.technicalDetail,
+                    onRetry = { refreshAccount(account) }
+                )
                 return@launch
             } catch (e: Exception) {
-                Logger.e(TAG, "Inventory fetch failed", e)
+                val mapped = ThrowableMapper.map(requireContext(), TAG, e, "Inventory fetch failed")
                 if (!isAdded) return@launch
-                Toast.makeText(requireContext(),
-                    getString(R.string.cloud_refresh_failed, e.message), Toast.LENGTH_LONG).show()
+                showError(
+                    getString(R.string.cloud_refresh_failed, mapped.message),
+                    copyText = mapped.technicalDetail,
+                    onRetry = { refreshAccount(account) }
+                )
                 return@launch
             }
             try {
@@ -762,10 +780,13 @@ class CloudAccountsFragment : Fragment() {
                         Toast.makeText(requireContext(),
                             getString(R.string.cloud_updated, newName), Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
-                        Logger.e(TAG, "Edit account failed", e)
+                        val mapped = ThrowableMapper.map(requireContext(), TAG, e, "Edit account failed")
                         if (!isAdded) return@launch
-                        Toast.makeText(requireContext(),
-                            getString(R.string.cloud_update_failed, e.message), Toast.LENGTH_LONG).show()
+                        showError(
+                            getString(R.string.cloud_update_failed, mapped.message),
+                            copyText = mapped.technicalDetail,
+                            onRetry = { showEditAccountDialog(account) }
+                        )
                     }
                 }
             }

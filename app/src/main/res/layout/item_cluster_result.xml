@@ -48,8 +48,8 @@
 
             <ImageButton
                 android:id="@+id/button_copy_output"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="@dimen/min_touch_target"
+                android:layout_height="@dimen/min_touch_target"
                 android:layout_marginStart="@dimen/space_sm"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/cluster_result_copy_output_desc"
@@ -59,8 +59,8 @@
 
             <ImageButton
                 android:id="@+id/button_toggle_output"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="@dimen/min_touch_target"
+                android:layout_height="@dimen/min_touch_target"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/cluster_result_toggle_output_desc"
                 android:src="@drawable/ic_expand_more"

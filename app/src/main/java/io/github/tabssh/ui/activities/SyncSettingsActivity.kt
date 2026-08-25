@@ -322,7 +322,7 @@ class SyncSettingsActivity : TabSSHActivity() {
             MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.sync_settings_clear_config_title)
                 .setMessage(R.string.sync_settings_clear_config_message)
-                .setPositiveButton(R.string.sync_settings_clear) { _, _ ->
+                .setPositiveButton(R.string.action_clear) { _, _ ->
                     lifecycleScope.launch {
                         withContext(Dispatchers.IO) { syncManager.clearConfiguration() }
                         switchEnabled.isChecked = false
@@ -615,7 +615,7 @@ class SyncSettingsActivity : TabSSHActivity() {
                 Logger.e(TAG, "Download failed", e)
                 withContext(Dispatchers.Main) {
                     progressSync.visibility = View.GONE
-                    toast(getString(R.string.sync_settings_toast_download_failed, e.message))
+                    toast(getString(R.string.sftp_download_failed_fmt, e.message))
                 }
             }
         }

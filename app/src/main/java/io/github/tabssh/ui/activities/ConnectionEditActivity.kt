@@ -18,16 +18,20 @@ import io.github.tabssh.storage.database.entities.TelnetHost
 import io.github.tabssh.storage.database.entities.VncHost
 import io.github.tabssh.storage.database.entities.VncIdentity
 import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.utils.ThrowableMapper
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.crypto.keys.KeyType
 import io.github.tabssh.crypto.keys.GenerateResult
+import io.github.tabssh.crypto.keys.toUserMessage
 import io.github.tabssh.crypto.storage.SecurePasswordManager
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
 import io.github.tabssh.utils.showError
+import io.github.tabssh.utils.announceAccessibility
 import java.util.UUID
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Activity for creating and editing connection profiles.
@@ -59,7 +63,8 @@ class ConnectionEditActivity : TabSSHActivity() {
         const val EXTRA_VNC_HOST_ID = "vnc_host_id"
         /** New-connection only — pre-selects the protocol spinner ("ssh"/"vnc"/"telnet"). */
         const val EXTRA_DEFAULT_PROTOCOL = "default_protocol"
-        private const val REQUEST_CODE_IMPORT_KEY = 1001
+        // Bundle key for the dirty flag saved/restored across rotation.
+        private const val KEY_HAS_UNSAVED_CHANGES = "has_unsaved_changes"
 
         // Fixed positions in the network route spinner. Saved routes start at
         // index 2; the final index is always the "+ Add new route…" action.
@@ -104,8 +109,18 @@ class ConnectionEditActivity : TabSSHActivity() {
         }
     }
 
+    // Edit screens use an up arrow instead of the hamburger, routed
+    // through the same OnBackPressedDispatcher as system Back.
+    override val navigationAffordance: NavigationAffordance = NavigationAffordance.UP
+
     private lateinit var binding: ActivityConnectionEditBinding
     private lateinit var app: TabSSHApplication
+
+    // Captured from onCreate's savedInstanceState and applied once the
+    // async DB load finishes populating fields from the stored record
+    // — applying it any earlier would just be overwritten by
+    // the freshly loaded record. Null on a fresh launch, or once consumed.
+    private var pendingFormState: Bundle? = null
 
     private var existingProfile: ConnectionProfile? = null
     private var editingVncHostId: String? = null
@@ -153,6 +168,32 @@ class ConnectionEditActivity : TabSSHActivity() {
             }
         }
 
+    // Launches the file picker for "import key from file" and reads the
+    // selected document back into the key-name prompt on success.
+    private val importKeyLauncher =
+        registerForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (result.resultCode == RESULT_OK) {
+                result.data?.data?.let { uri ->
+                    try {
+                        contentResolver.openInputStream(uri)?.use { inputStream ->
+                            val keyContent = inputStream.bufferedReader().readText()
+                            val display = resolveDisplayName(uri) ?: uri.lastPathSegment ?: "imported_key"
+                            val suggestion = display.replace(Regex("\\.(pem|key|pub)$"), "")
+                                .replace("_", " ").trim()
+                            promptForKeyName(suggestion) { confirmedName ->
+                                importKeyFromContent(keyContent, confirmedName)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        val mapped = ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Failed to read key file")
+                        showError(getString(R.string.conn_edit_read_key_file_failed, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
+                    }
+                }
+            }
+        }
+
     private var selectedGroupId: String? = null
     private var selectedGroupName: String = "No Group"
 
@@ -193,8 +234,9 @@ class ConnectionEditActivity : TabSSHActivity() {
         binding = ActivityConnectionEditBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
         isEditMode = intent.getBooleanExtra(EXTRA_IS_EDIT_MODE, false)
+        pendingFormState = savedInstanceState
 
         setupToolbar()
         // Wire spinner adapters + listeners synchronously with a placeholder list
@@ -242,10 +284,35 @@ class ConnectionEditActivity : TabSSHActivity() {
                     val index = values.indexOf(defaultProtocol)
                     if (index >= 0) binding.spinnerProtocol.setSelection(index)
                 }
+                // New-connection path has no async DB load to hang the restore
+                // off of (unlike loadConnection/loadVncHost's populate* calls),
+                // so apply any rotation-carried form state right here.
+                finishPopulatingFields()
             }
         }
 
         Logger.d("ConnectionEditActivity", "editMode=$isEditMode vncHostId=$vncHostId connectionId=$connectionId")
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        saveFormState(outState, binding.root)
+        outState.putBoolean(KEY_HAS_UNSAVED_CHANGES, hasUnsavedChanges)
+    }
+
+    /**
+     * Clears the dirty flag set by [setupUnsavedChangesGuard]'s watchers
+     * firing during programmatic population, then applies any rotation-
+     * carried [pendingFormState] on top so in-progress edits
+     * win over the freshly loaded record.
+     */
+    private fun finishPopulatingFields() {
+        hasUnsavedChanges = false
+        pendingFormState?.let { saved ->
+            restoreFormState(saved, binding.root)
+            hasUnsavedChanges = saved.getBoolean(KEY_HAS_UNSAVED_CHANGES, false)
+        }
+        pendingFormState = null
     }
 
     // -------------------------------------------------------------------------
@@ -676,7 +743,7 @@ class ConnectionEditActivity : TabSSHActivity() {
                 }
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to load SSH keys", e)
-                showError(getString(R.string.conn_edit_load_ssh_keys_failed), getString(R.string.dialog_title_error))
+                showError(getString(R.string.conn_edit_load_ssh_keys_failed), getString(R.string.status_error))
             }
         }
     }
@@ -844,12 +911,11 @@ class ConnectionEditActivity : TabSSHActivity() {
         binding.editUsername.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) validateUsername() }
     }
 
-    // Set to true the first time the user types in or toggles any of the
-    // primary form fields after the activity has finished populating. Used by
-    // [setupUnsavedChangesGuard] to decide whether the back button needs to
-    // confirm a discard. Reset to false at the end of [populateFields] and
-    // after a successful save.
-    private var hasUnsavedChanges: Boolean = false
+    // hasUnsavedChanges itself lives on TabSSHActivity — this
+    // screen only wires which fields flip it and calls
+    // enableUnsavedChangesGuard() below. Reset to false at the end of
+    // populateFields/populateVncFields/populateTelnetFields and after a
+    // successful save.
 
     private fun setupUnsavedChangesGuard() {
         val watcher = object : android.text.TextWatcher {
@@ -874,40 +940,12 @@ class ConnectionEditActivity : TabSSHActivity() {
         binding.spinnerEncoding.addTextChangedListener(watcher)
         binding.switchKeepAlive.setOnCheckedChangeListener { _, _ -> hasUnsavedChanges = true }
 
-        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (!hasUnsavedChanges) {
-                    isEnabled = false
-                    onBackPressedDispatcher.onBackPressed()
-                    return
-                }
-                MaterialAlertDialogBuilder(this@ConnectionEditActivity)
-                    .setTitle(R.string.conn_edit_discard_changes_title)
-                    .setMessage(R.string.conn_edit_discard_changes_message)
-                    .setPositiveButton(R.string.discard) { _, _ ->
-                        isEnabled = false
-                        finish()
-                    }
-                    .setNegativeButton(R.string.conn_edit_keep_editing, null)
-                    .show()
-            }
-        })
+        enableUnsavedChangesGuard()
     }
 
     private fun setupButtons() {
         binding.btnSave.setOnClickListener { saveConnection() }
-        binding.btnCancel.setOnClickListener {
-            if (!hasUnsavedChanges) {
-                finish()
-            } else {
-                MaterialAlertDialogBuilder(this)
-                    .setTitle(R.string.conn_edit_discard_changes_title)
-                    .setMessage(R.string.conn_edit_discard_changes_message)
-                    .setPositiveButton(R.string.discard) { _, _ -> finish() }
-                    .setNegativeButton(R.string.conn_edit_keep_editing, null)
-                    .show()
-            }
-        }
+        binding.btnCancel.setOnClickListener { confirmDiscardIfNeeded { finish() } }
         binding.btnTest.setOnClickListener { testConnection() }
         binding.btnGenerateKey.setOnClickListener { showKeyManagementDialog() }
         binding.btnPickColorTag.setOnClickListener { showColorTagPicker() }
@@ -926,7 +964,7 @@ class ConnectionEditActivity : TabSSHActivity() {
                 currentColorTag = colorTagPresets[which].first
                 renderColorTagPreview()
             }
-            .setNeutralButton(R.string.conn_edit_clear) { _, _ -> currentColorTag = 0; renderColorTagPreview() }
+            .setNeutralButton(R.string.action_clear) { _, _ -> currentColorTag = 0; renderColorTagPreview() }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
@@ -967,12 +1005,12 @@ class ConnectionEditActivity : TabSSHActivity() {
                     populateTelnetFields(telnetHost)
                     supportActionBar?.title = getString(R.string.conn_edit_title_edit_named, telnetHost.name)
                 } else {
-                    showError(getString(R.string.conn_edit_load_connection_failed), getString(R.string.dialog_title_error))
+                    showError(getString(R.string.conn_edit_load_connection_failed), getString(R.string.status_error))
                     finish()
                 }
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to load connection", e)
-                showError(getString(R.string.conn_edit_load_connection_failed), getString(R.string.dialog_title_error))
+                showError(getString(R.string.conn_edit_load_connection_failed), getString(R.string.status_error))
                 finish()
             }
         }
@@ -1020,8 +1058,9 @@ class ConnectionEditActivity : TabSSHActivity() {
             }
         }
         // After all fields are populated, clear the dirty flag so the back-press
-        // guard does not trigger on TextWatcher fires from setText (UX-13).
-        hasUnsavedChanges = false
+        // guard does not trigger on TextWatcher fires from setText (UX-13), then
+        // apply any rotation-carried edits on top.
+        finishPopulatingFields()
     }
 
     private suspend fun populateFields(profile: ConnectionProfile) {
@@ -1196,8 +1235,9 @@ class ConnectionEditActivity : TabSSHActivity() {
 
         // populateFields fires TextWatchers as it fills the form — clear the
         // dirty flag now so the back-press guard does not nag the user for
-        // changes they didn't actually make.
-        hasUnsavedChanges = false
+        // changes they didn't actually make, then apply any rotation-carried
+        // edits on top.
+        finishPopulatingFields()
     }
 
     // -------------------------------------------------------------------------
@@ -1214,12 +1254,12 @@ class ConnectionEditActivity : TabSSHActivity() {
                     populateVncFields(vncHost)
                     supportActionBar?.title = getString(R.string.conn_edit_title_edit_named, vncHost.name)
                 } else {
-                    showError(getString(R.string.conn_edit_vnc_host_not_found), getString(R.string.dialog_title_error))
+                    showError(getString(R.string.conn_edit_vnc_host_not_found), getString(R.string.status_error))
                     finish()
                 }
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to load VNC host", e)
-                showError(getString(R.string.conn_edit_load_vnc_host_failed), getString(R.string.dialog_title_error))
+                showError(getString(R.string.conn_edit_load_vnc_host_failed), getString(R.string.status_error))
                 finish()
             }
         }
@@ -1290,8 +1330,9 @@ class ConnectionEditActivity : TabSSHActivity() {
             binding.layoutVncPassword.visibility = View.GONE
         }
         // After all fields are populated, clear the dirty flag so the back-press
-        // guard does not trigger on TextWatcher fires from setText (UX-13).
-        hasUnsavedChanges = false
+        // guard does not trigger on TextWatcher fires from setText (UX-13), then
+        // apply any rotation-carried edits on top.
+        finishPopulatingFields()
     }
 
     // -------------------------------------------------------------------------
@@ -1377,8 +1418,8 @@ class ConnectionEditActivity : TabSSHActivity() {
                 setResult(RESULT_OK)
                 finish()
             } catch (e: Exception) {
-                Logger.e("ConnectionEditActivity", "Failed to save telnet host", e)
-                showError(getString(R.string.conn_edit_save_connection_failed, e.message.toString()), getString(R.string.dialog_title_error))
+                val mapped = ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Failed to save telnet host")
+                showError(getString(R.string.conn_edit_save_connection_failed, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
             }
         }
     }
@@ -1451,8 +1492,8 @@ class ConnectionEditActivity : TabSSHActivity() {
                 setResult(RESULT_OK)
                 finish()
             } catch (e: Exception) {
-                Logger.e("ConnectionEditActivity", "Failed to save VNC host", e)
-                showError(getString(R.string.conn_edit_save_vnc_host_failed, e.message.toString()), getString(R.string.dialog_title_error))
+                val mapped = ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Failed to save VNC host")
+                showError(getString(R.string.conn_edit_save_vnc_host_failed, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
             }
         }
     }
@@ -1485,8 +1526,8 @@ class ConnectionEditActivity : TabSSHActivity() {
                 }
                 doSave(profile)
             } catch (e: Exception) {
-                Logger.e("ConnectionEditActivity", "Failed to save connection", e)
-                showError(getString(R.string.conn_edit_save_connection_failed, e.message.toString()), getString(R.string.dialog_title_error))
+                val mapped = ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Failed to save connection")
+                showError(getString(R.string.conn_edit_save_connection_failed, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
             }
         }
     }
@@ -1532,8 +1573,8 @@ class ConnectionEditActivity : TabSSHActivity() {
             setResult(RESULT_OK)
             finish()
         } catch (e: Exception) {
-            Logger.e("ConnectionEditActivity", "Failed to save connection", e)
-            showError(getString(R.string.conn_edit_save_connection_failed, e.message.toString()), getString(R.string.dialog_title_error))
+            val mapped = ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Failed to save connection")
+            showError(getString(R.string.conn_edit_save_connection_failed, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
         }
     }
 
@@ -1820,10 +1861,10 @@ class ConnectionEditActivity : TabSSHActivity() {
     private fun validateHost(): Boolean {
         val host = binding.editHost.text.toString().trim()
         return if (host.isBlank()) {
-            binding.editHost.error = getString(R.string.conn_edit_host_required)
+            binding.layoutHost.error = getString(R.string.conn_edit_host_required)
             false
         } else {
-            binding.editHost.error = null
+            binding.layoutHost.error = null
             true
         }
     }
@@ -1832,20 +1873,20 @@ class ConnectionEditActivity : TabSSHActivity() {
         val portText = binding.editPort.text.toString().trim()
         val port = portText.toIntOrNull()
         return when {
-            portText.isBlank() -> { binding.editPort.error = getString(R.string.conn_edit_port_required); false }
-            port == null -> { binding.editPort.error = getString(R.string.conn_edit_port_invalid); false }
-            port < 1 || port > 65535 -> { binding.editPort.error = getString(R.string.conn_edit_port_out_of_range); false }
-            else -> { binding.editPort.error = null; true }
+            portText.isBlank() -> { binding.layoutPort.error = getString(R.string.conn_edit_port_required); false }
+            port == null -> { binding.layoutPort.error = getString(R.string.conn_edit_port_invalid); false }
+            port < 1 || port > 65535 -> { binding.layoutPort.error = getString(R.string.conn_edit_port_out_of_range); false }
+            else -> { binding.layoutPort.error = null; true }
         }
     }
 
     private fun validateUsername(): Boolean {
         val username = binding.editUsername.text.toString().trim()
         return if (username.isBlank()) {
-            binding.editUsername.error = getString(R.string.conn_edit_username_required)
+            binding.layoutUsernameInput.error = getString(R.string.conn_edit_username_required)
             false
         } else {
-            binding.editUsername.error = null
+            binding.layoutUsernameInput.error = null
             true
         }
     }
@@ -1921,8 +1962,8 @@ class ConnectionEditActivity : TabSSHActivity() {
                     showError(errorMsg, getString(R.string.conn_edit_test_failed_title))
                 }
             } catch (e: Exception) {
-                Logger.e("ConnectionEditActivity", "Connection test failed", e)
-                showError(e.message ?: getString(R.string.conn_edit_unknown_error), getString(R.string.conn_edit_test_failed_title))
+                val mapped = ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Connection test failed")
+                showError(mapped.message, getString(R.string.conn_edit_test_failed_title), copyText = mapped.technicalDetail)
             } finally {
                 try { connection?.disconnect() } catch (e: Exception) {
                     Logger.w("ConnectionEditActivity", "Test-connect disconnect failed", e)
@@ -1969,8 +2010,7 @@ class ConnectionEditActivity : TabSSHActivity() {
             type = "*/*"
         }
         try {
-            @Suppress("DEPRECATION")
-            startActivityForResult(intent, REQUEST_CODE_IMPORT_KEY)
+            importKeyLauncher.launch(intent)
         } catch (e: Exception) {
             showToast(getString(R.string.conn_edit_file_picker_unavailable))
         }
@@ -2075,9 +2115,10 @@ class ConnectionEditActivity : TabSSHActivity() {
                     }
                 }
             } catch (e: Exception) {
+                val mapped = ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Key generation failed")
                 runOnUiThread {
                     progressDialog.dismiss()
-                    showKeyGenerationError(getString(R.string.conn_edit_generate_key_failed, e.message.toString()))
+                    showKeyGenerationError(getString(R.string.conn_edit_generate_key_failed, mapped.message))
                 }
             }
         }
@@ -2130,8 +2171,8 @@ class ConnectionEditActivity : TabSSHActivity() {
                 if (needsPassphrase) showKeyPassphraseDialog(keyContent, filename)
                 else performKeyImport(keyContent, filename, null)
             } catch (e: Exception) {
-                Logger.e("ConnectionEditActivity", "Failed to import key", e)
-                showError(getString(R.string.conn_edit_import_failed, e.message.toString()), getString(R.string.dialog_title_error))
+                val mapped = io.github.tabssh.utils.ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Failed to import key")
+                showError(getString(R.string.conn_edit_import_failed, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
             }
         }
     }
@@ -2145,7 +2186,7 @@ class ConnectionEditActivity : TabSSHActivity() {
             .setTitle(R.string.conn_edit_encrypted_key_title)
             .setMessage(R.string.conn_edit_encrypted_key_message)
             .setView(form.root)
-            .setPositiveButton(R.string.conn_edit_import) { _, _ ->
+            .setPositiveButton(R.string.menu_import) { _, _ ->
                 val passphrase = passphraseInput.text.toString()
                 if (passphrase.isEmpty()) { showToast(getString(R.string.conn_edit_passphrase_required)); return@setPositiveButton }
                 lifecycleScope.launch { performKeyImport(keyContent, filename, passphrase) }
@@ -2165,6 +2206,10 @@ class ConnectionEditActivity : TabSSHActivity() {
                 is io.github.tabssh.crypto.keys.ImportResult.Success -> {
                     Logger.i("ConnectionEditActivity", "Key imported successfully: ${result.keyId}")
                     showToast(getString(R.string.conn_edit_key_imported_toast))
+                    // Item 20: explicit announcement — key import is async
+                    // and finishes off-screen (a file picker or background
+                    // decode), so TalkBack needs a spoken outcome.
+                    announceAccessibility(getString(R.string.conn_edit_key_imported_toast))
                     // bug-20: setupKeySpinner() is a fire-and-forget coroutine; calling it
                     // and then reading availableKeys immediately is a race. Load keys inline
                     // with withContext(IO) so availableKeys is up-to-date before auto-select.
@@ -2181,13 +2226,13 @@ class ConnectionEditActivity : TabSSHActivity() {
                     }
                 }
                 is io.github.tabssh.crypto.keys.ImportResult.Error -> {
-                    Logger.e("ConnectionEditActivity", "Key import failed: ${result.message}")
-                    showKeyImportErrorDialog(result.message)
+                    Logger.e("ConnectionEditActivity", "Key import failed: ${result.errorType} (${result.technicalDetail})")
+                    showKeyImportErrorDialog(result.errorType, result.technicalDetail)
                 }
             }
         } catch (e: Exception) {
-            Logger.e("ConnectionEditActivity", "Key import failed", e)
-            showError(getString(R.string.conn_edit_key_import_failed, e.message.toString()), getString(R.string.dialog_title_error))
+            val mapped = io.github.tabssh.utils.ThrowableMapper.map(this, "ConnectionEditActivity", e, "Key import failed")
+            showError(getString(R.string.conn_edit_key_import_failed, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
         }
     }
 
@@ -2216,6 +2261,7 @@ class ConnectionEditActivity : TabSSHActivity() {
                     is io.github.tabssh.crypto.keys.ImportResult.Success -> {
                         Logger.i("ConnectionEditActivity", "Encrypted key imported: ${result.keyId}")
                         showToast(getString(R.string.conn_edit_encrypted_key_imported_toast))
+                        announceAccessibility(getString(R.string.conn_edit_encrypted_key_imported_toast))
                         // bug-20: load keys inline so availableKeys is up-to-date before auto-select.
                         availableKeys = withContext(Dispatchers.IO) { app.keyStorage.listStoredKeys() }
                         val keyNames = listOf(getString(R.string.conn_edit_select_ssh_key_placeholder)) + availableKeys.map { it.getDisplayName() }
@@ -2230,47 +2276,25 @@ class ConnectionEditActivity : TabSSHActivity() {
                         }
                     }
                     is io.github.tabssh.crypto.keys.ImportResult.Error -> {
-                        Logger.e("ConnectionEditActivity", "Encrypted key import failed: ${result.message}")
-                        showKeyImportErrorDialog(result.message)
+                        Logger.e("ConnectionEditActivity", "Encrypted key import failed: ${result.errorType} (${result.technicalDetail})")
+                        showKeyImportErrorDialog(result.errorType, result.technicalDetail)
                     }
                 }
             } catch (e: Exception) {
-                Logger.e("ConnectionEditActivity", "Encrypted key import failed", e)
-                showError(getString(R.string.conn_edit_encrypted_key_import_failed, e.message.toString()), getString(R.string.dialog_title_error))
+                val mapped = io.github.tabssh.utils.ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Encrypted key import failed")
+                showError(getString(R.string.conn_edit_encrypted_key_import_failed, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
             }
         }
     }
 
-    private fun showKeyImportErrorDialog(errorMessage: String) {
+    private fun showKeyImportErrorDialog(errorType: io.github.tabssh.crypto.keys.KeyImportErrorType, technicalDetail: String?) {
         io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
             context = this,
             title = getString(R.string.conn_edit_ssh_key_import_failed_title),
-            message = errorMessage,
+            message = errorType.toUserMessage(this),
+            copyText = technicalDetail,
             onDismiss = {}
         )
-    }
-
-    @Suppress("DEPRECATION")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_CODE_IMPORT_KEY && resultCode == RESULT_OK) {
-            data?.data?.let { uri ->
-                try {
-                    contentResolver.openInputStream(uri)?.use { inputStream ->
-                        val keyContent = inputStream.bufferedReader().readText()
-                        val display = resolveDisplayName(uri) ?: uri.lastPathSegment ?: "imported_key"
-                        val suggestion = display.replace(Regex("\\.(pem|key|pub)$"), "")
-                            .replace("_", " ").trim()
-                        promptForKeyName(suggestion) { confirmedName ->
-                            importKeyFromContent(keyContent, confirmedName)
-                        }
-                    }
-                } catch (e: Exception) {
-                    Logger.e("ConnectionEditActivity", "Failed to read key file", e)
-                    showError(getString(R.string.conn_edit_read_key_file_failed, e.message.toString()), getString(R.string.dialog_title_error))
-                }
-            }
-        }
     }
 
     private fun resolveDisplayName(uri: Uri): String? {
@@ -2294,7 +2318,7 @@ class ConnectionEditActivity : TabSSHActivity() {
             .setTitle(R.string.conn_edit_name_this_key_title)
             .setMessage(R.string.conn_edit_name_this_key_message)
             .setView(form.root)
-            .setPositiveButton(R.string.conn_edit_import) { _, _ ->
+            .setPositiveButton(R.string.menu_import) { _, _ ->
                 val name = edit.text.toString().trim().ifBlank { suggestion }
                 onConfirm(name)
             }
@@ -2349,7 +2373,7 @@ class ConnectionEditActivity : TabSSHActivity() {
                 }
             }
             .setNegativeButton(R.string.cancel, null)
-            .setNeutralButton(R.string.conn_edit_clear) { _, _ ->
+            .setNeutralButton(R.string.action_clear) { _, _ ->
                 selectedGroupId = null
                 selectedGroupName = getString(R.string.conn_edit_no_group)
                 supportActionBar?.subtitle = null
@@ -2560,7 +2584,7 @@ class ConnectionEditActivity : TabSSHActivity() {
                 android.widget.Toast.makeText(this, getString(R.string.conn_edit_knock_sequence_saved, count), android.widget.Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton(R.string.cancel, null)
-            .setNeutralButton(R.string.conn_edit_clear) { _, _ ->
+            .setNeutralButton(R.string.action_clear) { _, _ ->
                 pendingKnockSequence = null
                 android.widget.Toast.makeText(this, getString(R.string.conn_edit_knock_sequence_cleared), android.widget.Toast.LENGTH_SHORT).show()
             }

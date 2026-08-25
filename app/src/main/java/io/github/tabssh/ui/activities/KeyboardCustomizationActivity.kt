@@ -23,7 +23,9 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.databinding.ActivityKeyboardCustomizationBinding
 import io.github.tabssh.ui.keyboard.KeyboardKey
 import io.github.tabssh.ui.keyboard.MultiRowKeyboardView
+import io.github.tabssh.utils.ThrowableMapper
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Keyboard layout editor.
@@ -43,6 +45,10 @@ import io.github.tabssh.utils.logging.Logger
  *   3. Available keys (tap to add to the currently active row)
  */
 class KeyboardCustomizationActivity : TabSSHActivity() {
+
+    // Edit screens use an up arrow instead of the hamburger, routed
+    // through the same OnBackPressedDispatcher as system Back.
+    override val navigationAffordance: NavigationAffordance = NavigationAffordance.UP
 
     private lateinit var binding: ActivityKeyboardCustomizationBinding
     private lateinit var app: TabSSHApplication
@@ -75,13 +81,17 @@ class KeyboardCustomizationActivity : TabSSHActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityKeyboardCustomizationBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        app = application as TabSSHApplication
+        app = tabSSHApp
         setupToolbar()
         initViews()
         loadLayout()
         setupListeners()
         rebuildSurface()
         refreshAvailableKeys()
+
+        // leaving the editor with unplaced/unsaved layout
+        // changes prompts for confirmation, same as the form-based screens.
+        enableUnsavedChangesGuard()
     }
 
     private fun setupToolbar() {
@@ -345,6 +355,7 @@ class KeyboardCustomizationActivity : TabSSHActivity() {
         }
         keyboardLayout[toRow].add(insertAt, key)
         activeRow = toRow
+        hasUnsavedChanges = true
         rebuildSurface()
     }
 
@@ -370,6 +381,7 @@ class KeyboardCustomizationActivity : TabSSHActivity() {
             n < cur -> repeat(cur - n) { keyboardLayout.removeLastOrNull() }
         }
         activeRow = activeRow.coerceAtMost((keyboardLayout.size - 1).coerceAtLeast(0))
+        hasUnsavedChanges = true
         rebuildSurface()
     }
 
@@ -381,12 +393,14 @@ class KeyboardCustomizationActivity : TabSSHActivity() {
         // (palette filtering prevents this in normal use, but be defensive).
         if (keyboardLayout.any { row -> row.any { it.id == key.id } }) return
         keyboardLayout[activeRow].add(key)
+        hasUnsavedChanges = true
         rebuildSurface()
     }
 
     private fun removeKey(rowIdx: Int, key: KeyboardKey) {
         if (rowIdx >= keyboardLayout.size) return
         keyboardLayout[rowIdx].removeIf { it.id == key.id }
+        hasUnsavedChanges = true
         rebuildSurface()
     }
 
@@ -427,10 +441,11 @@ class KeyboardCustomizationActivity : TabSSHActivity() {
             )
             Toast.makeText(this, getString(R.string.keyboard_customization_layout_saved, keyboardLayout.size), Toast.LENGTH_SHORT).show()
             Logger.i("KeyboardCustomization", "Saved ${keyboardLayout.size} rows")
+            hasUnsavedChanges = false
             finish()
         } catch (e: Exception) {
-            Logger.e("KeyboardCustomization", "Save failed", e)
-            Toast.makeText(this, getString(R.string.keyboard_customization_save_failed, e.message.toString()), Toast.LENGTH_LONG).show()
+            val mapped = ThrowableMapper.map(this, "KeyboardCustomization", e, "Save failed")
+            Toast.makeText(this, getString(R.string.keyboard_customization_save_failed, mapped.message), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -469,6 +484,7 @@ class KeyboardCustomizationActivity : TabSSHActivity() {
                     5 -> binding.toggleRowCount.check(R.id.btn_row_5)
                 }
                 activeRow = 0
+                hasUnsavedChanges = true
                 rebuildSurface()
                 refreshAvailableKeys()
                 Toast.makeText(this, getString(R.string.keyboard_customization_reset_done_toast), Toast.LENGTH_SHORT).show()

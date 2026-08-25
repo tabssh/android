@@ -31,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Per-account instance manager for Cloud Accounts.
@@ -82,7 +83,7 @@ class CloudAccountManagerActivity : TabSSHActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         binding = ActivityCloudManagerBinding.inflate(layoutInflater)
         setContentView(binding.root)

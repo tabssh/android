@@ -32,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Container host list — first Infra sub-tab, covering every engine
@@ -47,6 +48,8 @@ class ContainerHostsFragment : Fragment() {
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyState: LinearLayout
+    private lateinit var errorState: LinearLayout
+    private lateinit var textError: android.widget.TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var fabAdd: FloatingActionButton
     private lateinit var buttonAddFirst: Button
@@ -67,7 +70,7 @@ class ContainerHostsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        app = requireActivity().application as TabSSHApplication
+        app = tabSSHApp
 
         setupViews(view)
         setupToolbar()
@@ -81,9 +84,13 @@ class ContainerHostsFragment : Fragment() {
         swipeRefresh = view.findViewById(R.id.swipe_refresh)
         recyclerView = view.findViewById(R.id.recycler_container_hosts)
         emptyState = view.findViewById(R.id.empty_state)
+        errorState = view.findViewById(R.id.error_state)
+        textError = view.findViewById(R.id.text_error)
         progressBar = view.findViewById(R.id.progress_bar)
         fabAdd = view.findViewById(R.id.fab_add)
         buttonAddFirst = view.findViewById(R.id.button_add_first)
+
+        view.findViewById<Button>(R.id.button_retry).setOnClickListener { loadContainerHosts() }
     }
 
     private fun setupToolbar() {
@@ -164,6 +171,7 @@ class ContainerHostsFragment : Fragment() {
 
                     // Toggle the swipe container, not the recycler — the
                     // wrapper keeps its layout weight even with a GONE child.
+                    errorState.visibility = View.GONE
                     if (list.isEmpty()) {
                         swipeRefresh.visibility = View.GONE
                         emptyState.visibility = View.VISIBLE
@@ -185,6 +193,15 @@ class ContainerHostsFragment : Fragment() {
                     getString(R.string.container_error_detail_fmt, ContainerText.display(e.message)),
                     Toast.LENGTH_SHORT
                 ).show()
+
+                // Distinct from the empty state — a failed load is not the
+                // same thing as "no container hosts configured".
+                swipeRefresh.visibility = View.GONE
+                emptyState.visibility = View.GONE
+                errorState.visibility = View.VISIBLE
+                textError.text = getString(
+                    R.string.container_error_detail_fmt, ContainerText.display(e.message)
+                )
             }
         }
     }

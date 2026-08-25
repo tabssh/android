@@ -36,6 +36,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Add/edit one container host. Mirrors the hypervisor editor: optional name,
@@ -51,6 +52,10 @@ import kotlinx.coroutines.withContext
  * engine-group remediation dialog via ContainerErrorPresenter).
  */
 class ContainerHostEditActivity : TabSSHActivity() {
+
+    // Edit screens use an up arrow instead of the hamburger, routed
+    // through the same OnBackPressedDispatcher as system Back.
+    override val navigationAffordance: NavigationAffordance = NavigationAffordance.UP
 
     companion object {
         const val EXTRA_HOST_ID = "container_host_id"
@@ -142,8 +147,11 @@ class ContainerHostEditActivity : TabSSHActivity() {
     private lateinit var sectionSaved: View
     private lateinit var sectionCustom: View
     private lateinit var spinnerConnection: Spinner
+    private lateinit var layoutCustomHost: TextInputLayout
     private lateinit var editCustomHost: TextInputEditText
+    private lateinit var layoutCustomPort: TextInputLayout
     private lateinit var editCustomPort: TextInputEditText
+    private lateinit var layoutCustomUsername: TextInputLayout
     private lateinit var editCustomUsername: TextInputEditText
     private lateinit var spinnerAuthType: Spinner
     private lateinit var layoutCustomPassword: TextInputLayout
@@ -154,7 +162,9 @@ class ContainerHostEditActivity : TabSSHActivity() {
     private lateinit var spinnerCustomIdentity: Spinner
     private lateinit var layoutSocketPath: TextInputLayout
     private lateinit var editSocketPath: TextInputEditText
+    private lateinit var layoutComposeBase: TextInputLayout
     private lateinit var editComposeBase: TextInputEditText
+    private lateinit var layoutRunBase: TextInputLayout
     private lateinit var editRunBase: TextInputEditText
     private lateinit var layoutCliPath: TextInputLayout
     private lateinit var editCliPath: TextInputEditText
@@ -186,12 +196,81 @@ class ContainerHostEditActivity : TabSSHActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_container_host_edit)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         setupViews()
         setupToolbar()
         setupClickListeners()
+        setupUnsavedChangesGuard()
         loadData()
+    }
+
+    /**
+     * Wires every primary form field to flip [hasUnsavedChanges] and opts
+     * this screen into the shared discard-confirmation guard.
+     */
+    private fun setupUnsavedChangesGuard() {
+        val watcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) { hasUnsavedChanges = true }
+        }
+        editName.addTextChangedListener(watcher)
+        editCustomHost.addTextChangedListener(watcher)
+        editCustomPort.addTextChangedListener(watcher)
+        editCustomUsername.addTextChangedListener(watcher)
+        editCustomPassword.addTextChangedListener(watcher)
+        editSocketPath.addTextChangedListener(watcher)
+        editComposeBase.addTextChangedListener(watcher)
+        editRunBase.addTextChangedListener(watcher)
+        editCliPath.addTextChangedListener(watcher)
+        editUpdateInterval.addTextChangedListener(watcher)
+        editNotes.addTextChangedListener(watcher)
+        radioMode.setOnCheckedChangeListener { _, checkedId ->
+            hasUnsavedChanges = true
+            val custom = checkedId == R.id.radio_mode_custom
+            sectionSaved.visibility = if (custom) View.GONE else View.VISIBLE
+            sectionCustom.visibility = if (custom) View.VISIBLE else View.GONE
+        }
+        switchUpdateCheck.setOnCheckedChangeListener { _, checked ->
+            hasUnsavedChanges = true
+            layoutUpdateInterval.visibility = if (checked) View.VISIBLE else View.GONE
+        }
+        spinnerEngine.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
+                hasUnsavedChanges = true
+                applyEngineHints(engineValues.getOrNull(pos) ?: ContainerEngine.DEFAULT)
+            }
+
+            override fun onNothingSelected(p: AdapterView<*>?) = Unit
+        }
+        spinnerConnection.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) { hasUnsavedChanges = true }
+            override fun onNothingSelected(p: AdapterView<*>?) = Unit
+        }
+        spinnerAuthType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
+                hasUnsavedChanges = true
+                val auth = authTypeValues.getOrNull(pos) ?: "password"
+                layoutCustomPassword.visibility =
+                    if (auth == "password") View.VISIBLE else View.GONE
+                rowCustomKey.visibility = if (auth == "key") View.VISIBLE else View.GONE
+                rowCustomIdentity.visibility =
+                    if (auth == "identity") View.VISIBLE else View.GONE
+            }
+
+            override fun onNothingSelected(p: AdapterView<*>?) = Unit
+        }
+        spinnerCustomKey.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) { hasUnsavedChanges = true }
+            override fun onNothingSelected(p: AdapterView<*>?) = Unit
+        }
+        spinnerCustomIdentity.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) { hasUnsavedChanges = true }
+            override fun onNothingSelected(p: AdapterView<*>?) = Unit
+        }
+
+        enableUnsavedChangesGuard()
     }
 
     private fun setupViews() {
@@ -202,8 +281,11 @@ class ContainerHostEditActivity : TabSSHActivity() {
         sectionSaved = findViewById(R.id.section_saved)
         sectionCustom = findViewById(R.id.section_custom)
         spinnerConnection = findViewById(R.id.spinner_connection)
+        layoutCustomHost = findViewById(R.id.layout_custom_host)
         editCustomHost = findViewById(R.id.edit_custom_host)
+        layoutCustomPort = findViewById(R.id.layout_custom_port)
         editCustomPort = findViewById(R.id.edit_custom_port)
+        layoutCustomUsername = findViewById(R.id.layout_custom_username)
         editCustomUsername = findViewById(R.id.edit_custom_username)
         spinnerAuthType = findViewById(R.id.spinner_auth_type)
         layoutCustomPassword = findViewById(R.id.layout_custom_password)
@@ -214,16 +296,17 @@ class ContainerHostEditActivity : TabSSHActivity() {
         spinnerCustomIdentity = findViewById(R.id.spinner_custom_identity)
         layoutSocketPath = findViewById(R.id.layout_socket_path)
         editSocketPath = findViewById(R.id.edit_socket_path)
+        layoutComposeBase = findViewById(R.id.layout_compose_base)
         editComposeBase = findViewById(R.id.edit_compose_base)
+        layoutRunBase = findViewById(R.id.layout_run_base)
         editRunBase = findViewById(R.id.edit_run_base)
         layoutCliPath = findViewById(R.id.layout_cli_path)
         editCliPath = findViewById(R.id.edit_cli_path)
         switchUpdateCheck = findViewById(R.id.switch_update_check)
         layoutUpdateInterval = findViewById(R.id.layout_update_interval)
         editUpdateInterval = findViewById(R.id.edit_update_interval)
-        switchUpdateCheck.setOnCheckedChangeListener { _, checked ->
-            layoutUpdateInterval.visibility = if (checked) View.VISIBLE else View.GONE
-        }
+        // switchUpdateCheck's checked-change listener (visibility toggle plus
+        // the dirty-flag flip) is installed in setupUnsavedChangesGuard().
         editNotes = findViewById(R.id.edit_notes)
         buttonTestTransport = findViewById(R.id.button_test_transport)
         progressTest = findViewById(R.id.progress_test)
@@ -269,37 +352,28 @@ class ContainerHostEditActivity : TabSSHActivity() {
     }
 
     private fun setupClickListeners() {
-        buttonCancel.setOnClickListener { finish() }
+        buttonCancel.setOnClickListener { confirmDiscardIfNeeded { finish() } }
         buttonSave.setOnClickListener { saveHost() }
         buttonTestTransport.setOnClickListener { testTransport() }
-        radioMode.setOnCheckedChangeListener { _, checkedId ->
-            val custom = checkedId == R.id.radio_mode_custom
-            sectionSaved.visibility = if (custom) View.GONE else View.VISIBLE
-            sectionCustom.visibility = if (custom) View.VISIBLE else View.GONE
-        }
-        spinnerEngine.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
-                applyEngineHints(engineValues.getOrNull(pos) ?: ContainerEngine.DEFAULT)
-            }
-
-            override fun onNothingSelected(p: AdapterView<*>?) = Unit
-        }
-        spinnerAuthType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
-                val auth = authTypeValues.getOrNull(pos) ?: "password"
-                layoutCustomPassword.visibility =
-                    if (auth == "password") View.VISIBLE else View.GONE
-                rowCustomKey.visibility = if (auth == "key") View.VISIBLE else View.GONE
-                rowCustomIdentity.visibility =
-                    if (auth == "identity") View.VISIBLE else View.GONE
-            }
-
-            override fun onNothingSelected(p: AdapterView<*>?) = Unit
-        }
+        // radioMode's checked-change listener (and spinnerEngine/spinnerAuthType's
+        // item-selected listeners) are installed in setupUnsavedChangesGuard()
+        // instead, merged with the dirty-flag flip — a RadioGroup/Spinner only
+        // keeps one listener, so setting it here would be silently overwritten.
     }
 
     private fun isCustomMode(): Boolean =
         radioMode.checkedRadioButtonId == R.id.radio_mode_custom
+
+    /** Clears every field-level Material error before re-validating the form. */
+    private fun clearFieldErrors() {
+        layoutCustomHost.error = null
+        layoutCustomUsername.error = null
+        layoutCustomPort.error = null
+        layoutSocketPath.error = null
+        layoutComposeBase.error = null
+        layoutRunBase.error = null
+        layoutCliPath.error = null
+    }
 
     private fun loadData() {
         lifecycleScope.launch {
@@ -329,8 +403,8 @@ class ContainerHostEditActivity : TabSSHActivity() {
                 this@ContainerHostEditActivity,
                 android.R.layout.simple_spinner_dropdown_item,
                 listOf(
-                    getString(R.string.container_auth_password),
-                    getString(R.string.container_auth_key),
+                    getString(R.string.password_hint),
+                    getString(R.string.route_auth_key),
                     getString(R.string.container_auth_identity)
                 )
             )
@@ -361,7 +435,12 @@ class ContainerHostEditActivity : TabSSHActivity() {
             spinnerEngine.setSelection(if (engineIndex >= 0) engineIndex else 0)
             applyEngineHints(defaults.engineType())
 
-            host ?: return@launch
+            if (host == null) {
+                // No DB record to populate — the defaults set above are all
+                // there is, so the form starts clean.
+                hasUnsavedChanges = false
+                return@launch
+            }
 
             editName.setText(host.name)
             editCliPath.setText(host.engineCliPath ?: "")
@@ -387,6 +466,11 @@ class ContainerHostEditActivity : TabSSHActivity() {
                 val idx = connections.indexOfFirst { it.id == host.linkedConnectionId }
                 if (idx >= 0) spinnerConnection.setSelection(idx)
             }
+
+            // Every field/spinner set above flips the dirty-flag listeners
+            // installed in setupUnsavedChangesGuard() — DB-driven population
+            // is not a user edit, so clear the flag once population is done.
+            hasUnsavedChanges = false
         }
     }
 
@@ -396,6 +480,7 @@ class ContainerHostEditActivity : TabSSHActivity() {
      * (saved mode) or the endpoint hostname (custom mode).
      */
     private fun hostFromForm(): ContainerHost? {
+        clearFieldErrors()
         val typedName = editName.text?.toString()?.trim().orEmpty()
         val entityDefaults = ContainerHost(name = "")
         val base = existingHost ?: entityDefaults
@@ -403,7 +488,7 @@ class ContainerHostEditActivity : TabSSHActivity() {
         val endpoint: ContainerHost = if (isCustomMode()) {
             val hostAddr = editCustomHost.text?.toString()?.trim().orEmpty()
             if (!isValidHostAddress(hostAddr)) {
-                showError(getString(R.string.container_host_error_custom_host))
+                layoutCustomHost.error = getString(R.string.container_host_error_custom_host)
                 return null
             }
             val username = editCustomUsername.text?.toString()?.trim().orEmpty()
@@ -412,7 +497,15 @@ class ContainerHostEditActivity : TabSSHActivity() {
             if (username.isEmpty() ||
                 username.any { it.isWhitespace() || it.code < 0x20 || it.code == 0x7F }
             ) {
-                showError(getString(R.string.container_host_error_custom_username))
+                layoutCustomUsername.error = getString(R.string.container_host_error_custom_username)
+                return null
+            }
+            // Out-of-range ports are rejected, never silently clamped — a typo
+            // like "655350" must not silently become port 65535.
+            val portText = editCustomPort.text?.toString()?.trim().orEmpty()
+            val port = portText.toIntOrNull()
+            if (portText.isNotEmpty() && (port == null || port !in 1..65535)) {
+                layoutCustomPort.error = getString(R.string.error_invalid_port)
                 return null
             }
             val auth = authTypeValues.getOrNull(spinnerAuthType.selectedItemPosition)
@@ -433,8 +526,7 @@ class ContainerHostEditActivity : TabSSHActivity() {
                 name = typedName.ifEmpty { hostAddr },
                 linkedConnectionId = null,
                 customHost = hostAddr,
-                customPort = editCustomPort.text?.toString()?.trim()?.toIntOrNull()
-                    ?.coerceIn(1, 65535) ?: 22,
+                customPort = port ?: 22,
                 customUsername = username,
                 customAuthType = auth,
                 customKeyId = key?.keyId,
@@ -462,7 +554,7 @@ class ContainerHostEditActivity : TabSSHActivity() {
         // socketCandidates() to probe the engine's own default locations.
         val socketPath = editSocketPath.text?.toString()?.trim().orEmpty()
         if (!isValidSocketEndpoint(socketPath)) {
-            showError(getString(R.string.container_host_error_socket))
+            layoutSocketPath.error = getString(R.string.container_host_error_socket)
             return null
         }
         val composeBase = editComposeBase.text?.toString()?.trim()
@@ -471,8 +563,12 @@ class ContainerHostEditActivity : TabSSHActivity() {
             ?.takeIf { it.isNotEmpty() } ?: entityDefaults.runConfigBasePath
         // Both are interpolated into remote shell commands and into stored
         // config — reject anything that is not a plain absolute path.
-        if (!isValidRemotePath(composeBase) || !isValidRemotePath(runBase)) {
-            showError(getString(R.string.container_host_error_path))
+        if (!isValidRemotePath(composeBase)) {
+            layoutComposeBase.error = getString(R.string.container_host_error_path)
+            return null
+        }
+        if (!isValidRemotePath(runBase)) {
+            layoutRunBase.error = getString(R.string.container_host_error_path)
             return null
         }
         val cliPath = editCliPath.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
@@ -481,7 +577,7 @@ class ContainerHostEditActivity : TabSSHActivity() {
         if (cliPath != null &&
             cliPath.any { it.isWhitespace() || it.code < 0x20 || it.code == 0x7F }
         ) {
-            showError(getString(R.string.container_host_error_path))
+            layoutCliPath.error = getString(R.string.container_host_error_path)
             return null
         }
 
@@ -536,6 +632,7 @@ class ContainerHostEditActivity : TabSSHActivity() {
                     getString(R.string.container_host_saved),
                     Toast.LENGTH_SHORT
                 ).show()
+                hasUnsavedChanges = false
                 finish()
             } catch (e: CancellationException) {
                 throw e

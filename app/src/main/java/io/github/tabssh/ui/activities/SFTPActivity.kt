@@ -29,6 +29,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import io.github.tabssh.utils.showError
+import io.github.tabssh.utils.announceAccessibility
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * SFTP file browser activity with dual-pane interface
@@ -96,7 +98,7 @@ class SFTPActivity : TabSSHActivity() {
     // back on change). Constructed here, before onCreate finishes, so it can
     // observe this activity's lifecycle for the post-edit resume check.
     private val remoteFileOpener = io.github.tabssh.sftp.RemoteFileOpener(this) {
-        (application as TabSSHApplication).preferencesManager.getFileOpenSizeLimitMb()
+        tabSSHApp.preferencesManager.getFileOpenSizeLimitMb()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -105,7 +107,7 @@ class SFTPActivity : TabSSHActivity() {
         binding = ActivitySftpBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         intent.getStringExtra(EXTRA_INITIAL_REMOTE_PATH)?.let { initialPath ->
             currentRemotePath = initialPath
@@ -845,7 +847,7 @@ class SFTPActivity : TabSSHActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.sftp_permissions_title_fmt, file.name))
             .setView(container)
-            .setPositiveButton(R.string.sftp_permissions_apply) { _, _ ->
+            .setPositiveButton(R.string.terminal_apply) { _, _ ->
                 lifecycleScope.launch {
                     val ok = withContext(Dispatchers.IO) { sftpManager.changeRemotePermissions(file.path, mode[0]) }
                     runOnUiThread {
@@ -1093,15 +1095,23 @@ class SFTPActivity : TabSSHActivity() {
     }
     
     private fun handleTransferCompleted(transfer: TransferTask, result: io.github.tabssh.sftp.TransferResult) {
+        // Item 20: a Toast is not reliably spoken by TalkBack (custom Toast
+        // views and rapid successive transfers can drop it), so a transfer
+        // outcome gets an explicit announcement alongside the existing
+        // Toast/dialog feedback.
         when (result) {
             is io.github.tabssh.sftp.TransferResult.Success -> {
-                showToast(getString(R.string.sftp_transfer_completed_fmt, transfer.getDisplayName(this@SFTPActivity)))
+                val message = getString(R.string.sftp_transfer_completed_fmt, transfer.getDisplayName(this@SFTPActivity))
+                showToast(message)
+                announceAccessibility(message)
             }
             is io.github.tabssh.sftp.TransferResult.Error -> {
                 showError(getString(R.string.sftp_transfer_failed_fmt, result.message))
+                announceAccessibility(getString(R.string.sftp_transfer_failed_fmt, result.message))
             }
             is io.github.tabssh.sftp.TransferResult.Cancelled -> {
                 showToast(getString(R.string.sftp_transfer_cancelled))
+                announceAccessibility(getString(R.string.sftp_transfer_cancelled))
             }
         }
         
@@ -1131,7 +1141,7 @@ class SFTPActivity : TabSSHActivity() {
         val builder = MaterialAlertDialogBuilder(this)
         val form = DialogFields.form(this)
         val input = DialogFields.addText(
-            form, getString(R.string.sftp_rename_file_hint), initial = file.name
+            form, getString(R.string.container_rename_hint), initial = file.name
         )
         input.selectAll()
 
@@ -1308,10 +1318,18 @@ class SFTPActivity : TabSSHActivity() {
     }
     
     private fun clearCompletedTransfers() {
-        val completedCount = activeTransfers.count { 
+        // Item 24: keep the removed entries so a Snackbar can put them back —
+        // an outright confirm dialog would interrupt a routine cleanup tap,
+        // undo is the lighter-weight safety net for a non-destructive-to-data
+        // action (nothing on disk changes, only this list's contents).
+        val removed = activeTransfers.filter {
             it.isCompleted() || it.hasError() || it.isCancelled()
         }
-        
+        if (removed.isEmpty()) {
+            return
+        }
+        val removedPositions = removed.map { activeTransfers.indexOf(it) to it }
+
         // Build the filtered list explicitly so DiffUtil can compute the
         // exact removals instead of a wholesale invalidate.
         val remaining = activeTransfers.filterNot {
@@ -1322,13 +1340,26 @@ class SFTPActivity : TabSSHActivity() {
             newItems = remaining,
             areItemsTheSame = { a, b -> a === b }
         )
-        showToast(
+        com.google.android.material.snackbar.Snackbar.make(
+            binding.root,
             resources.getQuantityString(
                 R.plurals.sftp_cleared_transfers,
-                completedCount,
-                Format.count(completedCount)
+                removed.size,
+                Format.count(removed.size)
+            ),
+            com.google.android.material.snackbar.Snackbar.LENGTH_LONG
+        ).setAction(R.string.sftp_clear_transfers_undo) {
+            val restored = activeTransfers.toMutableList()
+            for ((position, transfer) in removedPositions.sortedBy { it.first }) {
+                val insertAt = position.coerceIn(0, restored.size)
+                restored.add(insertAt, transfer)
+            }
+            transferAdapter.replaceAllWithDiff(
+                items = activeTransfers,
+                newItems = restored,
+                areItemsTheSame = { a, b -> a === b }
             )
-        )
+        }.show()
     }
     
     private fun showToast(message: String) {

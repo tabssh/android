@@ -23,6 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Wave 1.7 — minimal in-app text editor for remote files.
@@ -69,7 +70,7 @@ class RemoteFileEditorActivity : TabSSHActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {

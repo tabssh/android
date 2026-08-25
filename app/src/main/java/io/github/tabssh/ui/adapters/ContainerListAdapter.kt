@@ -144,9 +144,9 @@ class ContainerListAdapter(
             // Status dot: semantic color resources — green running, amber
             // paused/restarting, red exited/dead, outline grey otherwise.
             val dotColor = when (container.state) {
-                "running" -> ContextCompat.getColor(context, R.color.success)
-                "paused", "restarting" -> ContextCompat.getColor(context, R.color.warning)
-                "exited", "dead" -> ContextCompat.getColor(context, R.color.error)
+                "running" -> ContextCompat.getColor(context, R.color.status_success)
+                "paused", "restarting" -> ContextCompat.getColor(context, R.color.status_warning)
+                "exited", "dead" -> ContextCompat.getColor(context, R.color.status_error)
                 else -> MaterialColors.getColor(
                     itemView, com.google.android.material.R.attr.colorOutline
                 )

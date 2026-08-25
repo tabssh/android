@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import io.github.tabssh.utils.showError
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Activity for managing command snippets
@@ -49,7 +50,7 @@ class SnippetManagerActivity : TabSSHActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_snippet_manager)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         setupToolbar()
         setupViews()
@@ -163,7 +164,7 @@ class SnippetManagerActivity : TabSSHActivity() {
                 Logger.e("SnippetManagerActivity", "Failed to load snippets", e)
                 runOnUiThread {
                     if (!isFinishing && !isDestroyed) {
-                        showError(getString(R.string.snippet_mgr_error_load_failed), getString(R.string.dialog_title_error))
+                        showError(getString(R.string.snippet_mgr_error_load_failed), getString(R.string.status_error))
                     }
                 }
             }
@@ -206,11 +207,11 @@ class SnippetManagerActivity : TabSSHActivity() {
                 val category = categoryInput.text.toString().trim().ifBlank { getString(R.string.settings_general) }
 
                 if (name.isBlank()) {
-                    showError(getString(R.string.snippet_mgr_error_name_empty), getString(R.string.dialog_title_error))
+                    showError(getString(R.string.snippet_mgr_error_name_empty), getString(R.string.status_error))
                     return@setPositiveButton
                 }
                 if (command.isBlank()) {
-                    showError(getString(R.string.snippet_mgr_error_command_empty), getString(R.string.dialog_title_error))
+                    showError(getString(R.string.snippet_mgr_error_command_empty), getString(R.string.status_error))
                     return@setPositiveButton
                 }
 
@@ -252,7 +253,7 @@ class SnippetManagerActivity : TabSSHActivity() {
                 val category = categoryInput.text.toString().trim().ifBlank { getString(R.string.settings_general) }
 
                 if (name.isBlank() || command.isBlank()) {
-                    showError(getString(R.string.snippet_mgr_error_name_command_empty), getString(R.string.dialog_title_error))
+                    showError(getString(R.string.snippet_mgr_error_name_command_empty), getString(R.string.status_error))
                     return@setPositiveButton
                 }
 
@@ -288,7 +289,7 @@ class SnippetManagerActivity : TabSSHActivity() {
                 Logger.e("SnippetManagerActivity", "Failed to create snippet", e)
                 runOnUiThread {
                     if (!isFinishing && !isDestroyed) {
-                        showError(getString(R.string.snippet_mgr_error_create_failed), getString(R.string.dialog_title_error))
+                        showError(getString(R.string.snippet_mgr_error_create_failed), getString(R.string.status_error))
                     }
                 }
             }
@@ -317,7 +318,7 @@ class SnippetManagerActivity : TabSSHActivity() {
                 Logger.e("SnippetManagerActivity", "Failed to update snippet", e)
                 runOnUiThread {
                     if (!isFinishing && !isDestroyed) {
-                        showError(getString(R.string.snippet_mgr_error_update_failed), getString(R.string.dialog_title_error))
+                        showError(getString(R.string.snippet_mgr_error_update_failed), getString(R.string.status_error))
                     }
                 }
             }
@@ -351,7 +352,7 @@ class SnippetManagerActivity : TabSSHActivity() {
                 Logger.e("SnippetManagerActivity", "Failed to delete snippet", e)
                 runOnUiThread {
                     if (!isFinishing && !isDestroyed) {
-                        showError(getString(R.string.snippet_mgr_error_delete_failed), getString(R.string.dialog_title_error))
+                        showError(getString(R.string.snippet_mgr_error_delete_failed), getString(R.string.status_error))
                     }
                 }
             }

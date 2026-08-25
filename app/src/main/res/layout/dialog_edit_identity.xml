@@ -87,7 +87,7 @@
             android:id="@+id/edit_description"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="@string/connection_edit_mosh_custom_desc_hint"
+            android:hint="@string/snippet_edit_description_hint"
             android:inputType="textMultiLine"
             android:lines="3" />
     </com.google.android.material.textfield.TextInputLayout>

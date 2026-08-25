@@ -454,6 +454,6 @@
         android:layout_margin="@dimen/space_lg"
         android:contentDescription="@string/perf_fab_control_content_description"
         app:srcCompat="@drawable/ic_play"
-        app:tint="@android:color/white" />
+        app:tint="?attr/colorOnPrimaryContainer" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

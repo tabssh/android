@@ -30,6 +30,7 @@ import io.github.tabssh.ui.dialogs.ContainerErrorPresenter
 import io.github.tabssh.ui.utils.ContainerText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Single-container run.yml editor: a structured form
@@ -86,7 +87,7 @@ class SingleContainerConfigEditorActivity : TabSSHActivity() {
         )
         setContentView(R.layout.activity_run_config_editor)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
         hostId = intent.getLongExtra(EXTRA_HOST_ID, 0)
         configId = intent.getLongExtra(EXTRA_CONFIG_ID, 0)
 

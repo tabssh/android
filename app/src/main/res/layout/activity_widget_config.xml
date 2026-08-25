@@ -32,6 +32,50 @@
         android:clipToPadding="false"
         android:scrollbars="vertical" />
 
+    <!-- Empty state — shown when the user has no saved connections to pick from -->
+    <LinearLayout
+        android:id="@+id/layout_empty_state"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="@dimen/space_xl"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/widget_config_empty_icon"
+            android:textSize="64sp"
+            android:importantForAccessibility="no"
+            android:layout_marginBottom="@dimen/space_md" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/no_connections_title"
+            android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
+            android:layout_marginBottom="@dimen/space_sm" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/widget_config_empty_message"
+            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:gravity="center"
+            android:layout_marginBottom="@dimen/space_lg" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/button_add_connection"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/add_connection"
+            style="@style/Widget.Material3.Button.TonalButton" />
+
+    </LinearLayout>
+
     <Button
         android:id="@+id/button_cancel"
         android:layout_width="match_parent"

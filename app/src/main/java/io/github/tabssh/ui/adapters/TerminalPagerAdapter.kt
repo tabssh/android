@@ -26,6 +26,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -455,7 +456,10 @@ class TerminalPagerAdapter(
         private var boundSpiceListener: SpiceListener? = null
         private var modeJob: Job? = null
         private var currentTheme: Theme? = null
-        private val holderScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+        // var, not val: unbind() cancels and replaces it so bind() (which
+        // calls unbind() first) always has a live scope to launch modeJob on.
+        private var holderScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
         /** True once this page is showing a graphical (RFB or SPICE) side. */
         var isGraphicalMode: Boolean = false
@@ -628,6 +632,8 @@ class TerminalPagerAdapter(
             modeJob = null
             unwireVnc()
             unwireSpice()
+            holderScope.cancel()
+            holderScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         }
 
         private fun unwireSpice() {
@@ -699,7 +705,10 @@ class TerminalPagerAdapter(
         private var paneTerminalViews: MutableMap<Int, TerminalView> = mutableMapOf()
         private var focusJob: Job? = null
         private var entriesJob: Job? = null
-        private val holderScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+        // var, not val: unbind() cancels and replaces it so bind() (which
+        // calls unbind() first) always has a live scope to launch on.
+        private var holderScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         private var currentTheme: Theme? = null
 
         fun bind(panesTab: PanesTab) {
@@ -796,6 +805,8 @@ class TerminalPagerAdapter(
             entriesJob = null
             boundPanesTab = null
             paneTerminalViews.clear()
+            holderScope.cancel()
+            holderScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         }
     }
 }

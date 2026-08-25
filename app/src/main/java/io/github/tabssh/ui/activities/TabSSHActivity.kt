@@ -54,6 +54,24 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
 
     protected open val drawerMode: DrawerMode = DrawerMode.FULL
 
+    /**
+     * Which affordance the toolbar's navigation icon offers.
+     *
+     * DRAWER — the hamburger icon, opens the navigation drawer. Default.
+     * UP — a Material back arrow that routes through the same
+     * [OnBackPressedDispatcher] as system Back, so an edit/detail screen's
+     * up arrow triggers the same unsaved-changes prompt as
+     * pressing Back does. `parentActivityName` in the manifest is not used
+     * for this — it never fires because this affordance, not the framework
+     * default, owns the toolbar's navigation icon.
+     */
+    enum class NavigationAffordance {
+        DRAWER,
+        UP
+    }
+
+    protected open val navigationAffordance: NavigationAffordance = NavigationAffordance.DRAWER
+
     private var drawerLayout: DrawerLayout? = null
     private var navigationView: NavigationView? = null
     private var appBarToolbar: Toolbar? = null
@@ -64,6 +82,28 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
     private val drawerBackCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
             closeNavigationDrawer()
+        }
+    }
+
+    /**
+     * True once an editing subclass has recorded a change to a tracked form
+     * field. Read by [unsavedChangesBackCallback] and [confirmDiscardIfNeeded]
+     * so system Back, the up arrow and a screen's own Cancel button all show
+     * the same "Discard changes?" prompt instead of three different ones.
+     * A subclass flips this from its own field listeners
+     * (TextWatcher / OnCheckedChangeListener / etc.) — the set of fields to
+     * watch is screen-specific, so it is not inferred here.
+     */
+    protected var hasUnsavedChanges: Boolean = false
+
+    // Disabled until a subclass calls enableUnsavedChangesGuard() — screens
+    // that never edit anything (trackers, dashboards) must not pay for this.
+    private val unsavedChangesBackCallback = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            confirmDiscardIfNeeded {
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
+            }
         }
     }
 
@@ -116,6 +156,37 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
         applyDrawerMode()
     }
 
+    // Cached so the overlay is applied at most once per Activity instance —
+    // Resources.Theme.applyStyle() is cumulative, so re-applying on every
+    // getTheme() call (it can be called many times while inflating a
+    // screen) would stack the overlay's items redundantly.
+    private var highContrastOverlayApplied = false
+
+    /**
+     * Applies the high-contrast accessibility overlay on top of whichever
+     * light/dark theme is already active, instead of switching to a
+     * separate fixed-mode theme (AI.md PART 7: "High-contrast mode toggle
+     * applied as a palette overlay"). Mirrors the run-time, preference-driven
+     * theme switching ThemeManager.applyTheme() already does for custom
+     * terminal themes, applied here to the app chrome.
+     */
+    override fun getTheme(): android.content.res.Resources.Theme {
+        val theme = super.getTheme()
+        if (!highContrastOverlayApplied) {
+            val highContrast = try {
+                io.github.tabssh.TabSSHApplication.get().preferencesManager.isHighContrastMode()
+            } catch (e: Exception) {
+                Logger.w("TabSSHActivity", "Failed to read high-contrast preference: ${e.message}")
+                false
+            }
+            if (highContrast) {
+                theme.applyStyle(R.style.ThemeOverlay_TabSSH_HighContrast, true)
+            }
+            highContrastOverlayApplied = true
+        }
+        return theme
+    }
+
     /**
      * Records the toolbar so the shared navigation affordance can be
      * re-applied after the screen finishes its own setup.
@@ -137,9 +208,99 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
 
     private fun applyNavigationAffordance() {
         val toolbar = appBarToolbar ?: return
-        toolbar.setNavigationIcon(R.drawable.ic_menu)
-        toolbar.navigationContentDescription = getString(R.string.navigation_drawer_open)
-        toolbar.setNavigationOnClickListener { openNavigationDrawer() }
+        when (navigationAffordance) {
+            NavigationAffordance.DRAWER -> {
+                toolbar.setNavigationIcon(R.drawable.ic_menu)
+                toolbar.navigationContentDescription = getString(R.string.navigation_drawer_open)
+                toolbar.setNavigationOnClickListener { openNavigationDrawer() }
+            }
+            NavigationAffordance.UP -> {
+                toolbar.setNavigationIcon(R.drawable.ic_arrow_back)
+                toolbar.navigationContentDescription = getString(R.string.navigation_up_description)
+                toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
+            }
+        }
+    }
+
+    /**
+     * Opts an edit/detail screen into the shared unsaved-changes discard
+     * guard. Call once from onCreate, after wiring the field
+     * listeners that flip [hasUnsavedChanges]. Has no effect on its own if
+     * [hasUnsavedChanges] is never set to true — the guard is a no-op prompt
+     * gate, not a tracker.
+     */
+    protected fun enableUnsavedChangesGuard() {
+        unsavedChangesBackCallback.isEnabled = true
+        onBackPressedDispatcher.addCallback(this, unsavedChangesBackCallback)
+    }
+
+    /**
+     * Runs [onProceed] immediately when there is nothing unsaved; otherwise
+     * confirms via a discard dialog first. Shared by the back callback, the
+     * up arrow (through system Back) and every screen's own Cancel button so
+     * the three exit paths never diverge.
+     */
+    protected fun confirmDiscardIfNeeded(onProceed: () -> Unit) {
+        if (!hasUnsavedChanges) {
+            onProceed()
+            return
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.conn_edit_discard_changes_title)
+            .setMessage(R.string.conn_edit_discard_changes_message)
+            .setPositiveButton(R.string.discard) { _, _ -> onProceed() }
+            .setNegativeButton(R.string.conn_edit_keep_editing, null)
+            .show()
+    }
+
+    /**
+     * Recursively saves the text/checked/selection state of every id'd
+     * EditText (including AutoCompleteTextView), CompoundButton (Switch,
+     * CheckBox, RadioButton, ToggleButton) and Spinner under [root], keyed by
+     * its resource id (rotation loses in-progress form data).
+     * Views without an `android:id` are skipped — there is no stable key to
+     * restore them by, and the framework's own view-hierarchy state
+     * restoration already covers everything else (scroll position, spinner
+     * dropdown open state, etc.).
+     */
+    protected fun saveFormState(outState: Bundle, root: View) {
+        forEachIdentifiedFormField(root) { view, key ->
+            when (view) {
+                is android.widget.EditText -> outState.putString(key, view.text?.toString())
+                is android.widget.CompoundButton -> outState.putBoolean(key, view.isChecked)
+                is android.widget.Spinner -> outState.putInt(key, view.selectedItemPosition)
+            }
+        }
+    }
+
+    /**
+     * Restores the state [saveFormState] captured. Call after the screen's
+     * own data-driven population (from a database record or intent extras)
+     * has finished, so the restored in-progress edits are applied last and
+     * are not immediately overwritten by the loaded record.
+     */
+    protected fun restoreFormState(savedInstanceState: Bundle, root: View) {
+        forEachIdentifiedFormField(root) { view, key ->
+            if (!savedInstanceState.containsKey(key)) return@forEachIdentifiedFormField
+            when (view) {
+                is android.widget.EditText -> view.setText(savedInstanceState.getString(key))
+                is android.widget.CompoundButton -> view.isChecked = savedInstanceState.getBoolean(key)
+                is android.widget.Spinner -> view.setSelection(savedInstanceState.getInt(key))
+            }
+        }
+    }
+
+    private inline fun forEachIdentifiedFormField(root: View, action: (View, String) -> Unit) {
+        val queue = ArrayDeque<View>()
+        queue.add(root)
+        while (queue.isNotEmpty()) {
+            val view = queue.removeFirst()
+            if (view is ViewGroup) {
+                for (i in 0 until view.childCount) queue.add(view.getChildAt(i))
+            }
+            if (view.id == View.NO_ID) continue
+            action(view, "formField_${view.id}")
+        }
     }
 
     private fun applyDrawerMode() {
@@ -237,7 +398,7 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.help_title)
             .setMessage(R.string.help_body)
-            .setPositiveButton(R.string.action_ok, null)
+            .setPositiveButton(R.string.ok, null)
             .setNeutralButton(R.string.action_visit_website) { _, _ ->
                 openProjectUrl(PROJECT_URL)
             }
@@ -295,7 +456,7 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.about_title)
             .setMessage(aboutText)
-            .setPositiveButton(R.string.action_ok, null)
+            .setPositiveButton(R.string.ok, null)
             .setNeutralButton(R.string.action_github) { _, _ -> openProjectUrl(PROJECT_URL) }
             .setNegativeButton(R.string.action_license) { _, _ -> openProjectUrl(LICENSE_URL) }
             .show()
@@ -318,7 +479,7 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
             MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.log_app_title)
                 .setMessage(R.string.log_app_empty)
-                .setPositiveButton(R.string.action_ok, null)
+                .setPositiveButton(R.string.ok, null)
                 .show()
             return
         }
@@ -357,7 +518,7 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
             MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.log_debug_empty_title)
                 .setMessage(message)
-                .setPositiveButton(R.string.action_ok, null)
+                .setPositiveButton(R.string.ok, null)
                 .show()
             return
         }
@@ -424,7 +585,7 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
                 )
                 .setPositiveButton(R.string.action_paste_issue) { _, _ -> openIssueAction() }
                 .setNeutralButton(R.string.action_clear) { _, _ -> onClear() }
-                .setNegativeButton(R.string.action_cancel, null)
+                .setNegativeButton(R.string.cancel, null)
                 .show()
             return
         }
@@ -445,7 +606,7 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
         MaterialAlertDialogBuilder(this)
             .setTitle(if (copied) getString(R.string.log_copied_title, title) else title)
             .setMessage(message)
-            .setPositiveButton(R.string.action_ok, null)
+            .setPositiveButton(R.string.ok, null)
             .setNeutralButton(R.string.action_paste_issue) { _, _ -> openIssueAction() }
             .setNegativeButton(R.string.action_clear) { _, _ -> onClear() }
             .show()

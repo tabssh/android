@@ -24,6 +24,7 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /** Auth tab — VMs sub-tab: hypervisor login credentials (Proxmox / VMware / XCP-ng). */
 class AuthVmsFragment : Fragment() {
@@ -39,7 +40,7 @@ class AuthVmsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        app = requireActivity().application as TabSSHApplication
+        app = tabSSHApp
 
         setupVirtIdentitiesSection(view)
         observeData()
@@ -57,12 +58,16 @@ class AuthVmsFragment : Fragment() {
         view.findViewById<MaterialButton>(R.id.btn_add_virt_identity).setOnClickListener {
             showVirtAccountDialog(null)
         }
+        view.findViewById<MaterialButton>(R.id.button_virt_identities_empty_cta).setOnClickListener {
+            showVirtAccountDialog(null)
+        }
     }
 
     private fun updateVirtEmptyState(view: View, count: Int) {
         val empty = count == 0
         view.findViewById<View>(R.id.recycler_virt_identities).visibility = if (empty) View.GONE else View.VISIBLE
         view.findViewById<View>(R.id.text_virt_identities_empty).visibility = if (empty) View.VISIBLE else View.GONE
+        view.findViewById<View>(R.id.button_virt_identities_empty_cta).visibility = if (empty) View.VISIBLE else View.GONE
     }
 
     private fun observeData() {

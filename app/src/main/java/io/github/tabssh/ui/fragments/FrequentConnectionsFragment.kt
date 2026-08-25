@@ -20,6 +20,7 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Fragment showing top 10 most frequently used connections
@@ -43,7 +44,7 @@ class FrequentConnectionsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        app = requireActivity().application as TabSSHApplication
+        app = tabSSHApp
 
         recyclerView = view.findViewById(R.id.recycler_frequent)
         emptyLayout = view.findViewById(R.id.layout_empty_frequent)
@@ -101,7 +102,7 @@ class FrequentConnectionsFragment : Fragment() {
         // those are record-management actions that belong on Hosts, where
         // the full connection list (not just the top-10 shortlist) lives.
         val items = arrayOf(
-            getString(R.string.connections_menu_connect),
+            getString(R.string.connect_button),
             getString(R.string.connections_menu_browse_files),
             getString(R.string.edit)
         )

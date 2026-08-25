@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Single-host performance detail screen.
@@ -84,7 +85,7 @@ class HostDetailActivity : TabSSHActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         val profileId = intent.getStringExtra(EXTRA_PROFILE_ID) ?: run {
             finish(); return

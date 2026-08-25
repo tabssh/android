@@ -32,6 +32,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /** Reachability probe budget for a single hypervisor endpoint. */
 private const val PROBE_TIMEOUT_MS = 5_000
@@ -46,6 +47,8 @@ class HypervisorsFragment : Fragment() {
     private lateinit var toolbar: MaterialToolbar
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyState: LinearLayout
+    private lateinit var errorState: LinearLayout
+    private lateinit var textError: android.widget.TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var fabAdd: FloatingActionButton
     private lateinit var buttonAddFirst: Button
@@ -65,7 +68,7 @@ class HypervisorsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
-        app = requireActivity().application as TabSSHApplication
+        app = tabSSHApp
         
         setupViews(view)
         setupToolbar()
@@ -78,9 +81,13 @@ class HypervisorsFragment : Fragment() {
         toolbar = view.findViewById(R.id.toolbar)
         recyclerView = view.findViewById(R.id.recycler_hypervisors)
         emptyState = view.findViewById(R.id.empty_state)
+        errorState = view.findViewById(R.id.error_state)
+        textError = view.findViewById(R.id.text_error)
         progressBar = view.findViewById(R.id.progress_bar)
         fabAdd = view.findViewById(R.id.fab_add)
         buttonAddFirst = view.findViewById(R.id.button_add_first)
+
+        view.findViewById<Button>(R.id.button_retry).setOnClickListener { loadHypervisors() }
     }
 
     private fun setupToolbar() {
@@ -153,6 +160,7 @@ class HypervisorsFragment : Fragment() {
                     hypervisors.addAll(list)
 
                     // Update UI visibility
+                    errorState.visibility = View.GONE
                     if (hypervisors.isEmpty()) {
                         recyclerView.visibility = View.GONE
                         emptyState.visibility = View.VISIBLE
@@ -170,13 +178,17 @@ class HypervisorsFragment : Fragment() {
                 if (!isAdded) return@launch
 
                 progressBar.visibility = View.GONE
-                Toast.makeText(
-                    requireContext(),
-                    getString(
-                        R.string.hypervisor_load_failed_fmt, ContainerText.display(e.message)
-                    ),
-                    Toast.LENGTH_SHORT
-                ).show()
+                val message = getString(
+                    R.string.hypervisor_load_failed_fmt, ContainerText.display(e.message)
+                )
+                Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+
+                // Distinct from the empty state — a failed load is not the
+                // same thing as "no hypervisors configured".
+                recyclerView.visibility = View.GONE
+                emptyState.visibility = View.GONE
+                errorState.visibility = View.VISIBLE
+                textError.text = message
             }
         }
     }

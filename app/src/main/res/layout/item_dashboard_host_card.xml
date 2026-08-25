@@ -8,8 +8,8 @@
     android:layout_marginEnd="@dimen/space_12dp"
     android:layout_marginTop="@dimen/space_xs"
     android:layout_marginBottom="@dimen/space_xs"
-    app:cardCornerRadius="12dp"
-    app:cardElevation="2dp"
+    app:cardCornerRadius="@dimen/card_corner_radius"
+    app:cardElevation="@dimen/elevation_low"
     app:cardBackgroundColor="?attr/colorSurface">
 
     <LinearLayout
@@ -28,8 +28,8 @@
             <!-- Status dot -->
             <View
                 android:id="@+id/status_dot"
-                android:layout_width="10dp"
-                android:layout_height="10dp"
+                android:layout_width="@dimen/connection_status_indicator_size"
+                android:layout_height="@dimen/connection_status_indicator_size"
                 android:background="@drawable/bg_circle"
                 android:backgroundTint="?attr/colorOutline"
                 android:layout_marginEnd="@dimen/space_sm" />
@@ -50,14 +50,14 @@
                 android:id="@+id/tv_os_icon"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="16sp"
+                android:textSize="@dimen/text_size_subtitle"
                 android:paddingEnd="@dimen/space_xs" />
 
             <!-- Monitor bell button -->
             <ImageButton
                 android:id="@+id/btn_monitor"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="@dimen/min_touch_target"
+                android:layout_height="@dimen/min_touch_target"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/host_detail_action_monitor_settings"
                 app:srcCompat="@drawable/ic_notification"
@@ -86,7 +86,7 @@
             android:layout_marginBottom="@dimen/space_xs">
 
             <TextView
-                android:layout_width="36dp"
+                android:layout_width="@dimen/dashboard_stat_label_width"
                 android:layout_height="wrap_content"
                 android:text="@string/host_detail_label_cpu"
                 android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
@@ -100,14 +100,14 @@
                 android:max="100"
                 android:layout_marginStart="@dimen/space_xs"
                 android:layout_marginEnd="@dimen/space_xs"
-                app:trackThickness="6dp"
-                app:trackCornerRadius="3dp"
+                app:trackThickness="@dimen/space_6dp"
+                app:trackCornerRadius="@dimen/progress_track_corner_radius"
                 app:indicatorColor="@color/accent_500"
                 app:trackColor="?attr/colorSurfaceVariant" />
 
             <TextView
                 android:id="@+id/tv_cpu"
-                android:layout_width="44dp"
+                android:layout_width="@dimen/dashboard_stat_value_width"
                 android:layout_height="wrap_content"
                 android:text="@string/host_detail_value_unavailable"
                 android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
@@ -125,7 +125,7 @@
             android:layout_marginBottom="@dimen/space_xs">
 
             <TextView
-                android:layout_width="36dp"
+                android:layout_width="@dimen/dashboard_stat_label_width"
                 android:layout_height="wrap_content"
                 android:text="@string/dashboard_host_card_mem_label"
                 android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
@@ -139,14 +139,14 @@
                 android:max="100"
                 android:layout_marginStart="@dimen/space_xs"
                 android:layout_marginEnd="@dimen/space_xs"
-                app:trackThickness="6dp"
-                app:trackCornerRadius="3dp"
+                app:trackThickness="@dimen/space_6dp"
+                app:trackCornerRadius="@dimen/progress_track_corner_radius"
                 app:indicatorColor="?attr/colorPrimary"
                 app:trackColor="?attr/colorSurfaceVariant" />
 
             <TextView
                 android:id="@+id/tv_mem"
-                android:layout_width="44dp"
+                android:layout_width="@dimen/dashboard_stat_value_width"
                 android:layout_height="wrap_content"
                 android:text="@string/host_detail_value_unavailable"
                 android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
@@ -164,7 +164,7 @@
             android:layout_marginBottom="@dimen/space_sm">
 
             <TextView
-                android:layout_width="36dp"
+                android:layout_width="@dimen/dashboard_stat_label_width"
                 android:layout_height="wrap_content"
                 android:text="@string/dashboard_host_card_disk_label"
                 android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
@@ -178,14 +178,14 @@
                 android:max="100"
                 android:layout_marginStart="@dimen/space_xs"
                 android:layout_marginEnd="@dimen/space_xs"
-                app:trackThickness="6dp"
-                app:trackCornerRadius="3dp"
+                app:trackThickness="@dimen/space_6dp"
+                app:trackCornerRadius="@dimen/progress_track_corner_radius"
                 app:indicatorColor="?attr/colorTertiary"
                 app:trackColor="?attr/colorSurfaceVariant" />
 
             <TextView
                 android:id="@+id/tv_disk"
-                android:layout_width="44dp"
+                android:layout_width="@dimen/dashboard_stat_value_width"
                 android:layout_height="wrap_content"
                 android:text="@string/host_detail_value_unavailable"
                 android:textAppearance="@style/TextAppearance.Material3.LabelSmall"

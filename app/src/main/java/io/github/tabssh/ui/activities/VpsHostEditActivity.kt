@@ -10,15 +10,19 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.VpsHost
 import io.github.tabssh.tracker.VpsMarkdownImportExport
+import io.github.tabssh.utils.ThrowableMapper
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Create or edit a [VpsHost] tracker record.
@@ -27,6 +31,10 @@ import java.util.UUID
  *   [EXTRA_VPS_HOST_ID] — String UUID; omit for a new host.
  */
 class VpsHostEditActivity : TabSSHActivity() {
+
+    // Edit screens use an up arrow instead of the hamburger, routed
+    // through the same OnBackPressedDispatcher as system Back.
+    override val navigationAffordance: NavigationAffordance = NavigationAffordance.UP
 
     companion object {
         private const val TAG = "VpsHostEditActivity"
@@ -37,7 +45,9 @@ class VpsHostEditActivity : TabSSHActivity() {
 
     private lateinit var app: TabSSHApplication
     private lateinit var toolbar: MaterialToolbar
+    private lateinit var layoutTenant: TextInputLayout
     private lateinit var editTenant: TextInputEditText
+    private lateinit var layoutHostname: TextInputLayout
     private lateinit var editHostname: TextInputEditText
     private lateinit var editIpv4: TextInputEditText
     private lateinit var editIpv6: TextInputEditText
@@ -59,10 +69,12 @@ class VpsHostEditActivity : TabSSHActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_vps_host_edit)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         toolbar = findViewById(R.id.toolbar)
+        layoutTenant = findViewById(R.id.layout_tenant)
         editTenant = findViewById(R.id.edit_tenant)
+        layoutHostname = findViewById(R.id.layout_hostname)
         editHostname = findViewById(R.id.edit_hostname)
         editIpv4 = findViewById(R.id.edit_ipv4)
         editIpv6 = findViewById(R.id.edit_ipv6)
@@ -91,8 +103,35 @@ class VpsHostEditActivity : TabSSHActivity() {
         }
 
         btnSave.setOnClickListener { saveHost() }
-        btnCancel.setOnClickListener { finish() }
+        btnCancel.setOnClickListener { confirmDiscardIfNeeded { finish() } }
         btnDelete.setOnClickListener { confirmDelete() }
+
+        setupUnsavedChangesGuard()
+    }
+
+    /**
+     * Wires every form field to flip [hasUnsavedChanges] and opts this
+     * screen into the shared discard-confirmation guard.
+     */
+    private fun setupUnsavedChangesGuard() {
+        val watcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) { hasUnsavedChanges = true }
+        }
+        editTenant.addTextChangedListener(watcher)
+        editHostname.addTextChangedListener(watcher)
+        editIpv4.addTextChangedListener(watcher)
+        editIpv6.addTextChangedListener(watcher)
+        editSpecs.addTextChangedListener(watcher)
+        editLinkedDomain.addTextChangedListener(watcher)
+        editRenewalRaw.addTextChangedListener(watcher)
+        editBillingCycle.addTextChangedListener(watcher)
+        editPrice.addTextChangedListener(watcher)
+        editDescription.addTextChangedListener(watcher)
+        editReminderDays.addTextChangedListener(watcher)
+
+        enableUnsavedChangesGuard()
     }
 
     // ── Setup ────────────────────────────────────────────────────────────────
@@ -117,20 +156,35 @@ class VpsHostEditActivity : TabSSHActivity() {
             editPrice.setText(host.price ?: "")
             editDescription.setText(host.description ?: "")
             editReminderDays.setText(host.reminderDaysBefore.toString())
+
+            // Every field set above flips the dirty-flag listeners installed
+            // in setupUnsavedChangesGuard() — DB-driven population is not a
+            // user edit, so clear the flag once population is done.
+            hasUnsavedChanges = false
         }
+    }
+
+    /**
+     * Clears any previously shown inline validation errors so a fixed field
+     * doesn't keep showing a stale Material error state.
+     */
+    private fun clearFieldErrors() {
+        layoutTenant.error = null
+        layoutHostname.error = null
     }
 
     // ── Save / Delete ─────────────────────────────────────────────────────────
 
     private fun saveHost() {
+        clearFieldErrors()
         val tenant = editTenant.text?.toString()?.trim()
         if (tenant.isNullOrBlank()) {
-            editTenant.error = getString(R.string.vps_host_edit_error_tenant_required)
+            layoutTenant.error = getString(R.string.vps_host_edit_error_tenant_required)
             return
         }
         val hostname = editHostname.text?.toString()?.trim()
         if (hostname.isNullOrBlank()) {
-            editHostname.error = getString(R.string.vps_host_edit_error_hostname_required)
+            layoutHostname.error = getString(R.string.vps_host_edit_error_hostname_required)
             return
         }
 
@@ -175,12 +229,17 @@ class VpsHostEditActivity : TabSSHActivity() {
                     }
                 }
                 Toast.makeText(this@VpsHostEditActivity, getString(R.string.vps_host_edit_saved), Toast.LENGTH_SHORT).show()
+                hasUnsavedChanges = false
                 finish()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to save VPS host", e)
-                Toast.makeText(this@VpsHostEditActivity, getString(R.string.vps_host_edit_save_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                val mapped = ThrowableMapper.map(this@VpsHostEditActivity, TAG, e, "Failed to save VPS host")
+                showError(
+                    getString(R.string.cloud_save_failed, mapped.message),
+                    copyText = mapped.technicalDetail,
+                    onRetry = { saveHost() }
+                )
             }
         }
     }
@@ -207,8 +266,12 @@ class VpsHostEditActivity : TabSSHActivity() {
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to delete VPS host", e)
-                Toast.makeText(this@VpsHostEditActivity, getString(R.string.vps_host_edit_delete_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                val mapped = ThrowableMapper.map(this@VpsHostEditActivity, TAG, e, "Failed to delete VPS host")
+                showError(
+                    getString(R.string.domain_delete_failed_fmt, mapped.message),
+                    copyText = mapped.technicalDetail,
+                    onRetry = { deleteHost(hostId) }
+                )
             }
         }
     }

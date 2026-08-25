@@ -16,8 +16,7 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            app:titleTextColor="@color/white"
-            app:popupTheme="@style/ThemeOverlay.Material3.Light" />
+            app:titleTextColor="@color/white" />
 
         <TextView
             android:id="@+id/offline_banner"
@@ -52,7 +51,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_margin="@dimen/space_md"
-        app:tint="@android:color/white"
+        app:tint="?attr/colorOnPrimaryContainer"
         android:text="@string/dashboard_new_group_button"
         android:contentDescription="@string/dashboard_new_group_description"
         app:icon="@drawable/ic_add" />

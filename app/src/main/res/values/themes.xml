@@ -52,89 +52,28 @@
         <item name="terminalTextColor">@color/terminal_foreground</item>
         <item name="tabBackgroundColor">@color/tab_background</item>
         <item name="tabTextColor">@color/tab_text</item>
-        <item name="connectionStatusConnected">@color/connected</item>
-        <item name="connectionStatusConnecting">@color/connecting</item>
-        <item name="connectionStatusDisconnected">@color/disconnected</item>
-        <item name="connectionStatusError">@color/connection_error</item>
+        <item name="connectionStatusConnected">@color/status_success</item>
+        <item name="connectionStatusConnecting">@color/status_warning</item>
+        <item name="connectionStatusDisconnected">@color/status_neutral</item>
+        <item name="connectionStatusError">@color/status_error</item>
     </style>
 
-    <!-- Dark theme — force dark unconditionally. Was DayNight parent before
-         which caused Issue #35: with system in light mode, DayNight handed us
-         a LIGHT background but our explicit dark text-color overrides won,
-         producing light-on-light text. The Dark theme is meant to look dark
-         regardless of the system setting, so use Material3.Dark as parent. -->
-    <style name="Theme.TabSSH.Dark" parent="Theme.Material3.Dark.NoActionBar">
-        <item name="colorPrimary">@color/primary_400</item>
-        <item name="colorOnPrimary">@color/primary_900</item>
-        <item name="colorPrimaryContainer">@color/primary_800</item>
-        <item name="colorOnPrimaryContainer">@color/primary_100</item>
-        
-        <item name="colorSecondary">@color/secondary_400</item>
-        <item name="colorOnSecondary">@color/secondary_900</item>
-        <item name="colorSecondaryContainer">@color/secondary_800</item>
-        <item name="colorOnSecondaryContainer">@color/secondary_100</item>
-        
-        <item name="colorTertiary">@color/info</item>
-        <item name="colorOnTertiary">@color/white</item>
-        
-        <item name="colorError">@color/error</item>
-        <item name="colorOnError">@color/white</item>
-        
-        <item name="colorSurface">@color/surface_dark</item>
-        <item name="colorOnSurface">@color/on_surface_dark</item>
-        <item name="colorSurfaceVariant">@color/surface_variant_dark</item>
-        <item name="colorOnSurfaceVariant">@color/on_surface_variant_dark</item>
-        
-        <item name="colorOutline">@color/outline_dark</item>
-        <item name="colorOutlineVariant">@color/outline_variant_dark</item>
-        
-        <item name="android:statusBarColor">@color/surface_dark</item>
-        <item name="android:navigationBarColor">@color/surface_dark</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">false</item>
+    <!-- High-contrast accessibility overlay. Applied at runtime on top of
+         whichever DayNight theme (light or dark) is already active — see
+         TabSSHActivity.getTheme() — instead of replacing it, so enabling
+         the accessibility toggle can never invert the user's light/dark
+         choice (the old Theme.TabSSH.HighContrast hardcoded a light
+         surface and would have done exactly that). It boosts secondary
+         text and outlines to full foreground contrast; every value is
+         attr-relative so it resolves correctly in both modes. -->
+    <style name="ThemeOverlay.TabSSH.HighContrast" parent="">
+        <item name="colorOnSurfaceVariant">?attr/colorOnSurface</item>
+        <item name="colorOutline">?attr/colorOnSurface</item>
+        <item name="colorOutlineVariant">?attr/colorOnSurface</item>
+        <item name="android:textColorSecondary">?attr/colorOnSurface</item>
+        <item name="android:textColorHint">?attr/colorOnSurfaceVariant</item>
+    </style>
 
-        <!-- Anchor textColor* for the dark theme too (Issue #35). -->
-        <item name="android:textColorPrimary">@color/on_surface_dark</item>
-        <item name="android:textColorSecondary">@color/on_surface_variant_dark</item>
-        <item name="android:textColorTertiary">@color/gray_400</item>
-        <item name="android:textColorHint">@color/gray_500</item>
-
-        <!-- Applies the branded app bar to every toolbar, including the
-             screens whose layouts do not name the style explicitly. -->
-        <item name="toolbarStyle">@style/Widget.TabSSH.Toolbar</item>
-
-        <!-- Custom attributes -->
-        <item name="terminalBackgroundColor">@color/terminal_background</item>
-        <item name="terminalTextColor">@color/terminal_foreground</item>
-        <item name="tabBackgroundColor">@color/surface_variant_dark</item>
-        <item name="tabTextColor">@color/on_surface_dark</item>
-        <item name="connectionStatusConnected">@color/connected</item>
-        <item name="connectionStatusConnecting">@color/connecting</item>
-        <item name="connectionStatusDisconnected">@color/disconnected</item>
-        <item name="connectionStatusError">@color/connection_error</item>
-    </style>
-    
-    <!-- High contrast theme for accessibility -->
-    <style name="Theme.TabSSH.HighContrast" parent="Theme.TabSSH">
-        <item name="colorPrimary">@color/black</item>
-        <item name="colorOnPrimary">@color/white</item>
-        <item name="colorSurface">@color/white</item>
-        <item name="colorOnSurface">@color/black</item>
-        <item name="terminalBackgroundColor">@color/high_contrast_background</item>
-        <item name="terminalTextColor">@color/high_contrast_foreground</item>
-    </style>
-    
-    <!-- Fullscreen theme for terminal -->
-    <style name="Theme.TabSSH.Fullscreen" parent="Theme.TabSSH">
-        <item name="android:windowFullscreen">true</item>
-        <item name="android:windowNoTitle">true</item>
-    </style>
-    
-    <!-- Settings theme -->
-    <style name="Theme.TabSSH.Settings" parent="Theme.TabSSH">
-        <!-- Settings specific customizations -->
-    </style>
-    
     <!-- Widget styles -->
     <style name="Widget.TabSSH" parent="@android:style/Widget" />
     
@@ -156,9 +95,9 @@
     <!-- Tab styles -->
     <style name="Widget.TabSSH.TabLayout" parent="Widget.Material3.TabLayout">
         <item name="tabBackground">@drawable/tab_background_selector</item>
-        <item name="tabTextColor">@color/tab_text</item>
+        <item name="tabTextColor">?attr/colorOnSurfaceVariant</item>
         <!-- Selected tab bg is primary blue; label must contrast, never match it -->
-        <item name="tabSelectedTextColor">@color/tab_text</item>
+        <item name="tabSelectedTextColor">@color/white</item>
         <item name="tabIndicatorColor">@color/primary_500</item>
         <item name="tabIndicatorHeight">3dp</item>
     </style>

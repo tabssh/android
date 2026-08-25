@@ -73,6 +73,31 @@ fun Tab.connectionDisplayName(): String = when (this) {
 }
 
 /**
+ * Item 43 — `user@host:port` (or `host:port` where there is no username)
+ * connection detail shared by any full-width tab list that needs to show
+ * more than [connectionDisplayName]'s identity label, e.g. the Hosts tab's
+ * Active sub-tab. Null for [Tab.Panes], which has no single host of its own.
+ */
+fun Tab.connectionDetail(): String? = when (this) {
+    is Tab.Ssh -> {
+        val user = sshTab.profile.username
+        val host = sshTab.profile.host
+        val port = sshTab.profile.port
+        val userHost = if (user.isNotBlank()) "$user@$host" else host
+        if (port != 22) "$userHost:$port" else userHost
+    }
+    is Tab.Vnc -> vncTab.vncHost?.let { host ->
+        if (host.port != 5900) "${host.host}:${host.port}" else host.host
+    }
+    is Tab.Console -> {
+        val params = consoleTab.connectParams
+        val userHost = if (params.username.isNotBlank()) "${params.username}@${params.host}" else params.host
+        "$userHost:${params.port}"
+    }
+    is Tab.Panes -> null
+}
+
+/**
  * Single representative [ConnectionState] shared by all variants — lets any
  * unified tab-list UI (e.g. the "OPEN TABS" list in the long-press terminal
  * menu) show a consistent state dot regardless of tab type, instead of only

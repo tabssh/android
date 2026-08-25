@@ -29,16 +29,16 @@
 
             <ImageButton
                 android:id="@+id/btn_edit"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="@dimen/min_touch_target"
+                android:layout_height="@dimen/min_touch_target"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@android:drawable/ic_menu_edit"
                 android:contentDescription="@string/edit" />
 
             <ImageButton
                 android:id="@+id/btn_delete"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="@dimen/min_touch_target"
+                android:layout_height="@dimen/min_touch_target"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@android:drawable/ic_menu_delete"
                 android:contentDescription="@string/delete" />

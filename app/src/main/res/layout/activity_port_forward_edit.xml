@@ -164,6 +164,7 @@
                         tools:visibility="visible">
 
                         <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/layout_ssh_host"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:hint="@string/port_forward_ssh_host_hint"
@@ -187,6 +188,7 @@
                             android:layout_marginTop="@dimen/space_sm">
 
                             <com.google.android.material.textfield.TextInputLayout
+                                android:id="@+id/layout_ssh_port"
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
@@ -208,10 +210,11 @@
                             </com.google.android.material.textfield.TextInputLayout>
 
                             <com.google.android.material.textfield.TextInputLayout
+                                android:id="@+id/layout_ssh_username"
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="2"
-                                android:hint="@string/port_forward_ssh_username_hint"
+                                android:hint="@string/username_hint"
                                 app:errorEnabled="true"
                                 style="@style/Widget.TabSSH.TextInputLayout">
 

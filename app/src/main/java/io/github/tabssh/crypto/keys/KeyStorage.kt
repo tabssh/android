@@ -244,15 +244,40 @@ class KeyStorage(private val context: Context) {
                     KeyPreviewInfo(parseResult.comment, type)
                 }
                 is ParseResult.Error -> {
-                    val encrypted = parseResult.message.contains("passphrase", ignoreCase = true) ||
-                        parseResult.message.contains("encrypted", ignoreCase = true)
+                    val encrypted = parseResult.errorType == KeyImportErrorType.ENCRYPTED_NEEDS_PASSPHRASE ||
+                        parseResult.errorType == KeyImportErrorType.WRONG_PASSPHRASE
                     KeyPreviewInfo("", null, isEncrypted = encrypted)
                 }
             }
         } catch (e: Exception) {
-            val encrypted = e.message?.contains("passphrase", ignoreCase = true) == true ||
-                e.message?.contains("encrypted", ignoreCase = true) == true
-            KeyPreviewInfo("", null, isEncrypted = encrypted)
+            // Unexpected failure outside the parse path (e.g. format detection
+            // itself throwing) — cannot classify without a ParseResult, so
+            // fall back to "not encrypted" rather than text-matching e.message.
+            Logger.w("KeyStorage", "previewKey: unexpected failure", e)
+            KeyPreviewInfo("", null, isEncrypted = false)
+        }
+    }
+
+    /**
+     * Classify a key-parse exception into a typed [KeyImportErrorType] instead
+     * of relying on callers substring-matching the (possibly translated or
+     * reworded) message text. [passphrase] disambiguates the common "corrupt
+     * vs. wrong passphrase" case: if the caller supplied a passphrase and the
+     * underlying library didn't give a more specific signal, a decrypt failure
+     * is far more likely to be a wrong passphrase than file corruption.
+     */
+    private fun classifyParseException(e: Throwable, passphrase: String?): KeyImportErrorType {
+        val msg = e.message.orEmpty()
+        return when {
+            msg.contains("Passphrase required", ignoreCase = true) ->
+                KeyImportErrorType.ENCRYPTED_NEEDS_PASSPHRASE
+            msg.contains("Incorrect passphrase", ignoreCase = true) ||
+                msg.contains("wrong passphrase", ignoreCase = true) ||
+                msg.contains("MAC verification failed", ignoreCase = true) ||
+                msg.contains("MAC mismatch", ignoreCase = true) ->
+                KeyImportErrorType.WRONG_PASSPHRASE
+            passphrase != null -> KeyImportErrorType.WRONG_PASSPHRASE
+            else -> KeyImportErrorType.CORRUPT
         }
     }
 
@@ -280,7 +305,7 @@ class KeyStorage(private val context: Context) {
         try {
             val keyContent = context.contentResolver.openInputStream(fileUri)
                 ?.bufferedReader()?.use { it.readText() }
-                ?: return@withContext ImportResult.Error("Cannot open file")
+                ?: return@withContext ImportResult.Error(KeyImportErrorType.READ_FAILED)
 
             // Query the content resolver for the human-readable display name.
             // fileUri.lastPathSegment on a content:// URI returns an encoded
@@ -298,7 +323,7 @@ class KeyStorage(private val context: Context) {
             
         } catch (e: Exception) {
             Logger.e("KeyStorage", "Failed to import key from file", e)
-            ImportResult.Error("Failed to read key file: ${e.message}")
+            ImportResult.Error(KeyImportErrorType.READ_FAILED, technicalDetail = "${e.javaClass.simpleName}: ${e.message}")
         }
     }
     
@@ -310,12 +335,12 @@ class KeyStorage(private val context: Context) {
     ): ImportResult = withContext(Dispatchers.IO) {
         
         if (keyContent.isBlank()) {
-            return@withContext ImportResult.Error("Key content is empty")
+            return@withContext ImportResult.Error(KeyImportErrorType.EMPTY_CONTENT)
         }
-        
+
         try {
             val format = KeyFormat.detectFormat(keyContent)
-                ?: return@withContext ImportResult.Error("Unrecognized key format")
+                ?: return@withContext ImportResult.Error(KeyImportErrorType.UNSUPPORTED_FORMAT)
             
             Logger.d("KeyStorage", "Detected key format: $format")
             
@@ -374,15 +399,15 @@ class KeyStorage(private val context: Context) {
                         Logger.i("KeyStorage", "Imported $keyType key: $keyName")
                         ImportResult.Success(keyId, parseResult.keyPair, fingerprint)
                     } else {
-                        ImportResult.Error("Failed to store imported key")
+                        ImportResult.Error(KeyImportErrorType.STORAGE_FAILED)
                     }
                 }
-                is ParseResult.Error -> ImportResult.Error(parseResult.message)
+                is ParseResult.Error -> ImportResult.Error(parseResult.errorType, parseResult.technicalDetail)
             }
-            
+
         } catch (e: Exception) {
             Logger.e("KeyStorage", "Failed to import key", e)
-            ImportResult.Error("Key import failed: ${e.message}")
+            ImportResult.Error(KeyImportErrorType.UNKNOWN, technicalDetail = "${e.javaClass.simpleName}: ${e.message}")
         }
     }
     
@@ -911,16 +936,10 @@ class KeyStorage(private val context: Context) {
         } catch (e: IllegalArgumentException) {
             // SSHKeyParser throws clear error messages
             Logger.e("KeyStorage", "Failed to parse OpenSSH key: ${e.message}", e)
-            
-            // Check if it's the "Passphrase required" error
-            if (e.message?.contains("Passphrase required") == true) {
-                ParseResult.Error("Key is encrypted but no passphrase provided")
-            } else {
-                ParseResult.Error(e.message ?: "Failed to parse OpenSSH key")
-            }
+            ParseResult.Error(classifyParseException(e, passphrase), technicalDetail = e.message)
         } catch (e: Exception) {
             Logger.e("KeyStorage", "Failed to parse OpenSSH key", e)
-            ParseResult.Error("Failed to parse OpenSSH key: ${e.message}")
+            ParseResult.Error(classifyParseException(e, passphrase), technicalDetail = "${e.javaClass.simpleName}: ${e.message}")
         }
     }
     
@@ -942,7 +961,7 @@ class KeyStorage(private val context: Context) {
                 is PEMEncryptedKeyPair -> {
                     // Encrypted traditional format
                     if (passphrase == null) {
-                        return ParseResult.Error("Key is encrypted but no passphrase provided")
+                        return ParseResult.Error(KeyImportErrorType.ENCRYPTED_NEEDS_PASSPHRASE)
                     }
                     val decryptorProvider = JcePEMDecryptorProviderBuilder().build(passphrase.toCharArray())
                     val decryptedKeyPair = pemObject.decryptKeyPair(decryptorProvider)
@@ -955,28 +974,22 @@ class KeyStorage(private val context: Context) {
                     KeyPair(publicKey, privateKey)
                 }
                 else -> {
-                    return ParseResult.Error("Unsupported PEM object type: ${pemObject.javaClass.simpleName}")
+                    return ParseResult.Error(
+                        KeyImportErrorType.UNSUPPORTED_FORMAT,
+                        technicalDetail = "Unsupported PEM object type: ${pemObject.javaClass.simpleName}"
+                    )
                 }
             }
-            
+
             // Extract comment from original PEM if present
             val comment = extractCommentFromPEM(keyContent)
-            
+
             Logger.i("KeyStorage", "Successfully parsed $algorithm key")
             ParseResult.Success(keyPair, comment)
-            
+
         } catch (e: Exception) {
             Logger.e("KeyStorage", "Failed to parse traditional $algorithm key", e)
-            ParseResult.Error(
-                """Failed to parse $algorithm private key.
-
-Possible causes:
-• Key file corrupted
-• Unsupported key variant  
-• Wrong passphrase (if encrypted)
-
-Error: ${e.javaClass.simpleName}: ${e.message}"""
-            )
+            ParseResult.Error(classifyParseException(e, passphrase), technicalDetail = "${e.javaClass.simpleName}: ${e.message}")
         }
     }
     
@@ -998,7 +1011,7 @@ Error: ${e.javaClass.simpleName}: ${e.message}"""
                 is PKCS8EncryptedPrivateKeyInfo -> {
                     // Encrypted PKCS#8
                     if (passphrase == null) {
-                        return ParseResult.Error("Key is encrypted but no passphrase provided")
+                        return ParseResult.Error(KeyImportErrorType.ENCRYPTED_NEEDS_PASSPHRASE)
                     }
                     val decryptorProvider = JcePKCSPBEInputDecryptorProviderBuilder()
                         .setProvider("BC")
@@ -1007,19 +1020,22 @@ Error: ${e.javaClass.simpleName}: ${e.message}"""
                     converter.getPrivateKey(decryptedKeyInfo)
                 }
                 else -> {
-                    return ParseResult.Error("Expected PKCS#8 format but found: ${pemObject.javaClass.simpleName}")
+                    return ParseResult.Error(
+                        KeyImportErrorType.UNSUPPORTED_FORMAT,
+                        technicalDetail = "Expected PKCS#8 format but found: ${pemObject.javaClass.simpleName}"
+                    )
                 }
             }
-            
+
             val publicKey = getPublicKeyFromPrivate(privateKey)
             val comment = extractCommentFromPEM(keyContent)
-            
+
             Logger.i("KeyStorage", "Successfully parsed PKCS#8 key")
             ParseResult.Success(KeyPair(publicKey, privateKey), comment)
-            
+
         } catch (e: Exception) {
             Logger.e("KeyStorage", "Failed to parse PKCS8 key", e)
-            ParseResult.Error("Failed to parse PKCS#8 key: ${e.message}")
+            ParseResult.Error(classifyParseException(e, passphrase), technicalDetail = "${e.javaClass.simpleName}: ${e.message}")
         }
     }
     
@@ -1031,11 +1047,14 @@ Error: ${e.javaClass.simpleName}: ${e.message}"""
             Logger.d("KeyStorage", "Parsing PuTTY (.ppk) private key via SSHKeyParser")
             val parsed = io.github.tabssh.crypto.SSHKeyParser.parse(keyContent, passphrase)
             val privateKey = parsed.privateKey
-                ?: return ParseResult.Error("PuTTY key parse returned no private key")
+                ?: return ParseResult.Error(
+                    KeyImportErrorType.UNSUPPORTED_FORMAT,
+                    technicalDetail = "PuTTY key parse returned no private key (public-key-only file?)"
+                )
             ParseResult.Success(KeyPair(parsed.publicKey, privateKey), parsed.comment)
         } catch (e: Exception) {
             Logger.e("KeyStorage", "Failed to parse PuTTY key", e)
-            ParseResult.Error("PuTTY key parsing failed: ${e.message}")
+            ParseResult.Error(classifyParseException(e, passphrase), technicalDetail = "${e.javaClass.simpleName}: ${e.message}")
         }
     }
     
@@ -1281,14 +1300,47 @@ sealed class GenerateResult {
     data class Error(val message: String) : GenerateResult()
 }
 
+/**
+ * Typed classification of a key parse/import failure. Callers branch on this
+ * instead of substring-matching a message string, which breaks the moment
+ * the string is reworded or translated.
+ */
+enum class KeyImportErrorType {
+    ENCRYPTED_NEEDS_PASSPHRASE,
+    WRONG_PASSPHRASE,
+    UNSUPPORTED_FORMAT,
+    CORRUPT,
+    EMPTY_CONTENT,
+    READ_FAILED,
+    STORAGE_FAILED,
+    UNKNOWN
+}
+
+/**
+ * Friendly, translatable message for a [KeyImportErrorType] — used by
+ * [io.github.tabssh.ui.activities.ConnectionEditActivity.showKeyImportErrorDialog]
+ * and [io.github.tabssh.ui.fragments.AuthKeysFragment]'s import error dialog.
+ * Never surfaces the raw BouncyCastle/JDK class name.
+ */
+fun KeyImportErrorType.toUserMessage(context: Context): String = when (this) {
+    KeyImportErrorType.ENCRYPTED_NEEDS_PASSPHRASE -> context.getString(io.github.tabssh.R.string.key_import_error_encrypted_needs_passphrase)
+    KeyImportErrorType.WRONG_PASSPHRASE -> context.getString(io.github.tabssh.R.string.key_import_error_wrong_passphrase)
+    KeyImportErrorType.UNSUPPORTED_FORMAT -> context.getString(io.github.tabssh.R.string.key_import_error_unsupported_format)
+    KeyImportErrorType.CORRUPT -> context.getString(io.github.tabssh.R.string.key_import_error_corrupt)
+    KeyImportErrorType.EMPTY_CONTENT -> context.getString(io.github.tabssh.R.string.key_import_error_empty_content)
+    KeyImportErrorType.READ_FAILED -> context.getString(io.github.tabssh.R.string.key_import_error_read_failed)
+    KeyImportErrorType.STORAGE_FAILED -> context.getString(io.github.tabssh.R.string.key_import_error_storage_failed)
+    KeyImportErrorType.UNKNOWN -> context.getString(io.github.tabssh.R.string.key_import_error_unknown)
+}
+
 sealed class ImportResult {
     data class Success(val keyId: String, val keyPair: KeyPair, val fingerprint: String) : ImportResult()
-    data class Error(val message: String) : ImportResult()
+    data class Error(val errorType: KeyImportErrorType, val technicalDetail: String? = null) : ImportResult()
 }
 
 sealed class ParseResult {
     data class Success(val keyPair: KeyPair, val comment: String) : ParseResult()
-    data class Error(val message: String) : ParseResult()
+    data class Error(val errorType: KeyImportErrorType, val technicalDetail: String? = null) : ParseResult()
 }
 
 /**

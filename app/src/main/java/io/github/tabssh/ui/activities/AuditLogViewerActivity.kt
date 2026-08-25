@@ -10,12 +10,12 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
-import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.ui.adapters.AuditLogAdapter
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Activity to view audit log history
@@ -25,7 +25,7 @@ class AuditLogViewerActivity : TabSSHActivity() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyView: TextView
     private lateinit var adapter: AuditLogAdapter
-    private val app by lazy { application as TabSSHApplication }
+    private val app by lazy { tabSSHApp }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -132,6 +132,7 @@ class AuditLogViewerActivity : TabSSHActivity() {
                 val logs = app.database.auditLogDao().getRecentSummary(1000)
 
                 if (logs.isEmpty()) {
+                    resetEmptyView()
                     recyclerView.visibility = View.GONE
                     emptyView.visibility = View.VISIBLE
                 } else {
@@ -139,7 +140,7 @@ class AuditLogViewerActivity : TabSSHActivity() {
                     emptyView.visibility = View.GONE
                     adapter.updateLogs(logs)
                 }
-                
+
             } catch (e: Exception) {
                 Logger.e("AuditLogViewer", "Failed to load audit logs", e)
                 android.widget.Toast.makeText(
@@ -147,8 +148,30 @@ class AuditLogViewerActivity : TabSSHActivity() {
                     getString(R.string.audit_log_toast_load_failed, e.message),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
+
+                // Distinct from the genuine empty state: error color/copy plus
+                // a tap-to-retry affordance instead of silently looking empty.
+                recyclerView.visibility = View.GONE
+                emptyView.visibility = View.VISIBLE
+                emptyView.text = getString(R.string.audit_log_load_error_fmt, e.message ?: "")
+                emptyView.setTextColor(
+                    androidx.core.content.ContextCompat.getColor(this@AuditLogViewerActivity, R.color.error)
+                )
+                emptyView.setOnClickListener { loadAuditLogs() }
             }
         }
+    }
+
+    /**
+     * Restores the empty-state view to its neutral "no audit logs" appearance,
+     * undoing any load-error styling from a previous failed attempt.
+     */
+    private fun resetEmptyView() {
+        emptyView.text = getString(R.string.audit_log_viewer_empty_message)
+        emptyView.setTextColor(
+            androidx.core.content.ContextCompat.getColor(this, R.color.on_surface_variant)
+        )
+        emptyView.setOnClickListener(null)
     }
     
     /**

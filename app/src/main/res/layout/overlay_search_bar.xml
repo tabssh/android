@@ -64,8 +64,8 @@
         <!-- Previous match -->
         <ImageButton
             android:id="@+id/search_prev"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="@dimen/min_touch_target"
+            android:layout_height="@dimen/min_touch_target"
             android:src="@drawable/ic_arrow_up"
             android:contentDescription="@string/search_bar_previous_match_description"
             android:background="?attr/selectableItemBackgroundBorderless"
@@ -74,8 +74,8 @@
         <!-- Next match -->
         <ImageButton
             android:id="@+id/search_next"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="@dimen/min_touch_target"
+            android:layout_height="@dimen/min_touch_target"
             android:src="@drawable/ic_arrow_down"
             android:contentDescription="@string/search_bar_next_match_description"
             android:background="?attr/selectableItemBackgroundBorderless"
@@ -97,8 +97,8 @@
         <!-- Close -->
         <ImageButton
             android:id="@+id/search_close"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="@dimen/min_touch_target"
+            android:layout_height="@dimen/min_touch_target"
             android:src="@drawable/ic_close"
             android:contentDescription="@string/search_bar_close_description"
             android:background="?attr/selectableItemBackgroundBorderless"

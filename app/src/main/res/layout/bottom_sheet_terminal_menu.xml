@@ -14,8 +14,8 @@
 
         <!-- Drag handle -->
         <View
-            android:layout_width="32dp"
-            android:layout_height="4dp"
+            android:layout_width="@dimen/bottom_sheet_handle_width"
+            android:layout_height="@dimen/bottom_sheet_handle_height"
             android:layout_gravity="center_horizontal"
             android:layout_marginBottom="@dimen/space_12dp"
             android:background="@drawable/bg_bottom_sheet_handle" />
@@ -25,14 +25,14 @@
             android:id="@+id/btn_new_tab"
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginStart="@dimen/space_md"
             android:layout_marginEnd="@dimen/space_md"
             android:layout_marginBottom="@dimen/space_12dp"
             android:text="@string/terminal_menu_new_tab"
             app:icon="@drawable/ic_add"
             app:iconGravity="start"
-            app:iconPadding="8dp" />
+            app:iconPadding="@dimen/space_sm" />
 
         <com.google.android.material.divider.MaterialDivider
             android:layout_width="match_parent"
@@ -49,7 +49,7 @@
             android:paddingStart="@dimen/space_md"
             android:paddingEnd="@dimen/space_md"
             android:text="@string/terminal_menu_section_open_tabs"
-            android:textSize="11sp"
+            android:textSize="@dimen/text_size_overline"
             android:letterSpacing="0.08"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -74,7 +74,7 @@
             android:paddingStart="@dimen/space_md"
             android:paddingEnd="@dimen/space_md"
             android:text="@string/terminal_menu_section_terminal"
-            android:textSize="11sp"
+            android:textSize="@dimen/text_size_overline"
             android:letterSpacing="0.08"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -83,70 +83,70 @@
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="48dp"
+            android:minHeight="@dimen/button_height"
             android:paddingStart="@dimen/space_md"
             android:gravity="start|center_vertical"
             android:text="@string/terminal_menu_toggle_system_keyboard"
             app:icon="@drawable/ic_keyboard"
             app:iconGravity="start"
-            app:iconPadding="12dp"
-            app:iconSize="20dp" />
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_toggle_key_bar"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="48dp"
+            android:minHeight="@dimen/button_height"
             android:paddingStart="@dimen/space_md"
             android:gravity="start|center_vertical"
             android:text="@string/terminal_menu_hide_key_bar"
             app:icon="@drawable/ic_keyboard"
             app:iconGravity="start"
-            app:iconPadding="12dp"
-            app:iconSize="20dp" />
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_find_in_scrollback"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="48dp"
+            android:minHeight="@dimen/button_height"
             android:paddingStart="@dimen/space_md"
             android:gravity="start|center_vertical"
             android:text="@string/terminal_menu_find_in_scrollback"
             app:icon="@drawable/ic_search"
             app:iconGravity="start"
-            app:iconPadding="12dp"
-            app:iconSize="20dp" />
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_snippets"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="48dp"
+            android:minHeight="@dimen/button_height"
             android:paddingStart="@dimen/space_md"
             android:gravity="start|center_vertical"
             android:text="@string/terminal_menu_snippets"
             app:icon="@drawable/ic_bookmark"
             app:iconGravity="start"
-            app:iconPadding="12dp"
-            app:iconSize="20dp" />
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_toggle_recording"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="48dp"
+            android:minHeight="@dimen/button_height"
             android:paddingStart="@dimen/space_md"
             android:gravity="start|center_vertical"
             android:text="@string/terminal_menu_start_recording"
             app:icon="@drawable/ic_radio_checked"
             app:iconGravity="start"
-            app:iconPadding="12dp"
-            app:iconSize="20dp" />
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
 
         <com.google.android.material.divider.MaterialDivider
             android:layout_width="match_parent"
@@ -163,7 +163,7 @@
             android:paddingStart="@dimen/space_md"
             android:paddingEnd="@dimen/space_md"
             android:text="@string/terminal_menu_section_session"
-            android:textSize="11sp"
+            android:textSize="@dimen/text_size_overline"
             android:letterSpacing="0.08"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -172,70 +172,70 @@
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="48dp"
+            android:minHeight="@dimen/button_height"
             android:paddingStart="@dimen/space_md"
             android:gravity="start|center_vertical"
             android:text="@string/terminal_menu_broadcast_to_all_tabs"
             app:icon="@drawable/ic_flash"
             app:iconGravity="start"
-            app:iconPadding="12dp"
-            app:iconSize="20dp" />
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_port_forwarding"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="48dp"
+            android:minHeight="@dimen/button_height"
             android:paddingStart="@dimen/space_md"
             android:gravity="start|center_vertical"
             android:text="@string/terminal_menu_port_forwarding"
             app:icon="@drawable/ic_interface"
             app:iconGravity="start"
-            app:iconPadding="12dp"
-            app:iconSize="20dp" />
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_share_session"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="48dp"
+            android:minHeight="@dimen/button_height"
             android:paddingStart="@dimen/space_md"
             android:gravity="start|center_vertical"
             android:text="@string/terminal_menu_share_session"
             app:icon="@drawable/ic_share"
             app:iconGravity="start"
-            app:iconPadding="12dp"
-            app:iconSize="20dp" />
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_close_tab"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="48dp"
+            android:minHeight="@dimen/button_height"
             android:paddingStart="@dimen/space_md"
             android:gravity="start|center_vertical"
             android:text="@string/terminal_menu_close_current_tab"
             app:icon="@drawable/ic_close"
             app:iconGravity="start"
-            app:iconPadding="12dp"
-            app:iconSize="20dp" />
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_disconnect_all"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="48dp"
+            android:minHeight="@dimen/button_height"
             android:paddingStart="@dimen/space_md"
             android:gravity="start|center_vertical"
             android:text="@string/terminal_menu_disconnect_all"
             app:icon="@drawable/ic_disconnect"
             app:iconGravity="start"
-            app:iconPadding="12dp"
-            app:iconSize="20dp" />
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
 
         <com.google.android.material.divider.MaterialDivider
             android:layout_width="match_parent"
@@ -249,14 +249,14 @@
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="48dp"
+            android:minHeight="@dimen/button_height"
             android:paddingStart="@dimen/space_md"
             android:gravity="start|center_vertical"
             android:text="@string/settings_title"
             app:icon="@drawable/ic_settings_general"
             app:iconGravity="start"
-            app:iconPadding="12dp"
-            app:iconSize="20dp" />
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
 
     </LinearLayout>
 

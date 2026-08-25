@@ -100,7 +100,7 @@
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/layout_port"
                     style="@style/BulkEdit.Input"
-                    android:hint="@string/container_host_custom_port_hint">
+                    android:hint="@string/route_port_hint">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/edit_port"

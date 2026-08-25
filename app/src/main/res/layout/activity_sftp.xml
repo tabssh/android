@@ -67,7 +67,7 @@
                     <!-- Local path bar -->
                     <LinearLayout
                         android:layout_width="match_parent"
-                        android:layout_height="48dp"
+                        android:layout_height="@dimen/button_height"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
                         android:background="?attr/colorSurfaceVariant"
@@ -75,8 +75,8 @@
 
                         <ImageButton
                             android:id="@+id/btn_local_up"
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
+                            android:layout_width="@dimen/min_touch_target"
+                            android:layout_height="@dimen/min_touch_target"
                             android:src="@drawable/ic_arrow_up"
                             android:background="?attr/selectableItemBackgroundBorderless"
                             app:tint="?attr/colorOnSurfaceVariant"
@@ -89,7 +89,7 @@
                             android:layout_weight="1"
                             android:layout_marginHorizontal="@dimen/space_xs"
                             android:text="@string/sftp_path_default_storage"
-                            android:textSize="13sp"
+                            android:textSize="@dimen/text_size_small_body"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:singleLine="true"
                             android:ellipsize="start"
@@ -117,8 +117,8 @@
                     android:visibility="gone">
 
                     <ImageView
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
+                        android:layout_width="@dimen/icon_size_40dp"
+                        android:layout_height="@dimen/icon_size_40dp"
                         android:src="@drawable/ic_folder"
                         app:tint="?attr/colorOutline"
                         android:alpha="0.5"
@@ -129,7 +129,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
                         android:text="@string/sftp_browser_empty_folder"
-                        android:textSize="13sp"
+                        android:textSize="@dimen/text_size_small_body"
                         android:textColor="?attr/colorOnSurfaceVariant" />
                 </LinearLayout>
 
@@ -156,7 +156,7 @@
                     <!-- Remote path bar -->
                     <LinearLayout
                         android:layout_width="match_parent"
-                        android:layout_height="48dp"
+                        android:layout_height="@dimen/button_height"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
                         android:background="?attr/colorSurfaceVariant"
@@ -164,8 +164,8 @@
 
                         <ImageButton
                             android:id="@+id/btn_remote_up"
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
+                            android:layout_width="@dimen/min_touch_target"
+                            android:layout_height="@dimen/min_touch_target"
                             android:src="@drawable/ic_arrow_up"
                             android:background="?attr/selectableItemBackgroundBorderless"
                             app:tint="?attr/colorOnSurfaceVariant"
@@ -178,7 +178,7 @@
                             android:layout_weight="1"
                             android:layout_marginHorizontal="@dimen/space_xs"
                             android:text="@string/sftp_path_root"
-                            android:textSize="13sp"
+                            android:textSize="@dimen/text_size_small_body"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:singleLine="true"
                             android:ellipsize="start"
@@ -205,8 +205,8 @@
                     android:visibility="gone">
 
                     <ImageView
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
+                        android:layout_width="@dimen/icon_size_40dp"
+                        android:layout_height="@dimen/icon_size_40dp"
                         android:src="@drawable/ic_folder"
                         app:tint="?attr/colorOutline"
                         android:alpha="0.5"
@@ -217,7 +217,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
                         android:text="@string/sftp_browser_empty_folder"
-                        android:textSize="13sp"
+                        android:textSize="@dimen/text_size_small_body"
                         android:textColor="?attr/colorOnSurfaceVariant" />
                 </LinearLayout>
 
@@ -248,55 +248,55 @@
                 android:id="@+id/btn_upload"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="0dp"
-                android:layout_height="56dp"
+                android:layout_height="@dimen/large_touch_target"
                 android:layout_weight="1"
                 android:text="@string/upload_file"
-                android:textSize="11sp"
+                android:textSize="@dimen/text_size_overline"
                 app:icon="@drawable/ic_upload"
                 app:iconGravity="top"
-                app:iconSize="20dp"
-                app:iconPadding="2dp"
+                app:iconSize="@dimen/icon_size_action"
+                app:iconPadding="@dimen/space_2dp"
                 android:enabled="false" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_download"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="0dp"
-                android:layout_height="56dp"
+                android:layout_height="@dimen/large_touch_target"
                 android:layout_weight="1"
                 android:text="@string/download_file"
-                android:textSize="11sp"
+                android:textSize="@dimen/text_size_overline"
                 app:icon="@drawable/ic_download"
                 app:iconGravity="top"
-                app:iconSize="20dp"
-                app:iconPadding="2dp"
+                app:iconSize="@dimen/icon_size_action"
+                app:iconPadding="@dimen/space_2dp"
                 android:enabled="false" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_new_folder"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="0dp"
-                android:layout_height="56dp"
+                android:layout_height="@dimen/large_touch_target"
                 android:layout_weight="1"
                 android:text="@string/new_folder"
-                android:textSize="11sp"
+                android:textSize="@dimen/text_size_overline"
                 app:icon="@drawable/ic_add"
                 app:iconGravity="top"
-                app:iconSize="20dp"
-                app:iconPadding="2dp" />
+                app:iconSize="@dimen/icon_size_action"
+                app:iconPadding="@dimen/space_2dp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_refresh"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="0dp"
-                android:layout_height="56dp"
+                android:layout_height="@dimen/large_touch_target"
                 android:layout_weight="1"
                 android:text="@string/container_refresh"
-                android:textSize="11sp"
+                android:textSize="@dimen/text_size_overline"
                 app:icon="@drawable/ic_refresh"
                 app:iconGravity="top"
-                app:iconSize="20dp"
-                app:iconPadding="2dp" />
+                app:iconSize="@dimen/icon_size_action"
+                app:iconPadding="@dimen/space_2dp" />
 
         </LinearLayout>
 

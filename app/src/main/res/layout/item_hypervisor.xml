@@ -53,7 +53,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_2dp"
                 android:text="@string/item_hypervisor_placeholder_type"
-                android:textSize="11sp"
+                android:textSize="@dimen/text_size_overline"
                 android:textStyle="bold"
                 android:textColor="?attr/colorOnPrimary"
                 android:background="@drawable/badge_background"

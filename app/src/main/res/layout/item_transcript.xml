@@ -35,24 +35,24 @@
 
         <ImageButton
             android:id="@+id/btn_view"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
+            android:layout_width="@dimen/min_touch_target"
+            android:layout_height="@dimen/min_touch_target"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_view"
             android:contentDescription="@string/transcript_item_view_description" />
 
         <ImageButton
             android:id="@+id/btn_share"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
+            android:layout_width="@dimen/min_touch_target"
+            android:layout_height="@dimen/min_touch_target"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_share"
             android:contentDescription="@string/share" />
 
         <ImageButton
             android:id="@+id/btn_delete"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
+            android:layout_width="@dimen/min_touch_target"
+            android:layout_height="@dimen/min_touch_target"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_delete"
             android:contentDescription="@string/delete" />

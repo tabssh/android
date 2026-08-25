@@ -76,6 +76,45 @@
 
         </LinearLayout>
 
+        <!-- Inline load-error state with retry — distinct from the empty state -->
+        <!-- above so a failed load never reads as "no hosts configured". -->
+        <LinearLayout
+            android:id="@+id/error_state"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="@dimen/space_xl"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="@dimen/icon_size_xlarge"
+                android:layout_height="@dimen/icon_size_xlarge"
+                android:layout_marginBottom="@dimen/space_md"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_error"
+                app:tint="?attr/colorError" />
+
+            <TextView
+                android:id="@+id/text_error"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textSize="@dimen/text_size_body"
+                android:textColor="?attr/colorOnSurface" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_retry"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_md"
+                android:minHeight="@dimen/min_touch_target"
+                android:text="@string/retry" />
+
+        </LinearLayout>
+
     </LinearLayout>
 
     <!-- Loading indicator, centered over the content while a refresh runs -->

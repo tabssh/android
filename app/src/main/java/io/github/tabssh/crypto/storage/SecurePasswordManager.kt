@@ -329,7 +329,7 @@ class SecurePasswordManager(private val context: Context) {
                 .setTitle(context.getString(R.string.secure_password_store_prompt_title))
                 .setSubtitle(context.getString(R.string.secure_password_store_prompt_subtitle))
                 .setDescription(context.getString(R.string.secure_password_store_prompt_description))
-                .setNegativeButtonText(context.getString(R.string.biometric_negative))
+                .setNegativeButtonText(context.getString(R.string.cancel))
                 .build()
             
             biometricPrompt.authenticate(promptInfo)
@@ -381,7 +381,7 @@ class SecurePasswordManager(private val context: Context) {
                 .setTitle(context.getString(R.string.secure_password_access_prompt_title))
                 .setSubtitle(context.getString(R.string.secure_password_access_prompt_subtitle))
                 .setDescription(context.getString(R.string.secure_password_access_prompt_description))
-                .setNegativeButtonText(context.getString(R.string.biometric_negative))
+                .setNegativeButtonText(context.getString(R.string.cancel))
                 .build()
             
             biometricPrompt.authenticate(promptInfo)

@@ -20,10 +20,7 @@
 
     <!-- Connection management -->
     <string name="connection_name_hint">✏️ Nombre de la conexión (ej., "Mi VPS")</string>
-    <string name="connection_host_hint">🌐 nombre de host o dirección IP</string>
     <string name="connection_port_hint">22</string>
-    <string name="connection_username_hint">👤 nombre de usuario</string>
-    <string name="save_connection">💾 Guardar</string>
     <string name="edit_connection">✏️ Editar Conexión</string>
     <string name="delete_connection">🗑️ Eliminar Conexión</string>
     <string name="duplicate_connection">📋 Duplicar Conexión</string>
@@ -31,7 +28,6 @@
     <string name="connection_deleted">🗑️ Conexión eliminada</string>
     
     <!-- Authentication -->
-    <string name="auth_type_password">🔑 Contraseña</string>
     <string name="auth_type_public_key">🔐 Clave Pública (Clave SSH)</string>
     <string name="auth_type_keyboard_interactive">⌨️ Teclado Interactivo</string>
     <string name="password_hint">🔒 Contraseña</string>
@@ -40,7 +36,6 @@
     <string name="import_key">📥 Importar Clave</string>
     
     <!-- Terminal activity -->
-    <string name="terminal_activity_title">💻 Terminal</string>
     <string name="new_tab">➕ Nueva Pestaña</string>
     <string name="close_tab">❌ Cerrar Pestaña</string>
     <string name="tab_menu">📑 Menú de Pestañas</string>
@@ -85,7 +80,6 @@
     <string name="settings_interface">🎨 Interfaz</string>
     <string name="settings_connections">🌐 Conexiones</string>
     <string name="settings_accessibility">♿ Accesibilidad</string>
-    <string name="settings_about">ℹ️ Acerca de TabSSH</string>
     
     <!-- General settings -->
     <string name="pref_startup_behavior">Comportamiento al Iniciar</string>
@@ -131,8 +125,6 @@
     <string name="accessibility_connection_list">Lista de Conexiones</string>
     <string name="accessibility_tab_list">Lista de Pestañas</string>
     <string name="accessibility_function_keys">Teclas de Función</string>
-    <string name="accessibility_connected">Conectado</string>
-    <string name="accessibility_disconnected">Desconectado</string>
     <string name="accessibility_connecting">Conectando</string>
     
     <!-- File operations -->
@@ -142,7 +134,6 @@
     <string name="upload_file">⬆️ Subir</string>
     <string name="download_file">⬇️ Descargar</string>
     <string name="new_folder">📁 Nueva Carpeta</string>
-    <string name="delete_file">🗑️ Eliminar</string>
     <string name="rename_file">✏️ Renombrar</string>
     <string name="file_properties">ℹ️ Propiedades</string>
     <string name="transfer_progress">📊 Progreso de Transferencia</string>
@@ -153,7 +144,6 @@
     <string name="biometric_title">🔐 Autenticar</string>
     <string name="biometric_subtitle">👆 Usa tu huella dactilar o rostro para desbloquear</string>
     <string name="biometric_description">🔒 Acceso seguro a tus contraseñas almacenadas</string>
-    <string name="biometric_negative">❌ Cancelar</string>
     <string name="biometric_error">❌ Autenticación fallida - por favor, inténtalo de nuevo</string>
     <string name="biometric_not_available">⚠️ Autenticación biométrica no disponible en este dispositivo</string>
     

@@ -10,11 +10,13 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.backup.BackupManager
 import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.utils.ThrowableMapper
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Dedicated Import / Export screen.
@@ -68,7 +70,7 @@ class ImportExportActivity : TabSSHActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_import_export)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         val toolbar = findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
@@ -191,10 +193,11 @@ class ImportExportActivity : TabSSHActivity() {
                     e.message?.contains("decrypt", ignoreCase = true) == true) {
                     showImportPasswordDialog(uri, replaceMode)
                 } else {
-                    Logger.e("ImportExportActivity", "Failed to import backup", e)
+                    val mapped = ThrowableMapper.map(this@ImportExportActivity, "ImportExportActivity", e, "Failed to import backup")
                     io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
                         this@ImportExportActivity, getString(R.string.import_export_import_failed_title),
-                        getString(R.string.import_export_import_failed_message, e.message)
+                        getString(R.string.import_export_import_failed_message, mapped.message),
+                        copyText = mapped.technicalDetail
                     )
                 }
             }
@@ -220,7 +223,7 @@ class ImportExportActivity : TabSSHActivity() {
             .setTitle(R.string.import_export_encrypted_backup_title)
             .setMessage(R.string.import_export_encrypted_backup_message)
             .setView(layout)
-            .setPositiveButton(R.string.conn_edit_import) { _, _ ->
+            .setPositiveButton(R.string.menu_import) { _, _ ->
                 val password = passwordInput.text.toString()
                 if (password.isNotBlank()) {
                     importBackupWithPassword(uri, password, replaceMode)
@@ -252,10 +255,11 @@ class ImportExportActivity : TabSSHActivity() {
                 }
 
             } catch (e: Exception) {
-                Logger.e("ImportExportActivity", "Failed to import backup with password", e)
+                val mapped = ThrowableMapper.map(this@ImportExportActivity, "ImportExportActivity", e, "Failed to import backup with password")
                 io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
                     this@ImportExportActivity, getString(R.string.import_export_import_failed_title),
-                    getString(R.string.import_export_import_failed_message, e.message)
+                    getString(R.string.import_export_import_failed_message, mapped.message),
+                    copyText = mapped.technicalDetail
                 )
             }
         }
@@ -312,10 +316,10 @@ class ImportExportActivity : TabSSHActivity() {
                     Toast.LENGTH_SHORT
                 ).show()
             } catch (e: Exception) {
-                Logger.e("ImportExportActivity", "SSH config export failed", e)
+                val mapped = ThrowableMapper.map(this@ImportExportActivity, "ImportExportActivity", e, "SSH config export failed")
                 Toast.makeText(
                     this@ImportExportActivity,
-                    getString(R.string.import_export_export_failed, e.message),
+                    getString(R.string.identity_export_failed_fmt, mapped.message),
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -341,10 +345,10 @@ class ImportExportActivity : TabSSHActivity() {
                     this@ImportExportActivity, getString(R.string.import_export_export_ssh_config_title), text
                 )
             } catch (e: Exception) {
-                Logger.e("ImportExportActivity", "SSH config export (text) failed", e)
+                val mapped = ThrowableMapper.map(this@ImportExportActivity, "ImportExportActivity", e, "SSH config export (text) failed")
                 Toast.makeText(
                     this@ImportExportActivity,
-                    getString(R.string.import_export_export_failed, e.message),
+                    getString(R.string.identity_export_failed_fmt, mapped.message),
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -400,10 +404,10 @@ class ImportExportActivity : TabSSHActivity() {
                 }
                 showBulkImportPreviewDialog(result)
             } catch (e: Exception) {
-                Logger.e("ImportExportActivity", "Bulk import failed", e)
+                val mapped = ThrowableMapper.map(this@ImportExportActivity, "ImportExportActivity", e, "Bulk import failed")
                 Toast.makeText(
                     this@ImportExportActivity,
-                    getString(R.string.import_export_bulk_import_failed, e.message),
+                    getString(R.string.import_export_bulk_import_failed, mapped.message),
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -430,7 +434,7 @@ class ImportExportActivity : TabSSHActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.import_export_bulk_import_format_title, result.format.name))
             .setMessage(getString(R.string.import_export_bulk_found_connections, result.hosts.size, sample, more, warn))
-            .setPositiveButton(R.string.conn_edit_import) { _, _ ->
+            .setPositiveButton(R.string.menu_import) { _, _ ->
                 val profiles = result.hosts.map { it.toConnectionProfile() }
                 importSSHConfigProfiles(profiles)
             }
@@ -512,10 +516,10 @@ class ImportExportActivity : TabSSHActivity() {
                 showSSHConfigImportDialog(profiles)
 
             } catch (e: Exception) {
-                Logger.e("ImportExportActivity", "Failed to import SSH config", e)
+                val mapped = ThrowableMapper.map(this@ImportExportActivity, "ImportExportActivity", e, "Failed to import SSH config")
                 Toast.makeText(
                     this@ImportExportActivity,
-                    getString(R.string.import_export_ssh_config_import_failed, e.message),
+                    getString(R.string.import_export_ssh_config_import_failed, mapped.message),
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -595,7 +599,7 @@ class ImportExportActivity : TabSSHActivity() {
                     append(getString(R.string.import_export_unresolved_keys_hint))
                 }
             })
-            .setPositiveButton(R.string.conn_edit_import) { _, _ ->
+            .setPositiveButton(R.string.menu_import) { _, _ ->
                 importSSHConfigProfiles(profiles, unresolvedKeyProfiles.isNotEmpty())
             }
             .setNegativeButton(R.string.cancel, null)
@@ -701,10 +705,10 @@ class ImportExportActivity : TabSSHActivity() {
                 }
 
             } catch (e: Exception) {
-                Logger.e("ImportExportActivity", "Failed to save imported connections", e)
+                val mapped = ThrowableMapper.map(this@ImportExportActivity, "ImportExportActivity", e, "Failed to save imported connections")
                 Toast.makeText(
                     this@ImportExportActivity,
-                    getString(R.string.import_export_save_connections_failed, e.message),
+                    getString(R.string.import_export_save_connections_failed, mapped.message),
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -817,7 +821,7 @@ class ImportExportActivity : TabSSHActivity() {
             .setTitle(R.string.import_export_encrypt_backup_title)
             .setMessage(R.string.import_export_encrypt_backup_message)
             .setView(layout)
-            .setPositiveButton(R.string.import_export_export) { _, _ ->
+            .setPositiveButton(R.string.menu_export) { _, _ ->
                 val password = passwordInput.text.toString()
                 val confirm = confirmInput.text.toString()
 
@@ -904,19 +908,20 @@ class ImportExportActivity : TabSSHActivity() {
 
                     Logger.i("ImportExportActivity", "Exported backup successfully")
                 } else {
-                    throw Exception(getString(R.string.import_export_export_failed, result.message))
+                    throw Exception(getString(R.string.identity_export_failed_fmt, result.message))
                 }
 
             } catch (e: Exception) {
-                Logger.e("ImportExportActivity", "Failed to export backup", e)
+                val mapped = ThrowableMapper.map(this@ImportExportActivity, "ImportExportActivity", e, "Failed to export backup")
                 Toast.makeText(
                     this@ImportExportActivity,
-                    getString(R.string.import_export_backup_export_failed, e.message),
+                    getString(R.string.import_export_backup_export_failed, mapped.message),
                     Toast.LENGTH_LONG
                 ).show()
                 io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
                     this@ImportExportActivity, getString(R.string.import_export_export_failed_title),
-                    getString(R.string.import_export_export_failed_message, e.message)
+                    getString(R.string.import_export_export_failed_message, mapped.message),
+                    copyText = mapped.technicalDetail
                 )
             }
         }

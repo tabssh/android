@@ -22,6 +22,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Compose stack log viewer (TODO.AI.md § D): `compose logs --follow`,
@@ -88,7 +89,7 @@ class StackLogsActivity : TabSSHActivity() {
         )
         setContentView(R.layout.activity_stack_logs)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
         hostId = intent.getLongExtra(EXTRA_HOST_ID, 0)
         stackName = intent.getStringExtra(EXTRA_STACK_NAME).orEmpty()
         stackDir = intent.getStringExtra(EXTRA_STACK_DIR)

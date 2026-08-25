@@ -25,7 +25,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/log_viewer_item_timestamp_placeholder"
-                android:textSize="11sp"
+                android:textSize="@dimen/text_size_overline"
                 android:textColor="?android:attr/textColorSecondary"
                 android:fontFamily="monospace" />
 
@@ -34,7 +34,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/log_viewer_item_level_placeholder"
-                android:textSize="11sp"
+                android:textSize="@dimen/text_size_overline"
                 android:textStyle="bold"
                 android:paddingStart="@dimen/space_sm"
                 android:paddingEnd="@dimen/space_none"

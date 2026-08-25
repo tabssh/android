@@ -14,7 +14,7 @@
 
     <Preference
       android:key="terminal_settings"
-      android:title="@string/prefs_terminal_settings_title"
+      android:title="@string/settings_terminal"
       android:summary="@string/prefs_terminal_settings_summary"
       android:icon="@drawable/ic_terminal"
       android:fragment="io.github.tabssh.ui.activities.TerminalSettingsFragment" />
@@ -98,7 +98,7 @@
   <!-- Summaries are replaced at runtime by SettingsMainFragment from BuildConfig. -->
   <PreferenceCategory
     android:key="prefcat_main_about"
-    android:title="@string/prefcat_main_about">
+    android:title="@string/nav_item_about">
 
     <Preference
       android:key="about_version"

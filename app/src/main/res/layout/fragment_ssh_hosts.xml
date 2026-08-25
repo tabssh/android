@@ -23,17 +23,6 @@
             android:elevation="4dp"
             style="@style/Widget.TabSSH.Toolbar.Section" />
 
-        <!-- Issue #165 + #175 — Active sessions strip behind a ViewStub
-             so its layout cost is paid only when there's actually a
-             running tab to show. Empty-on-cold-start (the common case)
-             is now zero-cost. -->
-        <ViewStub
-            android:id="@+id/stub_active_sessions"
-            android:layout="@layout/view_active_sessions_strip"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:inflatedId="@+id/active_sessions_container" />
-
         <!-- All SSH Connections RecyclerView -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recycler_connections"

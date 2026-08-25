@@ -30,13 +30,16 @@ import io.github.tabssh.databinding.ActivityCloudAccountsBinding
 import io.github.tabssh.databinding.ItemCloudAccountBinding
 import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.CloudAccount
+import io.github.tabssh.utils.ThrowableMapper
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * @deprecated Use [io.github.tabssh.ui.fragments.CloudAccountsFragment] embedded inside the
@@ -78,7 +81,7 @@ class CloudAccountsActivity : TabSSHActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         binding = ActivityCloudAccountsBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -230,8 +233,12 @@ class CloudAccountsActivity : TabSSHActivity() {
                 }
                 Toast.makeText(this@CloudAccountsActivity, getString(R.string.cloud_accounts_toast_saved, account.name), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Logger.e(TAG, "Save cloud account failed", e)
-                Toast.makeText(this@CloudAccountsActivity, getString(R.string.cloud_accounts_toast_save_failed, e.message), Toast.LENGTH_LONG).show()
+                val mapped = ThrowableMapper.map(this@CloudAccountsActivity, TAG, e, "Save cloud account failed")
+                showError(
+                    getString(R.string.cloud_save_failed, mapped.message),
+                    copyText = mapped.technicalDetail,
+                    onRetry = { saveAccount(name, provider, token) }
+                )
             }
         }
     }
@@ -259,9 +266,13 @@ class CloudAccountsActivity : TabSSHActivity() {
             val candidates = try {
                 withContext(Dispatchers.IO) { provider.fetchInventory(token, account.name) }
             } catch (e: Exception) {
-                Logger.e(TAG, "Inventory fetch failed", e)
+                val mapped = ThrowableMapper.map(this@CloudAccountsActivity, TAG, e, "Inventory fetch failed")
                 runOnUiThread {
-                    Toast.makeText(this@CloudAccountsActivity, getString(R.string.cloud_accounts_toast_refresh_failed, account.name, e.message), Toast.LENGTH_LONG).show()
+                    showError(
+                        getString(R.string.cloud_accounts_toast_refresh_failed, account.name, mapped.message),
+                        copyText = mapped.technicalDetail,
+                        onRetry = { refreshAccount(account) }
+                    )
                 }
                 return@launch
             }
@@ -289,7 +300,7 @@ class CloudAccountsActivity : TabSSHActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.cloud_accounts_import_picker_title, account.name, candidates.size))
             .setMultiChoiceItems(labels, checked) { _, idx, isChecked -> checked[idx] = isChecked }
-            .setPositiveButton(getString(R.string.conn_edit_import)) { _, _ ->
+            .setPositiveButton(getString(R.string.menu_import)) { _, _ ->
                 val picked = candidates.filterIndexed { i, _ -> checked[i] }
                 importPicked(picked)
             }
@@ -351,9 +362,13 @@ class CloudAccountsActivity : TabSSHActivity() {
                     ).show()
                 }
             } catch (e: Exception) {
-                Logger.e(TAG, "Bulk insert/update failed", e)
+                val mapped = ThrowableMapper.map(this@CloudAccountsActivity, TAG, e, "Bulk insert/update failed")
                 runOnUiThread {
-                    Toast.makeText(this@CloudAccountsActivity, getString(R.string.cloud_accounts_toast_import_failed, e.message), Toast.LENGTH_LONG).show()
+                    showError(
+                        getString(R.string.import_qr_import_failed_fmt, mapped.message),
+                        copyText = mapped.technicalDetail,
+                        onRetry = { importPicked(picked) }
+                    )
                 }
             }
         }
@@ -414,7 +429,7 @@ class CloudAccountsActivity : TabSSHActivity() {
 
     private fun confirmDelete(account: CloudAccount) {
         MaterialAlertDialogBuilder(this)
-            .setTitle(getString(R.string.cloud_accounts_delete_title, account.name))
+            .setTitle(getString(R.string.cloud_delete_title, account.name))
             .setMessage(getString(R.string.cloud_accounts_delete_message))
             .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 lifecycleScope.launch {

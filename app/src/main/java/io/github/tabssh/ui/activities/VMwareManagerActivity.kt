@@ -25,11 +25,13 @@ import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
+import io.github.tabssh.utils.ThrowableMapper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Displays the list of VMs on a single VMware ESXi/vCenter host. Launched by
@@ -115,6 +117,9 @@ class VMwareManagerActivity : TabSSHActivity() {
     private var currentProfile: HypervisorProfile? = null
     private lateinit var adapter: VmAdapter
 
+    /** Retained for [showError]'s tap-to-retry — re-runs the connect that failed. */
+    private var currentHypervisorId: Long = -1L
+
     /**
      * Single-flight latch for the VM actions. A second tap while a power op or a
      * console open is still in flight used to fire the whole path again —
@@ -133,7 +138,7 @@ class VMwareManagerActivity : TabSSHActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_vmware_manager)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         toolbar = findViewById(R.id.toolbar)
         btnRefresh = findViewById(R.id.btn_refresh)
@@ -151,6 +156,7 @@ class VMwareManagerActivity : TabSSHActivity() {
         btnRefresh.setOnClickListener { refreshVMs() }
 
         val hypervisorId = intent.getLongExtra(EXTRA_HYPERVISOR_ID, -1L)
+        currentHypervisorId = hypervisorId
         if (hypervisorId == -1L) {
             showError(getString(R.string.hypervisor_error_no_id))
             return
@@ -218,10 +224,11 @@ class VMwareManagerActivity : TabSSHActivity() {
                 // Activity scope cancelled — not a connection failure.
                 throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Connect failed", e)
                 // e.message can be a raw vSphere fault body, which echoes the
-                // request — including the session cookie on some deployments.
-                showError(getString(R.string.vmware_connect_failed_fmt, safeName(profile.name), safeDetail(e.message)))
+                // request — including the session cookie on some deployments;
+                // ThrowableMapper keeps that out of the UI while still logging it.
+                val mapped = ThrowableMapper.map(this@VMwareManagerActivity, TAG, e, "Connect failed")
+                showError(getString(R.string.vmware_connect_failed_fmt, safeName(profile.name), mapped.message))
             }
         }
     }
@@ -257,12 +264,13 @@ class VMwareManagerActivity : TabSSHActivity() {
             if (vms.isEmpty()) {
                 statusText.visibility = View.VISIBLE
                 statusText.text = getString(R.string.vmware_no_vms_found)
+                resetStatusTextStyle()
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Logger.e(TAG, "loadVMs failed", e)
-            showError(getString(R.string.vmware_error_load_vms_fmt, safeDetail(e.message)))
+            val mapped = ThrowableMapper.map(this@VMwareManagerActivity, TAG, e, "loadVMs failed")
+            showError(getString(R.string.vmware_error_load_vms_fmt, mapped.message))
         }
     }
 
@@ -328,8 +336,8 @@ class VMwareManagerActivity : TabSSHActivity() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "$action failed for $vmName", e)
-                showError(getString(R.string.xcpng_action_failed_fmt, action, safeDetail(e.message)))
+                val mapped = ThrowableMapper.map(this@VMwareManagerActivity, TAG, e, "$action failed for $vmName")
+                showError(getString(R.string.xcpng_action_failed_fmt, action, mapped.message))
             } finally {
                 actionInFlight = false
             }
@@ -403,8 +411,8 @@ class VMwareManagerActivity : TabSSHActivity() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to open SSH terminal for $vmName", e)
-                showError(getString(R.string.vmware_open_terminal_failed_fmt, safeDetail(e.message)))
+                val mapped = ThrowableMapper.map(this@VMwareManagerActivity, TAG, e, "Failed to open SSH terminal for $vmName")
+                showError(getString(R.string.vmware_open_terminal_failed_fmt, mapped.message))
             } finally {
                 actionInFlight = false
             }
@@ -486,8 +494,8 @@ class VMwareManagerActivity : TabSSHActivity() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to open VNC console for $vmName", e)
-                showError(getString(R.string.vmware_open_vnc_failed_fmt, vmName, safeDetail(e.message)))
+                val mapped = ThrowableMapper.map(this@VMwareManagerActivity, TAG, e, "Failed to open VNC console for $vmName")
+                showError(getString(R.string.vmware_open_vnc_failed_fmt, vmName, mapped.message))
             } finally {
                 try { socket?.close() } catch (_: Exception) {}
                 actionInFlight = false
@@ -504,6 +512,7 @@ class VMwareManagerActivity : TabSSHActivity() {
             progressBar.visibility = View.VISIBLE
             statusText.visibility = View.VISIBLE
             statusText.text = message
+            resetStatusTextStyle()
         }
     }
 
@@ -512,16 +521,36 @@ class VMwareManagerActivity : TabSSHActivity() {
             if (isFinishing || isDestroyed) return@runOnUiThread
             progressBar.visibility = View.GONE
             statusText.visibility = View.GONE
+            resetStatusTextStyle()
         }
     }
 
+    /**
+     * Renders a load/connect failure distinct from the loading/empty text
+     * above — error-colored copy plus a tap-to-retry affordance — instead of
+     * reusing the same plain text with no visual or interactive difference.
+     */
     private fun showError(message: String) {
         runOnUiThread {
             if (isFinishing || isDestroyed) return@runOnUiThread
             progressBar.visibility = View.GONE
             statusText.visibility = View.VISIBLE
             statusText.text = getString(R.string.hypervisor_error_prefix_fmt, message)
+            statusText.setTextColor(
+                androidx.core.content.ContextCompat.getColor(this, R.color.error)
+            )
+            statusText.setOnClickListener {
+                if (currentHypervisorId != -1L) connectAndRefresh(currentHypervisorId)
+            }
         }
+    }
+
+    /** Restores [statusText] to its neutral loading/empty appearance. */
+    private fun resetStatusTextStyle() {
+        statusText.setTextColor(
+            androidx.core.content.ContextCompat.getColor(this, R.color.on_surface_variant)
+        )
+        statusText.setOnClickListener(null)
     }
 
     // ── Adapter ───────────────────────────────────────────────────────────────
@@ -713,7 +742,7 @@ class VMwareManagerActivity : TabSSHActivity() {
         val form = DialogFields.form(this)
         val input = DialogFields.addText(
             form,
-            hint = getString(R.string.vmware_snapshot_name_hint),
+            hint = getString(R.string.xcpng_snapshot_name_hint),
             initial = getString(R.string.vmware_default_snapshot_name_fmt, System.currentTimeMillis()),
             monospace = true
         )
@@ -749,8 +778,8 @@ class VMwareManagerActivity : TabSSHActivity() {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        Logger.e(TAG, "Snapshot creation error", e)
-                        showError(getString(R.string.hypervisor_error_prefix_fmt, safeDetail(e.message)))
+                        val mapped = ThrowableMapper.map(this@VMwareManagerActivity, TAG, e, "Snapshot creation error")
+                        showError(getString(R.string.hypervisor_error_prefix_fmt, mapped.message))
                     }
                 }
             }
@@ -781,8 +810,8 @@ class VMwareManagerActivity : TabSSHActivity() {
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
-                                Logger.e(TAG, "Revert error", e)
-                                showError(getString(R.string.hypervisor_error_prefix_fmt, safeDetail(e.message)))
+                                val mapped = ThrowableMapper.map(this@VMwareManagerActivity, TAG, e, "Revert error")
+                                showError(getString(R.string.hypervisor_error_prefix_fmt, mapped.message))
                             }
                         }
                     }
@@ -809,8 +838,8 @@ class VMwareManagerActivity : TabSSHActivity() {
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
-                                Logger.e(TAG, "Delete error", e)
-                                showError(getString(R.string.hypervisor_error_prefix_fmt, safeDetail(e.message)))
+                                val mapped = ThrowableMapper.map(this@VMwareManagerActivity, TAG, e, "Delete error")
+                                showError(getString(R.string.hypervisor_error_prefix_fmt, mapped.message))
                             }
                         }
                     }

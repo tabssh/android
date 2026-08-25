@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 class ClusterCommandActivity : TabSSHActivity() {
 
@@ -63,7 +64,7 @@ class ClusterCommandActivity : TabSSHActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_cluster_command)
         
-        app = application as TabSSHApplication
+        app = tabSSHApp
         executor = ClusterCommandExecutor(app)
         prefs = getSharedPreferences("cluster_commands", Context.MODE_PRIVATE)
 

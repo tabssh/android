@@ -25,9 +25,11 @@ import io.github.tabssh.ssh.config.BulkImportParser
 import io.github.tabssh.storage.database.SystemGroupHelper
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.utils.Format
+import io.github.tabssh.utils.ThrowableMapper
 import io.github.tabssh.utils.replaceAllWithDiff
 import io.github.tabssh.utils.showError
 import kotlinx.coroutines.CancellationException
+import io.github.tabssh.utils.tabSSHApp
 
 class XCPngManagerActivity : TabSSHActivity() {
 
@@ -95,7 +97,7 @@ class XCPngManagerActivity : TabSSHActivity() {
         // Use XCP-ng specific layout
         setContentView(R.layout.activity_xcpng_manager)
         
-        app = application as TabSSHApplication
+        app = tabSSHApp
         
         setupToolbar()
         setupViews()
@@ -155,6 +157,7 @@ class XCPngManagerActivity : TabSSHActivity() {
                 hypervisors.addAll(servers)
 
                 if (hypervisors.isEmpty()) {
+                    resetStatusTextStyle()
                     statusText.text = getString(R.string.xcpng_no_servers)
                     statusText.visibility = View.VISIBLE
                 } else {
@@ -171,10 +174,25 @@ class XCPngManagerActivity : TabSSHActivity() {
                 throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to load XCP-ng hypervisor list", e)
+
+                // Distinct from the empty-server-list text above — error color
+                // plus a tap-to-retry affordance instead of identical plain text.
                 statusText.text = getString(R.string.xcpng_error_load_servers)
                 statusText.visibility = View.VISIBLE
+                statusText.setTextColor(
+                    androidx.core.content.ContextCompat.getColor(this@XCPngManagerActivity, R.color.error)
+                )
+                statusText.setOnClickListener { loadHypervisors() }
             }
         }
+    }
+
+    /** Restores [statusText] to its neutral loading/empty appearance. */
+    private fun resetStatusTextStyle() {
+        statusText.setTextColor(
+            androidx.core.content.ContextCompat.getColor(this, R.color.on_surface_variant)
+        )
+        statusText.setOnClickListener(null)
     }
 
     private fun connectToHypervisor(profile: HypervisorProfile) {
@@ -236,7 +254,7 @@ class XCPngManagerActivity : TabSSHActivity() {
             } catch (e: java.net.UnknownHostException) {
                 Logger.e(TAG, "Unknown host: ${profile.host}", e)
                 statusText.text = getString(R.string.xcpng_error_host_not_found_fmt, profile.host)
-                showError(getString(R.string.xcpng_cannot_resolve_fmt, profile.host), getString(R.string.hypervisor_error_title))
+                showError(getString(R.string.xcpng_cannot_resolve_fmt, profile.host), getString(R.string.status_error))
                 progressBar.visibility = View.GONE
             } catch (e: java.net.ConnectException) {
                 Logger.e(TAG, "Connection refused", e)
@@ -247,15 +265,19 @@ class XCPngManagerActivity : TabSSHActivity() {
             } catch (e: javax.net.ssl.SSLHandshakeException) {
                 Logger.e(TAG, "SSL handshake failed", e)
                 statusText.text = getString(R.string.xcpng_error_ssl)
-                showError(getString(R.string.xcpng_ssl_error_message), getString(R.string.hypervisor_error_title))
+                showError(getString(R.string.xcpng_ssl_error_message), getString(R.string.status_error))
                 progressBar.visibility = View.GONE
             } catch (e: Exception) {
-                Logger.e(TAG, "Connection failed", e)
-                // The exception text can carry a whole server error body; clamp it
-                // before it reaches the status line or the dialog.
-                val reason = safeText(e.message)
-                statusText.text = getString(R.string.xcpng_connection_error_fmt, reason)
-                showError(getString(R.string.xcpng_connect_failed_fmt, profile.name, reason), getString(R.string.hypervisor_error_title))
+                // Map to a friendly message; the raw server/exception text is
+                // logged and kept behind the dialog's Copy action, never spliced
+                // directly into the status line or dialog body.
+                val mapped = ThrowableMapper.map(this@XCPngManagerActivity, TAG, e, "Connection failed")
+                statusText.text = getString(R.string.xcpng_connection_error_fmt, mapped.message)
+                showError(
+                    getString(R.string.xcpng_connect_failed_fmt, profile.name, mapped.message),
+                    getString(R.string.status_error),
+                    copyText = mapped.technicalDetail
+                )
                 progressBar.visibility = View.GONE
             } finally {
                 connectInFlight = false
@@ -505,9 +527,9 @@ class XCPngManagerActivity : TabSSHActivity() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "VM action failed", e)
+                val mapped = ThrowableMapper.map(this@XCPngManagerActivity, TAG, e, "VM action failed")
                 progressBar.visibility = View.GONE
-                Toast.makeText(this@XCPngManagerActivity, getString(R.string.xcpng_action_failed_fmt, action, safeText(e.message)), Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@XCPngManagerActivity, getString(R.string.xcpng_action_failed_fmt, action, mapped.message), Toast.LENGTH_SHORT).show()
             } finally {
                 vmActionInFlight = false
             }
@@ -694,9 +716,9 @@ class XCPngManagerActivity : TabSSHActivity() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Console connection error for $vmLabel", e)
+                val mapped = ThrowableMapper.map(this@XCPngManagerActivity, TAG, e, "Console connection error for $vmLabel")
                 progressBar.visibility = View.GONE
-                showError(getString(R.string.xcpng_console_connect_failed_fmt, vmLabel, safeText(e.message)))
+                showError(getString(R.string.xcpng_console_connect_failed_fmt, vmLabel, mapped.message), copyText = mapped.technicalDetail)
             }
         }
     }
@@ -756,11 +778,11 @@ class XCPngManagerActivity : TabSSHActivity() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to open SSH for $vmLabel", e)
+                val mapped = ThrowableMapper.map(this@XCPngManagerActivity, TAG, e, "Failed to open SSH for $vmLabel")
                 if (!isFinishing && !isDestroyed) {
                     Toast.makeText(
                         this@XCPngManagerActivity,
-                        getString(R.string.hypervisor_ssh_open_failed_fmt, safeText(e.message)),
+                        getString(R.string.hypervisor_ssh_open_failed_fmt, mapped.message),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -855,11 +877,11 @@ class XCPngManagerActivity : TabSSHActivity() {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        Logger.e(TAG, "Failed to save XCP-ng server", e)
+                        val mapped = ThrowableMapper.map(this@XCPngManagerActivity, TAG, e, "Failed to save XCP-ng server")
                         if (!isFinishing && !isDestroyed) {
                             Toast.makeText(
                                 this@XCPngManagerActivity,
-                                getString(R.string.xcpng_save_server_failed_fmt, safeText(e.message)),
+                                getString(R.string.xcpng_save_server_failed_fmt, mapped.message),
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
@@ -1072,13 +1094,13 @@ class XCPngManagerActivity : TabSSHActivity() {
                             // Refresh
                             showSnapshotDialog(vm)
                         } else {
-                            showError(getString(R.string.xcpng_error_create_snapshot), getString(R.string.hypervisor_error_title))
+                            showError(getString(R.string.xcpng_error_create_snapshot), getString(R.string.status_error))
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        Logger.e(TAG, "Snapshot creation error", e)
-                        showError(getString(R.string.hypervisor_error_prefix_fmt, safeText(e.message)), getString(R.string.hypervisor_error_title))
+                        val mapped = ThrowableMapper.map(this@XCPngManagerActivity, TAG, e, "Snapshot creation error")
+                        showError(getString(R.string.hypervisor_error_prefix_fmt, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
                     }
                 }
             }
@@ -1107,13 +1129,13 @@ class XCPngManagerActivity : TabSSHActivity() {
                                     Toast.makeText(this@XCPngManagerActivity, getString(R.string.hypervisor_vm_reverted), Toast.LENGTH_SHORT).show()
                                     parentDialog.dismiss()
                                 } else {
-                                    showError(getString(R.string.xcpng_error_revert), getString(R.string.hypervisor_error_title))
+                                    showError(getString(R.string.xcpng_error_revert), getString(R.string.status_error))
                                 }
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
-                                Logger.e(TAG, "Revert error", e)
-                                showError(getString(R.string.hypervisor_error_prefix_fmt, safeText(e.message)), getString(R.string.hypervisor_error_title))
+                                val mapped = ThrowableMapper.map(this@XCPngManagerActivity, TAG, e, "Revert error")
+                                showError(getString(R.string.hypervisor_error_prefix_fmt, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
                             }
                         }
                     }
@@ -1134,13 +1156,13 @@ class XCPngManagerActivity : TabSSHActivity() {
                                     // Refresh
                                     showSnapshotDialog(vm)
                                 } else {
-                                    showError(getString(R.string.xcpng_error_delete_snapshot), getString(R.string.hypervisor_error_title))
+                                    showError(getString(R.string.xcpng_error_delete_snapshot), getString(R.string.status_error))
                                 }
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
-                                Logger.e(TAG, "Snapshot delete error", e)
-                                showError(getString(R.string.hypervisor_error_prefix_fmt, safeText(e.message)), getString(R.string.hypervisor_error_title))
+                                val mapped = ThrowableMapper.map(this@XCPngManagerActivity, TAG, e, "Snapshot delete error")
+                                showError(getString(R.string.hypervisor_error_prefix_fmt, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
                             }
                         }
                     }
@@ -1265,13 +1287,13 @@ class XCPngManagerActivity : TabSSHActivity() {
                                 if (success) {
                                     Toast.makeText(this@XCPngManagerActivity, getString(R.string.xcpng_backup_triggered), Toast.LENGTH_SHORT).show()
                                 } else {
-                                    showError(getString(R.string.xcpng_error_trigger_backup), getString(R.string.hypervisor_error_title))
+                                    showError(getString(R.string.xcpng_error_trigger_backup), getString(R.string.status_error))
                                 }
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
-                                Logger.e(TAG, "Trigger backup error", e)
-                                showError(getString(R.string.hypervisor_error_prefix_fmt, safeText(e.message)), getString(R.string.hypervisor_error_title))
+                                val mapped = ThrowableMapper.map(this@XCPngManagerActivity, TAG, e, "Trigger backup error")
+                                showError(getString(R.string.hypervisor_error_prefix_fmt, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
                             }
                         }
                     }
@@ -1614,11 +1636,11 @@ class XCPngManagerActivity : TabSSHActivity() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to load infrastructure", e)
+                val mapped = ThrowableMapper.map(this@XCPngManagerActivity, TAG, e, "Failed to load infrastructure")
                 if (!isFinishing && !isDestroyed) {
                     Toast.makeText(
                         this@XCPngManagerActivity,
-                        getString(R.string.hypervisor_error_prefix_fmt, safeText(e.message)),
+                        getString(R.string.hypervisor_error_prefix_fmt, mapped.message),
                         Toast.LENGTH_LONG
                     ).show()
                 }

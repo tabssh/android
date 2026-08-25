@@ -28,8 +28,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="@dimen/space_md"
                 android:layout_marginTop="@dimen/space_sm"
-                app:cardCornerRadius="8dp"
-                app:cardElevation="2dp"
+                app:cardCornerRadius="@dimen/card_corner_radius_small"
+                app:cardElevation="@dimen/elevation_low"
                 android:clickable="true"
                 android:focusable="true">
 
@@ -41,10 +41,11 @@
                     android:padding="@dimen/space_md">
 
                     <ImageView
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
+                        android:layout_width="@dimen/icon_size_large"
+                        android:layout_height="@dimen/icon_size_large"
                         android:src="@android:drawable/ic_menu_upload"
-                        android:layout_marginEnd="@dimen/space_md" />
+                        android:layout_marginEnd="@dimen/space_md"
+                        android:importantForAccessibility="no" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -56,7 +57,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/import_export_import_ssh_config_title"
-                            android:textSize="16sp"
+                            android:textSize="@dimen/text_size_subtitle"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
 
@@ -64,7 +65,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/import_export_card_import_ssh_subtitle"
-                            android:textSize="13sp"
+                            android:textSize="@dimen/text_size_small_body"
                             android:textColor="?attr/colorOnSurfaceVariant" />
 
                     </LinearLayout>
@@ -79,8 +80,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="@dimen/space_md"
                 android:layout_marginTop="@dimen/space_sm"
-                app:cardCornerRadius="8dp"
-                app:cardElevation="2dp"
+                app:cardCornerRadius="@dimen/card_corner_radius_small"
+                app:cardElevation="@dimen/elevation_low"
                 android:clickable="true"
                 android:focusable="true">
 
@@ -92,10 +93,11 @@
                     android:padding="@dimen/space_md">
 
                     <ImageView
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
+                        android:layout_width="@dimen/icon_size_large"
+                        android:layout_height="@dimen/icon_size_large"
                         android:src="@android:drawable/ic_menu_save"
-                        android:layout_marginEnd="@dimen/space_md" />
+                        android:layout_marginEnd="@dimen/space_md"
+                        android:importantForAccessibility="no" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -107,7 +109,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/import_export_export_ssh_config_title"
-                            android:textSize="16sp"
+                            android:textSize="@dimen/text_size_subtitle"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
 
@@ -115,7 +117,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/import_export_card_export_ssh_subtitle"
-                            android:textSize="13sp"
+                            android:textSize="@dimen/text_size_small_body"
                             android:textColor="?attr/colorOnSurfaceVariant" />
 
                     </LinearLayout>
@@ -130,8 +132,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="@dimen/space_md"
                 android:layout_marginTop="@dimen/space_sm"
-                app:cardCornerRadius="8dp"
-                app:cardElevation="2dp"
+                app:cardCornerRadius="@dimen/card_corner_radius_small"
+                app:cardElevation="@dimen/elevation_low"
                 android:clickable="true"
                 android:focusable="true">
 
@@ -143,10 +145,11 @@
                     android:padding="@dimen/space_md">
 
                     <ImageView
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
+                        android:layout_width="@dimen/icon_size_large"
+                        android:layout_height="@dimen/icon_size_large"
                         android:src="@android:drawable/ic_menu_upload"
-                        android:layout_marginEnd="@dimen/space_md" />
+                        android:layout_marginEnd="@dimen/space_md"
+                        android:importantForAccessibility="no" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -158,7 +161,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/import_export_bulk_import_title"
-                            android:textSize="16sp"
+                            android:textSize="@dimen/text_size_subtitle"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
 
@@ -166,7 +169,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/import_export_card_bulk_import_subtitle"
-                            android:textSize="13sp"
+                            android:textSize="@dimen/text_size_small_body"
                             android:textColor="?attr/colorOnSurfaceVariant" />
 
                     </LinearLayout>
@@ -181,8 +184,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="@dimen/space_md"
                 android:layout_marginTop="@dimen/space_sm"
-                app:cardCornerRadius="8dp"
-                app:cardElevation="2dp"
+                app:cardCornerRadius="@dimen/card_corner_radius_small"
+                app:cardElevation="@dimen/elevation_low"
                 android:clickable="true"
                 android:focusable="true">
 
@@ -194,10 +197,11 @@
                     android:padding="@dimen/space_md">
 
                     <ImageView
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
+                        android:layout_width="@dimen/icon_size_large"
+                        android:layout_height="@dimen/icon_size_large"
                         android:src="@android:drawable/ic_menu_camera"
-                        android:layout_marginEnd="@dimen/space_md" />
+                        android:layout_marginEnd="@dimen/space_md"
+                        android:importantForAccessibility="no" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -209,7 +213,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/import_export_card_pair_qr_title"
-                            android:textSize="16sp"
+                            android:textSize="@dimen/text_size_subtitle"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
 
@@ -217,7 +221,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/import_export_card_pair_qr_subtitle"
-                            android:textSize="13sp"
+                            android:textSize="@dimen/text_size_small_body"
                             android:textColor="?attr/colorOnSurfaceVariant" />
 
                     </LinearLayout>
@@ -232,8 +236,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="@dimen/space_md"
                 android:layout_marginTop="@dimen/space_sm"
-                app:cardCornerRadius="8dp"
-                app:cardElevation="2dp"
+                app:cardCornerRadius="@dimen/card_corner_radius_small"
+                app:cardElevation="@dimen/elevation_low"
                 android:clickable="true"
                 android:focusable="true">
 
@@ -245,10 +249,11 @@
                     android:padding="@dimen/space_md">
 
                     <ImageView
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
+                        android:layout_width="@dimen/icon_size_large"
+                        android:layout_height="@dimen/icon_size_large"
                         android:src="@android:drawable/ic_menu_upload"
-                        android:layout_marginEnd="@dimen/space_md" />
+                        android:layout_marginEnd="@dimen/space_md"
+                        android:importantForAccessibility="no" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -260,7 +265,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/import_export_card_import_backup_title"
-                            android:textSize="16sp"
+                            android:textSize="@dimen/text_size_subtitle"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
 
@@ -268,7 +273,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/import_export_card_import_backup_subtitle"
-                            android:textSize="13sp"
+                            android:textSize="@dimen/text_size_small_body"
                             android:textColor="?attr/colorOnSurfaceVariant" />
 
                     </LinearLayout>
@@ -283,8 +288,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="@dimen/space_md"
                 android:layout_marginTop="@dimen/space_sm"
-                app:cardCornerRadius="8dp"
-                app:cardElevation="2dp"
+                app:cardCornerRadius="@dimen/card_corner_radius_small"
+                app:cardElevation="@dimen/elevation_low"
                 android:clickable="true"
                 android:focusable="true">
 
@@ -296,10 +301,11 @@
                     android:padding="@dimen/space_md">
 
                     <ImageView
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
+                        android:layout_width="@dimen/icon_size_large"
+                        android:layout_height="@dimen/icon_size_large"
                         android:src="@android:drawable/ic_menu_save"
-                        android:layout_marginEnd="@dimen/space_md" />
+                        android:layout_marginEnd="@dimen/space_md"
+                        android:importantForAccessibility="no" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -311,7 +317,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/import_export_card_export_backup_title"
-                            android:textSize="16sp"
+                            android:textSize="@dimen/text_size_subtitle"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
 
@@ -319,7 +325,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/import_export_card_export_backup_subtitle"
-                            android:textSize="13sp"
+                            android:textSize="@dimen/text_size_small_body"
                             android:textColor="?attr/colorOnSurfaceVariant" />
 
                     </LinearLayout>

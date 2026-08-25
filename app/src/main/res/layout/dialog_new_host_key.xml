@@ -120,7 +120,7 @@
                     android:id="@+id/text_fingerprint"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textSize="11sp"
+                    android:textSize="@dimen/text_size_overline"
                     android:fontFamily="monospace"
                     android:textIsSelectable="true"
                     android:background="?attr/colorSurface"

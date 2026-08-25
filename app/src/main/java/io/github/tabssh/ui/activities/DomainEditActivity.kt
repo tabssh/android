@@ -15,13 +15,16 @@ import com.google.android.material.textfield.TextInputEditText
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.Domain
+import io.github.tabssh.utils.ThrowableMapper
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.TimeZone
 import java.util.UUID
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Create or edit a [Domain] tracker record.
@@ -30,6 +33,10 @@ import java.util.UUID
  *   [EXTRA_DOMAIN_ID] — String UUID; omit for a new domain.
  */
 class DomainEditActivity : TabSSHActivity() {
+
+    // Edit screens use an up arrow instead of the hamburger, routed
+    // through the same OnBackPressedDispatcher as system Back.
+    override val navigationAffordance: NavigationAffordance = NavigationAffordance.UP
 
     companion object {
         private const val TAG = "DomainEditActivity"
@@ -59,7 +66,7 @@ class DomainEditActivity : TabSSHActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_domain_edit)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         toolbar = findViewById(R.id.toolbar)
         editName = findViewById(R.id.edit_name)
@@ -90,8 +97,30 @@ class DomainEditActivity : TabSSHActivity() {
         }
 
         btnSave.setOnClickListener { saveDomain() }
-        btnCancel.setOnClickListener { finish() }
+        btnCancel.setOnClickListener { confirmDiscardIfNeeded { finish() } }
         btnDelete.setOnClickListener { confirmDelete() }
+
+        setupUnsavedChangesGuard()
+    }
+
+    /**
+     * Wires every primary form field to flip [hasUnsavedChanges] and opts
+     * this screen into the shared discard-confirmation guard.
+     */
+    private fun setupUnsavedChangesGuard() {
+        val watcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) { hasUnsavedChanges = true }
+        }
+        editName.addTextChangedListener(watcher)
+        editStatus.addTextChangedListener(watcher)
+        editReminderDays.addTextChangedListener(watcher)
+        editNotes.addTextChangedListener(watcher)
+        switchPrivacy.setOnCheckedChangeListener { _, _ -> hasUnsavedChanges = true }
+        switchAutoRenew.setOnCheckedChangeListener { _, _ -> hasUnsavedChanges = true }
+
+        enableUnsavedChangesGuard()
     }
 
     // ── Setup ────────────────────────────────────────────────────────────────
@@ -109,6 +138,7 @@ class DomainEditActivity : TabSSHActivity() {
                 editExpiration.setText(
                     android.text.format.DateFormat.getMediumDateFormat(this).format(picked.time)
                 )
+                hasUnsavedChanges = true
             },
             cal.get(Calendar.YEAR),
             cal.get(Calendar.MONTH),
@@ -140,6 +170,7 @@ class DomainEditActivity : TabSSHActivity() {
             )
             editReminderDays.setText(domain.reminderDaysBefore.toString())
             editNotes.setText(domain.notes ?: "")
+            hasUnsavedChanges = false
         }
     }
 
@@ -183,12 +214,17 @@ class DomainEditActivity : TabSSHActivity() {
                     }
                 }
                 Toast.makeText(this@DomainEditActivity, getString(R.string.domain_edit_saved), Toast.LENGTH_SHORT).show()
+                hasUnsavedChanges = false
                 finish()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to save domain", e)
-                Toast.makeText(this@DomainEditActivity, getString(R.string.domain_edit_save_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                val mapped = ThrowableMapper.map(this@DomainEditActivity, TAG, e, "Failed to save domain")
+                showError(
+                    getString(R.string.cloud_save_failed, mapped.message),
+                    copyText = mapped.technicalDetail,
+                    onRetry = { saveDomain() }
+                )
             }
         }
     }
@@ -215,8 +251,12 @@ class DomainEditActivity : TabSSHActivity() {
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to delete domain", e)
-                Toast.makeText(this@DomainEditActivity, getString(R.string.domain_edit_delete_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                val mapped = ThrowableMapper.map(this@DomainEditActivity, TAG, e, "Failed to delete domain")
+                showError(
+                    getString(R.string.domain_delete_failed_fmt, mapped.message),
+                    copyText = mapped.technicalDetail,
+                    onRetry = { deleteDomain(domainId) }
+                )
             }
         }
     }

@@ -1,209 +1,248 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="@dimen/space_lg">
+    android:orientation="vertical">
 
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="@dimen/space_lg">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Error Icon -->
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="@dimen/space_md"
+                android:src="@drawable/ic_error"
+                app:tint="?colorError"
+                android:contentDescription="@string/dialog_ssh_error_icon_content_description" />
+
+            <!-- Connection Details -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/space_md"
+                app:cardElevation="2dp"
+                app:cardCornerRadius="8dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/space_md">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/dialog_ssh_error_connection_details_title"
+                        android:textStyle="bold"
+                        android:textSize="14sp"
+                        android:textColor="?android:textColorPrimary"
+                        android:layout_marginBottom="@dimen/space_sm" />
+
+                    <TextView
+                        android:id="@+id/text_connection_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/dialog_ssh_error_connection_loading"
+                        android:textSize="12sp"
+                        android:textColor="?android:textColorSecondary"
+                        android:layout_marginBottom="@dimen/space_xs" />
+
+                    <TextView
+                        android:id="@+id/text_connection_host"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/dialog_ssh_error_host_loading"
+                        android:textSize="12sp"
+                        android:textColor="?android:textColorSecondary"
+                        android:layout_marginBottom="@dimen/space_xs" />
+
+                    <TextView
+                        android:id="@+id/text_connection_username"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/dialog_ssh_error_username_loading"
+                        android:textSize="12sp"
+                        android:textColor="?android:textColorSecondary"
+                        android:layout_marginBottom="@dimen/space_xs" />
+
+                    <TextView
+                        android:id="@+id/text_auth_type"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/dialog_ssh_error_auth_loading"
+                        android:textSize="12sp"
+                        android:textColor="?android:textColorSecondary" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Error Message -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/dialog_ssh_error_message_title"
+                android:textStyle="bold"
+                android:textSize="14sp"
+                android:textColor="?android:textColorPrimary"
+                android:layout_marginBottom="@dimen/space_sm" />
+
+            <TextView
+                android:id="@+id/text_error_message"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/dialog_ssh_error_message_loading"
+                android:textSize="13sp"
+                android:textColor="?colorError"
+                android:textIsSelectable="true"
+                android:padding="@dimen/space_12dp"
+                android:background="@android:color/transparent"
+                android:layout_marginBottom="@dimen/space_md" />
+
+            <!-- Technical Details (Expandable) -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/text_show_technical"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minHeight="@dimen/button_height"
+                android:text="@string/dialog_ssh_error_show_technical"
+                android:textSize="13sp"
+                style="?attr/borderlessButtonStyle"
+                app:icon="@drawable/ic_expand_more"
+                app:iconGravity="textEnd"
+                android:layout_marginBottom="@dimen/space_sm" />
+
+            <TextView
+                android:id="@+id/text_technical_details"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/dialog_ssh_error_technical_loading"
+                android:textSize="@dimen/text_size_overline"
+                android:textColor="?android:textColorSecondary"
+                android:textIsSelectable="true"
+                android:fontFamily="monospace"
+                android:padding="@dimen/space_12dp"
+                android:background="?attr/colorSurfaceVariant"
+                android:visibility="gone"
+                android:layout_marginBottom="@dimen/space_md" />
+
+            <!-- Possible Solutions -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/dialog_ssh_error_solutions_title"
+                android:textStyle="bold"
+                android:textSize="14sp"
+                android:textColor="?android:textColorPrimary"
+                android:layout_marginBottom="@dimen/space_sm" />
+
+            <TextView
+                android:id="@+id/text_solutions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/dialog_ssh_error_solutions_loading"
+                android:textSize="12sp"
+                android:textColor="?android:textColorSecondary"
+                android:textIsSelectable="true"
+                android:layout_marginBottom="@dimen/space_md" />
+
+            <!-- Credential Re-entry (Authentication Failed only) -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_retry_credential"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/space_md"
+                android:visibility="gone"
+                app:endIconMode="password_toggle"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/input_retry_credential"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textPassword" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+        </LinearLayout>
+
+    </ScrollView>
+
+    <!-- Action Buttons — fixed footer, outside the scroll region (item 8).
+         2x2 grid so a row of four buttons never overflows a narrow phone
+         screen (item 3): row 1 is the two non-destructive info actions,
+         row 2 is Retry/Close, each button weighted to share the row width
+         evenly and ellipsize rather than clip if a locale's label is long. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:padding="@dimen/space_lg"
+        android:paddingTop="@dimen/space_sm">
 
-        <!-- Error Icon -->
-        <ImageView
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="@dimen/space_md"
-            android:src="@drawable/ic_error"
-            app:tint="?colorError"
-            android:contentDescription="@string/dialog_ssh_error_icon_content_description" />
-
-        <!-- Connection Details -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="@dimen/space_md"
-            app:cardElevation="2dp"
-            app:cardCornerRadius="8dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="@dimen/space_md">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/dialog_ssh_error_connection_details_title"
-                    android:textStyle="bold"
-                    android:textSize="14sp"
-                    android:textColor="?android:textColorPrimary"
-                    android:layout_marginBottom="@dimen/space_sm" />
-
-                <TextView
-                    android:id="@+id/text_connection_name"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/dialog_ssh_error_connection_loading"
-                    android:textSize="12sp"
-                    android:textColor="?android:textColorSecondary"
-                    android:layout_marginBottom="@dimen/space_xs" />
-
-                <TextView
-                    android:id="@+id/text_connection_host"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/dialog_ssh_error_host_loading"
-                    android:textSize="12sp"
-                    android:textColor="?android:textColorSecondary"
-                    android:layout_marginBottom="@dimen/space_xs" />
-
-                <TextView
-                    android:id="@+id/text_connection_username"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/dialog_ssh_error_username_loading"
-                    android:textSize="12sp"
-                    android:textColor="?android:textColorSecondary"
-                    android:layout_marginBottom="@dimen/space_xs" />
-
-                <TextView
-                    android:id="@+id/text_auth_type"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/dialog_ssh_error_auth_loading"
-                    android:textSize="12sp"
-                    android:textColor="?android:textColorSecondary" />
-
-            </LinearLayout>
-
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- Error Message -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/dialog_ssh_error_message_title"
-            android:textStyle="bold"
-            android:textSize="14sp"
-            android:textColor="?android:textColorPrimary"
-            android:layout_marginBottom="@dimen/space_sm" />
-
-        <TextView
-            android:id="@+id/text_error_message"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/dialog_ssh_error_message_loading"
-            android:textSize="13sp"
-            android:textColor="?colorError"
-            android:textIsSelectable="true"
-            android:padding="@dimen/space_12dp"
-            android:background="@android:color/transparent"
-            android:layout_marginBottom="@dimen/space_md" />
-
-        <!-- Technical Details (Expandable) -->
-        <TextView
-            android:id="@+id/text_show_technical"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/dialog_ssh_error_show_technical"
-            android:textSize="13sp"
-            android:textColor="?colorPrimary"
-            android:clickable="true"
-            android:focusable="true"
-            android:paddingVertical="@dimen/space_sm"
-            android:layout_marginBottom="@dimen/space_sm" />
-
-        <TextView
-            android:id="@+id/text_technical_details"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/dialog_ssh_error_technical_loading"
-            android:textSize="11sp"
-            android:textColor="?android:textColorSecondary"
-            android:textIsSelectable="true"
-            android:fontFamily="monospace"
-            android:padding="@dimen/space_12dp"
-            android:background="?attr/colorSurfaceVariant"
-            android:visibility="gone"
-            android:layout_marginBottom="@dimen/space_md" />
-
-        <!-- Possible Solutions -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/dialog_ssh_error_solutions_title"
-            android:textStyle="bold"
-            android:textSize="14sp"
-            android:textColor="?android:textColorPrimary"
-            android:layout_marginBottom="@dimen/space_sm" />
-
-        <TextView
-            android:id="@+id/text_solutions"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/dialog_ssh_error_solutions_loading"
-            android:textSize="12sp"
-            android:textColor="?android:textColorSecondary"
-            android:textIsSelectable="true"
-            android:layout_marginBottom="@dimen/space_md" />
-
-        <!-- Credential Re-entry (Authentication Failed only) -->
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/layout_retry_credential"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="@dimen/space_md"
-            android:visibility="gone"
-            app:endIconMode="password_toggle"
-            style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/input_retry_credential"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="textPassword" />
-
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <!-- Action Buttons -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:gravity="end">
+            android:layout_marginBottom="@dimen/space_sm">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_copy_error"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:text="@string/dialog_ssh_error_copy_button"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_marginEnd="@dimen/space_sm" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_edit_connection"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:text="@string/edit_connection"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_marginEnd="@dimen/space_sm" />
+                style="@style/Widget.Material3.Button.TextButton" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_retry"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:text="@string/retry"
                 style="@style/Widget.Material3.Button"
                 android:layout_marginEnd="@dimen/space_sm" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_close"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:text="@string/close"
                 style="@style/Widget.Material3.Button.TextButton" />
 
@@ -211,4 +250,4 @@
 
     </LinearLayout>
 
-</ScrollView>
+</LinearLayout>

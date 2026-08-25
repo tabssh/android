@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 class SettingsActivity :
     TabSSHActivity(),
@@ -27,13 +28,13 @@ class SettingsActivity :
         setContentView(R.layout.activity_settings)
 
         setSupportActionBar(findViewById(R.id.toolbar))
-        supportActionBar?.setTitle(R.string.nav_item_settings)
+        supportActionBar?.setTitle(R.string.settings_title)
 
         // System back pops the preference back stack on its own; this listener
         // only restores the root title once the stack is empty again.
         supportFragmentManager.addOnBackStackChangedListener {
             if (supportFragmentManager.backStackEntryCount == 0) {
-                supportActionBar?.setTitle(R.string.nav_item_settings)
+                supportActionBar?.setTitle(R.string.settings_title)
             }
         }
 
@@ -202,7 +203,7 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
             MaterialAlertDialogBuilder(requireContext())
                 .setTitle(R.string.settings_dialog_clear_known_hosts_title)
                 .setMessage(R.string.settings_dialog_clear_known_hosts_message)
-                .setPositiveButton(R.string.settings_action_clear) { _, _ ->
+                .setPositiveButton(R.string.action_clear) { _, _ ->
                     clearKnownHosts()
                 }
                 .setNegativeButton(android.R.string.cancel, null)
@@ -271,7 +272,7 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
 
         // Wave 3.2 — PIN lock setup / change / disable
         findPreference<Preference>("app_lock_pin_setup")?.setOnPreferenceClickListener {
-            val app = requireActivity().application as TabSSHApplication
+            val app = tabSSHApp
             val enabled = app.preferencesManager.getBoolean(io.github.tabssh.ui.activities.PinLockActivity.PREF_PIN_ENABLED, false)
             val ctx = requireContext()
             val items = if (enabled) {
@@ -453,7 +454,7 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
             }
         }
 
-        val app = requireActivity().application as TabSSHApplication
+        val app = tabSSHApp
 
         // Import custom theme click listener
         findPreference<Preference>("import_custom_theme")?.setOnPreferenceClickListener {
@@ -570,7 +571,7 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
     }
 
     private fun importThemeFromUri(uri: android.net.Uri) {
-        val app = requireActivity().application as TabSSHApplication
+        val app = tabSSHApp
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val json = requireContext().contentResolver
@@ -593,7 +594,7 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
                         is io.github.tabssh.themes.definitions.ImportThemeResult.Error ->
                             Toast.makeText(
                                 requireContext(),
-                                getString(R.string.settings_toast_theme_import_failed, result.message),
+                                getString(R.string.import_qr_import_failed_fmt, result.message),
                                 Toast.LENGTH_LONG
                             ).show()
                     }
@@ -603,7 +604,7 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     Toast.makeText(
                         requireContext(),
-                        getString(R.string.settings_toast_theme_import_failed, e.message.orEmpty()),
+                        getString(R.string.import_qr_import_failed_fmt, e.message.orEmpty()),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -612,7 +613,7 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
     }
 
     private fun exportThemeToUri(uri: android.net.Uri) {
-        val app = requireActivity().application as TabSSHApplication
+        val app = tabSSHApp
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val themeId = app.preferencesManager.getString("terminal_theme", "dark")
@@ -634,7 +635,7 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     Toast.makeText(
                         requireContext(),
-                        getString(R.string.settings_toast_theme_export_failed, e.message.orEmpty()),
+                        getString(R.string.identity_export_failed_fmt, e.message.orEmpty()),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -754,7 +755,7 @@ class AuditSettingsFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_audit, rootKey)
 
-        val app = requireActivity().application as TabSSHApplication
+        val app = tabSSHApp
 
         // MDM status banner — show and lock the toggle when an EMM policy is active.
         if (app.auditLogManager.isMdmManaged()) {
@@ -807,7 +808,7 @@ class AuditSettingsFragment : PreferenceFragmentCompat() {
             MaterialAlertDialogBuilder(requireContext())
                 .setTitle(R.string.settings_dialog_clear_audit_logs_title)
                 .setMessage(R.string.settings_dialog_clear_audit_logs_message)
-                .setPositiveButton(R.string.settings_action_clear) { _, _ ->
+                .setPositiveButton(R.string.action_clear) { _, _ ->
                     lifecycleScope.launch {
                         withContext(Dispatchers.IO) {
                             app.auditLogManager.deleteAllLogs()
@@ -826,7 +827,7 @@ class AuditSettingsFragment : PreferenceFragmentCompat() {
     private fun exportAuditLogs() {
         lifecycleScope.launch {
             try {
-                val app = requireActivity().application as TabSSHApplication
+                val app = tabSSHApp
                 val logs = withContext(Dispatchers.IO) {
                     // Get last 1000 logs
                     app.database.auditLogDao().getRecent(1000)
@@ -899,7 +900,7 @@ class TaskerSettingsFragment : PreferenceFragmentCompat() {
         }
         
         // Load connection list for allowed connections
-        val app = requireActivity().application as TabSSHApplication
+        val app = tabSSHApp
         lifecycleScope.launch {
             app.database.connectionDao().getAllConnections()
                 .flowOn(Dispatchers.IO)
@@ -1083,8 +1084,8 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                 MaterialAlertDialogBuilder(requireContext())
                     .setTitle(title)
                     .setView(scrollView)
-                    .setPositiveButton(R.string.settings_action_close, null)
-                    .setNeutralButton(R.string.settings_action_copy) { _, _ ->
+                    .setPositiveButton(R.string.close, null)
+                    .setNeutralButton(R.string.copy) { _, _ ->
                         io.github.tabssh.utils.ClipboardHelper.copy(requireContext(), title, displayContent, sensitive = false)
                         android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_log_copied), android.widget.Toast.LENGTH_SHORT).show()
                     }
@@ -1159,8 +1160,8 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                 MaterialAlertDialogBuilder(requireContext())
                     .setTitle(logFile.name)
                     .setView(scrollView)
-                    .setPositiveButton(R.string.settings_action_close, null)
-                    .setNeutralButton(R.string.settings_action_copy) { _, _ ->
+                    .setPositiveButton(R.string.close, null)
+                    .setNeutralButton(R.string.copy) { _, _ ->
                         // Host logs contain real hostnames/usernames (never sanitized —
                         // see Logger.logHostEvent) — mark sensitive so the clipboard
                         // auto-clear timeout applies.
@@ -1221,7 +1222,7 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.settings_dialog_clear_logs_title)
             .setMessage(R.string.settings_dialog_clear_logs_message)
-            .setPositiveButton(R.string.settings_action_clear) { _, _ ->
+            .setPositiveButton(R.string.action_clear) { _, _ ->
                 io.github.tabssh.utils.logging.Logger.clearLogs()
                 android.widget.Toast.makeText(
                     requireContext(),

@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Per-host container manager.
@@ -101,7 +102,7 @@ class ContainerHostManagerActivity : TabSSHActivity() {
         )
         setContentView(R.layout.activity_container_host_manager)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
         hostId = intent.getLongExtra(EXTRA_HOST_ID, -1L)
         if (hostId == -1L) {
             finish()

@@ -31,6 +31,7 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Wave 2.4 — In-app theme editor.
@@ -45,6 +46,10 @@ import kotlinx.coroutines.withContext
  * lib was already considered overkill for one editor.
  */
 class ThemeEditorActivity : TabSSHActivity() {
+
+    // Edit screens use an up arrow instead of the hamburger, routed
+    // through the same OnBackPressedDispatcher as system Back.
+    override val navigationAffordance: NavigationAffordance = NavigationAffordance.UP
 
     companion object {
         private const val TAG = "ThemeEditor"
@@ -74,7 +79,7 @@ class ThemeEditorActivity : TabSSHActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         seedFromBase(intent.getStringExtra(EXTRA_BASE_THEME_ID))
 
@@ -103,7 +108,12 @@ class ThemeEditorActivity : TabSSHActivity() {
         // ── Base theme picker ─────────────────────────────────────────
         content.addView(sectionHeader(getString(io.github.tabssh.R.string.theme_editor_section_base)))
         val baseBtn = Button(this).apply { text = getString(io.github.tabssh.R.string.theme_editor_pick_base_button) }
-        baseBtn.setOnClickListener { showBasePicker { id -> seedFromBase(id); refreshAllSwatches(); refreshPreview() } }
+        baseBtn.setOnClickListener {
+            showBasePicker { id ->
+                hasUnsavedChanges = true
+                seedFromBase(id); refreshAllSwatches(); refreshPreview()
+            }
+        }
         content.addView(baseBtn)
 
         // ── Name ───────────────────────────────────────────────────────
@@ -112,6 +122,11 @@ class ThemeEditorActivity : TabSSHActivity() {
             hint = getString(io.github.tabssh.R.string.theme_editor_name_hint)
             inputType = InputType.TYPE_CLASS_TEXT
         }
+        nameInput?.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) { hasUnsavedChanges = true }
+        })
         content.addView(nameInput)
 
         // ── Live preview ───────────────────────────────────────────────
@@ -166,6 +181,10 @@ class ThemeEditorActivity : TabSSHActivity() {
         setSupportActionBar(toolbar)
 
         refreshPreview()
+
+        // leaving the editor with unsaved color/name edits
+        // prompts for confirmation, same as the form-based screens.
+        enableUnsavedChangesGuard()
     }
 
     private fun seedFromBase(baseId: String?) {
@@ -224,6 +243,7 @@ class ThemeEditorActivity : TabSSHActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 parseHex(s?.toString().orEmpty())?.let { c ->
+                    hasUnsavedChanges = true
                     setColor(key, c)
                     swatch.background = makeSwatch(c)
                     refreshPreview()
@@ -231,6 +251,7 @@ class ThemeEditorActivity : TabSSHActivity() {
             }
         })
         swatch.setOnClickListener { showHsvDialog(getColor(key)) { c ->
+            hasUnsavedChanges = true
             setColor(key, c)
             hexEdit.setText(toHex(c))
             swatch.background = makeSwatch(c)
@@ -359,6 +380,7 @@ class ThemeEditorActivity : TabSSHActivity() {
                         Toast.LENGTH_SHORT
                     ).show()
                     Logger.i(TAG, "Saved custom theme ${r.theme.id}")
+                    hasUnsavedChanges = false
                     finish()
                 }
                 is ImportThemeResult.Error -> {

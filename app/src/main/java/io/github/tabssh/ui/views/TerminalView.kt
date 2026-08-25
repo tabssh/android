@@ -3678,6 +3678,11 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
     // own text, finishComposingText() accepts the composition as-is.
     private var composingText: String = ""
 
+    // Item 42 — see [armDeleteSuppressionWindow] / [deleteBefore]. Non-zero
+    // while a stray post-submit deleteSurroundingText() is still eligible to
+    // be swallowed; SystemClock.uptimeMillis() timestamp, or 0L when idle.
+    private var suppressNextDeleteUntilMs: Long = 0L
+
     override fun getHandler(): android.os.Handler? = null
 
     override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence = ""
@@ -3711,6 +3716,19 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
     private fun deleteBefore(beforeLength: Int) {
         var remaining = beforeLength.coerceIn(0, MAX_DELETE_BEFORE)
         if (remaining == 0) return
+        // Item 42 — some Gboard builds occasionally fire one
+        // deleteSurroundingText() immediately after finishComposingText()/an
+        // Enter submit, apparently still believing the just-finalised
+        // composition sits in an editable buffer (we report an empty one).
+        // A real backspace never arrives on this path — it comes through
+        // sendKeyEvent()/commitText() instead — so it is safe to swallow
+        // exactly one such call, and only when there is no local composing
+        // text left to legitimately trim.
+        if (composingText.isEmpty() && isWithinDeleteSuppressionWindow()) {
+            suppressNextDeleteUntilMs = 0L
+            return
+        }
+        suppressNextDeleteUntilMs = 0L
         if (composingText.isNotEmpty()) {
             val trimmed = minOf(remaining, composingText.length)
             composingText = composingText.dropLast(trimmed)
@@ -3720,9 +3738,25 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
         repeat(remaining) { terminalView.sendText("\u007F") }
     }
 
+    private fun isWithinDeleteSuppressionWindow(): Boolean =
+        suppressNextDeleteUntilMs > 0L &&
+            android.os.SystemClock.uptimeMillis() < suppressNextDeleteUntilMs
+
+    /**
+     * Arm the item 42 mitigation window right after a composition is
+     * finalised (finishComposingText / Enter submit) — see [deleteBefore].
+     * Any real input event (a key event or a fresh commit/compose) clears it
+     * again, so the suppression can only ever consume the specific stray
+     * delete this mitigates, never a legitimate one that happens to follow.
+     */
+    private fun armDeleteSuppressionWindow() {
+        suppressNextDeleteUntilMs = android.os.SystemClock.uptimeMillis() + DELETE_SUPPRESS_WINDOW_MS
+    }
+
     override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
         // Track the provisional text only; do not forward it (see composingText).
         composingText = text?.toString() ?: ""
+        suppressNextDeleteUntilMs = 0L
         return true
     }
 
@@ -3732,6 +3766,7 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
         // The IME accepted the composition as final (no commitText). Emit it
         // now, converting newline to CR for shell submit, then clear.
         flushComposing()
+        armDeleteSuppressionWindow()
         return true
     }
 
@@ -3746,6 +3781,7 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
         // This bypasses the composition, so emit any pending composing text
         // before the submit rather than after it.
         flushComposing()
+        armDeleteSuppressionWindow()
         terminalView.sendText("\r")
         return true
     }
@@ -3760,6 +3796,10 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
         // Key events are written straight to the terminal by onKeyDown, which
         // would otherwise race ahead of an unfinished composition.
         flushComposing()
+        // A real key event means item 42's suppression window no longer
+        // applies — whatever follows now is a fresh input, not the stray
+        // post-submit delete it exists to catch.
+        suppressNextDeleteUntilMs = 0L
         terminalView.dispatchKeyEvent(event)
         return true
     }
@@ -3775,6 +3815,8 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
         // provisional string is superseded and must not be re-emitted on a later
         // finishComposingText().
         composingText = ""
+        // A real commit means item 42's suppression window no longer applies.
+        suppressNextDeleteUntilMs = 0L
         text?.let {
             val raw = it.toString()
             // Multiline commits — e.g. an IME (Gboard, etc.) delivering a
@@ -3842,6 +3884,12 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
         // Upper bound on a single IME deletion request. Nothing legitimate
         // deletes more than a line's worth of characters in one call.
         const val MAX_DELETE_BEFORE = 1024
+
+        // Item 42 — how long after a composition finalises a stray
+        // deleteSurroundingText() is still eligible to be swallowed. Wide
+        // enough to cover one IME dispatch round-trip, narrow enough that it
+        // never spans into the next unrelated keystroke.
+        const val DELETE_SUPPRESS_WINDOW_MS = 120L
     }
 
     override fun closeConnection() {

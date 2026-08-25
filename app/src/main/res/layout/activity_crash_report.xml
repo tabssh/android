@@ -52,7 +52,7 @@
             android:padding="@dimen/space_12dp"
             android:textColor="@color/console_error_text"
             android:textIsSelectable="true"
-            android:textSize="11sp" />
+            android:textSize="@dimen/text_size_overline" />
     </ScrollView>
 
     <LinearLayout

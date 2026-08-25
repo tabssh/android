@@ -24,6 +24,7 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Hosts tab's Telnet sub-tab — list/CRUD for [TelnetHost] rows backed by
@@ -52,7 +53,7 @@ class TelnetHostsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        app = requireActivity().application as TabSSHApplication
+        app = tabSSHApp
 
         recyclerView = view.findViewById(R.id.recycler_telnet_hosts)
         emptyState = view.findViewById(R.id.empty_state)
@@ -104,7 +105,7 @@ class TelnetHostsFragment : Fragment() {
 
     private fun confirmDelete(host: TelnetHost) {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle(getString(R.string.telnet_host_delete_title, host.name))
+            .setTitle(getString(R.string.domain_delete_title, host.name))
             .setMessage(getString(R.string.telnet_host_delete_message))
             .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 viewLifecycleOwner.lifecycleScope.launch {
@@ -120,7 +121,7 @@ class TelnetHostsFragment : Fragment() {
                     } catch (e: Exception) {
                         Logger.e(TAG, "Failed to delete Telnet host", e)
                         if (!isAlive) return@launch
-                        Toast.makeText(requireContext(), getString(R.string.telnet_host_delete_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                        Toast.makeText(requireContext(), getString(R.string.domain_delete_failed_fmt, e.message), Toast.LENGTH_LONG).show()
                     }
                 }
             }

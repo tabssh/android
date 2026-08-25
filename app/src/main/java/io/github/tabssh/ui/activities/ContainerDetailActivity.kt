@@ -26,6 +26,7 @@ import io.github.tabssh.ui.views.SparklineView
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Container detail screen: inspect, env/mounts/ports,
@@ -100,7 +101,7 @@ class ContainerDetailActivity : TabSSHActivity() {
         )
         setContentView(R.layout.activity_container_detail)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
         hostId = intent.getLongExtra(EXTRA_HOST_ID, 0)
         containerId = intent.getStringExtra(EXTRA_CONTAINER_ID) ?: ""
         // The name comes from the daemon and is rendered in the toolbar and in

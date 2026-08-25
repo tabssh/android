@@ -28,8 +28,8 @@
         <!-- Expand/collapse chevron -->
         <ImageButton
             android:id="@+id/btn_toggle"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="@dimen/min_touch_target"
+            android:layout_height="@dimen/min_touch_target"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/dashboard_group_toggle_description"
             app:srcCompat="@drawable/ic_expand_more"
@@ -76,8 +76,8 @@
         <!-- Add hosts to this group -->
         <ImageButton
             android:id="@+id/btn_add_hosts"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="@dimen/min_touch_target"
+            android:layout_height="@dimen/min_touch_target"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/dashboard_group_add_hosts_description"
             app:srcCompat="@drawable/ic_add"
@@ -86,8 +86,8 @@
         <!-- Bulk monitor config for all hosts in this group -->
         <ImageButton
             android:id="@+id/btn_bulk_monitor"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="@dimen/min_touch_target"
+            android:layout_height="@dimen/min_touch_target"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/dashboard_group_bulk_monitor_description"
             app:srcCompat="@drawable/ic_flash"
@@ -96,8 +96,8 @@
         <!-- Rename group -->
         <ImageButton
             android:id="@+id/btn_rename"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="@dimen/min_touch_target"
+            android:layout_height="@dimen/min_touch_target"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/dashboard_group_rename_description"
             app:srcCompat="@drawable/ic_edit"
@@ -106,8 +106,8 @@
         <!-- Delete group -->
         <ImageButton
             android:id="@+id/btn_delete"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="@dimen/min_touch_target"
+            android:layout_height="@dimen/min_touch_target"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/dashboard_group_delete_description"
             app:srcCompat="@drawable/ic_close"

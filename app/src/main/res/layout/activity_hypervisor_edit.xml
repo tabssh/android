@@ -38,6 +38,7 @@
 
             <!-- Name -->
             <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_name"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:hint="@string/container_name_hint"
@@ -198,7 +199,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/space_md"
-                    android:hint="@string/hypervisor_edit_realm_hint"
+                    android:hint="@string/hypervisor_add_realm_hint"
                     style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                     <com.google.android.material.textfield.TextInputEditText
@@ -280,7 +281,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
-                android:hint="@string/hypervisor_edit_api_type_hint"
+                android:hint="@string/hypervisor_add_api_type_hint"
                 android:visibility="gone"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 

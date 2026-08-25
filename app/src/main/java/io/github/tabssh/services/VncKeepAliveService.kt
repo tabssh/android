@@ -5,15 +5,14 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
-import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import io.github.tabssh.R
 import io.github.tabssh.hypervisor.vnc.VncBackgroundSessionStore
 import io.github.tabssh.ui.activities.MainActivity
 import io.github.tabssh.utils.NotificationHelper
+import io.github.tabssh.utils.PowerLockHelper
 import io.github.tabssh.utils.logging.Logger
 
 /**
@@ -32,8 +31,8 @@ import io.github.tabssh.utils.logging.Logger
  * is paused (no framebuffer-update requests outstanding), so there is nothing
  * to monitor or keep alive at the protocol layer beyond preventing the OS from
  * killing the process and letting the WiFi radio sleep. We hold a single
- * [PowerManager.PARTIAL_WAKE_LOCK] and a [WifiManager.WifiLock] for as long as
- * any session is parked, mirroring the SSH service's lock names — but not
+ * partial wake lock and a WiFi lock, both managed by [PowerLockHelper], for as
+ * long as any session is parked, mirroring the SSH service's lock names — but not
  * indefinitely: a periodic sweep ([idleSweepRunnable]) fully suspends any
  * session parked past [VncBackgroundSessionStore.DEFAULT_IDLE_TIMEOUT_MS] (10
  * minutes), and the service stops itself once nothing is left parked, so an
@@ -41,8 +40,14 @@ import io.github.tabssh.utils.logging.Logger
  */
 class VncKeepAliveService : Service() {
 
-    private var wakeLock: PowerManager.WakeLock? = null
-    private var wifiLock: WifiManager.WifiLock? = null
+    private val powerLocks by lazy {
+        PowerLockHelper(
+            context = this,
+            logTag = TAG,
+            wakeLockTag = "TabSSH:VncSession",
+            wifiLockTag = "TabSSH:VncWifi"
+        )
+    }
     private val sweepHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     /**
@@ -127,8 +132,8 @@ class VncKeepAliveService : Service() {
             return START_NOT_STICKY
         }
 
-        acquireWakeLock()
-        acquireWifiLock()
+        powerLocks.acquireWakeLockIndefinite()
+        powerLocks.acquireWifiLock()
         // Re-arm the sweep loop rather than stacking a second one: removeCallbacks
         // is a no-op if nothing is scheduled (first start), and collapses any
         // duplicate scheduled run if a new session was parked mid-interval.
@@ -146,8 +151,8 @@ class VncKeepAliveService : Service() {
         super.onDestroy()
         Logger.d(TAG, "Service destroyed")
         sweepHandler.removeCallbacks(idleSweepRunnable)
-        releaseWakeLock()
-        releaseWifiLock()
+        powerLocks.releaseWakeLock()
+        powerLocks.releaseWifiLock()
     }
 
     /**
@@ -184,63 +189,5 @@ class VncKeepAliveService : Service() {
             .setSilent(true)
             .setShowWhen(false)
             .build()
-    }
-
-    private fun acquireWakeLock() {
-        if (wakeLock?.isHeld == true) return
-        try {
-            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-            val wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TabSSH:VncSession")
-            wl.setReferenceCounted(false)
-            wl.acquire()
-            wakeLock = wl
-            Logger.i(TAG, "Wake lock acquired")
-        } catch (e: Exception) {
-            Logger.w(TAG, "Failed to acquire wake lock", e)
-        }
-    }
-
-    private fun releaseWakeLock() {
-        try {
-            val wl = wakeLock?.takeIf { it.isHeld } ?: return
-            wl.release()
-            Logger.i(TAG, "Wake lock released")
-        } catch (e: Exception) {
-            Logger.w(TAG, "Failed to release wake lock", e)
-        } finally {
-            wakeLock = null
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun acquireWifiLock() {
-        if (wifiLock?.isHeld == true) return
-        try {
-            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                WifiManager.WIFI_MODE_FULL_LOW_LATENCY
-            } else {
-                WifiManager.WIFI_MODE_FULL_HIGH_PERF
-            }
-            val wl = wm.createWifiLock(mode, "TabSSH:VncWifi")
-            wl.setReferenceCounted(false)
-            wl.acquire()
-            wifiLock = wl
-            Logger.i(TAG, "WiFi lock acquired")
-        } catch (e: Exception) {
-            Logger.w(TAG, "Failed to acquire WiFi lock", e)
-        }
-    }
-
-    private fun releaseWifiLock() {
-        try {
-            val wl = wifiLock?.takeIf { it.isHeld } ?: return
-            wl.release()
-            Logger.i(TAG, "WiFi lock released")
-        } catch (e: Exception) {
-            Logger.w(TAG, "Failed to release WiFi lock", e)
-        } finally {
-            wifiLock = null
-        }
     }
 }

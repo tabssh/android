@@ -864,8 +864,13 @@ class TabSSHApplication : Application() {
             // Release build: clean up and let Android handle it normally
             try {
                 securePasswordManager.clearSensitiveDataOnCrash()
+                // The default handler below is about to terminate the process, so
+                // there is no later point at which these connections could be
+                // closed asynchronously — block briefly here to flush them first.
                 runBlocking { sshSessionManager.closeAllConnections() }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Logger.w("TabSSHApplication", "Cleanup on crash failed: ${e.message}", e)
+            }
 
             defaultHandler?.uncaughtException(thread, throwable)
         }
@@ -881,6 +886,10 @@ class TabSSHApplication : Application() {
             sessionPersistenceManager.cleanup()
         }
         if (sshSessionManagerLazy.isInitialized()) {
+            // onTerminate() has no coroutine continuation past this call — the
+            // process is being torn down, so connections must be closed
+            // synchronously here rather than fired off into a scope that may
+            // never get to run.
             runBlocking { sshSessionManager.closeAllConnections() }
         }
         if (securePasswordManagerLazy.isInitialized()) {

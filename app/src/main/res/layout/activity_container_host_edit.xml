@@ -138,6 +138,7 @@
                     android:orientation="horizontal">
 
                     <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/layout_custom_host"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="3"
@@ -155,10 +156,11 @@
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/layout_custom_port"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:hint="@string/container_host_custom_port_hint"
+                        android:hint="@string/route_port_hint"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                         <com.google.android.material.textfield.TextInputEditText
@@ -173,10 +175,11 @@
                 </LinearLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/layout_custom_username"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/space_md"
-                    android:hint="@string/container_host_custom_username_hint"
+                    android:hint="@string/username_hint"
                     style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                     <com.google.android.material.textfield.TextInputEditText
@@ -211,7 +214,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/space_md"
-                    android:hint="@string/container_host_password_hint"
+                    android:hint="@string/password_hint"
                     app:endIconMode="password_toggle"
                     style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
@@ -236,7 +239,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_md"
                         android:labelFor="@+id/spinner_custom_key"
-                        android:text="@string/container_host_key_hint"
+                        android:text="@string/route_auth_key"
                         android:textSize="12sp"
                         android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -246,7 +249,7 @@
                         android:layout_height="48dp"
                         android:layout_marginTop="@dimen/space_xs"
                         android:background="@drawable/spinner_background"
-                        android:contentDescription="@string/container_host_key_desc"
+                        android:contentDescription="@string/route_auth_key"
                         android:paddingHorizontal="@dimen/space_md" />
 
                 </LinearLayout>
@@ -328,6 +331,7 @@
 
             <!-- Compose Base Path -->
             <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_compose_base"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
@@ -346,6 +350,7 @@
 
             <!-- Run-Config Base Path -->
             <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_run_base"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"

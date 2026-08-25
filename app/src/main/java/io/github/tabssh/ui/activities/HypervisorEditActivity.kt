@@ -24,12 +24,18 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import io.github.tabssh.utils.showError
+import io.github.tabssh.utils.tabSSHApp
 
 class HypervisorEditActivity : TabSSHActivity() {
+
+    // Edit screens use an up arrow instead of the hamburger, routed
+    // through the same OnBackPressedDispatcher as system Back.
+    override val navigationAffordance: NavigationAffordance = NavigationAffordance.UP
 
     private lateinit var app: TabSSHApplication
     private lateinit var toolbar: MaterialToolbar
     private lateinit var editName: TextInputEditText
+    private lateinit var layoutName: com.google.android.material.textfield.TextInputLayout
     private lateinit var spinnerType: Spinner
     private lateinit var editHost: TextInputEditText
     private lateinit var editPort: TextInputEditText
@@ -80,6 +86,12 @@ class HypervisorEditActivity : TabSSHActivity() {
     private var editingHypervisor: HypervisorProfile? = null
     private var linkedConnectionId: String? = null
 
+    // Captured from onCreate's savedInstanceState and applied once
+    // loadHypervisor's async DB read finishes populating fields — applying
+    // it any earlier would just be overwritten by the freshly loaded
+    // record. Null on a fresh launch, or once consumed.
+    private var pendingFormState: Bundle? = null
+
     /** Single-flight latch for [saveHypervisor] — blocks duplicate-row double taps. */
     private var isSaving = false
 
@@ -98,8 +110,9 @@ class HypervisorEditActivity : TabSSHActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_hypervisor_edit)
-        
-        app = application as TabSSHApplication
+        pendingFormState = savedInstanceState
+
+        app = tabSSHApp
 
         // Resolve the edit target BEFORE setupToolbar() — it picks the screen
         // title from hypervisorId, and reading it afterwards left every edit
@@ -113,8 +126,74 @@ class HypervisorEditActivity : TabSSHActivity() {
         setupAccountDropdown()
         setupSshIdentityDropdown()
         setupClickListeners()
+        setupUnsavedChangesGuard()
 
-        hypervisorId?.let { loadHypervisor(it) }
+        val id = hypervisorId
+        if (id != null) {
+            loadHypervisor(id)
+        } else {
+            // New hypervisor — no async DB load to hang the restore off of
+            // (unlike loadHypervisor's population), so apply any
+            // rotation-carried form state right here.
+            finishPopulatingFields()
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        saveFormState(outState, findViewById(android.R.id.content))
+        outState.putBoolean(KEY_HAS_UNSAVED_CHANGES, hasUnsavedChanges)
+    }
+
+    /**
+     * Clears the dirty flag set while [loadHypervisor] programmatically
+     * fills the form, then applies any rotation-carried [pendingFormState]
+     * on top so in-progress edits win over the freshly
+     * loaded record.
+     */
+    private fun finishPopulatingFields() {
+        hasUnsavedChanges = false
+        pendingFormState?.let { saved ->
+            restoreFormState(saved, findViewById(android.R.id.content))
+            hasUnsavedChanges = saved.getBoolean(KEY_HAS_UNSAVED_CHANGES, false)
+        }
+        pendingFormState = null
+    }
+
+    /**
+     * Wires every primary form field to flip [hasUnsavedChanges] and opts
+     * this screen into the shared discard-confirmation guard
+     * — system Back, the up arrow and the Cancel button all prompt the same
+     * way once the user has actually changed something.
+     */
+    private fun setupUnsavedChangesGuard() {
+        val watcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) { hasUnsavedChanges = true }
+        }
+        editName.addTextChangedListener(watcher)
+        editHost.addTextChangedListener(watcher)
+        editPort.addTextChangedListener(watcher)
+        editUsername.addTextChangedListener(watcher)
+        editPassword.addTextChangedListener(watcher)
+        editRealm.addTextChangedListener(watcher)
+        editNotes.addTextChangedListener(watcher)
+        dropdownApiType.addTextChangedListener(watcher)
+        dropdownAccount.addTextChangedListener(watcher)
+        dropdownSshIdentity.addTextChangedListener(watcher)
+        switchVerifySsl.setOnCheckedChangeListener { _, checked ->
+            hasUnsavedChanges = true
+            updatePinnedCertVisibility(checked)
+        }
+        spinnerType.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                hasUnsavedChanges = true
+            }
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+        }
+
+        enableUnsavedChangesGuard()
     }
 
     /**
@@ -217,6 +296,7 @@ class HypervisorEditActivity : TabSSHActivity() {
     private fun setupViews() {
         toolbar = findViewById(R.id.toolbar)
         editName = findViewById(R.id.edit_name)
+        layoutName = findViewById(R.id.layout_name)
         spinnerType = findViewById(R.id.spinner_type)
         editHost = findViewById(R.id.edit_host)
         editPort = findViewById(R.id.edit_port)
@@ -246,10 +326,8 @@ class HypervisorEditActivity : TabSSHActivity() {
         layoutPinnedCert = findViewById(R.id.layout_pinned_cert)
         textPinnedCert = findViewById(R.id.text_pinned_cert)
         buttonForgetPin = findViewById(R.id.button_forget_pin)
-        // Pinned-cert row visibility tracks the verify-SSL switch.
-        switchVerifySsl.setOnCheckedChangeListener { _, checked ->
-            updatePinnedCertVisibility(checked)
-        }
+        // Pinned-cert row visibility tracks the verify-SSL switch — wired in
+        // setupUnsavedChangesGuard(), which also flips hasUnsavedChanges.
         buttonForgetPin.setOnClickListener {
             currentPin = null
             renderPinnedCertText()
@@ -335,7 +413,7 @@ class HypervisorEditActivity : TabSSHActivity() {
         }
 
         buttonCancel.setOnClickListener {
-            finish()
+            confirmDiscardIfNeeded { finish() }
         }
 
         buttonImportHost.setOnClickListener {
@@ -648,13 +726,17 @@ class HypervisorEditActivity : TabSSHActivity() {
                             layoutPassword.visibility = View.GONE
                         }
                     }
+                    // Fields above fired TextWatchers as they were populated —
+                    // clear the dirty flag now, then apply any rotation-carried
+                    // edits on top.
+                    finishPopulatingFields()
                 }
             } catch (e: CancellationException) {
                 // Activity scope cancelled — not a load failure; never finish() here.
                 throw e
             } catch (e: Exception) {
                 Logger.e("HypervisorEditActivity", "Failed to load hypervisor", e)
-                showError(getString(R.string.hypervisor_edit_load_failed), getString(R.string.dialog_title_error))
+                showError(getString(R.string.hypervisor_edit_load_failed), getString(R.string.status_error))
                 finish()
             }
         }
@@ -751,7 +833,7 @@ class HypervisorEditActivity : TabSSHActivity() {
                 if (success) {
                     Toast.makeText(this@HypervisorEditActivity, getString(R.string.hypervisor_edit_test_successful), Toast.LENGTH_LONG).show()
                 } else {
-                    showError(getString(R.string.hypervisor_edit_test_failed), getString(R.string.dialog_title_error))
+                    showError(getString(R.string.hypervisor_edit_test_failed), getString(R.string.status_error))
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -759,7 +841,7 @@ class HypervisorEditActivity : TabSSHActivity() {
                 Logger.w("HypervisorEditActivity", "Test connection failed", e)
                 // e.message can be a raw server error body (vSphere/XO echo the
                 // request, including the Authorization header) — sanitize and cap.
-                showError(getString(R.string.hypervisor_edit_error_detail, safeDetail(e.message)), getString(R.string.dialog_title_error))
+                showError(getString(R.string.hypervisor_edit_error_detail, safeDetail(e.message)), getString(R.string.status_error))
             } finally {
                 if (!isFinishing && !isDestroyed) {
                     buttonTestConnection.isEnabled = true
@@ -869,12 +951,15 @@ class HypervisorEditActivity : TabSSHActivity() {
                     ).show()
                 }
 
+                // Save succeeded — clear the dirty flag so a stray Back/Cancel
+                // press during teardown doesn't prompt for discard.
+                hasUnsavedChanges = false
                 finish()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Logger.e("HypervisorEditActivity", "Failed to save hypervisor", e)
-                showError(getString(R.string.hypervisor_edit_save_failed, safeDetail(e.message)), getString(R.string.dialog_title_error))
+                showError(getString(R.string.hypervisor_edit_save_failed, safeDetail(e.message)), getString(R.string.status_error))
             } finally {
                 isSaving = false
                 if (!isFinishing && !isDestroyed) buttonSave.isEnabled = true
@@ -883,13 +968,14 @@ class HypervisorEditActivity : TabSSHActivity() {
     }
 
     private fun validateFields(): Boolean {
+        clearFieldErrors()
         if (editName.text.toString().isBlank()) {
-            editName.error = getString(R.string.xcpng_name_required)
+            layoutName.error = getString(R.string.xcpng_name_required)
             return false
         }
         val host = editHost.text.toString().trim()
         if (host.isBlank()) {
-            editHost.error = getString(R.string.conn_edit_host_required)
+            layoutHost.error = getString(R.string.conn_edit_host_required)
             return false
         }
         // The host is concatenated into the https:// base URL of the Proxmox /
@@ -897,18 +983,18 @@ class HypervisorEditActivity : TabSSHActivity() {
         // CR/LF, a scheme, or an embedded path/credential there is either a
         // request-splitting primitive or silently redirects the connection.
         if (!isValidHostValue(host)) {
-            editHost.error = getString(R.string.hypervisor_edit_invalid_host)
+            layoutHost.error = getString(R.string.hypervisor_edit_invalid_host)
             return false
         }
         if (editPort.text.toString().isBlank()) {
-            editPort.error = getString(R.string.conn_edit_port_required)
+            layoutPort.error = getString(R.string.conn_edit_port_required)
             return false
         }
         // Skip inline credential checks when a reusable account is selected;
         // those fields are hidden and credentials resolve from the account.
         if (selectedAccountId == null) {
             if (editUsername.text.toString().isBlank()) {
-                editUsername.error = getString(R.string.conn_edit_username_required)
+                layoutUsername.error = getString(R.string.conn_edit_username_required)
                 return false
             }
             // Password is optional for LIBVIRT when an SSH key identity is
@@ -916,18 +1002,27 @@ class HypervisorEditActivity : TabSSHActivity() {
             val isLibvirtWithKey = hypervisorTypes.getOrNull(spinnerType.selectedItemPosition) == HypervisorType.LIBVIRT
                 && selectedSshIdentityId != null
             if (!isLibvirtWithKey && editPassword.text.toString().isBlank()) {
-                editPassword.error = getString(R.string.hypervisor_edit_password_required)
+                layoutPassword.error = getString(R.string.hypervisor_edit_password_required)
                 return false
             }
         }
 
         val port = editPort.text.toString().toIntOrNull()
         if (port == null || port !in 1..65535) {
-            editPort.error = getString(R.string.hypervisor_edit_invalid_port)
+            layoutPort.error = getString(R.string.hypervisor_edit_invalid_port)
             return false
         }
 
         return true
+    }
+
+    /** Clears every field's TextInputLayout error before a fresh validation pass. */
+    private fun clearFieldErrors() {
+        layoutName.error = null
+        layoutHost.error = null
+        layoutPort.error = null
+        layoutUsername.error = null
+        layoutPassword.error = null
     }
 
     // Companion-scoped and internal so the pure validation/redaction logic is
@@ -935,6 +1030,9 @@ class HypervisorEditActivity : TabSSHActivity() {
     internal companion object {
         /** Upper bound on an error detail surfaced in a dialog. */
         private const val MAX_DETAIL_LENGTH = 300
+
+        // Bundle key for the dirty flag saved/restored across rotation.
+        private const val KEY_HAS_UNSAVED_CHANGES = "has_unsaved_changes"
 
         /**
          * True when [host] is usable as a bare hostname / IPv4 / bracketed-IPv6

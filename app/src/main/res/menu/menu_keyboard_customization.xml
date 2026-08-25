@@ -4,7 +4,7 @@
 
     <item
         android:id="@+id/menu_reset_default"
-        android:title="Reset to default"
+        android:title="@string/kbdcustom_menu_reset_to_default"
         android:icon="@drawable/ic_refresh"
         android:orderInCategory="1"
         app:showAsAction="ifRoom|withText" />

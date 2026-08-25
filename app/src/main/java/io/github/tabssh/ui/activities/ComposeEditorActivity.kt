@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import org.yaml.snakeyaml.Yaml
 import org.yaml.snakeyaml.nodes.MappingNode
 import java.io.StringReader
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Compose stack editor: paste-first new-stack flow —
@@ -90,7 +91,7 @@ class ComposeEditorActivity : TabSSHActivity() {
         )
         setContentView(R.layout.activity_compose_editor)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
         hostId = intent.getLongExtra(EXTRA_HOST_ID, 0)
         stackId = intent.getLongExtra(EXTRA_STACK_ID, 0)
         externalConfigFile = intent.getStringExtra(EXTRA_EXTERNAL_CONFIG_FILE)

@@ -52,6 +52,11 @@ object VpsMarkdownImportExport {
         SimpleDateFormat("MMMM d, yyyy", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
     }
 
+    // Single accessor for the per-thread SimpleDateFormat idiom used by all
+    // three ThreadLocal fields above — ThreadLocal.withInitial() guarantees
+    // get() is never null, so the force-unwrap is safe here.
+    private fun ThreadLocal<SimpleDateFormat>.format(): SimpleDateFormat = get()!!
+
     data class ParseResult(val hosts: List<VpsHost>, val warnings: List<String>)
 
     fun parse(text: String): ParseResult {
@@ -155,7 +160,7 @@ object VpsMarkdownImportExport {
 
         for (fmt in EXACT_DATE_FORMATS) {
             try {
-                val parsed = fmt.get()!!.parse(cleaned)
+                val parsed = fmt.format().parse(cleaned)
                 if (parsed != null) return parsed.time
             } catch (_: Exception) {
                 // Try the next format.
@@ -166,7 +171,7 @@ object VpsMarkdownImportExport {
         // (everything up to the first comma) and project the next occurrence.
         val monthDayFragment = cleaned.substringBefore(",").trim()
         return try {
-            val parsed = MONTH_DAY_FORMAT.get()!!.parse(monthDayFragment) ?: return null
+            val parsed = MONTH_DAY_FORMAT.format().parse(monthDayFragment) ?: return null
             val target = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
             target.time = parsed
             val now = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
@@ -209,5 +214,5 @@ object VpsMarkdownImportExport {
     }
 
     /** Format an entity's [VpsHost.renewalDate] as "Month d, yyyy" for display, or null if unset. */
-    fun formatRenewalDate(epochMillis: Long): String = EXPORT_EXACT_DATE_FORMAT.get()!!.format(epochMillis)
+    fun formatRenewalDate(epochMillis: Long): String = EXPORT_EXACT_DATE_FORMAT.format().format(epochMillis)
 }

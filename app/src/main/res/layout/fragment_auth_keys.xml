@@ -42,7 +42,8 @@
                 android:id="@+id/recycler_ssh_keys"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:nestedScrollingEnabled="false"
+                android:maxHeight="300dp"
+                android:nestedScrollingEnabled="true"
                 android:clipToPadding="false"
                 android:paddingStart="@dimen/space_sm"
                 android:paddingEnd="@dimen/space_sm"
@@ -58,7 +59,17 @@
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:gravity="center"
                 android:paddingTop="@dimen/space_md"
-                android:paddingBottom="@dimen/space_md"
+                android:paddingBottom="@dimen/space_xs"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_ssh_keys_empty_cta"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="@dimen/space_md"
+                android:text="@string/identity_ssh_keys_add_title"
+                style="@style/Widget.Material3.Button.TonalButton"
                 android:visibility="gone" />
 
         </LinearLayout>

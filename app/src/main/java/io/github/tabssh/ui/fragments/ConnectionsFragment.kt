@@ -12,7 +12,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.preference.PreferenceManager
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
@@ -26,6 +28,7 @@ import io.github.tabssh.ui.tabs.connectionState
 import io.github.tabssh.ui.tabs.shortTitle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Hosts main tab — outer shell hosting four sub-tabs (Active, SSH, VNC,
@@ -61,7 +64,7 @@ class ConnectionsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        app = requireActivity().application as TabSSHApplication
+        app = tabSSHApp
 
         viewPager = view.findViewById(R.id.view_pager_hosts)
         tabLayout = view.findViewById(R.id.tab_layout_hosts)
@@ -246,14 +249,7 @@ class ConnectionsFragment : Fragment() {
     )
 
     private class SearchResultAdapter :
-        RecyclerView.Adapter<SearchResultAdapter.ViewHolder>() {
-
-        private var items: List<SearchResult> = emptyList()
-
-        fun submitList(newItems: List<SearchResult>) {
-            items = newItems
-            notifyDataSetChanged()
-        }
+        ListAdapter<SearchResult, SearchResultAdapter.ViewHolder>(DiffCallback()) {
 
         class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val textBadge: TextView = view.findViewById(R.id.text_badge)
@@ -268,14 +264,27 @@ class ConnectionsFragment : Fragment() {
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            val item = items[position]
+            val item = getItem(position)
             holder.textBadge.text = item.badge
             holder.textTitle.text = item.title
             holder.textSubtitle.text = item.subtitle
             holder.itemView.setOnClickListener { item.onClick() }
         }
 
-        override fun getItemCount(): Int = items.size
+        // Identity/content are both keyed on the visible text — SearchResult
+        // also carries an onClick closure that has no meaningful equality,
+        // so it is excluded from the comparison.
+        class DiffCallback : DiffUtil.ItemCallback<SearchResult>() {
+            override fun areItemsTheSame(oldItem: SearchResult, newItem: SearchResult): Boolean {
+                return oldItem.badge == newItem.badge &&
+                    oldItem.title == newItem.title &&
+                    oldItem.subtitle == newItem.subtitle
+            }
+
+            override fun areContentsTheSame(oldItem: SearchResult, newItem: SearchResult): Boolean {
+                return areItemsTheSame(oldItem, newItem)
+            }
+        }
     }
 
     /**

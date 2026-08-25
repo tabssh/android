@@ -42,7 +42,7 @@
             android:layout_height="wrap_content"
             android:fontFamily="monospace"
             android:textIsSelectable="true"
-            android:textSize="11sp"
+            android:textSize="@dimen/text_size_overline"
             android:textColor="?attr/colorOnSurface" />
     </ScrollView>
 

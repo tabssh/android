@@ -16,6 +16,7 @@ import android.annotation.SuppressLint
 import android.content.ClipboardManager
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
@@ -40,6 +41,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.viewpager2.widget.ViewPager2
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
@@ -80,10 +82,12 @@ import io.github.tabssh.ui.tabs.connectionDisplayName
 import io.github.tabssh.ui.tabs.connectionState
 import io.github.tabssh.ui.tabs.shortTitle
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.ThrowableMapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import io.github.tabssh.utils.showError
+import io.github.tabssh.utils.announceAccessibility
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.themes.definitions.BuiltInThemes
@@ -131,6 +135,7 @@ import io.github.tabssh.utils.NotificationHelper
 import io.github.tabssh.utils.TerminalLinkClassifier
 import java.util.Collections
 import java.util.UUID
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Main terminal activity with tabbed SSH sessions
@@ -204,7 +209,7 @@ class TabTerminalActivity : TabSSHActivity() {
     // it can observe this activity's lifecycle for the post-edit resume
     // check.
     private val remoteFileOpener = RemoteFileOpener(this) {
-        (application as TabSSHApplication).preferencesManager.getFileOpenSizeLimitMb()
+        tabSSHApp.preferencesManager.getFileOpenSizeLimitMb()
     }
 
     /**
@@ -223,6 +228,20 @@ class TabTerminalActivity : TabSSHActivity() {
      * worker threads.
      */
     @Volatile private var isReconnecting = false
+
+    /**
+     * Item 15: profile IDs with a Retry currently in flight from the SSH
+     * connection-error dialog — guards against a user hammering Retry and
+     * spawning overlapping connect attempts against a down host.
+     */
+    private val sshRetryInFlight = mutableSetOf<String>()
+
+    /**
+     * Item 15: consecutive connect-failure count per profile ID, used only
+     * to escalate the Retry delay after the second straight failure. Reset
+     * to zero (key removed) the moment that profile connects successfully.
+     */
+    private val sshRetryFailureStreak = mutableMapOf<String, Int>()
 
     /**
      * Profile IDs for which a silent mosh→SSH fallback has already been
@@ -318,7 +337,7 @@ class TabTerminalActivity : TabSSHActivity() {
         Logger.d("TabTerminalActivity", "onCreate")
         isRecreated = savedInstanceState != null
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
         binding = ActivityTabTerminalBinding.inflate(layoutInflater)
         setContentView(binding.root)
         
@@ -425,7 +444,7 @@ class TabTerminalActivity : TabSSHActivity() {
     private fun setupToolbar() {
         setSupportActionBar(binding.toolbar)
         supportActionBar?.apply {
-            title = getString(R.string.terminal_activity_title)
+            title = getString(R.string.settings_terminal)
         }
     }
     
@@ -540,6 +559,22 @@ class TabTerminalActivity : TabSSHActivity() {
             override fun onTabConnectionStateChanged(tab: SSHTab, state: ConnectionState) {
                 Handler(Looper.getMainLooper()).post {
                     updateTabIcon(tab, state)
+                    // Item 20: TalkBack gets no spoken feedback on connect
+                    // outcomes otherwise — only announce the visible tab's
+                    // terminal transitions (CONNECTED/ERROR), never the
+                    // transient CONNECTING/AUTHENTICATING states, and never
+                    // a background tab the user isn't looking at.
+                    if (tab === tabManager.getActiveTab() &&
+                        (state == ConnectionState.CONNECTED || state == ConnectionState.ERROR)
+                    ) {
+                        val label = tab.profile.getDisplayName()
+                        val stateText = if (state == ConnectionState.CONNECTED) {
+                            getString(R.string.status_connected)
+                        } else {
+                            getString(R.string.accessibility_connection_error)
+                        }
+                        announceAccessibility(getString(R.string.accessibility_announce_tab_state, label, stateText))
+                    }
                 }
             }
         }
@@ -817,10 +852,17 @@ class TabTerminalActivity : TabSSHActivity() {
                 val tab = tabs[position]
                 val rowHolder = holder as TabRowHolder
                 val ctx = rowHolder.row.context
-                val (stateIcon, nameLabel, rightIcon) = rowHolder.row.tag as Triple<*, *, *>
-                val stateView = stateIcon as ImageView
-                val nameView = nameLabel as TextView
-                val rightView = rightIcon as ImageView
+                // Item 41(a): a stale/unexpected tag must not crash the row —
+                // skip binding this row's icons/label rather than throwing a
+                // ClassCastException.
+                val tagTriple = rowHolder.row.tag as? Triple<*, *, *>
+                val stateView = tagTriple?.first as? ImageView
+                val nameView = tagTriple?.second as? TextView
+                val rightView = tagTriple?.third as? ImageView
+                if (stateView == null || nameView == null || rightView == null) {
+                    Logger.w("TabTerminalActivity", "Tab row tag mismatch at position $position — skipping bind")
+                    return
+                }
                 val isActive = position == activeIndex
 
                 // Connection-state dot with semantic tint. connectionState()
@@ -831,28 +873,28 @@ class TabTerminalActivity : TabSSHActivity() {
                     ConnectionState.CONNECTED -> {
                         stateView.setImageResource(R.drawable.ic_connected)
                         stateView.imageTintList = ColorStateList.valueOf(
-                            ContextCompat.getColor(ctx, R.color.connected)
+                            ContextCompat.getColor(ctx, R.color.status_success)
                         )
-                        stateView.contentDescription = getString(R.string.accessibility_connected)
+                        stateView.contentDescription = getString(R.string.status_connected)
                     }
                     ConnectionState.CONNECTING -> {
                         stateView.setImageResource(R.drawable.ic_connecting)
                         stateView.imageTintList = ColorStateList.valueOf(
-                            ContextCompat.getColor(ctx, R.color.connecting)
+                            ContextCompat.getColor(ctx, R.color.status_warning)
                         )
                         stateView.contentDescription = getString(R.string.accessibility_connecting)
                     }
                     ConnectionState.AUTHENTICATING -> {
                         stateView.setImageResource(R.drawable.ic_connecting)
                         stateView.imageTintList = ColorStateList.valueOf(
-                            ContextCompat.getColor(ctx, R.color.connecting)
+                            ContextCompat.getColor(ctx, R.color.status_warning)
                         )
                         stateView.contentDescription = getString(R.string.accessibility_authenticating)
                     }
                     ConnectionState.ERROR -> {
                         stateView.setImageResource(R.drawable.ic_error)
                         stateView.imageTintList = ColorStateList.valueOf(
-                            ContextCompat.getColor(ctx, R.color.connection_error)
+                            ContextCompat.getColor(ctx, R.color.status_error)
                         )
                         stateView.contentDescription = getString(R.string.accessibility_connection_error)
                     }
@@ -862,7 +904,7 @@ class TabTerminalActivity : TabSSHActivity() {
                         val ta = ctx.obtainStyledAttributes(onSurfaceVariantAttrs)
                         stateView.imageTintList = ta.getColorStateList(0)
                         ta.recycle()
-                        stateView.contentDescription = getString(R.string.accessibility_disconnected)
+                        stateView.contentDescription = getString(R.string.status_disconnected)
                     }
                 }
 
@@ -883,7 +925,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 if (isActive) {
                     rightView.setImageResource(R.drawable.ic_connected)
                     rightView.imageTintList = ColorStateList.valueOf(
-                        ContextCompat.getColor(ctx, R.color.connected)
+                        ContextCompat.getColor(ctx, R.color.status_success)
                     )
                     rightView.visibility = View.VISIBLE
                     rightView.contentDescription = getString(R.string.terminal_tab_row_active)
@@ -953,7 +995,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 text = if (tabManager.getActiveTab()?.sessionRecorder?.isRecording() == true) {
                     getString(R.string.terminal_stop_recording)
                 } else {
-                    getString(R.string.terminal_start_recording)
+                    getString(R.string.terminal_menu_start_recording)
                 }
                 setOnClickListener {
                     bottomSheet.dismiss()
@@ -999,11 +1041,15 @@ class TabTerminalActivity : TabSSHActivity() {
                 closeCurrentTab()
             }
 
-        view.findViewById<MaterialButton>(R.id.btn_disconnect_all)
-            ?.setOnClickListener {
+        // Item 21: nothing to destroy with zero tabs — disable rather than
+        // offer a live "destroy everything" action that silently no-ops.
+        view.findViewById<MaterialButton>(R.id.btn_disconnect_all)?.apply {
+            isEnabled = tabs.isNotEmpty()
+            setOnClickListener {
                 bottomSheet.dismiss()
                 disconnectAllTabs()
             }
+        }
 
         // Settings.
         view.findViewById<MaterialButton>(R.id.btn_settings)
@@ -1592,7 +1638,7 @@ class TabTerminalActivity : TabSSHActivity() {
             Logger.d("TabTerminalActivity", "Opening URL: $url")
         } catch (e: Exception) {
             Logger.e("TabTerminalActivity", "Failed to open URL: $url", e)
-            showError(getString(R.string.terminal_error_failed_open_url), getString(R.string.dialog_title_error))
+            showError(getString(R.string.terminal_error_failed_open_url), getString(R.string.status_error))
         }
     }
 
@@ -1626,6 +1672,11 @@ class TabTerminalActivity : TabSSHActivity() {
             return
         }
 
+        // Item 15: reaching this dialog means this profile's connect attempt
+        // just failed — bump its consecutive-failure streak so Retry can
+        // apply an escalating delay if the user keeps hammering it.
+        sshRetryFailureStreak[profile.id] = (sshRetryFailureStreak[profile.id] ?: 0) + 1
+
         val dialogView = layoutInflater.inflate(R.layout.dialog_ssh_connection_error, null)
         
         // Populate connection details
@@ -1645,19 +1696,35 @@ class TabTerminalActivity : TabSSHActivity() {
         val technicalDetails = dialogView.findViewById<TextView>(R.id.text_technical_details)
         technicalDetails?.text = errorInfo.technicalDetails
         
-        // Set solutions
-        val solutionsText = errorInfo.possibleSolutions.joinToString("\n")
+        // Set solutions — drop the "enable debug logging" suggestion when
+        // it's already on (mirrors Logger.kt:1005-1020's existing
+        // debugMode-gated wording, applied here at the single display site
+        // rather than in each classifier branch).
+        val debugLoggingAlreadyOn = app.preferencesManager.isDebugLoggingEnabled()
+        val solutions = if (debugLoggingAlreadyOn) {
+            errorInfo.possibleSolutions.filterNot {
+                it.contains("debug logging", ignoreCase = true) || it.contains("debug logs", ignoreCase = true)
+            }
+        } else {
+            errorInfo.possibleSolutions
+        }
+        val solutionsText = solutions.joinToString("\n")
         dialogView.findViewById<TextView>(R.id.text_solutions)?.text = solutionsText
         
-        // Toggle technical details visibility
-        val showTechnicalButton = dialogView.findViewById<TextView>(R.id.text_show_technical)
+        // Toggle technical details visibility — a real MaterialButton (not a
+        // plain TextView) so TalkBack announces it as a button, gets the
+        // standard ripple/48dp touch target for free, and its icon flips to
+        // reflect expanded/collapsed state.
+        val showTechnicalButton = dialogView.findViewById<MaterialButton>(R.id.text_show_technical)
         showTechnicalButton?.setOnClickListener {
             if (technicalDetails?.visibility == View.GONE) {
                 technicalDetails.visibility = View.VISIBLE
                 showTechnicalButton.text = getString(R.string.terminal_hide_technical_details)
+                showTechnicalButton.setIconResource(R.drawable.ic_expand_less)
             } else {
                 technicalDetails?.visibility = View.GONE
                 showTechnicalButton.text = getString(R.string.dialog_ssh_error_show_technical)
+                showTechnicalButton.setIconResource(R.drawable.ic_expand_more)
             }
         }
         
@@ -1722,8 +1789,10 @@ class TabTerminalActivity : TabSSHActivity() {
                     putExtra(ConnectionEditActivity.EXTRA_CONNECTION_ID, profile.id)
                 }
                 startActivity(intent)
-                // Close TabTerminalActivity
-                finish()
+                // Close TabTerminalActivity — unless other tabs are still open.
+                if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
+                    finish()
+                }
             }
 
         // Retry button — if the inline credential field is showing and the user
@@ -1731,21 +1800,38 @@ class TabTerminalActivity : TabSSHActivity() {
         // itself reads/writes before retrying, so the new value is what the
         // retry attempt actually uses instead of the stale rejected one.
         dialogView.findViewById<MaterialButton>(R.id.button_retry)
-            ?.setOnClickListener {
+            ?.setOnClickListener { retryButton ->
+                // Item 15: refuse a second tap while a retry for this profile is
+                // already in flight, and apply a short escalating delay once the
+                // profile has failed twice or more in a row, so a user hammering
+                // Retry against a down host doesn't spawn overlapping attempts.
+                if (!sshRetryInFlight.add(profile.id)) {
+                    return@setOnClickListener
+                }
+                retryButton.isEnabled = false
+                val streak = sshRetryFailureStreak[profile.id] ?: 0
+                val retryDelayMs = if (streak >= 2) minOf((streak - 1) * 1000L, 5000L) else 0L
                 val newCredential = retryCredentialInput?.text?.toString()?.takeIf { it.isNotBlank() }
                 dialog.dismiss()
                 lifecycleScope.launch {
-                    if (newCredential != null) {
-                        withContext(Dispatchers.IO) {
-                            app.securePasswordManager.storePassword(
-                                retryCredentialStorageKey,
-                                newCredential,
-                                SecurePasswordManager.StorageLevel.SESSION_ONLY
-                            )
+                    try {
+                        if (newCredential != null) {
+                            withContext(Dispatchers.IO) {
+                                app.securePasswordManager.storePassword(
+                                    retryCredentialStorageKey,
+                                    newCredential,
+                                    SecurePasswordManager.StorageLevel.SESSION_ONLY
+                                )
+                            }
                         }
+                        if (retryDelayMs > 0) {
+                            delay(retryDelayMs)
+                        }
+                        // forceNew=true: the failed tab is gone; always open a fresh session.
+                        connectToProfile(profile, forceNew = true)
+                    } finally {
+                        sshRetryInFlight.remove(profile.id)
                     }
-                    // forceNew=true: the failed tab is gone; always open a fresh session.
-                    connectToProfile(profile, forceNew = true)
                 }
             }
         
@@ -1928,7 +2014,7 @@ class TabTerminalActivity : TabSSHActivity() {
             Toast.makeText(this, getString(R.string.terminal_nothing_on_screen_to_copy), Toast.LENGTH_SHORT).show()
             return
         }
-        ClipboardHelper.copy(this, getString(R.string.terminal_clip_label_terminal), visible, sensitive = false)
+        ClipboardHelper.copy(this, getString(R.string.settings_terminal), visible, sensitive = false)
         Toast.makeText(this, getString(R.string.terminal_screen_copied), Toast.LENGTH_SHORT).show()
     }
 
@@ -1968,15 +2054,15 @@ class TabTerminalActivity : TabSSHActivity() {
         val callback = object : ActionMode.Callback {
             override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
                 mode.title = null
-                menu.add(0, 1, 0, getString(R.string.terminal_selection_menu_copy))
+                menu.add(0, 1, 0, getString(R.string.copy))
                     .setIcon(android.R.drawable.ic_menu_set_as)
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-                menu.add(0, 2, 1, getString(R.string.terminal_selection_menu_select_all))
+                menu.add(0, 2, 1, getString(R.string.select_all))
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-                menu.add(0, 3, 2, getString(R.string.terminal_selection_menu_paste))
+                menu.add(0, 3, 2, getString(R.string.paste))
                     .setIcon(android.R.drawable.ic_input_add)
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                menu.add(0, 4, 3, getString(R.string.terminal_selection_menu_cancel))
+                menu.add(0, 4, 3, getString(R.string.cancel))
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
                 return true
             }
@@ -2339,7 +2425,9 @@ class TabTerminalActivity : TabSSHActivity() {
                                 "TabTerminalActivity",
                                 "Notification tap: no live tab for ${profile.name} — closing activity"
                             )
-                            finish()
+                            if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
+                                finish()
+                            }
                         }
                     }
                 } else {
@@ -2492,7 +2580,9 @@ class TabTerminalActivity : TabSSHActivity() {
                 if (enteredPassword == null) {
                     Logger.i("TabTerminalActivity", "User cancelled password prompt - closing activity")
                     Toast.makeText(this, getString(R.string.terminal_connection_cancelled), Toast.LENGTH_SHORT).show()
-                    finish()
+                    if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
+                        finish()
+                    }
                     return
                 }
                 withContext(Dispatchers.IO) {
@@ -2615,6 +2705,9 @@ class TabTerminalActivity : TabSSHActivity() {
                     }
                     if (connected) {
                         Logger.i("TabTerminalActivity", "TERMINAL CONNECTED SUCCESSFULLY to ${profile.getDisplayName()}")
+                        // Connection succeeded — the retry-backoff streak for this
+                        // profile no longer applies.
+                        sshRetryFailureStreak.remove(profile.id)
 
                         // Auto-switch to the newly connected tab so the user lands
                         // on it immediately. createTab() already advanced the
@@ -2658,7 +2751,7 @@ class TabTerminalActivity : TabSSHActivity() {
                         // here — it'd duplicate the service-posted row.
                     } else {
                         Logger.e("TabTerminalActivity", "Failed to connect terminal to SSH for ${profile.getDisplayName()}")
-                        showError(getString(R.string.terminal_error_failed_connect_terminal), getString(R.string.dialog_title_error))
+                        showError(getString(R.string.terminal_error_failed_connect_terminal), getString(R.string.status_error))
                         
                         // Check for detailed error info
                         val errorInfo = sshConnection.detailedError.value
@@ -2690,8 +2783,12 @@ class TabTerminalActivity : TabSSHActivity() {
                     // be wired to a tab and would otherwise leak until process exit.
                     try { sshConnection.disconnect() } catch (_: Exception) {}
                     // No tab was created — no terminal to show; close the activity so
-                    // the user isn't left on a blank screen with no way to recover.
-                    finish()
+                    // the user isn't left on a blank screen with no way to recover,
+                    // unless other tabs are still open (tab limit was hit *because*
+                    // other tabs exist — don't tear them down too).
+                    if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
+                        finish()
+                    }
                 }
             } else {
                 // Connection failed - try to get detailed error from last connection attempt
@@ -2714,7 +2811,7 @@ class TabTerminalActivity : TabSSHActivity() {
                     )
                 } else {
                     // Fallback to simple toast if no detailed error available
-                    showError(getString(R.string.terminal_ssh_connection_failed_fmt, profile.username, profile.host, profile.port), getString(R.string.dialog_title_error))
+                    showError(getString(R.string.terminal_ssh_connection_failed_fmt, profile.username, profile.host, profile.port), getString(R.string.status_error))
 
                     // Show generic error notification
                     NotificationHelper.showConnectionError(
@@ -2724,9 +2821,11 @@ class TabTerminalActivity : TabSSHActivity() {
                     )
 
                     // No tab, no session — close the activity so the user is not
-                    // left on a blank screen.
+                    // left on a blank screen, unless other tabs are still open.
                     Logger.i("TabTerminalActivity", "Closing activity due to connection failure")
-                    finish()
+                    if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
+                        finish()
+                    }
                 }
             }
             
@@ -2784,8 +2883,10 @@ class TabTerminalActivity : TabSSHActivity() {
         val tab = tabManager.createTab(profile, cursorStyle, app.preferencesManager.getTranscriptRows())
         if (tab == null) {
             Logger.e("TabTerminalActivity", "Failed to create tab for ${profile.getDisplayName()}")
-            showError(getString(R.string.terminal_error_failed_create_tab), getString(R.string.dialog_title_error))
-            finish()
+            showError(getString(R.string.terminal_error_failed_create_tab), getString(R.string.status_error))
+            if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
+                finish()
+            }
             return
         }
         withContext(Dispatchers.Main) {}
@@ -2806,7 +2907,9 @@ class TabTerminalActivity : TabSSHActivity() {
             NotificationHelper.showConnectionError(
                 this, profile.getDisplayName(), getString(R.string.terminal_telnet_connect_failed_fmt, profile.host, profile.port.takeIf { it > 0 } ?: 23)
             )
-            finish()
+            if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
+                finish()
+            }
         }
     }
 
@@ -3136,7 +3239,7 @@ class TabTerminalActivity : TabSSHActivity() {
                     // Re-prompt rather than clearing the request: a typo must not
                     // strand the user on a plain shell with no way back to the picker.
                     Toast.makeText(
-                        this, "Session name must be non-empty with no spaces",
+                        this, getString(R.string.terminal_session_name_invalid),
                         Toast.LENGTH_SHORT
                     ).show()
                     multiplexerCreateDialog = null
@@ -3739,12 +3842,13 @@ class TabTerminalActivity : TabSSHActivity() {
                 val idx = tabManager.getAllTabsSealed().indexOfFirst { it.tabId == vncTab.tabId }
                 if (idx >= 0) pagerAdapter?.notifyItemChanged(idx)
             } catch (e: Exception) {
-                Logger.e("TabTerminalActivity", "VNC reconnect failed for '${host.name}'", e)
+                val mapped = ThrowableMapper.map(
+                    this@TabTerminalActivity, "TabTerminalActivity", e, "VNC reconnect failed for '${host.name}'"
+                )
                 if (!isFinishing && !isDestroyed) {
-                    showToast(getString(R.string.terminal_reconnect_failed_fmt, e.message))
+                    showToast(getString(R.string.terminal_reconnect_failed_fmt, mapped.message))
                     // Put the decision back in front of the user.
-                    showConsoleReconnectDialog(
-                        Tab.Vnc(vncTab), e.message ?: getString(R.string.error_connection_failed))
+                    showConsoleReconnectDialog(Tab.Vnc(vncTab), mapped.message)
                 }
             }
         }
@@ -3995,9 +4099,14 @@ class TabTerminalActivity : TabSSHActivity() {
                 delay(400)
             }
             runOnUiThread {
+                val skippedSuffix = if (skipped > 0) {
+                    getString(R.string.terminal_workspace_skipped_fmt, skipped)
+                } else {
+                    ""
+                }
                 Toast.makeText(
                     this@TabTerminalActivity,
-                    "Opened $opened${if (skipped > 0) " (skipped $skipped missing)" else ""}",
+                    getString(R.string.terminal_workspace_opened_fmt, opened, skippedSuffix),
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -4008,8 +4117,22 @@ class TabTerminalActivity : TabSSHActivity() {
         val labels = all.map { it.name }.toTypedArray()
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_delete_workspace_title)
-            .setItems(labels) { _, which ->
-                val ws = all[which]
+            .setItems(labels) { _, which -> confirmDeleteWorkspace(all[which]) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /**
+     * Item 22 — a saved workspace's connection list is gone for good once
+     * deleted (no undo), so the single-pick list above hands off to this
+     * second confirmation rather than deleting on tap. Destructive choice
+     * carries the same error-color danger cue as [disconnectAllTabs].
+     */
+    private fun confirmDeleteWorkspace(ws: Workspace) {
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.terminal_workspace_delete_confirm_title)
+            .setMessage(getString(R.string.terminal_workspace_delete_confirm_message_fmt, ws.name))
+            .setNegativeButton(R.string.terminal_delete_workspace_title) { _, _ ->
                 lifecycleScope.launch {
                     try {
                         withContext(Dispatchers.IO) {
@@ -4025,8 +4148,10 @@ class TabTerminalActivity : TabSSHActivity() {
                     }
                 }
             }
-            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.cancel, null)
             .show()
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
+            ?.setTextColor(MaterialColors.getColor(dialog.context, com.google.android.material.R.attr.colorError, Color.RED))
     }
 
     /**
@@ -4688,7 +4813,7 @@ class TabTerminalActivity : TabSSHActivity() {
         if (activeTab.sessionRecorder?.isRecording() == true) {
             // Stop recording
             activeTab.sessionRecorder?.stopRecording()
-            menuItem?.title = getString(R.string.terminal_start_recording)
+            menuItem?.title = getString(R.string.terminal_menu_start_recording)
             Toast.makeText(this, getString(R.string.terminal_recording_stopped), Toast.LENGTH_SHORT).show()
         } else {
             // Start recording
@@ -4987,10 +5112,10 @@ class TabTerminalActivity : TabSSHActivity() {
      */
     private fun showCommandPalette() {
         val items = mutableListOf<PaletteDialog.Item>()
-        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_settings), getString(R.string.terminal_cmdpalette_settings_sub)) {
+        items += PaletteDialog.Item(getString(R.string.settings_title), getString(R.string.terminal_cmdpalette_settings_sub)) {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
-        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_theme_editor), getString(R.string.terminal_cmdpalette_theme_editor_sub)) {
+        items += PaletteDialog.Item(getString(R.string.theme_editor_title), getString(R.string.terminal_cmdpalette_theme_editor_sub)) {
             startActivity(ThemeEditorActivity.createIntent(this))
         }
         items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_ssh_keys), getString(R.string.terminal_cmdpalette_ssh_keys_sub)) {
@@ -5198,10 +5323,10 @@ class TabTerminalActivity : TabSSHActivity() {
         // through the console text-input path on a graphical console tab.
         val consoleGraphical = activeGraphicalDisplayMode() != null
         val options = if (consoleGraphical) {
-            arrayOf(getString(R.string.terminal_clipboard_menu_paste))
+            arrayOf(getString(R.string.paste))
         } else {
             arrayOf(
-                getString(R.string.terminal_clipboard_menu_paste),
+                getString(R.string.paste),
                 getString(R.string.terminal_clipboard_menu_select_text),
                 getString(R.string.terminal_clipboard_menu_copy_screen)
             )
@@ -5327,7 +5452,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 }
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Failed to load snippets", e)
-                showError(getString(R.string.snippet_mgr_error_load_failed), getString(R.string.dialog_title_error))
+                showError(getString(R.string.snippet_mgr_error_load_failed), getString(R.string.status_error))
             }
         }
     }
@@ -5354,7 +5479,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 }
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Failed to insert snippet", e)
-                showError(getString(R.string.terminal_error_failed_insert_snippet), getString(R.string.dialog_title_error))
+                showError(getString(R.string.terminal_error_failed_insert_snippet), getString(R.string.status_error))
             }
         }
     }
@@ -5588,12 +5713,37 @@ class TabTerminalActivity : TabSSHActivity() {
             val activeIndex = tabManager.getActiveTabIndex()
             if (activeIndex < 0) return@launch
             when (val entry = tabManager.getActiveTabSealed()) {
-                is Tab.Ssh -> tabManager.closeTab(activeIndex)
-                is Tab.Vnc, is Tab.Console -> closeConsoleTab(entry.tabId)
+                is Tab.Ssh -> closeTabWithConfirmation(entry) { tabManager.closeTab(activeIndex) }
+                is Tab.Vnc, is Tab.Console -> closeTabWithConfirmation(entry) { closeConsoleTab(entry.tabId) }
                 is Tab.Panes -> showPanesCloseDialog(entry)
                 null -> Unit
             }
         }
+    }
+
+    /**
+     * Item 22 — unify the tab-close confirmation across Ssh/Vnc/Console tabs
+     * so closing a live session confirms the same way Panes already does
+     * (see [showPanesCloseDialog]), gated on the existing "Confirm tab
+     * close" preference (Settings > confirm_tab_close, default on). A tab
+     * that isn't actually connected (DISCONNECTED/ERROR) has no live
+     * session to lose, so it closes immediately regardless of the
+     * preference.
+     */
+    private fun closeTabWithConfirmation(tab: Tab, onConfirmed: () -> Unit) {
+        val isLive = tab.connectionState().isActive()
+        if (!isLive || !app.preferencesManager.isConfirmTabClose()) {
+            onConfirmed()
+            return
+        }
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.terminal_close_live_tab_confirm_title)
+            .setMessage(R.string.terminal_close_live_tab_confirm_message)
+            .setNegativeButton(R.string.terminal_close_tab) { _, _ -> onConfirmed() }
+            .setPositiveButton(R.string.cancel, null)
+            .show()
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
+            ?.setTextColor(MaterialColors.getColor(dialog.context, com.google.android.material.R.attr.colorError, Color.RED))
     }
 
     /**
@@ -5607,7 +5757,7 @@ class TabTerminalActivity : TabSSHActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.panes_close_dialog_title)
             .setMessage(R.string.panes_close_dialog_message)
-            .setNegativeButton(R.string.panes_disconnect_all) { _, _ ->
+            .setNegativeButton(R.string.terminal_menu_disconnect_all) { _, _ ->
                 Logger.i("TabTerminalActivity", "User chose Disconnect All for panes tab ${tab.tabId}")
                 tabManager.closeTabByIdSealed(tab.tabId)
             }
@@ -5620,9 +5770,27 @@ class TabTerminalActivity : TabSSHActivity() {
     }
 
     private fun disconnectAllTabs() {
-        lifecycleScope.launch {
-            tabManager.closeAllTabs()
+        // Item 21: nothing to destroy with zero tabs.
+        val tabCount = tabManager.getTabCount()
+        if (tabCount == 0) {
+            return
         }
+        // Item 21+23: confirm with the live tab count before destroying every
+        // open session; the destructive choice is the negative button and
+        // carries the error-color danger cue, the safe "Cancel" choice stays
+        // the visually default action.
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.terminal_disconnect_all_confirm_title)
+            .setMessage(getString(R.string.terminal_disconnect_all_confirm_message_fmt, tabCount))
+            .setNegativeButton(R.string.terminal_menu_disconnect_all) { _, _ ->
+                lifecycleScope.launch {
+                    tabManager.closeAllTabs()
+                }
+            }
+            .setPositiveButton(R.string.cancel, null)
+            .show()
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
+            ?.setTextColor(MaterialColors.getColor(dialog.context, com.google.android.material.R.attr.colorError, Color.RED))
     }
     
     private fun showToast(message: String) {

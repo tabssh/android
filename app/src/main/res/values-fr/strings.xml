@@ -20,10 +20,7 @@
 
     <!-- Connection management -->
     <string name="connection_name_hint">✏️ Nom de la connexion (ex. : \"Mon VPS\")</string>
-    <string name="connection_host_hint">🌐 nom d\'hôte ou adresse IP</string>
     <string name="connection_port_hint">22</string>
-    <string name="connection_username_hint">👤 nom d\'utilisateur</string>
-    <string name="save_connection">💾 Enregistrer</string>
     <string name="edit_connection">✏️ Modifier la Connexion</string>
     <string name="delete_connection">🗑️ Supprimer la Connexion</string>
     <string name="duplicate_connection">📋 Dupliquer la Connexion</string>
@@ -31,7 +28,6 @@
     <string name="connection_deleted">🗑️ Connexion supprimée</string>
     
     <!-- Authentication -->
-    <string name="auth_type_password">🔑 Mot de Passe</string>
     <string name="auth_type_public_key">🔐 Clé Publique (Clé SSH)</string>
     <string name="auth_type_keyboard_interactive">⌨️ Interactif au Clavier</string>
     <string name="password_hint">🔒 Mot de passe</string>
@@ -40,7 +36,6 @@
     <string name="import_key">📥 Importer une Clé</string>
     
     <!-- Terminal activity -->
-    <string name="terminal_activity_title">💻 Terminal</string>
     <string name="new_tab">➕ Nouvel Onglet</string>
     <string name="close_tab">❌ Fermer l\'Onglet</string>
     <string name="tab_menu">📑 Menu des Onglets</string>
@@ -85,7 +80,6 @@
     <string name="settings_interface">🎨 Interface</string>
     <string name="settings_connections">🌐 Connexions</string>
     <string name="settings_accessibility">♿ Accessibilité</string>
-    <string name="settings_about">ℹ️ À Propos de TabSSH</string>
     
     <!-- General settings -->
     <string name="pref_startup_behavior">Comportement au Démarrage</string>
@@ -131,8 +125,6 @@
     <string name="accessibility_connection_list">Liste des Connexions</string>
     <string name="accessibility_tab_list">Liste des Onglets</string>
     <string name="accessibility_function_keys">Touches de Fonction</string>
-    <string name="accessibility_connected">Connecté</string>
-    <string name="accessibility_disconnected">Déconnecté</string>
     <string name="accessibility_connecting">Connexion en cours</string>
     
     <!-- File operations -->
@@ -142,7 +134,6 @@
     <string name="upload_file">⬆️ Envoyer</string>
     <string name="download_file">⬇️ Télécharger</string>
     <string name="new_folder">📁 Nouveau Dossier</string>
-    <string name="delete_file">🗑️ Supprimer</string>
     <string name="rename_file">✏️ Renommer</string>
     <string name="file_properties">ℹ️ Propriétés</string>
     <string name="transfer_progress">📊 Progression du Transfert</string>
@@ -153,7 +144,6 @@
     <string name="biometric_title">🔐 Authentification</string>
     <string name="biometric_subtitle">👆 Utilisez votre empreinte digitale ou votre visage pour déverrouiller</string>
     <string name="biometric_description">🔒 Accès sécurisé à vos mots de passe enregistrés</string>
-    <string name="biometric_negative">❌ Annuler</string>
     <string name="biometric_error">❌ Échec de l\'authentification - veuillez réessayer</string>
     <string name="biometric_not_available">⚠️ Authentification biométrique non disponible sur cet appareil</string>
     

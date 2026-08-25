@@ -61,6 +61,7 @@ class HypervisorAccountAdapter(
         } else {
             holder.realm.visibility = View.GONE
         }
+        holder.itemView.setOnClickListener { onEdit(account) }
         holder.btnEdit.setOnClickListener { onEdit(account) }
         holder.btnDelete.setOnClickListener { onDelete(account) }
     }

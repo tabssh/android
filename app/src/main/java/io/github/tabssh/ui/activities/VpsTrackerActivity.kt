@@ -30,6 +30,7 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * List screen for the VPS Hosting Tracker: tracked VPS/hosting instances
@@ -64,7 +65,7 @@ class VpsTrackerActivity : TabSSHActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         binding = ActivityVpsTrackerBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -194,7 +195,7 @@ class VpsTrackerActivity : TabSSHActivity() {
             } catch (e: Exception) {
                 Logger.e(TAG, "VPS markdown import failed", e)
                 if (!isAlive) return@launch
-                Toast.makeText(this@VpsTrackerActivity, getString(R.string.vps_tracker_import_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                Toast.makeText(this@VpsTrackerActivity, getString(R.string.import_qr_import_failed_fmt, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -214,7 +215,7 @@ class VpsTrackerActivity : TabSSHActivity() {
             } catch (e: Exception) {
                 Logger.e(TAG, "VPS markdown export failed", e)
                 if (!isAlive) return@launch
-                Toast.makeText(this@VpsTrackerActivity, getString(R.string.vps_tracker_export_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                Toast.makeText(this@VpsTrackerActivity, getString(R.string.identity_export_failed_fmt, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -235,7 +236,7 @@ class VpsTrackerActivity : TabSSHActivity() {
             } catch (e: Exception) {
                 Logger.e(TAG, "VPS markdown export (text) failed", e)
                 if (!isAlive) return@launch
-                Toast.makeText(this@VpsTrackerActivity, getString(R.string.vps_tracker_export_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                Toast.makeText(this@VpsTrackerActivity, getString(R.string.identity_export_failed_fmt, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -256,7 +257,7 @@ class VpsTrackerActivity : TabSSHActivity() {
 
     private fun confirmDelete(host: VpsHost) {
         MaterialAlertDialogBuilder(this)
-            .setTitle(getString(R.string.vps_host_delete_title, host.hostname))
+            .setTitle(getString(R.string.domain_delete_title, host.hostname))
             .setMessage(getString(R.string.vps_host_delete_message))
             .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 lifecycleScope.launch {
@@ -271,7 +272,7 @@ class VpsTrackerActivity : TabSSHActivity() {
                     } catch (e: Exception) {
                         Logger.e(TAG, "Failed to delete VPS host", e)
                         if (!isAlive) return@launch
-                        Toast.makeText(this@VpsTrackerActivity, getString(R.string.vps_host_delete_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@VpsTrackerActivity, getString(R.string.domain_delete_failed_fmt, e.message), Toast.LENGTH_LONG).show()
                     }
                 }
             }

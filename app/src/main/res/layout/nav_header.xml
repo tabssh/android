@@ -5,8 +5,7 @@
     android:background="@color/primary_500"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingHorizontal="@dimen/space_12dp"
-    android:theme="@style/ThemeOverlay.AppCompat.Dark">
+    android:paddingHorizontal="@dimen/space_12dp">
 
     <ImageView
         android:layout_width="32dp"
@@ -33,7 +32,7 @@
             android:layout_height="wrap_content"
             android:text="@string/nav_header_tagline"
             android:textColor="@color/white"
-            android:textSize="11sp"
+            android:textSize="@dimen/text_size_overline"
             android:alpha="0.8" />
 
     </LinearLayout>

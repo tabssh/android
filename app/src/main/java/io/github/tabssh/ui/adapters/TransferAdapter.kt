@@ -144,7 +144,7 @@ class TransferAdapter(
                 TransferState.ACTIVE -> R.string.transferrow_status_active
                 TransferState.PAUSED -> R.string.transferrow_status_paused
                 TransferState.COMPLETED -> R.string.transferrow_status_completed
-                TransferState.ERROR -> R.string.transferrow_status_error
+                TransferState.ERROR -> R.string.status_error
                 TransferState.CANCELLED -> R.string.transferrow_status_cancelled
             }
         }

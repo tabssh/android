@@ -61,9 +61,10 @@
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/layout_host"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="@string/connection_host_hint"
+                        android:hint="@string/host_hint"
                         android:layout_marginTop="@dimen/space_sm"
                         app:errorEnabled="true"
                         style="@style/Widget.TabSSH.TextInputLayout">
@@ -132,6 +133,7 @@
                         android:layout_marginTop="@dimen/space_sm">
 
                         <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/layout_port"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
@@ -157,7 +159,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="2"
-                            android:hint="@string/connection_username_hint"
+                            android:hint="@string/username_hint"
                             app:errorEnabled="true"
                             style="@style/Widget.TabSSH.TextInputLayout">
 
@@ -246,7 +248,7 @@
                             android:id="@+id/btn_clear_color_tag"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/conn_edit_clear" />
+                            android:text="@string/action_clear" />
                     </LinearLayout>
 
                     <!-- Reused for both SSH identities and VNC identities depending
@@ -549,7 +551,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_xs"
-                        android:hint="@string/connection_edit_mosh_custom_desc_hint"
+                        android:hint="@string/snippet_edit_description_hint"
                         android:visibility="gone">
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/edit_mosh_custom_desc"

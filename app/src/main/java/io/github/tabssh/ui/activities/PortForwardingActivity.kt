@@ -26,8 +26,10 @@ import io.github.tabssh.ui.adapters.PortForwardAdapter
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Unified "Routing & Forwarding" hub.
@@ -40,7 +42,7 @@ import kotlinx.coroutines.withContext
 class PortForwardingActivity : TabSSHActivity() {
 
     private val app: TabSSHApplication
-        get() = application as TabSSHApplication
+        get() = tabSSHApp
 
     // Routes section
     private lateinit var recyclerRoutes: RecyclerView
@@ -228,30 +230,35 @@ class PortForwardingActivity : TabSSHActivity() {
     /**
      * Observe the saved rules and, on every emission, refresh the running-state
      * overlay and the saved-connection name map so rows render fully.
+     *
+     * Item 44 — combined with [PortForwardCoordinator.runningIds] rather than
+     * recomputing the running set only from the DAO Flow's own emissions: a
+     * tunnel that ends on its own (SSH session drop, remote refusing the
+     * forward) updates that StateFlow without any DB write happening, so
+     * without this combine() the row would keep showing "running" until some
+     * unrelated edit touched the table.
      */
     private fun observeForwards() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                app.database.portForwardDao().getAll().collectLatest { forwards ->
-                    val names = withContext(Dispatchers.IO) {
-                        app.database.connectionDao().getAllConnectionsList()
-                            .associate { it.id to it.getDisplayName() }
+                combine(
+                    app.database.portForwardDao().getAll(),
+                    app.portForwardCoordinator.runningIds
+                ) { forwards, runningIds -> forwards to runningIds }
+                    .collectLatest { (forwards, runningIds) ->
+                        val names = withContext(Dispatchers.IO) {
+                            app.database.connectionDao().getAllConnectionsList()
+                                .associate { it.id to it.getDisplayName() }
+                        }
+                        adapter.setConnectionNames(names)
+                        adapter.submitList(forwards)
+                        adapter.setRunningIds(
+                            forwards.asSequence().map { it.id }.filter { it in runningIds }.toSet()
+                        )
+                        renderEmptyState(forwards.isEmpty())
                     }
-                    adapter.setConnectionNames(names)
-                    adapter.submitList(forwards)
-                    refreshRunningState(forwards)
-                    renderEmptyState(forwards.isEmpty())
-                }
             }
         }
-    }
-
-    private fun refreshRunningState(forwards: List<PortForward>) {
-        val running = forwards.asSequence()
-            .map { it.id }
-            .filter { app.portForwardCoordinator.isRunning(it) }
-            .toSet()
-        adapter.setRunningIds(running)
     }
 
     private fun renderEmptyState(isEmpty: Boolean) {

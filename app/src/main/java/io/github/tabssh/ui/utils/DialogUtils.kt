@@ -23,16 +23,25 @@ object DialogUtils {
     }
 
     /**
-     * Shows an error dialog with a copy button to copy the error message to clipboard
+     * Shows an error dialog with a copy button to copy the error message to clipboard.
+     *
+     * @param copyText Text copied by the Copy button; defaults to [message]. Pass a
+     *   separate value to keep raw technical detail (exception class/message) available
+     *   for debugging without displaying it in the dialog body — see AI.md's
+     *   "never raw exception text" error-surface rule.
+     * @param onRetry When non-null, adds a Retry button that invokes this callback
+     *   instead of just dismissing — for failures the caller can reasonably re-attempt.
      */
     fun showErrorDialog(
         context: Context,
-        title: String = context.getString(R.string.dialog_title_error),
+        title: String = context.getString(R.string.status_error),
         message: String,
+        copyText: String? = null,
+        onRetry: (() -> Unit)? = null,
         onDismiss: (() -> Unit)? = null
     ) {
         if (isContextDead(context)) return
-        MaterialAlertDialogBuilder(context)
+        val builder = MaterialAlertDialogBuilder(context)
             .setTitle(title)
             .setMessage(message)
             .setPositiveButton(context.getString(R.string.ok)) { dialog, _ ->
@@ -40,11 +49,14 @@ object DialogUtils {
                 onDismiss?.invoke()
             }
             .setNeutralButton(context.getString(R.string.copy)) { _, _ ->
-                copyToClipboard(context, message)
+                copyToClipboard(context, copyText ?: message)
                 Toast.makeText(context, context.getString(R.string.dialog_error_message_copied_toast), Toast.LENGTH_SHORT).show()
             }
             .setCancelable(true)
-            .show()
+        if (onRetry != null) {
+            builder.setNegativeButton(context.getString(R.string.retry)) { _, _ -> onRetry() }
+        }
+        builder.show()
     }
 
     /**

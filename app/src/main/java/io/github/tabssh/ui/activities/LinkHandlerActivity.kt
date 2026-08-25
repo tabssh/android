@@ -138,8 +138,8 @@ class LinkHandlerActivity : AppCompatActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.link_handler_ssh_dialog_title)
             .setMessage(getString(R.string.link_handler_ssh_dialog_message, display))
-            .setPositiveButton(R.string.virt_viewer_connect) { _, _ -> connectSsh(action) }
-            .setNegativeButton(R.string.virt_viewer_cancel) { _, _ -> finish() }
+            .setPositiveButton(R.string.connect_button) { _, _ -> connectSsh(action) }
+            .setNegativeButton(R.string.cancel) { _, _ -> finish() }
             .setOnCancelListener { finish() }
             .show()
     }
@@ -149,8 +149,8 @@ class LinkHandlerActivity : AppCompatActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.link_handler_sftp_dialog_title)
             .setMessage(getString(R.string.link_handler_sftp_dialog_message, display, action.path))
-            .setPositiveButton(R.string.virt_viewer_connect) { _, _ -> connectSftp(action) }
-            .setNegativeButton(R.string.virt_viewer_cancel) { _, _ -> finish() }
+            .setPositiveButton(R.string.connect_button) { _, _ -> connectSftp(action) }
+            .setNegativeButton(R.string.cancel) { _, _ -> finish() }
             .setOnCancelListener { finish() }
             .show()
     }
@@ -307,13 +307,13 @@ class LinkHandlerActivity : AppCompatActivity() {
                 else R.string.virt_viewer_vnc_dialog_title
             )
             .setMessage(getString(R.string.virt_viewer_dialog_message, target) + extra)
-            .setPositiveButton(R.string.virt_viewer_connect) { _, _ ->
+            .setPositiveButton(R.string.connect_button) { _, _ ->
                 when (connection.type) {
                     VirtViewerType.SPICE -> connectSpice(connection)
                     VirtViewerType.VNC -> connectVirtViewerVnc(connection)
                 }
             }
-            .setNegativeButton(R.string.virt_viewer_cancel) { _, _ -> finish() }
+            .setNegativeButton(R.string.cancel) { _, _ -> finish() }
             .setOnCancelListener { finish() }
             .show()
     }
@@ -412,7 +412,7 @@ class LinkHandlerActivity : AppCompatActivity() {
      */
     private fun promptVncPassword(connection: VirtViewerConnection) {
         val passwordInput = com.google.android.material.textfield.TextInputEditText(this).apply {
-            hint = getString(R.string.virt_viewer_password_hint)
+            hint = getString(R.string.password_hint)
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                 android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
@@ -427,7 +427,7 @@ class LinkHandlerActivity : AppCompatActivity() {
             .setTitle(R.string.virt_viewer_password_title)
             .setMessage(getString(R.string.virt_viewer_password_message, connection.host))
             .setView(layout)
-            .setPositiveButton(R.string.virt_viewer_connect) { _, _ ->
+            .setPositiveButton(R.string.connect_button) { _, _ ->
                 val entered = passwordInput.text?.toString().orEmpty()
                 if (entered.isEmpty()) {
                     Toast.makeText(this, R.string.virt_viewer_password_required, Toast.LENGTH_SHORT).show()
@@ -436,7 +436,7 @@ class LinkHandlerActivity : AppCompatActivity() {
                     launchVncTab(connection, entered)
                 }
             }
-            .setNegativeButton(R.string.virt_viewer_cancel) { _, _ -> finish() }
+            .setNegativeButton(R.string.cancel) { _, _ -> finish() }
             .setOnCancelListener { finish() }
             .show()
     }

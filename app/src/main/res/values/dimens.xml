@@ -20,7 +20,9 @@
     <dimen name="space_88dp">88dp</dimen>
     
     <!-- Text sizes -->
+    <dimen name="text_size_overline">11sp</dimen>
     <dimen name="text_size_caption">12sp</dimen>
+    <dimen name="text_size_small_body">13sp</dimen>
     <dimen name="text_size_body">14sp</dimen>
     <dimen name="text_size_subtitle">16sp</dimen>
     <dimen name="text_size_title">18sp</dimen>
@@ -49,6 +51,7 @@
     <dimen name="input_field_height">56dp</dimen>
     
     <!-- Cards and containers -->
+    <dimen name="card_corner_radius_small">8dp</dimen>
     <dimen name="card_corner_radius">12dp</dimen>
     <dimen name="card_elevation">4dp</dimen>
     <dimen name="container_padding">16dp</dimen>
@@ -57,14 +60,18 @@
     
     <!-- Borders and dividers -->
     <dimen name="divider_height">1dp</dimen>
+    <dimen name="card_stroke_width">1dp</dimen>
     <dimen name="border_width">2dp</dimen>
     <dimen name="focus_border_width">3dp</dimen>
     <dimen name="tab_indicator_height">3dp</dimen>
     
     <!-- Icons -->
     <dimen name="icon_size_small">16dp</dimen>
+    <dimen name="icon_size_action">20dp</dimen>
     <dimen name="icon_size_medium">24dp</dimen>
+    <dimen name="icon_size_badge">28dp</dimen>
     <dimen name="icon_size_large">32dp</dimen>
+    <dimen name="icon_size_40dp">40dp</dimen>
     <dimen name="icon_size_xlarge">48dp</dimen>
     
     <!-- Connection item dimensions (compact) -->
@@ -90,8 +97,13 @@
     
     <!-- Progress indicators -->
     <dimen name="progress_bar_height">4dp</dimen>
+    <dimen name="progress_track_corner_radius">3dp</dimen>
     <dimen name="circular_progress_size">24dp</dimen>
     <dimen name="loading_indicator_size">48dp</dimen>
+
+    <!-- Dashboard host card stat rows (CPU/mem/disk label + value columns) -->
+    <dimen name="dashboard_stat_label_width">36dp</dimen>
+    <dimen name="dashboard_stat_value_width">44dp</dimen>
     
     <!-- Keyboard dimensions -->
     <dimen name="keyboard_height_default">200dp</dimen>
@@ -127,6 +139,8 @@
     <!-- Bottom sheet dimensions -->
     <dimen name="bottom_sheet_peek_height">64dp</dimen>
     <dimen name="bottom_sheet_corner_radius">16dp</dimen>
+    <dimen name="bottom_sheet_handle_width">32dp</dimen>
+    <dimen name="bottom_sheet_handle_height">4dp</dimen>
     
     <!-- Dialog dimensions -->
     <dimen name="dialog_corner_radius">16dp</dimen>

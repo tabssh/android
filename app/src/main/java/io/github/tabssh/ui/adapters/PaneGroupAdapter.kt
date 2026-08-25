@@ -5,6 +5,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.TextView
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
 import io.github.tabssh.storage.database.entities.PaneGroup
@@ -13,13 +15,10 @@ class PaneGroupAdapter(
     private val onLaunch: (PaneGroup) -> Unit,
     private val onEdit: (PaneGroup) -> Unit,
     private val onDelete: (PaneGroup) -> Unit
-) : RecyclerView.Adapter<PaneGroupAdapter.VH>() {
-
-    private var items: List<PaneGroup> = emptyList()
+) : ListAdapter<PaneGroup, PaneGroupAdapter.VH>(DiffCallback()) {
 
     fun submit(list: List<PaneGroup>) {
-        items = list
-        notifyDataSetChanged()
+        submitList(list)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -28,10 +27,8 @@ class PaneGroupAdapter(
         return VH(v)
     }
 
-    override fun getItemCount(): Int = items.size
-
     override fun onBindViewHolder(holder: VH, position: Int) {
-        val group = items[position]
+        val group = getItem(position)
         val context = holder.itemView.context
         holder.name.text = group.name
         holder.description.text = context.getString(
@@ -47,5 +44,15 @@ class PaneGroupAdapter(
         val description: TextView = view.findViewById(R.id.text_description)
         val btnEdit: ImageButton = view.findViewById(R.id.btn_edit)
         val btnDelete: ImageButton = view.findViewById(R.id.btn_delete)
+    }
+
+    class DiffCallback : DiffUtil.ItemCallback<PaneGroup>() {
+        override fun areItemsTheSame(oldItem: PaneGroup, newItem: PaneGroup): Boolean {
+            return oldItem.id == newItem.id
+        }
+
+        override fun areContentsTheSame(oldItem: PaneGroup, newItem: PaneGroup): Boolean {
+            return oldItem == newItem
+        }
     }
 }

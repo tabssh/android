@@ -30,6 +30,7 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * List screen for the Domain Tracker: tracked domain registrations,
@@ -65,7 +66,7 @@ class DomainTrackerActivity : TabSSHActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         binding = ActivityDomainTrackerBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -196,7 +197,7 @@ class DomainTrackerActivity : TabSSHActivity() {
             } catch (e: Exception) {
                 Logger.e(TAG, "Domain CSV import failed", e)
                 if (!isAlive) return@launch
-                Toast.makeText(this@DomainTrackerActivity, getString(R.string.domain_tracker_import_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                Toast.makeText(this@DomainTrackerActivity, getString(R.string.import_qr_import_failed_fmt, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -216,7 +217,7 @@ class DomainTrackerActivity : TabSSHActivity() {
             } catch (e: Exception) {
                 Logger.e(TAG, "Domain CSV export failed", e)
                 if (!isAlive) return@launch
-                Toast.makeText(this@DomainTrackerActivity, getString(R.string.domain_tracker_export_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                Toast.makeText(this@DomainTrackerActivity, getString(R.string.identity_export_failed_fmt, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -237,7 +238,7 @@ class DomainTrackerActivity : TabSSHActivity() {
             } catch (e: Exception) {
                 Logger.e(TAG, "Domain CSV export (text) failed", e)
                 if (!isAlive) return@launch
-                Toast.makeText(this@DomainTrackerActivity, getString(R.string.domain_tracker_export_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                Toast.makeText(this@DomainTrackerActivity, getString(R.string.identity_export_failed_fmt, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }

@@ -10,6 +10,9 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -39,6 +42,46 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
     private data class Running(val endpointKey: String, val tunnelId: String)
     private val running = ConcurrentHashMap<String, Running>()
 
+    private val _runningIds = MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * Item 44 — running [PortForward] ids, kept in sync not only from
+     * [start]/[stop] but also when a tunnel ends on its own (SSH session
+     * drop, remote refusing the forward) via the [PortForwardingListener]
+     * registered on each manager in [obtainOrCreateManager]. UI observers
+     * (`PortForwardingActivity.observeForwards`) `combine()` this with the
+     * DAO Flow so a forward that silently died shows as stopped without
+     * waiting for an unrelated DB write to trigger a re-render.
+     */
+    val runningIds: StateFlow<Set<String>> = _runningIds.asStateFlow()
+
+    private fun updateRunningIds() {
+        _runningIds.value = running.keys.toSet()
+    }
+
+    /**
+     * Item 44 — remove whichever forward owns [tunnelId] from [running] when
+     * its tunnel ends outside of an explicit [stop] call. Safe to also fire
+     * from stop()'s own teardown path: by then the id is already removed, so
+     * the lookup below finds nothing and this is a no-op.
+     */
+    private fun handleTunnelEnded(tunnelId: String) {
+        val pfId = running.entries.find { it.value.tunnelId == tunnelId }?.key ?: return
+        running.remove(pfId)
+        updateRunningIds()
+    }
+
+    /** [managers.getOrPut] plus wiring the close/failure listener once per endpoint. */
+    private fun obtainOrCreateManager(key: String, connection: SSHConnection): PortForwardingManager =
+        managers.getOrPut(key) {
+            PortForwardingManager(connection).also { manager ->
+                manager.addListener(object : PortForwardingListener {
+                    override fun onTunnelStopped(tunnel: Tunnel) = handleTunnelEnded(tunnel.id)
+                    override fun onTunnelError(tunnel: Tunnel, error: String) = handleTunnelEnded(tunnel.id)
+                })
+            }
+        }
+
     /**
      * Start the tunnel for [pf]. Reuses an existing session to the same
      * endpoint when possible. Returns [Result.success] once the tunnel is
@@ -63,7 +106,7 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
                     IllegalStateException("SSH connection failed for ${profile.host}")
                 )
 
-            val manager = managers.getOrPut(key) { PortForwardingManager(connection) }
+            val manager = obtainOrCreateManager(key, connection)
 
             val tunnel = when (pf.forwardType) {
                 ForwardType.LOCAL -> manager.createLocalForward(
@@ -84,7 +127,17 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
                 )
             }
 
+            // Item 44 — createXForward() never throws on a bind/start failure,
+            // it reports it via the returned Tunnel's state instead; only a
+            // genuinely ACTIVE tunnel is "running".
+            if (tunnel.state != TunnelState.ACTIVE) {
+                return Result.failure(
+                    IllegalStateException(tunnel.lastError ?: "Failed to start tunnel")
+                )
+            }
+
             running[pf.id] = Running(key, tunnel.id)
+            updateRunningIds()
             Logger.i("PortForwardCoordinator", "Started ${pf.forwardType} forward '${pf.name}': ${pf.getSummary()}")
             Result.success(Unit)
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -104,6 +157,7 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
      */
     suspend fun stop(pfId: String) {
         val handle = running.remove(pfId) ?: return
+        updateRunningIds()
         val manager = managers[handle.endpointKey] ?: return
         try {
             manager.removeTunnel(handle.tunnelId)
@@ -139,6 +193,7 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
     /** Stop all tunnels and drop all sessions this coordinator owns. */
     fun stopAll() {
         running.clear()
+        updateRunningIds()
         managers.values.forEach { it.cleanup() }
         managers.clear()
     }

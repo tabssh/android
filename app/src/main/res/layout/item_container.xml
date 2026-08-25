@@ -63,7 +63,7 @@
               android:layout_height="wrap_content"
               android:layout_marginStart="@dimen/space_sm"
               android:text="@string/container_update_available"
-              android:textSize="11sp"
+              android:textSize="@dimen/text_size_overline"
               android:textStyle="bold"
               android:textColor="?attr/colorOnPrimary"
               android:background="@drawable/badge_background"

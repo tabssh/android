@@ -41,7 +41,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/widget_tap_to_configure"
-            android:textSize="11sp"
+            android:textSize="@dimen/text_size_overline"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:maxLines="1"
             android:ellipsize="end" />
@@ -50,8 +50,8 @@
 
     <ImageButton
         android:id="@+id/widget_connect"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
+        android:layout_width="@dimen/min_touch_target"
+        android:layout_height="@dimen/min_touch_target"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:src="@drawable/ic_play"
         android:contentDescription="@string/connect_button"

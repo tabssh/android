@@ -28,6 +28,7 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /** Auth tab — SSH sub-tab: host identities (SSH auth credential sets). */
 class AuthSshFragment : Fragment() {
@@ -43,7 +44,7 @@ class AuthSshFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        app = requireActivity().application as TabSSHApplication
+        app = tabSSHApp
 
         setupHostIdentitiesSection(view)
         observeData()
@@ -70,12 +71,16 @@ class AuthSshFragment : Fragment() {
         view.findViewById<MaterialButton>(R.id.btn_add_identity).setOnClickListener {
             showCreateIdentityDialog()
         }
+        view.findViewById<MaterialButton>(R.id.button_identities_empty_cta).setOnClickListener {
+            showCreateIdentityDialog()
+        }
     }
 
     private fun updateIdentitiesEmptyState(view: View) {
         val empty = identityAdapter.itemCount == 0
         view.findViewById<View>(R.id.recycler_identities).visibility = if (empty) View.GONE else View.VISIBLE
         view.findViewById<View>(R.id.text_identities_empty).visibility = if (empty) View.VISIBLE else View.GONE
+        view.findViewById<View>(R.id.button_identities_empty_cta).visibility = if (empty) View.VISIBLE else View.GONE
     }
 
     private fun observeData() {
@@ -140,7 +145,7 @@ class AuthSshFragment : Fragment() {
         }
 
         val authTypes = listOf(
-            getString(R.string.identity_auth_type_password),
+            getString(R.string.password_hint),
             getString(R.string.identity_auth_type_ssh_key),
             getString(R.string.identity_auth_type_keyboard_interactive)
         )
@@ -253,11 +258,11 @@ class AuthSshFragment : Fragment() {
                 MaterialAlertDialogBuilder(requireContext())
                     .setTitle(getString(R.string.identity_apply_to_title_fmt, identity.name))
                     .setMultiChoiceItems(names, checked) { _, i, v -> checked[i] = v }
-                    .setPositiveButton(getString(R.string.identity_apply_button)) { _, _ ->
+                    .setPositiveButton(getString(R.string.terminal_apply)) { _, _ ->
                         val ids = allConnections.filterIndexed { i, _ -> checked[i] }.map { it.id }
                         applyIdentityToConnections(identity, ids)
                     }
-                    .setNeutralButton(getString(R.string.identity_select_all_button)) { dialog, _ ->
+                    .setNeutralButton(getString(R.string.select_all)) { dialog, _ ->
                         checked.fill(true)
                         (dialog as? androidx.appcompat.app.AlertDialog)?.listView?.let { lv ->
                             for (i in 0 until lv.count) lv.setItemChecked(i, true)

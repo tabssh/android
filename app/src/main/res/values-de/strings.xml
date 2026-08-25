@@ -20,10 +20,7 @@
 
     <!-- Connection management -->
     <string name="connection_name_hint">✏️ Verbindungsname (z.B. \"Mein VPS\")</string>
-    <string name="connection_host_hint">🌐 Hostname oder IP-Adresse</string>
     <string name="connection_port_hint">22</string>
-    <string name="connection_username_hint">👤 Benutzername</string>
-    <string name="save_connection">💾 Speichern</string>
     <string name="edit_connection">✏️ Verbindung bearbeiten</string>
     <string name="delete_connection">🗑️ Verbindung löschen</string>
     <string name="duplicate_connection">📋 Verbindung duplizieren</string>
@@ -31,7 +28,6 @@
     <string name="connection_deleted">🗑️ Verbindung gelöscht</string>
     
     <!-- Authentication -->
-    <string name="auth_type_password">🔑 Passwort</string>
     <string name="auth_type_public_key">🔐 Public Key (SSH-Schlüssel)</string>
     <string name="auth_type_keyboard_interactive">⌨️ Keyboard Interactive</string>
     <string name="password_hint">🔒 Passwort</string>
@@ -40,7 +36,6 @@
     <string name="import_key">📥 Schlüssel importieren</string>
     
     <!-- Terminal activity -->
-    <string name="terminal_activity_title">💻 Terminal</string>
     <string name="new_tab">➕ Neuer Tab</string>
     <string name="close_tab">❌ Tab schließen</string>
     <string name="tab_menu">📑 Tab-Menü</string>
@@ -85,7 +80,6 @@
     <string name="settings_interface">🎨 Oberfläche</string>
     <string name="settings_connections">🌐 Verbindungen</string>
     <string name="settings_accessibility">♿ Barrierefreiheit</string>
-    <string name="settings_about">ℹ️ Über TabSSH</string>
     
     <!-- General settings -->
     <string name="pref_startup_behavior">Startverhalten</string>
@@ -131,8 +125,6 @@
     <string name="accessibility_connection_list">Verbindungsliste</string>
     <string name="accessibility_tab_list">Tab-Liste</string>
     <string name="accessibility_function_keys">Funktionstasten</string>
-    <string name="accessibility_connected">Verbunden</string>
-    <string name="accessibility_disconnected">Getrennt</string>
     <string name="accessibility_connecting">Verbinde</string>
     
     <!-- File operations -->
@@ -142,7 +134,6 @@
     <string name="upload_file">⬆️ Hochladen</string>
     <string name="download_file">⬇️ Herunterladen</string>
     <string name="new_folder">📁 Neuer Ordner</string>
-    <string name="delete_file">🗑️ Löschen</string>
     <string name="rename_file">✏️ Umbenennen</string>
     <string name="file_properties">ℹ️ Eigenschaften</string>
     <string name="transfer_progress">📊 Übertragungsfortschritt</string>
@@ -153,7 +144,6 @@
     <string name="biometric_title">🔐 Authentifizieren</string>
     <string name="biometric_subtitle">👆 Verwenden Sie Ihren Fingerabdruck oder Ihr Gesicht zum Entsperren</string>
     <string name="biometric_description">🔒 Sicherer Zugriff auf Ihre gespeicherten Passwörter</string>
-    <string name="biometric_negative">❌ Abbrechen</string>
     <string name="biometric_error">❌ Authentifizierung fehlgeschlagen - bitte versuchen Sie es erneut</string>
     <string name="biometric_not_available">⚠️ Biometrische Authentifizierung auf diesem Gerät nicht verfügbar</string>
     

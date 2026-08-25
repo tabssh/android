@@ -22,6 +22,7 @@ import io.github.tabssh.utils.replaceAllWithDiff
 import androidx.room.withTransaction
 import kotlinx.coroutines.launch
 import io.github.tabssh.utils.showError
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Activity for managing connection groups/folders
@@ -40,7 +41,7 @@ class GroupManagementActivity : TabSSHActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_group_management)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         setupToolbar()
         setupViews()
@@ -127,7 +128,7 @@ class GroupManagementActivity : TabSSHActivity() {
             } catch (e: Exception) {
                 Logger.e("GroupManagementActivity", "Failed to load groups", e)
                 runOnUiThread {
-                    showError(getString(R.string.group_mgmt_load_failed), getString(R.string.dialog_title_error))
+                    showError(getString(R.string.group_mgmt_load_failed), getString(R.string.status_error))
                 }
             }
         }
@@ -155,7 +156,7 @@ class GroupManagementActivity : TabSSHActivity() {
             .setPositiveButton(R.string.container_create) { _, _ ->
                 val name = nameInput.text.toString().trim()
                 if (name.isBlank()) {
-                    showError(getString(R.string.group_mgmt_name_empty), getString(R.string.dialog_title_error))
+                    showError(getString(R.string.group_mgmt_name_empty), getString(R.string.status_error))
                     return@setPositiveButton
                 }
 
@@ -185,7 +186,7 @@ class GroupManagementActivity : TabSSHActivity() {
             .setPositiveButton(R.string.save) { _, _ ->
                 val name = nameInput.text.toString().trim()
                 if (name.isBlank()) {
-                    showError(getString(R.string.group_mgmt_name_empty), getString(R.string.dialog_title_error))
+                    showError(getString(R.string.group_mgmt_name_empty), getString(R.string.status_error))
                     return@setPositiveButton
                 }
 
@@ -223,7 +224,7 @@ class GroupManagementActivity : TabSSHActivity() {
             } catch (e: Exception) {
                 Logger.e("GroupManagementActivity", "Failed to create group", e)
                 runOnUiThread {
-                    showError(getString(R.string.group_mgmt_create_failed), getString(R.string.dialog_title_error))
+                    showError(getString(R.string.group_mgmt_create_failed), getString(R.string.status_error))
                 }
             }
         }
@@ -249,7 +250,7 @@ class GroupManagementActivity : TabSSHActivity() {
             } catch (e: Exception) {
                 Logger.e("GroupManagementActivity", "Failed to update group", e)
                 runOnUiThread {
-                    showError(getString(R.string.group_mgmt_update_failed), getString(R.string.dialog_title_error))
+                    showError(getString(R.string.group_mgmt_update_failed), getString(R.string.status_error))
                 }
             }
         }
@@ -312,7 +313,7 @@ class GroupManagementActivity : TabSSHActivity() {
             } catch (e: Exception) {
                 Logger.e("GroupManagementActivity", "Failed to delete group", e)
                 runOnUiThread {
-                    showError(getString(R.string.group_mgmt_delete_failed), getString(R.string.dialog_title_error))
+                    showError(getString(R.string.group_mgmt_delete_failed), getString(R.string.status_error))
                 }
             }
         }

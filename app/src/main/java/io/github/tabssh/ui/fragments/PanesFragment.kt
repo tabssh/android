@@ -23,6 +23,7 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /** Panes tab — saved groups of up to 6 terminal connections tiled into one slot. */
 class PanesFragment : Fragment() {
@@ -38,7 +39,7 @@ class PanesFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        app = requireActivity().application as TabSSHApplication
+        app = tabSSHApp
 
         setupPaneGroupsSection(view)
         observeData()

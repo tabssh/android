@@ -122,7 +122,7 @@ class RemoteFileOpener(
                         ?: activity.getString(R.string.fileopen_download_failed)
                     Toast.makeText(
                         activity,
-                        activity.getString(R.string.fileopen_download_failed_fmt, message),
+                        activity.getString(R.string.sftp_download_failed_fmt, message),
                         Toast.LENGTH_LONG
                     ).show()
                     return@launch
@@ -133,7 +133,7 @@ class RemoteFileOpener(
                 Logger.e(TAG, "Download failed for $remotePath", e)
                 Toast.makeText(
                     activity,
-                    activity.getString(R.string.fileopen_download_failed_fmt, e.message.orEmpty()),
+                    activity.getString(R.string.sftp_download_failed_fmt, e.message.orEmpty()),
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -252,7 +252,7 @@ class RemoteFileOpener(
                 Logger.e(TAG, "Upload back failed for ${edit.remotePath}", e)
                 Toast.makeText(
                     activity,
-                    activity.getString(R.string.fileopen_upload_failed_fmt, e.message.orEmpty()),
+                    activity.getString(R.string.sftp_upload_failed_fmt, e.message.orEmpty()),
                     Toast.LENGTH_LONG
                 ).show()
                 promptUploadBack(edit)

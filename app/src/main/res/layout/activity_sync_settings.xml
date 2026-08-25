@@ -29,8 +29,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_12dp"
-                app:cardElevation="0dp"
-                app:strokeWidth="1dp"
+                app:cardElevation="@dimen/elevation_none"
+                app:strokeWidth="@dimen/card_stroke_width"
                 app:strokeColor="?attr/colorOutlineVariant">
 
                 <LinearLayout
@@ -49,7 +49,7 @@
                             android:id="@+id/text_status_icon"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:textSize="24sp"
+                            android:textSize="@dimen/text_size_display"
                             android:text="@string/common_icon_settings"
                             android:layout_marginEnd="@dimen/space_12dp" />
 
@@ -122,8 +122,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_12dp"
-                app:cardElevation="0dp"
-                app:strokeWidth="1dp"
+                app:cardElevation="@dimen/elevation_none"
+                app:strokeWidth="@dimen/card_stroke_width"
                 app:strokeColor="?attr/colorOutlineVariant">
 
                 <!-- Location row -->
@@ -145,10 +145,10 @@
 
                         <TextView
                             android:id="@+id/icon_location"
-                            android:layout_width="28dp"
-                            android:layout_height="28dp"
+                            android:layout_width="@dimen/icon_size_badge"
+                            android:layout_height="@dimen/icon_size_badge"
                             android:text="@string/group_mgmt_empty_icon"
-                            android:textSize="18sp"
+                            android:textSize="@dimen/text_size_title"
                             android:gravity="center"
                             android:layout_marginEnd="@dimen/space_md" />
 
@@ -180,14 +180,14 @@
                             android:layout_height="wrap_content"
                             android:text="@string/common_icon_check"
                             android:textColor="@android:color/holo_green_dark"
-                            android:textSize="18sp"
+                            android:textSize="@dimen/text_size_title"
                             android:visibility="gone" />
 
                     </LinearLayout>
 
                     <View
                         android:layout_width="match_parent"
-                        android:layout_height="1dp"
+                        android:layout_height="@dimen/divider_height"
                         android:layout_marginStart="@dimen/space_60dp"
                         android:background="?attr/colorOutlineVariant" />
 
@@ -204,10 +204,10 @@
                         android:padding="@dimen/space_md">
 
                         <TextView
-                            android:layout_width="28dp"
-                            android:layout_height="28dp"
+                            android:layout_width="@dimen/icon_size_badge"
+                            android:layout_height="@dimen/icon_size_badge"
                             android:text="@string/common_icon_key"
-                            android:textSize="18sp"
+                            android:textSize="@dimen/text_size_title"
                             android:gravity="center"
                             android:layout_marginEnd="@dimen/space_md" />
 
@@ -239,7 +239,7 @@
                             android:layout_height="wrap_content"
                             android:text="@string/common_icon_check"
                             android:textColor="@android:color/holo_green_dark"
-                            android:textSize="18sp"
+                            android:textSize="@dimen/text_size_title"
                             android:visibility="gone" />
 
                     </LinearLayout>
@@ -253,8 +253,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_20dp"
-                app:cardElevation="0dp"
-                app:strokeWidth="1dp"
+                app:cardElevation="@dimen/elevation_none"
+                app:strokeWidth="@dimen/card_stroke_width"
                 app:strokeColor="?attr/colorOutlineVariant">
 
                 <LinearLayout
@@ -317,8 +317,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="@dimen/space_12dp"
-                    app:cardElevation="0dp"
-                    app:strokeWidth="1dp"
+                    app:cardElevation="@dimen/elevation_none"
+                    app:strokeWidth="@dimen/card_stroke_width"
                     app:strokeColor="?attr/colorOutlineVariant">
 
                     <LinearLayout
@@ -364,14 +364,14 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="@string/common_icon_chevron_right"
-                                android:textSize="20sp"
+                                android:textSize="@dimen/text_size_headline"
                                 android:textColor="?android:attr/textColorSecondary" />
 
                         </LinearLayout>
 
                         <View
                             android:layout_width="match_parent"
-                            android:layout_height="1dp"
+                            android:layout_height="@dimen/divider_height"
                             android:layout_marginStart="@dimen/space_md"
                             android:background="?attr/colorOutlineVariant" />
 
@@ -414,7 +414,7 @@
 
                         <View
                             android:layout_width="match_parent"
-                            android:layout_height="1dp"
+                            android:layout_height="@dimen/divider_height"
                             android:layout_marginStart="@dimen/space_md"
                             android:background="?attr/colorOutlineVariant" />
 
@@ -473,8 +473,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="@dimen/space_12dp"
-                    app:cardElevation="0dp"
-                    app:strokeWidth="1dp"
+                    app:cardElevation="@dimen/elevation_none"
+                    app:strokeWidth="@dimen/card_stroke_width"
                     app:strokeColor="?attr/colorOutlineVariant">
 
                     <LinearLayout
@@ -484,64 +484,64 @@
 
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_connections" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_identities" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_keys" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_snippets" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_themes" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_host_keys" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_groups" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_workspaces" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_macros" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_monitor_slots" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_hypervisors" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_hypervisor_accounts" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_vnc_hosts" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_vnc_identities" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_cloud_accounts" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_certificates" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_port_forwards" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_network_routes" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_containers" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_pane_groups" />
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
                         <include layout="@layout/item_sync_toggle"
                             android:id="@+id/row_sync_telnet_hosts" />
 
@@ -563,8 +563,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="@dimen/space_12dp"
-                    app:cardElevation="0dp"
-                    app:strokeWidth="1dp"
+                    app:cardElevation="@dimen/elevation_none"
+                    app:strokeWidth="@dimen/card_stroke_width"
                     app:strokeColor="?attr/colorOutlineVariant">
 
                     <LinearLayout
@@ -603,8 +603,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="@dimen/space_lg"
-                    app:cardElevation="0dp"
-                    app:strokeWidth="1dp"
+                    app:cardElevation="@dimen/elevation_none"
+                    app:strokeWidth="@dimen/card_stroke_width"
                     app:strokeColor="?attr/colorOutlineVariant">
 
                     <LinearLayout
@@ -623,7 +623,7 @@
                             android:clickable="true"
                             android:focusable="true" />
 
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
 
                         <TextView
                             android:id="@+id/btn_force_download"
@@ -636,7 +636,7 @@
                             android:clickable="true"
                             android:focusable="true" />
 
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
 
                         <TextView
                             android:id="@+id/btn_view_sync_log"
@@ -649,7 +649,7 @@
                             android:clickable="true"
                             android:focusable="true" />
 
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
+                        <View android:layout_width="match_parent" android:layout_height="@dimen/divider_height" android:layout_marginStart="@dimen/space_md" android:background="?attr/colorOutlineVariant" />
 
                         <TextView
                             android:id="@+id/btn_clear_config"

@@ -28,7 +28,7 @@
         <item
             android:id="@+id/nav_quick_connect"
             android:icon="@drawable/ic_flash"
-            android:title="@string/nav_item_quick_connect" />
+            android:title="@string/quick_connect_title" />
     </group>
 
     <item android:title="@string/nav_group_manage">
@@ -44,7 +44,7 @@
         </menu>
     </item>
 
-    <item android:title="@string/nav_group_connect">
+    <item android:title="@string/connect_button">
         <menu>
             <item
                 android:id="@+id/nav_port_forwarding"
@@ -86,7 +86,7 @@
         <item
             android:id="@+id/nav_settings"
             android:icon="@drawable/ic_settings"
-            android:title="@string/nav_item_settings" />
+            android:title="@string/settings_title" />
     </group>
 
     <item android:title="@string/nav_group_diagnostics">

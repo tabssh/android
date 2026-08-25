@@ -27,6 +27,7 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Hosts tab's VNC sub-tab — relocated from the standalone `VncHostsActivity`
@@ -57,7 +58,7 @@ class VncHostsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        app = requireActivity().application as TabSSHApplication
+        app = tabSSHApp
 
         recyclerView = view.findViewById(R.id.recycler_vnc_hosts)
         emptyState = view.findViewById(R.id.empty_state)
@@ -187,7 +188,7 @@ class VncHostsFragment : Fragment() {
 
     private fun confirmDelete(host: VncHost) {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle(getString(R.string.vnc_host_delete_title, host.name))
+            .setTitle(getString(R.string.domain_delete_title, host.name))
             .setMessage(getString(R.string.vnc_host_delete_message))
             .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 viewLifecycleOwner.lifecycleScope.launch {
@@ -203,7 +204,7 @@ class VncHostsFragment : Fragment() {
                     } catch (e: Exception) {
                         Logger.e(TAG, "Failed to delete VNC host", e)
                         if (!isAlive) return@launch
-                        Toast.makeText(requireContext(), getString(R.string.vnc_host_delete_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                        Toast.makeText(requireContext(), getString(R.string.domain_delete_failed_fmt, e.message), Toast.LENGTH_LONG).show()
                     }
                 }
             }

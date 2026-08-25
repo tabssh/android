@@ -23,6 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Create or edit a [VncHost] record.
@@ -31,6 +32,10 @@ import java.util.UUID
  *   [EXTRA_VNC_HOST_ID] — String UUID; omit for new host.
  */
 class VncHostEditActivity : TabSSHActivity() {
+
+    // Edit screens use an up arrow instead of the hamburger, routed
+    // through the same OnBackPressedDispatcher as system Back.
+    override val navigationAffordance: NavigationAffordance = NavigationAffordance.UP
 
     companion object {
         private const val TAG = "VncHostEditActivity"
@@ -52,7 +57,9 @@ class VncHostEditActivity : TabSSHActivity() {
 
     private lateinit var app: TabSSHApplication
     private lateinit var toolbar: MaterialToolbar
+    private lateinit var layoutName: TextInputLayout
     private lateinit var editName: TextInputEditText
+    private lateinit var layoutHost: TextInputLayout
     private lateinit var editHost: TextInputEditText
     private lateinit var layoutPort: TextInputLayout
     private lateinit var editPort: TextInputEditText
@@ -84,10 +91,12 @@ class VncHostEditActivity : TabSSHActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_vnc_host_edit)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         toolbar = findViewById(R.id.toolbar)
+        layoutName = findViewById(R.id.layout_name)
         editName = findViewById(R.id.edit_name)
+        layoutHost = findViewById(R.id.layout_host)
         editHost = findViewById(R.id.edit_host)
         layoutPort = findViewById(R.id.layout_port)
         editPort = findViewById(R.id.edit_port)
@@ -117,6 +126,7 @@ class VncHostEditActivity : TabSSHActivity() {
         if (isEditing) btnDelete.visibility = View.VISIBLE
 
         switchUseDisplay.setOnCheckedChangeListener { _, checked ->
+            hasUnsavedChanges = true
             layoutPort.visibility = if (checked) View.GONE else View.VISIBLE
             layoutDisplay.visibility = if (checked) View.VISIBLE else View.GONE
         }
@@ -125,8 +135,34 @@ class VncHostEditActivity : TabSSHActivity() {
         loadIdentities(editingHostId)
 
         btnSave.setOnClickListener { saveHost() }
-        btnCancel.setOnClickListener { finish() }
+        btnCancel.setOnClickListener { confirmDiscardIfNeeded { finish() } }
         btnDelete.setOnClickListener { confirmDelete() }
+
+        setupUnsavedChangesGuard()
+    }
+
+    /**
+     * Wires every primary form field to flip [hasUnsavedChanges] and opts
+     * this screen into the shared discard-confirmation guard.
+     */
+    private fun setupUnsavedChangesGuard() {
+        val watcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) { hasUnsavedChanges = true }
+        }
+        editName.addTextChangedListener(watcher)
+        editHost.addTextChangedListener(watcher)
+        editPort.addTextChangedListener(watcher)
+        editDisplay.addTextChangedListener(watcher)
+        dropdownSecurity.addTextChangedListener(watcher)
+        editColorTag.addTextChangedListener(watcher)
+        editNotes.addTextChangedListener(watcher)
+        editPassword.addTextChangedListener(watcher)
+        switchTlsVerify.setOnCheckedChangeListener { _, _ -> hasUnsavedChanges = true }
+        switchKeepAlive.setOnCheckedChangeListener { _, _ -> hasUnsavedChanges = true }
+
+        enableUnsavedChangesGuard()
     }
 
     // ── Setup ────────────────────────────────────────────────────────────────
@@ -151,6 +187,7 @@ class VncHostEditActivity : TabSSHActivity() {
             dropdownIdentity.setAdapter(adapter)
             dropdownIdentity.setText(getString(R.string.vnc_host_edit_identity_none), false)
             dropdownIdentity.setOnItemClickListener { _, _, position, _ ->
+                hasUnsavedChanges = true
                 selectedIdentityId = if (position == 0) null else identities[position - 1].id
             }
 
@@ -200,20 +237,37 @@ class VncHostEditActivity : TabSSHActivity() {
             if (storedPw != null) {
                 layoutPassword.helperText = getString(R.string.vnc_host_edit_password_helper_existing)
             }
+
+            // Every field/switch/dropdown set above flips the dirty-flag
+            // listeners installed in setupUnsavedChangesGuard() — DB-driven
+            // population is not a user edit, so clear the flag once done.
+            hasUnsavedChanges = false
         }
+    }
+
+    /**
+     * Clears any previously shown inline validation errors so a fixed field
+     * doesn't keep showing a stale Material error state.
+     */
+    private fun clearFieldErrors() {
+        layoutName.error = null
+        layoutHost.error = null
+        layoutDisplay.error = null
+        layoutPort.error = null
     }
 
     // ── Save / Delete ─────────────────────────────────────────────────────────
 
     private fun saveHost() {
+        clearFieldErrors()
         val name = editName.text?.toString()?.trim()
         if (name.isNullOrBlank()) {
-            editName.error = getString(R.string.xcpng_name_required)
+            layoutName.error = getString(R.string.xcpng_name_required)
             return
         }
         val host = editHost.text?.toString()?.trim()
         if (host.isNullOrBlank()) {
-            editHost.error = getString(R.string.vnc_host_edit_host_required)
+            layoutHost.error = getString(R.string.vnc_host_edit_host_required)
             return
         }
         val useDisplay = switchUseDisplay.isChecked
@@ -224,11 +278,11 @@ class VncHostEditActivity : TabSSHActivity() {
         // only surfaced later as an opaque socket-connect failure.
         if (useDisplay) {
             if (displayNumber == null || displayNumber !in 0..MAX_DISPLAY_NUMBER) {
-                editDisplay.error = getString(R.string.vnc_host_edit_display_range_fmt, MAX_DISPLAY_NUMBER)
+                layoutDisplay.error = getString(R.string.vnc_host_edit_display_range_fmt, MAX_DISPLAY_NUMBER)
                 return
             }
         } else if (port !in 1..65535) {
-            editPort.error = getString(R.string.vnc_host_edit_port_error)
+            layoutPort.error = getString(R.string.vnc_host_edit_port_error)
             return
         }
 
@@ -279,10 +333,11 @@ class VncHostEditActivity : TabSSHActivity() {
                     }
                 }
                 Toast.makeText(this@VncHostEditActivity, getString(R.string.remote_editor_saved), Toast.LENGTH_SHORT).show()
+                hasUnsavedChanges = false
                 finish()
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to save VNC host", e)
-                Toast.makeText(this@VncHostEditActivity, getString(R.string.vps_host_edit_save_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                Toast.makeText(this@VncHostEditActivity, getString(R.string.cloud_save_failed, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -312,7 +367,7 @@ class VncHostEditActivity : TabSSHActivity() {
                 finish()
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to delete VNC host", e)
-                Toast.makeText(this@VncHostEditActivity, getString(R.string.vps_host_edit_delete_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                Toast.makeText(this@VncHostEditActivity, getString(R.string.domain_delete_failed_fmt, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }

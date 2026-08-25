@@ -59,6 +59,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Multi-host monitoring dashboard.
@@ -120,8 +121,10 @@ class MultiHostDashboardActivity : TabSSHActivity() {
             /** null = ungrouped. */
             val groupId: String?
         ) : DashboardItem()
-        /** Shown when the dashboard is empty. */
-        object EmptyState : DashboardItem()
+        /** Shown when the dashboard has no hosts, or when the last load failed
+         *  ([errorMessage] non-null) — kept visually distinct from a genuine empty
+         *  list so a load failure never reads as "nothing here yet". */
+        data class EmptyState(val errorMessage: String? = null) : DashboardItem()
     }
 
     companion object {
@@ -378,6 +381,10 @@ class MultiHostDashboardActivity : TabSSHActivity() {
     /** Whether the "Ungrouped" header is collapsed. */
     private var ungroupedCollapsed = false
 
+    /** Set when the last profile load failed; shown via [DashboardItem.EmptyState]
+     *  instead of silently rendering the same view as a genuine empty dashboard. */
+    private var lastLoadError: String? = null
+
     private val pumpScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val jobs          = mutableMapOf<String, Job>()
     private val ownedSessions = mutableMapOf<String, SSHConnection>()
@@ -392,7 +399,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        app = application as TabSSHApplication
+        app = tabSSHApp
         binding = ActivityMultiHostDashboardBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -509,14 +516,25 @@ class MultiHostDashboardActivity : TabSSHActivity() {
         }
 
         lifecycleScope.launch {
+            var loadFailed = false
             val profiles = withContext(Dispatchers.IO) {
                 try {
                     app.database.connectionDao().getAllConnectionsList()
                         .filter { it.id in allIds }
                 } catch (e: Exception) {
-                    Logger.e(TAG, "loadProfiles failed", e); emptyList()
+                    Logger.e(TAG, "loadProfiles failed", e)
+                    loadFailed = true
+                    emptyList()
                 }
             }
+            if (loadFailed) {
+                // Do not treat a DB read failure as "every host was deleted" —
+                // surface the error instead of wiping groups on a transient error.
+                lastLoadError = getString(R.string.load_state_error_generic)
+                rebuildAndSubmit()
+                return@launch
+            }
+            lastLoadError = null
             profiles.forEach { profileCache[it.id] = it }
 
             // Load monitor slots
@@ -846,7 +864,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
                 .setMultiChoiceItems(labels, checked) { _, idx, isChecked ->
                     checked[idx] = isChecked
                 }
-                .setPositiveButton(getString(R.string.conflict_button_apply)) { _, _ ->
+                .setPositiveButton(getString(R.string.terminal_apply)) { _, _ ->
                     lifecycleScope.launch {
                         applyHostPickerResult(targetGroupId, all, checked)
                     }
@@ -1094,7 +1112,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
             }
         }
 
-        if (list.isEmpty()) list.add(DashboardItem.EmptyState)
+        if (list.isEmpty()) list.add(DashboardItem.EmptyState(lastLoadError))
         return list
     }
 
@@ -1115,7 +1133,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
             is DashboardItem.GroupHeader    -> VT_GROUP_HEADER
             is DashboardItem.UngroupedHeader -> VT_UNGROUPED_HDR
             is DashboardItem.Host           -> VT_HOST
-            DashboardItem.EmptyState        -> VT_EMPTY
+            is DashboardItem.EmptyState     -> VT_EMPTY
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -1140,7 +1158,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
                 is DashboardItem.GroupHeader     -> (holder as GroupHeaderHolder).bind(item)
                 is DashboardItem.UngroupedHeader -> (holder as GroupHeaderHolder).bindUngrouped(item)
                 is DashboardItem.Host            -> (holder as HostCardHolder).bind(item)
-                DashboardItem.EmptyState         -> (holder as EmptyStateHolder).bind()
+                is DashboardItem.EmptyState      -> (holder as EmptyStateHolder).bind(item.errorMessage)
             }
         }
 
@@ -1224,9 +1242,9 @@ class MultiHostDashboardActivity : TabSSHActivity() {
         private fun metricColor(value: Int, warnAt: Int, critAt: Int): Int {
             val ctx = itemView.context
             return when {
-                value > critAt -> ContextCompat.getColor(ctx, R.color.error)
-                value > warnAt -> ContextCompat.getColor(ctx, R.color.warning)
-                else           -> ContextCompat.getColor(ctx, R.color.success)
+                value > critAt -> ContextCompat.getColor(ctx, R.color.status_error)
+                value > warnAt -> ContextCompat.getColor(ctx, R.color.status_warning)
+                else           -> ContextCompat.getColor(ctx, R.color.status_success)
             }
         }
 
@@ -1389,13 +1407,22 @@ class MultiHostDashboardActivity : TabSSHActivity() {
     }
 
     inner class EmptyStateHolder(view: View) : RecyclerView.ViewHolder(view) {
-        fun bind() {
+        /** [errorMessage] non-null renders the load-error variant: error-colored
+         *  text plus a tap-to-retry hint, distinct from the genuine empty state. */
+        fun bind(errorMessage: String?) {
             (itemView as? TextView)?.apply {
-                text = context.getString(R.string.dashboard_empty_state)
                 gravity = android.view.Gravity.CENTER
                 setPadding(dp(this@MultiHostDashboardActivity, 32))
-                setTextColor(ContextCompat.getColor(context, R.color.on_surface_variant))
                 textSize = 14f
+                if (errorMessage != null) {
+                    text = context.getString(R.string.dashboard_load_error_fmt, errorMessage)
+                    setTextColor(ContextCompat.getColor(context, R.color.error))
+                    itemView.setOnClickListener { loadPersistedState() }
+                } else {
+                    text = context.getString(R.string.dashboard_empty_state)
+                    setTextColor(ContextCompat.getColor(context, R.color.on_surface_variant))
+                    itemView.setOnClickListener(null)
+                }
             }
         }
     }
@@ -1453,7 +1480,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
             is DashboardItem.GroupHeader     -> "gh_${item.group.id}"
             is DashboardItem.UngroupedHeader -> "ugh"
             is DashboardItem.Host            -> "h_${item.profile.id}"
-            DashboardItem.EmptyState         -> "empty"
+            is DashboardItem.EmptyState      -> if (item.errorMessage != null) "error" else "empty"
         }
     }
 

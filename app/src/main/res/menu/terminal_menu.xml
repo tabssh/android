@@ -4,7 +4,7 @@
 
     <item
         android:id="@+id/action_new_tab"
-        android:title="New Tab"
+        android:title="@string/new_tab"
         android:icon="@drawable/ic_add"
         app:showAsAction="ifRoom" />
 
@@ -13,7 +13,7 @@
          collapse into the overflow menu on narrow toolbars. -->
     <item
         android:id="@+id/action_close_tab"
-        android:title="Close Tab"
+        android:title="@string/close_tab"
         android:icon="@drawable/ic_close"
         app:showAsAction="always" />
 
@@ -25,30 +25,30 @@
 
     <item
         android:id="@+id/action_disconnect_all"
-        android:title="Disconnect All"
+        android:title="@string/terminal_menu_disconnect_all"
         android:icon="@drawable/ic_disconnect"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_copy"
-        android:title="Copy"
+        android:title="@string/copy"
         android:icon="@drawable/ic_copy"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_paste"
-        android:title="Paste"
+        android:title="@string/paste"
         android:icon="@drawable/ic_paste"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_select_all"
-        android:title="Select All"
+        android:title="@string/select_all"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_share_session"
-        android:title="Share Session"
+        android:title="@string/terminal_menu_share_session"
         android:icon="@drawable/ic_share"
         app:showAsAction="never" />
     
@@ -60,69 +60,69 @@
     
     <item
         android:id="@+id/action_toggle_recording"
-        android:title="Start Recording"
+        android:title="@string/terminal_menu_start_recording"
         app:showAsAction="never" />
     
     <item
         android:id="@+id/action_view_transcripts"
-        android:title="View Transcripts"
+        android:title="@string/terminal_menu_view_transcripts"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_command_palette"
-        android:title="Command Palette (Ctrl+K)"
+        android:title="@string/terminal_menu_command_palette"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_quick_switcher"
-        android:title="Quick Switcher (Ctrl+J)"
+        android:title="@string/terminal_menu_quick_switcher"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_broadcast_input"
-        android:title="Broadcast input: choose targets…"
+        android:title="@string/terminal_menu_broadcast_choose_targets"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_save_workspace"
-        android:title="Save current tabs as workspace…"
+        android:title="@string/terminal_menu_save_workspace"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_open_workspace"
-        android:title="Open workspace…"
+        android:title="@string/terminal_menu_open_workspace"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_history_palette"
-        android:title="Search history (Ctrl+R)…"
+        android:title="@string/terminal_menu_search_history"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_split_bottom"
-        android:title="Split horizontally (open below)…"
+        android:title="@string/terminal_menu_split_horizontal"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_unsplit"
-        android:title="Close split pane"
+        android:title="@string/terminal_menu_close_split_pane"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_mosh_handoff"
-        android:title="Mosh handoff…"
+        android:title="@string/terminal_menu_mosh_handoff"
         app:showAsAction="never" />
 
     <!-- Issue #173 — recordable macros. Two entries so the user can
          start/stop a recording and pick a saved macro to replay. -->
     <item
         android:id="@+id/action_macro_record"
-        android:title="Record macro…"
+        android:title="@string/terminal_menu_record_macro"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_macro_replay"
-        android:title="Replay macro…"
+        android:title="@string/terminal_menu_replay_macro"
         app:showAsAction="never" />
 
 </menu>

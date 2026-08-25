@@ -4,107 +4,107 @@
 
     <item
         android:id="@+id/action_quick_connect"
-        android:title="Quick Connect"
+        android:title="@string/quick_connect_title"
         android:icon="@android:drawable/ic_menu_send"
         app:showAsAction="ifRoom" />
 
     <item
         android:id="@+id/action_search"
-        android:title="Search"
+        android:title="@string/menu_search"
         android:icon="@android:drawable/ic_menu_search"
         app:showAsAction="ifRoom|collapseActionView"
         app:actionViewClass="androidx.appcompat.widget.SearchView" />
 
     <item
         android:id="@+id/action_sort"
-        android:title="Sort"
+        android:title="@string/menu_sort"
         android:icon="@android:drawable/ic_menu_sort_alphabetically"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_create_group"
-        android:title="Create Group"
+        android:title="@string/group_mgmt_create_group_title"
         android:icon="@android:drawable/ic_input_add"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_manage_snippets"
-        android:title="Manage Snippets"
+        android:title="@string/activity_label_manage_snippets"
         android:icon="@android:drawable/ic_menu_edit"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_cluster_commands"
-        android:title="Cluster Commands"
+        android:title="@string/activity_label_cluster_commands"
         android:icon="@android:drawable/ic_menu_share"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_hypervisors"
-        android:title="Hypervisor Management"
+        android:title="@string/hypervisor_management_title"
         android:icon="@android:drawable/ic_menu_manage"
         app:showAsAction="never">
         <menu>
             <item
                 android:id="@+id/action_proxmox"
-                android:title="Proxmox"
+                android:title="@string/hypervisor_type_proxmox"
                 android:icon="@android:drawable/ic_menu_compass" />
             <item
                 android:id="@+id/action_xcpng"
-                android:title="XCP-ng"
+                android:title="@string/hypervisor_type_xcpng"
                 android:icon="@android:drawable/ic_menu_compass" />
             <item
                 android:id="@+id/action_vmware"
-                android:title="VMware"
+                android:title="@string/hypervisor_type_vmware"
                 android:icon="@android:drawable/ic_menu_compass" />
         </menu>
     </item>
 
     <item
         android:id="@+id/action_view_logs"
-        android:title="View Logs"
+        android:title="@string/main_menu_view_logs"
         android:icon="@android:drawable/ic_menu_info_details"
         app:showAsAction="never" />
     
     <item
         android:id="@+id/action_settings"
-        android:title="Settings"
+        android:title="@string/settings_title"
         android:icon="@android:drawable/ic_menu_preferences"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_manage_keys"
-        android:title="Manage SSH Keys"
+        android:title="@string/main_menu_manage_ssh_keys"
         android:icon="@android:drawable/ic_lock_lock"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_import_connections"
-        android:title="Import Connections"
+        android:title="@string/main_menu_import_connections"
         android:icon="@android:drawable/ic_menu_upload"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_import_ssh_config"
-        android:title="Import SSH Config"
+        android:title="@string/import_export_import_ssh_config_title"
         android:icon="@android:drawable/ic_menu_upload"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_export_connections"
-        android:title="Export Connections"
+        android:title="@string/main_menu_export_connections"
         android:icon="@android:drawable/ic_menu_save"
         app:showAsAction="never" />
     
     <item
         android:id="@+id/action_manage_identities"
-        android:title="Manage Identities"
+        android:title="@string/main_menu_manage_identities"
         android:icon="@android:drawable/ic_menu_myplaces"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_about"
-        android:title="About"
+        android:title="@string/nav_item_about"
         android:icon="@android:drawable/ic_menu_info_details"
         app:showAsAction="never" />
 </menu>

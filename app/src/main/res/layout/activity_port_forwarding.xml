@@ -122,7 +122,8 @@
                 android:id="@+id/recycler_routes"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:nestedScrollingEnabled="false"
+                android:maxHeight="300dp"
+                android:nestedScrollingEnabled="true"
                 android:clipToPadding="false"
                 android:paddingBottom="@dimen/space_sm"
                 tools:listitem="@layout/item_network_route" />
@@ -205,7 +206,8 @@
                 android:id="@+id/recycler_forwards"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:nestedScrollingEnabled="false"
+                android:maxHeight="300dp"
+                android:nestedScrollingEnabled="true"
                 android:clipToPadding="false"
                 android:paddingTop="@dimen/space_xs"
                 tools:listitem="@layout/item_port_forward" />

@@ -95,7 +95,7 @@ class TranscriptViewerActivity : TabSSHActivity() {
     private fun deleteTranscript(transcript: TranscriptManager.Transcript) {
         MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.transcript_viewer_delete_title))
-            .setMessage(getString(R.string.transcript_viewer_delete_message_fmt, transcript.name))
+            .setMessage(getString(R.string.cloud_delete_title, transcript.name))
             .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 // File deletion runs off Main — TranscriptManager.deleteTranscript
                 // walks the filesystem and can block on slow storage.

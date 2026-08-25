@@ -24,10 +24,14 @@ import io.github.tabssh.storage.database.entities.VncHost
 import io.github.tabssh.ui.adapters.MainPagerAdapter
 import io.github.tabssh.ui.adapters.MainTab
 import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.hypervisor.console.ConsoleErrorClassifier
+import io.github.tabssh.utils.ThrowableMapper
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Main activity with 5-tab JuiceSSH-inspired layout
@@ -46,7 +50,7 @@ class MainActivity : TabSSHActivity() {
 
         Logger.d("MainActivity", "onCreate - New 5-tab layout")
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         // Sweep any per-host SSH notifications that were orphaned by a prior
         // force-stop or OOM kill (onDestroy never ran → notifications survived
@@ -165,7 +169,7 @@ class MainActivity : TabSSHActivity() {
                             isEnabled = false
                             onBackPressedDispatcher.onBackPressed()
                         }
-                        .setNegativeButton(R.string.action_cancel, null)
+                        .setNegativeButton(R.string.cancel, null)
                         .show()
                 } else {
                     isEnabled = false
@@ -307,10 +311,10 @@ class MainActivity : TabSSHActivity() {
                     }
                 }
             } catch (e: Exception) {
-                Logger.e("MainActivity", "Failed to get hypervisors by type", e)
+                val mapped = ThrowableMapper.map(this@MainActivity, "MainActivity", e, "Failed to get hypervisors by type")
                 android.widget.Toast.makeText(
                     this@MainActivity,
-                    getString(R.string.main_load_hypervisors_failed, e.message),
+                    getString(R.string.main_load_hypervisors_failed, mapped.message),
                     android.widget.Toast.LENGTH_SHORT
                 ).show()
             }
@@ -473,8 +477,8 @@ class MainActivity : TabSSHActivity() {
                                     }
                                 )
                             } catch (e: Exception) {
-                                Logger.e("MainActivity", "Failed to save VNC host", e)
-                                Toast.makeText(this@MainActivity, getString(R.string.main_quick_connect_save_failed, e.message), Toast.LENGTH_LONG).show()
+                                val mapped = ThrowableMapper.map(this@MainActivity, "MainActivity", e, "Failed to save VNC host")
+                                Toast.makeText(this@MainActivity, getString(R.string.main_quick_connect_save_failed, mapped.message), Toast.LENGTH_LONG).show()
                             }
                         }
                     } else {
@@ -513,7 +517,11 @@ class MainActivity : TabSSHActivity() {
                                 )
                             } catch (e: Exception) {
                                 Logger.e("MainActivity", "VNC connect failed", e)
-                                Toast.makeText(this@MainActivity, getString(R.string.main_quick_connect_vnc_connection_failed, raw, port, e.message), Toast.LENGTH_LONG).show()
+                                val info = ConsoleErrorClassifier.classify(this@MainActivity, "VNC", e)
+                                showError(
+                                    getString(R.string.main_quick_connect_vnc_connection_failed, raw, port, info.userMessage),
+                                    copyText = info.technicalDetails
+                                )
                             }
                         }
                     }
@@ -579,8 +587,8 @@ class MainActivity : TabSSHActivity() {
                 val intent = TabTerminalActivity.createIntent(this@MainActivity, profile, autoConnect = true)
                 startActivity(intent)
             } catch (e: Exception) {
-                Logger.e("MainActivity", "Failed to save connection", e)
-                Toast.makeText(this@MainActivity, getString(R.string.main_quick_connect_save_failed, e.message), Toast.LENGTH_LONG).show()
+                val mapped = ThrowableMapper.map(this@MainActivity, "MainActivity", e, "Failed to save connection")
+                Toast.makeText(this@MainActivity, getString(R.string.main_quick_connect_save_failed, mapped.message), Toast.LENGTH_LONG).show()
             }
         }
     }

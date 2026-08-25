@@ -32,16 +32,16 @@
 
             <ImageButton
                 android:id="@+id/btn_edit"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="@dimen/min_touch_target"
+                android:layout_height="@dimen/min_touch_target"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@android:drawable/ic_menu_edit"
                 android:contentDescription="@string/edit" />
 
             <ImageButton
                 android:id="@+id/btn_delete"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="@dimen/min_touch_target"
+                android:layout_height="@dimen/min_touch_target"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@android:drawable/ic_menu_delete"
                 android:contentDescription="@string/delete" />
@@ -52,7 +52,7 @@
             android:id="@+id/text_username"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/item_hypervisor_account_placeholder_username"
+            android:text="@string/username_hint"
             android:textSize="14sp"
             android:layout_marginTop="@dimen/space_xs"
             android:textColor="?attr/colorOnSurface" />

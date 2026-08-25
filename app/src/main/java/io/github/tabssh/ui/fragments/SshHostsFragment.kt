@@ -36,8 +36,6 @@ import io.github.tabssh.ui.activities.TabTerminalActivity
 import io.github.tabssh.ui.adapters.ConnectionAdapter
 import io.github.tabssh.ui.adapters.GroupedConnectionAdapter
 import io.github.tabssh.ui.models.ConnectionListItem
-import io.github.tabssh.ui.tabs.Tab
-import io.github.tabssh.ui.tabs.connectionDisplayName
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
 import androidx.room.withTransaction
@@ -46,6 +44,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Hosts tab's SSH sub-tab — grouped list, sort, bulk edit, and multi-select
@@ -62,16 +61,6 @@ class SshHostsFragment : Fragment() {
     private lateinit var adapter: ConnectionAdapter
     private var groupedAdapter: GroupedConnectionAdapter? = null
 
-    // Issue #165 + #175 — "Active Sessions" strip above the connection
-    // list, deferred behind a ViewStub. Lateinit on the stub itself;
-    // the inflated views are populated only after first non-empty tabs.
-    private lateinit var activeSessionsStub: android.view.ViewStub
-    private var activeSessionsContainer: View? = null
-    private var activeSessionsRecycler: RecyclerView? = null
-    private var activeSessionAdapter: io.github.tabssh.ui.adapters.ActiveSessionAdapter? = null
-    private val activeTabTitleObservers = mutableMapOf<String, kotlinx.coroutines.Job>()
-    private val activeTabStateObservers = mutableMapOf<String, kotlinx.coroutines.Job>()
-    
     private var allConnections = listOf<ConnectionProfile>()
     private var allGroups = listOf<ConnectionGroup>()
     private var allIdentities = listOf<Identity>()
@@ -114,16 +103,14 @@ class SshHostsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
-        app = requireActivity().application as TabSSHApplication
+        app = tabSSHApp
         
         toolbar = view.findViewById(R.id.toolbar_connections)
         recyclerView = view.findViewById(R.id.recycler_connections)
         emptyLayout = view.findViewById(R.id.layout_empty_connections)
-        activeSessionsStub = view.findViewById(R.id.stub_active_sessions)
 
         setupToolbar()
         setupRecyclerView()
-        setupActiveSessionsStrip()
         loadSortPreference()
         loadAllConnections()
         
@@ -224,212 +211,6 @@ class SshHostsFragment : Fragment() {
         currentGroupSortOption = GroupSortOption.entries.find { it.name == groupsPref } ?: GroupSortOption.NAME_ASC
     }
 
-
-    /**
-     * Issue #165 — wire the "Active Sessions" strip. Subscribes to
-     * `app.tabManager.allTabsFlow` (every kind of tab — SSH, VNC, and
-     * hypervisor console) and to each tab's per-instance `title` +
-     * `connectionState` flows so the strip updates when a remote sets an
-     * OSC 0/2 title or a tab transitions state. Disambiguates same-
-     * default-title tabs (multiple tabs to one host with no OSC title)
-     * by appending `(#N)`.
-     */
-    private fun setupActiveSessionsStrip() {
-        // ViewStub-deferred — the strip's RecyclerView/header/container
-        // are NOT inflated yet. Just collect allTabsFlow; the first non-empty
-        // emission triggers ensureActiveSessionsInflated().
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                app.tabManager.allTabsFlow.collect { tabs -> rebindActiveSessions(tabs) }
-            }
-        }
-    }
-
-    /** Per-instance title flow for any tab kind — chip labels update live. */
-    private fun Tab.titleFlow() = when (this) {
-        is Tab.Ssh -> sshTab.title
-        is Tab.Vnc -> vncTab.title
-        is Tab.Console -> consoleTab.title
-        is Tab.Panes -> panesTab.title
-    }
-
-    /** Per-instance connection-state flow for any tab kind — drives the dot. */
-    private fun Tab.stateFlow() = when (this) {
-        is Tab.Ssh -> sshTab.connectionState
-        is Tab.Vnc -> vncTab.connectionState
-        is Tab.Console -> consoleTab.connectionState
-        // A Panes tab has no single connection state — its own panes each
-        // track theirs. Surface CONNECTED whenever at least one pane is
-        // connected so the strip doesn't hide/misrepresent an active group;
-        // DISCONNECTED only once every pane has dropped.
-        is Tab.Panes -> kotlinx.coroutines.flow.MutableStateFlow(
-            if (panesTab.currentEntries().any {
-                    it.sshTab?.connectionState?.value == io.github.tabssh.ssh.connection.ConnectionState.CONNECTED
-                }
-            ) io.github.tabssh.ssh.connection.ConnectionState.CONNECTED
-            else io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED
-        )
-    }
-
-    /**
-     * Issue #175 — first-call inflates the ViewStub, builds the adapter +
-     * LayoutManager. No-op on subsequent calls. Keeps cold-start cost at
-     * zero when the user has no running tabs (the common case).
-     */
-    private fun ensureActiveSessionsInflated() {
-        if (activeSessionsContainer != null) return
-        val inflated = activeSessionsStub.inflate()
-        activeSessionsContainer = inflated
-        activeSessionsRecycler = inflated.findViewById(R.id.recycler_active_sessions)
-        val recycler = activeSessionsRecycler!!
-        val adapter = io.github.tabssh.ui.adapters.ActiveSessionAdapter { tabId ->
-            val intent = android.content.Intent(requireContext(), TabTerminalActivity::class.java).apply {
-                putExtra(TabTerminalActivity.EXTRA_TAB_ID, tabId)
-                addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-            }
-            startActivity(intent)
-        }
-        recycler.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(
-            requireContext(), androidx.recyclerview.widget.LinearLayoutManager.HORIZONTAL, false
-        )
-        recycler.adapter = adapter
-        activeSessionAdapter = adapter
-        inflated.findViewById<View>(R.id.text_active_sessions_see_all)
-            .setOnClickListener { showAllActiveSessionsDialog() }
-    }
-
-    /**
-     * "See all" expansion — the strip is a horizontal preview that clips
-     * once there are more active sessions than fit on screen. This dialog
-     * lists every active session (SSH/VNC/Console/Panes) vertically,
-     * unclipped, reusing the same label logic as the strip.
-     */
-    private fun showAllActiveSessionsDialog() {
-        val tabs = app.tabManager.getAllTabsSealed().filter { tab ->
-            tab.stateFlow().value != io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED &&
-                (tab as? Tab.Ssh)?.sshTab?.profile?.id?.startsWith("docker-exec:") != true
-        }
-        if (tabs.isEmpty()) return
-
-        val labels = disambiguatedActiveSessionLabels(tabs)
-        val rows = tabs.map { tab ->
-            io.github.tabssh.ui.adapters.AllActiveSessionsAdapter.Row(
-                tabId = tab.tabId,
-                title = labels.getValue(tab.tabId),
-                subtitle = when (tab) {
-                    is Tab.Ssh -> getString(R.string.auth_tab_ssh)
-                    is Tab.Vnc -> getString(R.string.auth_tab_vnc)
-                    is Tab.Console -> getString(R.string.connections_session_type_console)
-                    is Tab.Panes -> getString(R.string.main_tab_panes)
-                },
-                state = tab.stateFlow().value
-            )
-        }
-
-        val dialogView = layoutInflater.inflate(R.layout.dialog_active_sessions_list, null, false)
-        val dialogRecycler = dialogView.findViewById<androidx.recyclerview.widget.RecyclerView>(
-            R.id.recycler_all_active_sessions
-        )
-        dialogRecycler.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(requireContext())
-        var dialogRef: androidx.appcompat.app.AlertDialog? = null
-        val dialogAdapter = io.github.tabssh.ui.adapters.AllActiveSessionsAdapter { tabId ->
-            dialogRef?.dismiss()
-            val intent = android.content.Intent(requireContext(), TabTerminalActivity::class.java).apply {
-                putExtra(TabTerminalActivity.EXTRA_TAB_ID, tabId)
-                addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-            }
-            startActivity(intent)
-        }
-        dialogRecycler.adapter = dialogAdapter
-        dialogAdapter.submit(rows)
-
-        dialogRef = com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.connections_active_sessions_dialog_title)
-            .setView(dialogView)
-            .setNegativeButton(R.string.close, null)
-            .show()
-    }
-
-    /**
-     * Shared label logic for the Active Sessions strip and its "See all"
-     * dialog. SSH: profile name else user@host (never the OSC terminal
-     * title). VNC/Console/Panes: the tab's own display title. Identical
-     * labels are disambiguated with a stable `(#N)` suffix.
-     */
-    private fun disambiguatedActiveSessionLabels(tabs: List<Tab>): Map<String, String> {
-        val rawDisplays = tabs.map { tab -> tab to tab.connectionDisplayName() }
-        val occurrences = rawDisplays.groupingBy { it.second }.eachCount()
-        val seen = mutableMapOf<String, Int>()
-        return rawDisplays.associate { (tab, display) ->
-            val total = occurrences[display] ?: 1
-            val label = if (total > 1) {
-                val n = (seen[display] ?: 0) + 1
-                seen[display] = n
-                getString(R.string.connections_session_duplicate_fmt, display, n)
-            } else {
-                display
-            }
-            tab.tabId to label
-        }
-    }
-
-    private fun rebindActiveSessions(tabs: List<Tab>) {
-        // Cancel observers for tabs that disappeared.
-        val live = tabs.map { it.tabId }.toSet()
-        (activeTabTitleObservers.keys - live).forEach { id ->
-            activeTabTitleObservers.remove(id)?.cancel()
-            activeTabStateObservers.remove(id)?.cancel()
-        }
-        // Subscribe to per-tab title + state for any new tab.
-        tabs.forEach { tab ->
-            if (tab.tabId !in activeTabTitleObservers) {
-                activeTabTitleObservers[tab.tabId] = viewLifecycleOwner.lifecycleScope.launch {
-                    tab.titleFlow().collect { renderActiveSessionRows() }
-                }
-                activeTabStateObservers[tab.tabId] = viewLifecycleOwner.lifecycleScope.launch {
-                    tab.stateFlow().collect { renderActiveSessionRows() }
-                }
-            }
-        }
-        renderActiveSessionRows()
-    }
-
-    private fun renderActiveSessionRows() {
-        // Only show tabs that are actively connecting or connected.
-        // DISCONNECTED tabs are dead slots — showing them after a notification
-        // disconnect misleads the user into thinking there is still a live session.
-        // Docker exec tabs (profile id "docker-exec:…") are excluded: Docker is
-        // a separate domain like hypervisors, not part of the SSH connection
-        // list, so its container shells don't belong in the sessions strip.
-        val tabs = app.tabManager.getAllTabsSealed().filter { tab ->
-            tab.stateFlow().value != io.github.tabssh.ssh.connection.ConnectionState.DISCONNECTED &&
-                (tab as? Tab.Ssh)?.sshTab?.profile?.id?.startsWith("docker-exec:") != true
-        }
-        if (tabs.isEmpty()) {
-            // Don't inflate the stub if we never had to. If it was already
-            // inflated (tabs existed earlier), just hide the container.
-            activeSessionsContainer?.visibility = View.GONE
-            activeSessionAdapter?.submit(emptyList())
-            return
-        }
-        ensureActiveSessionsInflated()
-        activeSessionsContainer?.visibility = View.VISIBLE
-
-        // Build chip labels for the active sessions strip. SSH: profile name
-        // else user@host, never the OSC terminal title (see
-        // disambiguatedActiveSessionLabels doc). VNC/Console/Panes: the
-        // tab's own display title.
-        val labels = disambiguatedActiveSessionLabels(tabs)
-        val rows = tabs.map { tab ->
-            io.github.tabssh.ui.adapters.ActiveSessionAdapter.Row(
-                tabId = tab.tabId,
-                title = labels.getValue(tab.tabId),
-                state = tab.stateFlow().value
-            )
-        }
-        activeSessionAdapter?.submit(rows)
-    }
-
     private fun setupRecyclerView() {
         adapter = ConnectionAdapter(
             onConnectionClick = { connection: ConnectionProfile ->
@@ -474,7 +255,7 @@ class SshHostsFragment : Fragment() {
         // not a buried option. Renamed "Open" to "Connect" to match how
         // the rest of the app talks about starting an SSH session.
         val items = arrayOf(
-            getString(R.string.connections_menu_connect),
+            getString(R.string.connect_button),
             getString(R.string.connections_menu_browse_files),
             getString(R.string.edit),
             getString(R.string.connections_menu_duplicate),
@@ -1003,7 +784,7 @@ class SshHostsFragment : Fragment() {
             dialogRef?.getButton(AlertDialog.BUTTON_POSITIVE)?.let { btn ->
                 btn.isEnabled = n > 0
                 btn.text = if (n == 0) {
-                    getString(R.string.connections_bulk_apply)
+                    getString(R.string.terminal_apply)
                 } else {
                     getString(R.string.connections_bulk_apply_count_fmt, n)
                 }
@@ -1032,7 +813,7 @@ class SshHostsFragment : Fragment() {
         dialogRef = MaterialAlertDialogBuilder(ctx)
             .setTitle(R.string.connections_bulk_edit_title)
             .setView(dialogView)
-            .setPositiveButton(R.string.connections_bulk_apply) { _, _ ->
+            .setPositiveButton(R.string.terminal_apply) { _, _ ->
                 applyBulkEdit(
                     connections = connections,
                     newUsername = editUsername.text?.toString()?.takeIf { it.isNotBlank() },

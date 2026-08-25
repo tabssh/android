@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Base for the nine ContainerHostManagerActivity destination fragments.
@@ -27,7 +28,7 @@ abstract class ContainerPageFragment : Fragment() {
         get() = requireActivity() as ContainerHostManagerActivity
 
     protected val app: TabSSHApplication
-        get() = requireActivity().application as TabSSHApplication
+        get() = tabSSHApp
 
     /** The current live session, or null before acquisition completes. */
     protected val session: ContainerSessionManager.ContainerSession?

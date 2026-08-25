@@ -10,6 +10,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -19,13 +20,15 @@ import io.github.tabssh.ssh.connection.ConnectionState
 import io.github.tabssh.ui.activities.TabTerminalActivity
 import io.github.tabssh.ui.tabs.Tab
 import io.github.tabssh.ui.tabs.connectedAt
+import io.github.tabssh.ui.tabs.connectionDetail
+import io.github.tabssh.ui.tabs.connectionDisplayName
 import io.github.tabssh.ui.tabs.connectionState
-import io.github.tabssh.ui.tabs.shortTitle
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import android.content.Intent
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Hosts tab's Active sub-tab — every currently-open [Tab] (SSH, VNC,
@@ -49,14 +52,39 @@ class ActiveHostsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        app = requireActivity().application as TabSSHApplication
+        app = tabSSHApp
 
         recyclerView = view.findViewById(R.id.recycler_active_hosts)
         emptyState = view.findViewById(R.id.empty_state)
 
-        adapter = ActiveTabAdapter { tab -> openTab(tab) }
+        adapter = ActiveTabAdapter(
+            onTap = { tab -> openTab(tab) },
+            onDisconnect = { tab -> disconnectTab(tab) }
+        )
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.adapter = adapter
+
+        // Item 43 — swipe-to-disconnect parity with the rest of the app's
+        // "close this session" affordances. Disconnect only ends the
+        // session (TabManager.closeTabByIdSealed below); it never touches
+        // the saved connection itself, so there is nothing destructive
+        // enough here to warrant a confirm dialog on top of the swipe.
+        ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(
+            0,
+            ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT
+        ) {
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder
+            ): Boolean = false
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+                val position = viewHolder.bindingAdapterPosition
+                if (position == RecyclerView.NO_POSITION) return
+                disconnectTab(adapter.currentList[position])
+            }
+        }).attachToRecyclerView(recyclerView)
 
         // Combines the live tab list with a 1s ticker so the connected-since
         // timers advance even when no tab actually opens/closes.
@@ -93,8 +121,17 @@ class ActiveHostsFragment : Fragment() {
         )
     }
 
+    /**
+     * Item 43 — shared by the swipe gesture and the long-press context menu
+     * so both affordances end a session the same way.
+     */
+    private fun disconnectTab(tab: Tab) {
+        app.tabManager.closeTabByIdSealed(tab.tabId)
+    }
+
     private inner class ActiveTabAdapter(
-        private val onTap: (Tab) -> Unit
+        private val onTap: (Tab) -> Unit,
+        private val onDisconnect: (Tab) -> Unit
     ) : ListAdapter<Tab, ActiveTabAdapter.ViewHolder>(TabDiff) {
 
         inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -113,13 +150,44 @@ class ActiveHostsFragment : Fragment() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val tab = getItem(position)
             val state = tab.connectionState()
-            holder.textTitle.text = tab.shortTitle()
-            holder.textSubtitle.text = getString(R.string.active_host_subtitle_fmt, protocolLabel(tab), state.displayName)
+            // Item 43 — the connection's own identity (never the OSC-title-
+            // prone shortTitle(), see connectionDisplayName's doc), with the
+            // detail line carrying protocol + user@host:port so two tabs to
+            // the same host stay distinguishable.
+            holder.textTitle.text = tab.connectionDisplayName()
+            val detail = tab.connectionDetail()
+            holder.textSubtitle.text = if (detail != null) {
+                getString(R.string.active_host_subtitle_detail_fmt, protocolLabel(tab), detail, state.displayName)
+            } else {
+                getString(R.string.active_host_subtitle_fmt, protocolLabel(tab), state.displayName)
+            }
             holder.stateDot.setBackgroundResource(
                 if (state == ConnectionState.CONNECTED) R.drawable.state_dot_connected else R.drawable.state_dot_disconnected
             )
             holder.textTimer.text = formatElapsed(tab.connectedAt())
             holder.itemView.setOnClickListener { onTap(tab) }
+            holder.itemView.setOnLongClickListener {
+                showTabMenu(holder.itemView, tab)
+                true
+            }
+        }
+
+        /**
+         * Item 43 — long-press parity with the swipe gesture: same "Open" /
+         * "Disconnect" pair, reachable without a directional swipe.
+         */
+        private fun showTabMenu(anchor: View, tab: Tab) {
+            val popup = android.widget.PopupMenu(anchor.context, anchor)
+            popup.menu.add(R.string.active_host_menu_open)
+            popup.menu.add(R.string.active_host_menu_disconnect)
+            popup.setOnMenuItemClickListener { item ->
+                when (item.title) {
+                    anchor.context.getString(R.string.active_host_menu_open) -> onTap(tab)
+                    anchor.context.getString(R.string.active_host_menu_disconnect) -> onDisconnect(tab)
+                }
+                true
+            }
+            popup.show()
         }
 
         private fun protocolLabel(tab: Tab): String = when (tab) {

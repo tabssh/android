@@ -26,9 +26,9 @@
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recycler_accounts"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:nestedScrollingEnabled="false"
+                android:layout_height="wrap_content"
+                android:maxHeight="300dp"
+                android:nestedScrollingEnabled="true"
                 android:clipToPadding="false" />
 
             <LinearLayout
@@ -88,6 +88,6 @@
         android:layout_margin="@dimen/space_lg"
         android:contentDescription="@string/cloud_add_account_title"
         app:srcCompat="@drawable/ic_add"
-        app:tint="@android:color/white" />
+        app:tint="?attr/colorOnPrimaryContainer" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

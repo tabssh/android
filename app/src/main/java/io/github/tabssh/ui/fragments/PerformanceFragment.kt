@@ -32,6 +32,7 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Real-time server performance monitoring with charts
@@ -103,7 +104,7 @@ class PerformanceFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
-        app = requireActivity().application as TabSSHApplication
+        app = tabSSHApp
         
         // Initialize views
         spinnerConnection = view.findViewById(R.id.spinner_connection)

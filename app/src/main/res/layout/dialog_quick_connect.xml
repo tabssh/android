@@ -64,7 +64,7 @@
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="@string/container_host_custom_port_hint"
+            android:hint="@string/route_port_hint"
             android:layout_marginBottom="@dimen/space_12dp">
 
             <com.google.android.material.textfield.TextInputEditText

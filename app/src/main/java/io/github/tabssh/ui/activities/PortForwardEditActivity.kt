@@ -18,6 +18,7 @@ import io.github.tabssh.storage.database.entities.PortForward
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Add / edit screen for a single saved [PortForward] rule.
@@ -27,8 +28,12 @@ import kotlinx.coroutines.withContext
  */
 class PortForwardEditActivity : TabSSHActivity() {
 
+    // Edit screens use an up arrow instead of the hamburger, routed
+    // through the same OnBackPressedDispatcher as system Back.
+    override val navigationAffordance: NavigationAffordance = NavigationAffordance.UP
+
     private val app: TabSSHApplication
-        get() = application as TabSSHApplication
+        get() = tabSSHApp
 
     // General
     private lateinit var editName: TextInputEditText
@@ -41,8 +46,11 @@ class PortForwardEditActivity : TabSSHActivity() {
     private lateinit var layoutConnection: TextInputLayout
     private lateinit var spinnerConnection: MaterialAutoCompleteTextView
     private lateinit var layoutManual: View
+    private lateinit var layoutSshHost: TextInputLayout
     private lateinit var editSshHost: TextInputEditText
+    private lateinit var layoutSshPort: TextInputLayout
     private lateinit var editSshPort: TextInputEditText
+    private lateinit var layoutSshUsername: TextInputLayout
     private lateinit var editSshUsername: TextInputEditText
     private lateinit var spinnerIdentity: MaterialAutoCompleteTextView
 
@@ -81,8 +89,30 @@ class PortForwardEditActivity : TabSSHActivity() {
         setupEndpointChips()
         setupOptionSwitches()
         setupButtons()
+        setupUnsavedChangesGuard()
 
         loadData()
+    }
+
+    /**
+     * Wires every primary form field to flip [hasUnsavedChanges] and opts
+     * this screen into the shared discard-confirmation guard.
+     */
+    private fun setupUnsavedChangesGuard() {
+        val watcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) { hasUnsavedChanges = true }
+        }
+        editName.addTextChangedListener(watcher)
+        editSshHost.addTextChangedListener(watcher)
+        editSshPort.addTextChangedListener(watcher)
+        editSshUsername.addTextChangedListener(watcher)
+        editHostIp.addTextChangedListener(watcher)
+        editRemotePort.addTextChangedListener(watcher)
+        editLocalPort.addTextChangedListener(watcher)
+
+        enableUnsavedChangesGuard()
     }
 
     private fun bindViews() {
@@ -95,8 +125,11 @@ class PortForwardEditActivity : TabSSHActivity() {
         layoutConnection = findViewById(R.id.layout_connection)
         spinnerConnection = findViewById(R.id.spinner_connection)
         layoutManual = findViewById(R.id.layout_manual)
+        layoutSshHost = findViewById(R.id.layout_ssh_host)
         editSshHost = findViewById(R.id.edit_ssh_host)
+        layoutSshPort = findViewById(R.id.layout_ssh_port)
         editSshPort = findViewById(R.id.edit_ssh_port)
+        layoutSshUsername = findViewById(R.id.layout_ssh_username)
         editSshUsername = findViewById(R.id.edit_ssh_username)
         spinnerIdentity = findViewById(R.id.spinner_identity)
 
@@ -128,6 +161,7 @@ class PortForwardEditActivity : TabSSHActivity() {
             ArrayAdapter(this, android.R.layout.simple_list_item_1, labels)
         )
         spinnerType.setOnItemClickListener { _, _, position, _ ->
+            hasUnsavedChanges = true
             applyType(types[position])
         }
     }
@@ -188,8 +222,8 @@ class PortForwardEditActivity : TabSSHActivity() {
     }
 
     private fun setupEndpointChips() {
-        chipSaved.setOnClickListener { applyEndpointMode(useSaved = true) }
-        chipManual.setOnClickListener { applyEndpointMode(useSaved = false) }
+        chipSaved.setOnClickListener { hasUnsavedChanges = true; applyEndpointMode(useSaved = true) }
+        chipManual.setOnClickListener { hasUnsavedChanges = true; applyEndpointMode(useSaved = false) }
     }
 
     private fun applyEndpointMode(useSaved: Boolean) {
@@ -205,14 +239,16 @@ class PortForwardEditActivity : TabSSHActivity() {
      */
     private fun setupOptionSwitches() {
         switchEnabled.setOnCheckedChangeListener { _, isChecked ->
+            hasUnsavedChanges = true
             switchAutoStart.isEnabled = isChecked
             if (!isChecked) switchAutoStart.isChecked = false
         }
+        switchAutoStart.setOnCheckedChangeListener { _, _ -> hasUnsavedChanges = true }
         switchAutoStart.isEnabled = switchEnabled.isChecked
     }
 
     private fun setupButtons() {
-        findViewById<View>(R.id.btn_cancel).setOnClickListener { finish() }
+        findViewById<View>(R.id.btn_cancel).setOnClickListener { confirmDiscardIfNeeded { finish() } }
         findViewById<View>(R.id.btn_save).setOnClickListener { save() }
     }
 
@@ -244,6 +280,10 @@ class PortForwardEditActivity : TabSSHActivity() {
                 applyEndpointMode(useSaved = connections.isNotEmpty())
                 prefillFromIntent()
             }
+            // Field/spinner changes above flip the dirty-flag listeners
+            // installed in setupUnsavedChangesGuard() — this is DB-driven
+            // (or default) population, not a user edit, so clear the flag.
+            hasUnsavedChanges = false
         }
     }
 
@@ -253,6 +293,7 @@ class PortForwardEditActivity : TabSSHActivity() {
             ArrayAdapter(this, android.R.layout.simple_list_item_1, labels)
         )
         spinnerConnection.setOnItemClickListener { _, _, position, _ ->
+            hasUnsavedChanges = true
             selectedConnectionId = connections[position].id
         }
     }
@@ -265,6 +306,7 @@ class PortForwardEditActivity : TabSSHActivity() {
         )
         spinnerIdentity.setText(labels.first(), false)
         spinnerIdentity.setOnItemClickListener { _, _, position, _ ->
+            hasUnsavedChanges = true
             selectedIdentityId = if (position == 0) null else identities[position - 1].id
         }
     }
@@ -338,18 +380,18 @@ class PortForwardEditActivity : TabSSHActivity() {
         } else {
             sshHost = editSshHost.text?.toString()?.trim().orEmpty()
             if (sshHost.isEmpty()) {
-                editSshHost.error = getString(R.string.port_forward_error_ssh_host)
+                layoutSshHost.error = getString(R.string.port_forward_error_ssh_host)
                 return
             }
             val portValue = editSshPort.text?.toString()?.trim()?.toIntOrNull()
             if (portValue == null || portValue !in 1..65535) {
-                editSshPort.error = getString(R.string.port_forward_error_port_range)
+                layoutSshPort.error = getString(R.string.port_forward_error_port_range)
                 return
             }
             sshPort = portValue
             sshUsername = editSshUsername.text?.toString()?.trim().orEmpty()
             if (sshUsername.isEmpty()) {
-                editSshUsername.error = getString(R.string.port_forward_error_ssh_username)
+                layoutSshUsername.error = getString(R.string.port_forward_error_ssh_username)
                 return
             }
             identityId = selectedIdentityId
@@ -363,28 +405,28 @@ class PortForwardEditActivity : TabSSHActivity() {
             ForwardType.LOCAL -> {
                 hostIp = editHostIp.text?.toString()?.trim().orEmpty()
                 if (hostIp.isEmpty()) {
-                    editHostIp.error = getString(R.string.port_forward_error_host_ip)
+                    layoutHostIp.error = getString(R.string.port_forward_error_host_ip)
                     return
                 }
-                remotePort = validPort(editRemotePort) ?: return
+                remotePort = validPort(layoutRemotePort) ?: return
                 // Blank local port mirrors the remote port (entity handles it).
                 localPort = editLocalPort.text?.toString()?.trim()?.toIntOrNull() ?: 0
                 if (localPort != 0 && localPort !in 1..65535) {
-                    editLocalPort.error = getString(R.string.port_forward_error_port_range)
+                    layoutLocalPort.error = getString(R.string.port_forward_error_port_range)
                     return
                 }
             }
             ForwardType.REMOTE -> {
                 hostIp = editHostIp.text?.toString()?.trim().orEmpty()
                 if (hostIp.isEmpty()) {
-                    editHostIp.error = getString(R.string.port_forward_error_host_ip)
+                    layoutHostIp.error = getString(R.string.port_forward_error_host_ip)
                     return
                 }
-                localPort = validPort(editLocalPort) ?: return
-                remotePort = validPort(editRemotePort) ?: return
+                localPort = validPort(layoutLocalPort) ?: return
+                remotePort = validPort(layoutRemotePort) ?: return
             }
             ForwardType.DYNAMIC -> {
-                localPort = validPort(editLocalPort) ?: return
+                localPort = validPort(layoutLocalPort) ?: return
             }
         }
 
@@ -413,10 +455,10 @@ class PortForwardEditActivity : TabSSHActivity() {
         persist(result)
     }
 
-    private fun validPort(field: TextInputEditText): Int? {
-        val value = field.text?.toString()?.trim()?.toIntOrNull()
+    private fun validPort(layout: TextInputLayout): Int? {
+        val value = layout.editText?.text?.toString()?.trim()?.toIntOrNull()
         if (value == null || value !in 1..65535) {
-            field.error = getString(R.string.port_forward_error_port_range)
+            layout.error = getString(R.string.port_forward_error_port_range)
             return null
         }
         return value
@@ -431,22 +473,20 @@ class PortForwardEditActivity : TabSSHActivity() {
                     app.database.portForwardDao().insert(pf)
                 }
             }
+            hasUnsavedChanges = false
             finish()
         }
     }
 
     private fun clearErrors() {
         layoutConnection.error = null
+        layoutSshHost.error = null
+        layoutSshPort.error = null
+        layoutSshUsername.error = null
         layoutHostIp.error = null
         layoutRemotePort.error = null
         layoutLocalPort.error = null
         editName.error = null
-        editSshHost.error = null
-        editSshPort.error = null
-        editSshUsername.error = null
-        editHostIp.error = null
-        editRemotePort.error = null
-        editLocalPort.error = null
     }
 
     companion object {

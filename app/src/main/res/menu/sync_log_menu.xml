@@ -10,7 +10,7 @@
 
     <item
         android:id="@+id/action_refresh"
-        android:title="@string/sync_log_action_refresh"
+        android:title="@string/container_refresh"
         android:icon="@android:drawable/ic_menu_rotate"
         app:showAsAction="never" />
 

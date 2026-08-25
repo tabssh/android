@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 import java.security.SecureRandom
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Wave 3.2 — PIN code app lock.
@@ -122,7 +123,7 @@ class PinLockActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         // Block screenshots of the lock screen.
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
-        app = application as TabSSHApplication
+        app = tabSSHApp
         mode = intent.getStringExtra(EXTRA_MODE) ?: MODE_VERIFY
         // Restore the persisted failed-attempt count so a relaunch can't reset
         // the brute-force budget. MODE_SET starts fresh.

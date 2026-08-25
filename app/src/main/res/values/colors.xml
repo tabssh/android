@@ -45,13 +45,7 @@
     <color name="error_dark">#FFD32F2F</color>
     <color name="info">#FF2196F3</color>
     <color name="info_dark">#FF1976D2</color>
-    
-    <!-- Connection status colors -->
-    <color name="connected">@color/success</color>
-    <color name="connecting">@color/warning</color>
-    <color name="disconnected">#FF757575</color>
-    <color name="connection_error">@color/error</color>
-    
+
     <!-- Neutral colors -->
     <color name="white">#FFFFFFFF</color>
     <color name="black">#FF000000</color>
@@ -76,16 +70,15 @@
     <color name="terminal_bell_flash">#40FFFFFF</color>
     
     <!-- UI specific colors -->
-    <color name="tab_background">#FF2C2C2C</color>
-    <color name="tab_text">#FFFFFFFF</color>
+    <color name="tab_background">#FFF5F5F5</color>
+    <color name="tab_text">#FF212121</color>
     <color name="tab_selected">#FF1976D2</color>
     <color name="tab_indicator">#FF1976D2</color>
     
     <!-- Accessibility colors -->
     <color name="high_contrast_background">#FF000000</color>
     <color name="high_contrast_foreground">#FFFFFFFF</color>
-    <color name="focus_indicator">#FF0066FF</color>
-    
+
     <!-- Material Design 3 colors -->
     <color name="surface">#FFFFFFFF</color>
     <color name="surface_variant">#FFF5F5F5</color>
@@ -148,12 +141,4 @@
 
     <!-- Performance chart line -->
     <color name="chart_cpu_line">@color/primary_500</color>
-
-    <!-- Dark theme colors -->
-    <color name="surface_dark">#FF121212</color>
-    <color name="surface_variant_dark">#FF1E1E1E</color>
-    <color name="on_surface_dark">#FFFFFFFF</color>
-    <color name="on_surface_variant_dark">#FFBDBDBD</color>
-    <color name="outline_dark">#FF424242</color>
-    <color name="outline_variant_dark">#FF2C2C2C</color>
 </resources>

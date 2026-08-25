@@ -146,6 +146,7 @@ class LogViewerActivity : TabSSHActivity() {
                     }
                 )
 
+                resetEmptyView()
                 if (logEntries.isEmpty()) {
                     recyclerView.visibility = View.GONE
                     emptyView.visibility = View.VISIBLE
@@ -153,7 +154,7 @@ class LogViewerActivity : TabSSHActivity() {
                     recyclerView.visibility = View.VISIBLE
                     emptyView.visibility = View.GONE
                 }
-                
+
             } catch (e: Exception) {
                 Logger.e("LogViewer", "Failed to load logs", e)
                 android.widget.Toast.makeText(
@@ -161,10 +162,32 @@ class LogViewerActivity : TabSSHActivity() {
                     getString(R.string.log_viewer_load_failed, e.message),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
+
+                // A failed load must not look like an empty log file — distinct
+                // error copy/color plus a tap-to-retry affordance.
+                recyclerView.visibility = View.GONE
+                emptyView.visibility = View.VISIBLE
+                emptyView.text = getString(R.string.log_viewer_load_error_fmt, e.message ?: "")
+                emptyView.setTextColor(
+                    androidx.core.content.ContextCompat.getColor(this@LogViewerActivity, R.color.error)
+                )
+                emptyView.setOnClickListener { loadLogs() }
             }
         }
     }
     
+    /**
+     * Restores the empty-state view to its neutral "no logs" appearance,
+     * undoing any load-error styling from a previous failed attempt.
+     */
+    private fun resetEmptyView() {
+        emptyView.text = getString(R.string.log_viewer_empty_message)
+        emptyView.setTextColor(
+            androidx.core.content.ContextCompat.getColor(this, R.color.on_surface_variant)
+        )
+        emptyView.setOnClickListener(null)
+    }
+
     /**
      * Parse a log line into a LogEntry
      */

@@ -10,9 +10,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
-import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.ui.adapters.SyncLogAdapter
 import kotlinx.coroutines.launch
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Displays the dedicated Sync Log — every sync conflict and how it was
@@ -26,7 +26,7 @@ class SyncLogActivity : TabSSHActivity() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyView: TextView
     private lateinit var adapter: SyncLogAdapter
-    private val app by lazy { application as TabSSHApplication }
+    private val app by lazy { tabSSHApp }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,16 +70,44 @@ class SyncLogActivity : TabSSHActivity() {
 
     private fun loadSyncLog() {
         lifecycleScope.launch {
-            val entries = app.database.syncLogDao().getRecent()
-            if (entries.isEmpty()) {
+            try {
+                val entries = app.database.syncLogDao().getRecent()
+                if (entries.isEmpty()) {
+                    resetEmptyView()
+                    recyclerView.visibility = View.GONE
+                    emptyView.visibility = View.VISIBLE
+                } else {
+                    recyclerView.visibility = View.VISIBLE
+                    emptyView.visibility = View.GONE
+                    adapter.updateEntries(entries)
+                }
+            } catch (e: Exception) {
+                io.github.tabssh.utils.logging.Logger.e("SyncLogActivity", "Failed to load sync log", e)
+
+                // A DB failure must not crash the coroutine silently — surface a
+                // distinct error state (not the same view as a genuine empty log)
+                // with a tap-to-retry affordance.
                 recyclerView.visibility = View.GONE
                 emptyView.visibility = View.VISIBLE
-            } else {
-                recyclerView.visibility = View.VISIBLE
-                emptyView.visibility = View.GONE
-                adapter.updateEntries(entries)
+                emptyView.text = getString(R.string.sync_log_load_error_fmt, e.message ?: "")
+                emptyView.setTextColor(
+                    androidx.core.content.ContextCompat.getColor(this@SyncLogActivity, R.color.error)
+                )
+                emptyView.setOnClickListener { loadSyncLog() }
             }
         }
+    }
+
+    /**
+     * Restores the empty-state view to its neutral "no sync activity"
+     * appearance, undoing any load-error styling from a previous failed attempt.
+     */
+    private fun resetEmptyView() {
+        emptyView.text = getString(R.string.sync_log_empty)
+        emptyView.setTextColor(
+            androidx.core.content.ContextCompat.getColor(this, R.color.on_surface_variant)
+        )
+        emptyView.setOnClickListener(null)
     }
 
     private fun copyLogToClipboard() {

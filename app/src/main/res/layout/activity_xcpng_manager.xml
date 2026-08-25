@@ -76,13 +76,13 @@
             style="@style/Widget.Material3.Button.TonalButton" />
 
         <!-- Progress Bar -->
-        <ProgressBar
+        <com.google.android.material.progressindicator.LinearProgressIndicator
             android:id="@+id/progress_bar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_sm"
             android:visibility="gone"
-            style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+            style="@style/Widget.Material3.LinearProgressIndicator"
             android:indeterminate="true" />
 
         <!-- Status Text -->

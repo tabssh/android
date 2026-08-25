@@ -21,6 +21,7 @@ import io.github.tabssh.storage.database.entities.StoredKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Add / edit screen for a single reusable [NetworkRoute] (proxy or SSH jump
@@ -33,8 +34,12 @@ import kotlinx.coroutines.withContext
  */
 class NetworkRouteEditActivity : TabSSHActivity() {
 
+    // Edit screens use an up arrow instead of the hamburger, routed
+    // through the same OnBackPressedDispatcher as system Back.
+    override val navigationAffordance: NavigationAffordance = NavigationAffordance.UP
+
     private val app: TabSSHApplication
-        get() = application as TabSSHApplication
+        get() = tabSSHApp
 
     private lateinit var editName: TextInputEditText
     private lateinit var spinnerType: MaterialAutoCompleteTextView
@@ -85,8 +90,28 @@ class NetworkRouteEditActivity : TabSSHActivity() {
         setupPresetChips()
         setupAuthTypeSpinner()
         setupButtons()
+        setupUnsavedChangesGuard()
 
         loadData()
+    }
+
+    /**
+     * Wires every primary form field to flip [hasUnsavedChanges] and opts
+     * this screen into the shared discard-confirmation guard.
+     */
+    private fun setupUnsavedChangesGuard() {
+        val watcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) { hasUnsavedChanges = true }
+        }
+        editName.addTextChangedListener(watcher)
+        editHost.addTextChangedListener(watcher)
+        editPort.addTextChangedListener(watcher)
+        editUsername.addTextChangedListener(watcher)
+        switchEnabled.setOnCheckedChangeListener { _, _ -> hasUnsavedChanges = true }
+
+        enableUnsavedChangesGuard()
     }
 
     private fun bindViews() {
@@ -129,6 +154,7 @@ class NetworkRouteEditActivity : TabSSHActivity() {
         )
         spinnerType.setOnItemClickListener { _, _, position, _ ->
             // A manual type choice always means "not the built-in Tor preset".
+            hasUnsavedChanges = true
             builtInTor = false
             applyType(types[position])
         }
@@ -153,12 +179,14 @@ class NetworkRouteEditActivity : TabSSHActivity() {
 
     private fun setupPresetChips() {
         chipOrbot.setOnClickListener {
+            hasUnsavedChanges = true
             builtInTor = false
             applyType(NetworkRouteType.PROXY_SOCKS5)
             editHost.setText("127.0.0.1")
             editPort.setText(NetworkRoute.ORBOT_SOCKS_PORT.toString())
         }
         chipTor.setOnClickListener {
+            hasUnsavedChanges = true
             builtInTor = true
             applyType(NetworkRouteType.PROXY_SOCKS5)
         }
@@ -166,7 +194,7 @@ class NetworkRouteEditActivity : TabSSHActivity() {
 
     private fun setupAuthTypeSpinner() {
         val labels = listOf(
-            getString(R.string.route_auth_password),
+            getString(R.string.password_hint),
             getString(R.string.route_auth_key)
         )
         spinnerAuthType.setAdapter(
@@ -174,6 +202,7 @@ class NetworkRouteEditActivity : TabSSHActivity() {
         )
         spinnerAuthType.setText(labels[0], false)
         spinnerAuthType.setOnItemClickListener { _, _, position, _ ->
+            hasUnsavedChanges = true
             jumpAuthIsKey = position == 1
             updateKeyVisibility()
         }
@@ -186,6 +215,7 @@ class NetworkRouteEditActivity : TabSSHActivity() {
             ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, labels)
         )
         spinnerKey.setOnItemClickListener { _, _, position, _ ->
+            hasUnsavedChanges = true
             selectedKeyId = if (position == 0) null else availableKeys[position - 1].keyId
             spinnerKey.setText(labels[position], false)
         }
@@ -229,7 +259,7 @@ class NetworkRouteEditActivity : TabSSHActivity() {
     }
 
     private fun setupButtons() {
-        findViewById<View>(R.id.btn_cancel).setOnClickListener { finish() }
+        findViewById<View>(R.id.btn_cancel).setOnClickListener { confirmDiscardIfNeeded { finish() } }
         findViewById<View>(R.id.btn_save).setOnClickListener { save() }
     }
 
@@ -246,6 +276,10 @@ class NetworkRouteEditActivity : TabSSHActivity() {
             }
             existing = loaded
             if (loaded != null) populate(loaded) else applyType(NetworkRouteType.PROXY_SOCKS5)
+            // Field/spinner changes above flip the dirty-flag listeners
+            // installed in setupUnsavedChangesGuard() — this is DB-driven
+            // (or default) population, not a user edit, so clear the flag.
+            hasUnsavedChanges = false
         }
     }
 
@@ -258,7 +292,7 @@ class NetworkRouteEditActivity : TabSSHActivity() {
 
         jumpAuthIsKey = route.authType.equals("KEY", ignoreCase = true)
         spinnerAuthType.setText(
-            getString(if (jumpAuthIsKey) R.string.route_auth_key else R.string.route_auth_password),
+            getString(if (jumpAuthIsKey) R.string.route_auth_key else R.string.password_hint),
             false
         )
         selectedKeyId = route.keyId
@@ -355,6 +389,7 @@ class NetworkRouteEditActivity : TabSSHActivity() {
                     app.database.networkRouteDao().insert(route)
                 }
             }
+            hasUnsavedChanges = false
             setResult(Activity.RESULT_OK, Intent().putExtra(RESULT_ROUTE_ID, route.id))
             finish()
         }

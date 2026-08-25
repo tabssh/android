@@ -203,7 +203,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
-                        android:hint="@string/route_username_hint"
+                        android:hint="@string/username_hint"
                         app:errorEnabled="true"
                         app:helperText="@string/route_username_optional_helper"
                         style="@style/Widget.TabSSH.TextInputLayout">
@@ -248,7 +248,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="@dimen/space_sm"
-                            android:hint="@string/route_key_hint"
+                            android:hint="@string/route_auth_key"
                             app:errorEnabled="true"
                             android:visibility="gone"
                             style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
@@ -258,7 +258,7 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:inputType="none"
-                                android:contentDescription="@string/route_key_hint" />
+                                android:contentDescription="@string/route_auth_key" />
 
                         </com.google.android.material.textfield.TextInputLayout>
 

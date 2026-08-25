@@ -4,11 +4,11 @@
          means swipe from anywhere (legacy). Keep entries/values in lockstep
          and aligned with tabSwipeEdgePx handling. -->
     <string-array name="tab_swipe_edge_entries">
-        <item>Anywhere on tab</item>
-        <item>Narrow (24 dp)</item>
-        <item>Standard (48 dp)</item>
-        <item>Wide (64 dp)</item>
-        <item>Extra wide (96 dp)</item>
+        <item>@string/arr_tab_swipe_edge_anywhere_on_tab</item>
+        <item>@string/arr_tab_swipe_edge_narrow_24_dp</item>
+        <item>@string/arr_tab_swipe_edge_standard_48_dp</item>
+        <item>@string/arr_tab_swipe_edge_wide_64_dp</item>
+        <item>@string/arr_tab_swipe_edge_extra_wide_96_dp</item>
     </string-array>
     <string-array name="tab_swipe_edge_values">
         <item>0</item>
@@ -22,9 +22,9 @@
          Index 0=SSH, 1=VNC, 2=Telnet.  Keep in sync with
          ConnectionEditActivity.updateProtocolUI(). -->
     <string-array name="protocol_options">
-        <item>SSH</item>
-        <item>VNC</item>
-        <item>Telnet</item>
+        <item>@string/arr_protocol_ssh</item>
+        <item>@string/arr_protocol_vnc</item>
+        <item>@string/arr_protocol_telnet</item>
     </string-array>
     <string-array name="protocol_values">
         <item>ssh</item>
@@ -34,9 +34,9 @@
 
     <!-- Issue #6 — IP mode (auto / force IPv4 / force IPv6). -->
     <string-array name="ip_mode_entries">
-        <item>Auto</item>
-        <item>IPv4</item>
-        <item>IPv6</item>
+        <item>@string/arr_ip_mode_auto</item>
+        <item>@string/arr_ip_mode_ipv4</item>
+        <item>@string/arr_ip_mode_ipv6</item>
     </string-array>
     <string-array name="ip_mode_values">
         <item>auto</item>
@@ -50,13 +50,13 @@
          Order matters: the activity treats the first entry as "no command"
          and the last entry as "show custom field". -->
     <string-array name="remote_command_entries">
-        <item>Default — login shell</item>
-        <item>sftp  (SFTP-only accounts)</item>
-        <item>internal-sftp  (OpenSSH SFTP subsystem)</item>
-        <item>tmux attach -d || tmux new  (auto-attach to tmux)</item>
-        <item>screen -DR  (auto-attach to screen)</item>
-        <item>create  (SourceForge shell.sourceforge.net)</item>
-        <item>Custom…</item>
+        <item>@string/arr_remote_command_default_login_shell</item>
+        <item>@string/arr_remote_command_sftp_sftp_only_accounts</item>
+        <item>@string/arr_remote_command_internal_sftp_openssh_sftp_s</item>
+        <item>@string/arr_remote_command_tmux_attach_d_tmux_new_auto</item>
+        <item>@string/arr_remote_command_screen_dr_auto_attach_to_scr</item>
+        <item>@string/arr_remote_command_create_sourceforge_shell_sou</item>
+        <item>@string/arr_remote_command_custom</item>
     </string-array>
     <!-- Parallel values array — index N matches `remote_command_entries[N]`.
          Index 0 (default) is the empty string. Index last (Custom…) is also
@@ -73,9 +73,9 @@
 
     <!-- Theme options -->
     <string-array name="theme_entries">
-        <item>Dark</item>
-        <item>Light</item>
-        <item>System Default</item>
+        <item>@string/arr_theme_dark</item>
+        <item>@string/arr_theme_light</item>
+        <item>@string/arr_theme_system_default</item>
     </string-array>
     <string-array name="theme_values">
         <item>dark</item>
@@ -84,26 +84,24 @@
     </string-array>
 
     <!-- Language options -->
+    <!-- Item 35 — de/es/fr translation files exist but cover only ~5% of
+         user-facing strings, so they are withheld from this picker until
+         they reach real completeness; the app still honors those locales
+         automatically when the device system language matches. -->
     <string-array name="language_entries">
-        <item>English</item>
-        <item>Spanish</item>
-        <item>French</item>
-        <item>German</item>
+        <item>@string/arr_language_english</item>
     </string-array>
     <string-array name="language_values">
         <item>en</item>
-        <item>es</item>
-        <item>fr</item>
-        <item>de</item>
     </string-array>
 
     <!-- Lock timeout options -->
     <string-array name="lock_timeout_entries">
-        <item>1 minute</item>
-        <item>5 minutes</item>
-        <item>15 minutes</item>
-        <item>30 minutes</item>
-        <item>1 hour</item>
+        <item>@string/arr_lock_timeout_1_minute</item>
+        <item>@string/arr_lock_timeout_5_minutes</item>
+        <item>@string/arr_lock_timeout_15_minutes</item>
+        <item>@string/arr_lock_timeout_30_minutes</item>
+        <item>@string/arr_lock_timeout_1_hour</item>
     </string-array>
     <string-array name="lock_timeout_values">
         <item>60</item>
@@ -115,10 +113,10 @@
 
     <!-- Auto-clear clipboard timeout -->
     <string-array name="clipboard_timeout_entries">
-        <item>Never</item>
-        <item>30 seconds</item>
-        <item>1 minute</item>
-        <item>5 minutes</item>
+        <item>@string/arr_clipboard_timeout_never</item>
+        <item>@string/arr_clipboard_timeout_30_seconds</item>
+        <item>@string/arr_clipboard_timeout_1_minute</item>
+        <item>@string/arr_clipboard_timeout_5_minutes</item>
     </string-array>
     <string-array name="clipboard_timeout_values">
         <item>0</item>
@@ -129,9 +127,9 @@
 
     <!-- Startup behaviour -->
     <string-array name="startup_entries">
-        <item>Connections list</item>
-        <item>Frequent connections</item>
-        <item>Last open tab</item>
+        <item>@string/arr_startup_connections_list</item>
+        <item>@string/arr_startup_frequent_connections</item>
+        <item>@string/arr_startup_last_open_tab</item>
     </string-array>
     <string-array name="startup_values">
         <item>connections</item>
@@ -156,33 +154,29 @@
 
     <!-- Terminal themes (23 total - all from BuiltInThemes.kt) -->
     <string-array name="terminal_theme_entries">
-        <!-- System themes -->
-        <item>System Default</item>
-        <item>System Dark</item>
-        <item>System Light</item>
-        <!-- Classic dark themes -->
-        <item>Dracula</item>
-        <item>Solarized Dark</item>
-        <item>Nord</item>
-        <item>One Dark</item>
-        <item>Monokai</item>
-        <item>Gruvbox Dark</item>
-        <item>Tomorrow Night</item>
-        <item>Atom One Dark</item>
-        <item>Material Dark</item>
-        <!-- Classic light themes -->
-        <item>Solarized Light</item>
-        <item>Gruvbox Light</item>
-        <item>GitHub Light</item>
-        <!-- New popular themes -->
-        <item>Tokyo Night</item>
-        <item>Tokyo Night Light</item>
-        <item>Catppuccin Mocha</item>
-        <item>Rose Pine</item>
-        <item>Everforest</item>
-        <item>Kanagawa</item>
-        <item>Night Owl</item>
-        <item>Cobalt2</item>
+        <item>@string/arr_terminal_theme_system_default</item>
+        <item>@string/arr_terminal_theme_system_dark</item>
+        <item>@string/arr_terminal_theme_system_light</item>
+        <item>@string/arr_terminal_theme_dracula</item>
+        <item>@string/arr_terminal_theme_solarized_dark</item>
+        <item>@string/arr_terminal_theme_nord</item>
+        <item>@string/arr_terminal_theme_one_dark</item>
+        <item>@string/arr_terminal_theme_monokai</item>
+        <item>@string/arr_terminal_theme_gruvbox_dark</item>
+        <item>@string/arr_terminal_theme_tomorrow_night</item>
+        <item>@string/arr_terminal_theme_atom_one_dark</item>
+        <item>@string/arr_terminal_theme_material_dark</item>
+        <item>@string/arr_terminal_theme_solarized_light</item>
+        <item>@string/arr_terminal_theme_gruvbox_light</item>
+        <item>@string/arr_terminal_theme_github_light</item>
+        <item>@string/arr_terminal_theme_tokyo_night</item>
+        <item>@string/arr_terminal_theme_tokyo_night_light</item>
+        <item>@string/arr_terminal_theme_catppuccin_mocha</item>
+        <item>@string/arr_terminal_theme_rose_pine</item>
+        <item>@string/arr_terminal_theme_everforest</item>
+        <item>@string/arr_terminal_theme_kanagawa</item>
+        <item>@string/arr_terminal_theme_night_owl</item>
+        <item>@string/arr_terminal_theme_cobalt2</item>
     </string-array>
     <string-array name="terminal_theme_values">
         <!-- System themes -->
@@ -216,16 +210,16 @@
 
     <!-- Terminal fonts -->
     <string-array name="terminal_font_entries">
-        <item>System Monospace</item>
-        <item>JetBrains Mono Nerd</item>
-        <item>Fira Code Nerd</item>
-        <item>Hack Nerd</item>
-        <item>Cascadia Code Nerd</item>
-        <item>Source Code Pro Nerd</item>
-        <item>Meslo Nerd</item>
-        <item>Roboto Mono Nerd</item>
-        <item>Ubuntu Mono Nerd</item>
-        <item>DejaVu Sans Mono Nerd</item>
+        <item>@string/arr_terminal_font_system_monospace</item>
+        <item>@string/arr_terminal_font_jetbrains_mono_nerd</item>
+        <item>@string/arr_terminal_font_fira_code_nerd</item>
+        <item>@string/arr_terminal_font_hack_nerd</item>
+        <item>@string/arr_terminal_font_cascadia_code_nerd</item>
+        <item>@string/arr_terminal_font_source_code_pro_nerd</item>
+        <item>@string/arr_terminal_font_meslo_nerd</item>
+        <item>@string/arr_terminal_font_roboto_mono_nerd</item>
+        <item>@string/arr_terminal_font_ubuntu_mono_nerd</item>
+        <item>@string/arr_terminal_font_dejavu_sans_mono_nerd</item>
     </string-array>
     <string-array name="terminal_font_values">
         <item>monospace</item>
@@ -242,9 +236,9 @@
 
     <!-- Cursor styles -->
     <string-array name="cursor_style_entries">
-        <item>Block</item>
-        <item>Underline</item>
-        <item>Vertical Bar</item>
+        <item>@string/arr_cursor_style_block</item>
+        <item>@string/arr_cursor_style_underline</item>
+        <item>@string/arr_cursor_style_vertical_bar</item>
     </string-array>
     <string-array name="cursor_style_values">
         <item>block</item>
@@ -254,11 +248,11 @@
 
     <!-- Keyboard row count options -->
     <string-array name="keyboard_row_entries">
-        <item>1 Row (Compact)</item>
-        <item>2 Rows</item>
-        <item>3 Rows (Default)</item>
-        <item>4 Rows</item>
-        <item>5 Rows (Full)</item>
+        <item>@string/arr_keyboard_row_1_row_compact</item>
+        <item>@string/arr_keyboard_row_2_rows</item>
+        <item>@string/arr_keyboard_row_3_rows_default</item>
+        <item>@string/arr_keyboard_row_4_rows</item>
+        <item>@string/arr_keyboard_row_5_rows_full</item>
     </string-array>
     <string-array name="keyboard_row_values">
         <item>1</item>
@@ -270,14 +264,14 @@
 
     <!-- Sync frequency options -->
     <string-array name="sync_frequency_entries">
-        <item>Manual only</item>
-        <item>Every 15 minutes</item>
-        <item>Every 30 minutes</item>
-        <item>Every hour</item>
-        <item>Every 3 hours</item>
-        <item>Every 6 hours</item>
-        <item>Every 12 hours</item>
-        <item>Every 24 hours</item>
+        <item>@string/arr_sync_frequency_manual_only</item>
+        <item>@string/arr_sync_frequency_every_15_minutes</item>
+        <item>@string/arr_sync_frequency_every_30_minutes</item>
+        <item>@string/arr_sync_frequency_every_hour</item>
+        <item>@string/arr_sync_frequency_every_3_hours</item>
+        <item>@string/arr_sync_frequency_every_6_hours</item>
+        <item>@string/arr_sync_frequency_every_12_hours</item>
+        <item>@string/arr_sync_frequency_every_24_hours</item>
     </string-array>
     <string-array name="sync_frequency_values">
         <item>manual</item>
@@ -292,9 +286,9 @@
     
     <!-- Multiplexer type options -->
     <string-array name="multiplexer_type_entries">
-        <item>tmux</item>
-        <item>screen</item>
-        <item>zellij</item>
+        <item>@string/arr_multiplexer_type_tmux</item>
+        <item>@string/arr_multiplexer_type_screen</item>
+        <item>@string/arr_multiplexer_type_zellij</item>
     </string-array>
     <string-array name="multiplexer_type_values">
         <item>tmux</item>
@@ -305,16 +299,16 @@
     <!-- Per-host notification alert modes. Maps to ConnectionProfile
          notifSoundMode / notifVibrateMode (0=NEVER, 1=ALWAYS, 2=ON_ERROR). -->
     <string-array name="notif_alert_mode_entries">
-        <item>Silent (default)</item>
-        <item>Always</item>
-        <item>Only on error</item>
+        <item>@string/arr_notif_alert_mode_silent_default</item>
+        <item>@string/arr_notif_alert_mode_always</item>
+        <item>@string/arr_notif_alert_mode_only_on_error</item>
     </string-array>
 
     <!-- Volume key action options (Settings → Terminal) -->
     <string-array name="volume_keys_action_entries">
-        <item>Font size (+ / −)</item>
-        <item>Scroll (page up / down)</item>
-        <item>System volume (off)</item>
+        <item>@string/arr_volume_keys_action_font_size</item>
+        <item>@string/arr_volume_keys_action_scroll_page_up_down</item>
+        <item>@string/arr_volume_keys_action_system_volume_off</item>
     </string-array>
     <string-array name="volume_keys_action_values">
         <item>font_size</item>
@@ -324,10 +318,10 @@
 
     <!-- Multiplexer mode options (per-connection) -->
     <string-array name="multiplexer_mode_entries">
-        <item>Disabled</item>
-        <item>Auto-attach to existing session</item>
-        <item>Create new session</item>
-        <item>Ask on connect</item>
+        <item>@string/arr_multiplexer_mode_disabled</item>
+        <item>@string/arr_multiplexer_mode_auto_attach_to_existing_sess</item>
+        <item>@string/arr_multiplexer_mode_create_new_session</item>
+        <item>@string/arr_multiplexer_mode_ask_on_connect</item>
     </string-array>
     <string-array name="multiplexer_mode_values">
         <item>OFF</item>
@@ -339,11 +333,11 @@
     <!-- PRE-key multiplexer override (per-connection). "AUTO" maps to a NULL
          override in the DB; the other values are stored verbatim. -->
     <string-array name="multiplexer_override_entries">
-        <item>Auto (detect)</item>
-        <item>tmux</item>
-        <item>zellij</item>
-        <item>screen</item>
-        <item>Off (disable PRE key)</item>
+        <item>@string/arr_multiplexer_override_auto_detect</item>
+        <item>@string/arr_multiplexer_override_tmux</item>
+        <item>@string/arr_multiplexer_override_zellij</item>
+        <item>@string/arr_multiplexer_override_screen</item>
+        <item>@string/arr_multiplexer_override_off_disable_pre_key</item>
     </string-array>
     <string-array name="multiplexer_override_values">
         <item>AUTO</item>
@@ -355,11 +349,11 @@
 
     <!-- Log level options -->
     <string-array name="log_levels">
-        <item>Verbose</item>
-        <item>Debug</item>
-        <item>Info</item>
-        <item>Warning</item>
-        <item>Error</item>
+        <item>@string/arr_log_levels_verbose</item>
+        <item>@string/arr_log_levels_debug</item>
+        <item>@string/arr_log_levels_info</item>
+        <item>@string/arr_log_levels_warning</item>
+        <item>@string/arr_log_levels_error</item>
     </string-array>
     <string-array name="log_level_values">
         <item>verbose</item>
@@ -371,13 +365,13 @@
     
     <!-- Audit events options -->
     <string-array name="audit_events">
-        <item>Login/Logout</item>
-        <item>Connection Created/Deleted</item>
-        <item>SSH Key Import/Export</item>
-        <item>Settings Changed</item>
-        <item>File Transfer (SFTP)</item>
-        <item>Port Forwarding</item>
-        <item>Sync Operations</item>
+        <item>@string/arr_audit_events_login_logout</item>
+        <item>@string/arr_audit_events_connection_created_deleted</item>
+        <item>@string/arr_audit_events_ssh_key_import_export</item>
+        <item>@string/arr_audit_events_settings_changed</item>
+        <item>@string/arr_audit_events_file_transfer_sftp</item>
+        <item>@string/arr_audit_events_port_forwarding</item>
+        <item>@string/arr_audit_events_sync_operations</item>
     </string-array>
     <string-array name="audit_event_values">
         <item>login_logout</item>
@@ -391,12 +385,12 @@
 
     <!-- Monitoring alert cooldown options -->
     <string-array name="monitoring_cooldown_labels">
-        <item>15 minutes</item>
-        <item>30 minutes</item>
-        <item>1 hour</item>
-        <item>2 hours</item>
-        <item>4 hours</item>
-        <item>12 hours</item>
+        <item>@string/arr_monitoring_cooldown_15_minutes</item>
+        <item>@string/arr_monitoring_cooldown_30_minutes</item>
+        <item>@string/arr_monitoring_cooldown_1_hour</item>
+        <item>@string/arr_monitoring_cooldown_2_hours</item>
+        <item>@string/arr_monitoring_cooldown_4_hours</item>
+        <item>@string/arr_monitoring_cooldown_12_hours</item>
     </string-array>
     <string-array name="monitoring_cooldown_values">
         <item>15</item>
@@ -409,10 +403,10 @@
 
     <!-- Paste service options for issue reporting -->
     <string-array name="paste_service_labels">
-        <item>MicroBin (default)</item>
-        <item>Lenpaste</item>
-        <item>Stikked</item>
-        <item>pastebin.com</item>
+        <item>@string/arr_paste_service_microbin_default</item>
+        <item>@string/arr_paste_service_lenpaste</item>
+        <item>@string/arr_paste_service_stikked</item>
+        <item>@string/arr_paste_service_pastebin_com</item>
     </string-array>
     <string-array name="paste_service_values">
         <item>microbin</item>
@@ -423,9 +417,9 @@
 
     <!-- Hypervisor API Type Override -->
     <string-array name="api_type_entries">
-        <item>Auto-detect (recommended)</item>
-        <item>Direct host connection</item>
-        <item>Centralized management</item>
+        <item>@string/arr_api_type_auto_detect_recommended</item>
+        <item>@string/arr_api_type_direct_host_connection</item>
+        <item>@string/arr_api_type_centralized_management</item>
     </string-array>
     <string-array name="api_type_values">
         <item>auto</item>

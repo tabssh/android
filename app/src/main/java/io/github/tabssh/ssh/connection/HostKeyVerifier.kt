@@ -15,6 +15,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import android.util.Base64
 
@@ -363,10 +364,13 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
     }
 
     /**
-     * Clear all host keys from database
+     * Clear all host keys from database.
+     * Unlike check()/add()/remove()/getHostKey() this is not a JSch
+     * HostKeyRepository override, so it has no synchronous-caller constraint
+     * and can be a genuine suspend function instead of blocking via runBlocking.
      */
-    fun clearAllHostKeys() {
-        runBlocking(hostKeyDbDispatcher) {
+    suspend fun clearAllHostKeys() {
+        withContext(hostKeyDbDispatcher) {
             hostKeyDao.deleteAllHostKeys()
             Logger.i("HostKeyVerifier", "Cleared all host keys")
         }

@@ -27,12 +27,12 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.BuildConfig
-import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.paste.PasteProviderFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Bottom sheet that lets the user:
@@ -87,7 +87,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
         val logContent  = arguments?.getString(ARG_LOG_CONTENT) ?: ""
         val logType     = arguments?.getString(ARG_LOG_TYPE) ?: "app"
 
-        val app   = requireActivity().application as TabSSHApplication
+        val app   = tabSSHApp
         val prefs = app.preferencesManager
 
         // ── dimension helpers ────────────────────────────────────────────────
@@ -272,7 +272,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
                     onSuccess(url)
                 } catch (e: Exception) {
                     setUploading(false)
-                    Toast.makeText(ctx, ctx.getString(io.github.tabssh.R.string.report_issue_upload_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                    Toast.makeText(ctx, ctx.getString(io.github.tabssh.R.string.sftp_upload_failed_fmt, e.message), Toast.LENGTH_LONG).show()
                 }
             }
         }

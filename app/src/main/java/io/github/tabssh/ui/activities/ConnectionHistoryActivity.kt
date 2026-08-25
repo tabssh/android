@@ -13,7 +13,7 @@ import androidx.appcompat.widget.Toolbar
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import io.github.tabssh.R
-import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.utils.ThrowableMapper
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -21,6 +21,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Wave 3.5 — Read-only history view.
@@ -38,7 +39,7 @@ class ConnectionHistoryActivity : TabSSHActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val app = application as TabSSHApplication
+        val app = tabSSHApp
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -84,8 +85,8 @@ class ConnectionHistoryActivity : TabSSHActivity() {
                     }
                 }
             } catch (e: Exception) {
-                Logger.e("ConnectionHistory", "Failed to load history", e)
-                Toast.makeText(this@ConnectionHistoryActivity, getString(R.string.conn_history_load_failed, e.message.toString()), Toast.LENGTH_LONG).show()
+                val mapped = ThrowableMapper.map(this@ConnectionHistoryActivity, "ConnectionHistory", e, "Failed to load history")
+                Toast.makeText(this@ConnectionHistoryActivity, getString(R.string.conn_history_load_failed, mapped.message), Toast.LENGTH_LONG).show()
             }
         }
     }

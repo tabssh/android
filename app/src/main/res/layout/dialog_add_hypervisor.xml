@@ -56,7 +56,7 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="@string/route_username_hint"
+            android:hint="@string/username_hint"
             android:layout_marginTop="@dimen/space_sm"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 

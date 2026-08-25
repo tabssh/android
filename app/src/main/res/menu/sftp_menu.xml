@@ -4,19 +4,19 @@
 
     <item
         android:id="@+id/action_select_all_local"
-        android:title="Select All Local"
+        android:title="@string/sftp_menu_select_all_local"
         android:icon="@drawable/ic_select_all"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_select_all_remote"
-        android:title="Select All Remote"
+        android:title="@string/sftp_menu_select_all_remote"
         android:icon="@drawable/ic_select_all"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_clear_transfers"
-        android:title="Clear Completed"
+        android:title="@string/sftp_menu_clear_completed"
         android:icon="@drawable/ic_clear"
         app:showAsAction="ifRoom" />
 

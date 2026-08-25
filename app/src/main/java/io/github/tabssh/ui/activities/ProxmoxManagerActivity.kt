@@ -37,6 +37,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Displays the list of VMs on a single Proxmox hypervisor. Launched by
@@ -95,6 +96,9 @@ class ProxmoxManagerActivity : TabSSHActivity() {
     private var currentProfile: HypervisorProfile? = null
     private lateinit var adapter: VmAdapter
 
+    /** Retained for [showError]'s tap-to-retry — re-runs the connect that failed. */
+    private var currentHypervisorId: Long = -1L
+
     /**
      * Single-flight latch for the VM actions. A second tap while a power op or a
      * console connect is still in flight used to fire the whole path again —
@@ -121,7 +125,7 @@ class ProxmoxManagerActivity : TabSSHActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_proxmox_manager)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         toolbar = findViewById(R.id.toolbar)
         btnRefresh = findViewById(R.id.btn_refresh)
@@ -139,6 +143,7 @@ class ProxmoxManagerActivity : TabSSHActivity() {
         btnRefresh.setOnClickListener { refreshVMs() }
 
         val hypervisorId = intent.getLongExtra(EXTRA_HYPERVISOR_ID, -1L)
+        currentHypervisorId = hypervisorId
         if (hypervisorId == -1L) {
             showError(getString(R.string.hypervisor_error_no_id))
             return
@@ -268,6 +273,7 @@ class ProxmoxManagerActivity : TabSSHActivity() {
             if (vms.isEmpty()) {
                 statusText.visibility = View.VISIBLE
                 statusText.text = getString(R.string.proxmox_no_vms_found)
+                resetStatusTextStyle()
             }
         } catch (e: CancellationException) {
             throw e
@@ -503,6 +509,7 @@ class ProxmoxManagerActivity : TabSSHActivity() {
             progressBar.visibility = View.VISIBLE
             statusText.visibility = View.VISIBLE
             statusText.text = message
+            resetStatusTextStyle()
         }
     }
 
@@ -511,16 +518,36 @@ class ProxmoxManagerActivity : TabSSHActivity() {
             if (isFinishing || isDestroyed) return@runOnUiThread
             progressBar.visibility = View.GONE
             statusText.visibility = View.GONE
+            resetStatusTextStyle()
         }
     }
 
+    /**
+     * Renders a load/connect failure distinct from the loading/empty text
+     * above — error-colored copy plus a tap-to-retry affordance — instead of
+     * reusing the same plain text with no visual or interactive difference.
+     */
     private fun showError(message: String) {
         runOnUiThread {
             if (isFinishing || isDestroyed) return@runOnUiThread
             progressBar.visibility = View.GONE
             statusText.visibility = View.VISIBLE
             statusText.text = getString(R.string.hypervisor_error_prefix_fmt, message)
+            statusText.setTextColor(
+                androidx.core.content.ContextCompat.getColor(this, R.color.error)
+            )
+            statusText.setOnClickListener {
+                if (currentHypervisorId != -1L) connectAndRefresh(currentHypervisorId)
+            }
         }
+    }
+
+    /** Restores [statusText] to its neutral loading/empty appearance. */
+    private fun resetStatusTextStyle() {
+        statusText.setTextColor(
+            androidx.core.content.ContextCompat.getColor(this, R.color.on_surface_variant)
+        )
+        statusText.setOnClickListener(null)
     }
 
     // ── Adapter ───────────────────────────────────────────────────────────────
@@ -719,7 +746,7 @@ class ProxmoxManagerActivity : TabSSHActivity() {
         // Proxmox snapshot names must be config IDs (letter first, no spaces) — default differs from XCPng's
         val input = DialogFields.addText(
             form,
-            hint = getString(R.string.proxmox_snapshot_name_hint),
+            hint = getString(R.string.xcpng_snapshot_name_hint),
             initial = "snap${System.currentTimeMillis()}",
             monospace = true
         )

@@ -11,7 +11,6 @@
         android:id="@+id/app_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
         android:visibility="gone">
 
         <androidx.appcompat.widget.Toolbar
@@ -21,7 +20,6 @@
             android:minHeight="40dp"
             app:titleTextAppearance="@style/TextAppearance.TabSSH.Toolbar.Title"
             app:contentInsetStartWithNavigation="0dp"
-            app:popupTheme="@style/ThemeOverlay.AppCompat.Light"
             style="@style/Widget.TabSSH.Toolbar" />
 
         <com.google.android.material.tabs.TabLayout
@@ -103,7 +101,7 @@
             android:layout_marginTop="@dimen/space_sm"
             android:layout_marginEnd="@dimen/space_sm"
             android:text="@string/tab_terminal_multiplexer_chip_default"
-            android:textSize="11sp"
+            android:textSize="@dimen/text_size_overline"
             app:chipBackgroundColor="@color/terminal_green"
             app:chipMinHeight="24dp"
             app:chipIcon="@drawable/ic_terminal"
@@ -176,7 +174,7 @@
         <LinearLayout
             android:id="@+id/bottom_action_bar"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="@dimen/bottom_bar_height"
             android:orientation="horizontal"
             android:background="?attr/colorSurface"
             android:gravity="center_vertical"

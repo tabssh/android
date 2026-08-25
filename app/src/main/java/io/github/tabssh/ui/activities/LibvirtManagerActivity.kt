@@ -30,10 +30,12 @@ import io.github.tabssh.storage.database.entities.HypervisorProfile
 import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
+import io.github.tabssh.utils.ThrowableMapper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Displays the list of libvirt domains on a QEMU/KVM hypervisor and lets the
@@ -89,6 +91,9 @@ class LibvirtManagerActivity : TabSSHActivity() {
     private val vms = mutableListOf<LibvirtVm>()
     private lateinit var adapter: VmAdapter
 
+    // Retained for showError's tap-to-retry — re-runs the connect that failed.
+    private var currentHypervisorId: Long = -1L
+
     // Single-flight latch for the power buttons: a second tap while a virsh
     // command is still running would fire a duplicate start/stop/reboot/reset.
     private var powerActionInFlight = false
@@ -101,7 +106,7 @@ class LibvirtManagerActivity : TabSSHActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_libvirt_manager)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         toolbar = findViewById(R.id.toolbar)
         btnRefresh = findViewById(R.id.btn_refresh)
@@ -119,6 +124,7 @@ class LibvirtManagerActivity : TabSSHActivity() {
         btnRefresh.setOnClickListener { refresh() }
 
         val hypervisorId = intent.getLongExtra(EXTRA_HYPERVISOR_ID, -1L)
+        currentHypervisorId = hypervisorId
         if (hypervisorId == -1L) {
             showError(getString(R.string.hypervisor_error_no_id))
             return
@@ -188,7 +194,8 @@ class LibvirtManagerActivity : TabSSHActivity() {
                             .show()
                     }
                 } else {
-                    showError(getString(R.string.libvirt_ssh_connect_failed_fmt, msg))
+                    val mapped = ThrowableMapper.map(this@LibvirtManagerActivity, TAG, e, "Failed to connect to libvirt host")
+                    showError(getString(R.string.libvirt_ssh_connect_failed_fmt, mapped.message))
                 }
             }
         }
@@ -219,8 +226,8 @@ class LibvirtManagerActivity : TabSSHActivity() {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to list domains", e)
-            showError(getString(R.string.libvirt_error_list_domains_fmt, safeText(e.message)))
+            val mapped = ThrowableMapper.map(this@LibvirtManagerActivity, TAG, e, "Failed to list domains")
+            showError(getString(R.string.libvirt_error_list_domains_fmt, mapped.message))
         }
     }
 
@@ -261,13 +268,14 @@ class LibvirtManagerActivity : TabSSHActivity() {
                 loadDomains(client)
             } catch (e: LibvirtException) {
                 hideProgress()
-                showDomainError("$action failed", safeText(e.message, 200))
+                val mapped = ThrowableMapper.map(this@LibvirtManagerActivity, TAG, e, "$action failed")
+                showDomainError("$action failed", mapped.message)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 hideProgress()
-                Logger.e(TAG, "$action failed for $vmLabel", e)
-                showError("$action failed: ${safeText(e.message)}")
+                val mapped = ThrowableMapper.map(this@LibvirtManagerActivity, TAG, e, "$action failed for $vmLabel")
+                showError("$action failed: ${mapped.message}")
             } finally {
                 powerActionInFlight = false
             }
@@ -362,14 +370,15 @@ class LibvirtManagerActivity : TabSSHActivity() {
                     // VNC not configured on this VM — try SSH instead.
                     offerSshFallback(vm, client)
                 } else {
-                    showDomainError(getString(R.string.libvirt_console_error_title), safeText(e.message, 200))
+                    val mapped = ThrowableMapper.map(this@LibvirtManagerActivity, TAG, e, "VNC unavailable for $vmLabel")
+                    showDomainError(getString(R.string.libvirt_console_error_title), mapped.message)
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to open VNC channel for $vmLabel", e)
+                val mapped = ThrowableMapper.map(this@LibvirtManagerActivity, TAG, e, "Failed to open VNC channel for $vmLabel")
                 hideProgress()
-                showError(getString(R.string.libvirt_error_open_console_fmt, safeText(e.message)))
+                showError(getString(R.string.libvirt_error_open_console_fmt, mapped.message))
             } finally {
                 consoleInFlight = false
             }
@@ -605,8 +614,8 @@ class LibvirtManagerActivity : TabSSHActivity() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.e(TAG, "SSH fallback launch failed for $vmLabel", e)
-                showError(getString(R.string.hypervisor_ssh_open_failed_fmt, safeText(e.message)))
+                val mapped = ThrowableMapper.map(this@LibvirtManagerActivity, TAG, e, "SSH fallback launch failed for $vmLabel")
+                showError(getString(R.string.hypervisor_ssh_open_failed_fmt, mapped.message))
             }
         }
     }
@@ -619,6 +628,7 @@ class LibvirtManagerActivity : TabSSHActivity() {
             progressBar.visibility = View.VISIBLE
             statusText.visibility = View.VISIBLE
             statusText.text = message
+            resetStatusTextStyle()
         }
     }
 
@@ -627,16 +637,36 @@ class LibvirtManagerActivity : TabSSHActivity() {
             if (isFinishing || isDestroyed) return@runOnUiThread
             progressBar.visibility = View.GONE
             statusText.visibility = View.GONE
+            resetStatusTextStyle()
         }
     }
 
+    /**
+     * Renders a load/connect failure distinct from the loading/empty text
+     * above — error-colored copy plus a tap-to-retry affordance — instead of
+     * reusing the same plain text with no visual or interactive difference.
+     */
     private fun showError(message: String) {
         runOnUiThread {
             if (isFinishing || isDestroyed) return@runOnUiThread
             progressBar.visibility = View.GONE
             statusText.visibility = View.VISIBLE
             statusText.text = getString(R.string.hypervisor_error_prefix_fmt, message)
+            statusText.setTextColor(
+                androidx.core.content.ContextCompat.getColor(this, R.color.error)
+            )
+            statusText.setOnClickListener {
+                if (currentHypervisorId != -1L) connectAndRefresh(currentHypervisorId)
+            }
         }
+    }
+
+    /** Restores [statusText] to its neutral loading/empty appearance. */
+    private fun resetStatusTextStyle() {
+        statusText.setTextColor(
+            androidx.core.content.ContextCompat.getColor(this, R.color.on_surface_variant)
+        )
+        statusText.setOnClickListener(null)
     }
 
     private fun showDomainError(title: String, message: String) {
@@ -715,7 +745,7 @@ class LibvirtManagerActivity : TabSSHActivity() {
         val form = DialogFields.form(this)
         val input = DialogFields.addText(
             form,
-            hint = getString(R.string.libvirt_snapshot_name_hint),
+            hint = getString(R.string.xcpng_snapshot_name_hint),
             initial = "snapshot-${System.currentTimeMillis()}",
             monospace = true
         )
@@ -744,8 +774,8 @@ class LibvirtManagerActivity : TabSSHActivity() {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        Logger.e(TAG, "Snapshot creation error", e)
-                        showDomainError(getString(R.string.hypervisor_error_title), getString(R.string.libvirt_error_create_snapshot_fmt, safeText(e.message, 200)))
+                        val mapped = ThrowableMapper.map(this@LibvirtManagerActivity, TAG, e, "Snapshot creation error")
+                        showDomainError(getString(R.string.status_error), getString(R.string.libvirt_error_create_snapshot_fmt, mapped.message))
                     }
                 }
             }
@@ -783,8 +813,8 @@ class LibvirtManagerActivity : TabSSHActivity() {
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
-                                Logger.e(TAG, "Revert error for $vmLabel", e)
-                                showDomainError(getString(R.string.hypervisor_error_title), getString(R.string.libvirt_error_revert_fmt, safeText(e.message, 200)))
+                                val mapped = ThrowableMapper.map(this@LibvirtManagerActivity, TAG, e, "Revert error for $vmLabel")
+                                showDomainError(getString(R.string.status_error), getString(R.string.libvirt_error_revert_fmt, mapped.message))
                             }
                         }
                     }
@@ -806,8 +836,8 @@ class LibvirtManagerActivity : TabSSHActivity() {
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
-                                Logger.e(TAG, "Snapshot delete error for $vmLabel", e)
-                                showDomainError(getString(R.string.hypervisor_error_title), getString(R.string.libvirt_error_delete_snapshot_fmt, safeText(e.message, 200)))
+                                val mapped = ThrowableMapper.map(this@LibvirtManagerActivity, TAG, e, "Snapshot delete error for $vmLabel")
+                                showDomainError(getString(R.string.status_error), getString(R.string.libvirt_error_delete_snapshot_fmt, mapped.message))
                             }
                         }
                     }

@@ -21,7 +21,9 @@ import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.keys.GenerateResult
 import io.github.tabssh.crypto.keys.ImportResult
+import io.github.tabssh.crypto.keys.KeyImportErrorType
 import io.github.tabssh.crypto.keys.KeyType
+import io.github.tabssh.crypto.keys.toUserMessage
 import io.github.tabssh.crypto.SSHKeyGenerator
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.storage.database.entities.ConnectionProfile
@@ -30,17 +32,23 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.SupervisorJob
 import io.github.tabssh.ui.adapters.StoredKeyAdapter
+import io.github.tabssh.utils.ThrowableMapper
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /** Auth tab — Keys sub-tab: raw SSH private keys used by host identities. */
 class AuthKeysFragment : Fragment() {
 
     private lateinit var app: TabSSHApplication
     private lateinit var keyAdapter: StoredKeyAdapter
+
+    // Fragment-scoped, so an in-flight SSH connect from installKeyOnServer()
+    // doesn't outlive the fragment's view.
+    private val installKeyScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     // ── SAF launchers — must be declared as field initializers (before onStart) ──
 
@@ -127,10 +135,15 @@ class AuthKeysFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        app = requireActivity().application as TabSSHApplication
+        app = tabSSHApp
 
         setupSshKeysSection(view)
         observeData()
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        installKeyScope.cancel()
     }
 
     // ─── SSH Keys ────────────────────────────────────────────────────────────
@@ -153,12 +166,16 @@ class AuthKeysFragment : Fragment() {
         view.findViewById<MaterialButton>(R.id.btn_add_ssh_key).setOnClickListener {
             showSshKeyAddMenu()
         }
+        view.findViewById<MaterialButton>(R.id.button_ssh_keys_empty_cta).setOnClickListener {
+            showSshKeyAddMenu()
+        }
     }
 
     private fun updateKeysEmptyState(view: View) {
         val empty = keyAdapter.itemCount == 0
         view.findViewById<View>(R.id.recycler_ssh_keys).visibility = if (empty) View.GONE else View.VISIBLE
         view.findViewById<View>(R.id.text_ssh_keys_empty).visibility = if (empty) View.VISIBLE else View.GONE
+        view.findViewById<View>(R.id.button_ssh_keys_empty_cta).visibility = if (empty) View.VISIBLE else View.GONE
     }
 
     // ─── Data observation ────────────────────────────────────────────────────
@@ -300,7 +317,7 @@ class AuthKeysFragment : Fragment() {
                     .setCancelable(false)
                     .show()
             }
-            val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+            val scope = installKeyScope
             var connection: SSHConnection? = null
             try {
                 val pubKey = app.keyStorage.getPublicKeyText(key.keyId)
@@ -350,7 +367,6 @@ class AuthKeysFragment : Fragment() {
                 }
             } finally {
                 try { connection?.disconnect() } catch (_: Exception) {}
-                scope.cancel()
             }
         }
     }
@@ -379,7 +395,7 @@ class AuthKeysFragment : Fragment() {
             .setTitle(getString(R.string.identity_export_private_key_title))
             .setMessage(getString(R.string.identity_export_passphrase_message))
             .setView(form.root)
-            .setPositiveButton(getString(R.string.import_export_export)) { _, _ ->
+            .setPositiveButton(getString(R.string.menu_export)) { _, _ ->
                 val passphrase = passphraseEdit.text.toString().takeIf { it.isNotEmpty() }
                 triggerPrivateKeyExport(key, passphrase)
             }
@@ -457,8 +473,8 @@ class AuthKeysFragment : Fragment() {
                 app.database.keyDao().updateKey(key.copy(certificate = cert))
                 Toast.makeText(requireContext(), toastMsg, Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to update certificate", e)
-                showError(getString(R.string.identity_update_cert_failed_fmt, e.message), getString(R.string.dialog_title_error))
+                val mapped = ThrowableMapper.map(requireContext(), TAG, e, "Failed to update certificate")
+                showError(getString(R.string.identity_update_cert_failed_fmt, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
             }
         }
     }
@@ -486,8 +502,8 @@ class AuthKeysFragment : Fragment() {
                 app.database.keyDao().updateKey(key.copy(name = newName))
                 Toast.makeText(requireContext(), getString(R.string.identity_key_renamed_toast_fmt, newName), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to rename key", e)
-                showError(getString(R.string.identity_rename_key_failed_fmt, e.message), getString(R.string.identity_rename_error_title))
+                val mapped = ThrowableMapper.map(requireContext(), TAG, e, "Failed to rename key")
+                showError(getString(R.string.identity_rename_key_failed_fmt, mapped.message), getString(R.string.identity_rename_error_title), copyText = mapped.technicalDetail)
             }
         }
     }
@@ -495,7 +511,7 @@ class AuthKeysFragment : Fragment() {
     private fun showKeyPasteDialog() {
         val form = DialogFields.form(requireContext())
         val edit = DialogFields.addMultiline(
-            form, getString(R.string.identity_key_paste_hint),
+            form, getString(R.string.paste_ssh_key_hint),
             minLines = 10, maxLines = 20, monospace = true
         )
         MaterialAlertDialogBuilder(requireContext())
@@ -586,9 +602,13 @@ class AuthKeysFragment : Fragment() {
                     }
                 }
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to read key file", e)
+                val mapped = ThrowableMapper.map(requireContext(), TAG, e, "Failed to read key file")
                 withContext(Dispatchers.Main) {
-                    showError(getString(R.string.identity_read_key_file_failed_fmt, e.message), getString(R.string.identity_import_error_title))
+                    showError(
+                        getString(R.string.identity_read_key_file_failed_fmt, mapped.message),
+                        getString(R.string.identity_import_error_title),
+                        copyText = mapped.technicalDetail
+                    )
                 }
             }
         }
@@ -627,7 +647,7 @@ class AuthKeysFragment : Fragment() {
         MaterialAlertDialogBuilder(ctx)
             .setTitle(getString(R.string.identity_import_key_title))
             .setView(form.root)
-            .setPositiveButton(getString(R.string.conn_edit_import)) { _, _ ->
+            .setPositiveButton(getString(R.string.menu_import)) { _, _ ->
                 val name = nameEdit.text.toString().trim().ifBlank { defaultName }
                 val alias = aliasEdit.text.toString().trim().ifBlank { defaultAlias }
                 onConfirm(name, alias)
@@ -652,20 +672,28 @@ class AuthKeysFragment : Fragment() {
                             Toast.makeText(requireContext(), getString(R.string.identity_ssh_key_imported_toast), Toast.LENGTH_SHORT).show()
                         }
                         is ImportResult.Error -> {
-                            if (result.message.contains("encrypted") &&
-                                result.message.contains("passphrase")
+                            if (result.errorType == KeyImportErrorType.ENCRYPTED_NEEDS_PASSPHRASE ||
+                                result.errorType == KeyImportErrorType.WRONG_PASSPHRASE
                             ) {
                                 showPassphraseDialog(keyContent, filename, keyAlias)
                             } else {
-                                showError(getString(R.string.identity_key_import_failed_fmt, result.message), getString(R.string.identity_import_failed_title))
+                                showError(
+                                    getString(R.string.identity_key_import_failed_fmt, result.errorType.toUserMessage(requireContext())),
+                                    getString(R.string.identity_import_failed_title),
+                                    copyText = result.technicalDetail
+                                )
                             }
                         }
                     }
                 }
             } catch (e: Exception) {
-                Logger.e(TAG, "Key import failed", e)
+                val mapped = ThrowableMapper.map(requireContext(), TAG, e, "Key import failed")
                 withContext(Dispatchers.Main) {
-                    showError(getString(R.string.identity_key_import_failed_exception_fmt, e.message), getString(R.string.identity_import_error_title))
+                    showError(
+                        getString(R.string.identity_key_import_failed_exception_fmt, mapped.message),
+                        getString(R.string.identity_import_error_title),
+                        copyText = mapped.technicalDetail
+                    )
                 }
             }
         }
@@ -678,7 +706,7 @@ class AuthKeysFragment : Fragment() {
             .setTitle(getString(R.string.identity_encrypted_key_title))
             .setMessage(getString(R.string.identity_encrypted_key_message))
             .setView(form.root)
-            .setPositiveButton(getString(R.string.conn_edit_import)) { _, _ ->
+            .setPositiveButton(getString(R.string.menu_import)) { _, _ ->
                 val passphrase = edit.text.toString()
                 importKeyWithPassphrase(keyContent, filename, passphrase, keyAlias)
             }
@@ -707,15 +735,23 @@ class AuthKeysFragment : Fragment() {
                             Toast.makeText(requireContext(), getString(R.string.identity_ssh_key_imported_toast), Toast.LENGTH_SHORT).show()
                         }
                         is ImportResult.Error -> {
-                            Logger.e(TAG, "Encrypted key import failed: ${result.message}")
-                            showError(getString(R.string.identity_import_failed_fmt, result.message), getString(R.string.identity_import_failed_title))
+                            Logger.e(TAG, "Encrypted key import failed: ${result.errorType} (${result.technicalDetail})")
+                            showError(
+                                getString(R.string.identity_import_failed_fmt, result.errorType.toUserMessage(requireContext())),
+                                getString(R.string.identity_import_failed_title),
+                                copyText = result.technicalDetail
+                            )
                         }
                     }
                 }
             } catch (e: Exception) {
-                Logger.e(TAG, "Encrypted key import failed", e)
+                val mapped = ThrowableMapper.map(requireContext(), TAG, e, "Encrypted key import failed")
                 withContext(Dispatchers.Main) {
-                    showError(getString(R.string.identity_encrypted_key_import_failed_fmt, e.message), getString(R.string.identity_import_error_title))
+                    showError(
+                        getString(R.string.identity_encrypted_key_import_failed_fmt, mapped.message),
+                        getString(R.string.identity_import_error_title),
+                        copyText = mapped.technicalDetail
+                    )
                 }
             }
         }
@@ -739,9 +775,13 @@ class AuthKeysFragment : Fragment() {
                     }
                 }
             } catch (e: Exception) {
-                Logger.e(TAG, "Key generation failed", e)
+                val mapped = ThrowableMapper.map(requireContext(), TAG, e, "Key generation failed")
                 withContext(Dispatchers.Main) {
-                    showError(getString(R.string.identity_key_generation_failed_exception_fmt, e.message), getString(R.string.dialog_title_error))
+                    showError(
+                        getString(R.string.identity_key_generation_failed_exception_fmt, mapped.message),
+                        getString(R.string.status_error),
+                        copyText = mapped.technicalDetail
+                    )
                 }
             }
         }

@@ -10,7 +10,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -22,6 +21,7 @@ import io.github.tabssh.ssh.connection.ConnectionState
 import io.github.tabssh.ui.activities.MainActivity
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Background service to maintain SSH connections
@@ -48,8 +48,7 @@ class SSHConnectionService : Service() {
     //              SSH_MSG_GLOBAL_REQUEST before the NAT table expires.
     //
     // Zero connections → released entirely; service self-stops shortly after.
-    private var wakeLock: PowerManager.WakeLock? = null
-
+    //
     // WiFi lock — keeps the WiFi radio out of power-saving mode while any
     // SSH session is active. PARTIAL_WAKE_LOCK keeps the CPU awake but does
     // not prevent the WiFi radio from sleeping; TCP connections drop when
@@ -61,7 +60,19 @@ class SSHConnectionService : Service() {
     // Uses WIFI_MODE_FULL_LOW_LATENCY on API 29+ (best for interactive SSH;
     // when screen is off it degrades gracefully to WIFI_MODE_FULL).
     // Uses WIFI_MODE_FULL_HIGH_PERF on older APIs (canonical VoIP pattern).
-    private var wifiLock: WifiManager.WifiLock? = null
+    //
+    // Acquire/release logic itself lives in the shared PowerLockHelper —
+    // see its kdoc for why this is factored out (also used by
+    // VncKeepAliveService).
+    private val powerLocks by lazy {
+        io.github.tabssh.utils.PowerLockHelper(
+            context = this,
+            logTag = TAG,
+            wakeLockTag = "TabSSH:SshSession",
+            wifiLockTag = "TabSSH:SshWifi",
+            timedWakeLockTag = "TabSSH:SshKeepAlive"
+        )
+    }
 
     // True when the device display is interactive (screen on / locked but lit).
     // Initialised from PowerManager.isInteractive() in onCreate so the first
@@ -172,7 +183,7 @@ class SSHConnectionService : Service() {
 
         Logger.d("SSHConnectionService", "Service created")
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         // Seed isScreenOn from the current display state so the first
         // acquireWakeLock() call after a process restart (which can happen
@@ -239,8 +250,8 @@ class SSHConnectionService : Service() {
         backgroundWakeCycleJob = null
 
         serviceScope.cancel()
-        releaseWakeLock()
-        releaseWifiLock()
+        powerLocks.releaseWakeLock()
+        powerLocks.releaseWifiLock()
         // Don't tear down the manager here — its lifecycle is the
         // Application's, not the service's. The service is allowed to
         // stop and restart (e.g. when there are zero active sessions),
@@ -261,11 +272,11 @@ class SSHConnectionService : Service() {
         // event fires. Without a lock the CPU can idle during the connecting /
         // authenticating phase (aggressive power management on many OEMs can
         // cause TCP handshake or JSch kex to time out on screen-off).
-        if (isScreenOn) acquireWakeLockIndefinite() else ensureBackgroundWakeCycleRunning()
+        if (isScreenOn) powerLocks.acquireWakeLockIndefinite() else ensureBackgroundWakeCycleRunning()
         // WiFi lock ensures the radio stays out of power-saving mode from the
         // moment the service starts so the TCP handshake is never stalled by
         // the radio waking up.
-        acquireWifiLock()
+        powerLocks.acquireWifiLock()
 
         // The foreground-service contract requires *some* notification
         // to be live before startForeground returns. If we already have
@@ -780,13 +791,13 @@ class SSHConnectionService : Service() {
             // just release both locks here.
             backgroundWakeCycleJob?.cancel()
             backgroundWakeCycleJob = null
-            releaseWakeLock()
-            releaseWifiLock()
+            powerLocks.releaseWakeLock()
+            powerLocks.releaseWifiLock()
             return
         }
 
         // At least one live session — ensure the WiFi radio stays awake.
-        acquireWifiLock()
+        powerLocks.acquireWifiLock()
 
         // At least one live session. Wake-lock mode depends on screen state:
         //  Screen on  → indefinite PARTIAL_WAKE_LOCK (user is interacting)
@@ -794,7 +805,7 @@ class SSHConnectionService : Service() {
         //               acquire an indefinite lock here — it would undo the
         //               battery savings. Ensure the cycle is running.
         if (isScreenOn) {
-            acquireWakeLockIndefinite()
+            powerLocks.acquireWakeLockIndefinite()
         } else {
             ensureBackgroundWakeCycleRunning()
         }
@@ -809,7 +820,7 @@ class SSHConnectionService : Service() {
         if (activeConnections == 0) return
         // Switch from indefinite wake lock to the battery-efficient background
         // cycle. Release first so the device can actually sleep between cycles.
-        releaseWakeLock()
+        powerLocks.releaseWakeLock()
         ensureBackgroundWakeCycleRunning()
         Logger.d(TAG, "Screen off — switched to background keepalive wake cycle")
     }
@@ -822,8 +833,8 @@ class SSHConnectionService : Service() {
         if (activeConnections > 0) {
             // Release first in case a timed wake lock from the last background
             // window is still held — timed + indefinite don't mix cleanly.
-            releaseWakeLock()
-            acquireWakeLockIndefinite()
+            powerLocks.releaseWakeLock()
+            powerLocks.acquireWakeLockIndefinite()
         }
         Logger.d(TAG, "Screen on — switched to indefinite wake lock")
     }
@@ -853,11 +864,11 @@ class SSHConnectionService : Service() {
         Logger.d(TAG, "Background wake cycle: ${BACKGROUND_WAKE_WINDOW_MS / 1000}s on / ${sleepMs / 1000}s sleep")
         backgroundWakeCycleJob = serviceScope.launch {
             while (isActive && !isScreenOn && activeConnections > 0) {
-                acquireTimedWakeLock(BACKGROUND_WAKE_WINDOW_MS)
+                powerLocks.acquireTimedWakeLock(BACKGROUND_WAKE_WINDOW_MS)
                 delay(BACKGROUND_WAKE_WINDOW_MS)
                 // Timed lock auto-releases after BACKGROUND_WAKE_WINDOW_MS;
                 // also clear our reference so releaseWakeLock() stays clean.
-                releaseWakeLock()
+                powerLocks.releaseWakeLock()
                 // Sleep — CPU can enter low-power state during this window
                 // because neither wake lock nor active coroutine requires it.
                 // The foreground service keeps the process alive (Doze-exempt),
@@ -867,104 +878,6 @@ class SSHConnectionService : Service() {
         }
     }
 
-    // ── Wake lock helpers ─────────────────────────────────────────────────────
-
-    /**
-     * Acquire an indefinite PARTIAL_WAKE_LOCK. Used while the screen is on.
-     * Idempotent: no-op if already held.
-     */
-    private fun acquireWakeLockIndefinite() {
-        if (wakeLock?.isHeld == true) return
-        try {
-            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-            val wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TabSSH:SshSession")
-            wl.setReferenceCounted(false)
-            wl.acquire()
-            wakeLock = wl
-            Logger.i(TAG, "Wake lock acquired (indefinite)")
-        } catch (e: Exception) {
-            Logger.w(TAG, "Failed to acquire wake lock", e)
-        }
-    }
-
-    /**
-     * Acquire a timed PARTIAL_WAKE_LOCK that auto-releases after [timeoutMs].
-     * Used by the background wake cycle. Replaces any existing held lock so
-     * the timeout is always [timeoutMs] from now.
-     */
-    private fun acquireTimedWakeLock(timeoutMs: Long) {
-        try {
-            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-            val wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TabSSH:SshKeepAlive")
-            wl.setReferenceCounted(false)
-            wl.acquire(timeoutMs)
-            wakeLock = wl
-            Logger.d(TAG, "Wake lock acquired (timed ${timeoutMs / 1000}s)")
-        } catch (e: Exception) {
-            Logger.w(TAG, "Failed to acquire timed wake lock", e)
-        }
-    }
-
-    private fun releaseWakeLock() {
-        try {
-            val wl = wakeLock?.takeIf { it.isHeld } ?: return
-            wl.release()
-            Logger.i(TAG, "Wake lock released")
-        } catch (e: Exception) {
-            Logger.w(TAG, "Failed to release wake lock", e)
-        } finally {
-            wakeLock = null
-        }
-    }
-
-    // ── WiFi lock helpers ─────────────────────────────────────────────────────
-
-    /**
-     * Acquire a WiFi lock to keep the radio out of power-saving mode.
-     *
-     * Uses [WifiManager.WIFI_MODE_FULL_LOW_LATENCY] on API 29+ — optimal for
-     * interactive SSH; degrades to WIFI_MODE_FULL automatically when the screen
-     * is off. On older APIs uses [WifiManager.WIFI_MODE_FULL_HIGH_PERF], the
-     * canonical VoIP/SSH pattern for keeping the radio fully awake.
-     *
-     * Idempotent: no-op if already held.
-     */
-    @Suppress("DEPRECATION")
-    private fun acquireWifiLock() {
-        if (wifiLock?.isHeld == true) return
-        try {
-            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                WifiManager.WIFI_MODE_FULL_LOW_LATENCY
-            } else {
-                WifiManager.WIFI_MODE_FULL_HIGH_PERF
-            }
-            val wl = wm.createWifiLock(mode, "TabSSH:SshWifi")
-            wl.setReferenceCounted(false)
-            wl.acquire()
-            wifiLock = wl
-            Logger.i(TAG, "WiFi lock acquired")
-        } catch (e: Exception) {
-            Logger.w(TAG, "Failed to acquire WiFi lock", e)
-        }
-    }
-
-    /**
-     * Release the WiFi lock, allowing the radio to enter power-saving mode.
-     * Called when all connections close or the service is destroyed.
-     */
-    private fun releaseWifiLock() {
-        try {
-            val wl = wifiLock?.takeIf { it.isHeld } ?: return
-            wl.release()
-            Logger.i(TAG, "WiFi lock released")
-        } catch (e: Exception) {
-            Logger.w(TAG, "Failed to release WiFi lock", e)
-        } finally {
-            wifiLock = null
-        }
-    }
-    
     private suspend fun startConnectionMonitoring() {
         Logger.d("SSHConnectionService", "Starting connection monitoring")
 

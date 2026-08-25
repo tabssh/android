@@ -383,7 +383,7 @@
         <activity
             android:name=".ui.activities.ThemeEditorActivity"
             android:exported="false"
-            android:label="@string/activity_label_theme_editor"
+            android:label="@string/theme_editor_title"
             android:parentActivityName=".ui.activities.SettingsActivity"
             android:windowSoftInputMode="adjustResize" />
 

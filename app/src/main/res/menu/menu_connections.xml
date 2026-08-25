@@ -7,15 +7,15 @@
          TalkBack reads something descriptive. -->
     <item
         android:id="@+id/action_sort"
-        android:title="Sort connections"
-        android:contentDescription="Sort connections"
+        android:title="@string/connections_sort_scope_connections"
+        android:contentDescription="@string/connections_sort_scope_connections"
         android:icon="@drawable/ic_sort"
         app:showAsAction="always" />
 
     <item
         android:id="@+id/action_bulk_edit"
-        android:title="Bulk edit"
-        android:contentDescription="Bulk edit connections"
+        android:title="@string/connections_bulk_edit_title"
+        android:contentDescription="@string/menu_connections_bulk_edit_desc"
         android:icon="@drawable/ic_edit"
         app:showAsAction="ifRoom" />
 

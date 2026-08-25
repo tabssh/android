@@ -35,6 +35,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.tabSSHApp
 
 /**
  * Displays the list of OCI Compute instances for a single tenancy. Launched by
@@ -63,6 +64,9 @@ class OciManagerActivity : TabSSHActivity() {
     private var currentProfile: HypervisorProfile? = null
     private lateinit var adapter: InstanceAdapter
 
+    // Retained for showError's tap-to-retry — re-runs the connect that failed.
+    private var currentHypervisorId: Long = -1L
+
     // The refresh button and every per-row action button stay tappable while
     // their HTTP call is in flight; without these a double tap issues the
     // instance action twice against the same OCID.
@@ -77,7 +81,7 @@ class OciManagerActivity : TabSSHActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_oci_manager)
 
-        app = application as TabSSHApplication
+        app = tabSSHApp
 
         toolbar = findViewById(R.id.toolbar)
         btnRefresh = findViewById(R.id.btn_refresh)
@@ -95,6 +99,7 @@ class OciManagerActivity : TabSSHActivity() {
         btnRefresh.setOnClickListener { refreshInstances() }
 
         val hypervisorId = intent.getLongExtra(EXTRA_HYPERVISOR_ID, -1L)
+        currentHypervisorId = hypervisorId
         if (hypervisorId == -1L) {
             showError(getString(R.string.hypervisor_error_no_id))
             return
@@ -465,7 +470,7 @@ class OciManagerActivity : TabSSHActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.oci_ssh_dialog_title_fmt, instanceName))
             .setView(view)
-            .setPositiveButton(getString(R.string.virt_viewer_connect)) { _, _ ->
+            .setPositiveButton(getString(R.string.connect_button)) { _, _ ->
                 val username = usernameField.text.toString().trim().ifBlank { "opc" }
                 val port = portField.text.toString().toIntOrNull()?.coerceIn(1, 65535) ?: 22
                 val authType = authOptions[authSpinner.selectedItemPosition]
@@ -517,6 +522,7 @@ class OciManagerActivity : TabSSHActivity() {
             progressBar.visibility = View.VISIBLE
             statusText.visibility = View.VISIBLE
             statusText.text = message
+            resetStatusTextStyle()
         }
     }
 
@@ -524,15 +530,35 @@ class OciManagerActivity : TabSSHActivity() {
         runOnUiThread {
             progressBar.visibility = View.GONE
             statusText.visibility = View.GONE
+            resetStatusTextStyle()
         }
     }
 
+    /**
+     * Renders a load/connect failure distinct from the loading/empty text
+     * above — error-colored copy plus a tap-to-retry affordance — instead of
+     * reusing the same plain text with no visual or interactive difference.
+     */
     private fun showError(message: String) {
         runOnUiThread {
             progressBar.visibility = View.GONE
             statusText.visibility = View.VISIBLE
             statusText.text = getString(R.string.hypervisor_error_prefix_fmt, message)
+            statusText.setTextColor(
+                androidx.core.content.ContextCompat.getColor(this, R.color.error)
+            )
+            statusText.setOnClickListener {
+                if (currentHypervisorId != -1L) connectAndRefresh(currentHypervisorId)
+            }
         }
+    }
+
+    /** Restores [statusText] to its neutral loading/empty appearance. */
+    private fun resetStatusTextStyle() {
+        statusText.setTextColor(
+            androidx.core.content.ContextCompat.getColor(this, R.color.on_surface_variant)
+        )
+        statusText.setOnClickListener(null)
     }
 
     // ── Adapter ───────────────────────────────────────────────────────────────
