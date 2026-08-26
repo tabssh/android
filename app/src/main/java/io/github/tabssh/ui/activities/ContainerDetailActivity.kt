@@ -150,7 +150,7 @@ class ContainerDetailActivity : TabSSHActivity() {
         val titles = intArrayOf(
             R.string.container_detail_tab_inspect,
             R.string.container_detail_tab_config,
-            R.string.container_detail_tab_logs,
+            R.string.container_action_logs,
             R.string.container_detail_tab_stats
         )
         titles.forEach { tabLayout.addTab(tabLayout.newTab().setText(it)) }

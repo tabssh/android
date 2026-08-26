@@ -45,7 +45,7 @@
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="@string/dialog_quick_connect_host_hint"
+            android:hint="@string/main_quick_connect_hint_host_ssh"
             android:layout_marginBottom="@dimen/space_12dp"
             app:startIconDrawable="@drawable/ic_computer">
 
@@ -83,7 +83,7 @@
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="@string/dialog_quick_connect_password_hint"
+            android:hint="@string/main_quick_connect_hint_password_ssh"
             android:layout_marginBottom="@dimen/space_sm"
             app:passwordToggleEnabled="true">
 

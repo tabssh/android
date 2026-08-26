@@ -31,7 +31,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_md"
-                android:text="@string/hypervisor_edit_import_from_host"
+                android:text="@string/hypervisor_edit_import_title"
                 app:icon="@drawable/ic_import_export"
                 app:iconGravity="start"
                 style="@style/Widget.Material3.Button.TonalButton" />
@@ -255,7 +255,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="@string/hypervisor_edit_not_pinned_yet"
+                        android:text="@string/hypervisor_edit_pin_not_pinned_yet"
                         android:textSize="13sp"
                         android:fontFamily="monospace"
                         android:textColor="?attr/colorOnSurface"
@@ -345,7 +345,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_lg"
-                android:text="@string/hypervisor_edit_test_connection"
+                android:text="@string/hypervisor_edit_test_connection_button"
                 style="@style/Widget.Material3.Button.OutlinedButton" />
 
         </LinearLayout>

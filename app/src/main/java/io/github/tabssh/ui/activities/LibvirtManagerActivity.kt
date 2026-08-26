@@ -536,7 +536,7 @@ class LibvirtManagerActivity : TabSSHActivity() {
                     // let the user configure the right auth method for their VM.
                     val vmHostsGroupId = withContext(Dispatchers.IO) {
                         SystemGroupHelper.getOrCreateSystemGroupId(
-                            app.database, "vm_hosts", getString(R.string.libvirt_manager_vm_hosts_group_name), "vm"
+                            app.database, "vm_hosts", getString(R.string.vmware_group_name_vm_hosts), "vm"
                         )
                     }
                     existing = ConnectionProfile(

@@ -78,7 +78,7 @@ class ImportFromQrActivity : TabSSHActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_import_from_qr)
         setSupportActionBar(findViewById(R.id.toolbar))
-        supportActionBar?.setTitle(R.string.import_from_qr_title)
+        supportActionBar?.setTitle(R.string.activity_label_pair_from_desktop)
         statusText = findViewById(R.id.text_status)
 
         if (savedInstanceState == null) {

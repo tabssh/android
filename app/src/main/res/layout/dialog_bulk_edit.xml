@@ -186,7 +186,7 @@
                         android:src="@drawable/ic_terminal" />
                     <TextView
                         style="@style/BulkEdit.SectionTitle"
-                        android:text="@string/dialog_bulk_edit_section_terminal" />
+                        android:text="@string/terminal_menu_section_terminal" />
                 </LinearLayout>
 
                 <com.google.android.material.textfield.TextInputLayout

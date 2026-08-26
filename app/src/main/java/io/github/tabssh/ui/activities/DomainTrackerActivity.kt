@@ -260,7 +260,7 @@ class DomainTrackerActivity : TabSSHActivity() {
     private fun confirmDelete(domain: Domain) {
         MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.domain_delete_title, domain.domainName))
-            .setMessage(getString(R.string.domain_delete_message))
+            .setMessage(getString(R.string.domain_delete_confirm_message))
             .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 lifecycleScope.launch {
                     try {
@@ -311,7 +311,7 @@ class DomainTrackerActivity : TabSSHActivity() {
             holder.detail.text = listOf(
                 getString(R.string.domain_tracker_col_privacy) + ": " + domain.privacyProtection,
                 getString(R.string.domain_tracker_col_status) + ": " + domain.statusAtRegistrar,
-                getString(R.string.domain_tracker_col_auto_renew) + ": " + domain.autoRenew,
+                getString(R.string.domain_edit_switch_auto_renew) + ": " + domain.autoRenew,
                 getString(R.string.domain_tracker_col_expires) + ": " + expiration
             ).joinToString("  ·  ")
 

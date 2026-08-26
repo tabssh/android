@@ -64,7 +64,7 @@ class ContainerImagesFragment : ContainerPageFragment() {
         textEmpty.setText(R.string.container_images_empty)
         view.findViewById<TextView>(R.id.text_empty_hint).setText(R.string.container_images_empty_hint)
         view.findViewById<ImageView>(R.id.image_empty).setImageResource(R.drawable.ic_container_image)
-        fabAction.contentDescription = getString(R.string.container_pull_image_desc)
+        fabAction.contentDescription = getString(R.string.container_pull_title)
 
         view.findViewById<MaterialButton>(R.id.button_retry).setOnClickListener {
             session?.let { onSessionReady(it) }

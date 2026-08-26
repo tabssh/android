@@ -317,7 +317,7 @@ class ContainerHostEditActivity : TabSSHActivity() {
     private fun setupToolbar() {
         setSupportActionBar(toolbar)
         supportActionBar?.setTitle(
-            if (hostId != null) R.string.container_host_edit_title_edit
+            if (hostId != null) R.string.activity_label_edit_container_host
             else R.string.container_host_edit_title_add
         )
     }
@@ -405,7 +405,7 @@ class ContainerHostEditActivity : TabSSHActivity() {
                 listOf(
                     getString(R.string.password_hint),
                     getString(R.string.route_auth_key),
-                    getString(R.string.container_auth_identity)
+                    getString(R.string.container_host_identity_desc)
                 )
             )
             spinnerCustomKey.adapter = ArrayAdapter(

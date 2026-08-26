@@ -68,7 +68,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginEnd="@dimen/space_sm"
-            android:text="@string/crash_report_paste_issue" />
+            android:text="@string/settings_action_report_issue" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_copy"

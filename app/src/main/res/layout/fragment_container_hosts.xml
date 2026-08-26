@@ -18,7 +18,7 @@
             android:layout_height="?attr/actionBarSize"
             android:elevation="4dp"
             style="@style/Widget.TabSSH.Toolbar.Section"
-            app:title="@string/container_tab_title" />
+            app:title="@string/container_manager_tab_containers" />
 
         <!-- Container host list with pull-to-refresh -->
         <androidx.swiperefreshlayout.widget.SwipeRefreshLayout

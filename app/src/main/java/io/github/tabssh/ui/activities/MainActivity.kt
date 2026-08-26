@@ -314,7 +314,7 @@ class MainActivity : TabSSHActivity() {
                 val mapped = ThrowableMapper.map(this@MainActivity, "MainActivity", e, "Failed to get hypervisors by type")
                 android.widget.Toast.makeText(
                     this@MainActivity,
-                    getString(R.string.main_load_hypervisors_failed, mapped.message),
+                    getString(R.string.hypervisor_load_failed_fmt, mapped.message),
                     android.widget.Toast.LENGTH_SHORT
                 ).show()
             }

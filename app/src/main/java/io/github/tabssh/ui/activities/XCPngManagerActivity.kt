@@ -106,7 +106,7 @@ class XCPngManagerActivity : TabSSHActivity() {
 
     private fun setupToolbar() {
         setSupportActionBar(findViewById(R.id.toolbar))
-        supportActionBar?.title = getString(R.string.xcpng_manager_title)
+        supportActionBar?.title = getString(R.string.activity_label_xcpng_manager)
     }
 
     private fun setupViews() {
@@ -245,7 +245,7 @@ class XCPngManagerActivity : TabSSHActivity() {
                     }
                 } else {
                     statusText.text = getString(R.string.xcpng_auth_failed)
-                    showError(getString(R.string.xcpng_auth_failed_details_fmt, profile.host, profile.port, profile.verifySsl.toString()), getString(R.string.xcpng_connection_error_title))
+                    showError(getString(R.string.xcpng_auth_failed_details_fmt, profile.host, profile.port, profile.verifySsl.toString()), getString(R.string.terminal_connection_error_title))
                     progressBar.visibility = View.GONE
                 }
 
@@ -529,7 +529,7 @@ class XCPngManagerActivity : TabSSHActivity() {
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(this@XCPngManagerActivity, TAG, e, "VM action failed")
                 progressBar.visibility = View.GONE
-                Toast.makeText(this@XCPngManagerActivity, getString(R.string.xcpng_action_failed_fmt, action, mapped.message), Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@XCPngManagerActivity, getString(R.string.proxmox_power_action_error_fmt, action, mapped.message), Toast.LENGTH_SHORT).show()
             } finally {
                 vmActionInFlight = false
             }
@@ -841,7 +841,7 @@ class XCPngManagerActivity : TabSSHActivity() {
                     return@setPositiveButton
                 }
                 if (rawPort == null || rawPort !in 1..65535) {
-                    Toast.makeText(this, getString(R.string.xcpng_invalid_port), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.conn_edit_port_out_of_range), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 val profile = HypervisorProfile(
@@ -1198,7 +1198,7 @@ class XCPngManagerActivity : TabSSHActivity() {
             
             holder.name.text = safeText(snapshot.name_label, 64)
             holder.time.text = getString(
-                R.string.xcpng_snapshot_created_fmt,
+                R.string.vmware_snapshot_created_time_fmt,
                 java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(snapshot.snapshot_time))
             )
             

@@ -189,7 +189,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/perf_memory_title"
+                            android:text="@string/host_detail_label_memory"
                             android:textSize="14sp"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
@@ -238,7 +238,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/perf_disk_title"
+                            android:text="@string/host_detail_label_disk"
                             android:textSize="14sp"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />

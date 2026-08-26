@@ -21,15 +21,12 @@
     <!-- Connection management -->
     <string name="connection_name_hint">✏️ Nom de la connexion (ex. : \"Mon VPS\")</string>
     <string name="connection_port_hint">22</string>
-    <string name="edit_connection">✏️ Modifier la Connexion</string>
-    <string name="delete_connection">🗑️ Supprimer la Connexion</string>
     <string name="duplicate_connection">📋 Dupliquer la Connexion</string>
     <string name="connection_saved">✅ Connexion enregistrée avec succès !</string>
     <string name="connection_deleted">🗑️ Connexion supprimée</string>
     
     <!-- Authentication -->
     <string name="auth_type_public_key">🔐 Clé Publique (Clé SSH)</string>
-    <string name="auth_type_keyboard_interactive">⌨️ Interactif au Clavier</string>
     <string name="password_hint">🔒 Mot de passe</string>
     <string name="select_key">🔑 Sélectionner une Clé SSH</string>
     <string name="generate_key">✨ Générer une Nouvelle Clé</string>
@@ -39,7 +36,6 @@
     <string name="new_tab">➕ Nouvel Onglet</string>
     <string name="close_tab">❌ Fermer l\'Onglet</string>
     <string name="tab_menu">📑 Menu des Onglets</string>
-    <string name="function_keys">🔤 Touches de Fonction</string>
     <string name="show_keyboard">⌨️ Afficher le Clavier</string>
     <string name="hide_keyboard">⌨️ Masquer le Clavier</string>
     <string name="paste">📋 Coller</string>
@@ -78,21 +74,17 @@
     <string name="settings_terminal">💻 Terminal</string>
     <string name="settings_security">🔐 Sécurité et Confidentialité</string>
     <string name="settings_interface">🎨 Interface</string>
-    <string name="settings_connections">🌐 Connexions</string>
-    <string name="settings_accessibility">♿ Accessibilité</string>
     
     <!-- General settings -->
     <string name="pref_startup_behavior">Comportement au Démarrage</string>
     <string name="pref_startup_behavior_summary">Action au lancement de l\'application</string>
     <string name="pref_auto_backup">Sauvegarde Automatique</string>
     <string name="pref_auto_backup_summary">Sauvegarder automatiquement les connexions et les clés</string>
-    <string name="pref_language">Langue</string>
     <string name="pref_language_summary">Langue de l\'application</string>
     
     <!-- Security settings -->
     <string name="pref_password_storage">Stockage des Mots de Passe</string>
     <string name="pref_password_storage_summary">Comment stocker les mots de passe</string>
-    <string name="pref_biometric_auth">Authentification Biométrique</string>
     <string name="pref_biometric_auth_summary">Utiliser l\'empreinte digitale ou la reconnaissance faciale</string>
     <string name="pref_host_key_checking">Vérification de la Clé d\'Hôte</string>
     <string name="pref_host_key_checking_summary">Vérifier l\'identité de l\'hôte</string>
@@ -103,13 +95,9 @@
     
     <!-- Terminal settings -->
     <string name="pref_theme">Thème</string>
-    <string name="pref_theme_summary">Palette de couleurs du terminal</string>
     <string name="pref_font_family">Police de Caractères</string>
     <string name="pref_font_family_summary">Police du terminal</string>
     <string name="pref_font_size">Taille de Police</string>
-    <string name="pref_font_size_summary">Taille du texte du terminal</string>
-    <string name="pref_cursor_style">Style du Curseur</string>
-    <string name="pref_cursor_style_summary">Apparence du curseur</string>
     <string name="pref_scrollback_lines">Lignes d\'Historique</string>
     <string name="pref_scrollback_lines_summary">Nombre de lignes à conserver dans l\'historique</string>
     
@@ -148,7 +136,6 @@
     <string name="biometric_not_available">⚠️ Authentification biométrique non disponible sur cet appareil</string>
     
     <!-- About -->
-    <string name="about_version">📦 Version</string>
     <string name="about_build">🔨 Build</string>
     <string name="about_license">📜 Licence (MIT)</string>
     <string name="about_source_code">💻 Code Source</string>

@@ -376,7 +376,7 @@ class ThemeEditorActivity : TabSSHActivity() {
                 is ImportThemeResult.Success -> {
                     Toast.makeText(
                         this@ThemeEditorActivity,
-                        getString(io.github.tabssh.R.string.theme_editor_saved_toast_fmt, r.theme.name),
+                        getString(io.github.tabssh.R.string.cloud_accounts_toast_saved, r.theme.name),
                         Toast.LENGTH_SHORT
                     ).show()
                     Logger.i(TAG, "Saved custom theme ${r.theme.id}")

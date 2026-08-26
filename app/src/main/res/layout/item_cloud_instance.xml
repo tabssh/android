@@ -133,7 +133,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="@string/cloud_instance_action_force_restart"
+                android:text="@string/cloud_manager_action_force_restart"
                 android:minHeight="@dimen/min_touch_target" />
 
         </LinearLayout>

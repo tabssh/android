@@ -583,7 +583,7 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
                         io.github.tabssh.utils.Format.size(this, logsBytes.toLong())
                     )
                 )
-                .setPositiveButton(R.string.action_paste_issue) { _, _ -> openIssueAction() }
+                .setPositiveButton(R.string.settings_action_report_issue) { _, _ -> openIssueAction() }
                 .setNeutralButton(R.string.action_clear) { _, _ -> onClear() }
                 .setNegativeButton(R.string.cancel, null)
                 .show()
@@ -607,7 +607,7 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
             .setTitle(if (copied) getString(R.string.log_copied_title, title) else title)
             .setMessage(message)
             .setPositiveButton(R.string.ok, null)
-            .setNeutralButton(R.string.action_paste_issue) { _, _ -> openIssueAction() }
+            .setNeutralButton(R.string.settings_action_report_issue) { _, _ -> openIssueAction() }
             .setNegativeButton(R.string.action_clear) { _, _ -> onClear() }
             .show()
     }

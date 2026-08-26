@@ -256,7 +256,7 @@ class HypervisorsFragment : Fragment() {
 
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.hypervisor_delete_title)
-            .setMessage(getString(R.string.hypervisor_delete_message, hypervisor.name))
+            .setMessage(getString(R.string.connections_delete_message_fmt, hypervisor.name))
             .setPositiveButton(R.string.delete) { _, _ ->
                 // viewLifecycleOwner: scope must end at onDestroyView so the
                 // toast/UI updates below can't fire against a dead view tree.
@@ -277,7 +277,7 @@ class HypervisorsFragment : Fragment() {
                         if (!isAdded) return@launch
                         Toast.makeText(
                             requireContext(),
-                            getString(R.string.hypervisor_deleted_fmt, hypervisor.name),
+                            getString(R.string.sftp_deleted_fmt, hypervisor.name),
                             Toast.LENGTH_SHORT
                         ).show()
                     } catch (e: CancellationException) {

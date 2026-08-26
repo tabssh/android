@@ -147,7 +147,7 @@ class AuthVncFragment : Fragment() {
     private fun confirmDeleteVncIdentity(identity: VncIdentity) {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(getString(R.string.identity_vnc_delete_title))
-            .setMessage(getString(R.string.identity_vnc_delete_message_fmt, identity.name))
+            .setMessage(getString(R.string.pane_group_delete_message_fmt, identity.name))
             .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 lifecycleScope.launch {
                     withContext(Dispatchers.IO) {

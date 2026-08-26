@@ -110,7 +110,7 @@
 
     <Preference
       android:key="view_audit_log"
-      android:title="@string/prefs_view_audit_log_title"
+      android:title="@string/prefs_audit_log_viewer_title"
       android:summary="@string/prefs_view_audit_log_summary"
       android:icon="@drawable/ic_security" />
 
@@ -129,7 +129,7 @@
 
     <Preference
       android:key="clear_logs"
-      android:title="@string/prefs_clear_logs_title"
+      android:title="@string/settings_dialog_clear_logs_title"
       android:summary="@string/prefs_clear_logs_summary"
       android:icon="@drawable/ic_clear" />
 

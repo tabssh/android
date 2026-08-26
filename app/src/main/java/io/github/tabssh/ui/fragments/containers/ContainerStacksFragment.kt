@@ -215,7 +215,7 @@ class ContainerStacksFragment : ContainerPageFragment() {
                 )
             }
         }
-        actions += ContainerActionSheet.Action(R.drawable.ic_download, getString(R.string.container_stack_action_pull)) {
+        actions += ContainerActionSheet.Action(R.drawable.ic_download, getString(R.string.container_pull_action)) {
             runComposeAction(item) {
                 composeAction(
                     current, item,

@@ -385,7 +385,7 @@ class PortForwardEditActivity : TabSSHActivity() {
             }
             val portValue = editSshPort.text?.toString()?.trim()?.toIntOrNull()
             if (portValue == null || portValue !in 1..65535) {
-                layoutSshPort.error = getString(R.string.port_forward_error_port_range)
+                layoutSshPort.error = getString(R.string.route_error_port_range)
                 return
             }
             sshPort = portValue
@@ -412,7 +412,7 @@ class PortForwardEditActivity : TabSSHActivity() {
                 // Blank local port mirrors the remote port (entity handles it).
                 localPort = editLocalPort.text?.toString()?.trim()?.toIntOrNull() ?: 0
                 if (localPort != 0 && localPort !in 1..65535) {
-                    layoutLocalPort.error = getString(R.string.port_forward_error_port_range)
+                    layoutLocalPort.error = getString(R.string.route_error_port_range)
                     return
                 }
             }
@@ -458,7 +458,7 @@ class PortForwardEditActivity : TabSSHActivity() {
     private fun validPort(layout: TextInputLayout): Int? {
         val value = layout.editText?.text?.toString()?.trim()?.toIntOrNull()
         if (value == null || value !in 1..65535) {
-            layout.error = getString(R.string.port_forward_error_port_range)
+            layout.error = getString(R.string.route_error_port_range)
             return null
         }
         return value

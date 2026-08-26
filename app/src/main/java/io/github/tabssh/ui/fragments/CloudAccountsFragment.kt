@@ -268,9 +268,9 @@ class CloudAccountsFragment : Fragment() {
                 }
             }
             b.textLastRefresh.text = if (account.lastRefreshAt > 0) {
-                getString(R.string.cloud_last_sync, ROW_FORMATTER.format(Date(account.lastRefreshAt)))
+                getString(R.string.cloud_accounts_last_sync, ROW_FORMATTER.format(Date(account.lastRefreshAt)))
             } else {
-                getString(R.string.cloud_never_synced)
+                getString(R.string.cloud_accounts_never_synced)
             }
 
             // Detach listener BEFORE updating isChecked so DiffUtil-driven
@@ -536,7 +536,7 @@ class CloudAccountsFragment : Fragment() {
                 val message = if (existing != null) {
                     getString(R.string.cloud_updated, name)
                 } else {
-                    getString(R.string.cloud_saved, name)
+                    getString(R.string.cloud_accounts_toast_saved, name)
                 }
                 Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
@@ -566,7 +566,7 @@ class CloudAccountsFragment : Fragment() {
                 }
                 if (!isAdded) return@launch
                 Toast.makeText(requireContext(),
-                    getString(R.string.cloud_saved, account.name), Toast.LENGTH_SHORT).show()
+                    getString(R.string.cloud_accounts_toast_saved, account.name), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(requireContext(), TAG, e, "Save cloud account failed")
                 if (!isAdded) return@launch
@@ -628,7 +628,7 @@ class CloudAccountsFragment : Fragment() {
             return
         }
         Toast.makeText(requireContext(),
-            getString(R.string.cloud_refreshing, account.name), Toast.LENGTH_SHORT).show()
+            getString(R.string.cloud_accounts_toast_refreshing, account.name), Toast.LENGTH_SHORT).show()
         viewLifecycleOwner.lifecycleScope.launch {
             val token = withContext(Dispatchers.IO) {
                 app.securePasswordManager.retrievePassword("cloud_token_${account.id}")
@@ -642,7 +642,7 @@ class CloudAccountsFragment : Fragment() {
             if (providerType == null) {
                 if (!isAdded) return@launch
                 Toast.makeText(requireContext(),
-                    getString(R.string.cloud_unknown_provider, account.provider), Toast.LENGTH_LONG).show()
+                    getString(R.string.cloud_manager_toast_unknown_provider, account.provider), Toast.LENGTH_LONG).show()
                 return@launch
             }
             val count = try {

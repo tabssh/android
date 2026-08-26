@@ -39,7 +39,7 @@ class LogViewerActivity : TabSSHActivity() {
         setContentView(R.layout.activity_log_viewer)
         
         setSupportActionBar(findViewById(R.id.toolbar))
-        supportActionBar?.setTitle(R.string.log_viewer_title)
+        supportActionBar?.setTitle(R.string.log_viewer_title_application_logs)
         
         // Initialize views
         recyclerView = findViewById(R.id.recycler_logs)

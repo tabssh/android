@@ -31,7 +31,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/active_hosts_empty_title"
+                android:text="@string/terminal_no_active_sessions"
                 android:textSize="18sp"
                 android:textStyle="bold"
                 android:gravity="center"

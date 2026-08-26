@@ -1431,7 +1431,7 @@ class TabTerminalActivity : TabSSHActivity() {
         val display = (action.username?.let { "$it@" } ?: "") + action.host +
             if (action.port != 22) ":${action.port}" else ""
         MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.terminal_ssh_link_title)
+            .setTitle(R.string.terminal_clip_label_ssh_link)
             .setMessage(getString(R.string.terminal_ssh_link_message, display))
             .setPositiveButton(R.string.connect_button) { _, _ ->
                 connectSshLink(action)
@@ -1477,7 +1477,7 @@ class TabTerminalActivity : TabSSHActivity() {
         val display = (action.username?.let { "$it@" } ?: "") + action.host +
             if (action.port != 22) ":${action.port}" else ""
         MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.terminal_sftp_link_title)
+            .setTitle(R.string.terminal_clip_label_sftp_link)
             .setMessage(getString(R.string.terminal_sftp_link_message, display, action.path))
             .setPositiveButton(R.string.connect_button) { _, _ ->
                 connectSftpLink(action)
@@ -5118,14 +5118,14 @@ class TabTerminalActivity : TabSSHActivity() {
         items += PaletteDialog.Item(getString(R.string.theme_editor_title), getString(R.string.terminal_cmdpalette_theme_editor_sub)) {
             startActivity(ThemeEditorActivity.createIntent(this))
         }
-        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_ssh_keys), getString(R.string.terminal_cmdpalette_ssh_keys_sub)) {
+        items += PaletteDialog.Item(getString(R.string.identity_ssh_keys_title), getString(R.string.terminal_cmdpalette_ssh_keys_sub)) {
             val intent = Intent(this, MainActivity::class.java)
             intent.putExtra("start_tab", io.github.tabssh.ui.adapters.MainTab.AUTH)
             intent.putExtra("start_sub_tab", io.github.tabssh.ui.adapters.AuthTab.KEYS)
             intent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             startActivity(intent)
         }
-        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_snippets), getString(R.string.terminal_cmdpalette_snippets_sub)) {
+        items += PaletteDialog.Item(getString(R.string.nav_item_snippets), getString(R.string.terminal_cmdpalette_snippets_sub)) {
             startActivity(Intent(this, SnippetManagerActivity::class.java))
         }
         items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_port_forwarding), getString(R.string.terminal_cmdpalette_port_forwarding_sub)) {
@@ -5444,7 +5444,7 @@ class TabTerminalActivity : TabSSHActivity() {
                             val snippet = snippets[which]
                             insertSnippet(snippet)
                         }
-                        .setNeutralButton(R.string.terminal_manage_snippets) { _, _ ->
+                        .setNeutralButton(R.string.activity_label_manage_snippets) { _, _ ->
                             showManageSnippetsMenu()
                         }
                         .setNegativeButton(R.string.cancel, null)
@@ -5565,7 +5565,7 @@ class TabTerminalActivity : TabSSHActivity() {
         )
 
         MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.terminal_manage_snippets)
+            .setTitle(R.string.activity_label_manage_snippets)
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> showCreateSnippetDialog()
@@ -5588,7 +5588,7 @@ class TabTerminalActivity : TabSSHActivity() {
         val inputCategory = dialogView.findViewById<AutoCompleteTextView>(R.id.edit_snippet_category)
 
         MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.terminal_create_snippet_title)
+            .setTitle(R.string.snippet_mgr_dialog_title_create)
             .setView(dialogView)
             .setPositiveButton(R.string.container_create) { _, _ ->
                 val name = inputName.text.toString().trim()

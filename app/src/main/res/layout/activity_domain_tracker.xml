@@ -87,7 +87,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_margin="@dimen/space_lg"
-        android:contentDescription="@string/domain_tracker_fab_add_desc"
+        android:contentDescription="@string/domain_edit_title_new"
         app:srcCompat="@drawable/ic_add" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

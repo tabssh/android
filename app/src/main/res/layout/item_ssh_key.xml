@@ -17,7 +17,7 @@
             android:id="@+id/text_key_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/item_ssh_key_name_placeholder"
+            android:text="@string/identity_key_name_title"
             android:textSize="16sp"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary" />

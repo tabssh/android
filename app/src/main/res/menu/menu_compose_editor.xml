@@ -14,7 +14,7 @@
 
     <item
         android:id="@+id/action_pull"
-        android:title="@string/container_stack_action_pull"
+        android:title="@string/container_pull_action"
         app:showAsAction="never" />
 
     <item

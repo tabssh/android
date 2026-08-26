@@ -362,7 +362,7 @@ class HypervisorEditActivity : TabSSHActivity() {
     private fun setupToolbar() {
         setSupportActionBar(toolbar)
         supportActionBar?.setTitle(
-            if (hypervisorId != null) R.string.hypervisor_edit_title_edit
+            if (hypervisorId != null) R.string.activity_label_edit_hypervisor
             else R.string.hypervisor_edit_title_new
         )
     }
@@ -841,7 +841,7 @@ class HypervisorEditActivity : TabSSHActivity() {
                 Logger.w("HypervisorEditActivity", "Test connection failed", e)
                 // e.message can be a raw server error body (vSphere/XO echo the
                 // request, including the Authorization header) — sanitize and cap.
-                showError(getString(R.string.hypervisor_edit_error_detail, safeDetail(e.message)), getString(R.string.status_error))
+                showError(getString(R.string.hypervisor_error_prefix_fmt, safeDetail(e.message)), getString(R.string.status_error))
             } finally {
                 if (!isFinishing && !isDestroyed) {
                     buttonTestConnection.isEnabled = true
@@ -959,7 +959,7 @@ class HypervisorEditActivity : TabSSHActivity() {
                 throw e
             } catch (e: Exception) {
                 Logger.e("HypervisorEditActivity", "Failed to save hypervisor", e)
-                showError(getString(R.string.hypervisor_edit_save_failed, safeDetail(e.message)), getString(R.string.status_error))
+                showError(getString(R.string.main_quick_connect_save_failed, safeDetail(e.message)), getString(R.string.status_error))
             } finally {
                 isSaving = false
                 if (!isFinishing && !isDestroyed) buttonSave.isEnabled = true
@@ -975,7 +975,7 @@ class HypervisorEditActivity : TabSSHActivity() {
         }
         val host = editHost.text.toString().trim()
         if (host.isBlank()) {
-            layoutHost.error = getString(R.string.conn_edit_host_required)
+            layoutHost.error = getString(R.string.vnc_host_edit_host_required)
             return false
         }
         // The host is concatenated into the https:// base URL of the Proxmox /
@@ -994,7 +994,7 @@ class HypervisorEditActivity : TabSSHActivity() {
         // those fields are hidden and credentials resolve from the account.
         if (selectedAccountId == null) {
             if (editUsername.text.toString().isBlank()) {
-                layoutUsername.error = getString(R.string.conn_edit_username_required)
+                layoutUsername.error = getString(R.string.identity_username_required)
                 return false
             }
             // Password is optional for LIBVIRT when an SSH key identity is

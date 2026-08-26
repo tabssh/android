@@ -268,7 +268,7 @@ class SFTPActivity : TabSSHActivity() {
                 if (candidates.isEmpty()) {
                     showError(
                         getString(R.string.sftp_no_saved_connections_message),
-                        getString(R.string.sftp_no_saved_connections_title)
+                        getString(R.string.dashboard_no_saved_connections)
                     )
                     return@runOnUiThread
                 }

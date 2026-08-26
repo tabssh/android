@@ -68,7 +68,7 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_horizontal"
                 android:layout_marginBottom="@dimen/space_md"
-                android:text="@string/identity_ssh_keys_add_title"
+                android:text="@string/identity_add_ssh_key_title"
                 style="@style/Widget.Material3.Button.TonalButton"
                 android:visibility="gone" />
 

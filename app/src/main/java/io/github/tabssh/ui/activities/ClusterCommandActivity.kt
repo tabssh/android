@@ -79,7 +79,7 @@ class ClusterCommandActivity : TabSSHActivity() {
 
     private fun setupToolbar() {
         setSupportActionBar(findViewById(R.id.toolbar))
-        supportActionBar?.title = getString(R.string.activity_label_cluster_commands)
+        supportActionBar?.title = getString(R.string.nav_item_cluster_commands)
     }
 
     private fun setupViews() {

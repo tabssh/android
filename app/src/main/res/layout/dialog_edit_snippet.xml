@@ -68,7 +68,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_sm"
-            android:hint="@string/snippet_edit_category_hint"
+            android:hint="@string/snippet_item_category_placeholder"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
             <com.google.android.material.textfield.MaterialAutoCompleteTextView

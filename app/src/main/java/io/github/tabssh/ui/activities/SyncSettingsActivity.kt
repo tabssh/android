@@ -221,11 +221,11 @@ class SyncSettingsActivity : TabSSHActivity() {
             Triple(findViewById(R.id.row_sync_telnet_hosts),       PREF_TELNET_HOSTS,        getString(R.string.sync_settings_subtitle_telnet_hosts))
         )
         val titles = listOf(
-            getString(R.string.settings_connections), getString(R.string.sync_settings_title_identities), getString(R.string.identity_ssh_keys_title), getString(R.string.nav_item_snippets), getString(R.string.sync_settings_title_themes),
+            getString(R.string.prefcat_main_connections), getString(R.string.import_export_identities_action), getString(R.string.identity_ssh_keys_title), getString(R.string.nav_item_snippets), getString(R.string.sync_settings_title_themes),
             getString(R.string.sync_settings_title_host_keys), getString(R.string.nav_item_groups), getString(R.string.sync_settings_title_workspaces), getString(R.string.sync_settings_title_macros), getString(R.string.sync_settings_title_monitor_slots),
             getString(R.string.infra_tab_hypervisors), getString(R.string.sync_settings_title_hypervisor_accounts), getString(R.string.nav_item_vnc_hosts), getString(R.string.identity_vnc_title),
             getString(R.string.activity_label_cloud_accounts), getString(R.string.sync_settings_title_certificates), getString(R.string.container_manager_tab_dashboard), getString(R.string.routing_section_forwards_title),
-            getString(R.string.sync_network_routes), getString(R.string.container_tab_title), getString(R.string.sync_settings_title_pane_groups), getString(R.string.sync_settings_title_telnet_hosts)
+            getString(R.string.sync_network_routes), getString(R.string.container_manager_tab_containers), getString(R.string.main_tab_panes), getString(R.string.sync_settings_title_telnet_hosts)
         )
         val defaults = listOf(
             true, true, true, true, true,
@@ -347,7 +347,7 @@ class SyncSettingsActivity : TabSSHActivity() {
         // Location badge
         badgeLocation.visibility       = if (hasLocation) View.VISIBLE else View.GONE
         textLocationSummary.text = syncManager.getSyncLocationName()
-            ?: getString(R.string.sync_settings_location_summary_default)
+            ?: getString(R.string.sync_settings_location_summary)
 
         // Password badge
         badgePassword.visibility       = if (hasPassword) View.VISIBLE else View.GONE
@@ -367,7 +367,7 @@ class SyncSettingsActivity : TabSSHActivity() {
             isEnabled -> {
                 statusIcon.text = "🔄"
                 statusTitle.text = getString(R.string.sync_settings_status_active)
-                statusSubtitle.text = getString(R.string.sync_settings_status_last_sync, formatLastSync(syncManager.getLastSyncTime()))
+                statusSubtitle.text = getString(R.string.cloud_accounts_last_sync, formatLastSync(syncManager.getLastSyncTime()))
                 btnSyncNow.visibility = View.VISIBLE
                 textLastSync.visibility = View.VISIBLE
                 textLastSync.text = getString(R.string.sync_settings_last_sync_short, formatLastSync(syncManager.getLastSyncTime()))

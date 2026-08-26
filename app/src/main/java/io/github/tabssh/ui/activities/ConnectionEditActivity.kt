@@ -188,7 +188,7 @@ class ConnectionEditActivity : TabSSHActivity() {
                         }
                     } catch (e: Exception) {
                         val mapped = ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Failed to read key file")
-                        showError(getString(R.string.conn_edit_read_key_file_failed, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
+                        showError(getString(R.string.identity_read_key_file_failed_fmt, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
                     }
                 }
             }
@@ -1861,7 +1861,7 @@ class ConnectionEditActivity : TabSSHActivity() {
     private fun validateHost(): Boolean {
         val host = binding.editHost.text.toString().trim()
         return if (host.isBlank()) {
-            binding.layoutHost.error = getString(R.string.conn_edit_host_required)
+            binding.layoutHost.error = getString(R.string.vnc_host_edit_host_required)
             false
         } else {
             binding.layoutHost.error = null
@@ -1883,7 +1883,7 @@ class ConnectionEditActivity : TabSSHActivity() {
     private fun validateUsername(): Boolean {
         val username = binding.editUsername.text.toString().trim()
         return if (username.isBlank()) {
-            binding.layoutUsernameInput.error = getString(R.string.conn_edit_username_required)
+            binding.layoutUsernameInput.error = getString(R.string.identity_username_required)
             false
         } else {
             binding.layoutUsernameInput.error = null
@@ -2245,7 +2245,7 @@ class ConnectionEditActivity : TabSSHActivity() {
             .joinToString(" ") { word ->
                 word.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
             }
-        return if (name.isBlank()) getString(R.string.conn_edit_imported_key_default_name) else name
+        return if (name.isBlank()) getString(R.string.identity_default_imported_key_name) else name
     }
 
     private fun importKeyWithPassphrase(keyContent: String, filename: String, passphrase: String) {

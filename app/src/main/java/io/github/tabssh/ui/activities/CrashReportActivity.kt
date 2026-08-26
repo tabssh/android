@@ -68,7 +68,7 @@ class CrashReportActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btn_copy).setOnClickListener {
             // Route through ClipboardHelper so a crash-report copy cancels any pending sensitive clear.
             io.github.tabssh.utils.ClipboardHelper.copy(this, label = "Crash", text = stackTrace, sensitive = false)
-            Toast.makeText(this, getString(R.string.text_export_copied_toast), Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.dialog_copied_to_clipboard_toast), Toast.LENGTH_SHORT).show()
         }
 
         // "Paste / Issue" — upload the sanitized crash to a paste service and

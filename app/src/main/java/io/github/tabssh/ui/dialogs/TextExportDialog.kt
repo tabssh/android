@@ -27,7 +27,7 @@ object TextExportDialog {
             .setView(view)
             .setPositiveButton(R.string.copy) { _, _ ->
                 ClipboardHelper.copy(context, title, text, sensitive = false)
-                Toast.makeText(context, R.string.text_export_copied_toast, Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, R.string.dialog_copied_to_clipboard_toast, Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton(R.string.close, null)
             .show()

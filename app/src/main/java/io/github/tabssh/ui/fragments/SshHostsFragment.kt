@@ -76,8 +76,8 @@ class SshHostsFragment : Fragment() {
     private val selectedConnections = mutableSetOf<String>()
 
     enum class SortOption(@StringRes val displayNameRes: Int) {
-        NAME_ASC(R.string.connections_sort_name_asc),
-        NAME_DESC(R.string.connections_sort_name_desc),
+        NAME_ASC(R.string.connections_group_sort_name_asc),
+        NAME_DESC(R.string.connections_group_sort_name_desc),
         HOST_ASC(R.string.connections_sort_host_asc),
         HOST_DESC(R.string.connections_sort_host_desc),
         MOST_USED(R.string.connections_sort_most_used),
@@ -340,8 +340,8 @@ class SshHostsFragment : Fragment() {
     private fun showGroupMenu(groupHeader: ConnectionListItem.GroupHeader) {
         val items = arrayOf(
             getString(R.string.connections_group_menu_bulk_edit),
-            getString(R.string.connections_group_menu_rename),
-            getString(R.string.connections_group_menu_delete),
+            getString(R.string.connections_group_rename_title),
+            getString(R.string.connections_group_delete_title),
             getString(R.string.connections_group_menu_collapse_all)
         )
 
@@ -712,7 +712,7 @@ class SshHostsFragment : Fragment() {
 
         val compression = wireTriState(R.id.row_compression, R.string.connections_bulk_tri_compression, R.drawable.ic_file_archive)
         val agentFwd = wireTriState(R.id.row_agent_fwd, R.string.connections_bulk_tri_agent_fwd, R.drawable.ic_forward)
-        val x11 = wireTriState(R.id.row_x11, R.string.connections_bulk_tri_x11, R.drawable.ic_interface)
+        val x11 = wireTriState(R.id.row_x11, R.string.connections_field_x11, R.drawable.ic_interface)
         val mosh = wireTriState(R.id.row_mosh, R.string.connections_bulk_tri_mosh, R.drawable.ic_flash)
 
         // ── Dropdown options ──

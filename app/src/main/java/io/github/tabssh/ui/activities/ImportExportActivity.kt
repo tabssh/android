@@ -195,7 +195,7 @@ class ImportExportActivity : TabSSHActivity() {
                 } else {
                     val mapped = ThrowableMapper.map(this@ImportExportActivity, "ImportExportActivity", e, "Failed to import backup")
                     io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
-                        this@ImportExportActivity, getString(R.string.import_export_import_failed_title),
+                        this@ImportExportActivity, getString(R.string.identity_import_failed_title),
                         getString(R.string.import_export_import_failed_message, mapped.message),
                         copyText = mapped.technicalDetail
                     )
@@ -228,7 +228,7 @@ class ImportExportActivity : TabSSHActivity() {
                 if (password.isNotBlank()) {
                     importBackupWithPassword(uri, password, replaceMode)
                 } else {
-                    Toast.makeText(this, R.string.import_export_password_required, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, R.string.virt_viewer_password_title, Toast.LENGTH_SHORT).show()
                 }
             }
             .setNegativeButton(R.string.cancel, null)
@@ -257,7 +257,7 @@ class ImportExportActivity : TabSSHActivity() {
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(this@ImportExportActivity, "ImportExportActivity", e, "Failed to import backup with password")
                 io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
-                    this@ImportExportActivity, getString(R.string.import_export_import_failed_title),
+                    this@ImportExportActivity, getString(R.string.identity_import_failed_title),
                     getString(R.string.import_export_import_failed_message, mapped.message),
                     copyText = mapped.technicalDetail
                 )
@@ -372,7 +372,7 @@ class ImportExportActivity : TabSSHActivity() {
             if (text == null) {
                 Toast.makeText(
                     this@ImportExportActivity,
-                    getString(R.string.import_export_bulk_import_failed, getString(R.string.import_export_could_not_open_file)),
+                    getString(R.string.import_export_bulk_import_failed, getString(R.string.fileopen_open_failed)),
                     Toast.LENGTH_LONG
                 ).show()
                 return@launch
@@ -461,7 +461,7 @@ class ImportExportActivity : TabSSHActivity() {
             if (configContent == null) {
                 Toast.makeText(
                     this@ImportExportActivity,
-                    getString(R.string.import_export_ssh_config_import_failed, getString(R.string.import_export_could_not_open_file)),
+                    getString(R.string.import_export_ssh_config_import_failed, getString(R.string.fileopen_open_failed)),
                     Toast.LENGTH_LONG
                 ).show()
                 return@launch
@@ -827,7 +827,7 @@ class ImportExportActivity : TabSSHActivity() {
 
                 when {
                     password.isBlank() -> {
-                        Toast.makeText(this, R.string.import_export_password_required, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, R.string.virt_viewer_password_title, Toast.LENGTH_SHORT).show()
                     }
                     password != confirm -> {
                         Toast.makeText(this, R.string.sync_password_mismatch, Toast.LENGTH_SHORT).show()

@@ -21,15 +21,12 @@
     <!-- Connection management -->
     <string name="connection_name_hint">Connection name (e.g., "My VPS")</string>
     <string name="connection_port_hint">22</string>
-    <string name="edit_connection">Edit Connection</string>
-    <string name="delete_connection">Delete Connection</string>
     <string name="duplicate_connection">Duplicate Connection</string>
     <string name="connection_saved">Connection saved successfully</string>
     <string name="connection_deleted">Connection deleted</string>
     
     <!-- Authentication -->
     <string name="auth_type_public_key">Public Key (SSH Key)</string>
-    <string name="auth_type_keyboard_interactive">Keyboard Interactive</string>
     <string name="password_hint">Password</string>
     <string name="select_key">Select SSH Key</string>
     <string name="generate_key">Generate New Key</string>
@@ -39,7 +36,6 @@
     <string name="new_tab">New Tab</string>
     <string name="close_tab">Close Tab</string>
     <string name="tab_menu">Tab Menu</string>
-    <string name="function_keys">Function Keys</string>
     <string name="show_keyboard">Show Keyboard</string>
     <string name="hide_keyboard">Hide Keyboard</string>
     <string name="paste">Paste</string>
@@ -48,7 +44,6 @@
     <string name="text_import_hint">Paste text here</string>
     <string name="text_import_clipboard_empty">Clipboard is empty or contains no text</string>
     <string name="text_import_empty_error">Paste some text first</string>
-    <string name="text_export_copied_toast">Copied to clipboard</string>
     <string name="import_source_chooser_title">Import from</string>
     <string name="import_source_file">File</string>
     <string name="import_source_paste">Paste text</string>
@@ -116,21 +111,17 @@
     <string name="settings_terminal">Terminal</string>
     <string name="settings_security">Security &amp; Privacy</string>
     <string name="settings_interface">Interface</string>
-    <string name="settings_connections">Connections</string>
-    <string name="settings_accessibility">Accessibility</string>
     
     <!-- General settings -->
     <string name="pref_startup_behavior">Startup Behavior</string>
     <string name="pref_startup_behavior_summary">What to do when app starts</string>
     <string name="pref_auto_backup">Auto Backup</string>
     <string name="pref_auto_backup_summary">Automatically backup connections and keys</string>
-    <string name="pref_language">Language</string>
     <string name="pref_language_summary">App language</string>
     
     <!-- Security settings -->
     <string name="pref_password_storage">Password Storage</string>
     <string name="pref_password_storage_summary">How to store passwords</string>
-    <string name="pref_biometric_auth">Biometric Authentication</string>
     <string name="pref_biometric_auth_summary">Use fingerprint/face unlock</string>
     <string name="pref_host_key_checking">Host Key Checking</string>
     <string name="pref_host_key_checking_summary">Verify host identity</string>
@@ -141,13 +132,9 @@
     
     <!-- Terminal settings -->
     <string name="pref_theme">Theme</string>
-    <string name="pref_theme_summary">Terminal color scheme</string>
     <string name="pref_font_family">Font Family</string>
     <string name="pref_font_family_summary">Terminal font</string>
     <string name="pref_font_size">Font Size</string>
-    <string name="pref_font_size_summary">Terminal text size</string>
-    <string name="pref_cursor_style">Cursor Style</string>
-    <string name="pref_cursor_style_summary">Cursor appearance</string>
     <string name="pref_scrollback_lines">Scrollback Lines</string>
     <string name="pref_scrollback_lines_summary">Lines to keep in history</string>
     
@@ -188,7 +175,6 @@
     <string name="biometric_not_available">Biometric authentication not available on this device</string>
     
     <!-- About -->
-    <string name="about_version">Version</string>
     <string name="about_build">Build</string>
     <string name="about_license">License (MIT)</string>
     <string name="about_source_code">Source Code</string>
@@ -244,8 +230,6 @@
     <!-- Performance fragment (fragment_performance.xml) -->
     <string name="perf_monitor_title">📊 Performance Monitor</string>
     <string name="perf_cpu_usage_title">CPU Usage</string>
-    <string name="perf_memory_title">Memory</string>
-    <string name="perf_disk_title">Disk</string>
     <string name="perf_network_title">Network</string>
     <string name="perf_load_average_title">Load Average</string>
     <string name="perf_empty_state_message">Select a connection to monitor</string>
@@ -294,19 +278,14 @@
 
 
     <!-- QR pairing import -->
-    <string name="import_from_qr_title">Pair from Desktop</string>
     <string name="import_from_qr_status_opening_camera">Opening camera…</string>
 
     <!-- Screen titles for the shared app bar -->
     <string name="theme_editor_title">Theme Editor</string>
-    <string name="host_detail_title">Host Detail</string>
     <string name="hypervisor_edit_title_new">Add Hypervisor</string>
-    <string name="hypervisor_edit_title_edit">Edit Hypervisor</string>
     <string name="vnc_host_edit_title_new">Add VNC Host</string>
     <string name="vnc_host_edit_title_edit">Edit VNC Host</string>
     <string name="audit_log_viewer_title">Audit Logs</string>
-    <string name="log_viewer_title">Application Logs</string>
-    <string name="transcript_viewer_title">Session Transcripts</string>
     <string name="multi_host_dashboard_title">Multi-Host Dashboard</string>
     <string name="connection_edit_title_new">New Connection</string>
     <string name="connection_edit_title_edit">Edit Connection</string>
@@ -404,7 +383,6 @@
     <string name="port_forward_error_connection">Choose a saved connection</string>
     <string name="port_forward_error_ssh_host">Enter the SSH host</string>
     <string name="port_forward_error_ssh_username">Enter a username</string>
-    <string name="port_forward_error_port_range">Enter a port from 1 to 65535</string>
     <string name="port_forward_error_host_ip">Enter the target host</string>
 
     <!-- Routing & Forwarding hub — section headers -->
@@ -418,7 +396,6 @@
     <string name="routes_empty_body">Add a proxy, SSH jump host, or Tor route to reuse across your connections.</string>
 
     <!-- Routing & Forwarding hub — default route -->
-    <string name="route_default_label">Default route</string>
     <string name="route_default_summary">Applied to connections set to use the global default.</string>
     <string name="route_default_direct">Direct connection</string>
     <string name="route_default_choose_title">Default route</string>
@@ -467,7 +444,6 @@
     <string name="route_error_key">Choose an SSH key</string>
 
     <!-- Connection editor — network route picker -->
-    <string name="conn_route_section_title">Network route</string>
     <string name="conn_route_hint">Network route</string>
     <string name="conn_route_helper">How this connection reaches the server.</string>
     <string name="conn_route_direct">Direct (no proxy or jump)</string>
@@ -484,7 +460,6 @@
     <string name="auth_tab_vms">VMs</string>
     <string name="auth_tab_vnc">VNC</string>
     <string name="auth_tab_keys">Keys</string>
-    <string name="sync_settings_title_identities">Identities</string>
     <string name="main_tab_infra">Infra</string>
 
     <!-- Infra tab (Containers / Hypervisors / Cloud sub-tabs) -->
@@ -523,24 +498,19 @@
     <string name="cloud_edit_token_helper">Leave blank to keep the existing token</string>
     <string name="cloud_delete_title">Delete %1$s?</string>
     <string name="cloud_delete_message">Removes this cloud account record and its stored token.</string>
-    <string name="cloud_saved">Saved \'%1$s\'</string>
     <string name="cloud_updated">Updated \'%1$s\'</string>
     <string name="cloud_save_failed">Save failed: %1$s</string>
     <string name="cloud_update_failed">Update failed: %1$s</string>
-    <string name="cloud_refreshing">Refreshing %1$s…</string>
     <string name="cloud_refresh_failed">Refresh failed: %1$s</string>
     <string name="cloud_enabled_toast">%1$s enabled</string>
     <string name="cloud_disabled_toast">%1$s disabled</string>
     <string name="cloud_disabled_refresh_hint">%1$s is disabled — enable to refresh</string>
     <string name="cloud_token_missing">Token missing — re-add the account</string>
     <string name="cloud_token_invalid">Token invalid — re-add the account (%1$s)</string>
-    <string name="cloud_unknown_provider">Unknown provider: %1$s</string>
     <string name="cloud_no_file_selected">No file selected</string>
     <string name="cloud_config_read_failed">Could not read the OCI config file — check the file and try again</string>
     <string name="cloud_key_read_failed">Could not read the key file — check the file and try again</string>
     <string name="cloud_credential_storage_failed">Credential storage failed — check device security settings (screen lock required)</string>
-    <string name="cloud_last_sync">Last sync: %1$s</string>
-    <string name="cloud_never_synced">Never synced</string>
     <plurals name="cloud_instance_count">
         <item quantity="one">%1$s: %2$d instance</item>
         <item quantity="other">%1$s: %2$d instances</item>
@@ -551,7 +521,6 @@
     </plurals>
 
     <!-- Containers (Phase 4) -->
-    <string name="container_tab_title">Containers</string>
     <string name="container_hosts_empty">No container hosts yet.\nTap + to add one.</string>
     <string name="container_add_host_desc">Add container host</string>
     <string name="container_refresh">Refresh</string>
@@ -564,7 +533,6 @@
     <string name="container_never_connected">Never connected</string>
     <string name="container_last_used_fmt">Last used: %1$s</string>
     <string name="container_host_edit_title_add">Add Container Host</string>
-    <string name="container_host_edit_title_edit">Edit Container Host</string>
     <string name="container_host_section_connection">Connection</string>
     <string name="container_host_section_engine">Engine settings</string>
     <string name="container_host_section_updates">Image update checks</string>
@@ -575,7 +543,6 @@
     <string name="container_host_mode_custom">Custom endpoint</string>
     <string name="container_host_custom_host_hint">Hostname or IP</string>
     <string name="container_host_auth_type_hint">Authentication</string>
-    <string name="container_auth_identity">Saved identity</string>
     <string name="container_host_password_keep_helper">Leave blank to keep the stored password</string>
     <string name="container_host_identity_hint">Identity</string>
     <string name="container_host_error_custom_host">Enter the host address</string>
@@ -608,7 +575,6 @@
     <string name="container_engine_icon_podman">🦭</string>
     <string name="container_engine_icon_lxd">📦</string>
     <string name="container_hosts_empty_icon">📦</string>
-    <string name="container_host_engine_hint">Container engine</string>
     <string name="container_host_engine_desc">Container engine</string>
     <string name="container_host_connection_desc">Saved SSH connection</string>
     <string name="container_host_auth_type_desc">Authentication method</string>
@@ -702,7 +668,6 @@
     <string name="container_update_check_summary">Periodically compare watched containers against their registry and alert when a newer image is available</string>
     <string name="container_image_dangling">(dangling)</string>
     <string name="container_new_container_config_desc">New container config</string>
-    <string name="container_pull_image_desc">Pull image</string>
     <string name="container_create_volume_title">Create volume</string>
     <string name="container_create_network_title">Create network</string>
     <string name="container_name_hint">Name</string>
@@ -716,7 +681,6 @@
     <string name="container_remove_image_message">Remove image %1$s?</string>
     <string name="container_detail_tab_inspect">Inspect</string>
     <string name="container_detail_tab_config">Config</string>
-    <string name="container_detail_tab_logs">Logs</string>
     <string name="container_detail_tab_stats">Stats</string>
     <string name="container_detail_env">Environment</string>
     <string name="container_detail_mounts">Mounts</string>
@@ -759,7 +723,6 @@
     <string name="container_stack_saved">Stack saved to %1$s</string>
     <string name="container_stack_action_up">Up</string>
     <string name="container_stack_action_down">Down</string>
-    <string name="container_stack_action_pull">Pull</string>
     <string name="container_stack_action_restart">Restart</string>
     <string name="container_stack_delete_message">Delete stack %1$s? Its containers are stopped (compose down); the files on the host are kept.</string>
     <string name="container_stack_action_running">Running %1$s…</string>
@@ -793,9 +756,7 @@
     <string name="search_snippets_hint">Search snippets…</string>
     <string name="terminal_open_url_title">Open this URL?</string>
     <string name="terminal_open_url_message">%1$s\n\nThis will open in your browser. Tap Open only if you meant to follow this link.</string>
-    <string name="terminal_ssh_link_title">SSH link</string>
     <string name="terminal_ssh_link_message">%1$s\n\nConnect opens a new session to this host.</string>
-    <string name="terminal_sftp_link_title">SFTP link</string>
     <string name="terminal_sftp_link_message">%1$s\nRemote path: %2$s\n\nConnect opens a new session and browses this path over SFTP.</string>
     <string name="terminal_remote_file_title">Remote file path</string>
     <string name="terminal_remote_file_message">%1$s\n\nThis path refers to a file on the remote host, not this device.</string>
@@ -855,10 +816,8 @@
     <string name="terminal_open_new_tab_title">Open new tab</string>
     <string name="terminal_add_new_connection">+ Add new connection…</string>
     <string name="terminal_insert_snippet_title">Insert Snippet</string>
-    <string name="terminal_manage_snippets">Manage Snippets</string>
     <string name="terminal_create_new_snippet">Create New Snippet</string>
     <string name="terminal_view_all_snippets">View All Snippets</string>
-    <string name="terminal_create_snippet_title">Create Snippet</string>
     <string name="terminal_all_snippets_title">All Snippets</string>
     <string name="terminal_search_snippets_title">Search Snippets</string>
     <string name="terminal_search_results_title">Search Results</string>
@@ -1019,7 +978,6 @@
     <string name="identity_ssh_keys_title">SSH Keys</string>
     <string name="identity_ssh_keys_subtitle">Private keys used for public-key authentication</string>
     <string name="identity_ssh_keys_add_content_description">Import or generate SSH key</string>
-    <string name="identity_ssh_keys_add_title">Add SSH Key</string>
     <string name="identity_ssh_keys_empty_message">No SSH keys yet — tap + to import or generate one</string>
     <string name="identity_vm_credentials_title">VM Credentials</string>
     <string name="identity_vm_credentials_subtitle">Login credentials for Proxmox, VMware, and XCP-ng</string>
@@ -1044,24 +1002,20 @@
 
     <!-- Hypervisor manager create-snapshot dialogs -->
     <string name="xcpng_snapshot_name_hint">Snapshot name</string>
-    <string name="xcpng_snapshot_created_fmt">Created: %1$s</string>
 
     <!-- Import from QR activity -->
     <string name="import_qr_code_hint">6-digit code</string>
 
     <!-- Import / Export activity -->
     <string name="import_export_backup_initialising">Backup system is still initialising — please wait a moment and try again.</string>
-    <string name="import_export_import_failed_title">Import Failed</string>
     <string name="import_export_import_failed_message">Failed to import backup:\n%1$s</string>
     <string name="import_export_backup_password_hint">Enter backup password</string>
     <string name="import_export_encrypted_backup_title">Encrypted Backup</string>
     <string name="import_export_encrypted_backup_message">This backup is encrypted. Enter the password to decrypt it.</string>
-    <string name="import_export_password_required">Password required</string>
     <string name="import_export_import_success_header">Import successful!\n\nImported:\n</string>
     <string name="import_export_item_count_line">"  • %1$d %2$s\n"</string>
     <string name="import_export_backup_imported_title">Backup Imported</string>
     <string name="import_export_exported_connections">Exported %1$d connections</string>
-    <string name="import_export_could_not_open_file">Could not open file</string>
     <string name="import_export_could_not_open_output">Could not open output stream</string>
     <string name="import_export_no_connections_detected">No connections detected (%1$s).</string>
     <string name="import_export_bulk_import_title">Bulk Import</string>
@@ -1160,8 +1114,6 @@
     <string name="hypervisor_menu_open">Open</string>
     <string name="hypervisor_menu_refresh_status">Refresh Status</string>
     <string name="hypervisor_delete_title">Delete Hypervisor</string>
-    <string name="hypervisor_delete_message">Are you sure you want to delete \'%1$s\'?</string>
-    <string name="hypervisor_deleted_fmt">Deleted %1$s</string>
     <string name="hypervisor_delete_failed_fmt">Failed to delete: %1$s</string>
     <string name="hypervisor_reachable_fmt">✓ %1$s is reachable</string>
     <string name="hypervisor_unreachable_fmt">✗ %1$s not reachable</string>
@@ -1206,7 +1158,6 @@
     <string name="hosts_sub_tab_vnc">VNC</string>
     <string name="hosts_sub_tab_telnet">Telnet</string>
     <string name="hosts_search_no_results">No matching hosts or sessions</string>
-    <string name="active_hosts_empty_title">No active sessions</string>
     <string name="hosts_search_badge_ssh">SSH</string>
     <string name="hosts_search_badge_vnc">VNC</string>
     <string name="hosts_search_badge_telnet">Telnet</string>
@@ -1239,7 +1190,6 @@
     <string name="oci_confirm_action_message_fmt">Send %1$s to %2$s? Running workloads are interrupted.</string>
     <string name="oci_action_progress_fmt">%1$s → %2$s…</string>
     <string name="oci_action_sent_fmt">%1$s sent to %2$s</string>
-    <string name="oci_action_failed_for_fmt">%1$s failed for %2$s</string>
     <string name="oci_error_action_failed_fmt">Action failed: %1$s</string>
     <string name="oci_error_no_public_ip">Instance has no public IP address</string>
     <string name="oci_error_unusable_address">Instance reported an unusable address</string>
@@ -1283,7 +1233,6 @@
     <string name="libvirt_shutdown_button">Shutdown</string>
 
     <!-- XCP-ng manager -->
-    <string name="xcpng_manager_title">XCP-ng Manager</string>
     <string name="xcpng_no_servers">No XCP-ng servers configured</string>
     <string name="xcpng_error_load_servers">Could not load server list</string>
     <string name="xcpng_connecting_fmt">Connecting to %1$s...</string>
@@ -1292,7 +1241,6 @@
     <string name="xcpng_label_xcpng">XCP-ng</string>
     <string name="xcpng_connected_fmt">Connected to %1$s (%2$s)</string>
     <string name="xcpng_auth_failed">Authentication failed - check credentials</string>
-    <string name="xcpng_connection_error_title">Connection Error</string>
     <string name="xcpng_auth_failed_details_fmt">Failed to authenticate. Tried both Xen Orchestra and XCP-ng APIs.\n\nCheck:\n• Username/password\n• Host/port (%1$s:%2$d)\n• Network connectivity\n• SSL certificate (verify SSL: %3$s)</string>
     <string name="xcpng_error_host_not_found_fmt">Error: Host not found (%1$s)</string>
     <string name="xcpng_cannot_resolve_fmt">Cannot resolve hostname: %1$s</string>
@@ -1314,7 +1262,6 @@
     <string name="xcpng_confirm_action_title_fmt">%1$s %2$s?</string>
     <string name="xcpng_vm_action_successful_fmt">VM %1$s successful</string>
     <string name="xcpng_action_failed_for_fmt">%1$s failed for %2$s</string>
-    <string name="xcpng_action_failed_fmt">%1$s failed: %2$s</string>
     <string name="xcpng_no_hypervisor_selected">No hypervisor selected</string>
     <string name="xcpng_connecting_to_vm_fmt">Connecting to %1$s…</string>
     <string name="xcpng_connecting_strategy_fmt">Connecting to %1$s (%2$s)…</string>
@@ -1327,7 +1274,6 @@
     <string name="xcpng_add_button">Add</string>
     <string name="xcpng_name_required">Name is required</string>
     <string name="xcpng_invalid_host">Enter a valid host name or IP address</string>
-    <string name="xcpng_invalid_port">Port must be between 1 and 65535</string>
     <string name="xcpng_password_store_failed">Server saved but the password could not be stored</string>
     <string name="xcpng_save_server_failed_fmt">Failed to save server: %1$s</string>
     <string name="xcpng_vm_info_fmt">CPUs: %1$d  ·  RAM: %2$s</string>
@@ -1375,7 +1321,6 @@
     <string name="xcpng_infra_title">Xen Orchestra Infrastructure</string>
 
     <!-- Activity and widget labels referenced from AndroidManifest.xml -->
-    <string name="activity_label_cluster_commands">Cluster Commands</string>
     <string name="activity_label_proxmox_manager">Proxmox Manager</string>
     <string name="activity_label_xcpng_manager">XCP-ng Manager</string>
     <string name="activity_label_vmware_manager">VMware Manager</string>
@@ -1388,10 +1333,7 @@
     <string name="activity_label_compose_stack">Compose Stack</string>
     <string name="activity_label_container_config">Container Config</string>
     <string name="activity_label_stack_logs">Stack Logs</string>
-    <string name="activity_label_connection_history">Connection History</string>
-    <string name="activity_label_whats_new">What\'s New</string>
     <string name="activity_label_app_lock">App Lock</string>
-    <string name="activity_label_multi_host_dashboard">Multi-host Dashboard</string>
     <string name="activity_label_host_detail">Host Detail</string>
     <string name="activity_label_cloud_accounts">Cloud Accounts</string>
     <string name="activity_label_cloud_instances">Cloud Instances</string>
@@ -1411,7 +1353,6 @@
     <string name="nav_group_accounts">Accounts</string>
     <string name="nav_group_manage">Manage</string>
     <string name="nav_group_insights">Insights</string>
-    <string name="nav_group_diagnostics">Diagnostics</string>
 
     <!-- Navigation drawer: destinations -->
     <string name="nav_item_home">Home</string>
@@ -1426,12 +1367,10 @@
     <string name="nav_item_copy_app_log">Copy App Log (Safe to Share)</string>
     <string name="nav_item_copy_debug_logs">Copy Debug Logs (Developer)</string>
     <string name="nav_item_whats_new">What\'s New</string>
-    <string name="nav_item_help">Help</string>
     <string name="nav_item_about">About</string>
 
     <!-- Shared dialog actions -->
     <string name="action_clear">Clear</string>
-    <string name="action_paste_issue">Paste / Issue</string>
     <string name="action_visit_website">Visit Website</string>
     <string name="action_github">GitHub</string>
     <string name="action_license">License</string>
@@ -1487,7 +1426,6 @@
     <string name="prefs_security_settings_summary">App lock, biometrics, and SSH/Mosh host-key security</string>
     <string name="prefs_connection_settings_title">Connection</string>
     <string name="prefs_connection_settings_summary">Default username/port/timeout for SSH &amp; Mosh, plus SSH-only options (compression, X11/agent forwarding)</string>
-    <string name="prefs_monitoring_settings_title">Monitoring</string>
     <string name="prefs_monitoring_settings_summary">Background host availability checks and performance alerts</string>
     <string name="prefs_sync_settings_title">Sync</string>
     <string name="prefs_sync_settings_summary">Sync data across devices (Google Drive, WebDAV, Nextcloud)</string>
@@ -1651,7 +1589,6 @@
     <string name="prefs_security_lock_timeout_summary">Time before app locks</string>
     <string name="prefs_biometric_auth_title">Biometric Authentication</string>
     <string name="prefs_biometric_auth_summary">Use fingerprint or face unlock</string>
-    <string name="prefs_app_lock_pin_setup_title">App lock PIN</string>
     <string name="prefs_app_lock_pin_setup_summary">Prompt for PIN on app launch (set / change / disable)</string>
     <string name="prefs_security_auto_lock_background_title">Lock When Backgrounded</string>
     <string name="prefs_security_auto_lock_background_summary">Require unlock after returning from background</string>
@@ -1697,11 +1634,9 @@
     <string name="prefs_view_debug_log_summary">Full verbose log (only available when debug logging is on)</string>
     <string name="prefs_view_host_logs_title">View Host Logs</string>
     <string name="prefs_view_host_logs_summary">Per-connection session logs</string>
-    <string name="prefs_view_audit_log_title">View Audit Log</string>
     <string name="prefs_view_audit_log_summary">Security events — auth, commands, file transfers (requires audit logging enabled)</string>
     <string name="prefs_export_logs_title">Export Logs</string>
     <string name="prefs_export_logs_summary">Save app log and host logs to a ZIP for sharing</string>
-    <string name="prefs_clear_logs_title">Clear Logs</string>
     <string name="prefs_clear_logs_summary">Delete app log and all host log files (cannot be undone)</string>
     <string name="prefs_paste_service_title">Paste Service</string>
     <string name="prefs_paste_service_summary">Service used to upload logs when reporting issues</string>
@@ -1799,7 +1734,6 @@
     <string name="host_detail_label_net_tx">Net TX</string>
     <string name="host_detail_label_system">System</string>
     <string name="host_detail_action_connect">Connect (open terminal)</string>
-    <string name="host_detail_action_monitor_settings">Monitor settings</string>
     <string name="host_detail_value_unavailable">—</string>
     <string name="host_detail_status_not_monitored">Not monitored</string>
     <string name="host_detail_status_disabled">Disabled</string>
@@ -1823,12 +1757,10 @@
     <string name="remote_editor_missing_path">Missing file path</string>
     <string name="remote_editor_no_connection">Connection not active — open the terminal first</string>
     <string name="remote_editor_sftp_failed">SFTP failed to open</string>
-    <string name="remote_editor_download_failed">Download failed</string>
     <string name="remote_editor_download_empty">Download produced no file</string>
     <string name="remote_editor_save_in_progress">Save already in progress…</string>
     <string name="remote_editor_saved">Saved</string>
     <string name="remote_editor_upload_failed">Upload failed</string>
-    <string name="remote_editor_error_fmt">Error: %1$s</string>
 
     <!-- Settings screens: toasts, dialogs, action buttons and dynamic summaries -->
     <string name="settings_value_unknown">unknown</string>
@@ -1891,7 +1823,6 @@
     <string name="settings_toast_default_username">Default username: %1$s</string>
     <string name="settings_toast_port_range">Port must be between 1-65535</string>
     <string name="settings_toast_default_port">Default port: %1$d</string>
-    <string name="settings_toast_invalid_port">Invalid port number</string>
     <string name="settings_toast_connect_timeout_range">Connection timeout must be 1–600 seconds</string>
     <plurals name="settings_toast_connect_timeout_seconds">
         <item quantity="one">Connection timeout: %1$d second</item>
@@ -1995,7 +1926,6 @@
     <string name="group_mgmt_empty_icon">📁</string>
     <string name="group_mgmt_empty_title">No Groups Yet</string>
     <string name="group_mgmt_empty_message">Organize your connections into folders\nTap + to create your first group</string>
-    <string name="group_mgmt_empty_action">Create Group</string>
     <string name="group_mgmt_fab_content_description">Create group</string>
 
     <!-- Group management: edit group dialog -->
@@ -2017,8 +1947,6 @@
     <string name="connections_sort_scope_groups">Sort groups</string>
     <string name="connections_sort_connections_title">Sort Connections</string>
     <string name="connections_sort_groups_title">Sort Groups</string>
-    <string name="connections_sort_name_asc">Name (A-Z)</string>
-    <string name="connections_sort_name_desc">Name (Z-A)</string>
     <string name="connections_sort_host_asc">Host (A-Z)</string>
     <string name="connections_sort_host_desc">Host (Z-A)</string>
     <string name="connections_sort_most_used">Most Used</string>
@@ -2041,8 +1969,6 @@
 
     <!-- Connections list: group actions -->
     <string name="connections_group_menu_bulk_edit">Bulk edit all hosts in this group</string>
-    <string name="connections_group_menu_rename">Rename Group</string>
-    <string name="connections_group_menu_delete">Delete Group</string>
     <string name="connections_group_menu_collapse_all">Collapse All Groups</string>
     <string name="connections_group_empty">No connections in this group</string>
     <string name="connections_group_rename_title">Rename Group</string>
@@ -2087,7 +2013,6 @@
     </plurals>
     <string name="connections_bulk_tri_compression">Compression</string>
     <string name="connections_bulk_tri_agent_fwd">Agent forwarding</string>
-    <string name="connections_bulk_tri_x11">X11 forwarding</string>
     <string name="connections_bulk_tri_mosh">Mosh</string>
     <string name="connections_bulk_clear_group">(Clear group assignment)</string>
     <string name="connections_bulk_clear_identity">(Clear identity)</string>
@@ -2256,7 +2181,6 @@
     <string name="sftp_error_connect_sftp_failed">Failed to connect SFTP</string>
     <string name="sftp_error_setup_fmt">SFTP setup error: %1$s</string>
     <string name="sftp_tab_add_chip">+</string>
-    <string name="sftp_no_saved_connections_title">No saved connections</string>
     <string name="sftp_no_saved_connections_message">Add a connection first, then return here to open it as an SFTP tab.</string>
     <string name="sftp_add_tab_title">Add SFTP tab</string>
     <string name="sftp_error_open_tab_failed_fmt">Failed to open SFTP for %1$s</string>
@@ -2357,16 +2281,13 @@
     <string name="domain_tracker_header_subtitle">Tracked domain registrations, expirations, and renewal status</string>
     <string name="domain_tracker_empty_title">No Domains Tracked</string>
     <string name="domain_tracker_empty_subtitle">Add a domain or import your Domain_List.csv export</string>
-    <string name="domain_tracker_fab_add_desc">Add Domain</string>
     <string name="domain_tracker_col_name">Domain</string>
     <string name="domain_tracker_col_privacy">Privacy</string>
     <string name="domain_tracker_col_status">Status</string>
-    <string name="domain_tracker_col_auto_renew">Auto-renew</string>
     <string name="domain_tracker_col_expires">Expires</string>
     <string name="domain_tracker_import_success_fmt">Imported %1$d new, updated %2$d existing domain(s)</string>
     <string name="domain_tracker_export_success">Domains exported</string>
     <string name="domain_delete_title">Delete \'%1$s\'?</string>
-    <string name="domain_delete_message">This removes the tracked domain record.</string>
     <string name="domain_delete_failed_fmt">Delete failed: %1$s</string>
 
     <string name="domain_edit_title_new">Add Domain</string>
@@ -2389,9 +2310,7 @@
     <string name="vps_tracker_header_subtitle">Tracked VPS/hosting instances, specs, and renewal status</string>
     <string name="vps_tracker_empty_title">No VPS Hosts Tracked</string>
     <string name="vps_tracker_empty_subtitle">Add a host or import your VPS.md export</string>
-    <string name="vps_tracker_fab_add_desc">Add VPS Host</string>
     <string name="vps_tracker_col_tenant">Tenant</string>
-    <string name="vps_tracker_col_hostname">Hostname</string>
     <string name="vps_tracker_col_ipv4">IPv4</string>
     <string name="vps_tracker_col_ipv6">IPv6</string>
     <string name="vps_tracker_col_specs">Specs</string>
@@ -2401,7 +2320,6 @@
     <string name="vps_tracker_col_price">Price</string>
     <string name="vps_tracker_import_success_fmt">Imported %1$d new, updated %2$d existing VPS host(s)</string>
     <string name="vps_tracker_export_success">VPS hosts exported</string>
-    <string name="vps_host_delete_message">This removes the tracked VPS host record.</string>
 
     <string name="vps_host_edit_title_new">Add VPS Host</string>
     <string name="vps_host_edit_title_edit">Edit VPS Host</string>
@@ -2515,7 +2433,6 @@
     <string name="cloud_account_enabled_desc">Account enabled</string>
 
     <!-- item_cloud_instance.xml -->
-    <string name="cloud_instance_action_force_restart">Force Restart</string>
 
     <!-- Connection edit activity (activity_connection_edit.xml) -->
     <string name="connection_edit_details_title">Connection Details</string>
@@ -2614,7 +2531,6 @@
     <string name="dialog_bulk_edit_identity_hint">Use identity</string>
     <string name="dialog_bulk_edit_timeout_hint">Connection timeout (seconds)</string>
     <string name="dialog_bulk_edit_section_behavior">BEHAVIOR</string>
-    <string name="dialog_bulk_edit_section_terminal">TERMINAL</string>
     <string name="dialog_bulk_edit_terminal_type_hint">Terminal type</string>
     <string name="dialog_bulk_edit_section_advanced">ADVANCED</string>
     <string name="dialog_bulk_edit_post_connect_hint">Post-connect script (one command per line)</string>
@@ -2635,8 +2551,6 @@
     <!-- Quick connect dialog (dialog_quick_connect.xml) -->
     <string name="dialog_quick_connect_chip_ssh">SSH</string>
     <string name="dialog_quick_connect_chip_vnc">VNC</string>
-    <string name="dialog_quick_connect_host_hint">hostname or user@hostname</string>
-    <string name="dialog_quick_connect_password_hint">Password (leave blank to use SSH key)</string>
     <string name="dialog_quick_connect_save_switch">Save this connection</string>
     <string name="dialog_quick_connect_save_name_hint">Connection name (optional)</string>
 
@@ -2721,7 +2635,6 @@
     <string name="item_pane_group_name_placeholder">Pane group name</string>
 
     <!-- SSH key item (item_ssh_key.xml) -->
-    <string name="item_ssh_key_name_placeholder">Key Name</string>
     <string name="item_ssh_key_type_placeholder">RSA</string>
     <string name="item_ssh_key_fingerprint_placeholder">SHA256:...</string>
 
@@ -2793,13 +2706,11 @@
     <string name="terminal_menu_section_open_tabs">OPEN TABS</string>
     <string name="terminal_menu_section_terminal">TERMINAL</string>
     <string name="terminal_menu_toggle_system_keyboard">Toggle System Keyboard</string>
-    <string name="terminal_menu_hide_key_bar">Hide Key Bar</string>
     <string name="terminal_menu_find_in_scrollback">Find in Scrollback…</string>
     <string name="terminal_menu_snippets">Snippets…</string>
     <string name="terminal_menu_start_recording">Start Recording</string>
     <string name="terminal_menu_section_session">SESSION</string>
     <string name="terminal_menu_broadcast_to_all_tabs">Broadcast to All Tabs…</string>
-    <string name="terminal_menu_port_forwarding">Port Forwarding</string>
     <string name="terminal_menu_share_session">Share Session</string>
     <string name="terminal_menu_close_current_tab">Close Current Tab</string>
     <string name="terminal_menu_disconnect_all">Disconnect All</string>
@@ -2807,7 +2718,6 @@
     <!-- Snippet editor dialog (dialog_edit_snippet.xml) -->
     <string name="snippet_edit_command_hint">Command</string>
     <string name="snippet_edit_description_hint">Description (optional)</string>
-    <string name="snippet_edit_category_hint">Category</string>
     <string name="snippet_edit_variables_tip">Tip: Use variables like {hostname}, {username} for dynamic snippets</string>
 
     <!-- Snippet list item (item_snippet.xml) -->
@@ -2836,8 +2746,6 @@
     <string name="dashboard_group_toggle_description">Toggle group</string>
     <string name="dashboard_group_add_hosts_description">Add hosts to group</string>
     <string name="dashboard_group_bulk_monitor_description">Configure monitoring for all hosts in group</string>
-    <string name="dashboard_group_rename_description">Rename group</string>
-    <string name="dashboard_group_delete_description">Delete group</string>
 
     <!-- Performance overlay (layout_performance_overlay.xml) -->
     <string name="perf_overlay_cpu_placeholder">CPU: 0%</string>
@@ -2847,7 +2755,6 @@
     <string name="perf_overlay_hide_hint">Long press to hide</string>
 
     <!-- VNC toolbar (view_vnc_toolbar.xml) -->
-    <string name="vnc_toolbar_toggle_keyboard_description">Toggle keyboard</string>
     <string name="vnc_toolbar_key_ctrl">Ctrl</string>
     <string name="vnc_toolbar_key_alt">Alt</string>
     <string name="vnc_toolbar_key_win">Win</string>
@@ -2869,7 +2776,6 @@
 
     <!-- Crash report activity -->
     <string name="crash_report_title">💥 App Crashed</string>
-    <string name="crash_report_paste_issue">Paste / Issue</string>
 
     <!-- Import / Export activity -->
     <string name="import_export_card_import_ssh_subtitle">Import hosts from an OpenSSH config file</string>
@@ -2904,14 +2810,10 @@
     <string name="sync_settings_status_complete_setup">Complete setup below to start syncing</string>
     <string name="sync_settings_sync_now">Sync Now</string>
     <string name="sync_settings_section_setup">SETUP</string>
-    <string name="sync_settings_location_title">Sync Location</string>
     <string name="sync_settings_location_summary">Tap to choose a file in any cloud app</string>
-    <string name="sync_settings_password_title">Encryption Password</string>
-    <string name="sync_settings_password_summary">Required — encrypts all synced data (AES-256)</string>
     <string name="sync_settings_enable_sync">Enable Sync</string>
     <string name="sync_settings_enable_sync_hint">Complete setup above first</string>
     <string name="sync_settings_section_options">OPTIONS</string>
-    <string name="sync_settings_frequency_title">Sync Frequency</string>
     <string name="sync_settings_frequency_hourly">Every hour</string>
     <string name="sync_settings_wifi_only_title">WiFi Only</string>
     <string name="sync_settings_wifi_only_summary">Only sync on WiFi connections</string>
@@ -2923,22 +2825,18 @@
     <string name="sync_settings_section_advanced">ADVANCED</string>
     <string name="sync_settings_force_upload">Force Upload  →  Overwrite remote with local</string>
     <string name="sync_settings_force_download">Force Download  →  Overwrite local with remote</string>
-    <string name="sync_settings_clear_configuration">Clear Configuration</string>
 
     <!-- Hypervisor edit activity -->
-    <string name="hypervisor_edit_import_from_host">Import from Existing Host</string>
     <string name="hypervisor_edit_type_label">Type</string>
     <string name="hypervisor_edit_oci_notice">OCI hosts use API-key auth — import a config + .pem via the wizard.</string>
     <string name="hypervisor_edit_configure_oci_credentials">Configure OCI credentials…</string>
     <string name="hypervisor_edit_use_account_hint">Use account (optional)</string>
     <string name="hypervisor_edit_verify_ssl">Verify SSL Certificate</string>
     <string name="hypervisor_edit_pinned_cert_label">Pinned cert (SHA-256)</string>
-    <string name="hypervisor_edit_not_pinned_yet">(not pinned yet — will pin on next successful connect)</string>
     <string name="hypervisor_edit_forget_pin">Forget</string>
     <string name="hypervisor_edit_api_type_auto_detect_hint">Auto-detect: Tries both APIs automatically</string>
     <string name="hypervisor_edit_ssh_key_hint">SSH Key (optional)</string>
     <string name="hypervisor_edit_notes_hint">Notes (optional)</string>
-    <string name="hypervisor_edit_test_connection">Test Connection</string>
 
     <!-- Backup jobs dialog -->
     <string name="backup_jobs_dialog_title">Backup Jobs</string>
@@ -2995,24 +2893,18 @@
     <string name="secure_password_access_prompt_description">Authenticate to decrypt your securely stored password</string>
 
     <!-- AuditLogViewerActivity -->
-    <string name="audit_log_toast_no_logs_to_copy">No logs to copy</string>
     <string name="audit_log_clipboard_label">TabSSH Audit Logs</string>
     <string name="audit_log_toast_copied">✓ Copied %1$d audit log entries to clipboard</string>
     <string name="audit_log_toast_copy_failed">Failed to copy logs: %1$s</string>
-    <string name="audit_log_toast_load_failed">Failed to load logs: %1$s</string>
     <string name="audit_log_load_error_fmt">⚠ Couldn\'t load audit logs: %1$s\n\nTap to retry</string>
     <string name="audit_log_filter_all_events">All Events</string>
-    <string name="audit_log_filter_file_transfers">File Transfers</string>
     <string name="audit_log_filter_configuration_changes">Configuration Changes</string>
-    <string name="audit_log_filter_errors_only">Errors Only</string>
-    <string name="audit_log_filter_dialog_title">Filter Logs</string>
     <string name="audit_log_filter_name_all">All</string>
     <string name="audit_log_filter_name_file_transfers">File Transfers</string>
     <string name="audit_log_filter_name_config_changes">Config Changes</string>
     <string name="audit_log_filter_name_errors">Errors</string>
     <string name="audit_log_title_with_filter">Audit Logs - %1$s</string>
     <string name="audit_log_toast_exported">✓ Exported %1$d logs to %2$s</string>
-    <string name="audit_log_toast_export_failed">Failed to export logs: %1$s</string>
     <string name="audit_log_clipboard_copied_at">Copied: %1$s</string>
 
     <!-- ConfirmDisconnectActivity -->
@@ -3094,11 +2986,9 @@
     <string name="conn_edit_save_connection_failed">Failed to save connection: %1$s</string>
     <string name="conn_edit_connection_updated">Connection updated</string>
     <string name="conn_edit_connection_saved">Connection saved</string>
-    <string name="conn_edit_host_required">Host is required</string>
     <string name="conn_edit_port_required">Port is required</string>
     <string name="conn_edit_port_invalid">Invalid port number</string>
     <string name="conn_edit_port_out_of_range">Port must be between 1 and 65535</string>
-    <string name="conn_edit_username_required">Username is required</string>
     <string name="conn_edit_select_key_for_pubkey_auth">Select an SSH key for public-key authentication</string>
     <string name="conn_edit_please_select_ssh_key">Please select an SSH key for public key authentication</string>
     <string name="conn_edit_test_not_available_vnc">Test connection is not available for VNC</string>
@@ -3130,12 +3020,10 @@
     <string name="conn_edit_key_imported_toast">✅ SSH key imported successfully!</string>
     <string name="conn_edit_select_ssh_key_placeholder">Select SSH Key...</string>
     <string name="conn_edit_key_import_failed">❌ Key import failed: %1$s</string>
-    <string name="conn_edit_imported_key_default_name">Imported Key</string>
     <string name="conn_edit_importing_encrypted_key">Importing encrypted SSH key…</string>
     <string name="conn_edit_encrypted_key_imported_toast">✅ Encrypted SSH key imported successfully!</string>
     <string name="conn_edit_encrypted_key_import_failed">❌ Encrypted key import failed: %1$s</string>
     <string name="conn_edit_ssh_key_import_failed_title">❌ SSH Key Import Failed</string>
-    <string name="conn_edit_read_key_file_failed">Failed to read key file: %1$s</string>
 
     <!-- KeyImportErrorType friendly messages — shared across ConnectionEditActivity
          and AuthKeysFragment key-import dialogs. Never show the raw BouncyCastle
@@ -3202,12 +3090,10 @@
     <string name="hypervisor_edit_test_not_supported">Test not supported for this type</string>
     <string name="hypervisor_edit_test_successful">✓ Connection successful</string>
     <string name="hypervisor_edit_test_failed">✗ Connection failed</string>
-    <string name="hypervisor_edit_error_detail">Error: %1$s</string>
     <string name="hypervisor_edit_test_connection_button">Test Connection</string>
     <string name="hypervisor_edit_updated_toast">Updated %1$s</string>
     <string name="hypervisor_edit_added_toast">Added %1$s</string>
     <string name="hypervisor_edit_password_insecure_warning">⚠ Password stored insecurely (Keystore unavailable). Re-edit to retry.</string>
-    <string name="hypervisor_edit_save_failed">Failed to save: %1$s</string>
     <string name="hypervisor_edit_invalid_host">Invalid host — use a hostname or IP address only</string>
     <string name="hypervisor_edit_password_required">Password is required</string>
     <string name="hypervisor_edit_invalid_port">Invalid port</string>
@@ -3215,13 +3101,11 @@
     <!-- Keyboard customization -->
     <string name="keyboard_customization_empty_row_hint">Empty row — tap a key below to add</string>
     <string name="keyboard_customization_layout_saved">Layout saved (%1$d rows)</string>
-    <string name="keyboard_customization_save_failed">Failed to save: %1$s</string>
     <string name="keyboard_customization_reset_title">Reset to default?</string>
     <string name="keyboard_customization_reset_message">Discard the current edits and restore the default keyboard layout. You will still need to tap Save to keep the change.</string>
     <string name="keyboard_customization_reset_done_toast">Reset to default layout</string>
 
     <!-- Libvirt manager -->
-    <string name="libvirt_manager_vm_hosts_group_name">VM Hosts</string>
 
     <!-- Link handler -->
     <string name="link_handler_invalid_link">Invalid link</string>
@@ -3254,7 +3138,6 @@
     <string name="main_startup_warning_dismiss">Dismiss</string>
     <string name="main_notifications_disabled">⚠️ Notifications disabled - you won\'t receive connection alerts</string>
     <string name="main_no_hosts_configured">No %1$s hosts configured. Go to Hypervisors tab to add one.</string>
-    <string name="main_load_hypervisors_failed">Failed to load hypervisors: %1$s</string>
     <string name="main_oci_managed_under_cloud_accounts">OCI is now managed under Cloud Accounts</string>
     <string name="main_hypervisor_name_host">%1$s (%2$s)</string>
     <string name="main_select_hypervisor_title">Select Hypervisor</string>
@@ -3311,7 +3194,6 @@
     <string name="sync_settings_title_monitor_slots">Monitor Slots</string>
     <string name="sync_settings_title_hypervisor_accounts">Hypervisor Accounts</string>
     <string name="sync_settings_title_certificates">Certificates</string>
-    <string name="sync_settings_title_pane_groups">Panes</string>
     <string name="sync_settings_title_telnet_hosts">Telnet Hosts</string>
     <string name="sync_settings_subtitle_hypervisor_accounts">Hypervisor accounts</string>
     <string name="sync_settings_subtitle_connections">SSH connection profiles</string>
@@ -3340,7 +3222,6 @@
     <string name="sync_settings_clear_config_title">Clear Configuration</string>
     <string name="sync_settings_clear_config_message">Remove sync setup. Your local data is NOT affected.</string>
     <string name="sync_settings_toast_config_cleared">Sync configuration cleared</string>
-    <string name="sync_settings_location_summary_default">Tap to choose a file in any cloud app</string>
     <string name="sync_settings_password_summary_set">Set — tap to change</string>
     <string name="sync_settings_password_summary_required">Required — encrypts all synced data (AES-256)</string>
     <string name="sync_settings_toggle_hint_location_and_password">Set location and password first</string>
@@ -3348,7 +3229,6 @@
     <string name="sync_settings_toggle_hint_password">Set encryption password first</string>
     <string name="sync_settings_toggle_hint_ready">Sync across devices</string>
     <string name="sync_settings_status_active">Sync Active</string>
-    <string name="sync_settings_status_last_sync">Last sync: %1$s</string>
     <string name="sync_settings_last_sync_short">Last: %1$s</string>
     <string name="sync_settings_status_ready">Ready</string>
     <string name="sync_settings_status_ready_subtitle">Toggle Enable Sync to start</string><string name="sync_settings_status_bullet_choose_location">• Choose sync location</string>
@@ -3397,7 +3277,6 @@
     <string name="dashboard_monitor_title_fmt">Monitor: %1$s</string>
     <string name="dashboard_remove">Remove</string>
     <string name="dashboard_new_group_title">New group</string>
-    <string name="dashboard_group_name_empty">Group name cannot be empty</string>
     <string name="dashboard_group_created_toast_fmt">Group \"%1$s\" created — use ⊕ to add hosts</string>
     <string name="dashboard_rename_group_title">Rename group</string>
     <string name="dashboard_delete_group_title">Delete group</string>
@@ -3446,13 +3325,10 @@
     <string name="proxmox_snapshot_name_invalid">Name must start with a letter and contain only letters, digits, - or _</string>
     <string name="proxmox_connect_auth_failed">Authentication failed — check credentials</string>
     <string name="proxmox_connect_failed_fmt">Connection failed: proxmox %1$s: %2$s</string>
-    <string name="proxmox_loading_vms">Loading VMs…</string>
-    <string name="proxmox_no_vms_found">No VMs found</string>
     <string name="proxmox_could_not_load_vms_fmt">Could not load VMs: %1$s</string>
     <string name="proxmox_stop_vm_title_fmt">Stop %1$s?</string>
     <string name="proxmox_stop_vm_message">Proxmox stop is a hard power-off, not a graceful shutdown. Any unsaved data will be lost.</string>
     <string name="proxmox_power_action_progress_fmt">%1$sing %2$s…</string>
-    <string name="proxmox_power_action_sent_fmt">%1$s: %2$s sent</string>
     <string name="proxmox_power_action_error_fmt">%1$s failed: %2$s</string>
     <string name="proxmox_snapshot_creating">Creating…</string>
     <string name="proxmox_vm_name_id_fmt">%1$s (%2$d)</string>
@@ -3528,7 +3404,6 @@
     <string name="identity_vnc_add_title">Add VNC Identity</string>
     <string name="identity_vnc_edit_title">Edit VNC Identity</string>
     <string name="identity_vnc_delete_title">Delete VNC identity?</string>
-    <string name="identity_vnc_delete_message_fmt">Delete \"%1$s\"?</string>
     <string name="pane_group_member_count_fmt">%1$d members</string>
     <string name="pane_group_add_title">Add Pane Group</string>
     <string name="pane_group_edit_title">Edit Pane Group</string>
@@ -3595,7 +3470,6 @@
     <string name="identity_key_cert_attached_fmt">Certificate: ✓ attached (%1$s)</string>
     <string name="identity_key_cert_none">Certificate: — none</string>
     <string name="identity_key_fingerprint_fmt">Fingerprint: %1$s</string>
-    <string name="identity_key_created_fmt">Created: %1$s</string>
     <string name="identity_key_comment_fmt">Comment: %1$s</string>
     <string name="identity_more_button">More…</string>
     <string name="identity_menu_copy_public_key">📋 Copy Public Key</string>
@@ -3680,7 +3554,6 @@
     <string name="theme_editor_saturation">Saturation</string>
     <string name="theme_editor_value">Value</string>
     <string name="theme_editor_pick_color_title">Pick color</string>
-    <string name="theme_editor_saved_toast_fmt">Saved \'%1$s\'</string>
     <string name="theme_editor_save_failed_title">Save failed</string>
 
     <!-- Session transcript viewer dialogs -->
@@ -3889,9 +3762,7 @@
     <string name="terminal_cmdpalette_title">Command Palette</string>
     <string name="terminal_cmdpalette_settings_sub">Open settings</string>
     <string name="terminal_cmdpalette_theme_editor_sub">Create or edit a custom terminal theme</string>
-    <string name="terminal_cmdpalette_ssh_keys">SSH Keys</string>
     <string name="terminal_cmdpalette_ssh_keys_sub">Manage SSH private keys &amp; certificates</string>
-    <string name="terminal_cmdpalette_snippets">Snippets</string>
     <string name="terminal_cmdpalette_snippets_sub">Reusable command snippets</string>
     <string name="terminal_cmdpalette_port_forwarding">Port Forwarding</string>
     <string name="terminal_cmdpalette_port_forwarding_sub">Local / Remote / SOCKS tunnels</string>

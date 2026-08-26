@@ -31,7 +31,7 @@ class TranscriptViewerActivity : TabSSHActivity() {
     
     private fun setupToolbar() {
         setSupportActionBar(binding.appBar.toolbar)
-        supportActionBar?.setTitle(R.string.transcript_viewer_title)
+        supportActionBar?.setTitle(R.string.activity_label_session_transcripts)
     }
     
     private fun setupRecyclerView() {

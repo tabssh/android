@@ -21,15 +21,12 @@
     <!-- Connection management -->
     <string name="connection_name_hint">✏️ Verbindungsname (z.B. \"Mein VPS\")</string>
     <string name="connection_port_hint">22</string>
-    <string name="edit_connection">✏️ Verbindung bearbeiten</string>
-    <string name="delete_connection">🗑️ Verbindung löschen</string>
     <string name="duplicate_connection">📋 Verbindung duplizieren</string>
     <string name="connection_saved">✅ Verbindung erfolgreich gespeichert!</string>
     <string name="connection_deleted">🗑️ Verbindung gelöscht</string>
     
     <!-- Authentication -->
     <string name="auth_type_public_key">🔐 Public Key (SSH-Schlüssel)</string>
-    <string name="auth_type_keyboard_interactive">⌨️ Keyboard Interactive</string>
     <string name="password_hint">🔒 Passwort</string>
     <string name="select_key">🔑 SSH-Schlüssel auswählen</string>
     <string name="generate_key">✨ Neuen Schlüssel erstellen</string>
@@ -39,7 +36,6 @@
     <string name="new_tab">➕ Neuer Tab</string>
     <string name="close_tab">❌ Tab schließen</string>
     <string name="tab_menu">📑 Tab-Menü</string>
-    <string name="function_keys">🔤 Funktionstasten</string>
     <string name="show_keyboard">⌨️ Tastatur anzeigen</string>
     <string name="hide_keyboard">⌨️ Tastatur ausblenden</string>
     <string name="paste">📋 Einfügen</string>
@@ -78,21 +74,17 @@
     <string name="settings_terminal">💻 Terminal</string>
     <string name="settings_security">🔐 Sicherheit &amp; Datenschutz</string>
     <string name="settings_interface">🎨 Oberfläche</string>
-    <string name="settings_connections">🌐 Verbindungen</string>
-    <string name="settings_accessibility">♿ Barrierefreiheit</string>
     
     <!-- General settings -->
     <string name="pref_startup_behavior">Startverhalten</string>
     <string name="pref_startup_behavior_summary">Was beim App-Start geschehen soll</string>
     <string name="pref_auto_backup">Automatische Sicherung</string>
     <string name="pref_auto_backup_summary">Verbindungen und Schlüssel automatisch sichern</string>
-    <string name="pref_language">Sprache</string>
     <string name="pref_language_summary">App-Sprache</string>
     
     <!-- Security settings -->
     <string name="pref_password_storage">Passwortspeicherung</string>
     <string name="pref_password_storage_summary">Wie Passwörter gespeichert werden</string>
-    <string name="pref_biometric_auth">Biometrische Authentifizierung</string>
     <string name="pref_biometric_auth_summary">Fingerabdruck/Gesichtserkennung verwenden</string>
     <string name="pref_host_key_checking">Host-Schlüssel-Überprüfung</string>
     <string name="pref_host_key_checking_summary">Host-Identität verifizieren</string>
@@ -103,13 +95,9 @@
     
     <!-- Terminal settings -->
     <string name="pref_theme">Design</string>
-    <string name="pref_theme_summary">Terminal-Farbschema</string>
     <string name="pref_font_family">Schriftart</string>
     <string name="pref_font_family_summary">Terminal-Schriftart</string>
     <string name="pref_font_size">Schriftgröße</string>
-    <string name="pref_font_size_summary">Terminal-Textgröße</string>
-    <string name="pref_cursor_style">Cursor-Stil</string>
-    <string name="pref_cursor_style_summary">Cursor-Darstellung</string>
     <string name="pref_scrollback_lines">Scrollback-Zeilen</string>
     <string name="pref_scrollback_lines_summary">Zeilen im Verlauf behalten</string>
     
@@ -148,7 +136,6 @@
     <string name="biometric_not_available">⚠️ Biometrische Authentifizierung auf diesem Gerät nicht verfügbar</string>
     
     <!-- About -->
-    <string name="about_version">📦 Version</string>
     <string name="about_build">🔨 Build</string>
     <string name="about_license">📜 Lizenz (MIT)</string>
     <string name="about_source_code">💻 Quellcode</string>

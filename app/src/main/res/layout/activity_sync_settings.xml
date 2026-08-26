@@ -161,7 +161,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="@string/sync_settings_location_title"
+                                android:text="@string/sync_settings_location_dialog_title"
                                 android:textAppearance="?attr/textAppearanceBodyLarge" />
 
                             <TextView
@@ -220,14 +220,14 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="@string/sync_settings_password_title"
+                                android:text="@string/sync_settings_password_dialog_title"
                                 android:textAppearance="?attr/textAppearanceBodyLarge" />
 
                             <TextView
                                 android:id="@+id/text_password_summary"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="@string/sync_settings_password_summary"
+                                android:text="@string/sync_settings_password_summary_required"
                                 android:textAppearance="?attr/textAppearanceBodySmall"
                                 android:textColor="?android:attr/textColorSecondary" />
 
@@ -347,7 +347,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="@string/sync_settings_frequency_title"
+                                    android:text="@string/sync_settings_frequency_dialog_title"
                                     android:textAppearance="?attr/textAppearanceBodyLarge" />
 
                                 <TextView
@@ -656,7 +656,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:padding="@dimen/space_md"
-                            android:text="@string/sync_settings_clear_configuration"
+                            android:text="@string/sync_settings_clear_config_title"
                             android:textAppearance="?attr/textAppearanceBodyLarge"
                             android:textColor="@android:color/holo_red_dark"
                             android:background="?attr/selectableItemBackground"

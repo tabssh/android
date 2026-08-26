@@ -35,7 +35,7 @@
 
     <item
         android:id="@+id/action_cluster_commands"
-        android:title="@string/activity_label_cluster_commands"
+        android:title="@string/nav_item_cluster_commands"
         android:icon="@android:drawable/ic_menu_share"
         app:showAsAction="never" />
 

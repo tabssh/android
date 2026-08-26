@@ -258,7 +258,7 @@ class VpsTrackerActivity : TabSSHActivity() {
     private fun confirmDelete(host: VpsHost) {
         MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.domain_delete_title, host.hostname))
-            .setMessage(getString(R.string.vps_host_delete_message))
+            .setMessage(getString(R.string.vps_host_delete_confirm_message))
             .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 lifecycleScope.launch {
                     try {

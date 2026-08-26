@@ -43,7 +43,7 @@ class InfraFragment : Fragment() {
 
         TabLayoutMediator(tabLayout, viewPager) { tab, position ->
             tab.text = when (position) {
-                0 -> getString(R.string.container_tab_title)
+                0 -> getString(R.string.container_manager_tab_containers)
                 1 -> getString(R.string.infra_tab_hypervisors)
                 2 -> getString(R.string.infra_tab_cloud)
                 else -> ""

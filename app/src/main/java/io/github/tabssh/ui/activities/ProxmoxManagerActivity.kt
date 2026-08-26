@@ -240,7 +240,7 @@ class ProxmoxManagerActivity : TabSSHActivity() {
     }
 
     private suspend fun loadVMs(client: ProxmoxApiClient) {
-        showProgress(getString(R.string.proxmox_loading_vms))
+        showProgress(getString(R.string.vmware_loading_vms))
         try {
             val vmList = client.getAllVMs()
             // Fetch IPs for running VMs concurrently — guest-agent queries can
@@ -272,7 +272,7 @@ class ProxmoxManagerActivity : TabSSHActivity() {
             hideProgress()
             if (vms.isEmpty()) {
                 statusText.visibility = View.VISIBLE
-                statusText.text = getString(R.string.proxmox_no_vms_found)
+                statusText.text = getString(R.string.vmware_no_vms_found)
                 resetStatusTextStyle()
             }
         } catch (e: CancellationException) {
@@ -329,7 +329,7 @@ class ProxmoxManagerActivity : TabSSHActivity() {
                 // The awaited API hop can land after the user has left the screen.
                 if (isFinishing || isDestroyed) return@launch
                 if (ok) {
-                    Toast.makeText(this@ProxmoxManagerActivity, getString(R.string.proxmox_power_action_sent_fmt, vmName, action), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@ProxmoxManagerActivity, getString(R.string.vmware_action_sent_fmt, vmName, action), Toast.LENGTH_SHORT).show()
                     delay(2000)
                     loadVMs(client)
                 } else {
@@ -898,7 +898,7 @@ class ProxmoxManagerActivity : TabSSHActivity() {
             // snaptime is epoch seconds; null while the snapshot is still being created
             holder.time.text = if (snapshot.snaptime != null) {
                 getString(
-                    R.string.xcpng_snapshot_created_fmt,
+                    R.string.vmware_snapshot_created_time_fmt,
                     java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(snapshot.snaptime * 1000))
                 )
             } else {

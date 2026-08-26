@@ -96,22 +96,6 @@ work).
     repro** — no `adb` access from this environment to capture `dumpsys
     input_method`/Gboard logcat; remains on the user to retest and report
     back whether the "do this"-style drop recurs.
-49. **~220 additional duplicated string values remain in `strings.xml`
-    beyond the 45 already consolidated** — found while doing that
-    consolidation pass. The full scan found ~265 groups of identical string
-    values; only the clearest 45 (exact-duplicate action/dialog labels,
-    format-string templates, and `_hint` suffixed fields with an
-    unambiguous canonical name) were consolidated in that pass. The
-    remaining ~220
-    groups were deliberately left alone because they are short generic
-    words/phrases (e.g. single words, numbers, punctuation-only strings)
-    or symbols where two strings share text incidentally rather than
-    semantically, and forcing them onto one shared key risks an
-    unrelated screen's copy changing when only one caller's wording
-    should. Fix: re-run the duplicate-string scan, review the remaining
-    groups case by case, and consolidate only the ones that are
-    genuinely the same semantic string (not just coincidentally equal
-    text) referenced from multiple places.
 50. **Item 40's raw dp/sp literal sweep is only partially complete** — the
     five worst-offender layouts (`activity_sync_settings.xml`,
     `bottom_sheet_terminal_menu.xml`, `activity_sftp.xml`,

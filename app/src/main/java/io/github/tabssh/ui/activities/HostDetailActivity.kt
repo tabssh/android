@@ -107,7 +107,7 @@ class HostDetailActivity : TabSSHActivity() {
         // screen gets the same toolbar styling as every XML-defined screen.
         val appBar = layoutInflater.inflate(R.layout.include_app_bar, root, false)
         val toolbar = appBar.findViewById<Toolbar>(R.id.toolbar)
-        toolbar.setTitle(R.string.host_detail_title)
+        toolbar.setTitle(R.string.activity_label_host_detail)
         root.addView(appBar)
 
         val scroll = ScrollView(this).apply {
@@ -146,7 +146,7 @@ class HostDetailActivity : TabSSHActivity() {
         connectBtn.setOnClickListener { launchTerminal() }
         content.addView(connectBtn)
 
-        val monitorBtn = actionButton(getString(R.string.host_detail_action_monitor_settings))
+        val monitorBtn = actionButton(getString(R.string.dashboard_context_monitor_settings))
         monitorBtn.setOnClickListener { openMonitorSettings() }
         content.addView(monitorBtn)
 

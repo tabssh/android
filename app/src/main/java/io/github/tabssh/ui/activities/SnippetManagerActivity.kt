@@ -328,7 +328,7 @@ class SnippetManagerActivity : TabSSHActivity() {
     private fun deleteSnippet(snippet: Snippet) {
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.snippet_mgr_dialog_title_delete)
-            .setMessage(getString(R.string.hypervisor_delete_message, snippet.name))
+            .setMessage(getString(R.string.connections_delete_message_fmt, snippet.name))
             .setPositiveButton(R.string.delete) { _, _ ->
                 performDelete(snippet)
             }

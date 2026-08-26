@@ -221,7 +221,7 @@ class RemoteFileEditorActivity : TabSSHActivity() {
                     io.github.tabssh.sftp.TransferState.ERROR,
                     io.github.tabssh.sftp.TransferState.CANCELLED -> {
                         runOnUiThread {
-                            Toast.makeText(this@RemoteFileEditorActivity, R.string.remote_editor_download_failed, Toast.LENGTH_LONG).show()
+                            Toast.makeText(this@RemoteFileEditorActivity, R.string.fileopen_download_failed, Toast.LENGTH_LONG).show()
                             finish()
                         }
                         return
@@ -249,7 +249,7 @@ class RemoteFileEditorActivity : TabSSHActivity() {
             runOnUiThread {
                 Toast.makeText(
                     this,
-                    getString(R.string.remote_editor_error_fmt, e.message.orEmpty()),
+                    getString(R.string.hypervisor_error_prefix_fmt, e.message.orEmpty()),
                     Toast.LENGTH_LONG
                 ).show()
                 finish()
@@ -304,7 +304,7 @@ class RemoteFileEditorActivity : TabSSHActivity() {
                     progress.visibility = android.view.View.GONE
                     Toast.makeText(
                         this@RemoteFileEditorActivity,
-                        getString(R.string.remote_editor_error_fmt, e.message.orEmpty()),
+                        getString(R.string.hypervisor_error_prefix_fmt, e.message.orEmpty()),
                         Toast.LENGTH_LONG
                     ).show()
                 }

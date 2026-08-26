@@ -237,7 +237,7 @@ class AuthKeysFragment : Fragment() {
             .setMessage(
                 getString(R.string.sftp_props_type_fmt, key.keyType) + "\n" +
                 getString(R.string.identity_key_fingerprint_fmt, key.fingerprint) + "\n" +
-                getString(R.string.identity_key_created_fmt, java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(key.createdAt))) + "\n" +
+                getString(R.string.vmware_snapshot_created_time_fmt, java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(key.createdAt))) + "\n" +
                 (if (!key.comment.isNullOrEmpty()) getString(R.string.identity_key_comment_fmt, key.comment) + "\n" else "") +
                 certInfo
             )

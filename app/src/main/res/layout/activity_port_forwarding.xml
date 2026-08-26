@@ -94,7 +94,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/route_default_label"
+                        android:text="@string/route_default_choose_title"
                         android:textAppearance="?attr/textAppearanceLabelLarge" />
 
                     <TextView

@@ -345,7 +345,7 @@ class OciManagerActivity : TabSSHActivity() {
                     loadInstances(client, compartment)
                 } else {
                     hideProgress()
-                    showError(getString(R.string.oci_action_failed_for_fmt, action.wireValue, name))
+                    showError(getString(R.string.xcpng_action_failed_for_fmt, action.wireValue, name))
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e

@@ -32,7 +32,7 @@
     <!-- PIN app lock is independent of the biometric/inactivity lock above. -->
     <Preference
       android:key="app_lock_pin_setup"
-      android:title="@string/prefs_app_lock_pin_setup_title"
+      android:title="@string/settings_dialog_app_lock_pin_title"
       android:summary="@string/prefs_app_lock_pin_setup_summary" />
 
     <SwitchPreferenceCompat

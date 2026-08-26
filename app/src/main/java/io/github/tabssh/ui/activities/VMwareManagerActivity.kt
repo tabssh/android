@@ -331,13 +331,13 @@ class VMwareManagerActivity : TabSSHActivity() {
                     loadVMs(client)
                 } else {
                     hideProgress()
-                    showError(getString(R.string.oci_action_failed_for_fmt, action, vmName))
+                    showError(getString(R.string.xcpng_action_failed_for_fmt, action, vmName))
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(this@VMwareManagerActivity, TAG, e, "$action failed for $vmName")
-                showError(getString(R.string.xcpng_action_failed_fmt, action, mapped.message))
+                showError(getString(R.string.proxmox_power_action_error_fmt, action, mapped.message))
             } finally {
                 actionInFlight = false
             }

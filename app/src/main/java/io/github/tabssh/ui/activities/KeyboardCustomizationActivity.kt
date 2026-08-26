@@ -445,7 +445,7 @@ class KeyboardCustomizationActivity : TabSSHActivity() {
             finish()
         } catch (e: Exception) {
             val mapped = ThrowableMapper.map(this, "KeyboardCustomization", e, "Save failed")
-            Toast.makeText(this, getString(R.string.keyboard_customization_save_failed, mapped.message), Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.main_quick_connect_save_failed, mapped.message), Toast.LENGTH_LONG).show()
         }
     }
 

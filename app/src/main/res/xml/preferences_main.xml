@@ -41,7 +41,7 @@
 
     <Preference
       android:key="monitoring_settings"
-      android:title="@string/prefs_monitoring_settings_title"
+      android:title="@string/host_detail_section_monitoring"
       android:summary="@string/prefs_monitoring_settings_summary"
       android:icon="@drawable/ic_flash"
       android:fragment="io.github.tabssh.ui.activities.MonitoringSettingsFragment" />

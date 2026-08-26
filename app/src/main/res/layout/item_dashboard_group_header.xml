@@ -99,7 +99,7 @@
             android:layout_width="@dimen/min_touch_target"
             android:layout_height="@dimen/min_touch_target"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/dashboard_group_rename_description"
+            android:contentDescription="@string/dashboard_rename_group_title"
             app:srcCompat="@drawable/ic_edit"
             app:tint="?attr/colorOnSurfaceVariant" />
 
@@ -109,7 +109,7 @@
             android:layout_width="@dimen/min_touch_target"
             android:layout_height="@dimen/min_touch_target"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/dashboard_group_delete_description"
+            android:contentDescription="@string/dashboard_delete_group_title"
             app:srcCompat="@drawable/ic_close"
             app:tint="?attr/colorOnSurfaceVariant" />
 

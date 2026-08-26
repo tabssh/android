@@ -690,7 +690,7 @@ class ConnectionSettingsFragment : PreferenceFragmentCompat() {
                 Logger.i("Settings", "Default port changed to: $portNum")
                 true
             } catch (e: NumberFormatException) {
-                android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_invalid_port), android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(requireContext(), getString(R.string.conn_edit_port_invalid), android.widget.Toast.LENGTH_SHORT).show()
                 false
             }
         }

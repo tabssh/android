@@ -59,7 +59,7 @@
                 android:layout_width="@dimen/min_touch_target"
                 android:layout_height="@dimen/min_touch_target"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/host_detail_action_monitor_settings"
+                android:contentDescription="@string/dashboard_context_monitor_settings"
                 app:srcCompat="@drawable/ic_notification"
                 app:tint="?attr/colorOnSurfaceVariant" />
 

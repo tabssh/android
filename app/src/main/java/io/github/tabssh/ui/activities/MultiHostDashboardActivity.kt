@@ -570,7 +570,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
             .setView(form.root)
             .setPositiveButton(getString(R.string.container_create)) { _, _ ->
                 val name = et.text.toString().trim()
-                if (name.isBlank()) { toast(getString(R.string.dashboard_group_name_empty)); return@setPositiveButton }
+                if (name.isBlank()) { toast(getString(R.string.group_mgmt_name_empty)); return@setPositiveButton }
                 val g = DashboardGroup(name = name, order = dashboardGroups.size)
                 dashboardGroups.add(g)
                 groupHosts[g.id] = mutableSetOf()
@@ -595,7 +595,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
             .setView(form.root)
             .setPositiveButton(getString(R.string.connections_group_rename_confirm)) { _, _ ->
                 val name = et.text.toString().trim()
-                if (name.isBlank()) { toast(getString(R.string.dashboard_group_name_empty)); return@setPositiveButton }
+                if (name.isBlank()) { toast(getString(R.string.group_mgmt_name_empty)); return@setPositiveButton }
                 val idx = dashboardGroups.indexOfFirst { it.id == group.id }
                 if (idx >= 0) {
                     dashboardGroups[idx] = group.copy(name = name)
