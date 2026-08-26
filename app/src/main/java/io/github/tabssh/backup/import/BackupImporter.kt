@@ -741,7 +741,7 @@ class BackupImporter(
 
     // ── Preferences ──────────────────────────────────────────────────────────
 
-    private fun restorePreferences(data: String) {
+    private suspend fun restorePreferences(data: String) {
         val root = JSONObject(data)
         root.optJSONObject("general")?.let { g ->
             preferenceManager.setAutoBackupEnabled(g.optBoolean("autoBackup", true))
@@ -760,7 +760,17 @@ class BackupImporter(
             preferenceManager.setPreventScreenshots(s.optBoolean("preventScreenshots", false))
         }
         root.optJSONObject("terminal")?.let { t ->
-            preferenceManager.setTerminalTheme(t.optString("theme", "dracula"))
+            // Route through ThemeManager.applyTheme() rather than writing the
+            // preference directly — a direct write leaves the running app's
+            // _currentTheme StateFlow (and any UI observing it) stale until
+            // the next process restart.
+            val themeId = t.optString("theme", "dracula")
+            val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+            if (app != null) {
+                app.themeManager.applyTheme(themeId)
+            } else {
+                preferenceManager.setTheme(themeId)
+            }
             preferenceManager.setFontSize(t.optDouble("fontSize", 14.0).toFloat())
             preferenceManager.setFontFamily(t.optString("fontFamily", "Roboto Mono"))
             preferenceManager.setCursorStyle(t.optString("cursorStyle", "bar"))

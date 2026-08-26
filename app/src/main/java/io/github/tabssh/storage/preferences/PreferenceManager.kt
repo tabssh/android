@@ -593,9 +593,6 @@ class PreferenceManager(private val context: Context) {
     fun setAutoBackup(enabled: Boolean) = setBoolean(KEY_AUTO_BACKUP, enabled)
     fun setBackupFrequency(frequency: String) = setString(KEY_BACKUP_FREQUENCY, frequency)
 
-    fun getTerminalTheme(): String = getString(KEY_THEME, DEFAULT_THEME)
-    fun setTerminalTheme(theme: String) = setString(KEY_THEME, theme)
-
     fun setCursorBlink(enabled: Boolean) = setBoolean(KEY_CURSOR_BLINK, enabled)
 
     /**

@@ -323,6 +323,7 @@
     <string name="sync_log_clear_message">Remove all sync log history. This cannot be undone.</string>
     <string name="sync_log_copied">Copied %1$d sync log entries to clipboard</string>
     <string name="sync_log_no_entries_to_copy">No sync log entries to copy</string>
+    <string name="sync_log_copy_failed_fmt">Couldn\'t copy sync log: %1$s</string>
     <string name="sync_log_resolution_auto_merged">Auto-merged</string>
     <string name="sync_log_resolution_kept_local">Kept Local</string>
     <string name="sync_log_resolution_kept_remote">Kept Remote</string>

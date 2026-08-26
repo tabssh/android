@@ -1118,7 +1118,7 @@ class SyncDataApplier {
     /**
      * Apply preferences from JsonElement map
      */
-    private fun applyPreferences(preferences: Map<String, JsonElement>): Int {
+    private suspend fun applyPreferences(preferences: Map<String, JsonElement>): Int {
         var count = 0
 
         try {
@@ -1484,12 +1484,24 @@ class SyncDataApplier {
         return count
     }
 
-    private fun applyTerminalPreferences(prefs: Map<String, Any>): Int {
+    private suspend fun applyTerminalPreferences(prefs: Map<String, Any>): Int {
         var count = 0
         prefs.forEach { (key, value) ->
             try {
                 when (key) {
-                    "theme" -> preferenceManager.setTerminalTheme(value as String)
+                    // Route through ThemeManager.applyTheme() rather than writing
+                    // the preference directly — a direct write leaves the running
+                    // app's _currentTheme StateFlow (and any UI observing it)
+                    // stale until the next process restart.
+                    "theme" -> {
+                        val themeId = value as String
+                        val activeApp = app
+                        if (activeApp != null) {
+                            activeApp.themeManager.applyTheme(themeId)
+                        } else {
+                            preferenceManager.setTheme(themeId)
+                        }
+                    }
                     "fontSize" -> {
                         val size = when (value) {
                             is Number -> value.toFloat()

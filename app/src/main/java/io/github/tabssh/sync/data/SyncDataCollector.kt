@@ -1105,7 +1105,7 @@ class SyncDataCollector {
 
     private fun collectTerminalPreferences(): Map<String, Any> {
         return mapOf(
-            "theme" to preferenceManager.getTerminalTheme(),
+            "theme" to preferenceManager.getTheme(),
             "fontSize" to preferenceManager.getFontSize(),
             "fontFamily" to preferenceManager.getFontFamily(),
             "cursorStyle" to preferenceManager.getCursorStyle(),

@@ -623,7 +623,7 @@ class BackupExporter(
         })
 
         root.put("terminal", JSONObject().apply {
-            put("theme", preferenceManager.getTerminalTheme())
+            put("theme", preferenceManager.getTheme())
             put("fontSize", preferenceManager.getFontSize())
             put("fontFamily", preferenceManager.getFontFamily())
             put("cursorStyle", preferenceManager.getCursorStyle())

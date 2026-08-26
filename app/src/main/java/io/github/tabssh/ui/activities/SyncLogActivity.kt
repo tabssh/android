@@ -112,24 +112,29 @@ class SyncLogActivity : TabSSHActivity() {
 
     private fun copyLogToClipboard() {
         lifecycleScope.launch {
-            val entries = app.database.syncLogDao().getRecent()
-            if (entries.isEmpty()) {
-                toast(getString(R.string.sync_log_no_entries_to_copy))
-                return@launch
-            }
-
-            val text = buildString {
-                append("TabSSH Sync Log\n")
-                append("=".repeat(60)).append("\n\n")
-                entries.forEach { entry ->
-                    val ts = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
-                        .format(java.util.Date(entry.timestamp))
-                    append("$ts [${entry.resolution}] ${entry.entityType} (${entry.deviceName}): ${entry.description}\n")
+            try {
+                val entries = app.database.syncLogDao().getRecent()
+                if (entries.isEmpty()) {
+                    toast(getString(R.string.sync_log_no_entries_to_copy))
+                    return@launch
                 }
-            }
 
-            io.github.tabssh.utils.ClipboardHelper.copy(this@SyncLogActivity, getString(R.string.sync_log_title), text, sensitive = false)
-            toast(getString(R.string.sync_log_copied, entries.size))
+                val text = buildString {
+                    append("TabSSH Sync Log\n")
+                    append("=".repeat(60)).append("\n\n")
+                    entries.forEach { entry ->
+                        val ts = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+                            .format(java.util.Date(entry.timestamp))
+                        append("$ts [${entry.resolution}] ${entry.entityType} (${entry.deviceName}): ${entry.description}\n")
+                    }
+                }
+
+                io.github.tabssh.utils.ClipboardHelper.copy(this@SyncLogActivity, getString(R.string.sync_log_title), text, sensitive = false)
+                toast(getString(R.string.sync_log_copied, entries.size))
+            } catch (e: Exception) {
+                io.github.tabssh.utils.logging.Logger.e("SyncLogActivity", "Failed to copy sync log", e)
+                toast(getString(R.string.sync_log_copy_failed_fmt, e.message ?: ""))
+            }
         }
     }
 

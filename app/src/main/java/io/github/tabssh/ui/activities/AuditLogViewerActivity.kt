@@ -135,6 +135,7 @@ class AuditLogViewerActivity : TabSSHActivity() {
                     resetEmptyView()
                     recyclerView.visibility = View.GONE
                     emptyView.visibility = View.VISIBLE
+                    adapter.updateLogs(logs)
                 } else {
                     recyclerView.visibility = View.VISIBLE
                     emptyView.visibility = View.GONE
