@@ -55,34 +55,6 @@ work).
     `fragment_performance.xml:457` and `activity_cloud_accounts.xml:91`
     hardcode `app:tint="@android:color/white"` on FAB icons, and
     `bg_bottom_sheet_handle.xml:12` hardcodes `#33808080`.
-41. **Code-quality issues worth folding into the same pass** — (a)
-    `TabTerminalActivity.kt:820-823` performs four unchecked casts on a
-    `View.tag` (`as Triple<*,*,*>`, then `as ImageView`/`as TextView`) with
-    no `as?` guard — a stale tag is a `ClassCastException`; (b)
-    `AuthKeysFragment.kt:303` creates a
-    `CoroutineScope(Dispatchers.IO + SupervisorJob())` *inside* a
-    `lifecycleScope.launch`, never stores or cancels it, so an SSH connect
-    in flight outlives the fragment; (c) `TabSSHApplication.kt:868` is a
-    bare `catch (_: Exception) {}` with no logging around shutdown logic,
-    and `:867,884` call `runBlocking` on the main thread; (d)
-    `HostKeyVerifier.kt` wraps every host-key DB read in `runBlocking`
-    (`:90,131,163,202,264,288,324,348,369`) — convert to real `suspend`
-    functions; (e) `VpsMarkdownImportExport.kt:158,169,212` repeat
-    `ThreadLocal.get()!!` three times — collapse to one accessor; (f)
-    `TerminalPagerAdapter.kt:458,702` never cancel `holderScope` in
-    `unbind()`; (g) duplicated WakeLock/WifiLock lifecycles in
-    `SSHConnectionService.kt:876,908,933,956` vs
-    `VncKeepAliveService.kt:189,203,216,235`, and the
-    `(application as TabSSHApplication)` cast repeated in 10+ activities —
-    both want a shared helper per AI.md PART 7 § Reuse Before Creating; (h)
-    `HypervisorAccountAdapter.kt:64-65` is the only row adapter whose
-    `itemView` has no click listener, so tapping the row does nothing; (i)
-    `ConnectionEditActivity.kt:1973`/`:2254` is the last remaining
-    `startActivityForResult`/`onActivityResult` pair (the rest of the app
-    already uses `registerForActivityResult`, including `:143` in the same
-    file); (j) `SSHConnection.kt:596-602`, `TabTerminalActivity.kt:3138-3140`
-    and `:3999` are the only three hardcoded Toast literals left out of 502
-    call sites — otherwise the i18n-in-code rule is met.
 42. **Intermittent "eats one character to the left of cursor" bug — likely
     root-caused, needs on-device confirmation before fixing** — user-reported
     repro: type a long command (e.g. `tmux-new ai --dir ~/Projects/github/dfprivate`),
