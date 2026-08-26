@@ -75,9 +75,6 @@
     <color name="tab_selected">#FF1976D2</color>
     <color name="tab_indicator">#FF1976D2</color>
     
-    <!-- Accessibility colors -->
-    <color name="high_contrast_background">#FF000000</color>
-    <color name="high_contrast_foreground">#FFFFFFFF</color>
 
     <!-- Material Design 3 colors -->
     <color name="surface">#FFFFFFFF</color>

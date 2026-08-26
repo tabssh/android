@@ -18,7 +18,7 @@
 
         <item name="colorError">@color/error</item>
         <item name="colorOnError">@color/white</item>
-        <item name="colorErrorContainer">@color/error_dark</item>
+        <item name="colorErrorContainer">@color/status_error_container</item>
 
         <item name="colorSurface">@color/surface</item>
         <item name="colorOnSurface">@color/on_surface</item>

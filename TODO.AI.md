@@ -154,22 +154,6 @@ work).
     repro** — no `adb` access from this environment to capture `dumpsys
     input_method`/Gboard logcat; remains on the user to retest and report
     back whether the "do this"-style drop recurs.
-45. **Two loose ends found during a color/theme resources pass**
-    — noted but left alone since neither was in that pass's named scope. (a)
-    `values/themes.xml`'s `Theme.TabSSH` sets `colorErrorContainer` to
-    `@color/error_dark`, a flat hex with no `values-night` override —
-    unlike every other Material3 role in that style (`colorSurface`,
-    `colorOutline`, …) it does not adapt between light/dark, so the
-    "error container" background is the same strong red in both modes
-    instead of a subtle day tint / dark tint pair like
-    `status_error_container` already provides. Consider repointing it at
-    `@color/status_error_container` instead of `@color/error_dark`. (b)
-    `drawable/high_contrast_background.xml` (which draws
-    `@color/high_contrast_background`/`@color/high_contrast_foreground`)
-    has zero references anywhere in `res/layout` or `java` — predates this
-    batch, not created by it. Confirm it's genuinely unused and delete it
-    (and the two colors, if nothing else picks them up) or wire it in
-    wherever it was meant to be used.
 49. **~220 additional duplicated string values remain in `strings.xml`
     beyond the 45 already consolidated** — found while doing that
     consolidation pass. The full scan found ~265 groups of identical string
