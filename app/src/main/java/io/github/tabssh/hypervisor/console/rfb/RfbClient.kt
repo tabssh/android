@@ -417,9 +417,16 @@ class RfbClient(
                         listener?.onDisconnected("Server closed the connection")
                         fireSessionEnded(ConsoleDisconnectReason.CLEAN, "Server closed the connection")
                     } else {
-                        Logger.e(TAG, "RFB protocol error", e)
-                        listener?.onError("VNC connection lost: ${e.message ?: e.javaClass.simpleName}")
-                        fireSessionEnded(ConsoleDisconnectReason.ERROR, e.message ?: e.javaClass.simpleName)
+                        // TabSSHApplication.get() is the documented last-resort
+                        // Context accessor (see its companion object) — RfbClient
+                        // has no Context of its own to feed ThrowableMapper, and
+                        // threading one through this class's constructor purely
+                        // for an error-message fallback isn't worth the churn.
+                        val friendly = io.github.tabssh.utils.ThrowableMapper.map(
+                            io.github.tabssh.TabSSHApplication.get(), TAG, e, "RFB protocol error"
+                        ).message
+                        listener?.onError("VNC connection lost: $friendly")
+                        fireSessionEnded(ConsoleDisconnectReason.ERROR, friendly)
                     }
                 }
             }

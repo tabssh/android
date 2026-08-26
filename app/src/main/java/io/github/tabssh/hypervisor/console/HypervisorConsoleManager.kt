@@ -335,14 +335,15 @@ class HypervisorConsoleManager {
                 }
 
                 override fun onError(error: Throwable) {
-                    Logger.e(TAG, "Proxmox console WebSocket error: ${error.message}")
-                    // error.message is null for some low-level socket failures
-                    // (e.g. java.net.SocketException with no detail message).
-                    // Fall back through cause.message then class name so the
-                    // dialog always shows something actionable.
-                    val msg = error.message?.takeIf { it.isNotBlank() }
-                        ?: error.cause?.message?.takeIf { it.isNotBlank() }
-                        ?: "Connection failed (${error.javaClass.simpleName})"
+                    // HypervisorConsoleManager has no Context of its own;
+                    // TabSSHApplication.get() is the documented last-resort
+                    // accessor (see its companion object) rather than
+                    // threading a Context through this manager's constructor
+                    // solely for error-message mapping. ThrowableMapper logs
+                    // the throwable itself, so no separate Logger.e call.
+                    val msg = io.github.tabssh.utils.ThrowableMapper.map(
+                        io.github.tabssh.TabSSHApplication.get(), TAG, error, "Proxmox console WebSocket error"
+                    ).message
                     activeListener?.onError(msg)
                 }
 
@@ -862,10 +863,13 @@ class HypervisorConsoleManager {
                 Logger.e(TAG, "reconnectGraphicalWithoutResize: WebSocket error", error)
                 // Before open: fail the gate so the awaiting coroutine reports it.
                 // After open: forward to the UI listener as a live-session error.
+                // ThrowableMapper.map() also logs, so pass a distinct logContext
+                // to keep this branch's log line identifiable if both fire.
                 if (!opened.completeExceptionally(error)) {
-                    val msg = error.message?.takeIf { it.isNotBlank() }
-                        ?: error.cause?.message?.takeIf { it.isNotBlank() }
-                        ?: "Reconnect failed (${error.javaClass.simpleName})"
+                    val msg = io.github.tabssh.utils.ThrowableMapper.map(
+                        io.github.tabssh.TabSSHApplication.get(), TAG, error,
+                        "reconnectGraphicalWithoutResize: WebSocket error (post-open)"
+                    ).message
                     activeListener?.onError(msg)
                 }
             }

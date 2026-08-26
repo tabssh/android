@@ -134,8 +134,15 @@ object BulkImportParser {
                     listOf("Could not detect format. Supported: CSV (header row), JSON array, PuTTY .reg, Terraform .tf"))
             }
         } catch (e: Exception) {
-            Logger.e(TAG, "parse failed for format=$format", e)
-            ParseResult(format, emptyList(), listOf("Parse error: ${e.message ?: e.javaClass.simpleName}"))
+            // BulkImportParser has no Context of its own; TabSSHApplication.get()
+            // is the documented last-resort accessor (see its companion object)
+            // rather than threading a Context through this object solely for
+            // error-message mapping. ThrowableMapper.map() logs the throwable
+            // itself, so no separate Logger.e call.
+            val friendly = io.github.tabssh.utils.ThrowableMapper.map(
+                io.github.tabssh.TabSSHApplication.get(), TAG, e, "parse failed for format=$format"
+            ).message
+            ParseResult(format, emptyList(), listOf("Parse error: $friendly"))
         }
     }
 

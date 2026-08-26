@@ -174,8 +174,15 @@ object MoshHandoff {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Logger.e(TAG, "Mosh handoff failed", e)
-            return@withContext Result.Error("Bootstrap failed: ${e.message ?: e.javaClass.simpleName}")
+            // MoshHandoff has no Context of its own; TabSSHApplication.get() is
+            // the documented last-resort accessor (see its companion object)
+            // rather than threading a Context through this object solely for
+            // error-message mapping. ThrowableMapper.map() logs the throwable
+            // itself, so no separate Logger.e call.
+            val friendly = io.github.tabssh.utils.ThrowableMapper.map(
+                io.github.tabssh.TabSSHApplication.get(), TAG, e, "Mosh handoff failed"
+            ).message
+            return@withContext Result.Error("Bootstrap failed: $friendly")
         } finally {
             try { ch?.disconnect() } catch (_: Exception) {}
         }

@@ -16,29 +16,6 @@ work).
    generic catch blocks with no classification. Larger scope than the SSH
    classifier fix (new feature work: shared error-info struct + per-protocol
    taxonomy), not a simple classifier fix.
-5. **Raw exception text/class names leak into user-facing UI** —
-   `ConnectionHistoryActivity.kt:88` and `KeyboardCustomizationActivity.kt:433`
-   show raw `e.message.toString()` in toasts; `TabTerminalActivity.kt:3744`
-   (VNC reconnect toast) does the same. `?: e.javaClass.simpleName` fallback
-   pattern (raw class name shown to user) appears in `ConsoleStrategy.kt:80`,
-   `HypervisorConsoleManager.kt:345,868`, `RfbClient.kt:421-422`,
-   `MoshHandoff.kt:178`, `BulkImportParser.kt:138`. Needs friendly
-   user-facing messages instead.
-   **PARTIALLY DONE** — `ConnectionHistoryActivity.kt`,
-   `KeyboardCustomizationActivity.kt`, and `TabTerminalActivity.kt`'s VNC
-   reconnect toast now route through the new `ThrowableMapper`
-   (`utils/ThrowableMapper.kt`). `RfbClient.kt`, `HypervisorConsoleManager.kt`,
-   `MoshHandoff.kt`, and `BulkImportParser.kt` are still unfixed — confirmed
-   none of the four have an Android `Context` in scope at the fallback site
-   (`ThrowableMapper`/`ConsoleErrorClassifier` both need `context.getString()`),
-   so converting them needs a small `Context`-injection refactor first
-   (constructor param or a context-free string-table variant of the mapper).
-   `SpiceLoader.kt` has no user-facing error strings — nothing to do there.
-   `MainActivity.kt:315,479,589` (`main_load_hypervisors_failed`,
-   `main_quick_connect_save_failed` x2) also still splice raw `e.message`
-   and were left alone as out of the batch's named scope — `ThrowableMapper`
-   is already imported in that file, so wiring these three in is a small
-   follow-up once picked up.
 40. **711 raw dp and 389 raw sp literals across 80% of layouts** —
     `values/dimens.xml` exists with 86 tokens (and `values-land`,
     `values-sw600dp`, `values-sw720dp` overrides), but 129 of 161 layouts
