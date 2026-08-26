@@ -198,7 +198,7 @@
         <activity
             android:name=".ui.activities.ClusterCommandActivity"
             android:exported="false"
-            android:label="@string/activity_label_cluster_commands"
+            android:label="@string/nav_item_cluster_commands"
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
@@ -391,14 +391,14 @@
         <activity
             android:name=".ui.activities.ConnectionHistoryActivity"
             android:exported="false"
-            android:label="@string/activity_label_connection_history"
+            android:label="@string/nav_item_connection_history"
             android:parentActivityName=".ui.activities.MainActivity" />
 
         <!-- Wave 3.6 — What's new -->
         <activity
             android:name=".ui.activities.WhatsNewActivity"
             android:exported="false"
-            android:label="@string/activity_label_whats_new"
+            android:label="@string/nav_item_whats_new"
             android:parentActivityName=".ui.activities.MainActivity" />
 
         <!-- Wave 3.2 — PIN lock screen (FLAG_SECURE; not exported) -->
@@ -421,7 +421,7 @@
         <activity
             android:name=".ui.activities.MultiHostDashboardActivity"
             android:exported="false"
-            android:label="@string/activity_label_multi_host_dashboard"
+            android:label="@string/nav_item_multi_host_dashboard"
             android:parentActivityName=".ui.activities.MainActivity" />
 
         <!-- Single-host detail / monitoring view (launched from dashboard cards) -->
