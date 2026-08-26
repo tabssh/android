@@ -245,7 +245,9 @@ class HypervisorConsoleManager {
                     "To enable serial console: open the VM in Proxmox → Hardware → " +
                     "Add → Serial Port → set to 'socket', then restart the VM."
                 else
-                    msg.ifBlank { "Connection failed" }
+                    io.github.tabssh.hypervisor.console.ConsoleErrorClassifier.classify(
+                        io.github.tabssh.TabSSHApplication.get(), "Console", e
+                    ).userMessage
             )
             return@withContext null
         }
@@ -339,11 +341,15 @@ class HypervisorConsoleManager {
                     // TabSSHApplication.get() is the documented last-resort
                     // accessor (see its companion object) rather than
                     // threading a Context through this manager's constructor
-                    // solely for error-message mapping. ThrowableMapper logs
-                    // the throwable itself, so no separate Logger.e call.
-                    val msg = io.github.tabssh.utils.ThrowableMapper.map(
-                        io.github.tabssh.TabSSHApplication.get(), TAG, error, "Proxmox console WebSocket error"
-                    ).message
+                    // solely for error-message mapping. ConsoleErrorClassifier
+                    // (not the generic ThrowableMapper) gives this VNC-over-
+                    // WebSocket failure the same structured timeout/refused/
+                    // TLS/auth classification as the SSH connection error path
+                    // (item 4), instead of a generic mapped message.
+                    Logger.e(TAG, "Proxmox console WebSocket error", error)
+                    val msg = io.github.tabssh.hypervisor.console.ConsoleErrorClassifier.classify(
+                        io.github.tabssh.TabSSHApplication.get(), "VNC", error
+                    ).userMessage
                     activeListener?.onError(msg)
                 }
 
@@ -411,7 +417,10 @@ class HypervisorConsoleManager {
             throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to connect Proxmox console", e)
-            listener?.onError(e.message ?: "Connection failed")
+            val friendly = io.github.tabssh.hypervisor.console.ConsoleErrorClassifier.classify(
+                io.github.tabssh.TabSSHApplication.get(), "Console", e
+            ).userMessage
+            listener?.onError(friendly)
             null
         }
     }
@@ -461,7 +470,10 @@ class HypervisorConsoleManager {
                 throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "All XCP-ng console strategies exhausted for $vmName", e)
-                listener?.onError(e.message?.ifBlank { null } ?: "Failed to get console URL from XCP-ng")
+                val friendly = io.github.tabssh.hypervisor.console.ConsoleErrorClassifier.classify(
+                    io.github.tabssh.TabSSHApplication.get(), "Console", e
+                ).userMessage
+                listener?.onError(friendly)
                 return@withContext null
             }
             val isRfb = consoleInfo.protocol == "rfb"
@@ -545,7 +557,10 @@ class HypervisorConsoleManager {
             throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to connect XCP-ng console", e)
-            listener?.onError(e.message ?: "Connection failed")
+            val friendly = io.github.tabssh.hypervisor.console.ConsoleErrorClassifier.classify(
+                io.github.tabssh.TabSSHApplication.get(), "Console", e
+            ).userMessage
+            listener?.onError(friendly)
             null
         }
     }
@@ -665,7 +680,10 @@ class HypervisorConsoleManager {
             throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to connect XO console", e)
-            listener?.onError(e.message ?: "Connection failed")
+            val friendly = io.github.tabssh.hypervisor.console.ConsoleErrorClassifier.classify(
+                io.github.tabssh.TabSSHApplication.get(), "Console", e
+            ).userMessage
+            listener?.onError(friendly)
             null
         }
     }
@@ -700,7 +718,9 @@ class HypervisorConsoleManager {
             throw e
         } catch (e: Exception) {
             Logger.e(TAG, "VNC fallback: getVNCProxy threw", e)
-            vncFailure = e.message
+            vncFailure = io.github.tabssh.hypervisor.console.ConsoleErrorClassifier.classify(
+                io.github.tabssh.TabSSHApplication.get(), "VNC", e
+            ).userMessage
             null
         }
         if (vnc == null) {
@@ -738,11 +758,15 @@ class HypervisorConsoleManager {
             }
 
             override fun onError(error: Throwable) {
-                Logger.e(TAG, "VNC fallback WebSocket error: ${error.message}")
+                Logger.e(TAG, "VNC fallback WebSocket error", error)
                 // Before open: fail the gate so the awaiting coroutine reports it.
-                // After open: forward to the UI listener as a live-session error.
+                // After open: forward to the UI listener as a live-session error,
+                // classified the same way as the primary onError() above (item 4).
                 if (!opened.completeExceptionally(error)) {
-                    activeListener?.onError(error.message ?: "VNC connection failed")
+                    val friendly = io.github.tabssh.hypervisor.console.ConsoleErrorClassifier.classify(
+                        io.github.tabssh.TabSSHApplication.get(), "VNC", error
+                    ).userMessage
+                    activeListener?.onError(friendly)
                 }
             }
         }
@@ -785,7 +809,10 @@ class HypervisorConsoleManager {
             // with nobody to close it — the session is already reported as failed.
             try { webSocketClient?.disconnect() } catch (_: Exception) {}
             webSocketClient = null
-            activeListener?.onError(e.message ?: "VNC fallback failed to connect for $vmName")
+            val friendly = io.github.tabssh.hypervisor.console.ConsoleErrorClassifier.classify(
+                io.github.tabssh.TabSSHApplication.get(), "VNC", e
+            ).userMessage
+            activeListener?.onError("VNC fallback failed to connect for $vmName: $friendly")
         }
     }
 
@@ -862,14 +889,13 @@ class HypervisorConsoleManager {
             override fun onError(error: Throwable) {
                 Logger.e(TAG, "reconnectGraphicalWithoutResize: WebSocket error", error)
                 // Before open: fail the gate so the awaiting coroutine reports it.
-                // After open: forward to the UI listener as a live-session error.
-                // ThrowableMapper.map() also logs, so pass a distinct logContext
-                // to keep this branch's log line identifiable if both fire.
+                // After open: forward to the UI listener as a live-session error,
+                // classified the same way as the primary onError() above (item 4)
+                // rather than a generic mapped message.
                 if (!opened.completeExceptionally(error)) {
-                    val msg = io.github.tabssh.utils.ThrowableMapper.map(
-                        io.github.tabssh.TabSSHApplication.get(), TAG, error,
-                        "reconnectGraphicalWithoutResize: WebSocket error (post-open)"
-                    ).message
+                    val msg = io.github.tabssh.hypervisor.console.ConsoleErrorClassifier.classify(
+                        io.github.tabssh.TabSSHApplication.get(), "VNC", error
+                    ).userMessage
                     activeListener?.onError(msg)
                 }
             }
@@ -909,10 +935,10 @@ class HypervisorConsoleManager {
             // above leaves a connected WebSocket nobody owns.
             try { webSocketClient?.disconnect() } catch (_: Exception) {}
             webSocketClient = null
-            val msg = e.message?.takeIf { it.isNotBlank() }
-                ?: e.cause?.message?.takeIf { it.isNotBlank() }
-                ?: "Reconnect failed — WebSocket could not connect to Proxmox."
-            activeListener?.onError(msg)
+            val friendly = io.github.tabssh.hypervisor.console.ConsoleErrorClassifier.classify(
+                io.github.tabssh.TabSSHApplication.get(), "VNC", e
+            ).userMessage
+            activeListener?.onError(friendly)
         }
     }
 

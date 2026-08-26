@@ -419,12 +419,18 @@ class RfbClient(
                     } else {
                         // TabSSHApplication.get() is the documented last-resort
                         // Context accessor (see its companion object) — RfbClient
-                        // has no Context of its own to feed ThrowableMapper, and
-                        // threading one through this class's constructor purely
+                        // has no Context of its own to feed ConsoleErrorClassifier,
+                        // and threading one through this class's constructor purely
                         // for an error-message fallback isn't worth the churn.
-                        val friendly = io.github.tabssh.utils.ThrowableMapper.map(
-                            io.github.tabssh.TabSSHApplication.get(), TAG, e, "RFB protocol error"
-                        ).message
+                        // ConsoleErrorClassifier (not the generic ThrowableMapper)
+                        // is used here so a VNC-specific timeout/refused/TLS/auth
+                        // failure gets the same structured classification as the
+                        // SSH connection error path (item 4), not just a mapped
+                        // generic message.
+                        Logger.e(TAG, "RFB protocol error", e)
+                        val friendly = io.github.tabssh.hypervisor.console.ConsoleErrorClassifier.classify(
+                            io.github.tabssh.TabSSHApplication.get(), "VNC", e
+                        ).userMessage
                         listener?.onError("VNC connection lost: $friendly")
                         fireSessionEnded(ConsoleDisconnectReason.ERROR, friendly)
                     }

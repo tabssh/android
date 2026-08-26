@@ -115,7 +115,15 @@ class SpiceClient(
         } catch (t: Throwable) {
             Logger.e(TAG, "nativeCreateSession threw", t)
             running.set(false)
-            listener?.onError("Failed to create SPICE session: ${t.message}")
+            // SpiceClient has no Context of its own; TabSSHApplication.get()
+            // is the documented last-resort accessor (see its companion
+            // object). ConsoleErrorClassifier gives this the same structured
+            // timeout/refused/TLS/auth classification as VNC and SSH (item 4)
+            // instead of splicing the raw exception message.
+            val friendly = io.github.tabssh.hypervisor.console.ConsoleErrorClassifier.classify(
+                io.github.tabssh.TabSSHApplication.get(), "SPICE", t
+            ).userMessage
+            listener?.onError(friendly)
             return false
         }
         if (handle == 0L) {
@@ -130,7 +138,10 @@ class SpiceClient(
             Logger.e(TAG, "nativeStartSession threw", t)
             destroyOwned(nativeHandle.getAndSet(0L))
             running.set(false)
-            listener?.onError("Failed to start SPICE session: ${t.message}")
+            val friendly = io.github.tabssh.hypervisor.console.ConsoleErrorClassifier.classify(
+                io.github.tabssh.TabSSHApplication.get(), "SPICE", t
+            ).userMessage
+            listener?.onError(friendly)
             return false
         }
         if (!started) {

@@ -9,13 +9,6 @@ is in progress.
 Found while researching the SSH error classifier fix (see chat/PR for that
 work).
 
-4. **VNC/SPICE/Console have no structured error classification/dialog at
-   all** — unlike SSH's `SSHConnectionErrorInfo`, `VncDirectConnector.kt`,
-   `SpiceLoader.kt`, `RfbClient.kt`, `ConsoleStrategy.kt`, and
-   `HypervisorConsoleManager.kt` surface failures via raw-message Toasts or
-   generic catch blocks with no classification. Larger scope than the SSH
-   classifier fix (new feature work: shared error-info struct + per-protocol
-   taxonomy), not a simple classifier fix.
 40. **711 raw dp and 389 raw sp literals across 80% of layouts** —
     `values/dimens.xml` exists with 86 tokens (and `values-land`,
     `values-sw600dp`, `values-sw720dp` overrides), but 129 of 161 layouts
