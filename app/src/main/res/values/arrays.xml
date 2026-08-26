@@ -84,7 +84,7 @@
     </string-array>
 
     <!-- Language options -->
-    <!-- Item 35 — de/es/fr translation files exist but cover only ~5% of
+    <!-- de/es/fr translation files exist but cover only ~5% of
          user-facing strings, so they are withheld from this picker until
          they reach real completeness; the app still honors those locales
          automatically when the device system language matches. -->

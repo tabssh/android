@@ -3678,7 +3678,7 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
     // own text, finishComposingText() accepts the composition as-is.
     private var composingText: String = ""
 
-    // Item 42 — see [armDeleteSuppressionWindow] / [deleteBefore]. Non-zero
+    // See [armDeleteSuppressionWindow] / [deleteBefore]. Non-zero
     // while a stray post-submit deleteSurroundingText() is still eligible to
     // be swallowed; SystemClock.uptimeMillis() timestamp, or 0L when idle.
     private var suppressNextDeleteUntilMs: Long = 0L
@@ -3716,7 +3716,7 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
     private fun deleteBefore(beforeLength: Int) {
         var remaining = beforeLength.coerceIn(0, MAX_DELETE_BEFORE)
         if (remaining == 0) return
-        // Item 42 — some Gboard builds occasionally fire one
+        // Some Gboard builds occasionally fire one
         // deleteSurroundingText() immediately after finishComposingText()/an
         // Enter submit, apparently still believing the just-finalised
         // composition sits in an editable buffer (we report an empty one).
@@ -3743,7 +3743,7 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
             android.os.SystemClock.uptimeMillis() < suppressNextDeleteUntilMs
 
     /**
-     * Arm the item 42 mitigation window right after a composition is
+     * Arm the delete-suppression mitigation window right after a composition is
      * finalised (finishComposingText / Enter submit) — see [deleteBefore].
      * Any real input event (a key event or a fresh commit/compose) clears it
      * again, so the suppression can only ever consume the specific stray
@@ -3885,7 +3885,7 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
         // deletes more than a line's worth of characters in one call.
         const val MAX_DELETE_BEFORE = 1024
 
-        // Item 42 — how long after a composition finalises a stray
+        // How long after a composition finalises a stray
         // deleteSurroundingText() is still eligible to be swallowed. Wide
         // enough to cover one IME dispatch round-trip, narrow enough that it
         // never spans into the next unrelated keystroke.

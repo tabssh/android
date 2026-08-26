@@ -230,14 +230,14 @@ class TabTerminalActivity : TabSSHActivity() {
     @Volatile private var isReconnecting = false
 
     /**
-     * Item 15: profile IDs with a Retry currently in flight from the SSH
+     * Profile IDs with a Retry currently in flight from the SSH
      * connection-error dialog — guards against a user hammering Retry and
      * spawning overlapping connect attempts against a down host.
      */
     private val sshRetryInFlight = mutableSetOf<String>()
 
     /**
-     * Item 15: consecutive connect-failure count per profile ID, used only
+     * Consecutive connect-failure count per profile ID, used only
      * to escalate the Retry delay after the second straight failure. Reset
      * to zero (key removed) the moment that profile connects successfully.
      */
@@ -559,7 +559,7 @@ class TabTerminalActivity : TabSSHActivity() {
             override fun onTabConnectionStateChanged(tab: SSHTab, state: ConnectionState) {
                 Handler(Looper.getMainLooper()).post {
                     updateTabIcon(tab, state)
-                    // Item 20: TalkBack gets no spoken feedback on connect
+                    // TalkBack gets no spoken feedback on connect
                     // outcomes otherwise — only announce the visible tab's
                     // terminal transitions (CONNECTED/ERROR), never the
                     // transient CONNECTING/AUTHENTICATING states, and never
@@ -852,7 +852,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 val tab = tabs[position]
                 val rowHolder = holder as TabRowHolder
                 val ctx = rowHolder.row.context
-                // Item 41(a): a stale/unexpected tag must not crash the row —
+                // A stale/unexpected tag must not crash the row —
                 // skip binding this row's icons/label rather than throwing a
                 // ClassCastException.
                 val tagTriple = rowHolder.row.tag as? Triple<*, *, *>
@@ -1041,7 +1041,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 closeCurrentTab()
             }
 
-        // Item 21: nothing to destroy with zero tabs — disable rather than
+        // Nothing to destroy with zero tabs — disable rather than
         // offer a live "destroy everything" action that silently no-ops.
         view.findViewById<MaterialButton>(R.id.btn_disconnect_all)?.apply {
             isEnabled = tabs.isNotEmpty()
@@ -1672,7 +1672,7 @@ class TabTerminalActivity : TabSSHActivity() {
             return
         }
 
-        // Item 15: reaching this dialog means this profile's connect attempt
+        // Reaching this dialog means this profile's connect attempt
         // just failed — bump its consecutive-failure streak so Retry can
         // apply an escalating delay if the user keeps hammering it.
         sshRetryFailureStreak[profile.id] = (sshRetryFailureStreak[profile.id] ?: 0) + 1
@@ -1801,7 +1801,7 @@ class TabTerminalActivity : TabSSHActivity() {
         // retry attempt actually uses instead of the stale rejected one.
         dialogView.findViewById<MaterialButton>(R.id.button_retry)
             ?.setOnClickListener { retryButton ->
-                // Item 15: refuse a second tap while a retry for this profile is
+                // Refuse a second tap while a retry for this profile is
                 // already in flight, and apply a short escalating delay once the
                 // profile has failed twice or more in a row, so a user hammering
                 // Retry against a down host doesn't spawn overlapping attempts.
@@ -4123,7 +4123,7 @@ class TabTerminalActivity : TabSSHActivity() {
     }
 
     /**
-     * Item 22 — a saved workspace's connection list is gone for good once
+     * A saved workspace's connection list is gone for good once
      * deleted (no undo), so the single-pick list above hands off to this
      * second confirmation rather than deleting on tap. Destructive choice
      * carries the same error-color danger cue as [disconnectAllTabs].
@@ -5722,7 +5722,7 @@ class TabTerminalActivity : TabSSHActivity() {
     }
 
     /**
-     * Item 22 — unify the tab-close confirmation across Ssh/Vnc/Console tabs
+     * Unify the tab-close confirmation across Ssh/Vnc/Console tabs
      * so closing a live session confirms the same way Panes already does
      * (see [showPanesCloseDialog]), gated on the existing "Confirm tab
      * close" preference (Settings > confirm_tab_close, default on). A tab
@@ -5770,12 +5770,12 @@ class TabTerminalActivity : TabSSHActivity() {
     }
 
     private fun disconnectAllTabs() {
-        // Item 21: nothing to destroy with zero tabs.
+        // Nothing to destroy with zero tabs.
         val tabCount = tabManager.getTabCount()
         if (tabCount == 0) {
             return
         }
-        // Item 21+23: confirm with the live tab count before destroying every
+        // Confirm with the live tab count before destroying every
         // open session; the destructive choice is the negative button and
         // carries the error-color danger cue, the safe "Cancel" choice stays
         // the visually default action.

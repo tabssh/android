@@ -64,7 +64,7 @@ class ActiveHostsFragment : Fragment() {
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.adapter = adapter
 
-        // Item 43 — swipe-to-disconnect parity with the rest of the app's
+        // Swipe-to-disconnect parity with the rest of the app's
         // "close this session" affordances. Disconnect only ends the
         // session (TabManager.closeTabByIdSealed below); it never touches
         // the saved connection itself, so there is nothing destructive
@@ -122,7 +122,7 @@ class ActiveHostsFragment : Fragment() {
     }
 
     /**
-     * Item 43 — shared by the swipe gesture and the long-press context menu
+     * Shared by the swipe gesture and the long-press context menu
      * so both affordances end a session the same way.
      */
     private fun disconnectTab(tab: Tab) {
@@ -150,7 +150,7 @@ class ActiveHostsFragment : Fragment() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val tab = getItem(position)
             val state = tab.connectionState()
-            // Item 43 — the connection's own identity (never the OSC-title-
+            // The connection's own identity (never the OSC-title-
             // prone shortTitle(), see connectionDisplayName's doc), with the
             // detail line carrying protocol + user@host:port so two tabs to
             // the same host stay distinguishable.
@@ -173,7 +173,7 @@ class ActiveHostsFragment : Fragment() {
         }
 
         /**
-         * Item 43 — long-press parity with the swipe gesture: same "Open" /
+         * Long-press parity with the swipe gesture: same "Open" /
          * "Disconnect" pair, reachable without a directional swipe.
          */
         private fun showTabMenu(anchor: View, tab: Tab) {

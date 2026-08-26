@@ -73,7 +73,7 @@ fun Tab.connectionDisplayName(): String = when (this) {
 }
 
 /**
- * Item 43 — `user@host:port` (or `host:port` where there is no username)
+ * `user@host:port` (or `host:port` where there is no username)
  * connection detail shared by any full-width tab list that needs to show
  * more than [connectionDisplayName]'s identity label, e.g. the Hosts tab's
  * Active sub-tab. Null for [Tab.Panes], which has no single host of its own.

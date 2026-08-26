@@ -1095,7 +1095,7 @@ class SFTPActivity : TabSSHActivity() {
     }
     
     private fun handleTransferCompleted(transfer: TransferTask, result: io.github.tabssh.sftp.TransferResult) {
-        // Item 20: a Toast is not reliably spoken by TalkBack (custom Toast
+        // A Toast is not reliably spoken by TalkBack (custom Toast
         // views and rapid successive transfers can drop it), so a transfer
         // outcome gets an explicit announcement alongside the existing
         // Toast/dialog feedback.
@@ -1318,8 +1318,8 @@ class SFTPActivity : TabSSHActivity() {
     }
     
     private fun clearCompletedTransfers() {
-        // Item 24: keep the removed entries so a Snackbar can put them back —
-        // an outright confirm dialog would interrupt a routine cleanup tap,
+        // Keep the removed entries so a Snackbar can put them back — an
+        // outright confirm dialog would interrupt a routine cleanup tap,
         // undo is the lighter-weight safety net for a non-destructive-to-data
         // action (nothing on disk changes, only this list's contents).
         val removed = activeTransfers.filter {

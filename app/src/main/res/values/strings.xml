@@ -3974,7 +3974,7 @@
     <string name="kbdcustom_menu_reset_to_default">Reset to default</string>
 
 
-    <!-- Item 36 — settings dropdown (arrays.xml) option labels, extracted
+    <!-- Settings dropdown (arrays.xml) option labels, extracted
          from res/values/arrays.xml so they participate in translation. -->
     <string name="arr_tab_swipe_edge_anywhere_on_tab">Anywhere on tab</string>
     <string name="arr_tab_swipe_edge_narrow_24_dp">Narrow (24 dp)</string>

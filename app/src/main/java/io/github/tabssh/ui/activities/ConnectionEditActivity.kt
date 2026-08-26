@@ -2206,7 +2206,7 @@ class ConnectionEditActivity : TabSSHActivity() {
                 is io.github.tabssh.crypto.keys.ImportResult.Success -> {
                     Logger.i("ConnectionEditActivity", "Key imported successfully: ${result.keyId}")
                     showToast(getString(R.string.conn_edit_key_imported_toast))
-                    // Item 20: explicit announcement — key import is async
+                    // Explicit announcement — key import is async
                     // and finishes off-screen (a file picker or background
                     // decode), so TalkBack needs a spoken outcome.
                     announceAccessibility(getString(R.string.conn_edit_key_imported_toast))

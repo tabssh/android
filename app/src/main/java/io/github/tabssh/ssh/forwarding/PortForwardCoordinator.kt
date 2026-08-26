@@ -45,7 +45,7 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
     private val _runningIds = MutableStateFlow<Set<String>>(emptySet())
 
     /**
-     * Item 44 — running [PortForward] ids, kept in sync not only from
+     * Running [PortForward] ids, kept in sync not only from
      * [start]/[stop] but also when a tunnel ends on its own (SSH session
      * drop, remote refusing the forward) via the [PortForwardingListener]
      * registered on each manager in [obtainOrCreateManager]. UI observers
@@ -60,7 +60,7 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
     }
 
     /**
-     * Item 44 — remove whichever forward owns [tunnelId] from [running] when
+     * Remove whichever forward owns [tunnelId] from [running] when
      * its tunnel ends outside of an explicit [stop] call. Safe to also fire
      * from stop()'s own teardown path: by then the id is already removed, so
      * the lookup below finds nothing and this is a no-op.
@@ -127,7 +127,7 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
                 )
             }
 
-            // Item 44 — createXForward() never throws on a bind/start failure,
+            // createXForward() never throws on a bind/start failure,
             // it reports it via the returned Tunnel's state instead; only a
             // genuinely ACTIVE tunnel is "running".
             if (tunnel.state != TunnelState.ACTIVE) {

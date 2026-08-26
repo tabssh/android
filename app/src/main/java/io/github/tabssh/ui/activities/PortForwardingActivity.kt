@@ -231,7 +231,7 @@ class PortForwardingActivity : TabSSHActivity() {
      * Observe the saved rules and, on every emission, refresh the running-state
      * overlay and the saved-connection name map so rows render fully.
      *
-     * Item 44 — combined with [PortForwardCoordinator.runningIds] rather than
+     * Combined with [PortForwardCoordinator.runningIds] rather than
      * recomputing the running set only from the DAO Flow's own emissions: a
      * tunnel that ends on its own (SSH session drop, remote refusing the
      * forward) updates that StateFlow without any DB write happening, so
