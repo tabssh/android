@@ -134,6 +134,39 @@ work).
     not yet been confirmed against a live on-device repro (`adb shell
     dumpsys input_method` + Gboard logcat) — the original bug's actual
     disappearance is unverified.
+    **PASTE PATH CONFIRMED CLEAN, TYPE/ENTER REPRO STILL UNCONFIRMED** —
+    user ran 3 live multi-line (5+ line) paste tests on-device through the
+    real TabSSH terminal, over an active session (paste from this chat
+    session, from a second unrelated session, and from a website): all
+    three came through complete with zero dropped characters. This
+    confirms the `commitText` paste path is clean, but paste is a
+    different code path from the bug's actual repro (type a command, hit
+    Enter, type a new command, hit Enter again — the *typing-after-Enter*
+    composing-state desync), which still has not been exercised on-device.
+    No `adb` access to the user's device from this environment to drive
+    that repro directly — remains on the user to run and report back.
+    **LIVE OCCURRENCE DURING NORMAL TYPING — MITIGATION WAS TOO NARROW, NOW
+    BROADENED** — user typed a multi-line message on-device, on the current
+    devel build (which already includes the `suppressNextDeleteUntilMs`
+    mitigation above), and confirmed the resulting text matched exactly what
+    they typed except for one dropped character: "do this" came out as
+    "dothis" (the space was eaten). User explicitly ruled out an ordinary
+    typo (separately confirmed other irregularities in the same message were
+    mobile-keyboard typos, unrelated). Root cause: the suppression window was
+    only armed after `finishComposingText()`/`performEditorAction()` (Enter),
+    but `commitText()` — the path Gboard uses to finalize a word at a space
+    press (e.g. `commitText("do ", 2)`, or separate `"do"`/`" "` commits) —
+    actively cleared the window and never armed it, leaving that path
+    unprotected against the same fake-empty-buffer stray
+    `deleteSurroundingText()` Gboard can issue right after any finalize, not
+    only after Enter. A stray delete landing right after a space commit
+    deletes exactly the space just sent, producing "dothis". Fixed in
+    `TerminalView.kt`'s `commitText()`: it now arms the same one-shot
+    suppression window after sending non-paste, non-modifier text, alongside
+    the existing arm sites. **Still not confirmed against a live on-device
+    repro** — no `adb` access from this environment to capture `dumpsys
+    input_method`/Gboard logcat; remains on the user to retest and report
+    back whether the "do this"-style drop recurs.
 45. **Two loose ends found during a color/theme resources pass**
     — noted but left alone since neither was in that pass's named scope. (a)
     `values/themes.xml`'s `Theme.TabSSH` sets `colorErrorContainer` to

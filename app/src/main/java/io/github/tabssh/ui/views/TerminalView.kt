@@ -3716,14 +3716,15 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
     private fun deleteBefore(beforeLength: Int) {
         var remaining = beforeLength.coerceIn(0, MAX_DELETE_BEFORE)
         if (remaining == 0) return
-        // Some Gboard builds occasionally fire one
-        // deleteSurroundingText() immediately after finishComposingText()/an
-        // Enter submit, apparently still believing the just-finalised
-        // composition sits in an editable buffer (we report an empty one).
-        // A real backspace never arrives on this path — it comes through
-        // sendKeyEvent()/commitText() instead — so it is safe to swallow
-        // exactly one such call, and only when there is no local composing
-        // text left to legitimately trim.
+        // Some Gboard builds occasionally fire one deleteSurroundingText()
+        // immediately after a finalising event — finishComposingText()/an
+        // Enter submit, or a plain commitText() (e.g. its space-triggered
+        // word-commit) — apparently still believing the just-finalised text
+        // sits in an editable buffer (we report an empty one). A real
+        // backspace never arrives on this path — it comes through
+        // sendKeyEvent() instead — so it is safe to swallow exactly one such
+        // call, and only when there is no local composing text left to
+        // legitimately trim.
         if (composingText.isEmpty() && isWithinDeleteSuppressionWindow()) {
             suppressNextDeleteUntilMs = 0L
             return
@@ -3743,11 +3744,14 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
             android.os.SystemClock.uptimeMillis() < suppressNextDeleteUntilMs
 
     /**
-     * Arm the delete-suppression mitigation window right after a composition is
-     * finalised (finishComposingText / Enter submit) — see [deleteBefore].
-     * Any real input event (a key event or a fresh commit/compose) clears it
-     * again, so the suppression can only ever consume the specific stray
-     * delete this mitigates, never a legitimate one that happens to follow.
+     * Arm the delete-suppression mitigation window right after text is
+     * finalised — a composition accepted as-is (finishComposingText / Enter
+     * submit) or a plain commitText() (e.g. Gboard's space-triggered word
+     * commit) — see [deleteBefore]. Any subsequent real input event (a key
+     * event, or the start of a fresh commit/compose) clears the window again
+     * before re-arming its own, so the suppression can only ever consume the
+     * one stray delete immediately following the event that armed it, never
+     * a legitimate one that happens to follow something else.
      */
     private fun armDeleteSuppressionWindow() {
         suppressNextDeleteUntilMs = android.os.SystemClock.uptimeMillis() + DELETE_SUPPRESS_WINDOW_MS
@@ -3815,7 +3819,11 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
         // provisional string is superseded and must not be re-emitted on a later
         // finishComposingText().
         composingText = ""
-        // A real commit means item 42's suppression window no longer applies.
+        // Invalidate whatever suppression window an earlier event armed — this
+        // commit is the real, current input. A fresh window is armed below, at
+        // the end of the plain-send path, since THIS commit can trigger the
+        // same stray post-finalize deleteSurroundingText() item 42 already
+        // mitigates after finishComposingText()/performEditorAction().
         suppressNextDeleteUntilMs = 0L
         text?.let {
             val raw = it.toString()
@@ -3845,6 +3853,16 @@ private class TerminalInputConnection(private val terminalView: TerminalView) : 
                 return true
             }
             terminalView.sendText(converted)
+            // Item 42 (broadened): Gboard's word-boundary autocorrect finalizes
+            // a word via commitText() at a space press (e.g. commitText("do ", 2)
+            // or separate "do"/" " commits) — the same fake-empty-buffer desync
+            // that produces a stray post-Enter deleteSurroundingText() can fire
+            // right after this kind of commit too, deleting the character this
+            // commitText() just sent (observed on-device: the space between
+            // "do" and "this" eaten, producing "dothis"). Arm the same one-shot
+            // suppression window here so that stray delete is swallowed instead
+            // of removing a just-committed character.
+            armDeleteSuppressionWindow()
         }
         return true
     }
