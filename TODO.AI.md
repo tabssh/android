@@ -39,19 +39,6 @@ work).
    and were left alone as out of the batch's named scope — `ThrowableMapper`
    is already imported in that file, so wiring these three in is a small
    follow-up once picked up.
-34. **Theme changes from restore/sync never reach the running UI** —
-    `ThemeManager` is the single source of truth (`_currentTheme`
-    `StateFlow` at `ThemeManager.kt:31-32`, listeners notified in
-    `applyTheme()` at `:172-183`), but `BackupImporter.kt:763` and
-    `SyncDataApplier.kt:1492` write the preference directly via
-    `setTerminalTheme()`, bypassing `applyTheme()` entirely — so after a
-    backup restore or a sync apply the StateFlow and listeners never fire
-    and open terminals keep the old theme until restart. Compounding it,
-    `PreferenceManager.kt:247-248` (`getTheme`/`setTheme`) and `:596-597`
-    (`getTerminalTheme`/`setTerminalTheme`) are two names for the same
-    `terminal_theme` key — the exact "two names for one value" bug AI.md
-    PART 7 calls out. Fix: delete the alias pair and route all writes
-    through `ThemeManager.applyTheme()`.
 40. **711 raw dp and 389 raw sp literals across 80% of layouts** —
     `values/dimens.xml` exists with 86 tokens (and `values-land`,
     `values-sw600dp`, `values-sw720dp` overrides), but 129 of 161 layouts
@@ -183,28 +170,6 @@ work).
     batch, not created by it. Confirm it's genuinely unused and delete it
     (and the two colors, if nothing else picks them up) or wire it in
     wherever it was meant to be used.
-46. **Read-only log/transcript empty states left without an "add" CTA on
-    purpose** — found while adding empty-state CTAs elsewhere in the app.
-    `activity_audit_log_viewer.xml`, `activity_sync_log.xml`, and
-    `activity_transcript_viewer.xml` show a label-only empty state with no
-    CTA button, unlike the identity fragments and `WidgetConfigActivity`.
-    Not fixed: these are auto-populated, read-only historical logs (audit
-    trail, sync history, session transcripts) with no user-initiated "add"
-    action — the icon+title+hint+CTA pattern used elsewhere does not apply
-    since there is nothing for a button to create. Left as bare label-only
-    empty states; revisit only if a genuine action becomes relevant (e.g.
-    "Export" or "Generate test entry").
-47. **`SyncLogActivity.copyLogToClipboard()` also lacks try/catch around
-    `syncLogDao().getRecent()`** — found while fixing `loadSyncLog()`'s
-    equivalent gap. Same DB-failure crash risk on the copy-to-
-    clipboard path. Fix: wrap in try/catch, log the exception, and Toast a
-    failure message.
-48. **`AuditLogViewerActivity`'s empty branch never calls
-    `adapter.updateLogs(logs)`** — found while adding error-state
-    parity for this file. Only the non-empty branch refreshes the adapter,
-    so if the log list transitions from non-empty to empty the RecyclerView
-    (hidden, but still backing the adapter) keeps stale data. Fix: call
-    `adapter.updateLogs(logs)` (with the empty list) in both branches.
 49. **~220 additional duplicated string values remain in `strings.xml`
     beyond the 45 already consolidated** — found while doing that
     consolidation pass. The full scan found ~265 groups of identical string
