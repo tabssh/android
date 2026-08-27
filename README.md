@@ -35,6 +35,7 @@ enterprise security, hypervisor management, and cloud provider integration.
 - 🌐 **SSH Config Import** — `~/.ssh/config` with RemoteCommand, SendEnv, RequestTTY, ProxyJump
 - ❤️ **Always-on Keepalive** — 60s serverAliveInterval; idle sessions survive carrier NAT and Wi-Fi sleep
 - 🚀 **Tmux/Screen auto-launch** — Per-profile auto-attach/create for tmux/screen/zellij + postConnectScript
+- ⌨️ **Per-host PRE-key bindings** — Override the tmux/screen/zellij PRE prefix independently per host; blank falls back to the global default
 - 🌐 **IPv4 / IPv6 selection** — Per-host auto/ipv4/ipv6 with fallback toast
 - 🔗 **ProxyJump** — Multi-hop connections through bastion hosts
 - ⏺️ **Session Recording** — Capture and replay raw terminal sessions

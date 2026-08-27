@@ -47,6 +47,16 @@
   twice** — a duplicate increment fired from both the session-established
   listener and the tab's own connect path.
 
+### Per-host PRE-key bindings
+
+- **Each host can now bind PRE to its own tmux/screen/zellij key,
+  independently of the global default** — Settings still sets the
+  app-wide default prefix for each multiplexer type, but a host's own
+  edit screen can now override tmux, screen, and zellij separately, e.g.
+  one host's tmux session binds PRE to `C-a` while every other host
+  keeps the global `C-b`. Leaving a host's binding blank keeps using the
+  global default for that type.
+
 ### Fixed
 
 - **Pasting, the clipboard menu, and the custom keyboard bar didn't work
