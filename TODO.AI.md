@@ -46,10 +46,31 @@ work).
     lock — no height/padding diffs), `TerminalView.kt`'s resize-debounce/
     `gridTop`/`updateGridSize` system (unchanged since Aug 7–11, predates the
     regression window), and `TermuxBridge.resize()` (unchanged logic, only
-    added log-throttling). Blocked on an on-device repro with logcat
-    (`Logger.d("TerminalView", "Terminal resized: ...")` lines) while
-    toggling the keyboard, and confirmation of whether "Show bottom nav bar"
-    is enabled on the affected device — needs the user to reproduce with
-    debug logging or confirm that setting before this can be root-caused
-    further.
+    added log-throttling).
+
+    Analyzed a real on-device debug log (in-app `debug_logging_enabled`
+    export, no adb needed) covering one keyboard-hide→show cycle: both
+    `TermuxBridge.resize()` and `TerminalView`'s `updateGridSize()` fired and
+    completed cleanly in each direction (`90x37` keyboard hidden → `90x27`
+    keyboard shown, columns unchanged), each followed by an
+    `onScreenChanged - scheduling redraw` line ~120–200ms later. This rules
+    out "resize doesn't fire"/"resize gets dropped" — the client-side resize
+    mechanics work as designed on the reporting device. A 10-row shrink for
+    Gboard's typical height is not abnormally large on its own. The debug
+    log has no rendered-pixel content, so it cannot confirm or rule out
+    whether the specific "item 1 truncated, items 2/3 fully invisible"
+    symptom is a genuine TabSSH client-render bug vs. the remote CLI/shell's
+    own reflow of multi-line output to fit a shorter terminal (normal
+    curses/TUI behavior, would look identical). Zero `W/`/`E/`-level log
+    entries and no other anomalies (reconnect loops, repeated errors) found
+    anywhere else in the ~1300-line log across all tags.
+
+    Still blocked on: confirmation of whether "Show bottom nav bar" is
+    enabled on the affected device (the one concrete, git-history-confirmed
+    regression touching this vertical-space budget in the timeframe) — and,
+    if that's not it, a way to compare actual rendered terminal content
+    before/after the keyboard opens (screen recording or a second log
+    export with the exact repro content shown), since debug-log timestamps
+    alone can't distinguish a client render bug from expected remote-app
+    reflow.
 
