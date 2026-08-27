@@ -24,3 +24,32 @@ work).
     the `check` target's Gradle task list so this class of bug is caught
     before commit, not after push.
 
+52. **Terminal content gets cut off / scrolls out of view when the system
+    IME (Gboard) is open — confirmed recent regression, root cause not yet
+    fully confirmed.** Screenshots (same Claude-Code-over-SSH session, with
+    vs. without the Android keyboard open) show a 3-item multi-line message
+    fully visible with the keyboard closed, but only the first item
+    (truncated) visible with it open — items 2 and 3 are entirely off-screen,
+    which a pure "fewer visible rows" theory doesn't fully explain (scroll
+    offset `scrollYf` in `TerminalView.kt` is untouched by resize, so if the
+    user was scrolled to bottom the newest lines should stay visible, not the
+    oldest). One confirmed-but-conditional contributing regression was found
+    and fixed in a separate commit: `activity_tab_terminal.xml`'s
+    `bottom_action_bar` height was silently changed 48dp→72dp by the item-40
+    dp-literal→dimen sweep (`e540691eacfc`), eating extra vertical space from
+    the terminal grid — but that bar is only visible when Settings → General
+    → "Show bottom nav bar" is enabled (off by default), so it may not be the
+    actual cause of the reported screenshots. Ruled out via git-history
+    review of the last 2 weeks: `MultiRowKeyboardView`/`KeyboardRowView` row
+    height and row count defaults (unchanged), the two recent keyboard-bar
+    feature commits (`9acaadd3623d` auto-repeat, `e37556ac6467` modifier
+    lock — no height/padding diffs), `TerminalView.kt`'s resize-debounce/
+    `gridTop`/`updateGridSize` system (unchanged since Aug 7–11, predates the
+    regression window), and `TermuxBridge.resize()` (unchanged logic, only
+    added log-throttling). Blocked on an on-device repro with logcat
+    (`Logger.d("TerminalView", "Terminal resized: ...")` lines) while
+    toggling the keyboard, and confirmation of whether "Show bottom nav bar"
+    is enabled on the affected device — needs the user to reproduce with
+    debug logging or confirm that setting before this can be root-caused
+    further.
+
