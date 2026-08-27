@@ -13,7 +13,7 @@
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
       android:text="@string/locale_edit_title"
-      android:textSize="20sp"
+      android:textSize="@dimen/text_size_headline"
       android:textStyle="bold"
       android:textColor="?attr/colorOnSurface"
       android:paddingBottom="@dimen/space_md" />
@@ -22,7 +22,7 @@
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
       android:text="@string/locale_edit_action_label"
-      android:textSize="14sp"
+      android:textSize="@dimen/text_size_body"
       android:textColor="?attr/colorOnSurfaceVariant" />
 
     <Spinner
@@ -36,7 +36,7 @@
       android:layout_height="wrap_content"
       android:layout_marginTop="@dimen/space_sm"
       android:text="@string/container_host_section_connection"
-      android:textSize="14sp"
+      android:textSize="@dimen/text_size_body"
       android:textColor="?attr/colorOnSurfaceVariant" />
 
     <Spinner
@@ -77,7 +77,7 @@
       android:layout_height="wrap_content"
       android:layout_marginTop="@dimen/space_md"
       android:text="@string/locale_edit_actions_help"
-      android:textSize="12sp"
+      android:textSize="@dimen/text_size_caption"
       android:textColor="?attr/colorOnSurfaceVariant" />
 
     <LinearLayout

@@ -33,14 +33,14 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/vnc_hosts_header_emoji"
-                android:textSize="64sp"
+                android:textSize="@dimen/text_size_64sp"
                 android:paddingBottom="@dimen/space_md" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/vnc_hosts_empty_title"
-                android:textSize="18sp"
+                android:textSize="@dimen/text_size_title"
                 android:textStyle="bold"
                 android:gravity="center"
                 android:textColor="?attr/colorOnSurface"
@@ -50,7 +50,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/vnc_hosts_empty_message"
-                android:textSize="14sp"
+                android:textSize="@dimen/text_size_body"
                 android:gravity="center"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 

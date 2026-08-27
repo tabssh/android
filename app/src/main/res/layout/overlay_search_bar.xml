@@ -11,14 +11,14 @@
     android:layout_height="wrap_content"
     android:layout_gravity="top"
     android:layout_margin="@dimen/space_sm"
-    app:cardCornerRadius="8dp"
-    app:cardElevation="6dp"
+    app:cardCornerRadius="@dimen/card_corner_radius_small"
+    app:cardElevation="@dimen/space_6dp"
     app:cardBackgroundColor="?attr/colorSurface"
     android:visibility="gone">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="@dimen/min_touch_target"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:paddingStart="@dimen/space_12dp"
@@ -26,8 +26,8 @@
 
         <!-- Search icon -->
         <ImageView
-            android:layout_width="20dp"
-            android:layout_height="20dp"
+            android:layout_width="@dimen/icon_size_action"
+            android:layout_height="@dimen/icon_size_action"
             android:src="@drawable/ic_search"
             app:tint="?attr/colorOnSurfaceVariant"
             android:layout_marginEnd="@dimen/space_sm"
@@ -40,7 +40,7 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:hint="@string/search_bar_hint"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_size_body"
             android:textColor="?attr/colorOnSurface"
             android:textColorHint="?attr/colorOnSurfaceVariant"
             android:inputType="text"
@@ -54,9 +54,9 @@
             android:id="@+id/search_match_count"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:textColor="?attr/colorOnSurfaceVariant"
-            android:minWidth="48dp"
+            android:minWidth="@dimen/min_touch_target"
             android:gravity="center"
             android:paddingHorizontal="@dimen/space_xs"
             android:visibility="gone" />
@@ -86,12 +86,12 @@
             android:id="@+id/search_case_toggle"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="wrap_content"
-            android:layout_height="36dp"
+            android:layout_height="@dimen/tab_height"
             android:text="@string/search_bar_case_toggle"
-            android:textSize="13sp"
+            android:textSize="@dimen/text_size_small_body"
             android:minWidth="0dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
+            android:insetTop="@dimen/space_none"
+            android:insetBottom="@dimen/space_none"
             android:contentDescription="@string/search_bar_case_toggle_description" />
 
         <!-- Close -->

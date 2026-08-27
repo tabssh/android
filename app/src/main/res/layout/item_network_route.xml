@@ -52,7 +52,7 @@
                     android:layout_marginStart="@dimen/space_sm"
                     android:checkable="false"
                     android:clickable="false"
-                    app:chipMinHeight="28dp"
+                    app:chipMinHeight="@dimen/icon_size_badge"
                     app:ensureMinTouchTargetSize="false"
                     tools:text="SOCKS5 proxy" />
 
@@ -101,7 +101,7 @@
             android:contentDescription="@string/route_more_actions"
             app:icon="@drawable/ic_more_vert"
             app:iconGravity="textStart"
-            app:iconPadding="0dp" />
+            app:iconPadding="@dimen/space_none" />
 
     </LinearLayout>
 

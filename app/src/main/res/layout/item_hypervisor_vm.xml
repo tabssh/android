@@ -6,8 +6,8 @@
     android:layout_height="wrap_content"
     android:layout_marginHorizontal="@dimen/space_sm"
     android:layout_marginBottom="@dimen/space_sm"
-    app:cardElevation="2dp"
-    app:cardCornerRadius="8dp">
+    app:cardElevation="@dimen/elevation_low"
+    app:cardCornerRadius="@dimen/card_corner_radius_small">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -24,8 +24,8 @@
 
             <View
                 android:id="@+id/view_status_dot"
-                android:layout_width="10dp"
-                android:layout_height="10dp"
+                android:layout_width="@dimen/connection_status_indicator_size"
+                android:layout_height="@dimen/connection_status_indicator_size"
                 android:layout_marginEnd="@dimen/space_sm"
                 android:background="@drawable/bg_status_dot" />
 
@@ -34,7 +34,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:textSize="15sp"
+                android:textSize="@dimen/text_size_15sp"
                 android:textStyle="bold"
                 android:textColor="?attr/colorOnSurface" />
 
@@ -42,7 +42,7 @@
                 android:id="@+id/vm_state"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="12sp"
+                android:textSize="@dimen/text_size_caption"
                 android:textStyle="bold" />
 
         </LinearLayout>
@@ -53,7 +53,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_xs"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
         <!-- IP address line, shown only when available -->
@@ -62,7 +62,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_2dp"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:visibility="gone" />
 

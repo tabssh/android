@@ -13,8 +13,8 @@
 
         <!-- Drag handle -->
         <View
-            android:layout_width="32dp"
-            android:layout_height="4dp"
+            android:layout_width="@dimen/icon_size_large"
+            android:layout_height="@dimen/scrollbar_width"
             android:layout_gravity="center_horizontal"
             android:layout_marginBottom="@dimen/space_sm"
             android:background="@drawable/bg_bottom_sheet_handle" />

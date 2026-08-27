@@ -24,15 +24,15 @@
         android:layout_height="wrap_content"
         android:layout_marginEnd="@dimen/space_sm"
         app:cardBackgroundColor="?attr/colorSecondaryContainer"
-        app:cardCornerRadius="4dp"
-        app:cardElevation="0dp">
+        app:cardCornerRadius="@dimen/space_xs"
+        app:cardElevation="@dimen/elevation_none">
 
         <TextView
             android:id="@+id/text_badge"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:paddingHorizontal="@dimen/space_sm"
-            android:paddingVertical="2dp"
+            android:paddingVertical="@dimen/space_2dp"
             android:textSize="@dimen/text_size_overline"
             android:textStyle="bold"
             android:textColor="?attr/colorOnSecondaryContainer"
@@ -52,7 +52,7 @@
             android:layout_height="wrap_content"
             android:singleLine="true"
             android:ellipsize="end"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_size_body"
             android:textColor="?attr/colorOnSurface"
             tools:text="server20" />
 
@@ -62,7 +62,7 @@
             android:layout_height="wrap_content"
             android:singleLine="true"
             android:ellipsize="end"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:textColor="?android:textColorSecondary"
             tools:text="user@10.0.0.5" />
 

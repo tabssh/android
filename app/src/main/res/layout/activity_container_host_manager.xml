@@ -45,7 +45,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_md"
             android:text="@string/container_connecting"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_size_body"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
     </LinearLayout>
@@ -78,7 +78,7 @@
                 app:cardCornerRadius="@dimen/card_corner_radius"
                 app:cardElevation="@dimen/card_elevation"
                 app:strokeColor="?attr/colorError"
-                app:strokeWidth="1dp">
+                app:strokeWidth="@dimen/card_stroke_width">
 
                 <LinearLayout
                     android:layout_width="match_parent"

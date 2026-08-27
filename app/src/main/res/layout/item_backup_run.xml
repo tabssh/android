@@ -4,8 +4,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_margin="@dimen/space_sm"
-    app:cardElevation="2dp"
-    app:cardCornerRadius="8dp">
+    app:cardElevation="@dimen/elevation_low"
+    app:cardCornerRadius="@dimen/card_corner_radius_small">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -24,7 +24,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/backup_run_item_status_success_placeholder"
-                android:textSize="14sp"
+                android:textSize="@dimen/text_size_body"
                 android:textStyle="bold"
                 android:textColor="@color/status_success"
                 android:layout_marginEnd="@dimen/space_12dp" />
@@ -35,7 +35,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/backup_run_item_date_placeholder"
-                android:textSize="14sp" />
+                android:textSize="@dimen/text_size_body" />
 
         </LinearLayout>
 
@@ -44,7 +44,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/backup_run_item_duration_placeholder"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_size_body"
             android:layout_marginBottom="@dimen/space_xs" />
 
         <TextView
@@ -52,7 +52,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/backup_run_item_result_placeholder"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:textColor="?android:attr/textColorSecondary"
             android:maxLines="2"
             android:ellipsize="end" />

@@ -29,8 +29,8 @@
 
             <ImageButton
                 android:id="@+id/btn_nav_menu"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="@dimen/icon_size_xlarge"
+                android:layout_height="@dimen/icon_size_xlarge"
                 android:src="@drawable/ic_menu"
                 app:tint="@color/white"
                 android:background="?attr/selectableItemBackgroundBorderless"
@@ -46,7 +46,7 @@
                 app:tabTextColor="@color/white"
                 app:tabSelectedTextColor="@color/white"
                 app:tabIndicatorColor="@color/accent_500"
-                app:tabIndicatorHeight="3dp"
+                app:tabIndicatorHeight="@dimen/focus_border_width"
                 app:tabMode="scrollable"
                 app:tabGravity="start" />
 

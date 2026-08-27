@@ -68,7 +68,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/snippet_mgr_empty_icon"
-            android:textSize="64sp"
+            android:textSize="@dimen/text_size_64sp"
             android:importantForAccessibility="no"
             android:layout_marginBottom="@dimen/space_md" />
 

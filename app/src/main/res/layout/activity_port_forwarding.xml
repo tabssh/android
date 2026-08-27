@@ -40,7 +40,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/routing_section_routes_emoji"
-                    android:textSize="24sp"
+                    android:textSize="@dimen/text_size_display"
                     android:layout_marginEnd="@dimen/space_sm" />
 
                 <TextView
@@ -48,7 +48,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/routing_section_routes_title"
-                    android:textSize="20sp"
+                    android:textSize="@dimen/text_size_headline"
                     android:textStyle="bold"
                     android:textColor="?attr/colorOnSurface" />
 
@@ -69,7 +69,7 @@
                 android:paddingStart="@dimen/space_md"
                 android:paddingEnd="@dimen/space_md"
                 android:text="@string/routing_section_routes_subtitle"
-                android:textSize="14sp"
+                android:textSize="@dimen/text_size_body"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
             <!-- Default route selector -->
@@ -122,7 +122,7 @@
                 android:id="@+id/recycler_routes"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:maxHeight="300dp"
+                android:maxHeight="@dimen/space_300dp"
                 android:nestedScrollingEnabled="true"
                 android:clipToPadding="false"
                 android:paddingBottom="@dimen/space_sm"
@@ -178,7 +178,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/routing_section_forwards_emoji"
-                    android:textSize="24sp"
+                    android:textSize="@dimen/text_size_display"
                     android:layout_marginEnd="@dimen/space_sm" />
 
                 <TextView
@@ -186,7 +186,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/routing_section_forwards_title"
-                    android:textSize="20sp"
+                    android:textSize="@dimen/text_size_headline"
                     android:textStyle="bold"
                     android:textColor="?attr/colorOnSurface" />
 
@@ -199,14 +199,14 @@
                 android:paddingEnd="@dimen/space_md"
                 android:paddingTop="@dimen/space_xs"
                 android:text="@string/routing_section_forwards_subtitle"
-                android:textSize="14sp"
+                android:textSize="@dimen/text_size_body"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recycler_forwards"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:maxHeight="300dp"
+                android:maxHeight="@dimen/space_300dp"
                 android:nestedScrollingEnabled="true"
                 android:clipToPadding="false"
                 android:paddingTop="@dimen/space_xs"

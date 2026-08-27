@@ -11,7 +11,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/backup_runs_job_name_loading"
-        android:textSize="18sp"
+        android:textSize="@dimen/text_size_title"
         android:textStyle="bold"
         android:layout_marginBottom="@dimen/space_md" />
 
@@ -28,7 +28,7 @@
         android:layout_height="wrap_content"
         android:text="@string/backup_runs_empty_state"
         android:textAlignment="center"
-        android:textSize="16sp"
+        android:textSize="@dimen/text_size_subtitle"
         android:visibility="gone"
         android:layout_marginTop="@dimen/space_xl"
         android:layout_marginBottom="@dimen/space_xl" />
@@ -36,7 +36,7 @@
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/backup_runs_recycler_view"
         android:layout_width="match_parent"
-        android:layout_height="200dp" />
+        android:layout_height="@dimen/keyboard_height_default" />
 
     <LinearLayout
         android:layout_width="match_parent"

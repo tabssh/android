@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_margin="@dimen/space_xs"
-    app:cardCornerRadius="8dp"
+    app:cardCornerRadius="@dimen/card_corner_radius_small"
     app:cardElevation="@dimen/elevation_low">
 
     <LinearLayout
@@ -65,7 +65,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/transferrow_action_pause"
-                    android:textSize="12sp"
+                    android:textSize="@dimen/text_size_caption"
                     android:minWidth="0dp"
                     android:layout_marginEnd="@dimen/space_xs" />
 
@@ -75,7 +75,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/cancel"
-                    android:textSize="12sp"
+                    android:textSize="@dimen/text_size_caption"
                     android:minWidth="0dp" />
 
             </LinearLayout>

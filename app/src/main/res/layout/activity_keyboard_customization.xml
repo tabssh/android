@@ -41,7 +41,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/kbdcustom_number_of_rows_label"
-                    android:textSize="16sp"
+                    android:textSize="@dimen/text_size_subtitle"
                     android:textColor="?attr/colorOnSurface" />
 
                 <com.google.android.material.button.MaterialButtonToggleGroup
@@ -96,8 +96,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="@dimen/space_md"
                 android:layout_marginBottom="@dimen/space_sm"
-                app:cardElevation="4dp"
-                app:cardCornerRadius="8dp">
+                app:cardElevation="@dimen/card_elevation"
+                app:cardCornerRadius="@dimen/card_corner_radius_small">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -118,7 +118,7 @@
                             android:layout_weight="1"
                             android:text="@string/kbdcustom_preview_label"
                             android:textStyle="bold"
-                            android:textSize="14sp"
+                            android:textSize="@dimen/text_size_body"
                             android:textColor="?attr/colorPrimary" />
 
                         <TextView
@@ -148,8 +148,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="@dimen/space_md"
                 android:layout_marginBottom="@dimen/space_sm"
-                app:cardElevation="2dp"
-                app:cardCornerRadius="8dp">
+                app:cardElevation="@dimen/elevation_low"
+                app:cardCornerRadius="@dimen/card_corner_radius_small">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -162,7 +162,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/kbdcustom_available_keys_label"
                         android:textStyle="bold"
-                        android:textSize="14sp"
+                        android:textSize="@dimen/text_size_body"
                         android:textColor="?attr/colorPrimary"
                         android:layout_marginBottom="@dimen/space_2dp" />
 
@@ -170,7 +170,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/kbdcustom_available_keys_hint"
-                        android:textSize="12sp"
+                        android:textSize="@dimen/text_size_caption"
                         android:textColor="?attr/colorOnSurfaceVariant"
                         android:layout_marginBottom="@dimen/space_sm" />
 

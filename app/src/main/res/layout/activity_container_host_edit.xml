@@ -50,13 +50,13 @@
                 android:layout_marginTop="@dimen/space_md"
                 android:labelFor="@+id/spinner_engine"
                 android:text="@string/container_host_engine_desc"
-                android:textSize="12sp"
+                android:textSize="@dimen/text_size_caption"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
             <Spinner
                 android:id="@+id/spinner_engine"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="@dimen/min_touch_target"
                 android:layout_marginTop="@dimen/space_xs"
                 android:background="@drawable/spinner_background"
                 android:contentDescription="@string/container_host_engine_desc"
@@ -109,13 +109,13 @@
                     android:layout_marginTop="@dimen/space_md"
                     android:labelFor="@+id/spinner_connection"
                     android:text="@string/container_host_connection_hint"
-                    android:textSize="12sp"
+                    android:textSize="@dimen/text_size_caption"
                     android:textColor="?attr/colorOnSurfaceVariant" />
 
                 <Spinner
                     android:id="@+id/spinner_connection"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="@dimen/min_touch_target"
                     android:layout_marginTop="@dimen/space_xs"
                     android:background="@drawable/spinner_background"
                     android:contentDescription="@string/container_host_connection_desc"
@@ -197,13 +197,13 @@
                     android:layout_marginTop="@dimen/space_md"
                     android:labelFor="@+id/spinner_auth_type"
                     android:text="@string/container_host_auth_type_hint"
-                    android:textSize="12sp"
+                    android:textSize="@dimen/text_size_caption"
                     android:textColor="?attr/colorOnSurfaceVariant" />
 
                 <Spinner
                     android:id="@+id/spinner_auth_type"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="@dimen/min_touch_target"
                     android:layout_marginTop="@dimen/space_xs"
                     android:background="@drawable/spinner_background"
                     android:contentDescription="@string/container_host_auth_type_desc"
@@ -240,13 +240,13 @@
                         android:layout_marginTop="@dimen/space_md"
                         android:labelFor="@+id/spinner_custom_key"
                         android:text="@string/route_auth_key"
-                        android:textSize="12sp"
+                        android:textSize="@dimen/text_size_caption"
                         android:textColor="?attr/colorOnSurfaceVariant" />
 
                     <Spinner
                         android:id="@+id/spinner_custom_key"
                         android:layout_width="match_parent"
-                        android:layout_height="48dp"
+                        android:layout_height="@dimen/min_touch_target"
                         android:layout_marginTop="@dimen/space_xs"
                         android:background="@drawable/spinner_background"
                         android:contentDescription="@string/route_auth_key"
@@ -267,13 +267,13 @@
                         android:layout_marginTop="@dimen/space_md"
                         android:labelFor="@+id/spinner_custom_identity"
                         android:text="@string/container_host_identity_hint"
-                        android:textSize="12sp"
+                        android:textSize="@dimen/text_size_caption"
                         android:textColor="?attr/colorOnSurfaceVariant" />
 
                     <Spinner
                         android:id="@+id/spinner_custom_identity"
                         android:layout_width="match_parent"
-                        android:layout_height="48dp"
+                        android:layout_height="@dimen/min_touch_target"
                         android:layout_marginTop="@dimen/space_xs"
                         android:background="@drawable/spinner_background"
                         android:contentDescription="@string/container_host_identity_desc"
@@ -450,7 +450,7 @@
         android:orientation="horizontal"
         android:padding="@dimen/space_md"
         android:background="?attr/colorSurface"
-        android:elevation="8dp">
+        android:elevation="@dimen/elevation_high">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/button_cancel"

@@ -95,8 +95,8 @@
                 android:id="@+id/connection_list"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="100dp"
-                android:maxHeight="300dp"
+                android:minHeight="@dimen/slide_animation_distance"
+                android:maxHeight="@dimen/space_300dp"
                 android:background="?attr/colorSurfaceVariant"
                 android:padding="@dimen/space_sm"
                 android:nestedScrollingEnabled="true" />
@@ -139,7 +139,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     app:singleLine="true"
-                    app:chipSpacingHorizontal="8dp">
+                    app:chipSpacingHorizontal="@dimen/space_sm">
 
                     <!-- Chips will be added programmatically -->
 
@@ -215,8 +215,8 @@
                 android:id="@+id/results_view"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="100dp"
-                android:maxHeight="300dp"
+                android:minHeight="@dimen/slide_animation_distance"
+                android:maxHeight="@dimen/space_300dp"
                 android:background="?attr/colorSurfaceVariant"
                 android:padding="@dimen/space_md"
                 android:nestedScrollingEnabled="true" />
@@ -240,7 +240,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/common_icon_server"
-            android:textSize="64sp"
+            android:textSize="@dimen/text_size_64sp"
             android:layout_marginBottom="@dimen/space_md" />
 
         <TextView

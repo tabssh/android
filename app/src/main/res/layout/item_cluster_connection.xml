@@ -23,7 +23,7 @@
             android:id="@+id/connection_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="16sp"
+            android:textSize="@dimen/text_size_subtitle"
             android:textStyle="bold"
             android:text="@string/item_cluster_connection_placeholder_name" />
 
@@ -31,7 +31,7 @@
             android:id="@+id/connection_host"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_size_body"
             android:textColor="?android:attr/textColorSecondary"
             android:text="@string/item_cluster_connection_placeholder_target" />
 
@@ -40,7 +40,7 @@
             android:id="@+id/connection_group_badge"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:textColor="?attr/colorPrimary"
             android:maxLines="1"
             android:ellipsize="end"

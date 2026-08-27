@@ -16,10 +16,10 @@
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
-            android:layout_height="40dp"
-            android:minHeight="40dp"
+            android:layout_height="@dimen/toolbar_height"
+            android:minHeight="@dimen/toolbar_height"
             app:titleTextAppearance="@style/TextAppearance.TabSSH.Toolbar.Title"
-            app:contentInsetStartWithNavigation="0dp"
+            app:contentInsetStartWithNavigation="@dimen/space_none"
             style="@style/Widget.TabSSH.Toolbar" />
 
         <com.google.android.material.tabs.TabLayout
@@ -89,7 +89,7 @@
             app:fabSize="mini"
             app:backgroundTint="?attr/colorSecondaryContainer"
             app:tint="?attr/colorOnSecondaryContainer"
-            app:elevation="6dp"
+            app:elevation="@dimen/space_6dp"
             android:visibility="gone" />
 
         <!-- Multiplexer Status Indicator -->
@@ -103,7 +103,7 @@
             android:text="@string/tab_terminal_multiplexer_chip_default"
             android:textSize="@dimen/text_size_overline"
             app:chipBackgroundColor="@color/terminal_green"
-            app:chipMinHeight="24dp"
+            app:chipMinHeight="@dimen/icon_size_medium"
             app:chipIcon="@drawable/ic_terminal"
             app:chipIconSize="14dp"
             app:chipIconTint="@android:color/white"
@@ -120,7 +120,7 @@
              TabTerminalActivity; alpha=0 (invisible) until triggered. -->
         <View
             android:id="@+id/swipe_edge_glow_start"
-            android:layout_width="18dp"
+            android:layout_width="@dimen/space_18dp"
             android:layout_height="match_parent"
             android:layout_gravity="start"
             android:background="@drawable/swipe_edge_glow_start"
@@ -129,7 +129,7 @@
 
         <View
             android:id="@+id/swipe_edge_glow_end"
-            android:layout_width="18dp"
+            android:layout_width="@dimen/space_18dp"
             android:layout_height="match_parent"
             android:layout_gravity="end"
             android:background="@drawable/swipe_edge_glow_end"

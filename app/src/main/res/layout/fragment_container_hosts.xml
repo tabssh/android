@@ -16,7 +16,7 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            android:elevation="4dp"
+            android:elevation="@dimen/card_elevation"
             style="@style/Widget.TabSSH.Toolbar.Section"
             app:title="@string/container_manager_tab_containers" />
 
@@ -54,7 +54,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/container_hosts_empty_icon"
-                android:textSize="64sp"
+                android:textSize="@dimen/text_size_64sp"
                 android:importantForAccessibility="no"
                 android:paddingBottom="@dimen/space_md" />
 
@@ -62,7 +62,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/container_hosts_empty"
-                android:textSize="14sp"
+                android:textSize="@dimen/text_size_body"
                 android:gravity="center"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:paddingBottom="@dimen/space_lg" />

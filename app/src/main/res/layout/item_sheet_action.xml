@@ -13,8 +13,8 @@
 
     <ImageView
         android:id="@+id/image_action_icon"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
+        android:layout_width="@dimen/icon_size_medium"
+        android:layout_height="@dimen/icon_size_medium"
         android:layout_marginEnd="@dimen/space_md"
         android:importantForAccessibility="no"
         app:tint="?attr/colorOnSurfaceVariant" />

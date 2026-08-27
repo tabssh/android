@@ -86,7 +86,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_md"
             android:text="@string/snippet_edit_variables_tip"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:textColor="?android:attr/textColorSecondary" />
 
     </LinearLayout>

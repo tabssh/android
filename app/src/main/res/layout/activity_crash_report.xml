@@ -18,7 +18,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/crash_report_title"
-            android:textSize="20sp"
+            android:textSize="@dimen/text_size_headline"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary" />
 
@@ -26,7 +26,7 @@
             android:id="@+id/text_timestamp"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:textColor="?android:attr/textColorSecondary" />
     </LinearLayout>
 
@@ -35,7 +35,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingBottom="@dimen/space_sm"
-        android:textSize="13sp"
+        android:textSize="@dimen/text_size_small_body"
         android:textColor="?android:attr/textColorSecondary" />
 
     <ScrollView

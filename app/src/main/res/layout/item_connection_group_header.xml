@@ -14,7 +14,7 @@
     <!-- Color indicator -->
     <View
         android:id="@+id/view_color_indicator"
-        android:layout_width="4dp"
+        android:layout_width="@dimen/scrollbar_width"
         android:layout_height="match_parent"
         android:layout_marginEnd="@dimen/space_12dp"
         android:background="@color/primary_500" />
@@ -30,7 +30,7 @@
             android:id="@+id/text_group_name"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="16sp"
+            android:textSize="@dimen/text_size_subtitle"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary"
             tools:text="Production Servers" />
@@ -39,7 +39,7 @@
             android:id="@+id/text_connection_count"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:textColor="?android:attr/textColorSecondary"
             tools:text="5 connection(s)" />
 
@@ -48,8 +48,8 @@
     <!-- Expand/collapse icon -->
     <ImageView
         android:id="@+id/icon_expand"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
+        android:layout_width="@dimen/icon_size_medium"
+        android:layout_height="@dimen/icon_size_medium"
         android:src="@android:drawable/arrow_down_float"
         android:contentDescription="@string/item_group_expand_collapse_content_description" />
 

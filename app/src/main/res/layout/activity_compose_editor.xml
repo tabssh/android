@@ -47,7 +47,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
                 android:text="@string/container_stack_paste_helper"
-                android:textSize="12sp"
+                android:textSize="@dimen/text_size_caption"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
             <!-- Paste From Clipboard -->
@@ -73,7 +73,7 @@
                     android:layout_height="wrap_content"
                     android:inputType="textMultiLine|textNoSuggestions"
                     android:fontFamily="monospace"
-                    android:textSize="13sp"
+                    android:textSize="@dimen/text_size_small_body"
                     android:minLines="10"
                     android:gravity="top" />
 
@@ -94,7 +94,7 @@
                     android:layout_height="wrap_content"
                     android:inputType="textMultiLine|textNoSuggestions"
                     android:fontFamily="monospace"
-                    android:textSize="13sp"
+                    android:textSize="@dimen/text_size_small_body"
                     android:minLines="3"
                     android:gravity="top" />
 
@@ -120,7 +120,7 @@
         android:orientation="horizontal"
         android:padding="@dimen/space_md"
         android:background="?attr/colorSurface"
-        android:elevation="8dp">
+        android:elevation="@dimen/elevation_high">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/button_cancel"

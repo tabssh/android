@@ -7,8 +7,8 @@
     android:layout_marginStart="@dimen/space_md"
     android:layout_marginEnd="@dimen/space_md"
     android:layout_marginBottom="@dimen/space_sm"
-    app:cardCornerRadius="8dp"
-    app:cardElevation="2dp">
+    app:cardCornerRadius="@dimen/card_corner_radius_small"
+    app:cardElevation="@dimen/elevation_low">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -26,8 +26,8 @@
             <!-- Colored dot indicating running/stopped/unknown state -->
             <View
                 android:id="@+id/view_status_dot"
-                android:layout_width="10dp"
-                android:layout_height="10dp"
+                android:layout_width="@dimen/connection_status_indicator_size"
+                android:layout_height="@dimen/connection_status_indicator_size"
                 android:background="@drawable/bg_status_dot"
                 android:layout_marginEnd="@dimen/space_sm" />
 
@@ -41,7 +41,7 @@
                     android:id="@+id/text_instance_name"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textSize="15sp"
+                    android:textSize="@dimen/text_size_15sp"
                     android:textStyle="bold"
                     android:textColor="?attr/colorOnSurface"
                     android:maxLines="1"
@@ -51,7 +51,7 @@
                     android:id="@+id/text_instance_region"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textSize="12sp"
+                    android:textSize="@dimen/text_size_caption"
                     android:textColor="?attr/colorOnSurfaceVariant"
                     android:maxLines="1"
                     android:ellipsize="end" />
@@ -62,7 +62,7 @@
                 android:id="@+id/text_instance_status"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="12sp"
+                android:textSize="@dimen/text_size_caption"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:textAllCaps="true"
                 android:layout_marginStart="@dimen/space_sm" />
@@ -74,7 +74,7 @@
             android:id="@+id/text_instance_ip"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:fontFamily="monospace"
             android:layout_marginTop="@dimen/space_xs" />

@@ -26,14 +26,14 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/common_icon_cloud"
-            android:textSize="64sp"
+            android:textSize="@dimen/text_size_64sp"
             android:gravity="center" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/cloud_empty_title"
-            android:textSize="18sp"
+            android:textSize="@dimen/text_size_title"
             android:textStyle="bold"
             android:textColor="?attr/colorOnSurface"
             android:gravity="center"
@@ -43,7 +43,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/cloud_empty_hint"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_size_body"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:gravity="center"
             android:layout_marginTop="@dimen/space_sm" />

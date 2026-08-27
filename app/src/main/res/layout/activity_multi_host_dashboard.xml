@@ -28,7 +28,7 @@
             android:paddingTop="@dimen/space_sm"
             android:paddingBottom="@dimen/space_sm"
             android:textColor="@color/white"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_size_body"
             android:gravity="center_vertical"
             android:drawablePadding="@dimen/space_sm"
             android:contentDescription="@string/dashboard_offline_banner_description"

@@ -4,8 +4,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_margin="@dimen/space_xs"
-    app:cardElevation="2dp"
-    app:cardCornerRadius="8dp">
+    app:cardElevation="@dimen/elevation_low"
+    app:cardCornerRadius="@dimen/card_corner_radius_small">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -19,7 +19,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/item_snapshot_placeholder_name"
-            android:textSize="16sp"
+            android:textSize="@dimen/text_size_subtitle"
             android:textStyle="bold" />
 
         <!-- Snapshot Time -->
@@ -28,7 +28,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/item_snapshot_placeholder_created"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:textColor="?android:textColorSecondary"
             android:layout_marginTop="@dimen/space_xs" />
 

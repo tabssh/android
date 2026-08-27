@@ -68,7 +68,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/space_sm"
         android:text="@string/vnc_identity_edit_password_note"
-        android:textSize="12sp"
+        android:textSize="@dimen/text_size_caption"
         android:textColor="?attr/colorOnSurfaceVariant" />
 
 </LinearLayout>

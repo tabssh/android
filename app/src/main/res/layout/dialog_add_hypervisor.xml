@@ -123,7 +123,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_xs"
             android:text="@string/hypervisor_add_api_type_explanation"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:textColor="?android:textColorSecondary"
             android:visibility="gone" />
 

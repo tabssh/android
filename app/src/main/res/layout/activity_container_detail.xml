@@ -47,7 +47,7 @@
                     android:layout_height="wrap_content"
                     android:fontFamily="monospace"
                     android:textIsSelectable="true"
-                    android:textSize="12sp"
+                    android:textSize="@dimen/text_size_caption"
                     android:textColor="?attr/colorOnSurface" />
             </HorizontalScrollView>
         </ScrollView>
@@ -69,7 +69,7 @@
                     android:layout_height="wrap_content"
                     android:fontFamily="monospace"
                     android:textIsSelectable="true"
-                    android:textSize="12sp"
+                    android:textSize="@dimen/text_size_caption"
                     android:textColor="?attr/colorOnSurface" />
             </HorizontalScrollView>
         </ScrollView>
@@ -107,14 +107,14 @@
                     android:id="@+id/text_stats_cpu"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textSize="14sp"
+                    android:textSize="@dimen/text_size_body"
                     android:textStyle="bold"
                     android:textColor="?attr/colorOnSurface" />
 
                 <io.github.tabssh.ui.views.SparklineView
                     android:id="@+id/sparkline_cpu"
                     android:layout_width="match_parent"
-                    android:layout_height="72dp"
+                    android:layout_height="@dimen/bottom_bar_height"
                     android:layout_marginTop="@dimen/space_xs"
                     android:layout_marginBottom="@dimen/space_md" />
 
@@ -122,14 +122,14 @@
                     android:id="@+id/text_stats_mem"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textSize="14sp"
+                    android:textSize="@dimen/text_size_body"
                     android:textStyle="bold"
                     android:textColor="?attr/colorOnSurface" />
 
                 <io.github.tabssh.ui.views.SparklineView
                     android:id="@+id/sparkline_mem"
                     android:layout_width="match_parent"
-                    android:layout_height="72dp"
+                    android:layout_height="@dimen/bottom_bar_height"
                     android:layout_marginTop="@dimen/space_xs"
                     android:layout_marginBottom="@dimen/space_md" />
 
@@ -137,7 +137,7 @@
                     android:id="@+id/text_stats_net"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textSize="13sp"
+                    android:textSize="@dimen/text_size_small_body"
                     android:textColor="?attr/colorOnSurfaceVariant" />
 
                 <TextView
@@ -145,7 +145,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/space_xs"
-                    android:textSize="13sp"
+                    android:textSize="@dimen/text_size_small_body"
                     android:textColor="?attr/colorOnSurfaceVariant" />
 
                 <TextView
@@ -153,7 +153,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/space_xs"
-                    android:textSize="13sp"
+                    android:textSize="@dimen/text_size_small_body"
                     android:textColor="?attr/colorOnSurfaceVariant" />
             </LinearLayout>
         </ScrollView>

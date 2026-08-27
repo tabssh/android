@@ -20,7 +20,7 @@
             android:id="@+id/toolbar_connections"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            android:elevation="4dp"
+            android:elevation="@dimen/card_elevation"
             style="@style/Widget.TabSSH.Toolbar.Section" />
 
         <!-- All SSH Connections RecyclerView -->
@@ -50,14 +50,14 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/fragment_connections_empty_emoji"
-                android:textSize="64sp"
+                android:textSize="@dimen/text_size_64sp"
                 android:paddingBottom="@dimen/space_md" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/fragment_connections_empty_title"
-                android:textSize="18sp"
+                android:textSize="@dimen/text_size_title"
                 android:textStyle="bold"
                 android:gravity="center"
                 android:textColor="?attr/colorOnSurface"
@@ -67,7 +67,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/fragment_connections_empty_message"
-                android:textSize="14sp"
+                android:textSize="@dimen/text_size_body"
                 android:gravity="center"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 

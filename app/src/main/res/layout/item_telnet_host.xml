@@ -21,7 +21,7 @@
             android:id="@+id/text_host_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="16sp"
+            android:textSize="@dimen/text_size_subtitle"
             android:textStyle="bold"
             android:textColor="?attr/colorOnSurface" />
 
@@ -29,7 +29,7 @@
             android:id="@+id/text_host_detail"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_size_body"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
     </LinearLayout>

@@ -12,7 +12,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="@dimen/space_xs"
-        android:textSize="14sp"
+        android:textSize="@dimen/text_size_body"
         android:textStyle="bold"
         android:textColor="?attr/colorOnSurface"
         tools:text="Window 1" />
@@ -20,7 +20,7 @@
     <Spinner
         android:id="@+id/spinner_pane_window_host"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="@dimen/min_touch_target"
         android:layout_marginBottom="@dimen/space_xs"
         android:background="@drawable/spinner_background" />
 

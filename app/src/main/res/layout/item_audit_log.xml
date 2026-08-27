@@ -5,8 +5,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_margin="@dimen/space_xs"
-    app:cardElevation="2dp"
-    app:cardCornerRadius="8dp">
+    app:cardElevation="@dimen/elevation_low"
+    app:cardCornerRadius="@dimen/card_corner_radius_small">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -25,7 +25,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/audit_log_item_timestamp_placeholder"
-                android:textSize="12sp"
+                android:textSize="@dimen/text_size_caption"
                 android:textColor="?android:attr/textColorSecondary" />
 
             <TextView
@@ -33,7 +33,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/audit_log_item_status_placeholder"
-                android:textSize="12sp"
+                android:textSize="@dimen/text_size_caption"
                 android:textStyle="bold"
                 android:paddingStart="@dimen/space_sm"
                 android:paddingEnd="@dimen/space_none" />
@@ -45,7 +45,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/audit_log_item_action_placeholder"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_size_body"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary"
             android:layout_marginTop="@dimen/space_xs" />
@@ -55,7 +55,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/audit_log_item_details_placeholder"
-            android:textSize="13sp"
+            android:textSize="@dimen/text_size_small_body"
             android:textColor="?android:attr/textColorSecondary"
             android:layout_marginTop="@dimen/space_xs" />
 

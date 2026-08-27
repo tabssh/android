@@ -29,13 +29,13 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/transcript_empty_title"
-            android:textSize="24sp" />
+            android:textSize="@dimen/text_size_display" />
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_sm"
             android:text="@string/transcript_empty_message"
-            android:textSize="14sp" />
+            android:textSize="@dimen/text_size_body" />
     </LinearLayout>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -31,8 +31,8 @@
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_add_ssh_key"
                     style="@style/Widget.Material3.Button.IconButton"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="@dimen/icon_size_40dp"
+                    android:layout_height="@dimen/icon_size_40dp"
                     android:contentDescription="@string/identity_ssh_keys_add_content_description"
                     app:icon="@android:drawable/ic_input_add" />
 
@@ -42,7 +42,7 @@
                 android:id="@+id/recycler_ssh_keys"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:maxHeight="300dp"
+                android:maxHeight="@dimen/space_300dp"
                 android:nestedScrollingEnabled="true"
                 android:clipToPadding="false"
                 android:paddingStart="@dimen/space_sm"
@@ -55,7 +55,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/identity_ssh_keys_empty_message"
-                android:textSize="13sp"
+                android:textSize="@dimen/text_size_small_body"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:gravity="center"
                 android:paddingTop="@dimen/space_md"

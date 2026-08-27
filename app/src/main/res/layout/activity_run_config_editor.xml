@@ -113,7 +113,7 @@
                         android:layout_height="wrap_content"
                         android:inputType="textMultiLine|textNoSuggestions"
                         android:fontFamily="monospace"
-                        android:textSize="13sp"
+                        android:textSize="@dimen/text_size_small_body"
                         android:minLines="2"
                         android:gravity="top" />
 
@@ -133,7 +133,7 @@
                         android:layout_height="wrap_content"
                         android:inputType="textMultiLine|textNoSuggestions"
                         android:fontFamily="monospace"
-                        android:textSize="13sp"
+                        android:textSize="@dimen/text_size_small_body"
                         android:minLines="2"
                         android:gravity="top" />
 
@@ -153,7 +153,7 @@
                         android:layout_height="wrap_content"
                         android:inputType="textMultiLine|textNoSuggestions"
                         android:fontFamily="monospace"
-                        android:textSize="13sp"
+                        android:textSize="@dimen/text_size_small_body"
                         android:minLines="2"
                         android:gravity="top" />
 
@@ -190,7 +190,7 @@
                         android:layout_height="wrap_content"
                         android:inputType="text"
                         android:fontFamily="monospace"
-                        android:textSize="13sp"
+                        android:textSize="@dimen/text_size_small_body"
                         android:maxLines="1" />
 
                 </com.google.android.material.textfield.TextInputLayout>
@@ -221,7 +221,7 @@
                     android:layout_height="wrap_content"
                     android:inputType="textMultiLine|textNoSuggestions"
                     android:fontFamily="monospace"
-                    android:textSize="13sp"
+                    android:textSize="@dimen/text_size_small_body"
                     android:minLines="10"
                     android:gravity="top" />
 
@@ -257,7 +257,7 @@
         android:orientation="horizontal"
         android:padding="@dimen/space_md"
         android:background="?attr/colorSurface"
-        android:elevation="8dp">
+        android:elevation="@dimen/elevation_high">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/button_cancel"

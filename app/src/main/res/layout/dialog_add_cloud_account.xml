@@ -70,7 +70,7 @@
         android:id="@+id/tv_token_help"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="12sp"
+        android:textSize="@dimen/text_size_caption"
         android:textColor="?attr/colorOnSurfaceVariant"
         android:layout_marginBottom="@dimen/space_xs" />
 

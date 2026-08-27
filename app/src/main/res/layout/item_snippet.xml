@@ -4,8 +4,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_margin="@dimen/space_sm"
-    app:cardCornerRadius="8dp"
-    app:cardElevation="2dp">
+    app:cardCornerRadius="@dimen/card_corner_radius_small"
+    app:cardElevation="@dimen/elevation_low">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -25,15 +25,15 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:textSize="16sp"
+                android:textSize="@dimen/text_size_subtitle"
                 android:textStyle="bold"
                 android:textColor="?attr/colorOnSurface"
                 android:text="@string/snippet_item_name_placeholder" />
 
             <ImageView
                 android:id="@+id/icon_variables"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
+                android:layout_width="@dimen/icon_size_action"
+                android:layout_height="@dimen/icon_size_action"
                 android:layout_marginEnd="@dimen/space_sm"
                 android:src="@drawable/ic_code"
                 android:contentDescription="@string/snippet_item_has_variables_description"
@@ -41,8 +41,8 @@
 
             <ImageView
                 android:id="@+id/icon_favorite"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="@dimen/icon_size_medium"
+                android:layout_height="@dimen/icon_size_medium"
                 android:src="@drawable/ic_star_outline"
                 android:contentDescription="@string/snippet_item_toggle_favorite_description" />
 
@@ -54,7 +54,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_sm"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_size_body"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:fontFamily="monospace"
             android:text="@string/snippet_item_command_placeholder"
@@ -73,7 +73,7 @@
                 android:id="@+id/text_snippet_category"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="12sp"
+                android:textSize="@dimen/text_size_caption"
                 android:textColor="?attr/colorPrimary"
                 android:text="@string/snippet_item_category_placeholder"
                 android:paddingHorizontal="@dimen/space_sm"
@@ -89,7 +89,7 @@
                 android:id="@+id/text_usage_count"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="12sp"
+                android:textSize="@dimen/text_size_caption"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:text="@string/snippet_item_usage_count_placeholder"
                 android:visibility="gone" />

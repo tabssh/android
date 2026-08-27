@@ -324,8 +324,8 @@
                     android:layout_weight="1"
                     android:layout_marginEnd="@dimen/space_sm"
                     android:minWidth="0dp"
-                    android:insetLeft="0dp"
-                    android:insetRight="0dp"
+                    android:insetLeft="@dimen/space_none"
+                    android:insetRight="@dimen/space_none"
                     android:singleLine="true"
                     android:ellipsize="end"
                     android:text="@string/cancel" />
@@ -337,8 +337,8 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:minWidth="0dp"
-                    android:insetLeft="0dp"
-                    android:insetRight="0dp"
+                    android:insetLeft="@dimen/space_none"
+                    android:insetRight="@dimen/space_none"
                     android:singleLine="true"
                     android:ellipsize="end"
                     android:text="@string/save" />

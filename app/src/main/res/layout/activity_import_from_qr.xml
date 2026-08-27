@@ -28,7 +28,7 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:padding="@dimen/space_lg"
-        android:textSize="16sp"
+        android:textSize="@dimen/text_size_subtitle"
         android:gravity="center"
         android:textColor="?android:attr/textColorSecondary"
         android:text="@string/import_from_qr_status_opening_camera" />

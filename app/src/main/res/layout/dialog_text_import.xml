@@ -15,11 +15,11 @@
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/edit_text_import"
             android:layout_width="match_parent"
-            android:layout_height="200dp"
+            android:layout_height="@dimen/keyboard_height_default"
             android:gravity="top|start"
             android:inputType="textMultiLine"
             android:fontFamily="monospace"
-            android:textSize="13sp" />
+            android:textSize="@dimen/text_size_small_body" />
     </com.google.android.material.textfield.TextInputLayout>
 
 </LinearLayout>

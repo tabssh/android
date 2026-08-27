@@ -11,7 +11,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/vps_host_edit_hint_hostname"
-        android:textSize="14sp"
+        android:textSize="@dimen/text_size_body"
         android:textStyle="bold"
         android:textColor="?android:attr/textColorPrimary"
         android:layout_marginBottom="@dimen/space_xs" />
@@ -21,7 +21,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/item_conflict_field_local_placeholder"
-        android:textSize="12sp"
+        android:textSize="@dimen/text_size_caption"
         android:textColor="?android:attr/textColorSecondary"
         android:layout_marginBottom="@dimen/space_2dp" />
 
@@ -30,12 +30,12 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/item_conflict_field_remote_placeholder"
-        android:textSize="12sp"
+        android:textSize="@dimen/text_size_caption"
         android:textColor="?android:attr/textColorSecondary" />
 
     <View
         android:layout_width="match_parent"
-        android:layout_height="1dp"
+        android:layout_height="@dimen/divider_height"
         android:background="?android:attr/dividerVertical"
         android:layout_marginTop="@dimen/space_sm" />
 

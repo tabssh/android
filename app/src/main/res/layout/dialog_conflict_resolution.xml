@@ -17,7 +17,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/conflict_dialog_default_title"
-            android:textSize="20sp"
+            android:textSize="@dimen/text_size_headline"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary"
             android:layout_marginBottom="@dimen/space_sm" />
@@ -26,7 +26,7 @@
             android:id="@+id/conflict_entity_type"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="16sp"
+            android:textSize="@dimen/text_size_subtitle"
             android:textColor="?android:attr/textColorSecondary"
             android:layout_marginBottom="@dimen/space_md" />
 
@@ -34,7 +34,7 @@
             android:id="@+id/field_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_size_body"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary"
             android:layout_marginBottom="@dimen/space_sm" />
@@ -43,7 +43,7 @@
             android:id="@+id/local_value"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:textColor="?android:attr/textColorSecondary"
             android:layout_marginBottom="@dimen/space_xs" />
 
@@ -51,7 +51,7 @@
             android:id="@+id/remote_value"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:textColor="?android:attr/textColorSecondary"
             android:layout_marginBottom="@dimen/space_md" />
 
@@ -59,7 +59,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/conflict_choose_resolution"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_size_body"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary"
             android:layout_marginBottom="@dimen/space_sm" />
@@ -81,28 +81,28 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/conflict_option_keep_local"
-                android:textSize="14sp" />
+                android:textSize="@dimen/text_size_body" />
 
             <RadioButton
                 android:id="@+id/radio_keep_remote"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/conflict_option_keep_remote"
-                android:textSize="14sp" />
+                android:textSize="@dimen/text_size_body" />
 
             <RadioButton
                 android:id="@+id/radio_keep_both"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/conflict_option_keep_both"
-                android:textSize="14sp" />
+                android:textSize="@dimen/text_size_body" />
 
             <RadioButton
                 android:id="@+id/radio_skip"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/conflict_option_skip"
-                android:textSize="14sp" />
+                android:textSize="@dimen/text_size_body" />
 
         </RadioGroup>
 

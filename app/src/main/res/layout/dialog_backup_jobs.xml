@@ -12,7 +12,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/backup_jobs_dialog_title"
-        android:textSize="20sp"
+        android:textSize="@dimen/text_size_headline"
         android:textStyle="bold"
         android:paddingBottom="@dimen/space_md" />
 

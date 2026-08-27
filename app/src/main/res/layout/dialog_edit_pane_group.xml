@@ -29,14 +29,14 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="@dimen/space_xs"
             android:text="@string/pane_group_window_count_label"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_size_body"
             android:textStyle="bold"
             android:textColor="?attr/colorOnSurface" />
 
         <Spinner
             android:id="@+id/spinner_pane_group_window_count"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="@dimen/min_touch_target"
             android:background="@drawable/spinner_background" />
 
     </LinearLayout>

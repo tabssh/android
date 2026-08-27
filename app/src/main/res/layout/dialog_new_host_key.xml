@@ -19,14 +19,14 @@
             android:background="@color/status_success_container"
             android:padding="@dimen/space_md"
             android:layout_marginBottom="@dimen/space_20dp"
-            android:elevation="2dp">
+            android:elevation="@dimen/elevation_low">
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/dialog_new_host_key_header_title"
                 android:textStyle="bold"
-                android:textSize="20sp"
+                android:textSize="@dimen/text_size_headline"
                 android:textColor="@color/status_success"
                 android:gravity="center"
                 android:paddingBottom="@dimen/space_sm" />
@@ -35,7 +35,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/dialog_new_host_key_header_subtitle"
-                android:textSize="13sp"
+                android:textSize="@dimen/text_size_small_body"
                 android:textColor="@color/status_success"
                 android:gravity="center"
                 android:alpha="0.9" />
@@ -60,14 +60,14 @@
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_new_host_key_server_label"
                     android:textStyle="bold"
-                    android:textSize="14sp"
+                    android:textSize="@dimen/text_size_body"
                     android:paddingBottom="@dimen/space_xs" />
 
                 <TextView
                     android:id="@+id/text_hostname"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textSize="16sp"
+                    android:textSize="@dimen/text_size_subtitle"
                     android:fontFamily="monospace"
                     android:textStyle="bold"
                     android:textColor="?attr/colorPrimary"
@@ -95,7 +95,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_new_host_key_public_key_title"
                     android:textStyle="bold"
-                    android:textSize="14sp"
+                    android:textSize="@dimen/text_size_body"
                     android:textColor="@color/status_info"
                     android:paddingBottom="@dimen/space_sm" />
 
@@ -103,7 +103,7 @@
                     android:id="@+id/text_key_type"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textSize="13sp"
+                    android:textSize="@dimen/text_size_small_body"
                     android:paddingBottom="@dimen/space_sm"
                     android:textColor="@color/status_info"
                     tools:text="Key Type: ssh-ed25519" />
@@ -112,7 +112,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_new_host_key_fingerprint_label"
-                    android:textSize="12sp"
+                    android:textSize="@dimen/text_size_caption"
                     android:textColor="@color/status_info"
                     android:paddingBottom="@dimen/space_xs" />
 
@@ -149,7 +149,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_new_host_key_verification_title"
                     android:textStyle="bold"
-                    android:textSize="15sp"
+                    android:textSize="@dimen/text_size_15sp"
                     android:textColor="?attr/colorPrimary"
                     android:paddingBottom="@dimen/space_12dp" />
 
@@ -157,15 +157,15 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_new_host_key_verification_body"
-                    android:textSize="13sp"
-                    android:lineSpacingExtra="4dp" />
+                    android:textSize="@dimen/text_size_small_body"
+                    android:lineSpacingExtra="@dimen/space_xs" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/space_12dp"
                     android:text="@string/dialog_new_host_key_trust_hint"
-                    android:textSize="12sp"
+                    android:textSize="@dimen/text_size_caption"
                     android:textColor="?android:attr/textColorSecondary" />
 
             </LinearLayout>

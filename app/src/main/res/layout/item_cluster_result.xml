@@ -4,8 +4,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="@dimen/space_sm"
-    app:cardElevation="2dp"
-    app:cardCornerRadius="8dp">
+    app:cardElevation="@dimen/elevation_low"
+    app:cardCornerRadius="@dimen/card_corner_radius_small">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -24,7 +24,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:textSize="16sp"
+                android:textSize="@dimen/text_size_subtitle"
                 android:textStyle="bold"
                 android:text="@string/item_cluster_result_placeholder_name" />
 
@@ -32,7 +32,7 @@
                 android:id="@+id/result_status"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="14sp"
+                android:textSize="@dimen/text_size_body"
                 android:textStyle="bold"
                 android:text="@string/cluster_status_success" />
 
@@ -40,7 +40,7 @@
                 android:id="@+id/result_time"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="12sp"
+                android:textSize="@dimen/text_size_caption"
                 android:textColor="?android:attr/textColorSecondary"
                 android:paddingStart="@dimen/space_sm"
                 android:paddingEnd="@dimen/space_none"
@@ -74,7 +74,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_sm"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:fontFamily="monospace"
             android:background="?attr/colorSurface"
             android:padding="@dimen/space_sm"

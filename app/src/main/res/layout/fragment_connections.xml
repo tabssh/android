@@ -17,7 +17,7 @@
             android:id="@+id/toolbar_hosts"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            android:elevation="4dp"
+            android:elevation="@dimen/card_elevation"
             style="@style/Widget.TabSSH.Toolbar.Section" />
 
         <!-- Unified search — queries SSH + VNC + Telnet hosts and active
@@ -26,13 +26,13 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_margin="@dimen/space_md"
-            app:cardElevation="2dp"
-            app:cardCornerRadius="8dp">
+            app:cardElevation="@dimen/elevation_low"
+            app:cardCornerRadius="@dimen/card_corner_radius_small">
 
             <androidx.appcompat.widget.SearchView
                 android:id="@+id/search_view_hosts"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="@dimen/icon_size_xlarge"
                 app:queryHint="@string/fragment_connections_search_hint"
                 app:iconifiedByDefault="false"
                 android:background="?attr/colorSurface" />
@@ -91,7 +91,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/hosts_search_no_results"
-                        android:textSize="16sp"
+                        android:textSize="@dimen/text_size_subtitle"
                         android:gravity="center"
                         android:textColor="?attr/colorOnSurfaceVariant" />
 

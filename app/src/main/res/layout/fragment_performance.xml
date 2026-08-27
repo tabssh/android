@@ -22,8 +22,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_md"
-                app:cardElevation="2dp"
-                app:cardCornerRadius="8dp">
+                app:cardElevation="@dimen/elevation_low"
+                app:cardCornerRadius="@dimen/card_corner_radius_small">
 
                 <!-- Polish #43: was a horizontal row with 50/50 weight which
                      truncated the spinner label to "Select connec..". Stack
@@ -38,7 +38,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/perf_monitor_title"
-                        android:textSize="18sp"
+                        android:textSize="@dimen/text_size_title"
                         android:textStyle="bold"
                         android:textColor="?attr/colorOnSurface"
                         android:layout_marginBottom="@dimen/space_sm" />
@@ -60,8 +60,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_md"
                 android:visibility="gone"
-                app:cardElevation="2dp"
-                app:cardCornerRadius="8dp">
+                app:cardElevation="@dimen/elevation_low"
+                app:cardCornerRadius="@dimen/card_corner_radius_small">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -89,7 +89,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             tools:text="Ubuntu 22.04"
-                            android:textSize="16sp"
+                            android:textSize="@dimen/text_size_subtitle"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
 
@@ -98,7 +98,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             tools:text="Linux 5.15.0 (x86_64)"
-                            android:textSize="12sp"
+                            android:textSize="@dimen/text_size_caption"
                             android:textColor="?attr/colorOnSurfaceVariant" />
 
                     </LinearLayout>
@@ -114,7 +114,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             tools:text="server01"
-                            android:textSize="14sp"
+                            android:textSize="@dimen/text_size_body"
                             android:textColor="?attr/colorPrimary" />
 
                         <TextView
@@ -122,7 +122,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             tools:text="up 12d 3h"
-                            android:textSize="12sp"
+                            android:textSize="@dimen/text_size_caption"
                             android:textColor="?attr/colorOnSurfaceVariant" />
 
                     </LinearLayout>
@@ -136,8 +136,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="180dp"
                 android:layout_marginBottom="@dimen/space_md"
-                app:cardElevation="2dp"
-                app:cardCornerRadius="8dp">
+                app:cardElevation="@dimen/elevation_low"
+                app:cardCornerRadius="@dimen/card_corner_radius_small">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -149,7 +149,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/perf_cpu_usage_title"
-                        android:textSize="16sp"
+                        android:textSize="@dimen/text_size_subtitle"
                         android:textStyle="bold"
                         android:textColor="?attr/colorOnSurface" />
 
@@ -176,8 +176,8 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:layout_marginEnd="@dimen/space_sm"
-                    app:cardElevation="2dp"
-                    app:cardCornerRadius="8dp">
+                    app:cardElevation="@dimen/elevation_low"
+                    app:cardCornerRadius="@dimen/card_corner_radius_small">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -190,7 +190,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/host_detail_label_memory"
-                            android:textSize="14sp"
+                            android:textSize="@dimen/text_size_body"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
 
@@ -199,7 +199,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             tools:text="0%"
-                            android:textSize="32sp"
+                            android:textSize="@dimen/terminal_text_size_max"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface"
                             android:layout_marginVertical="@dimen/space_sm" />
@@ -209,7 +209,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             tools:text="0 MB / 0 MB"
-                            android:textSize="12sp"
+                            android:textSize="@dimen/text_size_caption"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:gravity="center"
                             android:maxLines="1"
@@ -225,8 +225,8 @@
                     android:layout_height="match_parent"
                     android:layout_weight="1"
                     android:layout_marginStart="@dimen/space_sm"
-                    app:cardElevation="2dp"
-                    app:cardCornerRadius="8dp">
+                    app:cardElevation="@dimen/elevation_low"
+                    app:cardCornerRadius="@dimen/card_corner_radius_small">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -239,7 +239,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/host_detail_label_disk"
-                            android:textSize="14sp"
+                            android:textSize="@dimen/text_size_body"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
 
@@ -248,7 +248,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             tools:text="0%"
-                            android:textSize="32sp"
+                            android:textSize="@dimen/terminal_text_size_max"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface"
                             android:layout_marginVertical="@dimen/space_sm" />
@@ -258,7 +258,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             tools:text="0 GB / 0 GB"
-                            android:textSize="12sp"
+                            android:textSize="@dimen/text_size_caption"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:gravity="center"
                             android:maxLines="1"
@@ -283,8 +283,8 @@
                     android:layout_height="match_parent"
                     android:layout_weight="1"
                     android:layout_marginEnd="@dimen/space_sm"
-                    app:cardElevation="2dp"
-                    app:cardCornerRadius="8dp">
+                    app:cardElevation="@dimen/elevation_low"
+                    app:cardCornerRadius="@dimen/card_corner_radius_small">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -297,7 +297,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/perf_network_title"
-                            android:textSize="14sp"
+                            android:textSize="@dimen/text_size_body"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
 
@@ -306,7 +306,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             tools:text="↓ 0 KB/s"
-                            android:textSize="16sp"
+                            android:textSize="@dimen/text_size_subtitle"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface"
                             android:layout_marginTop="@dimen/space_sm" />
@@ -316,7 +316,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             tools:text="↑ 0 KB/s"
-                            android:textSize="16sp"
+                            android:textSize="@dimen/text_size_subtitle"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface"
                             android:layout_marginTop="@dimen/space_xs" />
@@ -326,7 +326,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             tools:text="Total: 0 MB"
-                            android:textSize="12sp"
+                            android:textSize="@dimen/text_size_caption"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:layout_marginTop="@dimen/space_xs"
                             android:gravity="center"
@@ -343,8 +343,8 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:layout_marginStart="@dimen/space_sm"
-                    app:cardElevation="2dp"
-                    app:cardCornerRadius="8dp">
+                    app:cardElevation="@dimen/elevation_low"
+                    app:cardCornerRadius="@dimen/card_corner_radius_small">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -357,7 +357,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/perf_load_average_title"
-                            android:textSize="14sp"
+                            android:textSize="@dimen/text_size_body"
                             android:textStyle="bold"
                             android:textColor="?attr/colorOnSurface" />
 
@@ -366,7 +366,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             tools:text="1m: 0.00"
-                            android:textSize="14sp"
+                            android:textSize="@dimen/text_size_body"
                             android:textColor="?attr/colorOnSurface"
                             android:layout_marginTop="@dimen/space_sm" />
 
@@ -375,7 +375,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             tools:text="5m: 0.00"
-                            android:textSize="14sp"
+                            android:textSize="@dimen/text_size_body"
                             android:textColor="?attr/colorOnSurface"
                             android:layout_marginTop="@dimen/space_xs" />
 
@@ -384,7 +384,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             tools:text="15m: 0.00"
-                            android:textSize="14sp"
+                            android:textSize="@dimen/text_size_body"
                             android:textColor="?attr/colorOnSurface"
                             android:layout_marginTop="@dimen/space_xs" />
 
@@ -393,7 +393,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             tools:text="0/0 processes"
-                            android:textSize="12sp"
+                            android:textSize="@dimen/text_size_caption"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:layout_marginTop="@dimen/space_xs"
                             android:gravity="center"
@@ -420,13 +420,13 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/fragment_frequent_connections_empty_emoji"
-                    android:textSize="64sp" />
+                    android:textSize="@dimen/text_size_64sp" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/perf_empty_state_message"
-                    android:textSize="16sp"
+                    android:textSize="@dimen/text_size_subtitle"
                     android:textColor="?attr/colorOnSurfaceVariant"
                     android:layout_marginTop="@dimen/space_md" />
 

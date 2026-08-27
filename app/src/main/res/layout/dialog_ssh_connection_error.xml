@@ -18,8 +18,8 @@
 
             <!-- Error Icon -->
             <ImageView
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="@dimen/icon_size_xlarge"
+                android:layout_height="@dimen/icon_size_xlarge"
                 android:layout_gravity="center_horizontal"
                 android:layout_marginBottom="@dimen/space_md"
                 android:src="@drawable/ic_error"
@@ -31,8 +31,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_md"
-                app:cardElevation="2dp"
-                app:cardCornerRadius="8dp">
+                app:cardElevation="@dimen/elevation_low"
+                app:cardCornerRadius="@dimen/card_corner_radius_small">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -45,7 +45,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/dialog_ssh_error_connection_details_title"
                         android:textStyle="bold"
-                        android:textSize="14sp"
+                        android:textSize="@dimen/text_size_body"
                         android:textColor="?android:textColorPrimary"
                         android:layout_marginBottom="@dimen/space_sm" />
 
@@ -54,7 +54,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/dialog_ssh_error_connection_loading"
-                        android:textSize="12sp"
+                        android:textSize="@dimen/text_size_caption"
                         android:textColor="?android:textColorSecondary"
                         android:layout_marginBottom="@dimen/space_xs" />
 
@@ -63,7 +63,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/dialog_ssh_error_host_loading"
-                        android:textSize="12sp"
+                        android:textSize="@dimen/text_size_caption"
                         android:textColor="?android:textColorSecondary"
                         android:layout_marginBottom="@dimen/space_xs" />
 
@@ -72,7 +72,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/dialog_ssh_error_username_loading"
-                        android:textSize="12sp"
+                        android:textSize="@dimen/text_size_caption"
                         android:textColor="?android:textColorSecondary"
                         android:layout_marginBottom="@dimen/space_xs" />
 
@@ -81,7 +81,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/dialog_ssh_error_auth_loading"
-                        android:textSize="12sp"
+                        android:textSize="@dimen/text_size_caption"
                         android:textColor="?android:textColorSecondary" />
 
                 </LinearLayout>
@@ -94,7 +94,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/dialog_ssh_error_message_title"
                 android:textStyle="bold"
-                android:textSize="14sp"
+                android:textSize="@dimen/text_size_body"
                 android:textColor="?android:textColorPrimary"
                 android:layout_marginBottom="@dimen/space_sm" />
 
@@ -103,7 +103,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/dialog_ssh_error_message_loading"
-                android:textSize="13sp"
+                android:textSize="@dimen/text_size_small_body"
                 android:textColor="?colorError"
                 android:textIsSelectable="true"
                 android:padding="@dimen/space_12dp"
@@ -117,7 +117,7 @@
                 android:layout_height="wrap_content"
                 android:minHeight="@dimen/button_height"
                 android:text="@string/dialog_ssh_error_show_technical"
-                android:textSize="13sp"
+                android:textSize="@dimen/text_size_small_body"
                 style="?attr/borderlessButtonStyle"
                 app:icon="@drawable/ic_expand_more"
                 app:iconGravity="textEnd"
@@ -143,7 +143,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/dialog_ssh_error_solutions_title"
                 android:textStyle="bold"
-                android:textSize="14sp"
+                android:textSize="@dimen/text_size_body"
                 android:textColor="?android:textColorPrimary"
                 android:layout_marginBottom="@dimen/space_sm" />
 
@@ -152,7 +152,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/dialog_ssh_error_solutions_loading"
-                android:textSize="12sp"
+                android:textSize="@dimen/text_size_caption"
                 android:textColor="?android:textColorSecondary"
                 android:textIsSelectable="true"
                 android:layout_marginBottom="@dimen/space_md" />

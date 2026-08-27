@@ -231,8 +231,8 @@
 
                         <View
                             android:id="@+id/preview_color_tag"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
+                            android:layout_width="@dimen/icon_size_medium"
+                            android:layout_height="@dimen/icon_size_medium"
                             android:layout_marginEnd="@dimen/space_sm"
                             android:background="?attr/colorOutline"
                             android:contentDescription="@string/connection_edit_color_tag_content_description" />
@@ -1044,8 +1044,8 @@
                     android:layout_weight="1"
                     android:layout_marginEnd="@dimen/space_sm"
                     android:minWidth="0dp"
-                    android:insetLeft="0dp"
-                    android:insetRight="0dp"
+                    android:insetLeft="@dimen/space_none"
+                    android:insetRight="@dimen/space_none"
                     android:singleLine="true"
                     android:ellipsize="end"
                     android:text="@string/cancel" />
@@ -1058,8 +1058,8 @@
                     android:layout_weight="1"
                     android:layout_marginEnd="@dimen/space_sm"
                     android:minWidth="0dp"
-                    android:insetLeft="0dp"
-                    android:insetRight="0dp"
+                    android:insetLeft="@dimen/space_none"
+                    android:insetRight="@dimen/space_none"
                     android:singleLine="true"
                     android:ellipsize="end"
                     android:text="@string/test_button" />
@@ -1071,8 +1071,8 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:minWidth="0dp"
-                    android:insetLeft="0dp"
-                    android:insetRight="0dp"
+                    android:insetLeft="@dimen/space_none"
+                    android:insetRight="@dimen/space_none"
                     android:singleLine="true"
                     android:ellipsize="end"
                     android:text="@string/save" />

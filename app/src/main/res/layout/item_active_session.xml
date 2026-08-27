@@ -8,8 +8,8 @@
     android:layout_marginEnd="@dimen/space_sm"
     android:clickable="true"
     android:focusable="true"
-    app:cardCornerRadius="8dp"
-    app:cardElevation="2dp">
+    app:cardCornerRadius="@dimen/card_corner_radius_small"
+    app:cardElevation="@dimen/elevation_low">
 
     <LinearLayout
         android:layout_width="wrap_content"
@@ -23,8 +23,8 @@
 
         <View
             android:id="@+id/state_dot"
-            android:layout_width="8dp"
-            android:layout_height="8dp"
+            android:layout_width="@dimen/space_sm"
+            android:layout_height="@dimen/space_sm"
             android:layout_marginEnd="@dimen/space_xs"
             android:background="@drawable/state_dot_connected" />
 
@@ -33,10 +33,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:maxWidth="120dp"
-            android:minWidth="48dp"
+            android:minWidth="@dimen/min_touch_target"
             android:singleLine="true"
             android:ellipsize="end"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:textColor="?attr/colorOnSurface"
             tools:text="server20" />
 

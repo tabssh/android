@@ -18,6 +18,7 @@
     <dimen name="space_60dp">60dp</dimen>
     <dimen name="space_80dp">80dp</dimen>
     <dimen name="space_88dp">88dp</dimen>
+    <dimen name="space_300dp">300dp</dimen>
     
     <!-- Text sizes -->
     <dimen name="text_size_overline">11sp</dimen>
@@ -28,6 +29,8 @@
     <dimen name="text_size_title">18sp</dimen>
     <dimen name="text_size_headline">20sp</dimen>
     <dimen name="text_size_display">24sp</dimen>
+    <dimen name="text_size_15sp">15sp</dimen>
+    <dimen name="text_size_64sp">64sp</dimen>
     
     <!-- Terminal typography -->
     <dimen name="terminal_text_size_default">14sp</dimen>

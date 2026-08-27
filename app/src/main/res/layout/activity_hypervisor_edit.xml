@@ -59,13 +59,13 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md"
                 android:text="@string/hypervisor_edit_type_label"
-                android:textSize="12sp"
+                android:textSize="@dimen/text_size_caption"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
             <Spinner
                 android:id="@+id/spinner_type"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="@dimen/min_touch_target"
                 android:layout_marginTop="@dimen/space_xs"
                 android:background="@drawable/spinner_background"
                 android:paddingHorizontal="@dimen/space_md" />
@@ -240,7 +240,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/hypervisor_edit_pinned_cert_label"
-                    android:textSize="12sp"
+                    android:textSize="@dimen/text_size_caption"
                     android:textColor="?attr/colorOnSurfaceVariant" />
 
                 <LinearLayout
@@ -256,7 +256,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="@string/hypervisor_edit_pin_not_pinned_yet"
-                        android:textSize="13sp"
+                        android:textSize="@dimen/text_size_small_body"
                         android:fontFamily="monospace"
                         android:textColor="?attr/colorOnSurface"
                         android:singleLine="true"
@@ -267,7 +267,7 @@
                         style="@style/Widget.Material3.Button.TextButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:minHeight="36dp"
+                        android:minHeight="@dimen/tab_height"
                         android:text="@string/hypervisor_edit_forget_pin"
                         android:visibility="gone" />
 
@@ -299,7 +299,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_xs"
                 android:text="@string/hypervisor_edit_api_type_auto_detect_hint"
-                android:textSize="12sp"
+                android:textSize="@dimen/text_size_caption"
                 android:textColor="?android:textColorSecondary"
                 android:visibility="gone" />
 
@@ -359,7 +359,7 @@
         android:orientation="horizontal"
         android:padding="@dimen/space_md"
         android:background="?attr/colorSurface"
-        android:elevation="4dp">
+        android:elevation="@dimen/card_elevation">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/button_cancel"

@@ -30,7 +30,7 @@
             android:id="@+id/text_header_emoji"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="24sp"
+            android:textSize="@dimen/text_size_display"
             android:layout_marginEnd="@dimen/space_sm"
             tools:text="🔧" />
 
@@ -39,7 +39,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textSize="20sp"
+            android:textSize="@dimen/text_size_headline"
             android:textStyle="bold"
             android:textColor="?attr/colorOnSurface"
             tools:text="Section Title" />
@@ -50,7 +50,7 @@
         android:id="@+id/text_header_subtitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="14sp"
+        android:textSize="@dimen/text_size_body"
         android:textColor="?attr/colorOnSurfaceVariant"
         android:paddingBottom="@dimen/space_md"
         tools:text="Section subtitle explaining this screen." />

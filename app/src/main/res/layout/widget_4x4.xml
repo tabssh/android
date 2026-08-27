@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/widget_header_tabssh"
-        android:textSize="18sp"
+        android:textSize="@dimen/text_size_title"
         android:textStyle="bold"
         android:textColor="?attr/colorOnSurface"
         android:gravity="center"
@@ -22,7 +22,7 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:text="@string/widget_tap_to_open_app"
-        android:textSize="14sp"
+        android:textSize="@dimen/text_size_body"
         android:textColor="?attr/colorOnSurfaceVariant"
         android:gravity="center"
         android:background="?attr/selectableItemBackground" />

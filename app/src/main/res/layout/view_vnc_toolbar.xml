@@ -46,8 +46,8 @@
             android:layout_marginEnd="@dimen/space_2dp" />
 
         <View
-            android:layout_width="1dp"
-            android:layout_height="24dp"
+            android:layout_width="@dimen/divider_height"
+            android:layout_height="@dimen/icon_size_medium"
             android:background="@color/vnc_toolbar_divider"
             android:layout_marginStart="@dimen/space_2dp"
             android:layout_marginEnd="@dimen/space_xs" />
@@ -59,7 +59,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/vnc_toolbar_key_ctrl"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:minWidth="0dp"
             android:minHeight="0dp"
             android:paddingStart="@dimen/space_10dp"
@@ -76,7 +76,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/vnc_toolbar_key_alt"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:minWidth="0dp"
             android:minHeight="0dp"
             android:paddingStart="@dimen/space_10dp"
@@ -93,7 +93,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/vnc_toolbar_key_win"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:minWidth="0dp"
             android:minHeight="0dp"
             android:paddingStart="@dimen/space_10dp"
@@ -104,8 +104,8 @@
             android:layout_marginEnd="@dimen/space_2dp" />
 
         <View
-            android:layout_width="1dp"
-            android:layout_height="24dp"
+            android:layout_width="@dimen/divider_height"
+            android:layout_height="@dimen/icon_size_medium"
             android:background="@color/vnc_toolbar_divider"
             android:layout_marginStart="@dimen/space_2dp"
             android:layout_marginEnd="@dimen/space_xs" />
@@ -117,7 +117,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/vnc_toolbar_key_esc"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:minWidth="0dp"
             android:minHeight="0dp"
             android:paddingStart="@dimen/space_10dp"
@@ -133,7 +133,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/vnc_toolbar_key_tab"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:minWidth="0dp"
             android:minHeight="0dp"
             android:paddingStart="@dimen/space_10dp"
@@ -149,7 +149,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/vnc_toolbar_fkeys_button"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:minWidth="0dp"
             android:minHeight="0dp"
             android:paddingStart="@dimen/space_10dp"
@@ -196,8 +196,8 @@
             android:layout_marginEnd="@dimen/space_2dp" />
 
         <View
-            android:layout_width="1dp"
-            android:layout_height="24dp"
+            android:layout_width="@dimen/divider_height"
+            android:layout_height="@dimen/icon_size_medium"
             android:background="@color/vnc_toolbar_divider"
             android:layout_marginStart="@dimen/space_2dp"
             android:layout_marginEnd="@dimen/space_xs" />
@@ -209,7 +209,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/common_icon_overflow_menu"
-            android:textSize="16sp"
+            android:textSize="@dimen/text_size_subtitle"
             android:minWidth="0dp"
             android:minHeight="0dp"
             android:paddingStart="@dimen/space_10dp"

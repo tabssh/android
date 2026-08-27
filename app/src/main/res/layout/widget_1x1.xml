@@ -12,7 +12,7 @@
         android:layout_height="match_parent"
         android:gravity="center"
         android:text="@string/common_icon_phone"
-        android:textSize="32sp"
+        android:textSize="@dimen/terminal_text_size_max"
         android:textColor="?attr/colorOnSurface" />
 
 </FrameLayout>

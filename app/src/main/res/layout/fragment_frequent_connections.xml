@@ -23,7 +23,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/fragment_frequent_connections_header_emoji"
-                android:textSize="24sp"
+                android:textSize="@dimen/text_size_display"
                 android:layout_marginEnd="@dimen/space_sm" />
 
             <TextView
@@ -31,7 +31,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/frequent_connections_title"
-                android:textSize="20sp"
+                android:textSize="@dimen/text_size_headline"
                 android:textStyle="bold"
                 android:textColor="?attr/colorOnSurface" />
 
@@ -41,7 +41,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/frequent_connections_subtitle"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_size_body"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:paddingBottom="@dimen/space_md" />
 
@@ -67,14 +67,14 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/fragment_frequent_connections_empty_emoji"
-                android:textSize="64sp"
+                android:textSize="@dimen/text_size_64sp"
                 android:paddingBottom="@dimen/space_md" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/frequent_connections_empty_title"
-                android:textSize="18sp"
+                android:textSize="@dimen/text_size_title"
                 android:textStyle="bold"
                 android:gravity="center"
                 android:textColor="?attr/colorOnSurface"
@@ -84,7 +84,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/frequent_connections_empty_message"
-                android:textSize="14sp"
+                android:textSize="@dimen/text_size_body"
                 android:gravity="center"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 

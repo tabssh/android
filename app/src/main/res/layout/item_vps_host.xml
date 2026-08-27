@@ -19,7 +19,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:typeface="monospace"
-            android:textSize="16sp"
+            android:textSize="@dimen/text_size_subtitle"
             android:textStyle="bold"
             android:textColor="?attr/colorOnSurface" />
 
@@ -38,7 +38,7 @@
                 android:singleLine="true"
                 android:ellipsize="none"
                 android:typeface="monospace"
-                android:textSize="13sp"
+                android:textSize="@dimen/text_size_small_body"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
         </HorizontalScrollView>
@@ -47,7 +47,7 @@
 
     <View
         android:layout_width="match_parent"
-        android:layout_height="1dp"
+        android:layout_height="@dimen/divider_height"
         android:background="?attr/colorOutlineVariant" />
 
 </LinearLayout>

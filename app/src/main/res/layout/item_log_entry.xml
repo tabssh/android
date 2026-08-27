@@ -5,8 +5,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_margin="@dimen/space_xs"
-    app:cardElevation="2dp"
-    app:cardCornerRadius="8dp">
+    app:cardElevation="@dimen/elevation_low"
+    app:cardCornerRadius="@dimen/card_corner_radius_small">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -47,7 +47,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/log_viewer_item_tag_placeholder"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary"
             android:layout_marginTop="@dimen/space_xs"
@@ -58,7 +58,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/log_viewer_item_message_placeholder"
-            android:textSize="13sp"
+            android:textSize="@dimen/text_size_small_body"
             android:textColor="?android:attr/textColorPrimary"
             android:layout_marginTop="@dimen/space_xs"
             android:fontFamily="monospace" />

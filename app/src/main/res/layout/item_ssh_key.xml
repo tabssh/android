@@ -4,8 +4,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_margin="@dimen/space_sm"
-    app:cardElevation="2dp"
-    app:cardCornerRadius="8dp">
+    app:cardElevation="@dimen/elevation_low"
+    app:cardCornerRadius="@dimen/card_corner_radius_small">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -18,7 +18,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/identity_key_name_title"
-            android:textSize="16sp"
+            android:textSize="@dimen/text_size_subtitle"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary" />
 
@@ -33,7 +33,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/item_ssh_key_type_placeholder"
-                android:textSize="12sp"
+                android:textSize="@dimen/text_size_caption"
                 android:textColor="?android:attr/textColorSecondary"
                 android:background="?attr/colorPrimaryContainer"
                 android:paddingStart="@dimen/space_sm"
@@ -48,7 +48,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/item_ssh_key_fingerprint_placeholder"
-                android:textSize="12sp"
+                android:textSize="@dimen/text_size_caption"
                 android:fontFamily="monospace"
                 android:textColor="?android:attr/textColorTertiary"
                 android:maxLines="1"

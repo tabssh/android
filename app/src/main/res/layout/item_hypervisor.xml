@@ -8,8 +8,8 @@
     android:layout_marginBottom="@dimen/space_sm"
     android:clickable="true"
     android:focusable="true"
-    app:cardCornerRadius="12dp"
-    app:cardElevation="2dp">
+    app:cardCornerRadius="@dimen/card_corner_radius"
+    app:cardElevation="@dimen/elevation_low">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -20,10 +20,10 @@
         <!-- Type Icon -->
         <TextView
             android:id="@+id/text_type_icon"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="@dimen/icon_size_xlarge"
+            android:layout_height="@dimen/icon_size_xlarge"
             android:gravity="center"
-            android:textSize="32sp"
+            android:textSize="@dimen/terminal_text_size_max"
             android:text="@string/common_icon_cloud" />
 
         <!-- Info Column -->
@@ -40,7 +40,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/item_hypervisor_placeholder_name"
-                android:textSize="16sp"
+                android:textSize="@dimen/text_size_subtitle"
                 android:textStyle="bold"
                 android:textColor="?attr/colorOnSurface"
                 android:maxLines="1"
@@ -67,7 +67,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_xs"
                 android:text="@string/item_hypervisor_placeholder_host"
-                android:textSize="13sp"
+                android:textSize="@dimen/text_size_small_body"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:maxLines="1"
                 android:ellipsize="end" />
@@ -79,7 +79,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_2dp"
                 android:text="@string/item_hypervisor_placeholder_last_used"
-                android:textSize="12sp"
+                android:textSize="@dimen/text_size_caption"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:maxLines="1"
                 android:ellipsize="end" />
@@ -89,8 +89,8 @@
         <!-- Status Indicator -->
         <View
             android:id="@+id/view_status"
-            android:layout_width="8dp"
-            android:layout_height="8dp"
+            android:layout_width="@dimen/space_sm"
+            android:layout_height="@dimen/space_sm"
             android:layout_gravity="center_vertical"
             android:layout_marginStart="@dimen/space_sm"
             android:background="@drawable/status_indicator"

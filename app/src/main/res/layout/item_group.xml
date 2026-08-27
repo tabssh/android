@@ -5,8 +5,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_margin="@dimen/space_sm"
-    app:cardElevation="2dp"
-    app:cardCornerRadius="8dp">
+    app:cardElevation="@dimen/elevation_low"
+    app:cardCornerRadius="@dimen/card_corner_radius_small">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -18,8 +18,8 @@
         <!-- Color indicator -->
         <View
             android:id="@+id/view_color_indicator"
-            android:layout_width="4dp"
-            android:layout_height="48dp"
+            android:layout_width="@dimen/scrollbar_width"
+            android:layout_height="@dimen/min_touch_target"
             android:layout_marginEnd="@dimen/space_md"
             android:background="?attr/colorPrimary" />
 
@@ -52,8 +52,8 @@
         <!-- Drag handle -->
         <ImageView
             android:id="@+id/icon_drag_handle"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="@dimen/icon_size_medium"
+            android:layout_height="@dimen/icon_size_medium"
             android:layout_marginStart="@dimen/space_sm"
             android:src="@android:drawable/ic_menu_sort_by_size"
             android:contentDescription="@string/item_group_drag_content_description"

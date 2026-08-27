@@ -20,7 +20,7 @@
 
     <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="200dp"
+        android:layout_height="@dimen/keyboard_height_default"
         android:layout_marginTop="@dimen/space_sm">
 
         <LinearLayout
@@ -35,7 +35,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/space_sm"
-        android:textSize="13sp"
+        android:textSize="@dimen/text_size_small_body"
         android:textColor="?attr/colorOnSurfaceVariant"
         android:visibility="gone" />
 </LinearLayout>

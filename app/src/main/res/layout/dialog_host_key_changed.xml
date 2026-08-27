@@ -19,14 +19,14 @@
             android:background="@color/status_warning_container"
             android:padding="@dimen/space_md"
             android:layout_marginBottom="@dimen/space_20dp"
-            android:elevation="2dp">
+            android:elevation="@dimen/elevation_low">
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/dialog_host_key_changed_header_title"
                 android:textStyle="bold"
-                android:textSize="20sp"
+                android:textSize="@dimen/text_size_headline"
                 android:textColor="@color/status_warning"
                 android:gravity="center"
                 android:paddingBottom="@dimen/space_sm" />
@@ -35,7 +35,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/dialog_host_key_changed_header_subtitle"
-                android:textSize="13sp"
+                android:textSize="@dimen/text_size_small_body"
                 android:textColor="@color/status_warning"
                 android:gravity="center"
                 android:alpha="0.9" />
@@ -60,15 +60,15 @@
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_host_key_changed_reasons_title"
                     android:textStyle="bold"
-                    android:textSize="14sp"
+                    android:textSize="@dimen/text_size_body"
                     android:paddingBottom="@dimen/space_sm" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_host_key_changed_reasons_body"
-                    android:textSize="13sp"
-                    android:lineSpacingExtra="4dp" />
+                    android:textSize="@dimen/text_size_small_body"
+                    android:lineSpacingExtra="@dimen/space_xs" />
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
@@ -91,14 +91,14 @@
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_host_key_changed_server_label"
                     android:textStyle="bold"
-                    android:textSize="14sp"
+                    android:textSize="@dimen/text_size_body"
                     android:paddingBottom="@dimen/space_xs" />
 
                 <TextView
                     android:id="@+id/text_hostname"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textSize="16sp"
+                    android:textSize="@dimen/text_size_subtitle"
                     android:fontFamily="monospace"
                     android:textStyle="bold"
                     android:textColor="?attr/colorPrimary"
@@ -126,7 +126,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_host_key_changed_previous_key_title"
                     android:textStyle="bold"
-                    android:textSize="14sp"
+                    android:textSize="@dimen/text_size_body"
                     android:textColor="@color/status_error"
                     android:paddingBottom="@dimen/space_sm" />
 
@@ -134,7 +134,7 @@
                     android:id="@+id/text_old_key_type"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textSize="13sp"
+                    android:textSize="@dimen/text_size_small_body"
                     android:paddingBottom="@dimen/space_6dp"
                     android:textColor="@color/status_error"
                     tools:text="🔑 ssh-ed25519" />
@@ -173,7 +173,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_host_key_changed_new_key_title"
                     android:textStyle="bold"
-                    android:textSize="14sp"
+                    android:textSize="@dimen/text_size_body"
                     android:textColor="@color/status_info"
                     android:paddingBottom="@dimen/space_sm" />
 
@@ -181,7 +181,7 @@
                     android:id="@+id/text_new_key_type"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textSize="13sp"
+                    android:textSize="@dimen/text_size_small_body"
                     android:paddingBottom="@dimen/space_6dp"
                     android:textColor="@color/status_info"
                     tools:text="🔑 ssh-ed25519" />
@@ -219,14 +219,14 @@
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_host_key_changed_timeline_title"
                     android:textStyle="bold"
-                    android:textSize="14sp"
+                    android:textSize="@dimen/text_size_body"
                     android:paddingBottom="@dimen/space_sm" />
 
                 <TextView
                     android:id="@+id/text_first_seen"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textSize="13sp"
+                    android:textSize="@dimen/text_size_small_body"
                     tools:text="First connected: 2025-01-15 10:30" />
 
             </LinearLayout>
@@ -250,7 +250,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_host_key_changed_guidance_title"
                     android:textStyle="bold"
-                    android:textSize="15sp"
+                    android:textSize="@dimen/text_size_15sp"
                     android:textColor="?attr/colorPrimary"
                     android:paddingBottom="@dimen/space_12dp" />
 
@@ -259,7 +259,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_host_key_changed_accept_new_title"
                     android:textStyle="bold"
-                    android:textSize="13sp"
+                    android:textSize="@dimen/text_size_small_body"
                     android:textColor="@color/status_success"
                     android:paddingBottom="@dimen/space_xs" />
 
@@ -267,7 +267,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_host_key_changed_accept_new_body"
-                    android:textSize="12sp"
+                    android:textSize="@dimen/text_size_caption"
                     android:paddingBottom="@dimen/space_12dp"
                     android:paddingStart="@dimen/space_xs"
                     android:paddingEnd="@dimen/space_xs" />
@@ -277,7 +277,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_host_key_changed_accept_once_title"
                     android:textStyle="bold"
-                    android:textSize="13sp"
+                    android:textSize="@dimen/text_size_small_body"
                     android:textColor="@color/status_warning"
                     android:paddingBottom="@dimen/space_xs" />
 
@@ -285,7 +285,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_host_key_changed_accept_once_body"
-                    android:textSize="12sp"
+                    android:textSize="@dimen/text_size_caption"
                     android:paddingBottom="@dimen/space_12dp"
                     android:paddingStart="@dimen/space_xs"
                     android:paddingEnd="@dimen/space_xs" />
@@ -295,7 +295,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_host_key_changed_reject_title"
                     android:textStyle="bold"
-                    android:textSize="13sp"
+                    android:textSize="@dimen/text_size_small_body"
                     android:textColor="@color/status_error"
                     android:paddingBottom="@dimen/space_xs" />
 
@@ -303,7 +303,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_host_key_changed_reject_body"
-                    android:textSize="12sp"
+                    android:textSize="@dimen/text_size_caption"
                     android:paddingStart="@dimen/space_xs"
                     android:paddingEnd="@dimen/space_xs" />
 

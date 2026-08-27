@@ -16,14 +16,14 @@
             android:id="@+id/vm_name"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="16sp"
+            android:textSize="@dimen/text_size_subtitle"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/vm_state"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_size_caption"
             android:layout_marginTop="@dimen/space_2dp" />
 
     </LinearLayout>
@@ -32,7 +32,7 @@
         android:id="@+id/vm_id"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textSize="12sp"
+        android:textSize="@dimen/text_size_caption"
         android:textColor="?attr/colorOnSurfaceVariant" />
 
 </LinearLayout>

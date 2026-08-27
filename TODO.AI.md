@@ -9,22 +9,6 @@ is in progress.
 Found while researching the SSH error classifier fix (see chat/PR for that
 work).
 
-40. **711 raw dp and 389 raw sp literals across 80% of layouts** —
-    `values/dimens.xml` exists with 86 tokens (and `values-land`,
-    `values-sw600dp`, `values-sw720dp` overrides), but 129 of 161 layouts
-    still mix raw literals with token refs, so the responsive overrides only
-    partially apply. Worst: `activity_sync_settings.xml` (51),
-    `bottom_sheet_terminal_menu.xml` (37), `activity_sftp.xml` (32),
-    `activity_import_export.xml` (30), `item_dashboard_host_card.xml` (24).
-    AI.md PART 7 § Layout rules requires dimension resources. Fix: sweep
-    into `dimens.xml`, starting with the touch-target and icon sizes
-    (`min_touch_target`, `icon_size_medium` already exist). Related smaller
-    bug: `activity_tab_terminal.xml:176-199`'s `bottom_action_bar` is
-    pinned to `48dp` while its children are `drawableTop` buttons with both
-    icon and label — the label clips. Also `activity_multi_host_dashboard.xml:55`,
-    `fragment_performance.xml:457` and `activity_cloud_accounts.xml:91`
-    hardcode `app:tint="@android:color/white"` on FAB icons, and
-    `bg_bottom_sheet_handle.xml:12` hardcodes `#33808080`.
 42. **Intermittent "eats one character to the left of cursor" bug — likely
     root-caused, needs on-device confirmation before fixing** — user-reported
     repro: type a long command (e.g. `tmux-new ai --dir ~/Projects/github/dfprivate`),
@@ -96,18 +80,6 @@ work).
     repro** — no `adb` access from this environment to capture `dumpsys
     input_method`/Gboard logcat; remains on the user to retest and report
     back whether the "do this"-style drop recurs.
-50. **Item 40's raw dp/sp literal sweep is only partially complete** — the
-    five worst-offender layouts (`activity_sync_settings.xml`,
-    `bottom_sheet_terminal_menu.xml`, `activity_sftp.xml`,
-    `activity_import_export.xml`, `item_dashboard_host_card.xml`) plus a
-    broad mechanical pass for four highly-recurrent patterns
-    (`iconSize="20dp"`, `textSize="11sp"`, `minHeight="48dp"`,
-    `iconPadding="12dp"`) were converted to `@dimen` references, and 12 new
-    tokens were added to `dimens.xml`. Recurring `8dp`/`13sp` literals were
-    found across roughly 27-28 more layout files but only fixed in
-    `activity_import_export.xml`. Fix: re-run the item-40 sweep across the
-    remaining `app/src/main/res/layout/*.xml` files not yet covered,
-    reusing the tokens already in `dimens.xml` before adding new ones.
 51. **`make check`'s Gradle task list never runs resource linking, so a
     broken `AndroidManifest.xml` `android:string` reference is invisible to
     the local pre-commit gate** — `check`'s invocation

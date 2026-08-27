@@ -11,7 +11,7 @@
     <!-- Group color indicator -->
     <View
         android:id="@+id/view_group_color"
-        android:layout_width="4dp"
+        android:layout_width="@dimen/scrollbar_width"
         android:layout_height="match_parent"
         android:layout_marginEnd="@dimen/space_12dp"
         android:visibility="gone" />
@@ -19,8 +19,8 @@
     <!-- Expand/collapse icon -->
     <ImageView
         android:id="@+id/icon_expand"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
+        android:layout_width="@dimen/icon_size_medium"
+        android:layout_height="@dimen/icon_size_medium"
         android:layout_marginEnd="@dimen/space_12dp"
         android:src="@drawable/ic_expand_more"
         android:contentDescription="@string/item_group_expand_collapse_content_description" />
@@ -31,7 +31,7 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:textSize="16sp"
+        android:textSize="@dimen/text_size_subtitle"
         android:textStyle="bold"
         android:textColor="?attr/colorOnSurface"
         android:text="@string/item_connection_group_name_placeholder" />

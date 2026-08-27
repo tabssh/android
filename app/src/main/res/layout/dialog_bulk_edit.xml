@@ -55,8 +55,8 @@
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:minWidth="64dp"
-                android:minHeight="36dp"
+                android:minWidth="@dimen/tab_min_width"
+                android:minHeight="@dimen/tab_height"
                 android:text="@string/settings_action_reset" />
         </LinearLayout>
 
