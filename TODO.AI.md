@@ -91,13 +91,16 @@ work).
     resize/scroll mechanics are now fully exonerated: no dropped resize,
     no scroll drift, zero `W/`/`E/`-level entries anywhere in either log.
 
-    Remaining candidates, neither confirmable from a text log: (1) the
-    `bottom_action_bar` regression (fixed in `83071e7b3cb0`) — still
-    unconfirmed whether "Show bottom nav bar" is enabled on the affected
-    device; (2) the remote shell/CLI's own SIGWINCH reflow of multi-line
-    output to fit a shorter terminal, which is normal curses/TUI behavior
-    indistinguishable from a client bug in a text log. Next step needs
-    either that setting confirmed, or a screen recording of the actual
-    repro (the 3-item multi-line message, keyboard toggled) to see what
-    is actually drawn.
+    **User confirmed "Show bottom nav bar" is OFF on the affected device
+    — the `bottom_action_bar` regression (`83071e7b3cb0`) is ruled out as
+    the cause of this report.** With both the resize/scroll mechanics and
+    that dimen regression exonerated, every code-level lead this session's
+    investigation could find without pixel data is exhausted. Remaining
+    candidate, not confirmable from a text log: the remote shell/CLI's own
+    SIGWINCH reflow of multi-line output to fit a shorter terminal, which
+    is normal curses/TUI behavior indistinguishable from a client bug in a
+    text log. Next step needs a screen recording of the actual repro (the
+    3-item multi-line message, keyboard toggled) to see what is actually
+    drawn — no further text-log analysis can distinguish a real client
+    render bug from expected remote-app reflow.
 
