@@ -74,3 +74,12 @@ work).
     alone can't distinguish a client render bug from expected remote-app
     reflow.
 
+    `TerminalView.kt`'s two resize/redraw debug-log lines now also emit
+    `scrollYf`, `visualRows`, and `gridTop` (resize line) / `rows`, `cols`,
+    `scrollYf` (redraw line) — added so a future repro log can show directly
+    whether `scrollYf` stays at 0 (bottom) through the keyboard-open
+    transition or drifts. The debug log already analyzed above predates
+    this change and does not have these fields — needs a fresh export with
+    the exact repro (the 3-item multi-line message, keyboard toggled) to
+    make use of them.
+

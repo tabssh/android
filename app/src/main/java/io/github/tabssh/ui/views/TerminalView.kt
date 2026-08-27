@@ -642,7 +642,7 @@ class TerminalView @JvmOverloads constructor(
                 // per second during bulk output. Throttled so an active
                 // session doesn't flood the Logger write queue.
                 Logger.dThrottled("TerminalView", "onScreenChanged", 500) {
-                    "onScreenChanged - scheduling redraw"
+                    "onScreenChanged - scheduling redraw (rows=$terminalRows cols=$terminalCols scrollYf=$scrollYf)"
                 }
                 post {
                     // Screen content changed, so the cached URL underline map
@@ -1368,7 +1368,11 @@ class TerminalView @JvmOverloads constructor(
         termuxBridge?.resize(terminalCols, terminalRows)
         terminalBuffer?.resize(terminalRows, terminalCols)
         terminalEmulator?.resize(terminalRows, terminalCols)
-        Logger.d("TerminalView", "Terminal resized: ${terminalRows}x${terminalCols}")
+        Logger.d(
+            "TerminalView",
+            "Terminal resized: ${terminalRows}x${terminalCols} " +
+                "(visualRows=$visualRows scrollYf=$scrollYf gridTop=$gridTop)"
+        )
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
