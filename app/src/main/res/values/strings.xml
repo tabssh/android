@@ -2482,6 +2482,12 @@
     <string name="connection_edit_multiplexer_mode_hint">Multiplexer Mode</string>
     <string name="connection_edit_multiplexer_session_name_hint">Session Name (optional)</string>
     <string name="connection_edit_multiplexer_override_hint">PRE Key Override</string>
+    <string name="connection_edit_multiplexer_prefix_title">PRE Key Bindings (this host)</string>
+    <string name="connection_edit_multiplexer_prefix_description">Leave blank to use the global default from Settings. Set one to bind PRE differently for this host only, e.g. tmux “C-a” here while the global default stays “C-b”.</string>
+    <string name="connection_edit_multiplexer_prefix_tmux_hint">tmux PRE binding (optional)</string>
+    <string name="connection_edit_multiplexer_prefix_screen_hint">screen PRE binding (optional)</string>
+    <string name="connection_edit_multiplexer_prefix_zellij_hint">zellij PRE binding (optional)</string>
+    <string name="connection_edit_multiplexer_prefix_invalid">Not a recognized key binding (e.g. C-b, ^B, M-b, 0x02)</string>
     <string name="connection_edit_appearance_title">Appearance &amp; Scripts</string>
     <string name="connection_edit_theme_override_hint">Terminal Theme (Override)</string>
     <string name="connection_edit_font_size_override_hint">Font Size Override</string>

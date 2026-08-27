@@ -1321,7 +1321,7 @@ class TabTerminalActivity : TabSSHActivity() {
                         else -> GestureCommandMapper.MultiplexerType.TMUX
                     }
                     
-                    val customPrefix = app.preferencesManager.getMultiplexerPrefix(multiplexerTypeStr)
+                    val customPrefix = resolvePrefixBinding(tabManager.getActiveTab()?.profile, multiplexerTypeStr)
                     enableGestureSupport(multiplexerType, customPrefix)
 
                     // Set up command callback
@@ -2972,7 +2972,7 @@ class TabTerminalActivity : TabSSHActivity() {
             "zellij" -> GestureCommandMapper.MultiplexerType.ZELLIJ
             else -> GestureCommandMapper.MultiplexerType.TMUX
         }
-        val customPrefix = app.preferencesManager.getMultiplexerPrefix(multiplexerTypeStr)
+        val customPrefix = resolvePrefixBinding(tabManager.getActiveTab()?.profile, multiplexerTypeStr)
 
         // Create command send callback for gestures
         val commandCallback: ((ByteArray) -> Unit)? = if (gesturesEnabled) {
@@ -3300,6 +3300,29 @@ class TabTerminalActivity : TabSSHActivity() {
         // Label is always "PRE"; brackets indicate the latch is armed.
         val label = if (prefixArmed) "[PRE]" else "PRE"
         binding.multiRowKeyboard.setKeyLabel("PREFIX", label)
+    }
+
+    /**
+     * Resolve the PRE-key prefix binding to use for [type] ("tmux"/"screen"/
+     * "zellij") on [profile]'s connection. Precedence: [profile]'s own
+     * per-host override for that type (`ConnectionProfile
+     * .multiplexerPrefixTmuxOverride`/`...ScreenOverride`/`...ZellijOverride`)
+     * if set and valid > the app-wide global default
+     * (`PreferenceManager.getMultiplexerPrefix(type)`). Lets one host bind
+     * PRE to "C-a" for tmux while every other host keeps the global "C-b",
+     * independently for each of tmux/screen/zellij.
+     */
+    private fun resolvePrefixBinding(profile: ConnectionProfile?, type: String?): String {
+        val override = when (type) {
+            "tmux"   -> profile?.multiplexerPrefixTmuxOverride
+            "screen" -> profile?.multiplexerPrefixScreenOverride
+            "zellij" -> profile?.multiplexerPrefixZellijOverride
+            else     -> null
+        }
+        if (!override.isNullOrBlank() && PrefixParser.isValid(override)) {
+            return override
+        }
+        return app.preferencesManager.getMultiplexerPrefix(type ?: "tmux")
     }
 
     /**
@@ -6204,16 +6227,7 @@ class TabTerminalActivity : TabSSHActivity() {
                     // bind (e.g. Ctrl-B) — so tapping it must act exactly like
                     // that keypress: send the bytes to the terminal right now,
                     // not deferred until the user's next keystroke.
-                    val prefixStr = when (type) {
-                        "tmux"   -> app.preferencesManager.getString(
-                            "multiplexer_custom_prefix_tmux",   "C-b")
-                        "screen" -> app.preferencesManager.getString(
-                            "multiplexer_custom_prefix_screen", "C-a")
-                        "zellij" -> app.preferencesManager.getString(
-                            "multiplexer_custom_prefix_zellij", "C-g")
-                        else     -> app.preferencesManager.getString(
-                            "multiplexer_custom_prefix_tmux",   "C-b")
-                    }
+                    val prefixStr = resolvePrefixBinding(tab.profile, type)
                     val bytes = PrefixParser.parse(prefixStr)
                     if (bytes == null) {
                         Logger.w("TabTerminalActivity", "PREFIX key: failed to parse prefix '$prefixStr'")

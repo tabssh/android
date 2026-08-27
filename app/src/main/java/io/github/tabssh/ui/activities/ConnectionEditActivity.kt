@@ -1182,6 +1182,12 @@ class ConnectionEditActivity : TabSSHActivity() {
             ovEntries.getOrNull(ovIndex) ?: ovEntries[0], false
         )
 
+        // Per-host PRE-key binding overrides — blank = inherit the global
+        // default for that multiplexer type.
+        profile.multiplexerPrefixTmuxOverride?.let { binding.editMultiplexerPrefixTmux.setText(it) }
+        profile.multiplexerPrefixScreenOverride?.let { binding.editMultiplexerPrefixScreen.setText(it) }
+        profile.multiplexerPrefixZellijOverride?.let { binding.editMultiplexerPrefixZellij.setText(it) }
+
         selectedGroupId = profile.groupId
         val resolvedGroup = selectedGroupId?.let { gid ->
             withContext(Dispatchers.IO) { app.database.connectionGroupDao().getGroupById(gid) }
@@ -1645,6 +1651,12 @@ class ConnectionEditActivity : TabSSHActivity() {
         val ovIndex = ovEntries.indexOf(binding.spinnerMultiplexerOverride.text.toString())
         val multiplexerOverride = ovValues.getOrNull(ovIndex)?.takeIf { it != "AUTO" }
 
+        // Per-host PRE-key binding overrides — blank input = null = inherit
+        // the global default for that multiplexer type.
+        val multiplexerPrefixTmuxOverride = binding.editMultiplexerPrefixTmux.text.toString().takeIf { it.isNotBlank() }
+        val multiplexerPrefixScreenOverride = binding.editMultiplexerPrefixScreen.text.toString().takeIf { it.isNotBlank() }
+        val multiplexerPrefixZellijOverride = binding.editMultiplexerPrefixZellij.text.toString().takeIf { it.isNotBlank() }
+
         val themeEntries = resources.getStringArray(R.array.terminal_theme_entries)
         val themeValues = resources.getStringArray(R.array.terminal_theme_values)
         val selectedThemeText = binding.spinnerConnectionTheme.text.toString()
@@ -1698,6 +1710,9 @@ class ConnectionEditActivity : TabSSHActivity() {
             x11Forwarding = x11Forwarding, moshMode = moshMode,
             multiplexerMode = multiplexerMode, multiplexerSessionName = multiplexerSessionName,
             multiplexerOverride = multiplexerOverride,
+            multiplexerPrefixTmuxOverride = multiplexerPrefixTmuxOverride,
+            multiplexerPrefixScreenOverride = multiplexerPrefixScreenOverride,
+            multiplexerPrefixZellijOverride = multiplexerPrefixZellijOverride,
             theme = theme, fontSizeOverride = fontSizeOverride,
             postConnectScript = postConnectScript, envVars = envVars,
             agentForwarding = agentForwarding, remoteCommand = remoteCommand,
@@ -1717,6 +1732,9 @@ class ConnectionEditActivity : TabSSHActivity() {
             x11Forwarding = x11Forwarding, moshMode = moshMode,
             multiplexerMode = multiplexerMode, multiplexerSessionName = multiplexerSessionName,
             multiplexerOverride = multiplexerOverride,
+            multiplexerPrefixTmuxOverride = multiplexerPrefixTmuxOverride,
+            multiplexerPrefixScreenOverride = multiplexerPrefixScreenOverride,
+            multiplexerPrefixZellijOverride = multiplexerPrefixZellijOverride,
             theme = theme, fontSizeOverride = fontSizeOverride,
             postConnectScript = postConnectScript, envVars = envVars,
             agentForwarding = agentForwarding, remoteCommand = remoteCommand,

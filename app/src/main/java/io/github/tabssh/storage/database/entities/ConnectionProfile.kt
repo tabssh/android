@@ -100,6 +100,27 @@ data class ConnectionProfile(
     @ColumnInfo(name = "multiplexer_override")
     val multiplexerOverride: String? = null,
 
+    /**
+     * Per-connection PRE-key prefix *binding* overrides, independent of
+     * [multiplexerOverride] (which only selects which multiplexer type is
+     * active for this connection). Each is a notation string accepted by
+     * `PrefixParser` (e.g. "C-b", "^B", "M-b", "0x02"). null = inherit the
+     * app-wide global prefix for that multiplexer type
+     * (`PreferenceManager.getMultiplexerPrefix(type)`); non-null = use this
+     * connection's own binding for that type instead, so e.g. one host's
+     * tmux session can bind PRE to "C-a" while the global default stays
+     * "C-b". Lets a single device have different real multiplexer
+     * keybindings per host without changing the global default.
+     */
+    @ColumnInfo(name = "multiplexer_prefix_tmux_override")
+    val multiplexerPrefixTmuxOverride: String? = null,
+
+    @ColumnInfo(name = "multiplexer_prefix_screen_override")
+    val multiplexerPrefixScreenOverride: String? = null,
+
+    @ColumnInfo(name = "multiplexer_prefix_zellij_override")
+    val multiplexerPrefixZellijOverride: String? = null,
+
     // null = use global default, true/false = override
     @ColumnInfo(name = "port_knock_enabled")
     val portKnockEnabled: Boolean? = null,
