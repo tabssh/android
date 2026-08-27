@@ -78,8 +78,26 @@ work).
     `scrollYf`, `visualRows`, and `gridTop` (resize line) / `rows`, `cols`,
     `scrollYf` (redraw line) — added so a future repro log can show directly
     whether `scrollYf` stays at 0 (bottom) through the keyboard-open
-    transition or drifts. The debug log already analyzed above predates
-    this change and does not have these fields — needs a fresh export with
-    the exact repro (the 3-item multi-line message, keyboard toggled) to
-    make use of them.
+    transition or drifts.
+
+    **Second debug log analyzed (post-field-addition, build `2201ae2`),
+    covering a full ~2-minute session with two keyboard show/hide cycles
+    (37↔27 rows, cols constant at 90): `scrollYf=0.0` on every single one
+    of ~35 redraw lines and every resize line, with no exceptions.** This
+    conclusively rules out scroll-offset drift as the cause — the terminal
+    never leaves the bottom/live position across either keyboard
+    transition. Combined with the earlier finding that resize always
+    completes cleanly in both directions within ~170ms, the client-side
+    resize/scroll mechanics are now fully exonerated: no dropped resize,
+    no scroll drift, zero `W/`/`E/`-level entries anywhere in either log.
+
+    Remaining candidates, neither confirmable from a text log: (1) the
+    `bottom_action_bar` regression (fixed in `83071e7b3cb0`) — still
+    unconfirmed whether "Show bottom nav bar" is enabled on the affected
+    device; (2) the remote shell/CLI's own SIGWINCH reflow of multi-line
+    output to fit a shorter terminal, which is normal curses/TUI behavior
+    indistinguishable from a client bug in a text log. Next step needs
+    either that setting confirmed, or a screen recording of the actual
+    repro (the 3-item multi-line message, keyboard toggled) to see what
+    is actually drawn.
 
