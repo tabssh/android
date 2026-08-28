@@ -1491,7 +1491,7 @@
     <string name="prefcat_terminal_keyboard">Custom keyboard</string>
     <string name="prefcat_terminal_bell">Bell &amp; alerts</string>
     <string name="prefcat_terminal_display">Display</string>
-    <string name="prefcat_terminal_recording">Session recording</string>
+    <string name="prefcat_terminal_recording">Session transcripts</string>
     <string name="prefs_terminal_theme_title">Theme / Colors</string>
     <string name="prefs_terminal_theme_summary">Terminal color scheme</string>
     <string name="prefs_import_custom_theme_title">Import Custom Theme</string>
@@ -1538,8 +1538,8 @@
     <string name="prefs_ui_fullscreen_mode_summary">Hide status &amp; navigation bars while in a tab</string>
     <string name="prefs_show_performance_overlay_title">Show Performance Overlay</string>
     <string name="prefs_show_performance_overlay_summary">Display CPU, memory, battery, and network stats</string>
-    <string name="prefs_auto_record_sessions_title">Auto-Record Sessions</string>
-    <string name="prefs_auto_record_sessions_summary">Automatically record all SSH sessions to transcripts</string>
+    <string name="prefs_auto_record_sessions_title">Auto-Transcript Sessions</string>
+    <string name="prefs_auto_record_sessions_summary">Automatically save a transcript of all SSH sessions</string>
 
     <!-- Settings: Connection screen -->
     <string name="prefcat_connection_defaults">Defaults for new connections</string>
@@ -2669,7 +2669,7 @@
 
     <!-- Session transcript viewer (activity_transcript_viewer.xml) -->
     <string name="transcript_empty_title">📄 No Transcripts</string>
-    <string name="transcript_empty_message">Enable recording in terminal menu</string>
+    <string name="transcript_empty_message">Start a transcript from the terminal menu</string>
 
     <!-- Log viewer (activity_log_viewer.xml, item_log_entry.xml) -->
     <string name="log_viewer_empty_message">📝 No logs available\n\nLogs will appear here when enabled</string>
@@ -2714,7 +2714,7 @@
     <string name="terminal_menu_toggle_system_keyboard">Toggle System Keyboard</string>
     <string name="terminal_menu_find_in_scrollback">Find in Scrollback…</string>
     <string name="terminal_menu_snippets">Snippets…</string>
-    <string name="terminal_menu_start_recording">Start Recording</string>
+    <string name="terminal_menu_start_recording">Start Transcript</string>
     <string name="terminal_menu_section_session">SESSION</string>
     <string name="terminal_menu_broadcast_to_all_tabs">Broadcast to All Tabs…</string>
     <string name="terminal_menu_share_session">Share Session</string>
@@ -3564,6 +3564,9 @@
 
     <!-- Session transcript viewer dialogs -->
     <string name="transcript_viewer_share_chooser_title">Share Transcript</string>
+    <string name="transcript_viewer_share_options_title">Share Transcript</string>
+    <string name="transcript_viewer_share_option_intent">Share via…</string>
+    <string name="transcript_viewer_share_option_paste">Upload to Paste Service</string>
     <string name="transcript_viewer_delete_title">Delete Transcript</string>
     <string name="transcript_viewer_deleted_toast">Transcript deleted</string>
     <string name="transcript_viewer_delete_failed_toast">Failed to delete transcript</string>
@@ -3679,8 +3682,8 @@
     <string name="terminal_split_pane_closed">Split pane closed</string>
     <string name="terminal_no_keystrokes_recorded">No keystrokes recorded</string>
     <string name="terminal_no_active_connection">No active connection</string>
-    <string name="terminal_recording_stopped">Recording stopped</string>
-    <string name="terminal_recording_started">Recording started</string>
+    <string name="terminal_recording_stopped">Transcript stopped</string>
+    <string name="terminal_recording_started">Transcript started</string>
     <string name="terminal_copied_to_clipboard_fmt">%1$s copied to clipboard</string>
     <string name="terminal_error_details_copied">Error details copied</string>
     <string name="terminal_sent_to_fmt">Sent to %1$d / %2$d</string>
@@ -3725,7 +3728,7 @@
     <string name="terminal_tab_row_active">Active</string>
     <string name="terminal_hide_key_bar">Hide Key Bar</string>
     <string name="terminal_show_key_bar">Show Key Bar</string>
-    <string name="terminal_stop_recording">Stop Recording</string>
+    <string name="terminal_stop_recording">Stop Transcript</string>
     <string name="terminal_gesture_command_sent">Gesture command sent</string>
     <string name="terminal_reattached_to_fmt">Reattached to %1$s</string>
     <string name="terminal_ssh_key_not_found_prompt_fmt">SSH key not found. Enter password for %1$s@%2$s</string>

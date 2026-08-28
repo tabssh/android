@@ -9,6 +9,7 @@ import io.github.tabssh.R
 import io.github.tabssh.databinding.ActivityTranscriptViewerBinding
 import io.github.tabssh.terminal.recording.TranscriptManager
 import io.github.tabssh.ui.adapters.TranscriptAdapter
+import io.github.tabssh.ui.dialogs.ReportIssueDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -79,6 +80,22 @@ class TranscriptViewerActivity : TabSSHActivity() {
     }
     
     private fun shareTranscript(transcript: TranscriptManager.Transcript) {
+        val options = arrayOf(
+            getString(R.string.transcript_viewer_share_option_intent),
+            getString(R.string.transcript_viewer_share_option_paste)
+        )
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.transcript_viewer_share_options_title))
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> shareTranscriptViaIntent(transcript)
+                    1 -> shareTranscriptViaPaste(transcript)
+                }
+            }
+            .show()
+    }
+
+    private fun shareTranscriptViaIntent(transcript: TranscriptManager.Transcript) {
         lifecycleScope.launch(Dispatchers.IO) {
             val content = TranscriptManager.getTranscriptContent(this@TranscriptViewerActivity, transcript)
             withContext(Dispatchers.Main) {
@@ -88,6 +105,16 @@ class TranscriptViewerActivity : TabSSHActivity() {
                     putExtra(Intent.EXTRA_TEXT, content)
                 }
                 startActivity(Intent.createChooser(intent, getString(R.string.transcript_viewer_share_chooser_title)))
+            }
+        }
+    }
+
+    private fun shareTranscriptViaPaste(transcript: TranscriptManager.Transcript) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val content = TranscriptManager.getTranscriptContent(this@TranscriptViewerActivity, transcript)
+            withContext(Dispatchers.Main) {
+                ReportIssueDialog.create(content, "transcript")
+                    .show(supportFragmentManager, "report_issue")
             }
         }
     }

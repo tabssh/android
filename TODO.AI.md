@@ -104,3 +104,33 @@ work).
     drawn — no further text-log analysis can distinguish a real client
     render bug from expected remote-app reflow.
 
+53. **New feature request: built-in session video recorder (mp4 + asciinema
+    `.cast`, dual format), with upload capability, saved to the device's
+    `Videos/TabSSH` directory.** Distinct from the existing Session
+    Transcript feature (`terminal/recording/SessionRecorder.kt`, renamed
+    "Recording"→"Transcript" in the UI this session to avoid the naming
+    collision with this new feature) — that recorder captures the raw
+    text/ANSI byte stream, not pixels or frame timing. This is a genuinely
+    new capability, not a small addition:
+    - Needs `MediaProjection`/`MediaRecorder` for actual screen capture
+      (mp4 output), which requires a foreground service (user-visible
+      recording notification, Android screen-capture consent flow) and
+      careful lifecycle handling across tab switches/app backgrounding.
+    - The asciinema `.cast` format is a separate, simpler writer — JSON
+      event stream of terminal output + timing, likely derivable from the
+      same byte stream `SessionRecorder` already taps, but is a new file
+      format/writer, not reuse of the existing transcript writer.
+    - Producing both formats from one "start recording" action means two
+      independent capture paths running concurrently and terminating
+      together.
+    - Save location: `Videos/TabSSH` under the device's public Movies/Videos
+      directory (MediaStore-scoped on API 29+, matching how other
+      user-facing exports in this app already handle scoped storage).
+    - Upload: presumably via the same `PasteProviderFactory` paste
+      infrastructure already used for logs/transcripts, though a video/cast
+      file may not fit typical paste-service size/content-type
+      expectations — needs its own design pass (possibly a different
+      upload mechanism for the mp4 vs. the `.cast` file).
+    - Explicitly deferred: user chose to log this for later planning rather
+      than build or plan it now (`AskUserQuestion`, this session).
+
