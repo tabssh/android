@@ -1029,12 +1029,6 @@ class TabTerminalActivity : TabSSHActivity() {
                 openPortForwarding()
             }
 
-        view.findViewById<MaterialButton>(R.id.btn_share_session)
-            ?.setOnClickListener {
-                bottomSheet.dismiss()
-                shareSession()
-            }
-
         view.findViewById<MaterialButton>(R.id.btn_close_tab)
             ?.setOnClickListener {
                 bottomSheet.dismiss()
@@ -2244,35 +2238,6 @@ class TabTerminalActivity : TabSSHActivity() {
         }
     }
 
-    /**
-     * Share current session info
-     */
-    private fun shareSession() {
-        val currentTab = tabManager.getActiveTab()
-        val profile = currentTab?.profile
-        
-        val shareText = buildString {
-            append(getString(R.string.terminal_share_session_header))
-            append("\n\n")
-            profile?.let { p ->
-                append(getString(R.string.terminal_share_session_host_fmt, p.host))
-                append("\n")
-                append(getString(R.string.terminal_share_session_port_fmt, p.port))
-                append("\n")
-                append(getString(R.string.terminal_share_session_user_fmt, p.username))
-                append("\n")
-            }
-        }
-
-        val sendIntent = Intent().apply {
-            action = Intent.ACTION_SEND
-            putExtra(Intent.EXTRA_TEXT, shareText)
-            type = "text/plain"
-        }
-
-        startActivity(Intent.createChooser(sendIntent, getString(R.string.terminal_share_session_chooser_title)))
-    }
-    
     private fun setupPerformanceOverlay() {
         // Check if performance overlay is enabled in settings
         val showOverlay = app.preferencesManager.getBoolean("show_performance_overlay", false)
@@ -5169,7 +5134,6 @@ class TabTerminalActivity : TabSSHActivity() {
         items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_paste_clipboard), null) { pasteFromClipboard() }
         items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_copy_screen), getString(R.string.terminal_cmdpalette_copy_screen_sub)) { copyTerminalScreen() }
         items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_cluster_send), getString(R.string.terminal_cmdpalette_cluster_send_sub)) { showClusterBroadcastDialog() }
-        items += PaletteDialog.Item(getString(R.string.terminal_cmdpalette_share_connection), getString(R.string.terminal_cmdpalette_share_connection_sub)) { shareSession() }
         PaletteDialog.show(this, getString(R.string.terminal_cmdpalette_title), items)
     }
 

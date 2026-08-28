@@ -196,20 +196,6 @@
             app:iconSize="@dimen/icon_size_action" />
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_share_session"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="@dimen/button_height"
-            android:paddingStart="@dimen/space_md"
-            android:gravity="start|center_vertical"
-            android:text="@string/terminal_menu_share_session"
-            app:icon="@drawable/ic_share"
-            app:iconGravity="start"
-            app:iconPadding="@dimen/space_12dp"
-            app:iconSize="@dimen/icon_size_action" />
-
-        <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_close_tab"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"

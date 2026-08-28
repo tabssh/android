@@ -2717,7 +2717,6 @@
     <string name="terminal_menu_start_recording">Start Transcript</string>
     <string name="terminal_menu_section_session">SESSION</string>
     <string name="terminal_menu_broadcast_to_all_tabs">Broadcast to All Tabs…</string>
-    <string name="terminal_menu_share_session">Share Session</string>
     <string name="terminal_menu_close_current_tab">Close Current Tab</string>
     <string name="terminal_menu_disconnect_all">Disconnect All</string>
 
@@ -3563,10 +3562,6 @@
     <string name="theme_editor_save_failed_title">Save failed</string>
 
     <!-- Session transcript viewer dialogs -->
-    <string name="transcript_viewer_share_chooser_title">Share Transcript</string>
-    <string name="transcript_viewer_share_options_title">Share Transcript</string>
-    <string name="transcript_viewer_share_option_intent">Share via…</string>
-    <string name="transcript_viewer_share_option_paste">Upload to Paste Service</string>
     <string name="transcript_viewer_delete_title">Delete Transcript</string>
     <string name="transcript_viewer_deleted_toast">Transcript deleted</string>
     <string name="transcript_viewer_delete_failed_toast">Failed to delete transcript</string>
@@ -3756,11 +3751,6 @@
     <string name="terminal_clip_label_mosh_handoff">mosh handoff</string>
     <string name="terminal_clipboard_menu_select_text">Select Text…</string>
     <string name="terminal_clipboard_menu_copy_screen">Copy Screen</string>
-    <string name="terminal_share_session_header">TabSSH Session</string>
-    <string name="terminal_share_session_host_fmt">Host: %1$s</string>
-    <string name="terminal_share_session_port_fmt">Port: %1$d</string>
-    <string name="terminal_share_session_user_fmt">User: %1$s</string>
-    <string name="terminal_share_session_chooser_title">Share session info</string>
     <string name="terminal_multiplexer_attach_fmt">Attach: %1$s</string>
     <string name="terminal_multiplexer_create_new_session">Create new session</string>
     <string name="terminal_remote_history_title_fmt">Remote history (%1$d)</string>
@@ -3793,8 +3783,6 @@
     <string name="terminal_cmdpalette_copy_screen_sub">Copy visible terminal output to clipboard</string>
     <string name="terminal_cmdpalette_cluster_send">Cluster: send to all sessions…</string>
     <string name="terminal_cmdpalette_cluster_send_sub">Broadcast a command to every open tab</string>
-    <string name="terminal_cmdpalette_share_connection">Share connection info</string>
-    <string name="terminal_cmdpalette_share_connection_sub">Share host / user details</string>
     <string name="terminal_mosh_failed_using_ssh">Mosh failed — using SSH</string>
     <string name="terminal_mosh_not_available_using_ssh">Mosh not available — using SSH</string>
     <string name="terminal_connected_to_fmt">Connected to %1$s</string>

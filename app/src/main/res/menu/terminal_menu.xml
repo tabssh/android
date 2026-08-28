@@ -47,12 +47,6 @@
         app:showAsAction="never" />
 
     <item
-        android:id="@+id/action_share_session"
-        android:title="@string/terminal_menu_share_session"
-        android:icon="@drawable/ic_share"
-        app:showAsAction="never" />
-    
-    <item
         android:id="@+id/action_port_forwarding"
         android:title="@string/port_forwarding_title"
         android:icon="@drawable/ic_interface"

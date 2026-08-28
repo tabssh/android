@@ -14,13 +14,12 @@ import io.github.tabssh.utils.Format
 
 class TranscriptAdapter(
     private val onView: (TranscriptManager.Transcript) -> Unit,
-    private val onShare: (TranscriptManager.Transcript) -> Unit,
     private val onDelete: (TranscriptManager.Transcript) -> Unit
 ) : ListAdapter<TranscriptManager.Transcript, TranscriptAdapter.ViewHolder>(DiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_transcript, parent, false)
-        return ViewHolder(view, onView, onShare, onDelete)
+        return ViewHolder(view, onView, onDelete)
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
@@ -30,23 +29,20 @@ class TranscriptAdapter(
     class ViewHolder(
         itemView: View,
         private val onView: (TranscriptManager.Transcript) -> Unit,
-        private val onShare: (TranscriptManager.Transcript) -> Unit,
         private val onDelete: (TranscriptManager.Transcript) -> Unit
     ) : RecyclerView.ViewHolder(itemView) {
-        
+
         private val textName: TextView = itemView.findViewById(R.id.text_name)
         private val textInfo: TextView = itemView.findViewById(R.id.text_info)
         private val btnView: ImageButton = itemView.findViewById(R.id.btn_view)
-        private val btnShare: ImageButton = itemView.findViewById(R.id.btn_share)
         private val btnDelete: ImageButton = itemView.findViewById(R.id.btn_delete)
-        
+
         fun bind(transcript: TranscriptManager.Transcript) {
             textName.text = transcript.name
             textInfo.text = "${Format.size(itemView.context, transcript.size)} • ${TranscriptManager.formatTimestamp(transcript.timestamp)}"
-            
+
             itemView.setOnClickListener { onView(transcript) }
             btnView.setOnClickListener { onView(transcript) }
-            btnShare.setOnClickListener { onShare(transcript) }
             btnDelete.setOnClickListener { onDelete(transcript) }
         }
     }
