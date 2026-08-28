@@ -104,6 +104,16 @@ work).
     drawn — no further text-log analysis can distinguish a real client
     render bug from expected remote-app reflow.
 
+    **User reports the symptom is no longer reoccurring** as of this note
+    — closing active investigation for now. No specific commit in this
+    repo's history was identified as "the fix"; the most likely
+    explanation is the conditional `bottom_action_bar` 48dp→72dp
+    regression fix (`83071e7b3cb0`) resolved it for this device even
+    though "Show bottom nav bar" was reported off at the time, or the
+    symptom was remote-app SIGWINCH reflow (never a TabSSH client bug) and
+    isn't reproducing under current conditions. Reopen with a fresh debug
+    log (and ideally a screen recording) if the symptom returns.
+
 53. **New feature request: built-in session video recorder (mp4 + asciinema
     `.cast`, dual format), with upload capability, saved to the device's
     `Videos/TabSSH` directory.** Distinct from the existing Session
