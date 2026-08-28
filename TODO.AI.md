@@ -182,3 +182,22 @@ work).
     still"), so check prior sessions' notes/commits for earlier attempts
     at this before re-diagnosing from scratch.
 
+    **Fixed** — root cause: `TermuxBridge.write()`/`TerminalEmulator`'s
+    write path wraps every single `write()` call in its own async
+    write/lock/flush unit, and the original `pasteText()` in both classes
+    issued the bracketed-paste open marker (`ESC[200~`), the pasted body,
+    and the close marker (`ESC[201~`) as 2-3 separate such calls with no
+    guaranteed relative ordering/atomicity. This let the remote's
+    bracketed-paste parser see a broken/interleaved
+    `ESC[200~...ESC[201~` block, falling back to treating embedded line
+    breaks as literal Enter presses — submitting only the first line and
+    misrouting the rest as separate input, matching the reported repro.
+    Fix: `TermuxBridge.pasteText()` and `TerminalEmulator.pasteText()`
+    now fuse the open/close markers into the first/last content chunk so
+    a paste that fits in one chunk (`PASTE_CHUNK_SIZE` = 4096 chars,
+    covering the reported repro) goes out as a single atomic write; only
+    pastes exceeding that size still need multiple writes, and even then
+    each marker rides along with real content instead of standing alone.
+    `make check` (Docker toolchain: compile + `lintDebug` +
+    `testDebugUnitTest` + `processDebugResources`) passes clean.
+

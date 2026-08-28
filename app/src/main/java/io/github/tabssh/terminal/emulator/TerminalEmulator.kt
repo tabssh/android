@@ -192,18 +192,34 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
         val bracketed = buffer.isBracketedPasteModeActive()
         postWrite {
             try {
-                if (bracketed) stream.write("$BRACKETED_PASTE_START".toByteArray(currentCharset))
-                var offset = 0
-                while (offset < normalized.length) {
-                    val end = minOf(offset + PASTE_CHUNK_SIZE, normalized.length)
-                    val bytes = normalized.substring(offset, end).toByteArray(currentCharset)
-                    stream.write(bytes)
-                    stream.flush()
-                    offset = end
-                }
-                if (bracketed) {
-                    stream.write("$BRACKETED_PASTE_END".toByteArray(currentCharset))
-                    stream.flush()
+                // Fuse the open/close markers into the first/last chunk so a
+                // paste that fits in one PASTE_CHUNK_SIZE block (the common
+                // case) reaches the remote as a single write()/flush() -- see
+                // TermuxBridge.pasteText() for why splitting the markers into
+                // their own separate writes risks the remote's
+                // bracketed-paste parser seeing a broken ESC[200~...ESC[201~
+                // block across multiple socket reads.
+                val startMarker = "$BRACKETED_PASTE_START"
+                val endMarker = "$BRACKETED_PASTE_END"
+                if (normalized.isEmpty()) {
+                    if (bracketed) {
+                        stream.write((startMarker + endMarker).toByteArray(currentCharset))
+                        stream.flush()
+                    }
+                } else {
+                    var offset = 0
+                    while (offset < normalized.length) {
+                        val end = minOf(offset + PASTE_CHUNK_SIZE, normalized.length)
+                        val chunk = normalized.substring(offset, end)
+                        val payload = buildString {
+                            if (bracketed && offset == 0) append(startMarker)
+                            append(chunk)
+                            if (bracketed && end == normalized.length) append(endMarker)
+                        }
+                        stream.write(payload.toByteArray(currentCharset))
+                        stream.flush()
+                        offset = end
+                    }
                 }
                 Logger.d("TerminalEmulator", "Pasted ${normalized.length} chars (bracketed=$bracketed)")
             } catch (e: Exception) {

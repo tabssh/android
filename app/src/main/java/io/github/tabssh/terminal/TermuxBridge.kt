@@ -1106,14 +1106,38 @@ class TermuxBridge(
     fun pasteText(text: String) {
         val normalized = text.replace("\r\n", "\r").replace('\n', '\r')
         val bracketed = bracketedPasteActive
-        if (bracketed) writeString("\u001b[200~")
+        // Each writeString() call below becomes its own writeScope.launch{}
+        // coroutine that independently acquires writeLock -- launch order is
+        // not execution order under a multi-threaded dispatcher, so separate
+        // writes for "open marker" / "body" / "close marker" could reach the
+        // remote out of order, or with an unrelated concurrent keystroke
+        // write interleaved between them. The remote's bracketed-paste
+        // parser then sees a broken ESC[200~ ... ESC[201~ block and falls
+        // back to treating the embedded \r line breaks as literal Enter
+        // presses, submitting only the first line and misrouting the rest
+        // as separate input. Fuse the markers into the first/last chunk so
+        // the whole paste goes out as a single atomic write whenever it
+        // fits in one chunk (the common case) -- pastes over
+        // PASTE_CHUNK_SIZE still need more than one write, but even then
+        // the markers ride along with real content instead of standing
+        // alone.
+        if (normalized.isEmpty()) {
+            if (bracketed) writeString("\u001b[200~\u001b[201~")
+            Logger.d(TAG, "Pasted 0 chars (bracketed=$bracketed)")
+            return
+        }
         var offset = 0
         while (offset < normalized.length) {
             val end = minOf(offset + PASTE_CHUNK_SIZE, normalized.length)
-            writeString(normalized.substring(offset, end))
+            val chunk = normalized.substring(offset, end)
+            val payload = buildString {
+                if (bracketed && offset == 0) append("\u001b[200~")
+                append(chunk)
+                if (bracketed && end == normalized.length) append("\u001b[201~")
+            }
+            writeString(payload)
             offset = end
         }
-        if (bracketed) writeString("\u001b[201~")
         Logger.d(TAG, "Pasted ${normalized.length} chars (bracketed=$bracketed)")
     }
 
