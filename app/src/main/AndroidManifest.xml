@@ -34,6 +34,7 @@
     <!-- Foreground service permissions (Android 14+) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
     <!-- Override Termux library minSdk requirement (24) to maintain our minSdk (21) -->
     <!-- Termux terminal-emulator may use some API 24 features, test on older devices -->
@@ -522,6 +523,14 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- Captures the on-screen tab region to mp4 via MediaProjection while a
+             session video recording is active (TODO.AI.md item 53) -->
+        <service
+            android:name=".services.SessionRecordingService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
 
         <!-- Tasker integration entry point. Gated on the signature-level
              permission declared above so only same-signature callers can

@@ -148,6 +148,20 @@
             app:iconPadding="@dimen/space_12dp"
             app:iconSize="@dimen/icon_size_action" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_record_video"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/button_height"
+            android:paddingStart="@dimen/space_md"
+            android:gravity="start|center_vertical"
+            android:text="@string/terminal_menu_record_video"
+            app:icon="@drawable/ic_videocam"
+            app:iconGravity="start"
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
+
         <com.google.android.material.divider.MaterialDivider
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

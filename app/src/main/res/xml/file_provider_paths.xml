@@ -18,4 +18,9 @@
     
     <!-- Backup exports -->
     <files-path name="backups" path="backups/" />
+
+    <!-- Session video recordings (mp4/.cast) on pre-API-29 devices, where
+         VideoRecordingStorage falls back to a direct public-storage path
+         instead of MediaStore's own content:// Uris. -->
+    <external-path name="recordings" path="Movies/TabSSH/" />
 </paths>

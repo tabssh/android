@@ -1,8 +1,12 @@
 package io.github.tabssh.ui.activities
 
 import io.github.tabssh.sync.tombstone.TombstoneRecorder
+import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.media.projection.MediaProjectionManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -36,6 +40,8 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -105,6 +111,8 @@ import io.github.tabssh.protocols.mosh.MoshHandoff
 import io.github.tabssh.protocols.mosh.MoshNativeClient
 import io.github.tabssh.protocols.mosh.TermuxMoshLauncher
 import io.github.tabssh.services.SSHConnectionService
+import io.github.tabssh.services.SessionRecordingService
+import io.github.tabssh.terminal.recording.AsciinemaCastWriter
 import io.github.tabssh.sftp.RemoteFileOpener
 import io.github.tabssh.sftp.SFTPManager
 import io.github.tabssh.ssh.HistoryFetcher
@@ -133,6 +141,7 @@ import io.github.tabssh.ui.views.PerformanceOverlayView
 import io.github.tabssh.utils.ClipboardHelper
 import io.github.tabssh.utils.NotificationHelper
 import io.github.tabssh.utils.TerminalLinkClassifier
+import io.github.tabssh.utils.VideoRecordingStorage
 import java.util.Collections
 import java.util.UUID
 import io.github.tabssh.utils.tabSSHApp
@@ -261,6 +270,42 @@ class TabTerminalActivity : TabSSHActivity() {
     // setupTabManager() for the construction site and the leak rationale.
     private var tabManagerListener: TabManagerListener? = null
 
+    // Session video recorder (TODO.AI.md item 53) — MediaProjection consent
+    // flow + per-tab recording state. Registered as a field so the launcher
+    // is available before onCreate reaches STARTED, per the
+    // registerForActivityResult contract.
+    private val mediaProjectionManager: MediaProjectionManager by lazy {
+        getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+    }
+    private val screenRecordLauncher: ActivityResultLauncher<Intent> =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val tab = pendingRecordingTab
+            val includeCast = pendingRecordingIncludeCast
+            pendingRecordingTab = null
+            if (result.resultCode != Activity.RESULT_OK || result.data == null || tab == null) {
+                Toast.makeText(this, getString(R.string.video_recording_permission_denied), Toast.LENGTH_SHORT).show()
+                return@registerForActivityResult
+            }
+            beginVideoRecording(tab, result.resultCode, result.data!!, includeCast)
+        }
+    private var pendingRecordingTab: Tab? = null
+    private var pendingRecordingIncludeCast: Boolean = false
+
+    // Id of the tab currently being video-recorded (any tab type — full-screen
+    // capture is type-agnostic) and, when the SSH-only "Video + Terminal
+    // Cast" option was chosen, the SSHTab whose castWriter needs tearing down
+    // on stop. Both cleared together in stopVideoRecording().
+    private var recordingTabId: String? = null
+    private var recordingSshTabRef: SSHTab? = null
+    private var recordingVideoFilename: String? = null
+    private var recordingCastFilename: String? = null
+
+    // Local broadcast receiver for SessionRecordingService self-stops (cap
+    // hit, MediaProjection revoked from the system status bar) so the UI
+    // resets even when the stop didn't originate from this Activity's own
+    // stopVideoRecording() call.
+    private var recordingStoppedReceiver: BroadcastReceiver? = null
+
     // UI components
     private var terminalView: TerminalView? = null
     private var viewPager: ViewPager2? = null
@@ -364,7 +409,38 @@ class TabTerminalActivity : TabSSHActivity() {
         // Handle intent
         handleIntent(intent)
 
+        registerRecordingStoppedReceiver()
+
         Logger.i("TabTerminalActivity", "Terminal activity created")
+    }
+
+    /**
+     * Resets the "Record Video" button/toast state when
+     * [SessionRecordingService] stops itself (recording cap hit, or the
+     * system's own "Stop sharing" projection control) rather than via this
+     * Activity's [stopVideoRecording]. Local broadcast, same process only.
+     */
+    private fun registerRecordingStoppedReceiver() {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                recordingSshTabRef?.let { sshTab ->
+                    sshTab.castWriter?.stopRecording()
+                    sshTab.castWriter = null
+                }
+                recordingSshTabRef = null
+                recordingTabId = null
+                Toast.makeText(this@TabTerminalActivity, getString(R.string.video_recording_stopped), Toast.LENGTH_SHORT).show()
+                offerShareForFinishedRecording()
+            }
+        }
+        recordingStoppedReceiver = receiver
+        val filter = IntentFilter(SessionRecordingService.ACTION_RECORDING_STOPPED)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(receiver, filter)
+        }
     }
 
     // singleTop: new intent arrives while this instance is at the top of the
@@ -479,6 +555,12 @@ class TabTerminalActivity : TabSSHActivity() {
 
             override fun onTabClosed(tab: SSHTab, index: Int) {
                 Handler(Looper.getMainLooper()).post {
+                    // Auto-stop an in-flight video recording if the closed
+                    // tab is the one being recorded — see stopVideoRecording.
+                    if (tab.tabId == recordingTabId) {
+                        stopVideoRecording(tabClosed = true)
+                    }
+
                     // Drop any cached remote history for this tab so the map
                     // does not grow without bound across many open/close cycles.
                     historyCache.remove(tab.tabId)
@@ -528,6 +610,11 @@ class TabTerminalActivity : TabSSHActivity() {
                 // close — closeConsoleTab no longer does its own UI work.
                 Handler(Looper.getMainLooper()).post {
                     if (isFinishing || isDestroyed) return@post
+                    // Auto-stop an in-flight video recording if the closed
+                    // tab is the one being recorded — see stopVideoRecording.
+                    if (tab.tabId == recordingTabId) {
+                        stopVideoRecording(tabClosed = true)
+                    }
                     removeTabFromUI(index)
                     if (tabManager.getTabCount() == 0 && !isReconnecting) {
                         finish()
@@ -1000,6 +1087,23 @@ class TabTerminalActivity : TabSSHActivity() {
                 setOnClickListener {
                     bottomSheet.dismiss()
                     toggleRecording()
+                }
+            }
+
+        view.findViewById<MaterialButton>(R.id.btn_record_video)
+            ?.apply {
+                text = if (SessionRecordingService.isRecording) {
+                    getString(R.string.terminal_menu_stop_video_recording)
+                } else {
+                    getString(R.string.terminal_menu_record_video)
+                }
+                setOnClickListener {
+                    bottomSheet.dismiss()
+                    if (SessionRecordingService.isRecording) {
+                        stopVideoRecording()
+                    } else {
+                        startVideoRecordingFlow()
+                    }
                 }
             }
 
@@ -4828,6 +4932,165 @@ class TabTerminalActivity : TabSSHActivity() {
         val recording = tabManager.getActiveTab()?.sessionRecorder?.isRecording() == true
         binding.multiRowKeyboard.setRecordingIndicatorVisible(recording)
     }
+
+    /**
+     * "Record Video" entry point (TODO.AI.md item 53). Any visible tab type
+     * can be mp4-recorded (full-screen capture via MediaProjection is
+     * type-agnostic); the paired asciinema `.cast` writer is SSH-only, so
+     * only an [Tab.Ssh] active tab gets the format chooser — any other tab
+     * type skips straight to the consent dialog, mp4-only.
+     */
+    private fun startVideoRecordingFlow() {
+        if (SessionRecordingService.isRecording) {
+            Toast.makeText(this, getString(R.string.video_recording_already_active), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val activeTabSealed = tabManager.getActiveTabSealed()
+        if (activeTabSealed == null) {
+            Toast.makeText(this, getString(R.string.terminal_no_active_connection), Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (activeTabSealed is Tab.Ssh) {
+            val options = arrayOf(
+                getString(R.string.video_recording_choose_format_video_only),
+                getString(R.string.video_recording_choose_format_video_and_cast)
+            )
+            // "Include Terminal Cast by Default" setting pre-checks the
+            // second option — it only sets the chooser's starting selection,
+            // never bypasses the chooser itself (plan Step 7).
+            val includeCastByDefault = PreferenceManager.getDefaultSharedPreferences(this)
+                .getBoolean("video_recording_include_cast_by_default", false)
+            var selected = if (includeCastByDefault) 1 else 0
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.video_recording_choose_format_title)
+                .setSingleChoiceItems(options, selected) { _, which -> selected = which }
+                .setPositiveButton(R.string.terminal_menu_record_video) { _, _ ->
+                    requestScreenCaptureConsent(activeTabSealed, includeCast = selected == 1)
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        } else {
+            requestScreenCaptureConsent(activeTabSealed, includeCast = false)
+        }
+    }
+
+    private fun requestScreenCaptureConsent(tab: Tab, includeCast: Boolean) {
+        pendingRecordingTab = tab
+        pendingRecordingIncludeCast = includeCast
+        screenRecordLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
+    }
+
+    private fun beginVideoRecording(tab: Tab, resultCode: Int, resultData: Intent, includeCast: Boolean) {
+        val tabTitle = tab.shortTitle()
+        val sanitizedName = tabTitle.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+        val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+        val filename = "video_${sanitizedName}_$timestamp.mp4"
+
+        if (includeCast && tab is Tab.Ssh) {
+            val sshTab = tab.sshTab
+            val writer = AsciinemaCastWriter(
+                this,
+                sshTab.profile.getDisplayName(),
+                sshTab.termuxBridge.getColumns(),
+                sshTab.termuxBridge.getRows()
+            )
+            sshTab.castWriter = writer
+            writer.startRecording()
+            recordingSshTabRef = sshTab
+            recordingCastFilename = writer.getCurrentFilePath()
+        }
+
+        recordingTabId = tab.tabId
+        recordingVideoFilename = filename
+        SessionRecordingService.startRecording(this, resultCode, resultData, tabTitle, filename)
+        Toast.makeText(this, getString(R.string.video_recording_started), Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * Stops both the mp4 capture and (if active) the paired `.cast` writer.
+     * [tabClosed] selects the toast wording for the auto-stop-on-close path
+     * (see [TabManagerListener.onTabClosed]/[TabManagerListener.onGraphicalTabClosed]).
+     */
+    private fun stopVideoRecording(tabClosed: Boolean = false) {
+        SessionRecordingService.stopRecording(this)
+        recordingSshTabRef?.let { sshTab ->
+            sshTab.castWriter?.stopRecording()
+            sshTab.castWriter = null
+        }
+        recordingSshTabRef = null
+        recordingTabId = null
+        val message = if (tabClosed) {
+            getString(R.string.video_recording_stopped_tab_closed)
+        } else {
+            getString(R.string.video_recording_stopped)
+        }
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        offerShareForFinishedRecording()
+    }
+
+    /**
+     * Post-stop "Share" prompt (plan Step 6) — offers the mp4 and, if one
+     * was produced, the `.cast` file as separate share targets via the OS
+     * share sheet, mirroring [SFTPActivity.shareFile]'s exact
+     * `ACTION_SEND` + `FileProvider`/MediaStore-Uri pattern. A short
+     * `postDelayed` gives [VideoRecordingStorage.finalizePendingFile]
+     * (called from the service right before its stop broadcast/return) time
+     * to clear `IS_PENDING` so the MediaStore query in `shareableUriFor`
+     * can find the row.
+     */
+    private fun offerShareForFinishedRecording() {
+        val videoFilename = recordingVideoFilename
+        val castFilename = recordingCastFilename
+        recordingVideoFilename = null
+        recordingCastFilename = null
+        if (videoFilename == null && castFilename == null) return
+
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (isFinishing || isDestroyed) return@postDelayed
+            val actions = mutableListOf<Pair<String, () -> Unit>>()
+            videoFilename?.let { name ->
+                actions.add(getString(R.string.video_recording_share_video) to { shareRecordingFile(name, "video/mp4") })
+            }
+            castFilename?.let { name ->
+                actions.add(getString(R.string.video_recording_share_cast) to { shareRecordingFile(name, "application/json") })
+            }
+            if (actions.isEmpty()) return@postDelayed
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.video_recording_share_action)
+                .setItems(actions.map { it.first }.toTypedArray()) { _, which ->
+                    actions[which].second()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }, 500L)
+    }
+
+    private fun shareRecordingFile(filename: String, mimeType: String) {
+        val legacyFile = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            java.io.File(
+                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MOVIES),
+                "TabSSH/$filename"
+            )
+        } else {
+            null
+        }
+        val uri = VideoRecordingStorage.shareableUriFor(this, filename, legacyFile)
+        if (uri == null) {
+            showError(getString(R.string.sftp_error_share))
+            return
+        }
+        try {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = mimeType
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, filename))
+        } catch (e: Exception) {
+            Logger.e("TabTerminalActivity", "Error sharing recording $filename", e)
+            showError(getString(R.string.sftp_error_share))
+        }
+    }
     
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         // Volume key action: font_size (default) / scroll / off.
@@ -5921,6 +6184,11 @@ class TabTerminalActivity : TabSSHActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+
+        recordingStoppedReceiver?.let {
+            try { unregisterReceiver(it) } catch (_: Exception) {}
+        }
+        recordingStoppedReceiver = null
 
         // Cancel performance overlay updates
         performanceUpdateJob?.cancel()

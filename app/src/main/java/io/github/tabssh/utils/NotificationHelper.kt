@@ -108,6 +108,11 @@ object NotificationHelper {
     // never an interruption.
     internal const val CHANNEL_RENEWAL_REMINDERS = "renewal_reminders_v1"
 
+    // Session video recording — the foreground-service anchor while a
+    // MediaProjection-backed mp4 (+ optional asciinema .cast) capture is
+    // active (TODO.AI.md item 53). Shows elapsed time and a Stop action.
+    internal const val CHANNEL_SESSION_RECORDING = "session_recording_v1"
+
     /**
      * Create all notification channels (Android 8+)
      */
@@ -268,6 +273,22 @@ object NotificationHelper {
                 setSound(null, null)
             }
 
+            // ── Session Recording ─────────────────────────────────────────────────
+            // Foreground-service anchor while a video (mp4) and/or asciinema (.cast)
+            // session recording is in progress. Shows elapsed time + a Stop action.
+            // Importance LOW: this is a status/control surface, not an interruption —
+            // the recording itself was already an explicit, in-context user action.
+            val sessionRecording = NotificationChannel(
+                CHANNEL_SESSION_RECORDING,
+                "Session Recording",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Ongoing status while a session video/cast recording is active"
+                setShowBadge(false)
+                enableVibration(false)
+                setSound(null, null)
+            }
+
             // Remove the legacy ssh_connection_v2 channel that was registered in an
             // earlier release but never posted to. Its role is covered by
             // ssh_silent_v3 (status) and ssh_alerts_v3 (events). Deleting it removes
@@ -283,10 +304,11 @@ object NotificationHelper {
                 hostMonitoring,
                 hostMetrics,
                 containerUpdates,
-                renewalReminders
+                renewalReminders,
+                sessionRecording
             ))
 
-            Logger.d("NotificationHelper", "Registered 9 notification channels: Session Service, Active Sessions, Session Alerts, File Transfers, Connection Errors, Host Monitoring Alerts, Performance Alerts, Container Update Alerts, Renewal Reminders")
+            Logger.d("NotificationHelper", "Registered 10 notification channels: Session Service, Active Sessions, Session Alerts, File Transfers, Connection Errors, Host Monitoring Alerts, Performance Alerts, Container Update Alerts, Renewal Reminders, Session Recording")
         }
     }
 

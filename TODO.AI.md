@@ -149,3 +149,36 @@ work).
     - Explicitly deferred: user chose to log this for later planning rather
       than build or plan it now (`AskUserQuestion`, this session).
 
+    **Fixed** — implemented per plan (`.claude/plans/moonlit-giggling-boot.md`):
+    `SessionRecordingService` (MediaProjection → VirtualDisplay → MediaRecorder
+    foreground service, mp4 to MediaStore-scoped `Movies/TabSSH`) +
+    `AsciinemaCastWriter` (SSH-only asciicast v2 `.cast` writer, wired through
+    a new independent `TermuxBridge.castRecorder`/`SSHTab.castWriter` field so
+    it never contends with the existing Transcript feature's `outputRecorder`)
+    + `VideoRecordingStorage` (MediaStore/legacy-file save helper). UI: a
+    "Record Video…" bottom-sheet action works for any visible tab type
+    (mp4-only for non-SSH tabs; SSH tabs get a "Video only" / "Video +
+    Terminal Cast" chooser, pre-selectable via a new setting), MediaProjection
+    consent via `registerForActivityResult`, auto-stop-with-toast on tab
+    close or external projection revocation, and a post-stop "Share" dialog
+    reusing `SFTPActivity.shareFile()`'s `ACTION_SEND` + `FileProvider`/
+    MediaStore-Uri pattern for each produced file. Settings: mp4 quality
+    preset (Low/Medium/High bitrate) and "include terminal cast by default"
+    added to the existing recording preferences category. `make check`
+    (Docker toolchain) passes clean: compile + `lintDebug` + unit tests +
+    `processDebugResources`.
+
+54. **Multi-line paste into the terminal drops/splits lines after the
+    first — reported again this session, still unfixed.** Repro source
+    this session: `/tmp/pasted.txt` containing 4 lines (`Demo`,
+    `func hello() string {`, a tab-indented `return "hi"`, `}`) pasted as
+    one clipboard block; only `Demo` (the first line) was actually
+    pasted — the remaining 3 lines were each delivered as their own
+    separate input instead of arriving together as part of the same
+    paste. Needs investigation into wherever the app's paste path
+    (terminal input / bracketed-paste handling) splits clipboard content
+    on newlines instead of sending it as a single paste payload. User
+    flagged this as a recurring/known issue ("we have that damn paste bug
+    still"), so check prior sessions' notes/commits for earlier attempts
+    at this before re-diagnosing from scratch.
+

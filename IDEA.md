@@ -160,6 +160,13 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 - Camera: QR pairing import only; declared optional (app fully works without it)
 - Notifications: per-session status entries and connection events
 - Foreground service: keeps SSH/mosh sessions alive while backgrounded
+- Foreground service (media projection): required by API 34+ to run
+  `SessionRecordingService`, which captures on-screen content to mp4 while
+  the user has an active session video recording (TODO.AI.md item 53);
+  system consent (`MediaProjectionManager.createScreenCaptureIntent()`) is
+  shown by the Activity before the service ever starts, per Android's own
+  MediaProjection contract — the permission only lets an already-consented
+  capture keep running as a foreground service
 - Network: the app's core purpose; no network use on first launch is still required
 
 ### What the app must never do

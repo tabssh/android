@@ -164,6 +164,18 @@ class SSHTab(
             }
         }
 
+    // Session video recorder's asciinema `.cast` sink — independent of
+    // [sessionRecorder] above (TODO.AI.md item 53), same wiring shape.
+    var castWriter: io.github.tabssh.terminal.recording.AsciinemaCastWriter? = null
+        set(value) {
+            field = value
+            termuxBridge.castRecorder = if (value == null) {
+                null
+            } else {
+                { bytes, length -> value.recordOutput(String(bytes, 0, length, Charsets.UTF_8)) }
+            }
+        }
+
     /**
      * Active multiplexer type for this tab ("tmux", "screen", "zellij", or null
      * when none is detected). Exposed as a [StateFlow] so the keyboard bar can
@@ -1469,6 +1481,8 @@ class SSHTab(
         // died, with the trailing footer never written.
         sessionRecorder?.stopRecording()
         sessionRecorder = null
+        castWriter?.stopRecording()
+        castWriter = null
         termuxBridge.cleanup()
         // Cancel all coroutines
         connectionScope.cancel()

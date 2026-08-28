@@ -469,6 +469,16 @@ class TermuxBridge(
     @Volatile
     var outputRecorder: ((ByteArray, Int) -> Unit)? = null
 
+    /**
+     * Independent sink for the asciinema `.cast` writer (TODO.AI.md item 53's
+     * session video recorder). Kept separate from [outputRecorder] so the
+     * existing "Transcript" feature and the new "Session Recording" feature
+     * never share or contend for the same field — both can be active at once.
+     * Same volatile/no-retain contract as [outputRecorder].
+     */
+    @Volatile
+    var castRecorder: ((ByteArray, Int) -> Unit)? = null
+
     // Set by the read loop whenever the remote sends ESC[?2004h (enable) or
     // ESC[?2004l (disable).  Read by pasteText() on the UI/main thread.
     @Volatile
@@ -1004,6 +1014,15 @@ class TermuxBridge(
                             sink(buffer, bytesRead)
                         } catch (e: Exception) {
                             Logger.w(TAG, "Session recorder rejected output: ${e.message}")
+                        }
+                    }
+
+                    // Terminal-cast recording, independent of the transcript sink above.
+                    castRecorder?.let { sink ->
+                        try {
+                            sink(buffer, bytesRead)
+                        } catch (e: Exception) {
+                            Logger.w(TAG, "Cast writer rejected output: ${e.message}")
                         }
                     }
 

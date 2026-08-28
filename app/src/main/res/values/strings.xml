@@ -1540,6 +1540,10 @@
     <string name="prefs_show_performance_overlay_summary">Display CPU, memory, battery, and network stats</string>
     <string name="prefs_auto_record_sessions_title">Auto-Transcript Sessions</string>
     <string name="prefs_auto_record_sessions_summary">Automatically save a transcript of all SSH sessions</string>
+    <string name="prefs_video_recording_quality_title">Video Recording Quality</string>
+    <string name="prefs_video_recording_quality_summary">Bitrate preset for session video recordings</string>
+    <string name="prefs_video_recording_include_cast_title">Include Terminal Cast by Default</string>
+    <string name="prefs_video_recording_include_cast_summary">Pre-select "Video + Terminal Cast" in the recording chooser</string>
 
     <!-- Settings: Connection screen -->
     <string name="prefcat_connection_defaults">Defaults for new connections</string>
@@ -2734,6 +2738,8 @@
     <string name="terminal_menu_find_in_scrollback">Find in Scrollback…</string>
     <string name="terminal_menu_snippets">Snippets…</string>
     <string name="terminal_menu_start_recording">Start Transcript</string>
+    <string name="terminal_menu_record_video">Record Video…</string>
+    <string name="terminal_menu_stop_video_recording">Stop Video Recording</string>
     <string name="terminal_menu_section_session">SESSION</string>
     <string name="terminal_menu_broadcast_to_all_tabs">Broadcast to All Tabs…</string>
     <string name="terminal_menu_close_current_tab">Close Current Tab</string>
@@ -3743,6 +3749,22 @@
     <string name="terminal_hide_key_bar">Hide Key Bar</string>
     <string name="terminal_show_key_bar">Show Key Bar</string>
     <string name="terminal_stop_recording">Stop Transcript</string>
+
+    <!-- Session video recorder (TODO.AI.md item 53): mp4 + asciinema .cast -->
+    <string name="video_recording_choose_format_title">Record Video</string>
+    <string name="video_recording_choose_format_video_only">Video only</string>
+    <string name="video_recording_choose_format_video_and_cast">Video + Terminal Cast</string>
+    <string name="video_recording_permission_denied">Screen recording permission was denied</string>
+    <string name="video_recording_already_active">A video recording is already in progress</string>
+    <string name="video_recording_started">Recording started</string>
+    <string name="video_recording_stopped">Recording stopped — saved to Movies/TabSSH</string>
+    <string name="video_recording_stopped_tab_closed">Recording stopped — tab was closed</string>
+    <string name="video_recording_share_action">Share</string>
+    <string name="video_recording_share_video">Share Video</string>
+    <string name="video_recording_share_cast">Share Terminal Cast</string>
+    <string name="video_recording_notification_title">TabSSH is recording</string>
+    <string name="video_recording_notification_text">Recording %1$s to Movies/TabSSH</string>
+    <string name="video_recording_notification_stop_action">Stop</string>
     <string name="terminal_gesture_command_sent">Gesture command sent</string>
     <string name="terminal_reattached_to_fmt">Reattached to %1$s</string>
     <string name="terminal_ssh_key_not_found_prompt_fmt">SSH key not found. Enter password for %1$s@%2$s</string>
@@ -3934,6 +3956,9 @@
     <string name="arr_cursor_style_block">Block</string>
     <string name="arr_cursor_style_underline">Underline</string>
     <string name="arr_cursor_style_vertical_bar">Vertical Bar</string>
+    <string name="arr_video_recording_quality_low">Low</string>
+    <string name="arr_video_recording_quality_medium">Medium</string>
+    <string name="arr_video_recording_quality_high">High</string>
     <string name="arr_keyboard_row_1_row_compact">1 Row (Compact)</string>
     <string name="arr_keyboard_row_2_rows">2 Rows</string>
     <string name="arr_keyboard_row_3_rows_default">3 Rows (Default)</string>

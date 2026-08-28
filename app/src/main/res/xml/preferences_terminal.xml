@@ -271,6 +271,21 @@
       android:summary="@string/prefs_auto_record_sessions_summary"
       android:defaultValue="false" />
 
+    <ListPreference
+      android:key="video_recording_quality"
+      android:title="@string/prefs_video_recording_quality_title"
+      android:summary="@string/prefs_video_recording_quality_summary"
+      android:entries="@array/video_recording_quality_entries"
+      android:entryValues="@array/video_recording_quality_values"
+      android:defaultValue="medium"
+      app:useSimpleSummaryProvider="true" />
+
+    <SwitchPreferenceCompat
+      android:key="video_recording_include_cast_by_default"
+      android:title="@string/prefs_video_recording_include_cast_title"
+      android:summary="@string/prefs_video_recording_include_cast_summary"
+      android:defaultValue="false" />
+
   </PreferenceCategory>
 
 </PreferenceScreen>
