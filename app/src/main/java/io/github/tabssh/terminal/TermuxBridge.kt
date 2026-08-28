@@ -107,7 +107,6 @@ class TermuxBridge(
             }
             return 0
         }
-        private const val PASTE_CHUNK_SIZE = 4096
 
         // Hard cap on tracked OSC 8 hyperlink spans. A long-running session that
         // tails a log file emitting OSC 8 sequences would otherwise grow the list
@@ -1098,46 +1097,30 @@ class TermuxBridge(
 
     /**
      * Send clipboard text to the SSH server, applying bracketed paste mode
-     * markers (ESC[200~ / ESC[201~) when the remote has enabled ?2004, and
-     * chunking large payloads so a single large write never holds the writeLock
-     * long enough to starve concurrent keystrokes.
+     * markers (ESC[200~ / ESC[201~) when the remote has enabled ?2004.
      * Line endings are normalised: CRLF and bare LF both become CR.
      */
     fun pasteText(text: String) {
         val normalized = text.replace("\r\n", "\r").replace('\n', '\r')
         val bracketed = bracketedPasteActive
-        // Each writeString() call below becomes its own writeScope.launch{}
-        // coroutine that independently acquires writeLock -- launch order is
-        // not execution order under a multi-threaded dispatcher, so separate
-        // writes for "open marker" / "body" / "close marker" could reach the
-        // remote out of order, or with an unrelated concurrent keystroke
-        // write interleaved between them. The remote's bracketed-paste
-        // parser then sees a broken ESC[200~ ... ESC[201~ block and falls
-        // back to treating the embedded \r line breaks as literal Enter
-        // presses, submitting only the first line and misrouting the rest
-        // as separate input. Fuse the markers into the first/last chunk so
-        // the whole paste goes out as a single atomic write whenever it
-        // fits in one chunk (the common case) -- pastes over
-        // PASTE_CHUNK_SIZE still need more than one write, but even then
-        // the markers ride along with real content instead of standing
-        // alone.
-        if (normalized.isEmpty()) {
-            if (bracketed) writeString("\u001b[200~\u001b[201~")
-            Logger.d(TAG, "Pasted 0 chars (bracketed=$bracketed)")
-            return
+        // A separate write for the open marker / body / close marker each
+        // becomes its own writeScope.launch{} coroutine that independently
+        // acquires writeLock -- launch order is not execution order under a
+        // multi-threaded dispatcher, so those writes could reach the remote
+        // out of order, or with an unrelated concurrent keystroke write
+        // interleaved between them. The remote's bracketed-paste parser
+        // then sees a broken ESC[200~ ... ESC[201~ block and falls back to
+        // treating the embedded \r line breaks as literal Enter presses,
+        // submitting only the first line and misrouting the rest as
+        // separate input. Always send the whole paste -- markers and body
+        // together -- as a single write so it reaches the remote
+        // atomically, no matter how large.
+        val payload = buildString {
+            if (bracketed) append("\u001b[200~")
+            append(normalized)
+            if (bracketed) append("\u001b[201~")
         }
-        var offset = 0
-        while (offset < normalized.length) {
-            val end = minOf(offset + PASTE_CHUNK_SIZE, normalized.length)
-            val chunk = normalized.substring(offset, end)
-            val payload = buildString {
-                if (bracketed && offset == 0) append("\u001b[200~")
-                append(chunk)
-                if (bracketed && end == normalized.length) append("\u001b[201~")
-            }
-            writeString(payload)
-            offset = end
-        }
+        writeString(payload)
         Logger.d(TAG, "Pasted ${normalized.length} chars (bracketed=$bracketed)")
     }
 

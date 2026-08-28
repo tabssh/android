@@ -201,3 +201,19 @@ work).
     `make check` (Docker toolchain: compile + `lintDebug` +
     `testDebugUnitTest` + `processDebugResources`) passes clean.
 
+    **Follow-up (same session)** — user asked to remove the
+    `PASTE_CHUNK_SIZE` cap entirely and always send the whole paste in one
+    write, regardless of size (no protocol/window-size reason for the
+    4096-char cap, it was an arbitrary chunking limit). Both
+    `pasteText()` implementations now build the marker+body+marker
+    payload in one `buildString`/`writeString` (or `stream.write`) call
+    with no chunking loop; `PASTE_CHUNK_SIZE` removed from both files.
+    While doing this, found and fixed a second, unrelated bug introduced
+    by the same-session marker-fusion commit (`3350d1735e32`):
+    `TerminalEmulator.kt`'s `BRACKETED_PASTE_START`/`END` constants
+    already embed the raw ESC byte, but the marker-fusion code prepended
+    an *additional* ESC before them, double-prefixing every bracketed
+    paste on the local (non-SSH-bridge) terminal path — fixed by using
+    the constants directly instead of re-prefixing. `make check` passes
+    clean.
+

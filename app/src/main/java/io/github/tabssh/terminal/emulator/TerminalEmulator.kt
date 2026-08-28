@@ -29,7 +29,6 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
 
     companion object {
         private const val READ_BUFFER_SIZE = 4096
-        private const val PASTE_CHUNK_SIZE = 4096
         private const val BRACKETED_PASTE_START = "[200~"
         private const val BRACKETED_PASTE_END = "[201~"
     }
@@ -179,8 +178,7 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
 
     /**
      * Send clipboard text to the remote, applying bracketed paste mode markers
-     * (ESC[200~ / ESC[201~) when the remote has enabled ?2004, and chunking
-     * large payloads so a single 2 MB write never stalls for a whole round-trip.
+     * (ESC[200~ / ESC[201~) when the remote has enabled ?2004.
      * Line endings are normalised: CRLF and bare LF both become CR.
      */
     fun pasteText(text: String) {
@@ -192,35 +190,20 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
         val bracketed = buffer.isBracketedPasteModeActive()
         postWrite {
             try {
-                // Fuse the open/close markers into the first/last chunk so a
-                // paste that fits in one PASTE_CHUNK_SIZE block (the common
-                // case) reaches the remote as a single write()/flush() -- see
-                // TermuxBridge.pasteText() for why splitting the markers into
-                // their own separate writes risks the remote's
-                // bracketed-paste parser seeing a broken ESC[200~...ESC[201~
-                // block across multiple socket reads.
-                val startMarker = "$BRACKETED_PASTE_START"
-                val endMarker = "$BRACKETED_PASTE_END"
-                if (normalized.isEmpty()) {
-                    if (bracketed) {
-                        stream.write((startMarker + endMarker).toByteArray(currentCharset))
-                        stream.flush()
-                    }
-                } else {
-                    var offset = 0
-                    while (offset < normalized.length) {
-                        val end = minOf(offset + PASTE_CHUNK_SIZE, normalized.length)
-                        val chunk = normalized.substring(offset, end)
-                        val payload = buildString {
-                            if (bracketed && offset == 0) append(startMarker)
-                            append(chunk)
-                            if (bracketed && end == normalized.length) append(endMarker)
-                        }
-                        stream.write(payload.toByteArray(currentCharset))
-                        stream.flush()
-                        offset = end
-                    }
+                // Always send the whole paste -- markers and body -- as a
+                // single write()/flush() so it reaches the remote
+                // atomically, no matter how large. See
+                // TermuxBridge.pasteText() for why splitting the markers
+                // into their own separate writes risks the remote's
+                // bracketed-paste parser seeing a broken
+                // ESC[200~...ESC[201~ block across multiple socket reads.
+                val payload = buildString {
+                    if (bracketed) append(BRACKETED_PASTE_START)
+                    append(normalized)
+                    if (bracketed) append(BRACKETED_PASTE_END)
                 }
+                stream.write(payload.toByteArray(currentCharset))
+                stream.flush()
                 Logger.d("TerminalEmulator", "Pasted ${normalized.length} chars (bracketed=$bracketed)")
             } catch (e: Exception) {
                 Logger.e("TerminalEmulator", "Error pasting text", e)
