@@ -65,7 +65,7 @@ help: ## Show available targets
 	@grep -E -- '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(BLUE)%-12s$(NC) %s\n", $$1, $$2}'
 
 check: _ensure-image ## Compile + lint + JVM unit tests in Docker (pre-commit gate)
-	@$(DOCKER_RUN) $(BUILD_IMAGE) sh -c "$(GRADLE_SEED); ./gradlew kspDebugKotlin compileDebugKotlin lintDebug testDebugUnitTest --no-daemon --build-cache" \
+	@$(DOCKER_RUN) $(BUILD_IMAGE) sh -c "$(GRADLE_SEED); ./gradlew kspDebugKotlin compileDebugKotlin lintDebug testDebugUnitTest processDebugResources --no-daemon --build-cache" \
 		&& echo -e "$(GREEN)✅ No errors$(NC)" \
 		|| { echo -e "$(YELLOW)❌ Errors found$(NC)"; exit 1; }
 

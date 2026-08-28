@@ -101,6 +101,10 @@
     <color name="status_error">#FFC62828</color>
     <color name="status_info">#FF1565C0</color>
     <color name="status_neutral">#FF616161</color>
+    <!-- Overdue tier (past a tracked renewal date) — deliberately a distinct
+         hue from status_error, not just a darker red, so "overdue" and
+         "renews very soon" never read as the same color at a glance -->
+    <color name="status_overdue">#FF6A1B9A</color>
 
     <!-- Tinted status container backgrounds (banner cards in the host-key
          dialogs); values-night swaps in dark tints -->
@@ -108,6 +112,8 @@
     <color name="status_warning_container">#FFFFF3E0</color>
     <color name="status_error_container">#FFFFEBEE</color>
     <color name="status_info_container">#FFE3F2FD</color>
+    <color name="status_overdue_container">#FFF3E5F5</color>
+    <color name="status_neutral_container">#FFF5F5F5</color>
 
     <!-- Translucent primary tint for selected list rows (file manager);
          values-night lightens the base hue -->

@@ -26,6 +26,7 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.databinding.ActivityVpsTrackerBinding
 import io.github.tabssh.storage.database.entities.VpsHost
 import io.github.tabssh.tracker.VpsMarkdownImportExport
+import io.github.tabssh.utils.RenewalUrgency
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -81,8 +82,17 @@ class VpsTrackerActivity : TabSSHActivity() {
         binding.recyclerVpsHosts.layoutManager = LinearLayoutManager(this)
         binding.recyclerVpsHosts.adapter = adapter
         adapter.setOnItemClickListener { host -> launchEditHost(host) }
+        adapter.setOnRenewalPillClickListener { host -> maybeShowRenewalConfirm(host) }
 
         binding.fabAdd.setOnClickListener { launchAddHost() }
+
+        // Grace-window purge: a host the user confirmed "not renewed" 30+
+        // days ago is now removed. Confirming "renewed" (clears canceled_at)
+        // or ignoring the prompt (canceled_at stays null) both keep it.
+        lifecycleScope.launch(Dispatchers.IO) {
+            val cutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
+            app.database.vpsHostDao().deleteStaleCanceled(cutoff)
+        }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -145,6 +155,42 @@ class VpsTrackerActivity : TabSSHActivity() {
         )
     }
 
+    // ── Overdue-renewal confirmation ────────────────────────────────────────
+
+    /** Only overdue hosts prompt — tapping the pill on a non-overdue row is a no-op. */
+    private fun maybeShowRenewalConfirm(host: VpsHost) {
+        val effectiveRenewalDate = RenewalUrgency.effectiveDate(host.renewalDate, host.billingCycle)
+        if (RenewalUrgency.of(effectiveRenewalDate) != RenewalUrgency.OVERDUE) return
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.renewal_confirm_title)
+            .setMessage(getString(R.string.renewal_confirm_message_fmt, "${host.tenant} · ${host.hostname}"))
+            .setPositiveButton(R.string.renewal_confirm_yes) { _, _ ->
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) {
+                        val dao = app.database.vpsHostDao()
+                        // Roll the due date forward one cycle from where it
+                        // actually stood (not just "now") — the same
+                        // projection used for display, applied for real.
+                        val nextDate = RenewalUrgency.effectiveDate(host.renewalDate, host.billingCycle, System.currentTimeMillis() + 1)
+                        dao.update(host.copy(renewalDate = nextDate ?: host.renewalDate, canceledAt = null, modifiedAt = System.currentTimeMillis()))
+                    }
+                    if (!isAlive) return@launch
+                    Toast.makeText(this@VpsTrackerActivity, getString(R.string.renewal_confirm_marked_renewed_fmt, host.hostname), Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton(R.string.renewal_confirm_no) { _, _ ->
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) {
+                        app.database.vpsHostDao().setCanceledAt(host.id, System.currentTimeMillis())
+                    }
+                    if (!isAlive) return@launch
+                    Toast.makeText(this@VpsTrackerActivity, getString(R.string.renewal_confirm_marked_canceled_fmt, host.hostname), Toast.LENGTH_LONG).show()
+                }
+            }
+            .show()
+    }
+
     // ── Import / Export (SAF) ────────────────────────────────────────────────
 
     private fun importFrom(uri: Uri) {
@@ -161,7 +207,14 @@ class VpsTrackerActivity : TabSSHActivity() {
         }
     }
 
-    /** Parse [text] (from a file or pasted directly) and merge into the database by (tenant, hostname). */
+    /**
+     * Parse [text] (from a file or pasted directly) and merge into the
+     * database. Matched by ipv4 first when the parsed row has one — a
+     * host's tenant label or hostname alias can be renamed between exports
+     * but its IPv4 address is effectively stable — falling back to
+     * (tenant, hostname) for rows with no ipv4 (e.g. a still-provisioning
+     * host).
+     */
     private fun importText(text: String) {
         lifecycleScope.launch {
             try {
@@ -171,7 +224,8 @@ class VpsTrackerActivity : TabSSHActivity() {
                 withContext(Dispatchers.IO) {
                     val dao = app.database.vpsHostDao()
                     val merged = result.hosts.map { parsed ->
-                        val existing = dao.getByTenantAndHostname(parsed.tenant, parsed.hostname)
+                        val existing = parsed.ipv4?.takeIf { it.isNotBlank() }?.let { dao.getByIpv4(it) }
+                            ?: dao.getByTenantAndHostname(parsed.tenant, parsed.hostname)
                         if (existing != null) {
                             updated++
                             parsed.copy(
@@ -289,8 +343,12 @@ class VpsTrackerActivity : TabSSHActivity() {
         private var onClick: ((VpsHost) -> Unit)? = null
         fun setOnItemClickListener(listener: (VpsHost) -> Unit) { onClick = listener }
 
+        private var onRenewalPillClick: ((VpsHost) -> Unit)? = null
+        fun setOnRenewalPillClickListener(listener: (VpsHost) -> Unit) { onRenewalPillClick = listener }
+
         inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val hostname: TextView = view.findViewById(R.id.text_vps_hostname)
+            val renewalPill: TextView = view.findViewById(R.id.text_vps_renewal_pill)
             val detail: TextView = view.findViewById(R.id.text_vps_detail)
             val detailScroll: View = view.findViewById(R.id.scroll_vps_detail)
         }
@@ -304,7 +362,30 @@ class VpsTrackerActivity : TabSSHActivity() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val host = getItem(position)
             holder.hostname.text = "${host.tenant} · ${host.hostname}"
-            val renewal = host.renewalDate?.let { VpsMarkdownImportExport.formatRenewalDate(it) } ?: host.renewalRaw ?: "—"
+            // A recurring host's stored date may be a stale past occurrence
+            // (see RenewalUrgency.effectiveDate) — project it forward to the
+            // actual next due date before showing it or coloring the pill.
+            val effectiveRenewalDate = RenewalUrgency.effectiveDate(host.renewalDate, host.billingCycle)
+            val renewal = effectiveRenewalDate?.let { VpsMarkdownImportExport.formatRenewalDate(it) } ?: host.renewalRaw ?: "—"
+
+            // A host awaiting deletion in the 30-day cancellation grace window
+            // overrides the urgency pill entirely — its underlying date is no
+            // longer meaningful once the user has confirmed it was canceled.
+            val urgency = if (host.canceledAt != null) RenewalUrgency.UNKNOWN else RenewalUrgency.of(effectiveRenewalDate)
+            holder.renewalPill.text = if (host.canceledAt != null) {
+                getString(R.string.renewal_pill_canceled)
+            } else {
+                RenewalUrgency.pillText(this@VpsTrackerActivity, effectiveRenewalDate)
+            }
+            val pillBackground = androidx.core.content.ContextCompat.getColor(this@VpsTrackerActivity, urgency.containerColorAttrRes)
+            val pillTextColor = androidx.core.content.ContextCompat.getColor(this@VpsTrackerActivity, urgency.colorAttrRes)
+            (holder.renewalPill.background.mutate() as android.graphics.drawable.GradientDrawable).setColor(pillBackground)
+            holder.renewalPill.setTextColor(pillTextColor)
+            // Tapping the pill itself (not the whole row) opens the "was
+            // this renewed?" prompt — kept separate from the row's own
+            // click-to-edit so the two actions don't collide.
+            holder.renewalPill.setOnClickListener { onRenewalPillClick?.invoke(host) }
+
             holder.detail.text = listOf(
                 getString(R.string.vps_tracker_col_ipv4) + ": " + (host.ipv4 ?: "—"),
                 getString(R.string.vps_tracker_col_ipv6) + ": " + (host.ipv6 ?: "—"),

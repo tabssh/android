@@ -26,6 +26,7 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.databinding.ActivityDomainTrackerBinding
 import io.github.tabssh.storage.database.entities.Domain
 import io.github.tabssh.tracker.DomainCsvImportExport
+import io.github.tabssh.utils.RenewalUrgency
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -82,8 +83,14 @@ class DomainTrackerActivity : TabSSHActivity() {
         binding.recyclerDomains.layoutManager = LinearLayoutManager(this)
         binding.recyclerDomains.adapter = adapter
         adapter.setOnItemClickListener { domain -> launchEditDomain(domain) }
+        adapter.setOnRenewalPillClickListener { domain -> maybeShowRenewalConfirm(domain) }
 
         binding.fabAdd.setOnClickListener { launchAddDomain() }
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val cutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
+            app.database.domainDao().deleteStaleCanceled(cutoff)
+        }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -144,6 +151,46 @@ class DomainTrackerActivity : TabSSHActivity() {
                 putExtra(DomainEditActivity.EXTRA_DOMAIN_ID, domain.id)
             }
         )
+    }
+
+    // ── Overdue-renewal confirmation ────────────────────────────────────────
+
+    /** Only overdue domains prompt — tapping the pill on a non-overdue row is a no-op. */
+    private fun maybeShowRenewalConfirm(domain: Domain) {
+        if (RenewalUrgency.of(domain.expirationDate) != RenewalUrgency.OVERDUE) return
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.renewal_confirm_title)
+            .setMessage(getString(R.string.renewal_confirm_message_fmt, domain.domainName))
+            .setPositiveButton(R.string.renewal_confirm_yes) { _, _ ->
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) {
+                        val dao = app.database.domainDao()
+                        // Domains have no billing-cycle field to project from —
+                        // default to rolling the expiration forward exactly one
+                        // year from where it actually stood, mirroring the VPS
+                        // side's "advance from the real due date, not now" rule.
+                        val calendar = java.util.Calendar.getInstance()
+                        calendar.timeInMillis = domain.expirationDate ?: System.currentTimeMillis()
+                        while (calendar.timeInMillis < System.currentTimeMillis()) {
+                            calendar.add(java.util.Calendar.YEAR, 1)
+                        }
+                        dao.update(domain.copy(expirationDate = calendar.timeInMillis, canceledAt = null, modifiedAt = System.currentTimeMillis()))
+                    }
+                    if (!isAlive) return@launch
+                    Toast.makeText(this@DomainTrackerActivity, getString(R.string.renewal_confirm_marked_renewed_fmt, domain.domainName), Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton(R.string.renewal_confirm_no) { _, _ ->
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) {
+                        app.database.domainDao().setCanceledAt(domain.id, System.currentTimeMillis())
+                    }
+                    if (!isAlive) return@launch
+                    Toast.makeText(this@DomainTrackerActivity, getString(R.string.renewal_confirm_marked_canceled_fmt, domain.domainName), Toast.LENGTH_LONG).show()
+                }
+            }
+            .show()
     }
 
     // ── Import / Export (SAF) ────────────────────────────────────────────────
@@ -291,8 +338,12 @@ class DomainTrackerActivity : TabSSHActivity() {
         private var onClick: ((Domain) -> Unit)? = null
         fun setOnItemClickListener(listener: (Domain) -> Unit) { onClick = listener }
 
+        private var onRenewalPillClick: ((Domain) -> Unit)? = null
+        fun setOnRenewalPillClickListener(listener: (Domain) -> Unit) { onRenewalPillClick = listener }
+
         inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val name: TextView = view.findViewById(R.id.text_domain_name)
+            val renewalPill: TextView = view.findViewById(R.id.text_domain_renewal_pill)
             val detail: TextView = view.findViewById(R.id.text_domain_detail)
             val detailScroll: View = view.findViewById(R.id.scroll_domain_detail)
         }
@@ -308,6 +359,22 @@ class DomainTrackerActivity : TabSSHActivity() {
             holder.name.text = domain.domainName
             val expiration = domain.expirationDate?.let { android.text.format.DateFormat.getMediumDateFormat(this@DomainTrackerActivity).format(it) }
                 ?: getString(R.string.domain_edit_expiration_unset)
+
+            // A domain awaiting deletion in the 30-day cancellation grace
+            // window overrides the urgency pill entirely — its underlying
+            // date is no longer meaningful once canceled is confirmed.
+            val urgency = if (domain.canceledAt != null) RenewalUrgency.UNKNOWN else RenewalUrgency.of(domain.expirationDate)
+            holder.renewalPill.text = if (domain.canceledAt != null) {
+                getString(R.string.renewal_pill_canceled)
+            } else {
+                RenewalUrgency.pillText(this@DomainTrackerActivity, domain.expirationDate)
+            }
+            val pillBackground = androidx.core.content.ContextCompat.getColor(this@DomainTrackerActivity, urgency.containerColorAttrRes)
+            val pillTextColor = androidx.core.content.ContextCompat.getColor(this@DomainTrackerActivity, urgency.colorAttrRes)
+            (holder.renewalPill.background.mutate() as android.graphics.drawable.GradientDrawable).setColor(pillBackground)
+            holder.renewalPill.setTextColor(pillTextColor)
+            holder.renewalPill.setOnClickListener { onRenewalPillClick?.invoke(domain) }
+
             holder.detail.text = listOf(
                 getString(R.string.domain_tracker_col_privacy) + ": " + domain.privacyProtection,
                 getString(R.string.domain_tracker_col_status) + ": " + domain.statusAtRegistrar,

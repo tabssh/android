@@ -610,7 +610,15 @@ class ImportExportActivity : TabSSHActivity() {
 
     /**
      * Insert parsed connection profiles into the database, creating groups as needed.
-     * Deduplicates on (host, port, username) to avoid re-importing the same hosts.
+     *
+     * Matches existing connections by (host, username) — the host address is the
+     * stable identity of "this machine," same reasoning as the VPS/Domain tracker's
+     * IPv4-keyed import — rather than port, which changes far more often (e.g. a
+     * box moved off a custom port back to 22) and previously caused a re-import to
+     * create a stale duplicate instead of updating the existing row in place. Since
+     * hypervisor/container/monitoring features reference a connection by its
+     * database id, updating in place (not delete+reinsert) is what keeps those
+     * links intact across re-imports.
      *
      * [hasUnresolvedKeys] — true when at least one profile's IdentityFile couldn't
      * be resolved to a stored key. A persistent Snackbar prompts the user to navigate
@@ -649,30 +657,57 @@ class ImportExportActivity : TabSSHActivity() {
                 }
 
                 val existing = app.database.connectionDao().getAllConnectionsList()
-                val existingTriples = existing.map { Triple(it.host, it.port, it.username) }.toHashSet()
+                // (host, username) is the merge key — host address is unlikely to
+                // change and username distinguishes multiple accounts on the same
+                // box; port is deliberately excluded (see doc comment above).
+                fun matchKey(host: String, username: String) = host.lowercase() to username
+                val existingByKey = existing.associateBy { matchKey(it.host, it.username) }.toMutableMap()
                 var connectionsImported = 0
-                var connectionsSkipped = 0
+                var connectionsUpdated = 0
                 profiles.forEach { profile ->
                     val updatedProfile = if (profile.groupId != null && groupNameToId.containsKey(profile.groupId)) {
                         profile.copy(groupId = groupNameToId[profile.groupId])
                     } else {
                         profile
                     }
-                    val triple = Triple(updatedProfile.host, updatedProfile.port, updatedProfile.username)
-                    if (existingTriples.contains(triple)) {
-                        connectionsSkipped++
+                    val key = matchKey(updatedProfile.host, updatedProfile.username)
+                    val match = existingByKey[key]
+                    if (match != null) {
+                        // Overwrite the ssh_config-derived fields, but keep every
+                        // app-managed/runtime field the config file knows nothing
+                        // about — same "preserve what the source can't express"
+                        // rule as the VPS/Domain tracker's import merge.
+                        val merged = updatedProfile.copy(
+                            id = match.id,
+                            createdAt = match.createdAt,
+                            sortOrder = match.sortOrder,
+                            colorTag = match.colorTag,
+                            lastConnected = match.lastConnected,
+                            connectionCount = match.connectionCount,
+                            notifSoundMode = match.notifSoundMode,
+                            notifVibrateMode = match.notifVibrateMode,
+                            lastSyncedAt = match.lastSyncedAt,
+                            syncVersion = match.syncVersion,
+                            syncDeviceId = match.syncDeviceId,
+                            ociInstanceId = match.ociInstanceId,
+                            routeId = match.routeId,
+                            modifiedAt = System.currentTimeMillis()
+                        )
+                        app.database.connectionDao().updateConnection(merged)
+                        existingByKey[key] = merged
+                        connectionsUpdated++
                     } else {
                         app.database.connectionDao().insertConnection(updatedProfile)
                         // Catch in-batch duplicates too
-                        existingTriples.add(triple)
+                        existingByKey[key] = updatedProfile
                         connectionsImported++
                     }
                 }
 
                 val message = buildString {
                     append(getString(R.string.import_export_imported_connections, connectionsImported))
-                    if (connectionsSkipped > 0) {
-                        append(getString(R.string.import_export_skipped_connections, connectionsSkipped))
+                    if (connectionsUpdated > 0) {
+                        append(getString(R.string.import_export_updated_connections, connectionsUpdated))
                     }
                     if (groupsCreated > 0) {
                         append(getString(R.string.import_export_created_groups, groupsCreated))

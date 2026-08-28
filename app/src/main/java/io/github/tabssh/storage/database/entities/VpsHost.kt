@@ -65,6 +65,17 @@ data class VpsHost(
     @ColumnInfo(name = "last_reminder_sent_at")
     val lastReminderSentAt: Long? = null,
 
+    /**
+     * Epoch millis of when the user answered "no" to the overdue-renewal
+     * confirmation prompt ("was this renewed?") — null while the host is
+     * active/unconfirmed. A canceled host is kept (not deleted immediately)
+     * so the user has a grace window to notice/undo, then swept away once
+     * it has been canceled for 30+ days (see `VpsTrackerActivity`'s
+     * stale-cancellation sweep).
+     */
+    @ColumnInfo(name = "canceled_at")
+    val canceledAt: Long? = null,
+
     @ColumnInfo(name = "created_at")
     val createdAt: Long,
 

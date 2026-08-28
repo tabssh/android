@@ -27,6 +27,17 @@ interface DomainDao {
     @Query("SELECT * FROM domains WHERE expiration_date IS NOT NULL")
     suspend fun getAllWithExpiration(): List<Domain>
 
+    // Overdue-renewal confirmation flow: "yes" clears canceled_at (and the
+    // caller separately updates expiration_date via `update()`); "no" sets it.
+    @Query("UPDATE domains SET canceled_at = :canceledAt WHERE id = :id")
+    suspend fun setCanceledAt(id: String, canceledAt: Long?)
+
+    // Grace-window purge: only rows still marked canceled 30+ days ago are
+    // removed — confirming "renewed" (which clears canceled_at) or simply
+    // ignoring the prompt (canceled_at stays null) both keep the row.
+    @Query("DELETE FROM domains WHERE canceled_at IS NOT NULL AND canceled_at < :cutoff")
+    suspend fun deleteStaleCanceled(cutoff: Long)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(domain: Domain)
 

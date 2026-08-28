@@ -21,7 +21,11 @@ import java.util.UUID
  * This is human-formatted, whitespace-aligned text, not strict data — the
  * parser is deliberately permissive (bracket-group extraction + positional
  * token assignment) rather than a strict grammar, and every field beyond
- * hostname/ipv4/ipv6 tolerates being missing.
+ * hostname/ipv4/ipv6 tolerates being missing. A top-level title line, blank
+ * lines, and an optional wrapping ` ```text ` / ` ``` ` fenced-code-block
+ * (common when the source note is kept in a Markdown-aware editor) are all
+ * skipped rather than misread as data rows. Recognized billing-cycle
+ * keywords: yearly/annually, monthly, weekly, daily, biennially, triennially.
  */
 object VpsMarkdownImportExport {
 
@@ -75,6 +79,10 @@ object VpsMarkdownImportExport {
                 continue
             }
             if (line.trim().startsWith("#")) continue
+            // Personal notes often wrap the tenant/host table in a fenced code
+            // block (```text ... ```) to keep alignment in a Markdown viewer —
+            // skip fence markers rather than misreading them as a data row.
+            if (line.trim().startsWith("```")) continue
 
             val tenant = currentTenant
             if (tenant.isNullOrBlank()) {
@@ -115,6 +123,8 @@ object VpsMarkdownImportExport {
             val billingCycle = renewalRaw?.let { raw ->
                 val lower = raw.lowercase(Locale.US)
                 when {
+                    "biennially" in lower || "biennial" in lower -> "biennially"
+                    "triennially" in lower || "triennial" in lower -> "triennially"
                     "yearly" in lower || "annual" in lower -> "yearly"
                     "monthly" in lower -> "monthly"
                     "weekly" in lower -> "weekly"
@@ -185,27 +195,45 @@ object VpsMarkdownImportExport {
         }
     }
 
-    /** Regenerate the grouped-by-tenant Markdown shape from DB rows. */
+    private fun renewalFieldText(h: VpsHost): String = buildString {
+        append(h.renewalRaw.orEmpty())
+        if (!h.price.isNullOrBlank()) {
+            if (isNotEmpty()) append(' ')
+            append(h.price)
+        }
+    }
+
+    private fun bracket(value: String?): String = "[" + value.orEmpty() + "]"
+
+    /**
+     * Regenerate the grouped-by-tenant Markdown shape from DB rows, column-
+     * aligned to match the hand-maintained source file's look: hostname/
+     * ipv4/ipv6 padded to the widest value across the whole export (not
+     * just the current tenant block, so alignment stays consistent even
+     * for single-host blocks), and each bracketed field padded to the
+     * widest bracketed value before the next field starts.
+     */
     fun export(hosts: List<VpsHost>): String {
         val sb = StringBuilder()
         val byTenant = hosts.groupBy { it.tenant }.toSortedMap()
+
+        val hostnameWidth = (hosts.maxOfOrNull { it.hostname.length } ?: 0) + 2
+        val ipv4Width = (hosts.maxOfOrNull { (it.ipv4 ?: "").length } ?: 0) + 2
+        val ipv6Width = (hosts.maxOfOrNull { (it.ipv6 ?: "").length } ?: 0) + 2
+        val specsWidth = hosts.maxOfOrNull { bracket(it.specs).length } ?: 0
+        val domainWidth = hosts.maxOfOrNull { bracket(it.linkedDomain).length } ?: 0
+        val renewalWidth = hosts.maxOfOrNull { bracket(renewalFieldText(it)).length } ?: 0
+
         for ((tenant, tenantHosts) in byTenant) {
             sb.append("## Tenant   - ").append(tenant).append('\n')
             for (h in tenantHosts.sortedBy { it.hostname }) {
-                sb.append(h.hostname)
-                sb.append("   - ").append(h.ipv4.orEmpty())
-                sb.append("   - ").append(h.ipv6.orEmpty())
-                sb.append("   [").append(h.specs.orEmpty()).append(']')
-                sb.append("   [").append(h.linkedDomain.orEmpty()).append(']')
-                val renewalField = buildString {
-                    append(h.renewalRaw.orEmpty())
-                    if (!h.price.isNullOrBlank()) {
-                        if (isNotEmpty()) append("    ")
-                        append(h.price)
-                    }
-                }
-                sb.append("   [").append(renewalField).append(']')
-                sb.append("   [").append(h.description.orEmpty()).append(']')
+                sb.append(h.hostname.padEnd(hostnameWidth)).append("- ")
+                sb.append((h.ipv4.orEmpty()).padEnd(ipv4Width)).append("- ")
+                sb.append((h.ipv6.orEmpty()).padEnd(ipv6Width))
+                sb.append(bracket(h.specs).padEnd(specsWidth)).append("  ")
+                sb.append(bracket(h.linkedDomain).padEnd(domainWidth)).append("  ")
+                sb.append(bracket(renewalFieldText(h)).padEnd(renewalWidth)).append("  ")
+                sb.append(bracket(h.description))
                 sb.append('\n')
             }
             sb.append(SEPARATOR).append('\n')

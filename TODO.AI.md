@@ -24,6 +24,11 @@ work).
     the `check` target's Gradle task list so this class of bug is caught
     before commit, not after push.
 
+    **Fixed** — added `processDebugResources` to the `check` target's Gradle
+    task list in `Makefile` (lighter than `assembleDebug`, still runs AAPT
+    resource linking so a missing `android:string`/`android:label` reference
+    now fails locally instead of only in CI).
+
 52. **Terminal content gets cut off / scrolls out of view when the system
     IME (Gboard) is open — confirmed recent regression, root cause not yet
     fully confirmed.** Screenshots (same Claude-Code-over-SSH session, with

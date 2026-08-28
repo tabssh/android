@@ -1045,7 +1045,7 @@
     <string name="import_export_unresolved_key_path">"  %1$s\n"</string>
     <string name="import_export_unresolved_keys_hint">\nAfter import: go to the Identities tab, import your private key, then edit each connection and select it.</string>
     <string name="import_export_imported_connections">✓ Imported %1$d connection(s)</string>
-    <string name="import_export_skipped_connections">\n• Skipped %1$d already-existing host(s)</string>
+    <string name="import_export_updated_connections">\n• Updated %1$d already-existing host(s)</string>
     <string name="import_export_created_groups">\n✓ Created %1$d new group(s)</string>
     <string name="import_export_need_key_snackbar">Some connections need an SSH key — go import it now</string>
     <string name="import_export_identities_action">Identities</string>
@@ -2320,6 +2320,25 @@
     <string name="vps_tracker_col_price">Price</string>
     <string name="vps_tracker_import_success_fmt">Imported %1$d new, updated %2$d existing VPS host(s)</string>
     <string name="vps_tracker_export_success">VPS hosts exported</string>
+
+    <!-- ── Renewal urgency pill (shared: VPS Tracker + Domain Tracker rows) ── -->
+    <string name="renewal_pill_unknown">—</string>
+    <plurals name="renewal_pill_overdue">
+        <item quantity="one">Overdue %1$d day</item>
+        <item quantity="other">Overdue %1$d days</item>
+    </plurals>
+    <string name="renewal_pill_today">Due today</string>
+    <plurals name="renewal_pill_days_left">
+        <item quantity="one">%1$d day left</item>
+        <item quantity="other">%1$d days left</item>
+    </plurals>
+    <string name="renewal_pill_canceled">Canceled</string>
+    <string name="renewal_confirm_title">Was this renewed?</string>
+    <string name="renewal_confirm_message_fmt">%1$s is overdue for renewal. Was it renewed?</string>
+    <string name="renewal_confirm_yes">Yes, renewed</string>
+    <string name="renewal_confirm_no">No, canceled</string>
+    <string name="renewal_confirm_marked_canceled_fmt">%1$s marked canceled — it will be removed automatically after 30 days unless confirmed renewed</string>
+    <string name="renewal_confirm_marked_renewed_fmt">%1$s marked renewed</string>
 
     <string name="vps_host_edit_title_new">Add VPS Host</string>
     <string name="vps_host_edit_title_edit">Edit VPS Host</string>
