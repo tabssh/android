@@ -59,6 +59,7 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 - Agent forwarding
 - SFTP file browser with upload, download, rename, chmod, delete; remote file editor; SCP fallback
 - Session recording and replay (transcript) — transcripts stay on-device and must be readable by the user outside the app
+- Session video recorder — `MediaProjection`/`MediaRecorder` screen capture to mp4 for any visible tab (SSH, VNC, Panes); SSH tabs can additionally record an asciinema v2 `.cast` alongside the mp4, driven off the same byte-stream tap the transcript recorder uses but through its own independent `TermuxBridge.castRecorder` field so neither recorder can interfere with the other; both files save to MediaStore-scoped `Movies/TabSSH` and offer a post-stop Share action (`ACTION_SEND` + `FileProvider`, mirroring `SFTPActivity.shareFile()`); recording pauses (not stops) when the user swipes away from the recorded tab and auto-stops with a toast if that tab is closed
 - `~/.ssh/config` import
 - Bulk import: CSV, JSON, PuTTY .reg, Terraform `.tf` config files — each format maps its fields onto connection profiles (host, port, user, auth, group)
 - Custom on-screen keyboard with configurable rows and gesture bindings

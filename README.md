@@ -38,7 +38,8 @@ enterprise security, hypervisor management, and cloud provider integration.
 - ⌨️ **Per-host PRE-key bindings** — Override the tmux/screen/zellij PRE prefix independently per host; blank falls back to the global default
 - 🌐 **IPv4 / IPv6 selection** — Per-host auto/ipv4/ipv6 with fallback toast
 - 🔗 **ProxyJump** — Multi-hop connections through bastion hosts
-- ⏺️ **Session Recording** — Capture and replay raw terminal sessions
+- ⏺️ **Session Recording** — Capture and replay raw terminal sessions (transcript)
+- 🎥 **Session Video Recorder** — Record any tab (SSH, VNC, Panes) to mp4 via screen capture; SSH tabs can also record an asciinema `.cast` alongside it; saved to `Movies/TabSSH` and shareable straight from the stop notification
 - 🪟 **Panes** — Up to 6 SSH/Telnet/Mosh sessions tiled in a resizable grid inside one terminal tab; tap a pane to focus it, close individually or as a group (Disconnect All / Keep Running in Background), auto-stacks to a single column on narrow screens
 
 ### Security

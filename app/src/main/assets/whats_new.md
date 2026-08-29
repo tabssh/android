@@ -57,8 +57,31 @@
   keeps the global `C-b`. Leaving a host's binding blank keeps using the
   global default for that type.
 
+### Session video recorder
+
+- **Record a tab to video** — "Record Video…" on any visible tab (SSH,
+  VNC, Panes) captures the screen to mp4 via Android's screen-recording
+  consent flow. On an SSH tab you can additionally record an asciinema
+  `.cast` alongside it, so you get a real terminal-cast file (not just
+  pixels) from the same "start recording" action.
+- Both files save to `Movies/TabSSH`, and a Share action appears in the
+  stop notification and a post-stop dialog once recording finishes.
+- Recording pauses (not stops) if you swipe away from the recorded tab,
+  and auto-stops with a toast if that tab is closed while recording.
+- mp4 quality (Low/Medium/High) and whether the `.cast` is included by
+  default are both configurable in Settings.
+
 ### Fixed
 
+- **Multi-line paste dropped or split lines after the first** — pasting a
+  multi-line file or snippet into an SSH terminal could submit only the
+  first line, with the rest arriving as separate individual input instead
+  of one paste. The bracketed-paste open marker, pasted body, and close
+  marker were being sent as separate writes with no guaranteed ordering,
+  so the remote could see a broken paste block and fall back to treating
+  line breaks as Enter presses. Pastes of any size now always go out as
+  a single write, so this can no longer happen regardless of paste
+  length.
 - **Pasting, the clipboard menu, and the custom keyboard bar didn't work
   on a standalone VNC tab** — they were gated on a check that only
   matched console (multiplexer) tabs, so a plain VNC tab always reported
