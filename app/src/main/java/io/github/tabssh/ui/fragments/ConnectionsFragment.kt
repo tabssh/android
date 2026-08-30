@@ -1,6 +1,5 @@
 package io.github.tabssh.ui.fragments
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -22,10 +21,14 @@ import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
-import io.github.tabssh.ui.activities.TabTerminalActivity
+import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.storage.database.entities.TelnetHost
+import io.github.tabssh.storage.database.entities.VncHost
 import io.github.tabssh.ui.tabs.Tab
 import io.github.tabssh.ui.tabs.connectionState
 import io.github.tabssh.ui.tabs.shortTitle
+import io.github.tabssh.ui.utils.ConnectionLauncher
+import io.github.tabssh.ui.utils.HostContextActions
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import io.github.tabssh.utils.tabSSHApp
@@ -54,6 +57,11 @@ class ConnectionsFragment : Fragment() {
 
     private var searchJob: Job? = null
     private var currentQuery: String = ""
+
+    // Connecting suspends through the whole RFB handshake while the search
+    // row stays tappable — a double tap would open two sockets, same guard
+    // VncHostsFragment keeps for its own list.
+    private var vncConnecting = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -132,7 +140,10 @@ class ConnectionsFragment : Fragment() {
     }
 
     private fun setupSearch() {
-        searchAdapter = SearchResultAdapter()
+        searchAdapter = SearchResultAdapter(
+            onClick = { result -> handleSearchResultClick(result) },
+            onLongClick = { anchor, result -> handleSearchResultLongClick(anchor, result) }
+        )
         recyclerSearchResults.layoutManager = LinearLayoutManager(requireContext())
         recyclerSearchResults.adapter = searchAdapter
 
@@ -178,78 +189,147 @@ class ConnectionsFragment : Fragment() {
             .filter { it.protocol == "ssh" }
             .filter { it.name.lowercase().contains(needle) || it.host.lowercase().contains(needle) }
             .forEach { connection ->
-                results += SearchResult(
+                results += SearchResult.SshResult(
+                    connection = connection,
                     badge = getString(R.string.hosts_search_badge_ssh),
                     title = connection.name,
                     subtitle = getString(R.string.hypervisor_endpoint_fmt, connection.host, connection.port)
-                ) {
-                    startActivity(
-                        io.github.tabssh.ui.activities.ConnectionEditActivity
-                            .createIntent(requireContext(), connection.id)
-                    )
-                }
+                )
             }
 
         app.database.vncHostDao().getAllHostsList()
             .filter { it.name.lowercase().contains(needle) || it.host.lowercase().contains(needle) }
             .forEach { host ->
-                results += SearchResult(
+                results += SearchResult.VncResult(
+                    host = host,
                     badge = getString(R.string.hosts_search_badge_vnc),
                     title = host.name,
                     subtitle = getString(R.string.hypervisor_endpoint_fmt, host.host, host.effectivePort)
-                ) {
-                    startActivity(
-                        Intent(requireContext(), io.github.tabssh.ui.activities.VncHostEditActivity::class.java).apply {
-                            putExtra(io.github.tabssh.ui.activities.VncHostEditActivity.EXTRA_VNC_HOST_ID, host.id)
-                        }
-                    )
-                }
+                )
             }
 
         app.database.telnetHostDao().getAllList()
             .filter { it.name.lowercase().contains(needle) || it.host.lowercase().contains(needle) }
             .forEach { host ->
-                results += SearchResult(
+                results += SearchResult.TelnetResult(
+                    host = host,
                     badge = getString(R.string.hosts_search_badge_telnet),
                     title = host.name,
                     subtitle = getString(R.string.hypervisor_endpoint_fmt, host.host, host.port)
-                ) {
-                    startActivity(
-                        io.github.tabssh.ui.activities.ConnectionEditActivity
-                            .createTelnetIntent(requireContext(), host.id)
-                    )
-                }
+                )
             }
 
         app.tabManager.getAllTabsSealed()
             .filter { it.shortTitle().lowercase().contains(needle) }
             .forEach { tab ->
-                results += SearchResult(
+                results += SearchResult.ActiveResult(
+                    tab = tab,
                     badge = getString(R.string.hosts_search_badge_active),
                     title = tab.shortTitle(),
                     subtitle = tab.connectionState().displayName
-                ) {
-                    app.tabManager.switchToTabById(tab.tabId)
-                    startActivity(
-                        Intent(requireContext(), TabTerminalActivity::class.java).apply {
-                            putExtra(TabTerminalActivity.EXTRA_TAB_ID, tab.tabId)
-                        }
-                    )
-                }
+                )
             }
 
         return results
     }
 
-    private data class SearchResult(
-        val badge: String,
-        val title: String,
-        val subtitle: String,
-        val onClick: () -> Unit
-    )
+    /**
+     * Primary tap — matches whatever tapping the same host/tab does on its
+     * own sub-tab list: Connect for SSH/VNC, edit for Telnet (there is no
+     * live Telnet connector yet, same as [TelnetHostsFragment]), and
+     * switch-to-tab for an already-open session.
+     */
+    private fun handleSearchResultClick(result: SearchResult) {
+        when (result) {
+            is SearchResult.SshResult ->
+                ConnectionLauncher.launch(requireContext(), result.connection)
+            is SearchResult.VncResult ->
+                HostContextActions.connectToVncHost(
+                    fragment = this,
+                    app = app,
+                    host = result.host,
+                    isConnecting = { vncConnecting },
+                    setConnecting = { vncConnecting = it }
+                )
+            is SearchResult.TelnetResult ->
+                HostContextActions.editTelnetHost(this, result.host)
+            is SearchResult.ActiveResult ->
+                HostContextActions.openActiveTab(this, app, result.tab)
+        }
+    }
 
-    private class SearchResultAdapter :
-        ListAdapter<SearchResult, SearchResultAdapter.ViewHolder>(DiffCallback()) {
+    /**
+     * Long-press — the exact same context menu (Connect / Browse Files /
+     * Edit / Duplicate / Delete for SSH, Edit / Delete for VNC and Telnet,
+     * Open / Disconnect for Active) that host/tab's own sub-tab list shows,
+     * via the shared [HostContextActions].
+     */
+    private fun handleSearchResultLongClick(anchor: View, result: SearchResult) {
+        when (result) {
+            is SearchResult.SshResult ->
+                HostContextActions.showSshConnectionMenu(this, app, result.connection)
+            is SearchResult.VncResult ->
+                HostContextActions.showVncHostMenu(this, app, result.host)
+            is SearchResult.TelnetResult ->
+                HostContextActions.showTelnetHostMenu(this, app, result.host)
+            is SearchResult.ActiveResult ->
+                HostContextActions.showActiveTabMenu(this, anchor, app, result.tab)
+        }
+    }
+
+    /**
+     * One row in the unified search overlay. Carries the actual entity
+     * (not a precomputed click lambda) so both tap and long-press can
+     * dispatch through [HostContextActions] — the same logic each sub-tab
+     * list already uses — instead of duplicating it.
+     */
+    private sealed class SearchResult {
+        abstract val badge: String
+        abstract val title: String
+        abstract val subtitle: String
+        abstract val key: String
+
+        data class SshResult(
+            val connection: ConnectionProfile,
+            override val badge: String,
+            override val title: String,
+            override val subtitle: String
+        ) : SearchResult() {
+            override val key: String = "ssh:${connection.id}"
+        }
+
+        data class VncResult(
+            val host: VncHost,
+            override val badge: String,
+            override val title: String,
+            override val subtitle: String
+        ) : SearchResult() {
+            override val key: String = "vnc:${host.id}"
+        }
+
+        data class TelnetResult(
+            val host: TelnetHost,
+            override val badge: String,
+            override val title: String,
+            override val subtitle: String
+        ) : SearchResult() {
+            override val key: String = "telnet:${host.id}"
+        }
+
+        data class ActiveResult(
+            val tab: Tab,
+            override val badge: String,
+            override val title: String,
+            override val subtitle: String
+        ) : SearchResult() {
+            override val key: String = "active:${tab.tabId}"
+        }
+    }
+
+    private class SearchResultAdapter(
+        private val onClick: (SearchResult) -> Unit,
+        private val onLongClick: (View, SearchResult) -> Unit
+    ) : ListAdapter<SearchResult, SearchResultAdapter.ViewHolder>(DiffCallback()) {
 
         class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val textBadge: TextView = view.findViewById(R.id.text_badge)
@@ -268,21 +348,20 @@ class ConnectionsFragment : Fragment() {
             holder.textBadge.text = item.badge
             holder.textTitle.text = item.title
             holder.textSubtitle.text = item.subtitle
-            holder.itemView.setOnClickListener { item.onClick() }
+            holder.itemView.setOnClickListener { onClick(item) }
+            holder.itemView.setOnLongClickListener {
+                onLongClick(holder.itemView, item)
+                true
+            }
         }
 
-        // Identity/content are both keyed on the visible text — SearchResult
-        // also carries an onClick closure that has no meaningful equality,
-        // so it is excluded from the comparison.
         class DiffCallback : DiffUtil.ItemCallback<SearchResult>() {
             override fun areItemsTheSame(oldItem: SearchResult, newItem: SearchResult): Boolean {
-                return oldItem.badge == newItem.badge &&
-                    oldItem.title == newItem.title &&
-                    oldItem.subtitle == newItem.subtitle
+                return oldItem.key == newItem.key
             }
 
             override fun areContentsTheSame(oldItem: SearchResult, newItem: SearchResult): Boolean {
-                return areItemsTheSame(oldItem, newItem)
+                return oldItem == newItem
             }
         }
     }

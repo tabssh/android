@@ -5,7 +5,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -14,16 +13,12 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.TelnetHost
-import io.github.tabssh.sync.tombstone.TombstoneRecorder
 import io.github.tabssh.ui.activities.ConnectionEditActivity
-import io.github.tabssh.utils.logging.Logger
-import kotlinx.coroutines.Dispatchers
+import io.github.tabssh.ui.utils.HostContextActions
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import io.github.tabssh.utils.tabSSHApp
 
 /**
@@ -40,9 +35,6 @@ class TelnetHostsFragment : Fragment() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyState: View
     private lateinit var adapter: TelnetHostAdapter
-
-    private val isAlive: Boolean
-        get() = isAdded && !requireActivity().isFinishing && !requireActivity().isDestroyed
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -88,45 +80,11 @@ class TelnetHostsFragment : Fragment() {
     }
 
     private fun launchEditHost(host: TelnetHost) {
-        startActivity(ConnectionEditActivity.createTelnetIntent(requireContext(), host.id))
+        HostContextActions.editTelnetHost(this, host)
     }
 
     private fun showHostMenu(host: TelnetHost) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(host.name)
-            .setItems(arrayOf(getString(R.string.edit), getString(R.string.delete))) { _, which ->
-                when (which) {
-                    0 -> launchEditHost(host)
-                    1 -> confirmDelete(host)
-                }
-            }
-            .show()
-    }
-
-    private fun confirmDelete(host: TelnetHost) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(getString(R.string.domain_delete_title, host.name))
-            .setMessage(getString(R.string.telnet_host_delete_message))
-            .setPositiveButton(getString(R.string.delete)) { _, _ ->
-                viewLifecycleOwner.lifecycleScope.launch {
-                    try {
-                        withContext(Dispatchers.IO) {
-                            app.database.telnetHostDao().deleteById(host.id)
-                            app.securePasswordManager.clearPassword(host.id)
-                            TombstoneRecorder.record(app, TombstoneRecorder.TELNET_HOST, host.id)
-                        }
-                        Logger.d(TAG, "Deleted Telnet host: ${host.name}")
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Logger.e(TAG, "Failed to delete Telnet host", e)
-                        if (!isAlive) return@launch
-                        Toast.makeText(requireContext(), getString(R.string.domain_delete_failed_fmt, e.message), Toast.LENGTH_LONG).show()
-                    }
-                }
-            }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
+        HostContextActions.showTelnetHostMenu(this, app, host)
     }
 
     private inner class TelnetHostAdapter(
@@ -163,7 +121,6 @@ class TelnetHostsFragment : Fragment() {
     }
 
     companion object {
-        private const val TAG = "TelnetHostsFragment"
         fun newInstance() = TelnetHostsFragment()
     }
 }

@@ -17,17 +17,16 @@ import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.ssh.connection.ConnectionState
-import io.github.tabssh.ui.activities.TabTerminalActivity
 import io.github.tabssh.ui.tabs.Tab
 import io.github.tabssh.ui.tabs.connectedAt
 import io.github.tabssh.ui.tabs.connectionDetail
 import io.github.tabssh.ui.tabs.connectionDisplayName
 import io.github.tabssh.ui.tabs.connectionState
+import io.github.tabssh.ui.utils.HostContextActions
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import android.content.Intent
 import io.github.tabssh.utils.tabSSHApp
 
 /**
@@ -58,8 +57,7 @@ class ActiveHostsFragment : Fragment() {
         emptyState = view.findViewById(R.id.empty_state)
 
         adapter = ActiveTabAdapter(
-            onTap = { tab -> openTab(tab) },
-            onDisconnect = { tab -> disconnectTab(tab) }
+            onTap = { tab -> openTab(tab) }
         )
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.adapter = adapter
@@ -113,12 +111,7 @@ class ActiveHostsFragment : Fragment() {
     }
 
     private fun openTab(tab: Tab) {
-        app.tabManager.switchToTabById(tab.tabId)
-        startActivity(
-            Intent(requireContext(), TabTerminalActivity::class.java).apply {
-                putExtra(TabTerminalActivity.EXTRA_TAB_ID, tab.tabId)
-            }
-        )
+        HostContextActions.openActiveTab(this, app, tab)
     }
 
     /**
@@ -130,8 +123,7 @@ class ActiveHostsFragment : Fragment() {
     }
 
     private inner class ActiveTabAdapter(
-        private val onTap: (Tab) -> Unit,
-        private val onDisconnect: (Tab) -> Unit
+        private val onTap: (Tab) -> Unit
     ) : ListAdapter<Tab, ActiveTabAdapter.ViewHolder>(TabDiff) {
 
         inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -175,19 +167,11 @@ class ActiveHostsFragment : Fragment() {
         /**
          * Long-press parity with the swipe gesture: same "Open" /
          * "Disconnect" pair, reachable without a directional swipe.
+         * Delegates to [HostContextActions.showActiveTabMenu] so the
+         * unified search overlay's "Active" results get the identical menu.
          */
         private fun showTabMenu(anchor: View, tab: Tab) {
-            val popup = android.widget.PopupMenu(anchor.context, anchor)
-            popup.menu.add(R.string.active_host_menu_open)
-            popup.menu.add(R.string.active_host_menu_disconnect)
-            popup.setOnMenuItemClickListener { item ->
-                when (item.title) {
-                    anchor.context.getString(R.string.active_host_menu_open) -> onTap(tab)
-                    anchor.context.getString(R.string.active_host_menu_disconnect) -> onDisconnect(tab)
-                }
-                true
-            }
-            popup.show()
+            HostContextActions.showActiveTabMenu(this@ActiveHostsFragment, anchor, app, tab)
         }
 
         private fun protocolLabel(tab: Tab): String = when (tab) {

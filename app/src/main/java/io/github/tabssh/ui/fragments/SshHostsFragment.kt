@@ -1,7 +1,6 @@
 package io.github.tabssh.ui.fragments
 
 import io.github.tabssh.sync.tombstone.TombstoneRecorder
-import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.Menu
@@ -31,11 +30,11 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.storage.database.entities.Identity
-import io.github.tabssh.ui.activities.ConnectionEditActivity
 import io.github.tabssh.ui.activities.TabTerminalActivity
 import io.github.tabssh.ui.adapters.ConnectionAdapter
 import io.github.tabssh.ui.adapters.GroupedConnectionAdapter
 import io.github.tabssh.ui.models.ConnectionListItem
+import io.github.tabssh.ui.utils.HostContextActions
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.replaceAllWithDiff
 import androidx.room.withTransaction
@@ -220,7 +219,7 @@ class SshHostsFragment : Fragment() {
 
         // Long click for context menu
         adapter.setOnItemLongClickListener { connection ->
-            showConnectionMenu(connection)
+            HostContextActions.showSshConnectionMenu(this, app, connection)
             true
         }
 
@@ -248,95 +247,6 @@ class SshHostsFragment : Fragment() {
         io.github.tabssh.ui.utils.ConnectionLauncher.launch(requireContext(), connection)
     }
     
-    private fun showConnectionMenu(connection: ConnectionProfile) {
-        // Order: Connect → Browse Files → Edit → Duplicate → Delete.
-        // "Browse Files" sits between Connect and Edit per UX feedback —
-        // it's a top-level action a user reaches for as often as Connect,
-        // not a buried option. Renamed "Open" to "Connect" to match how
-        // the rest of the app talks about starting an SSH session.
-        val items = arrayOf(
-            getString(R.string.connect_button),
-            getString(R.string.connections_menu_browse_files),
-            getString(R.string.edit),
-            getString(R.string.connections_menu_duplicate),
-            getString(R.string.delete)
-        )
-
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(connection.name)
-            .setItems(items) { _, which ->
-                when (which) {
-                    0 -> openConnection(connection)
-                    1 -> openSftpBrowser(connection)
-                    2 -> editConnection(connection)
-                    3 -> duplicateConnection(connection)
-                    4 -> deleteConnection(connection)
-                }
-            }
-            .show()
-    }
-
-    private fun openSftpBrowser(connection: ConnectionProfile) {
-        Logger.d("SshHostsFragment", "Opening SFTP browser for ${connection.name}")
-        startActivity(io.github.tabssh.ui.activities.SFTPActivity.createIntent(
-            requireContext(), connection.id
-        ))
-    }
-    
-    private fun editConnection(connection: ConnectionProfile) {
-        val intent = Intent(requireContext(), ConnectionEditActivity::class.java).apply {
-            putExtra(ConnectionEditActivity.EXTRA_CONNECTION_ID, connection.id)
-        }
-        startActivity(intent)
-    }
-    
-    private fun duplicateConnection(connection: ConnectionProfile) {
-        lifecycleScope.launch {
-            try {
-                val duplicate = connection.copy(
-                    id = java.util.UUID.randomUUID().toString(),
-                    name = getString(R.string.connections_duplicate_name_fmt, connection.name),
-                    connectionCount = 0,
-                    lastConnected = 0
-                )
-                app.database.connectionDao().insertConnection(duplicate)
-                Logger.d("SshHostsFragment", "Connection duplicated: ${duplicate.name}")
-            } catch (e: Exception) {
-                Logger.e("SshHostsFragment", "Failed to duplicate connection", e)
-            }
-        }
-    }
-    
-    private fun deleteConnection(connection: ConnectionProfile) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.connections_delete_title)
-            .setMessage(getString(R.string.connections_delete_message_fmt, connection.name))
-            .setPositiveButton(R.string.delete) { _, _ ->
-                lifecycleScope.launch {
-                    try {
-                        withContext(Dispatchers.IO) {
-                            app.database.connectionDao().deleteConnection(connection)
-                            // H6 — record the deletion so it propagates and is not resurrected.
-                            TombstoneRecorder.record(app, TombstoneRecorder.CONNECTION, connection.id)
-                            // Clean up orphan soft-FK references left by this connection.
-                            app.database.monitorSlotDao().deleteByConnectionId(connection.id)
-                            app.database.hypervisorDao().clearLinkedConnectionId(connection.id)
-                            // Keep the Panes registry and any saved pane-group membership accurate.
-                            io.github.tabssh.storage.registry.ConnectableHostRegistry
-                                .removeConnectionProfile(app.database, connection.id)
-                            // clearPassword is suspend + IO-dispatched (KeyStore HAL round-trip).
-                            try { app.securePasswordManager.clearPassword(connection.id) } catch (_: Exception) {}
-                        }
-                        Logger.d("SshHostsFragment", "Connection deleted: ${connection.name}")
-                    } catch (e: Exception) {
-                        Logger.e("SshHostsFragment", "Failed to delete connection", e)
-                    }
-                }
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
     private fun showGroupMenu(groupHeader: ConnectionListItem.GroupHeader) {
         val items = arrayOf(
             getString(R.string.connections_group_menu_bulk_edit),
@@ -1127,7 +1037,7 @@ class SshHostsFragment : Fragment() {
             groupedAdapter = GroupedConnectionAdapter(
                 items = items.toMutableList(),
                 onConnectionClick = { connection -> openConnection(connection) },
-                onConnectionLongClick = { connection -> showConnectionMenu(connection); },
+                onConnectionLongClick = { connection -> HostContextActions.showSshConnectionMenu(this, app, connection) },
                 onGroupClick = { groupHeader -> toggleGroupExpanded(groupHeader) },
                 onGroupLongClick = { groupHeader -> showGroupMenu(groupHeader) }
             )
