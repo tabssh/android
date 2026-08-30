@@ -510,6 +510,10 @@ Every non-trivial user flow (onboarding, primary task, import/export) is documen
 ├── docker/
 │   ├── Dockerfile                # optional runtime/CI helpers — NOT a toolchain image
 │   └── docker-compose.yml        # optional test-service containers
+├── deps/                         # native dependency cross-compile toolchains
+│   ├── tor/                      # Dockerfile + build-android.sh (tor binaries)
+│   ├── mosh/                     # Dockerfile + build-android.sh (mosh-client)
+│   └── spice/                    # Dockerfile + build-android.sh + cpp/ (SPICE JNI bridge)
 ├── scripts/                      # build/install/emulator/release helpers
 ├── metadata/                     # F-Droid metadata ({app_id}.yml)
 ├── binaries/                     # debug APK output (gitignored)

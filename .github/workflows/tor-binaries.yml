@@ -2,7 +2,7 @@ name: Tor Native Binaries
 
 # Builds the tor client for all 4 Android ABIs and publishes a GitHub release
 # tagged `tor-<version>`. Runs monthly; if the pinned tor version (in
-# tor/build-android.sh) already has a matching `tor-*` release, exits cleanly.
+# deps/tor/build-android.sh) already has a matching `tor-*` release, exits cleanly.
 #
 # Triggered manually via workflow_dispatch with optional `force: true` to
 # rebuild even if the pinned version is unchanged.
@@ -43,10 +43,10 @@ jobs:
       - name: Resolve pinned tor version
         id: pinned
         run: |
-          # The version tor/build-android.sh unpacks is the single source of
+          # The version deps/tor/build-android.sh unpacks is the single source of
           # truth for which tor we ship.
           version=$(grep -oE -- 'tor-[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?\.tar\.gz' \
-                      tor/build-android.sh | head -n1 \
+                      deps/tor/build-android.sh | head -n1 \
                     | sed -E 's/tor-(.*)\.tar\.gz/\1/')
           if [[ -z "$version" ]]; then
             echo "Could not determine pinned tor version" >&2
@@ -110,18 +110,18 @@ jobs:
 
       - name: Build cross-compile image
         run: |
-          docker build -t tabssh/tor-build:latest tor/
+          docker build -t tabssh/tor-build:latest deps/tor/
 
       - name: Cross-compile tor for ${{ matrix.abi }}
         run: |
           docker run --rm \
-            -v "${{ github.workspace }}/tor:/work" \
+            -v "${{ github.workspace }}/deps/tor:/work" \
             tabssh/tor-build:latest \
             /work/build-android.sh ${{ matrix.abi }}
 
       - name: Verify binary
         run: |
-          binary="tor/out/${{ matrix.abi }}/tor"
+          binary="deps/tor/out/${{ matrix.abi }}/tor"
           test -f "$binary" || { echo "Missing binary"; exit 1; }
           file "$binary"
           ls -la "$binary"
@@ -173,7 +173,7 @@ jobs:
 
           **License:** \`tor\` is BSD-3-Clause (see [Tor LICENSE](https://gitlab.torproject.org/tpo/core/tor/-/blob/main/LICENSE)). It is aggregated alongside TabSSH (MIT).
 
-          **Built from:** tor ${version} + libevent + openssl + zlib, via \`tor/Dockerfile\` + \`tor/build-android.sh\` in this repo.
+          **Built from:** tor ${version} + libevent + openssl + zlib, via \`deps/tor/Dockerfile\` + \`deps/tor/build-android.sh\` in this repo.
           EOF
 
           # Tor binary refreshes are infrastructure, not user-facing app

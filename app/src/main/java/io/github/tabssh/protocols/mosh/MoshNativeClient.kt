@@ -42,7 +42,7 @@ object MoshNativeClient {
     private const val TAG = "MoshNativeClient"
     private const val BINARY_FILE_NAME = "libmosh-client.so"
 
-    // Pinned to match mosh/Dockerfile and mosh/build-android.sh — the bundled
+    // Pinned to match deps/mosh/Dockerfile and deps/mosh/build-android.sh — the bundled
     // binary has no cheap runtime version query, so the About dialog reports
     // this build-time constant. Update here and in both build files together.
     const val MOSH_VERSION = "1.4.0"

@@ -3,7 +3,7 @@ name: SPICE Native Libraries
 # Cross-compiles the SPICE client stack + TabSSH JNI bridge into a single
 # libtabssh_native.so per Android ABI and publishes a GitHub release tagged
 # `spice-libs-<version>`. Manual trigger only — the pinned dependency
-# versions live in spice/Dockerfile, so there is no upstream feed to poll.
+# versions live in deps/spice/Dockerfile, so there is no upstream feed to poll.
 #
 # Output: release `spice-libs-<version>` with assets:
 #   - libtabssh_native-arm64-v8a.so
@@ -41,18 +41,18 @@ jobs:
 
       - name: Build cross-compile image
         run: |
-          docker build -t tabssh/spice-build:latest spice/
+          docker build -t tabssh/spice-build:latest deps/spice/
 
       - name: Cross-compile SPICE stack for ${{ matrix.abi }}
         run: |
           docker run --rm \
-            -v "${{ github.workspace }}/spice:/work" \
+            -v "${{ github.workspace }}/deps/spice:/work" \
             tabssh/spice-build:latest \
             /work/build-android.sh ${{ matrix.abi }}
 
       - name: Verify library
         run: |
-          lib="spice/out/${{ matrix.abi }}/libtabssh_native.so"
+          lib="deps/spice/out/${{ matrix.abi }}/libtabssh_native.so"
           test -f "$lib" || { echo "Missing library"; exit 1; }
           file "$lib"
           ls -la "$lib"
@@ -97,11 +97,11 @@ jobs:
           cat > /tmp/spice-release-notes.md <<EOF
           Cross-compiled \`libtabssh_native.so\` (SPICE client bridge) ${version} for Android, all four ABIs.
 
-          Each library statically links the SPICE client stack (spice-gtk spice-client-glib, glib, pixman, openssl, opus) plus the TabSSH JNI bridge from \`spice/cpp/\`. They are bundled into the TabSSH APK at \`app/src/main/jniLibs/<abi>/libtabssh_native.so\` and unpacked to the app's \`nativeLibraryDir\` on install.
+          Each library statically links the SPICE client stack (spice-gtk spice-client-glib, glib, pixman, openssl, opus) plus the TabSSH JNI bridge from \`deps/spice/cpp/\`. They are bundled into the TabSSH APK at \`app/src/main/jniLibs/<abi>/libtabssh_native.so\` and unpacked to the app's \`nativeLibraryDir\` on install.
 
           **License:** spice-gtk and glib are LGPL-2.1+; they are dynamically aggregated with TabSSH (MIT) and statically linked into this standalone bridge library. See the respective upstream projects for full license terms.
 
-          **Built from:** \`spice/Dockerfile\` + \`spice/build-android.sh\` in this repo (pinned dependency versions).
+          **Built from:** \`deps/spice/Dockerfile\` + \`deps/spice/build-android.sh\` in this repo (pinned dependency versions).
           EOF
 
           # Native-lib refreshes are infrastructure, not user-facing app
