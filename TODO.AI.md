@@ -38,3 +38,21 @@ is in progress.
     the screenshot repro to confirm which, then a fix (likely reusing
     `joinRowText()`'s trailing-space-preservation approach for the actual
     selection-copy path, not just URL detection) plus a `make check` pass.
+
+56. **Sibling repos' Room-schema-version cross-references are stale** —
+    found incidentally while adding IDEA.md's "Must be compatible with"
+    section documenting cross-platform compatibility with `../desktop` and
+    `../web`. `../desktop/IDEA.md` and `../web/IDEA.md` both cite the
+    Android Room schema as "currently v37" (desktop also cites
+    "`../android/AI.md §9.1`"/"`§8.4`" for the sync wire format header
+    layout and migration chain, section numbers that do not exist in this
+    project's current `AI.md`). The actual schema version, verified
+    directly from `storage/database/TabSSHDatabase.kt`'s `@Database`
+    annotation, is v27, not v37 — this project's own IDEA.md and README.md
+    have been corrected to v27 as part of this same change. The two
+    sibling repos' stale v37/§9.1/§8.4 references are out of this
+    project's write scope (a different repo) and need a matching
+    correction there — either update them to v27 (if they were just never
+    kept in sync) or, if `../desktop`/`../web` genuinely are ahead of what
+    is in this repo's `main` right now, reconcile which number is actually
+    correct before editing either side.

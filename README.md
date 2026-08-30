@@ -1,7 +1,12 @@
 # 📱 TabSSH — Modern SSH Client for Android
 
 A beautiful, modern, open-source SSH client for Android with true browser-style tabs,
-enterprise security, hypervisor management, and cloud provider integration.
+enterprise security, hypervisor management, and cloud provider integration. Android is
+the reference implementation of the TabSSH ecosystem: [TabSSH Desktop](https://github.com/tabssh/desktop)
+(Windows/macOS/Linux/BSD) and [TabSSH Web](https://github.com/tabssh/web) (self-hosted
+browser client) are siblings that track this app's connection/backup/sync formats,
+QR pairing payload, and built-in theme catalogue byte-for-byte, so a connection vault
+created, synced, or paired on any one of the three works unmodified on the other two.
 
 [![Platform](https://img.shields.io/badge/Platform-Android-green.svg)](https://developer.android.com)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/tabssh/android/blob/main/LICENSE.md)
@@ -79,6 +84,7 @@ enterprise security, hypervisor management, and cloud provider integration.
 - 📱 **Mosh Protocol** — Mobile shell for unstable connections with roaming support
 - 💾 **Backup & Restore** — Export/import all settings as encrypted ZIP
 - ☁️ **Cloud Sync** — Storage Access Framework (Google Drive, Dropbox, OneDrive, Nextcloud, local — no Google services dependency); AES-256-GCM + Argon2id + 3-way merge with conflict UI
+- 🔗 **Cross-Platform Compatible** — sync blobs, encrypted backups, QR pairing payloads, and theme files are byte-compatible with [TabSSH Desktop](https://github.com/tabssh/desktop) and [TabSSH Web](https://github.com/tabssh/web); pair or restore on any of the three and pick up the exact same connections, keys, and settings
 - 🏠 **Home Screen Widgets** — Quick-connect from launcher
 - 📂 **Connection Groups** — Folders with expand/collapse; group badges in search
 - 🔍 **Search & Sort** — Real-time search, 8 sort options
@@ -312,8 +318,9 @@ android/
 │   ├── ssh/            # SSHConnection, SSHSessionManager, port forwarding, X11
 │   ├── sftp/           # SFTP browser and file transfer
 │   ├── terminal/       # TermuxBridge, TerminalView, VNC RFB client
-│   ├── storage/        # Room DB (v16, 13 migrations), DAOs, entities
-│   ├── sync/           # SAF-based 3-way merge sync
+│   ├── storage/        # Room DB (v27), DAOs, entities
+│   ├── sync/           # SAF-based 3-way merge sync (TABSSH_SYNC_V2, shared
+│                       #   with the Desktop and Web sibling apps)
 │   ├── backup/         # Encrypted ZIP backup/restore
 │   └── ui/             # Activities, Fragments, Adapters, ViewModels
 ├── app/src/main/res/   # Layouts, strings, themes, drawables
@@ -340,6 +347,25 @@ make build
 ```
 
 The `:build` image (`docker/Dockerfile.build`) contains the Android SDK, JDK 17, and Gradle. It is rebuilt monthly by the `build-toolchain.yml` workflow.
+
+---
+
+## 🌐 Sibling Apps
+
+TabSSH is a three-platform ecosystem; Android is the reference implementation.
+Every sync blob, encrypted backup, QR pairing payload, and built-in theme is
+byte-compatible across all three, so users can move between platforms freely:
+
+- [**TabSSH Desktop**](https://github.com/tabssh/desktop) — a single static Rust
+  binary for Windows, macOS, Linux, and BSD, with system tray, direct `~/.ssh/`
+  access, and CLI invocation
+- [**TabSSH Web**](https://github.com/tabssh/web) — a self-hosted web client
+  (a self-hosted Termius/Termix alternative) for browser access with no install,
+  plus server-blind end-to-end encrypted sync and device pairing for the native apps
+
+Changes to the shared sync wire format, QR pairing payload, backup schema, or
+theme catalogue must stay compatible with both siblings — see IDEA.md's
+"Must be compatible with" section.
 
 ---
 
