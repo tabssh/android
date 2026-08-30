@@ -84,7 +84,7 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 - Per-connection color tags, font size overrides, custom themes
 - URL detection on long-press
 - Performance dashboard with configurable monitor slots per host and metric graphs
-- Desktop-terminal scrollbar (konsole/xfce4-terminal style) — a persistent right-edge track and draggable thumb that scrolls the terminal's own scrollback; the thumb fills the track when there is nothing to scroll back through; swipe up/down independently acts as a smooth-scrolling mouse wheel (default 3 lines per line of finger travel) for the app/shell to handle; the bar must never interfere with left/right tab-switch swipes
+- Touchpad-emulating terminal surface with three distinct zones: a left-edge wheel zone (mouse-wheel-notch scrolling — a quick flick fires one notch, a sustained drag repeats one notch per line of travel; notch size is user-configurable, default 3 lines), a right-edge desktop-terminal scrollbar (konsole/xfce4-terminal style) — a persistent track and draggable thumb that scrolls the terminal's own scrollback, the thumb fills the track when there is nothing to scroll back through — and everywhere else acting as a 1:1 touchpad (proportional drag/swipe scrolling, no gearing); swipe left/right still changes tabs; none of the three zones may interfere with each other or with left/right tab-switch swipes
 - Per-session status notifications — every open tab gets its own shade entry (even when tabs share one host), tapping jumps to that exact tab, a Disconnect action closes just that session, and entries clear as soon as their tab closes
 
 ### Security requirements

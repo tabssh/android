@@ -211,6 +211,14 @@ Load PARTs on demand with `grep -n "^# PART N" AI.md` — never read this file e
 - `IDEA.md` is where project-specific values and product rules live
 - Loader files (`CLAUDE.md`, `.claude/CLAUDE.md`) stay short and point back to `AI.md`
 - If a loader file and `AI.md` disagree, `AI.md` wins
+- `.claude/memory/` holds durable, project-specific knowledge discovered during
+  development — decisions, gotchas, conventions unique to this codebase — distinct
+  from `AI.md` (spec) and the loader files above. Committed to the repo, not
+  gitignored. One markdown file per topic, YAML frontmatter (`name`, `description`,
+  `type: project`), indexed by `.claude/memory/MEMORY.md`, read on demand. Same
+  credential-masking rule as everywhere else. `~/.claude/**` (global) stays
+  read-only, deployed only via `claudemgr/config`'s `install.sh`; `.claude/memory/`
+  here is read/write in this repo directly
 
 ## ⚠️ CRITICAL: Immutable Application Identity
 

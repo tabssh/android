@@ -66,6 +66,7 @@ created, synced, or paired on any one of the three works unmodified on the other
 - ⌨️ **Hardware Keyboard** — AltGr distinct from Alt; xterm modifier-encoded arrows (Ctrl-Right = `ESC[1;5C`), HOME/END/PG family
 - 🗂️ **Tabs at Top** — TabBar flush at top; no toolbar chrome; navigation drawer via left-edge swipe
 - 👆 **Edge-Swipe Tabs** — Single-finger fling within 24dp of left/right edge switches tabs
+- 🖱️ **Touchpad-Style Terminal Surface** — right-edge desktop scrollbar (xfce4/konsole-style drag-to-scrub), left-edge mouse-wheel zone (flick = one notch, drag = repeated notches, configurable lines per notch), everywhere else scrolls 1:1 like a trackpad
 - 🔁 **Active Sessions Strip** — Running tabs with live OSC 0/2 terminal title and connection-state dot
 - 📋 **Copyable Error Dialogs** — Every error dialog has a Copy button for clean bug reports
 - 🔍 **Find in Scrollback** — Floating search bar with prev/next, match counter, amber highlights, Ctrl+Shift+F shortcut

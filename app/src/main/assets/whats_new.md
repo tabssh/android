@@ -19,6 +19,28 @@
 - Saved pane groups back up and sync like any other saved item, with
   their own independent sync toggle.
 
+### Terminal now behaves like a touchpad, not a mouse
+
+- **Swipe/drag scrolling in the terminal is now 1:1** — dragging or
+  swiping the main terminal area scrolls exactly as far as your finger
+  travels, like a laptop touchpad, instead of the old fixed 3-lines-
+  per-line-of-travel mouse-wheel gearing.
+- **Fixed: the right-edge scrollbar had a dead touch target** on
+  gesture-navigation devices — the OS back-gesture inset was eating
+  touches near the screen edge before the app ever saw them. The
+  scrollbar (and the new left-edge zone below) now explicitly exclude
+  themselves from that system gesture area.
+- **New: a left-edge "wheel zone"**, the same width as the right-edge
+  scrollbar's touch strip — a mouse-wheel-notch equivalent. A quick
+  flick scrolls exactly one notch; a sustained drag repeats one notch
+  per line of travel for as long as you keep dragging. Notch size is
+  configurable in Settings → Terminal ("Wheel zone lines per notch",
+  1–10, default 3). The right edge stays a pure drag-to-scrub
+  scrollbar (xfce4/konsole-style) and swipe left/right still changes
+  tabs — the terminal surface is now three distinct touch zones plus
+  the touchpad-style middle, matching how a real touchpad/trackpad+
+  scrollbar setup behaves.
+
 ### Stats moved to the nav drawer, under Insights
 
 - **The Stats tab is no longer a top-level tab** — it now lives in the
