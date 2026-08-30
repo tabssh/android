@@ -1388,6 +1388,8 @@ class TerminalView @JvmOverloads constructor(
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
 
+        updateSystemGestureExclusion(w, h)
+
         if (cellWidth <= 0 || cellHeight <= 0) return
 
         // Cheap, immediate recompute of the visual row count so gridTop's
@@ -2668,9 +2670,11 @@ class TerminalView @JvmOverloads constructor(
                         com.termux.terminal.TerminalEmulator.MOUSE_WHEELUP_BUTTON
                     else
                         com.termux.terminal.TerminalEmulator.MOUSE_WHEELDOWN_BUTTON
-                    // Mousewheel feel: each cell of finger travel is one wheel
-                    // notch worth WHEEL_STEP_LINES lines (desktop default 3).
-                    repeat(Math.abs(ticks) * WHEEL_STEP_LINES) {
+                    // Trackpad feel: one wheel-click per line of finger travel,
+                    // no extra gearing — the remote's scrollback advances at
+                    // the same rate your finger moves, not amplified like
+                    // spinning a physical mouse wheel.
+                    repeat(Math.abs(ticks)) {
                         termuxEmulator.sendMouseEvent(button, col, row, true)
                     }
                 }
@@ -2728,10 +2732,10 @@ class TerminalView @JvmOverloads constructor(
                     val up = "\u001bOA".toByteArray()
                     val down = "\u001bOB".toByteArray()
                     // ticks > 0 == swipe toward older content == Up arrow.
-                    // Mousewheel feel: each cell of finger travel scrolls
-                    // WHEEL_STEP_LINES lines (desktop wheel default 3).
+                    // Trackpad feel: one arrow-key press per line of finger
+                    // travel, no extra gearing.
                     val key = if (ticks > 0) up else down
-                    repeat(Math.abs(ticks) * WHEEL_STEP_LINES) { termuxBridge?.write(key) }
+                    repeat(Math.abs(ticks)) { termuxBridge?.write(key) }
                 }
                 mouseScrollAccum = 0f
                 return true
@@ -2744,10 +2748,16 @@ class TerminalView @JvmOverloads constructor(
             // → scrollYf increases). reverseScrollDirection = true inverts this
             // to match the old TabSSH behaviour where swipe DOWN showed older content.
             val scrollDelta = if (reverseScrollDirection) -distanceY else distanceY
-            // Mousewheel feel: WHEEL_STEP_LINES (3) lines of scrollback per
-            // line-height of finger travel — smooth (pixel-based), just geared
-            // like a desktop wheel instead of 1:1.
-            scrollYf = (scrollYf + scrollDelta * WHEEL_STEP_LINES)
+            // True 1:1 pixel tracking, no gearing — this is the local
+            // scrollback path (no remote protocol involved), so the content
+            // moves exactly as far as the finger does, the same way a
+            // laptop trackpad's 2-finger scroll moves any other scrollable
+            // view (xfce4-terminal included). The two forwarding branches
+            // above (mouse-wheel clicks / arrow keys) are tick-based instead
+            // — a remote wire protocol can only express discrete events, but
+            // they now fire one tick per line of travel too, matching this
+            // path's proportional feel as closely as that protocol allows.
+            scrollYf = (scrollYf + scrollDelta)
                 .coerceIn(0f, maxScrollYPx().toFloat())
             mouseScrollAccum = 0f
             // invalidate() requests the redraw immediately rather than waiting
@@ -2809,11 +2819,12 @@ class TerminalView @JvmOverloads constructor(
             // older content → scrollYf increases. So pass -velocityY (negate so an
             // upward fling produces positive scroll movement toward the past).
             // reverseScrollDirection: leave as +velocityY (old behaviour).
-            // Same WHEEL_STEP_LINES gearing as onScroll so a fling continues
-            // at the speed the drag established.
+            // No extra gearing — matches onScroll's local-scrollback path
+            // above, so a fling continues at the exact speed the 1:1 drag
+            // established instead of jumping 3x faster the instant the finger
+            // lifts.
             val flingVelocity =
-                (if (reverseScrollDirection) velocityY.toInt() else -velocityY.toInt()) *
-                    WHEEL_STEP_LINES
+                if (reverseScrollDirection) velocityY.toInt() else -velocityY.toInt()
             scroller.fling(0, scrollYInt, 0, flingVelocity, 0, 0, 0, maxScrollYPx())
             postInvalidateOnAnimation()
             return true
@@ -3408,6 +3419,24 @@ class TerminalView @JvmOverloads constructor(
     // ── Scrollbar helpers ────────────────────────────────────────────────────
 
     /**
+     * Exclude the scrollbar's touch strip from the OS's system gesture
+     * navigation (edge-swipe back). The strip sits within [thumbTouchStripPx]
+     * (24dp) of the true right edge of the screen — squarely inside Android's
+     * default ~24dp system gesture inset on gesture-navigation devices/OS
+     * versions. Without this, a touch-down there is consumed by the system
+     * gesture overlay before it ever reaches this view's onTouch(), so the
+     * thumb never even sees ACTION_DOWN — drags there silently do nothing,
+     * while drags elsewhere on screen (outside the inset) work normally.
+     */
+    private fun updateSystemGestureExclusion(w: Int, h: Int) {
+        if (w <= 0 || h <= 0) return
+        val stripLeft = (w - thumbTouchStripPx).toInt().coerceAtLeast(0)
+        ViewCompat.setSystemGestureExclusionRects(
+            this, listOf(android.graphics.Rect(stripLeft, 0, w, h))
+        )
+    }
+
+    /**
      * True when the thumb can accept a touch-down: no text selection owns
      * the touch stream. The bar always owns vertical drags in its strip —
      * even with nothing to scroll back through (alt-screen app, empty
@@ -3658,9 +3687,6 @@ class TerminalView @JvmOverloads constructor(
 
     companion object {
         private const val CURSOR_BLINK_INTERVAL_MS = 500L
-        // Swipe-scroll gearing: lines scrolled per line-height of finger
-        // travel — matches the desktop mousewheel default of 3 lines/notch.
-        private const val WHEEL_STEP_LINES = 3
         // Keyboard open/close animation fires two onSizeChanged events ~30 ms
         // apart. Debounce longer than the animation gap so only the settled
         // final size is forwarded to the SSH server via SIGWINCH.
