@@ -80,6 +80,7 @@ class PreferenceManager(private val context: Context) {
         private const val MAX_TRANSCRIPT_ROWS = 50000
 
         private const val KEY_REVERSE_SCROLL = "terminal_reverse_scroll"
+        private const val KEY_WHEEL_LINES_PER_NOTCH = "terminal_wheel_lines_per_notch"
         private const val KEY_WORD_WRAP = "terminal_word_wrap"
         private const val KEY_COPY_ON_SELECT = "terminal_copy_on_select"
         private const val KEY_BELL_NOTIFICATION = "terminal_bell"
@@ -328,6 +329,18 @@ class PreferenceManager(private val context: Context) {
      */
     fun isReverseScrollDirection(): Boolean = getBoolean(KEY_REVERSE_SCROLL, false)
     fun setReverseScrollDirection(reversed: Boolean) = setBoolean(KEY_REVERSE_SCROLL, reversed)
+
+    /**
+     * Lines scrolled per notch on the left-edge wheel zone (the mouse-wheel-
+     * notch equivalent — separate from the right-edge scrollbar and from the
+     * touchpad-style content drag, both of which stay 1:1/proportional).
+     * A quick flick in the zone fires exactly one notch; a sustained drag
+     * fires one notch per cellHeight of travel. Stored as a String slot (same
+     * reasoning as KEY_SCROLLBACK_LINES/KEY_MAX_TABS: a numeric-input
+     * preference UI writes a String even with inputType="number").
+     */
+    fun getWheelLinesPerNotch(): Int = getStringAsInt(KEY_WHEEL_LINES_PER_NOTCH, 3).coerceIn(1, 10)
+    fun setWheelLinesPerNotch(lines: Int) = setString(KEY_WHEEL_LINES_PER_NOTCH, lines.toString())
 
     fun isWordWrap(): Boolean = getBoolean(KEY_WORD_WRAP, true)
     fun setWordWrap(enabled: Boolean) = setBoolean(KEY_WORD_WRAP, enabled)

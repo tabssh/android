@@ -1362,6 +1362,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 setFontSize(fontSize)
 
                 reverseScrollDirection = app.preferencesManager.isReverseScrollDirection()
+                wheelLinesPerNotch = app.preferencesManager.getWheelLinesPerNotch()
 
                 // URL detection is opt-in via preference; the long-press
                 // context menu is ALWAYS available so users have a discoverable
@@ -2290,15 +2291,18 @@ class TabTerminalActivity : TabSSHActivity() {
         // the moment this method runs.
         val spacing = prefs.getStringAsInt("terminal_line_spacing", 120)
         val reversed = prefs.isReverseScrollDirection()
+        val wheelLines = prefs.getWheelLinesPerNotch()
         try {
             val adapter = pagerAdapter
             if (adapter != null) {
                 adapter.setLineSpacingPercent(spacing)
                 adapter.setReverseScrollDirection(reversed)
+                adapter.setWheelLinesPerNotch(wheelLines)
             } else {
                 // Classic (non-swipe) mode: one TerminalView in the layout.
                 terminalView?.setLineSpacingPercent(spacing)
                 terminalView?.let { it.reverseScrollDirection = reversed }
+                terminalView?.let { it.wheelLinesPerNotch = wheelLines }
             }
         } catch (e: Exception) {
             Logger.w("TabTerminalActivity", "Terminal pref apply failed: ${e.message}")
@@ -3075,6 +3079,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 onSelectionEnded = { selectionActionMode?.finish() },
                 onContextMenuRequested = { _, _ -> showTerminalMenu() },
                 reverseScrollDirection = app.preferencesManager.isReverseScrollDirection(),
+                wheelLinesPerNotch = app.preferencesManager.getWheelLinesPerNotch(),
                 lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120)
             )
             // Suppress onPageSelected / onTabSelected while the adapter is
@@ -3144,6 +3149,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 onSelectionEnded = { selectionActionMode?.finish() },
                 onContextMenuRequested = { _, _ -> showTerminalMenu() },
                 reverseScrollDirection = app.preferencesManager.isReverseScrollDirection(),
+                wheelLinesPerNotch = app.preferencesManager.getWheelLinesPerNotch(),
                 lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120)
             )
             viewPager?.adapter = pagerAdapter

@@ -104,6 +104,13 @@
       android:summary="@string/prefs_terminal_reverse_scroll_summary"
       android:defaultValue="false" />
 
+    <EditTextPreference
+      android:key="terminal_wheel_lines_per_notch"
+      android:title="@string/prefs_terminal_wheel_lines_per_notch_title"
+      android:summary="@string/prefs_terminal_wheel_lines_per_notch_summary"
+      android:defaultValue="3"
+      android:inputType="number" />
+
   </PreferenceCategory>
 
   <PreferenceCategory

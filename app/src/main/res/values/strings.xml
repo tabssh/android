@@ -1514,6 +1514,8 @@
     <string name="prefs_terminal_scrollback_summary">Lines in history (250 min, -1 unlimited)</string>
     <string name="prefs_terminal_reverse_scroll_title">Reverse scroll direction</string>
     <string name="prefs_terminal_reverse_scroll_summary">OFF: swipe up to see older output (standard, like JuiceSSH/Termux) · ON: swipe down to see older output (old TabSSH behaviour)</string>
+    <string name="prefs_terminal_wheel_lines_per_notch_title">Wheel zone lines per notch</string>
+    <string name="prefs_terminal_wheel_lines_per_notch_summary">Lines scrolled per notch in the left-edge wheel zone (1-10). A quick flick scrolls one notch; a sustained drag repeats it.</string>
     <string name="prefs_volume_keys_action_title">Volume Key Action</string>
     <string name="prefs_volume_keys_action_summary">What the volume buttons do inside a terminal session</string>
     <string name="prefs_terminal_copy_on_select_title">Copy on Select</string>

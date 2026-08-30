@@ -64,6 +64,7 @@ class TerminalPagerAdapter(
     private val onSelectionEnded: (() -> Unit)? = null,
     private val onContextMenuRequested: ((Float, Float) -> Unit)? = null,
     private var reverseScrollDirection: Boolean = false,
+    private var wheelLinesPerNotch: Int = 3,
     private var lineSpacingPercent: Int = 120
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
@@ -105,6 +106,17 @@ class TerminalPagerAdapter(
         // triggered by the update causes RecyclerView to recycle a view.
         boundTerminalHolders().forEach { it.terminalView.reverseScrollDirection = reversed }
         boundConsoleHolders().forEach { it.terminalView.reverseScrollDirection = reversed }
+    }
+
+    /**
+     * Update the left-edge wheel zone's lines-per-notch on all bound
+     * terminal views. Called from applyTerminalUiPrefs() when the user
+     * changes the preference.
+     */
+    fun setWheelLinesPerNotch(lines: Int) {
+        wheelLinesPerNotch = lines
+        boundTerminalHolders().forEach { it.terminalView.wheelLinesPerNotch = lines }
+        boundConsoleHolders().forEach { it.terminalView.wheelLinesPerNotch = lines }
     }
 
     /**
@@ -158,6 +170,7 @@ class TerminalPagerAdapter(
                     fontSize,
                     fontValue,
                     reverseScrollDirection,
+                    wheelLinesPerNotch,
                     lineSpacingPercent,
                     onContextMenuRequested
                 )
@@ -177,6 +190,7 @@ class TerminalPagerAdapter(
                     FrameLayout.LayoutParams.MATCH_PARENT
                 )
                 terminalView.reverseScrollDirection = reverseScrollDirection
+                terminalView.wheelLinesPerNotch = wheelLinesPerNotch
                 terminalView.setLineSpacingPercent(lineSpacingPercent)
                 val vncView = VncView(parent.context)
                 vncView.layoutParams = FrameLayout.LayoutParams(
@@ -209,6 +223,7 @@ class TerminalPagerAdapter(
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
                 terminalView.reverseScrollDirection = reverseScrollDirection
+                terminalView.wheelLinesPerNotch = wheelLinesPerNotch
                 terminalView.setLineSpacingPercent(lineSpacingPercent)
                 TerminalViewHolder(
                     terminalView,
@@ -687,6 +702,7 @@ class TerminalPagerAdapter(
         private val fontSize: Int,
         private val fontValue: String,
         private val reverseScrollDirection: Boolean,
+        private val wheelLinesPerNotch: Int,
         private val lineSpacingPercent: Int,
         // Wired to showTerminalMenu() by TabTerminalActivity, same as every
         // other ViewHolder type (Ssh/Vnc/Console/Split). Previously omitted
@@ -736,6 +752,7 @@ class TerminalPagerAdapter(
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
                     this.reverseScrollDirection = this@PanesViewHolder.reverseScrollDirection
+                    this.wheelLinesPerNotch = this@PanesViewHolder.wheelLinesPerNotch
                     setLineSpacingPercent(this@PanesViewHolder.lineSpacingPercent)
                     setFont(fontValue)
                     setFontSize(fontSize)

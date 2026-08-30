@@ -306,7 +306,11 @@ class TerminalView @JvmOverloads constructor(
     private val thumbDragWidthPx by lazy { 8f * resources.displayMetrics.density }
     /** Gap between the thumb and the right view edge (4dp). */
     private val thumbEdgeMarginPx by lazy { 4f * resources.displayMetrics.density }
-    /** Right-edge grab strip width (24dp) — generous horizontal slop. */
+    /**
+     * Edge grab strip width (24dp) — generous horizontal slop. Shared by the
+     * right-edge scrollbar thumb and the left-edge wheel zone so both edges
+     * present the same-size touch target.
+     */
     private val thumbTouchStripPx by lazy { 24f * resources.displayMetrics.density }
     /**
      * Horizontal gutter reserved for the scrollbar when sizing the grid:
@@ -325,6 +329,32 @@ class TerminalView @JvmOverloads constructor(
     private val thumbClaimSlopPx by lazy {
         android.view.ViewConfiguration.get(context).scaledTouchSlop.toFloat()
     }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Left-edge wheel zone — a mouse-wheel-notch equivalent, distinct from
+    // both the right-edge scrollbar (drag-to-scrub, xfce4-terminal-style)
+    // and the main-area touchpad drag (1:1 proportional). A quick flick
+    // fires exactly one notch of [wheelLinesPerNotch] lines; a sustained
+    // drag fires one notch per [thumbTouchStripPx]-independent cellHeight
+    // of travel, repeating for as long as the finger keeps moving — same
+    // "single scroll vs many scrolls" distinction as a physical wheel's
+    // single click vs spinning it. Reuses the scrollbar's touch-strip
+    // width and vertical/horizontal claim slop so the zone matches the
+    // scrollbar's footprint on the opposite edge.
+    // ─────────────────────────────────────────────────────────────────
+    private var wheelZoneDragCandidate = false
+    private var wheelZoneDragging = false
+    private var wheelZoneDownX = 0f
+    private var wheelZoneDownY = 0f
+    private var wheelZoneLastDragY = 0f
+    private var wheelZoneAccum = 0f
+    // True once at least one notch fired during the drag — the swipe
+    // fallback on ACTION_UP only fires when the drag never reached a full
+    // notch of travel on its own (a quick short flick), so a sustained
+    // drag that already produced notches doesn't get a bonus extra one.
+    private var wheelZoneNotchFired = false
+    /** Lines scrolled per notch — wired from PreferenceManager.getWheelLinesPerNotch(). */
+    var wheelLinesPerNotch: Int = 3
 
     // ─────────────────────────────────────────────────────────────────
     // Drag-to-select range copy (issue #73)
@@ -2261,6 +2291,10 @@ class TerminalView @JvmOverloads constructor(
         // changes nothing.
         if (handleThumbTouch(event)) return true
 
+        // Left-edge wheel zone — same vertical/horizontal claim discipline
+        // as the scrollbar thumb, mirrored on the opposite edge.
+        if (handleWheelZoneTouch(event)) return true
+
         // Handle single-finger gestures (scroll, tap, long press)
         if (!isScaling) {
             gestureDetector.onTouchEvent(event)
@@ -3431,8 +3465,13 @@ class TerminalView @JvmOverloads constructor(
     private fun updateSystemGestureExclusion(w: Int, h: Int) {
         if (w <= 0 || h <= 0) return
         val stripLeft = (w - thumbTouchStripPx).toInt().coerceAtLeast(0)
+        val wheelZoneRight = thumbTouchStripPx.toInt().coerceAtMost(w)
         ViewCompat.setSystemGestureExclusionRects(
-            this, listOf(android.graphics.Rect(stripLeft, 0, w, h))
+            this,
+            listOf(
+                android.graphics.Rect(stripLeft, 0, w, h),
+                android.graphics.Rect(0, 0, wheelZoneRight, h)
+            )
         )
     }
 
@@ -3608,6 +3647,131 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
+     * Fire [rawNotches] wheel notches (each worth [wheelLinesPerNotch] lines)
+     * from the left-edge wheel zone, routed through the same target
+     * selection as onScroll(): remote mouse-tracking forward, alt-screen
+     * arrow-key forward, or local scrollback. rawNotches > 0 means the
+     * finger moved toward the top of the screen (swipe up == toward older
+     * content), before reverseScrollDirection is applied — same convention
+     * as onScroll's distanceY. The mouse-wheel-forward branch intentionally
+     * ignores reverseScrollDirection, mirroring onScroll's own branch.
+     */
+    private fun scrollByNotches(rawNotches: Int, atX: Float, atY: Float) {
+        if (rawNotches == 0) return
+        val lines = Math.abs(rawNotches) * wheelLinesPerNotch
+        val termuxEmulator = termuxBridge?.getEmulator()
+        val cellH = if (cellHeight > 0f) cellHeight else 20f
+        if (termuxEmulator != null && termuxEmulator.isMouseTrackingActive()) {
+            val col = ((atX / (if (cellWidth > 0f) cellWidth else cellH)) + 1)
+                .toInt().coerceIn(1, terminalCols)
+            val row = ((atY / cellH) + 1).toInt().coerceIn(1, terminalRows)
+            val button = if (rawNotches > 0)
+                com.termux.terminal.TerminalEmulator.MOUSE_WHEELUP_BUTTON
+            else
+                com.termux.terminal.TerminalEmulator.MOUSE_WHEELDOWN_BUTTON
+            repeat(lines) { termuxEmulator.sendMouseEvent(button, col, row, true) }
+            return
+        }
+        if (termuxEmulator != null && termuxEmulator.isAlternateBufferActive()) {
+            if (!termuxEmulator.isCursorKeysApplicationMode()) return
+            val notches = if (reverseScrollDirection) -rawNotches else rawNotches
+            val up = "OA".toByteArray()
+            val down = "OB".toByteArray()
+            val key = if (notches > 0) up else down
+            repeat(lines) { termuxBridge?.write(key) }
+            return
+        }
+        val notches = if (reverseScrollDirection) -rawNotches else rawNotches
+        val sign = if (notches > 0) 1f else -1f
+        scrollYf = (scrollYf + sign * lines * cellH).coerceIn(0f, maxScrollYPx().toFloat())
+        invalidate()
+    }
+
+    /**
+     * Left-edge wheel zone touch handling — mirrors handleThumbTouch's
+     * claim discipline (never claims on ACTION_DOWN, claims on the first
+     * predominantly-vertical ACTION_MOVE, sends the gestureDetector a
+     * synthetic ACTION_CANCEL at that point) but scrolls in discrete
+     * wheel-notch steps instead of scrubbing a thumb: a sustained drag
+     * fires one notch per cellHeight of travel (the "many scrolls" case);
+     * a quick flick that never reaches a full notch of travel during the
+     * move phase fires exactly one notch on release instead (the "single
+     * scroll" case), so a short deliberate swipe always does something.
+     */
+    private fun handleWheelZoneTouch(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                wheelZoneDragging = false
+                wheelZoneDragCandidate = false
+                if (!selectionActive && event.x <= thumbTouchStripPx) {
+                    wheelZoneDragCandidate = true
+                    wheelZoneDownX = event.x
+                    wheelZoneDownY = event.y
+                    wheelZoneLastDragY = event.y
+                }
+                return false
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                if (!wheelZoneDragging) wheelZoneDragCandidate = false
+                return wheelZoneDragging
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (wheelZoneDragging) {
+                    val dy = event.y - wheelZoneLastDragY
+                    wheelZoneLastDragY = event.y
+                    wheelZoneAccum += -dy
+                    val cellH = if (cellHeight > 0f) cellHeight else 20f
+                    val notches = (wheelZoneAccum / cellH).toInt()
+                    if (notches != 0) {
+                        wheelZoneAccum -= notches * cellH
+                        wheelZoneNotchFired = true
+                        scrollByNotches(notches, event.x, event.y)
+                    }
+                    return true
+                }
+                if (wheelZoneDragCandidate) {
+                    val dx = event.x - wheelZoneDownX
+                    val dy = event.y - wheelZoneDownY
+                    when (ScrollbarThumbGeometry.classifyDrag(dx, dy, thumbClaimSlopPx)) {
+                        ScrollbarThumbGeometry.DragClaim.CLAIM -> {
+                            wheelZoneDragCandidate = false
+                            wheelZoneDragging = true
+                            wheelZoneAccum = 0f
+                            wheelZoneNotchFired = false
+                            val cancel = MotionEvent.obtain(event)
+                            cancel.action = MotionEvent.ACTION_CANCEL
+                            gestureDetector.onTouchEvent(cancel)
+                            cancel.recycle()
+                            wheelZoneLastDragY = event.y
+                            return true
+                        }
+                        ScrollbarThumbGeometry.DragClaim.PASS -> {
+                            wheelZoneDragCandidate = false
+                        }
+                        ScrollbarThumbGeometry.DragClaim.UNDECIDED -> {}
+                    }
+                }
+                return false
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                wheelZoneDragCandidate = false
+                if (wheelZoneDragging) {
+                    wheelZoneDragging = false
+                    if (!wheelZoneNotchFired) {
+                        val totalDy = event.y - wheelZoneDownY
+                        val rawNotches = if (totalDy < 0) 1 else if (totalDy > 0) -1 else 0
+                        scrollByNotches(rawNotches, event.x, event.y)
+                    }
+                    wheelZoneAccum = 0f
+                    return true
+                }
+                return false
+            }
+        }
+        return false
+    }
+
+    /**
      * Maximum scrollY in pixels — backed by the Termux transcript (SSH path)
      * or the custom TerminalBuffer scrollback (standalone path).
      */
@@ -3669,6 +3833,11 @@ class TerminalView @JvmOverloads constructor(
         // leave a stale claimed pointer.
         thumbDragging = false
         thumbDragCandidate = false
+        // Same reasoning, mirrored for the left-edge wheel zone.
+        wheelZoneDragging = false
+        wheelZoneDragCandidate = false
+        wheelZoneAccum = 0f
+        wheelZoneNotchFired = false
     }
 
     // ── Cursor blink helpers ─────────────────────────────────────────────────
