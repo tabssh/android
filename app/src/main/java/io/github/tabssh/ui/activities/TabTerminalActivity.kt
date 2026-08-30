@@ -17,6 +17,7 @@ import android.view.View
 import android.widget.TextView
 import android.widget.Toast
 import android.annotation.SuppressLint
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.res.ColorStateList
 import android.content.res.Configuration
@@ -5053,6 +5054,7 @@ class TabTerminalActivity : TabSSHActivity() {
             }
             castFilename?.let { name ->
                 actions.add(getString(R.string.video_recording_share_cast) to { shareRecordingFile(name, "application/json") })
+                actions.add(getString(R.string.video_recording_upload_cast) to { uploadCastToAsciinema(name) })
             }
             if (actions.isEmpty()) return@postDelayed
             MaterialAlertDialogBuilder(this)
@@ -5092,6 +5094,54 @@ class TabTerminalActivity : TabSSHActivity() {
         }
     }
     
+    /**
+     * "Upload to Asciinema" action for a finished `.cast` recording — the
+     * configurable-server counterpart to [shareRecordingFile]'s local OS
+     * share. Server URL comes from `preferences_terminal.xml`'s
+     * `asciinema_server_url` key (self-hostable, defaults to
+     * [io.github.tabssh.terminal.recording.AsciinemaUploader.DEFAULT_SERVER_URL]).
+     * On success, the returned cast URL is copied to the clipboard, mirroring
+     * how the rest of the app (e.g. QR pairing secrets) surfaces
+     * one-off generated values.
+     */
+    private fun uploadCastToAsciinema(filename: String) {
+        val legacyFile = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            java.io.File(
+                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MOVIES),
+                "TabSSH/$filename"
+            )
+        } else {
+            null
+        }
+        val serverUrl = app.preferencesManager.getString(
+            "asciinema_server_url",
+            io.github.tabssh.terminal.recording.AsciinemaUploader.DEFAULT_SERVER_URL
+        )
+        Toast.makeText(this, R.string.video_recording_upload_cast, Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    io.github.tabssh.terminal.recording.AsciinemaUploader.uploadByFilename(
+                        this@TabTerminalActivity, filename, legacyFile, serverUrl
+                    )
+                }
+            }
+            if (isFinishing || isDestroyed) return@launch
+            result.onSuccess { url ->
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Asciinema URL", url))
+                Toast.makeText(this@TabTerminalActivity, getString(R.string.video_recording_upload_success, url), Toast.LENGTH_LONG).show()
+            }.onFailure { e ->
+                Logger.e("TabTerminalActivity", "Asciinema upload failed for $filename", e)
+                Toast.makeText(
+                    this@TabTerminalActivity,
+                    getString(R.string.video_recording_upload_failure, e.message ?: e.toString()),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         // Volume key action: font_size (default) / scroll / off.
         // Migrate legacy boolean key on first run. The old key was a boolean

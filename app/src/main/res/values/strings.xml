@@ -1544,6 +1544,8 @@
     <string name="prefs_video_recording_quality_summary">Bitrate preset for session video recordings</string>
     <string name="prefs_video_recording_include_cast_title">Include Terminal Cast by Default</string>
     <string name="prefs_video_recording_include_cast_summary">Pre-select "Video + Terminal Cast" in the recording chooser</string>
+    <string name="prefs_asciinema_server_url_title">Asciinema Server</string>
+    <string name="prefs_asciinema_server_url_summary">Server used for "Upload to asciinema" — self-hostable, defaults to asciinema.org</string>
 
     <!-- Settings: Connection screen -->
     <string name="prefcat_connection_defaults">Defaults for new connections</string>
@@ -3762,6 +3764,9 @@
     <string name="video_recording_share_action">Share</string>
     <string name="video_recording_share_video">Share Video</string>
     <string name="video_recording_share_cast">Share Terminal Cast</string>
+    <string name="video_recording_upload_cast">Upload Terminal Cast to Asciinema</string>
+    <string name="video_recording_upload_success">Uploaded — link copied to clipboard: %1$s</string>
+    <string name="video_recording_upload_failure">Asciinema upload failed: %1$s</string>
     <string name="video_recording_notification_title">TabSSH is recording</string>
     <string name="video_recording_notification_text">Recording %1$s to Movies/TabSSH</string>
     <string name="video_recording_notification_stop_action">Stop</string>

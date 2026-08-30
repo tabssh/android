@@ -286,6 +286,14 @@
       android:summary="@string/prefs_video_recording_include_cast_summary"
       android:defaultValue="false" />
 
+    <EditTextPreference
+      android:key="asciinema_server_url"
+      android:title="@string/prefs_asciinema_server_url_title"
+      android:summary="@string/prefs_asciinema_server_url_summary"
+      android:defaultValue="https://asciinema.org"
+      android:inputType="textUri"
+      app:useSimpleSummaryProvider="true" />
+
   </PreferenceCategory>
 
 </PreferenceScreen>
