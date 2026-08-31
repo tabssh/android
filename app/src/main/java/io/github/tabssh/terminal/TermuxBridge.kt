@@ -1504,6 +1504,13 @@ class TermuxBridge(
         val envList = arrayOf(
             "MOSH_KEY=$moshKeyBase64",
             "TERM=xterm-256color",
+            // Keep mosh-client off the alternate screen (skips smcup/rmcup —
+            // mosh terminaldisplayinit.cc honors this env var). On the primary
+            // screen mosh's scroll repaints feed the Termux transcript, so all
+            // three swipe-scroll zones work at a plain prompt over mosh; with
+            // the alt screen the transcript is pinned to 0 rows for the whole
+            // session and the alt-screen/DECCKM signals are pinned useless.
+            "MOSH_NO_TERM_INIT=1",
             // mosh-client checks nl_langinfo(CODESET) at startup and exits if not UTF-8;
             // Android subprocess envs built from scratch don't inherit LANG from the app process.
             "LANG=en_US.UTF-8",

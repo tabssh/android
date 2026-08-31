@@ -48,22 +48,3 @@ is in progress.
     ● One item pending — #55, the word-join paste bug (line-wrap boundary spaces getting  dropped on copy/paste). It's explicitly blocked: waiting on a user-provided screenshot  (original wrapped text vs. what actually pasted) to confirm the exact repro before  making any code changes. No other items in the file.  Do you have that screenshot, or want me to proceed on the investigation notes alone?✻ Baked for 14s                                                   new task? /clear to save 112.9k tokens
     ```
 
-56. **`scrollByNotches()`'s alt-screen arrow-key branch sends bytes with no
-    ESC prefix** — `TerminalView.kt` ~line 3692-3693 (left-edge wheel-zone
-    handler, `scrollByNotches()`) builds the up/down key bytes as
-    `"OA".toByteArray()` / `"OB".toByteArray()` — the literal two-character
-    text "OA"/"OB", not an SS3 arrow-key escape sequence. The equivalent
-    branch in `onScroll()` (main touchpad-drag path, ~line 2775-2776)
-    correctly uses `"\u001bOA".toByteArray()` / `"\u001bOB".toByteArray()`
-    (ESC O A / ESC O B). `TermuxBridge.write()` (`TermuxBridge.kt` ~line
-    1061) writes the raw bytes as-is with no ESC injection, so this path
-    appears to send literal "OA"/"OB" text rather than a real arrow key.
-    Found incidentally while instrumenting all three swipe zones
-    (left/wheel, right/scrollbar-thumb, middle/onScroll) with diagnostic
-    `Logger.d("TerminalView.Scroll", ...)` calls for item-55-adjacent
-    touchpad-scrollback bug work — not yet fixed, since the user has
-    separately confirmed the left-zone arrow-key behavior currently "works"
-    for them and asked this call site not be touched pending real log
-    evidence. Needs: confirm via the new diagnostic logging whether this
-    branch actually fires in the user's repro cases, and if so fix it to
-    match `onScroll()`'s `"\u001bOA"`/`"\u001bOB"` byte sequences.

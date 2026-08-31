@@ -1004,8 +1004,16 @@ __ui_inject_crash_prefs() {
     # Write prefs XML to a local temp file and push it directly (requires root adb).
     local local_tmp
     local_tmp="$UITEST_TMP/tabssh_startup_inject.xml"
-    printf '<?xml version="1.0" encoding="utf-8" standalone="yes" ?>\n<map>\n    <long name="crash_time" value="%s" />\n    <string name="crash_thread">main</string>\n    <string name="last_crash">java.lang.RuntimeException: Test crash\n\tat io.github.tabssh.test.Fake.method(Fake.kt:1)\n    </string>\n</map>\n' \
-        "$ts" > "$local_tmp"
+    cat > "$local_tmp" <<EOF
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<map>
+    <long name="crash_time" value="$ts" />
+    <string name="crash_thread">main</string>
+    <string name="last_crash">java.lang.RuntimeException: Test crash
+	at io.github.tabssh.test.Fake.method(Fake.kt:1)
+    </string>
+</map>
+EOF
 
     # Ensure the shared_prefs directory exists (it might not if the app never ran).
     __adb shell "mkdir -p $prefs_dir" >/dev/null 2>&1 || true

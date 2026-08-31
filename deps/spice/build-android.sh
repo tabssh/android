@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+##@Version 202608310000-git
 # deps/spice/build-android.sh — Cross-compile the SPICE client stack and link
 # the TabSSH JNI bridge into libtabssh_native.so for one Android ABI.
 #
@@ -20,6 +21,8 @@
 # SpiceLoader — devices below 26 simply fall back to VNC, exactly like mosh.
 
 set -euo pipefail
+
+VERSION="202608310000-git"
 
 ABI="${1:-arm64-v8a}"
 API_LEVEL="${API_LEVEL:-26}"

@@ -2756,15 +2756,24 @@ class TerminalView @JvmOverloads constructor(
             // has no equivalent mouse-scroll support at all, with or without
             // config; a tmux the user starts manually needs `set -g mouse on`
             // in their own .tmux.conf.
-            if (ALT_SCREEN_SWIPE_HANDLING_ENABLED && termuxEmulator != null && termuxEmulator.isAlternateBufferActive()) {
+            if (termuxEmulator != null && termuxEmulator.isAlternateBufferActive()) {
                 // GATE: arrows are sent only while cursor keys are in
                 // APPLICATION mode (DECCKM/smkx) — every terminfo/ncurses
                 // full-screen app that wants arrow navigation switches it on
-                // at startup. mosh pins the terminal to the alt screen for its
-                // whole lifetime, so without this gate a swipe at a plain mosh
-                // shell prompt would type literal arrow keys (^[[A garbage or
-                // history stepping) into the shell. A prompt never enables
-                // application cursor mode, so the swipe is swallowed there.
+                // at startup. A prompt never enables application cursor
+                // mode, so a stray alt-screen swipe at a shell prompt is
+                // swallowed instead of stepping shell history.
+                // Mosh sessions never reach this branch: mosh-client would
+                // pin BOTH alt-screen and DECCKM on for its whole lifetime
+                // (Display::open() sends smcup + \e[?1h and new_frame()
+                // never updates either), making both signals useless as a
+                // full-screen-app indicator — so TabSSH launches mosh-client
+                // with the no-term-init environment flag set (see the mosh
+                // env lists in TermuxBridge and MoshNativeClient), keeping
+                // mosh on the primary screen where the local-scrollback
+                // path below works. Full-screen apps over mosh are reached
+                // via the mouse-tracking branch above instead — mosh syncs
+                // the remote mouse-reporting mode to the client per frame.
                 // Ceiling: an alt-screen app that enables neither application
                 // cursor mode nor mouse tracking gets no swipe scrolling —
                 // rare, and blindly injecting keys into a shell is worse.
@@ -2869,7 +2878,7 @@ class TerminalView @JvmOverloads constructor(
             // velocity either. Consume so it doesn't fall through to the
             // local-scrollback fling below, which would fling against a
             // zero-height buffer (see onScroll's isAlternateBufferActive branch).
-            if (ALT_SCREEN_SWIPE_HANDLING_ENABLED && termuxEmulator != null && termuxEmulator.isAlternateBufferActive()) {
+            if (termuxEmulator != null && termuxEmulator.isAlternateBufferActive()) {
                 keyScrollAccum = 0f
                 return true
             }
@@ -3708,11 +3717,11 @@ class TerminalView @JvmOverloads constructor(
             Logger.d("TerminalView.Scroll", "scrollByNotches: BRANCH=mouseWheel lines=$lines")
             return
         }
-        if (ALT_SCREEN_SWIPE_HANDLING_ENABLED && termuxEmulator != null && termuxEmulator.isAlternateBufferActive()) {
+        if (termuxEmulator != null && termuxEmulator.isAlternateBufferActive()) {
             if (!termuxEmulator.isCursorKeysApplicationMode()) return
             val notches = if (reverseScrollDirection) -rawNotches else rawNotches
-            val up = "OA".toByteArray()
-            val down = "OB".toByteArray()
+            val up = "\u001bOA".toByteArray()
+            val down = "\u001bOB".toByteArray()
             val key = if (notches > 0) up else down
             repeat(lines) { termuxBridge?.write(key) }
             Logger.d(
@@ -3904,16 +3913,6 @@ class TerminalView @JvmOverloads constructor(
         // apart. Debounce longer than the animation gap so only the settled
         // final size is forwarded to the SSH server via SIGWINCH.
         private const val RESIZE_DEBOUNCE_MS = 80L
-
-        // Temporary diagnostic kill-switch, at the user's explicit request,
-        // to isolate whether the alt-screen arrow-key swipe branch is the
-        // actual cause of the reported scroll bug. While false, all three
-        // swipe zones (onScroll/scrollByNotches/handleWheelZoneTouch) treat
-        // every swipe as local-scrollback scrolling regardless of alt-screen
-        // state, so a session that misreports alt-screen=true still scrolls
-        // normally. Revert to true once the alt-screen detection bug itself
-        // is fixed and confirmed.
-        const val ALT_SCREEN_SWIPE_HANDLING_ENABLED = false
     }
 }
 

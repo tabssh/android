@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+##@Version 202608310000-git
 # deps/mosh/build-android.sh — Cross-compile mosh-client for one Android ABI.
 #
 # Wave 9.2 — runs INSIDE the Docker image built from deps/mosh/Dockerfile.
@@ -17,6 +18,8 @@
 #  the file to nativeLibraryDir; the file is not actually a shared object.)
 
 set -euo pipefail
+
+VERSION="202608310000-git"
 
 ABI="${1:-arm64-v8a}"
 # Mosh needs API 26+ — `nl_langinfo` was only added to Bionic in API 26.
@@ -48,17 +51,18 @@ NDK_CFLAGS="-fPIC -O2"
 NDK_CXXFLAGS="-fPIC -O2"
 NDK_LDFLAGS="-static-libstdc++"
 
-use_ndk_toolchain() {
+__use_ndk_toolchain() {
     export AR="$NDK_AR" RANLIB="$NDK_RANLIB" STRIP="$NDK_STRIP" NM="$NDK_NM"
     export CC="$NDK_CC" CXX="$NDK_CXX"
     export CFLAGS="$NDK_CFLAGS" CXXFLAGS="$NDK_CXXFLAGS" LDFLAGS="$NDK_LDFLAGS"
 }
 
-use_host_toolchain() {
+__use_host_toolchain() {
     unset AR RANLIB STRIP NM CC CXX CFLAGS CXXFLAGS LDFLAGS
 }
 
-export STRIP="$NDK_STRIP"  # for the final strip step at the end
+# for the final strip step at the end
+export STRIP="$NDK_STRIP"
 
 PREFIX="/tmp/build-${ABI}/prefix"
 SRC_CACHE="/opt/sources"
@@ -77,7 +81,7 @@ echo "════════════════════════�
 
 # ── 1. ncurses ────────────────────────────────────────────────────────────
 echo "──── ncurses 6.4 ────"
-use_ndk_toolchain
+__use_ndk_toolchain
 tar xzf "$SRC_CACHE/ncurses-6.4.tar.gz"
 cd ncurses-6.4
 ./configure \
@@ -94,7 +98,7 @@ cd ..
 
 # ── 2. openssl ────────────────────────────────────────────────────────────
 echo "──── openssl 3.0.13 ────"
-use_ndk_toolchain
+__use_ndk_toolchain
 tar xzf "$SRC_CACHE/openssl-3.0.13.tar.gz"
 cd openssl-3.0.13
 case "$ABI" in
@@ -124,7 +128,7 @@ tar xzf "$SRC_CACHE/protobuf-cpp-3.21.12.tar.gz"
 cd protobuf-3.21.12
 
 # Pass 1 — host build of protoc (needed to generate sources during cross-build)
-use_host_toolchain
+__use_host_toolchain
 mkdir build-host && cd build-host
 cmake .. \
     -DCMAKE_BUILD_TYPE=Release \
@@ -139,7 +143,7 @@ HOST_PROTOC="$(pwd)/protoc"
 cd ..
 
 # Pass 2 — cross-compile static libraries for Android.
-use_ndk_toolchain
+__use_ndk_toolchain
 mkdir build-android && cd build-android
 cmake .. \
     -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
@@ -162,7 +166,7 @@ cd ../..
 # `make dist` archive that ships pre-generated configure + VERSION).
 # The github "archive" tarball lacks those and breaks `make -C src/include`.
 echo "──── mosh 1.4.0 ────"
-use_ndk_toolchain
+__use_ndk_toolchain
 tar xzf "$SRC_CACHE/mosh-1.4.0.tar.gz"
 cd mosh-1.4.0
 # Mosh's `make` regenerates src/include/version.h from $top/VERSION; the

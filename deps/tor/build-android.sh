@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+##@Version 202608310000-git
 # deps/tor/build-android.sh — Cross-compile the tor client for one Android ABI.
 #
 # Runs INSIDE the Docker image built from deps/tor/Dockerfile.
@@ -17,6 +18,8 @@
 #  the file to nativeLibraryDir; the file is not actually a shared object.)
 
 set -euo pipefail
+
+VERSION="202608310000-git"
 
 ABI="${1:-arm64-v8a}"
 # TabSSH has minSdk 24; tor cross-compiles cleanly against API 24 and the
@@ -41,13 +44,14 @@ NDK_NM="$TOOLCHAIN/bin/llvm-nm"
 NDK_CC="$TOOLCHAIN/bin/${TRIPLE}${API_LEVEL}-clang"
 NDK_CXX="$TOOLCHAIN/bin/${TRIPLE}${API_LEVEL}-clang++"
 
-use_ndk_toolchain() {
+__use_ndk_toolchain() {
     export AR="$NDK_AR" RANLIB="$NDK_RANLIB" STRIP="$NDK_STRIP" NM="$NDK_NM"
     export CC="$NDK_CC" CXX="$NDK_CXX"
     export CFLAGS="-fPIC -O2" CXXFLAGS="-fPIC -O2" LDFLAGS="-static-libstdc++"
 }
 
-export STRIP="$NDK_STRIP"  # for the final strip step at the end
+# for the final strip step at the end
+export STRIP="$NDK_STRIP"
 export PATH="$TOOLCHAIN/bin:$PATH"
 
 # tor's configure prints a summary banner whose width probe runs
@@ -76,7 +80,7 @@ echo "════════════════════════�
 
 # ── 1. zlib ────────────────────────────────────────────────────────────────
 echo "──── zlib 1.3.1 ────"
-use_ndk_toolchain
+__use_ndk_toolchain
 tar xzf "$SRC_CACHE/zlib-1.3.1.tar.gz"
 cd zlib-1.3.1
 # zlib's configure has no --host; it honours CC/CFLAGS from the environment.
@@ -87,7 +91,7 @@ cd ..
 
 # ── 2. openssl ─────────────────────────────────────────────────────────────
 echo "──── openssl 3.0.13 ────"
-use_ndk_toolchain
+__use_ndk_toolchain
 tar xzf "$SRC_CACHE/openssl-3.0.13.tar.gz"
 cd openssl-3.0.13
 case "$ABI" in
@@ -108,7 +112,7 @@ cd ..
 
 # ── 3. libevent ────────────────────────────────────────────────────────────
 echo "──── libevent 2.1.13 ────"
-use_ndk_toolchain
+__use_ndk_toolchain
 tar xzf "$SRC_CACHE/libevent-2.1.13-stable.tar.gz"
 cd libevent-2.1.13-stable
 # tor uses its own TLS, so libevent's OpenSSL bufferevents aren't needed.
@@ -124,7 +128,7 @@ cd ..
 
 # ── 4. tor ─────────────────────────────────────────────────────────────────
 echo "──── tor 0.4.9.11 ────"
-use_ndk_toolchain
+__use_ndk_toolchain
 tar xzf "$SRC_CACHE/tor-0.4.9.11.tar.gz"
 cd tor-0.4.9.11
 # --enable-android sets the Android-specific configure defaults so the many

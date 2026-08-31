@@ -97,6 +97,9 @@ object MoshNativeClient {
             // mosh-client writes to TERM-driven curses; xterm-256color is the
             // matching TermuxBridge setting.
             environment()["TERM"] = "xterm-256color"
+            // Keep mosh-client off the alternate screen so local scrollback
+            // works — same rationale as TermuxBridge's mosh PTY env list.
+            environment()["MOSH_NO_TERM_INIT"] = "1"
             // Don't merge stderr — keep it separate so we can log it.
             redirectErrorStream(false)
             // Working dir: app's data dir (mosh-client writes nothing to disk

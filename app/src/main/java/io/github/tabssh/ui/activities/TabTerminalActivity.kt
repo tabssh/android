@@ -6578,27 +6578,27 @@ class TabTerminalActivity : TabSSHActivity() {
                     val shiftActive = terminal?.isPendingShift() == true
                     val seq: String = if (shiftActive) {
                         when (key.id) {
-                            "UP"    -> "[1;2A"
-                            "DOWN"  -> "[1;2B"
-                            "RIGHT" -> "[1;2C"
-                            "LEFT"  -> "[1;2D"
-                            "TAB"   -> "[Z"
-                            "HOME"  -> "[1;2H"
-                            "END"   -> "[1;2F"
-                            "PGUP"  -> "[5;2~"
-                            "PGDN"  -> "[6;2~"
-                            "F1"    -> "[1;2P"
-                            "F2"    -> "[1;2Q"
-                            "F3"    -> "[1;2R"
-                            "F4"    -> "[1;2S"
-                            "F5"    -> "[15;2~"
-                            "F6"    -> "[17;2~"
-                            "F7"    -> "[18;2~"
-                            "F8"    -> "[19;2~"
-                            "F9"    -> "[20;2~"
-                            "F10"   -> "[21;2~"
-                            "F11"   -> "[23;2~"
-                            "F12"   -> "[24;2~"
+                            "UP"    -> "\u001b[1;2A"
+                            "DOWN"  -> "\u001b[1;2B"
+                            "RIGHT" -> "\u001b[1;2C"
+                            "LEFT"  -> "\u001b[1;2D"
+                            "TAB"   -> "\u001b[Z"
+                            "HOME"  -> "\u001b[1;2H"
+                            "END"   -> "\u001b[1;2F"
+                            "PGUP"  -> "\u001b[5;2~"
+                            "PGDN"  -> "\u001b[6;2~"
+                            "F1"    -> "\u001b[1;2P"
+                            "F2"    -> "\u001b[1;2Q"
+                            "F3"    -> "\u001b[1;2R"
+                            "F4"    -> "\u001b[1;2S"
+                            "F5"    -> "\u001b[15;2~"
+                            "F6"    -> "\u001b[17;2~"
+                            "F7"    -> "\u001b[18;2~"
+                            "F8"    -> "\u001b[19;2~"
+                            "F9"    -> "\u001b[20;2~"
+                            "F10"   -> "\u001b[21;2~"
+                            "F11"   -> "\u001b[23;2~"
+                            "F12"   -> "\u001b[24;2~"
                             else    -> key.keySequence
                         }
                     } else if (terminal?.isApplicationCursorKeysMode() == true &&
@@ -6608,8 +6608,8 @@ class TabTerminalActivity : TabSSHActivity() {
                         // (SS3), so vim/less only recognise the SS3 form when they
                         // have enabled application cursor keys (\033[?1h).
                         when (key.id) {
-                            "HOME" -> "OH"
-                            "END"  -> "OF"
+                            "HOME" -> "\u001bOH"
+                            "END"  -> "\u001bOF"
                             else   -> key.keySequence
                         }
                     } else if (key.category == KeyboardKey.KeyCategory.ARROW &&
@@ -6617,10 +6617,10 @@ class TabTerminalActivity : TabSSHActivity() {
                         // is active (\033[?1h), arrows use SS3 (\033OA) not CSI (\033[A).
                         terminal?.isApplicationCursorKeysMode() == true) {
                         when (key.id) {
-                            "UP"    -> "OA"
-                            "DOWN"  -> "OB"
-                            "RIGHT" -> "OC"
-                            "LEFT"  -> "OD"
+                            "UP"    -> "\u001bOA"
+                            "DOWN"  -> "\u001bOB"
+                            "RIGHT" -> "\u001bOC"
+                            "LEFT"  -> "\u001bOD"
                             else    -> key.keySequence
                         }
                     } else {

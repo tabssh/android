@@ -29,8 +29,8 @@ class TerminalEmulator(private val buffer: TerminalBuffer) {
 
     companion object {
         private const val READ_BUFFER_SIZE = 4096
-        private const val BRACKETED_PASTE_START = "[200~"
-        private const val BRACKETED_PASTE_END = "[201~"
+        private const val BRACKETED_PASTE_START = "\u001b[200~"
+        private const val BRACKETED_PASTE_END = "\u001b[201~"
     }
 
     // ANSI Parser for proper escape sequence handling
