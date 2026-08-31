@@ -2756,7 +2756,7 @@ class TerminalView @JvmOverloads constructor(
             // has no equivalent mouse-scroll support at all, with or without
             // config; a tmux the user starts manually needs `set -g mouse on`
             // in their own .tmux.conf.
-            if (termuxEmulator != null && termuxEmulator.isAlternateBufferActive()) {
+            if (ALT_SCREEN_SWIPE_HANDLING_ENABLED && termuxEmulator != null && termuxEmulator.isAlternateBufferActive()) {
                 // GATE: arrows are sent only while cursor keys are in
                 // APPLICATION mode (DECCKM/smkx) — every terminfo/ncurses
                 // full-screen app that wants arrow navigation switches it on
@@ -2869,7 +2869,7 @@ class TerminalView @JvmOverloads constructor(
             // velocity either. Consume so it doesn't fall through to the
             // local-scrollback fling below, which would fling against a
             // zero-height buffer (see onScroll's isAlternateBufferActive branch).
-            if (termuxEmulator != null && termuxEmulator.isAlternateBufferActive()) {
+            if (ALT_SCREEN_SWIPE_HANDLING_ENABLED && termuxEmulator != null && termuxEmulator.isAlternateBufferActive()) {
                 keyScrollAccum = 0f
                 return true
             }
@@ -3708,7 +3708,7 @@ class TerminalView @JvmOverloads constructor(
             Logger.d("TerminalView.Scroll", "scrollByNotches: BRANCH=mouseWheel lines=$lines")
             return
         }
-        if (termuxEmulator != null && termuxEmulator.isAlternateBufferActive()) {
+        if (ALT_SCREEN_SWIPE_HANDLING_ENABLED && termuxEmulator != null && termuxEmulator.isAlternateBufferActive()) {
             if (!termuxEmulator.isCursorKeysApplicationMode()) return
             val notches = if (reverseScrollDirection) -rawNotches else rawNotches
             val up = "OA".toByteArray()
@@ -3904,6 +3904,16 @@ class TerminalView @JvmOverloads constructor(
         // apart. Debounce longer than the animation gap so only the settled
         // final size is forwarded to the SSH server via SIGWINCH.
         private const val RESIZE_DEBOUNCE_MS = 80L
+
+        // Temporary diagnostic kill-switch, at the user's explicit request,
+        // to isolate whether the alt-screen arrow-key swipe branch is the
+        // actual cause of the reported scroll bug. While false, all three
+        // swipe zones (onScroll/scrollByNotches/handleWheelZoneTouch) treat
+        // every swipe as local-scrollback scrolling regardless of alt-screen
+        // state, so a session that misreports alt-screen=true still scrolls
+        // normally. Revert to true once the alt-screen detection bug itself
+        // is fixed and confirmed.
+        const val ALT_SCREEN_SWIPE_HANDLING_ENABLED = false
     }
 }
 

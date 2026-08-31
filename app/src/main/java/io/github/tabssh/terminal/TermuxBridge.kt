@@ -312,6 +312,12 @@ class TermuxBridge(
     @Volatile
     private var moshWatchdog: Job? = null
 
+    /** Edge-detect state for the "TerminalView.AltScreen" diagnostic log
+     *  below — null until the first onTextChanged fires, then holds the
+     *  last logged (altScreen, appCursorKeys) pair so we only log on
+     *  actual transitions, not on every screen redraw. */
+    private var lastLoggedAltScreenState: Pair<Boolean, Boolean>? = null
+
     /**
      * True when the last mosh session exited abnormally within 120 s —
      * the classic signature of a UDP-blocked "nothing received from server"
@@ -823,6 +829,24 @@ class TermuxBridge(
      */
     private val sessionClient = object : TerminalSessionClient {
         override fun onTextChanged(changedSession: TerminalSession) {
+            // Edge-triggered alt-screen/app-cursor-mode tracer: logs only on
+            // an actual state transition, not on every redraw. This is
+            // ground truth on whether the emulator is genuinely being
+            // pushed into alt-screen plus app-cursor-keys mode by real
+            // bytes from the remote or mosh-client side.
+            val em = changedSession.getEmulator()
+            if (em != null) {
+                val current = Pair(em.isAlternateBufferActive(), em.isCursorKeysApplicationMode())
+                if (current != lastLoggedAltScreenState) {
+                    Logger.d(
+                        "TerminalView.AltScreen",
+                        "transition altScreen=${lastLoggedAltScreenState?.first}->${current.first} " +
+                            "appCursorKeys=${lastLoggedAltScreenState?.second}->${current.second} " +
+                            "viaMosh=${moshSession != null}"
+                    )
+                    lastLoggedAltScreenState = current
+                }
+            }
             runOnMain {
                 listeners.forEach { it.onScreenChanged() }
             }
@@ -1002,6 +1026,16 @@ class TermuxBridge(
                     val em = emulator
                     if (em != null) {
                         appendWithOsc8Tracking(em, buffer, bytesRead)
+                        val current = Pair(em.isAlternateBufferActive(), em.isCursorKeysApplicationMode())
+                        if (current != lastLoggedAltScreenState) {
+                            Logger.d(
+                                "TerminalView.AltScreen",
+                                "transition altScreen=${lastLoggedAltScreenState?.first}->${current.first} " +
+                                    "appCursorKeys=${lastLoggedAltScreenState?.second}->${current.second} " +
+                                    "viaMosh=false"
+                            )
+                            lastLoggedAltScreenState = current
+                        }
                     } else {
                         Logger.e(TAG, "EMULATOR IS NULL - cannot process $bytesRead bytes!")
                     }
