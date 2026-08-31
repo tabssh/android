@@ -424,7 +424,7 @@ Getting code correct on the first try is much harder than iterating with feedbac
 5. Re-read `COMMIT_MESS` against the diff; rewrite if anything is missing.
 6. `gitcommit --dir {dir} all` — the only commit path; never bare `git commit`, never `-m`.
 
-**Format:** `{emoji} Title (≤64 chars) {emoji}` + blank line + body + `- path: change` bullets. Emoji map: ✨ feat · 🐛 fix · 📝 docs · 🎨 style · ♻️ refactor · ⚡ perf · ✅ test · 🔧 chore · 🔒 security · 🗑️ remove · 🚀 deploy · 📦 deps. No bare `@` handles; no attribution trailers; one logical change per commit. **Findings-based work (audits, reviews, numbered fix-lists) defaults to one commit per finding — never batch distinct findings into one commit just because they share a file or session. Feature work is the opposite — one commit for the whole feature, never split per part. Unrelated bugs found mid-feature go to `TODO.AI.md`, except app-breaking bugs, which must be fixed immediately.**
+**Format:** `{emoji} Title (≤64 chars) {emoji}` + blank line + body + `- path: change` bullets. Emoji map: ✨ feat · 🐛 fix · 📝 docs · 🎨 style · ♻️ refactor · ⚡ perf · ✅ test · 🔧 chore · 🔒 security · 🗑️ remove · 🚀 deploy · 📦 deps. No bare `@` handles; no attribution trailers. A commit's scope is the resolved unit of work, not "one fix" by default — decide the scope BEFORE fixing, in this order (first match wins): **(1)** user states or implies a single commit → everything for that request in one commit, overriding every rule below; **(2)** ad hoc "fix X and anything else you find" → one commit for the whole request; **(3)** multi-file bug fixes → one commit per group of files actually coupled by dependency/root cause, split when files are independent; **(4)** findings-based work (audits, reviews, numbered fix-lists) → one commit per finding by default, batched only when genuinely inseparable; **(5)** feature work → one commit for the entire feature plus directly-related bugs, never split per part. Unrelated bugs found mid-feature go to `TODO.AI.md`, except app-breaking bugs, which must be fixed immediately. **Subagents never commit, no exceptions.**
 
 ## Terminology
 
@@ -510,11 +510,8 @@ Every non-trivial user flow (onboarding, primary task, import/export) is documen
 ├── docker/
 │   ├── Dockerfile                # optional runtime/CI helpers — NOT a toolchain image
 │   └── docker-compose.yml        # optional test-service containers
-├── deps/                         # native dependency cross-compile toolchains
-│   ├── tor/                      # Dockerfile + build-android.sh (tor binaries)
-│   ├── mosh/                     # Dockerfile + build-android.sh (mosh-client)
-│   └── spice/                    # Dockerfile + build-android.sh + cpp/ (SPICE JNI bridge)
 ├── scripts/                      # build/install/emulator/release helpers
+├── deps/                         # optional: committed, project-specific support files not part of the build/release output (e.g. scripts or Dockerfiles for building a dependency) — never a cache or temp/output dir
 ├── metadata/                     # F-Droid metadata ({app_id}.yml)
 ├── binaries/                     # debug APK output (gitignored)
 ├── releases/                     # release APK output (gitignored)
