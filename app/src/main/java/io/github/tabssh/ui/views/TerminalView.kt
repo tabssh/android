@@ -2429,11 +2429,21 @@ class TerminalView @JvmOverloads constructor(
             // (\033[A). Modifier-qualified chords always use parameterised CSI.
             KeyEvent.KEYCODE_DPAD_UP -> {
                 val appMode = isApplicationCursorKeysMode()
+                Logger.d(
+                    "TerminalView.Scroll",
+                    "onKeyDown: BRANCH=dpadUp appMode=$appMode source=${event.source} " +
+                        "deviceId=${event.deviceId} isPointerSource=${event.isFromSource(android.view.InputDevice.SOURCE_CLASS_POINTER)}"
+                )
                 sendKeySequence(if (appMode) ss3ArrowSeq('A', isShift, isAlt, isCtrl) else arrowSeq('A', isShift, isAlt, isCtrl))
                 return true
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
                 val appMode = isApplicationCursorKeysMode()
+                Logger.d(
+                    "TerminalView.Scroll",
+                    "onKeyDown: BRANCH=dpadDown appMode=$appMode source=${event.source} " +
+                        "deviceId=${event.deviceId} isPointerSource=${event.isFromSource(android.view.InputDevice.SOURCE_CLASS_POINTER)}"
+                )
                 sendKeySequence(if (appMode) ss3ArrowSeq('B', isShift, isAlt, isCtrl) else arrowSeq('B', isShift, isAlt, isCtrl))
                 return true
             }
@@ -2688,6 +2698,13 @@ class TerminalView @JvmOverloads constructor(
                 return false
             }
             val termuxEmulator = termuxBridge?.getEmulator()
+            Logger.d(
+                "TerminalView.Scroll",
+                "onScroll: pointerCount=${e2.pointerCount} distanceY=$distanceY " +
+                    "mouseTracking=${termuxEmulator?.isMouseTrackingActive()} " +
+                    "altScreen=${termuxEmulator?.isAlternateBufferActive()} " +
+                    "appCursorKeys=${termuxEmulator?.isCursorKeysApplicationMode()}"
+            )
             if (termuxEmulator != null && termuxEmulator.isMouseTrackingActive()) {
                 // Remote app (e.g. tmux with mouse on) owns scroll — forward as
                 // mouse wheel events so it can scroll its own scrollback.
@@ -2711,6 +2728,7 @@ class TerminalView @JvmOverloads constructor(
                     repeat(Math.abs(ticks)) {
                         termuxEmulator.sendMouseEvent(button, col, row, true)
                     }
+                    Logger.d("TerminalView.Scroll", "onScroll: BRANCH=mouseWheel ticks=$ticks")
                 }
                 keyScrollAccum = 0f
                 return true
@@ -2753,6 +2771,7 @@ class TerminalView @JvmOverloads constructor(
                 if (!termuxEmulator.isCursorKeysApplicationMode()) {
                     keyScrollAccum = 0f
                     mouseScrollAccum = 0f
+                    Logger.d("TerminalView.Scroll", "onScroll: BRANCH=altScreenSwallowed")
                     return true
                 }
                 val scrollDeltaKey = if (reverseScrollDirection) -distanceY else distanceY
@@ -2770,6 +2789,7 @@ class TerminalView @JvmOverloads constructor(
                     // travel, no extra gearing.
                     val key = if (ticks > 0) up else down
                     repeat(Math.abs(ticks)) { termuxBridge?.write(key) }
+                    Logger.d("TerminalView.Scroll", "onScroll: BRANCH=altScreenArrowKeys ticks=$ticks")
                 }
                 mouseScrollAccum = 0f
                 return true
@@ -2794,6 +2814,10 @@ class TerminalView @JvmOverloads constructor(
             scrollYf = (scrollYf + scrollDelta)
                 .coerceIn(0f, maxScrollYPx().toFloat())
             mouseScrollAccum = 0f
+            Logger.d(
+                "TerminalView.Scroll",
+                "onScroll: BRANCH=localScrollback scrollDelta=$scrollDelta scrollYf=$scrollYf"
+            )
             // invalidate() requests the redraw immediately rather than waiting
             // for the next vsync post — this is what gives 1:1 finger tracking.
             // The framework still coalesces invalidations within the same frame
@@ -3589,6 +3613,10 @@ class TerminalView @JvmOverloads constructor(
                         val len = ScrollbarThumbGeometry.thumbLengthPx(trackH, maxScroll, thumbMinLenPx)
                         val delta = ScrollbarThumbGeometry.dragScrollDelta(dy, trackH, maxScroll, len)
                         scrollYf = (scrollYf + delta).coerceIn(0f, maxScroll)
+                        Logger.d(
+                            "TerminalView.Scroll",
+                            "handleThumbTouch: BRANCH=thumbDrag dy=$dy delta=$delta scrollYf=$scrollYf"
+                        )
                     }
                     // maxScroll == 0 (alt-screen app, empty transcript): the
                     // drag is still consumed — doing nothing — so it can never
@@ -3661,6 +3689,13 @@ class TerminalView @JvmOverloads constructor(
         val lines = Math.abs(rawNotches) * wheelLinesPerNotch
         val termuxEmulator = termuxBridge?.getEmulator()
         val cellH = if (cellHeight > 0f) cellHeight else 20f
+        Logger.d(
+            "TerminalView.Scroll",
+            "scrollByNotches: rawNotches=$rawNotches " +
+                "mouseTracking=${termuxEmulator?.isMouseTrackingActive()} " +
+                "altScreen=${termuxEmulator?.isAlternateBufferActive()} " +
+                "appCursorKeys=${termuxEmulator?.isCursorKeysApplicationMode()}"
+        )
         if (termuxEmulator != null && termuxEmulator.isMouseTrackingActive()) {
             val col = ((atX / (if (cellWidth > 0f) cellWidth else cellH)) + 1)
                 .toInt().coerceIn(1, terminalCols)
@@ -3670,6 +3705,7 @@ class TerminalView @JvmOverloads constructor(
             else
                 com.termux.terminal.TerminalEmulator.MOUSE_WHEELDOWN_BUTTON
             repeat(lines) { termuxEmulator.sendMouseEvent(button, col, row, true) }
+            Logger.d("TerminalView.Scroll", "scrollByNotches: BRANCH=mouseWheel lines=$lines")
             return
         }
         if (termuxEmulator != null && termuxEmulator.isAlternateBufferActive()) {
@@ -3679,11 +3715,19 @@ class TerminalView @JvmOverloads constructor(
             val down = "OB".toByteArray()
             val key = if (notches > 0) up else down
             repeat(lines) { termuxBridge?.write(key) }
+            Logger.d(
+                "TerminalView.Scroll",
+                "scrollByNotches: BRANCH=altScreenArrowKeys rawNotches=$rawNotches lines=$lines"
+            )
             return
         }
         val notches = if (reverseScrollDirection) -rawNotches else rawNotches
         val sign = if (notches > 0) 1f else -1f
         scrollYf = (scrollYf + sign * lines * cellH).coerceIn(0f, maxScrollYPx().toFloat())
+        Logger.d(
+            "TerminalView.Scroll",
+            "scrollByNotches: BRANCH=localScrollback rawNotches=$rawNotches scrollYf=$scrollYf"
+        )
         invalidate()
     }
 
