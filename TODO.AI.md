@@ -48,3 +48,12 @@ is in progress.
     ● One item pending — #55, the word-join paste bug (line-wrap boundary spaces getting  dropped on copy/paste). It's explicitly blocked: waiting on a user-provided screenshot  (original wrapped text vs. what actually pasted) to confirm the exact repro before  making any code changes. No other items in the file.  Do you have that screenshot, or want me to proceed on the investigation notes alone?✻ Baked for 14s                                                   new task? /clear to save 112.9k tokens
     ```
 
+
+56. Real scrollback over Mosh via a mosh-client patch (Blink Shell approach).
+    Mosh never feeds terminal scrollback — it repaints by cursor-addressed
+    overwrite (mosh issue #122), so over Mosh TabSSH falls back to
+    xfce4-style arrow-key swipe emulation on the alt screen. Blink Shell
+    solved this properly by patching mosh to expose scrolled-off lines to
+    the host terminal. TabSSH cross-compiles its own mosh-client in
+    deps/mosh/, so the same patch route is available. Investigate Blink's
+    mosh fork and estimate the patch surface before committing to it.

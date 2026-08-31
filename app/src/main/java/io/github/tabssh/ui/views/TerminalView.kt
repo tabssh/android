@@ -2763,17 +2763,19 @@ class TerminalView @JvmOverloads constructor(
                 // at startup. A prompt never enables application cursor
                 // mode, so a stray alt-screen swipe at a shell prompt is
                 // swallowed instead of stepping shell history.
-                // Mosh sessions never reach this branch: mosh-client would
-                // pin BOTH alt-screen and DECCKM on for its whole lifetime
+                // Mosh sessions always take this branch: mosh-client pins
+                // BOTH alt-screen and DECCKM on for its whole lifetime
                 // (Display::open() sends smcup + \e[?1h and new_frame()
-                // never updates either), making both signals useless as a
-                // full-screen-app indicator — so TabSSH launches mosh-client
-                // with the no-term-init environment flag set (see the mosh
-                // env lists in TermuxBridge and MoshNativeClient), keeping
-                // mosh on the primary screen where the local-scrollback
-                // path below works. Full-screen apps over mosh are reached
-                // via the mouse-tracking branch above instead — mosh syncs
-                // the remote mouse-reporting mode to the client per frame.
+                // never updates either), and mosh never feeds the local
+                // transcript anyway (mosh issue #122 — it repaints by
+                // cursor-addressed overwrite), so arrow-key emulation is
+                // the only scroll signal available over mosh. This matches
+                // xfce4-terminal/VTE "alternate screen scrolling": pagers,
+                // vim, and TUIs scroll via arrows; at a plain mosh prompt a
+                // swipe steps shell history, exactly as on the desktop.
+                // Apps that enable mouse reporting take the mouse-tracking
+                // branch above instead — mosh syncs the remote
+                // mouse-reporting mode to the client per frame.
                 // Ceiling: an alt-screen app that enables neither application
                 // cursor mode nor mouse tracking gets no swipe scrolling —
                 // rare, and blindly injecting keys into a shell is worse.

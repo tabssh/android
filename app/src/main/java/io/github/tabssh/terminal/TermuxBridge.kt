@@ -1308,6 +1308,16 @@ class TermuxBridge(
                 // and the PTY (via ioctl TIOCSWINSZ → SIGWINCH to mosh-client).
                 // No SSH resize callback is needed.
                 try { ms.updateSize(newColumns, newRows) } catch (_: Exception) {}
+                // Belt and braces: also signal mosh-client explicitly. On-device
+                // evidence (Android 16, debug log "Terminal resized: 37x90" with
+                // mosh still painting 27 rows) shows the kernel-generated SIGWINCH
+                // triggered by TIOCSWINSZ is not reliably reaching the PTY child,
+                // even though the delivery chain is correct in source (termux.c
+                // does setsid + open(pts) for a proper controlling tty, and
+                // mosh's stmclient.cc registers SIGWINCH). mosh's process_resize()
+                // is idempotent — it re-reads TIOCGWINSZ — so a duplicate signal
+                // is harmless. SIGWINCH is 28 on every Android ABI (asm-generic).
+                sendSigwinch(ms)
             } else {
                 emulator?.resize(newColumns, newRows)
 
@@ -1503,14 +1513,13 @@ class TermuxBridge(
 
         val envList = arrayOf(
             "MOSH_KEY=$moshKeyBase64",
+            // Deliberately NOT setting MOSH_NO_TERM_INIT: it would keep mosh off
+            // the alt screen, but mosh repaints by cursor-addressed overwrite and
+            // never feeds the transcript either way (mosh issue #122), so local
+            // scrollback is dead over mosh regardless. Staying on the alt screen
+            // keeps the alt-screen+DECCKM swipe branch active, which turns swipes
+            // into arrow keys — matching xfce4-terminal/VTE alt-screen scrolling.
             "TERM=xterm-256color",
-            // Keep mosh-client off the alternate screen (skips smcup/rmcup —
-            // mosh terminaldisplayinit.cc honors this env var). On the primary
-            // screen mosh's scroll repaints feed the Termux transcript, so all
-            // three swipe-scroll zones work at a plain prompt over mosh; with
-            // the alt screen the transcript is pinned to 0 rows for the whole
-            // session and the alt-screen/DECCKM signals are pinned useless.
-            "MOSH_NO_TERM_INIT=1",
             // mosh-client checks nl_langinfo(CODESET) at startup and exits if not UTF-8;
             // Android subprocess envs built from scratch don't inherit LANG from the app process.
             "LANG=en_US.UTF-8",
@@ -1647,6 +1656,9 @@ class TermuxBridge(
             session.initializeEmulator(currentColumns, currentRows)
         } else {
             try { session.updateSize(currentColumns, currentRows) } catch (_: Exception) {}
+            // Same belt-and-braces explicit SIGWINCH as resize() — see the
+            // comment there for the on-device evidence and safety argument.
+            sendSigwinch(session)
         }
 
         // Delegate rendering to the session's TerminalEmulator.
@@ -1658,6 +1670,20 @@ class TermuxBridge(
             listeners.forEach { it.onConnected() }
         }
         Logger.i(TAG, "Connected via PTY TerminalSession (mosh-client)")
+    }
+
+    /**
+     * Explicitly deliver SIGWINCH (28 on all Android ABIs, asm-generic) to a
+     * PTY-backed session's shell process so it re-reads the kernel winsize
+     * even when the TIOCSWINSZ-generated signal is lost on-device.
+     */
+    private fun sendSigwinch(session: TerminalSession) {
+        try {
+            val pid = session.pid
+            if (pid > 0) android.os.Process.sendSignal(pid, 28)
+        } catch (e: Exception) {
+            Logger.w(TAG, "sendSigwinch failed: ${e.message}")
+        }
     }
 
     /**
