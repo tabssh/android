@@ -236,7 +236,8 @@ git checkout <commit> -- scripts/fix/script-name.sh
 1. Create script in appropriate directory:
    - `scripts/` - Main scripts (build, release, dev tooling, test sshd, etc.)
    - `tests/` - Reserve for actual test code (instrumented / JUnit / integration). Don't put build helpers here.
-   - `docker/` - Dockerfiles + compose files only. Test fixtures that ship as containers (e.g. `docker/test-sshd/`) live here.
+   - `docker/` - Dockerfiles + compose files only.
+   - `deps/` - Test fixtures that ship as containers (e.g. `deps/tests/sshd/`) live here.
 
 2. Make executable:
    ```bash

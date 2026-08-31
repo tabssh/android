@@ -37,7 +37,7 @@ object TorNativeClient {
     private const val BOOTSTRAP_MARKER = "Bootstrapped 100%"
 
     // Pinned versions of the statically-linked native stack. These MUST track
-    // the pins in deps/tor/Dockerfile and deps/tor/build-android.sh — the bundled binary
+    // the pins in deps/prereqs/tor/Dockerfile and deps/prereqs/tor/build-android.sh — the bundled binary
     // has no cheap runtime version query, so the About dialog reports these
     // build-time constants. Update here and in both build files together.
     const val TOR_VERSION = "0.4.9.11"

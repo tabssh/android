@@ -107,18 +107,18 @@ jobs:
 
       - name: Build cross-compile image
         run: |
-          docker build -t tabssh/mosh-build:latest deps/mosh/
+          docker build -t tabssh/mosh-build:latest deps/prereqs/mosh/
 
       - name: Cross-compile mosh-client for ${{ matrix.abi }}
         run: |
           docker run --rm \
-            -v "${{ github.workspace }}/deps/mosh:/work" \
+            -v "${{ github.workspace }}/deps/prereqs/mosh:/work" \
             tabssh/mosh-build:latest \
             /work/build-android.sh ${{ matrix.abi }}
 
       - name: Verify binary
         run: |
-          binary="deps/mosh/out/${{ matrix.abi }}/mosh-client"
+          binary="deps/prereqs/mosh/out/${{ matrix.abi }}/mosh-client"
           test -f "$binary" || { echo "Missing binary"; exit 1; }
           file "$binary"
           ls -la "$binary"
@@ -170,7 +170,7 @@ jobs:
 
           **License:** \`mosh-client\` is GPL-3.0 (see [mobile-shell/mosh LICENSE](https://github.com/mobile-shell/mosh/blob/master/COPYING)). It is aggregated alongside TabSSH (MIT) — neither license infects the other.
 
-          **Built from:** \`mosh-${version}\` upstream release, via \`deps/mosh/Dockerfile\` + \`deps/mosh/build-android.sh\` in this repo.
+          **Built from:** \`mosh-${version}\` upstream release, via \`deps/prereqs/mosh/Dockerfile\` + \`deps/prereqs/mosh/build-android.sh\` in this repo.
           EOF
 
           # Mosh binary refreshes are infrastructure, not user-facing

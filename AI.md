@@ -174,20 +174,20 @@ Load PARTs on demand with `grep -n "^# PART N" AI.md` — never read this file e
 | PART | Title | ~Line |
 |------|-------|-------|
 | 0 | CRITICAL RULES - READ FIRST | 194 |
-| 1 | PROJECT FILES & GOVERNANCE | 317 |
-| 2 | ANDROID APPLICATION MODEL | 423 |
-| 3 | PROJECT STRUCTURE | 481 |
-| 4 | TOOLCHAIN, BUILD & DOCKER | 543 |
-| 5 | STORAGE & DATABASE | 640 |
-| 6 | SECURITY & CRYPTO | 674 |
-| 7 | UI, THEMING, ACCESSIBILITY, I18N | 703 |
-| 8 | NOTIFICATIONS, SERVICES, BACKGROUND WORK | 758 |
-| 9 | NETWORK & CONNECTIVITY | 791 |
-| 10 | BACKUP, RESTORE & SYNC | 822 |
-| 11 | TESTING & EMULATORS | 843 |
-| 12 | CI/CD WORKFLOWS | 871 |
-| 13 | RELEASE, SIGNING & F-DROID | 912 |
-| 14 | IDEA.md REFERENCE | 977 |
+| 1 | PROJECT FILES & GOVERNANCE | 341 |
+| 2 | ANDROID APPLICATION MODEL | 447 |
+| 3 | PROJECT STRUCTURE | 505 |
+| 4 | TOOLCHAIN, BUILD & DOCKER | 570 |
+| 5 | STORAGE & DATABASE | 669 |
+| 6 | SECURITY & CRYPTO | 704 |
+| 7 | UI, THEMING, ACCESSIBILITY, I18N | 733 |
+| 8 | NOTIFICATIONS, SERVICES, BACKGROUND WORK | 936 |
+| 9 | NETWORK & CONNECTIVITY | 969 |
+| 10 | BACKUP, RESTORE & SYNC | 1000 |
+| 11 | TESTING & EMULATORS | 1022 |
+| 12 | CI/CD WORKFLOWS | 1050 |
+| 13 | RELEASE, SIGNING & F-DROID | 1102 |
+| 14 | IDEA.md REFERENCE | 1210 |
 
 ---
 
@@ -260,6 +260,17 @@ Update these when their subject changes:
 | Store targets | `{store_targets}` — default **fdroid + provider releases** (GitHub/GitLab/Gitea/Forgejo releases per git remote); **Play is opt-in** via IDEA.md (PART 13) |
 | Module layout | Single `app/` Gradle module unless IDEA.md declares otherwise (Wear/TV companions get their own module) |
 
+## Kotlin Style & Idioms
+
+- **Style & lint**: `ktlint` (official Kotlin code style) formats every file; `detekt` runs in `make check` for static analysis (complexity, unused code, magic numbers) — both gate every commit, the Kotlin equivalent of `go-lint`/`rust-lint` for this project.
+- **Null safety**: `!!` is forbidden outside test code — use safe calls (`?.`), the elvis operator (`?:`), or `requireNotNull()`/`checkNotNull()` with a message. Platform types from Java interop are wrapped/annotated at the boundary, never leaked raw into app code.
+- **Immutability first**: `val` over `var`; data classes carry no `var` properties unless the object is genuinely mutable state; expose read-only `List`/`Map`/`Set` outside the owning scope, keep `Mutable*` variants private to it.
+- **Structured concurrency**: never `GlobalScope.launch` — every coroutine is scoped to `viewModelScope`, `lifecycleScope`, or an explicit `CoroutineScope` tied to a component's lifecycle and cancelled with it. Long-running background work uses `WorkManager` (PART 8), never a detached coroutine.
+- **State modeling**: `sealed class`/`sealed interface` for UI/domain state (`Loading`/`Success`/`Error`, not a nullable value plus a boolean flag) — `when` over a sealed hierarchy stays exhaustive; no `else` branch that would silently swallow a future new case.
+- **Visibility**: `private`/`internal` by default; a member is `public` only when it is genuinely part of the module's external API.
+- **Scope functions**: `let`/`run`/`with`/`apply`/`also` used for their idiomatic purpose (null-check unwrap, object configuration, side effects) — never chained more than two deep, and never used to smuggle multi-statement logic into what reads like a one-liner.
+- **Naming**: standard Kotlin conventions — `UpperCamelCase` types, `lowerCamelCase` members/functions, `SCREAMING_SNAKE_CASE` top-level/companion `const val`s; no Hungarian notation, no `m`/`s` prefixes.
+
 ## ALWAYS DO
 
 - **ALWAYS resolve placeholders from `IDEA.md ## Project variables`** — `AI.md` is read-only; never edit placeholders in place
@@ -272,15 +283,16 @@ Update these when their subject changes:
 - **ALWAYS keep `minSdk` working** — new dependencies must respect the project's `minSdk` or be guarded by `Build.VERSION.SDK_INT` checks
 - **ALWAYS keep the F-Droid flavor reproducible** (PART 13) — no non-deterministic codegen, no proprietary services, no network-fetching Gradle plugins
 - **ALWAYS use `Flow`/`StateFlow` for new reactive code** — never introduce LiveData, RxJava, or callback chains
-- **ALWAYS run `make check` before every commit** — compile + lint + JVM unit tests; never commit with errors, violations, or failing unit tests
+- **ALWAYS run `make check` before every commit** — compile + `ktlint`/`detekt` lint + JVM unit tests; never commit with errors, violations, or failing unit tests
 - **ALWAYS follow the commit workflow** in PART 1 — `gitcommit --dir {dir} all` is the only commit path
 - **ALWAYS update `CHANGELOG.md` in the same commit** as any user-visible behavior change
 
 ## NEVER DO
 
 - **NEVER add `TODO`/`FIXME`/`HACK` or commented-out code** to committed files
-- **NEVER write inline comments** — comments go above the code, single line, ≤180 chars; tool-required same-line directives (`@Suppress`, `// noinspection`) are the only exception
-- **NEVER commit secrets** — no keystores with production keys, no tokens, no API keys; a dev `keystore.jks` is permitted only if generated locally and documented as dev-only
+- **NEVER write inline comments** — comments go above the code, single line, ≤180 chars. Two exceptions only: tool-required same-line directives (`@Suppress`, `// noinspection`), and CI workflow SHA-pin version annotations (`uses: owner/action@{40-char-sha}  # vX.Y.Z`), which Renovate reads and rewrites in place and must never be moved above the `uses:` line
+- **NEVER put comments in pure data formats** — no comments in `.json` (including `google-services.json`-style configs), `.env`/`KEY=VALUE` files, or CSV/TSV; document those in markdown instead. Gradle/Kotlin/XML/YAML take comments normally, above the line
+- **NEVER commit secrets** — no keystores of any kind, no tokens, no API keys; a dev `keystore.jks` is permitted only as a locally generated, gitignored, never-committed artifact documented as dev-only
 - **NEVER pull in Google Play Services** unless IDEA.md explicitly requires it — default target includes de-Googled ROMs; prefer pure-JVM/AOSP alternatives (e.g. ZXing over ML Kit)
 - **NEVER create a `docker/Dockerfile.build` by default** — `casjaysdev/android:latest` covers virtually every need; escape hatch in PART 4
 - **NEVER volume-mount over `/opt/android-sdk`** in the build container — it overlays the baked SDK
@@ -302,7 +314,7 @@ Update these when their subject changes:
 
 ## Device access reality
 
-The development device, when one exists, is typically remote or absent. **Assume adb/USB is unavailable**: prefer the emulator path (PART 11) or treat the build artifact (APK) as the deliverable. Never block a task waiting for a physical device.
+**AI/adb never has access to the user's physical device** — the development device, when one exists, is typically remote or absent. **Assume adb/USB is unavailable**: use an AVD (PART 11) where the system supports it, or treat the build artifact (APK) as the deliverable. Never block a task waiting for a physical device.
 
 ## Licensing & Attribution
 
@@ -418,7 +430,7 @@ Getting code correct on the first try is much harder than iterating with feedbac
 ## Commit workflow (required on every commit)
 
 1. `git status --porcelain` + `git diff --stat` — see exactly what changed.
-2. **Run `make check`** — compile + lint + device-free JVM unit tests; the mandatory pre-commit gate (instrumented tests need a device/emulator the build host generally lacks — that is why the gate is `check`, not `test`). Run `make test` when an emulator/device is reachable and the change touches security-critical code (crypto, storage, transport, exported components) — and always before tagging a release.
+2. **Run `make check`** — compile + `ktlint`/`detekt` lint (PART 0 → Kotlin Style & Idioms) + device-free JVM unit tests; the mandatory pre-commit gate (instrumented tests need a device/emulator the build host generally lacks — that is why the gate is `check`, not `test`). Run `make test` when an emulator/device is reachable and the change touches security-critical code (crypto, storage, transport, exported components) — and always before tagging a release.
 3. **Changelog gate** — user-visible change ⇒ `CHANGELOG.md` (and the in-app what's-new asset if present) staged in the same commit.
 4. Write `.git/COMMIT_MESS` from the diff — every changed file described; never from memory.
 5. Re-read `COMMIT_MESS` against the diff; rewrite if anything is missing.
@@ -516,8 +528,10 @@ Every non-trivial user flow (onboarding, primary task, import/export) is documen
 ├── binaries/                     # debug APK output (gitignored)
 ├── releases/                     # release APK output (gitignored)
 ├── Makefile
+├── .gitignore                    # required; must cover binaries/, releases/, .gradle/, keystore.jks, .env*
 ├── AI.md                         # this spec (read-only)
 ├── IDEA.md                       # project variables + business decisions
+├── SPEC.md                       # optional rule overrides; may be empty
 ├── CLAUDE.md                     # short loader
 ├── CHANGELOG.md                  # Keep-a-Changelog format
 ├── README.md
@@ -548,8 +562,8 @@ Feature-specific packages (the app's actual domain) sit alongside these; documen
 
 ## Root-file rules
 
-- `keystore.jks` in the repo is dev-only, generated by `scripts/generate-keystore.sh`; production signing comes from CI secrets (PART 13).
-- Temp/output paths: all temp files under `$TMPDIR/{project_org}/{internal_name}-XXXXXX/`; never in the project tree.
+- `keystore.jks` is dev-only, generated locally on demand by `scripts/generate-keystore.sh`, listed in `.gitignore`, and **never committed** (`.jks` is a globally forbidden extension); production signing comes from CI secrets (PART 13).
+- Temp/output paths: all temp files under `${TMPDIR:-/tmp}/{project_org}/{internal_name}-XXXXXX/` (never a bare `/tmp`, never a bare `mktemp -d`); never in the project tree.
 
 ---
 
@@ -611,13 +625,14 @@ ABI splits ON for release. Rename outputs with simplified arch tags:
 - No snapshot/dynamic versions (`+`); pin exact versions; Renovate keeps them current.
 - Room schema export ON (`app/schemas/` committed).
 - OWASP DependencyCheck runs in release CI; CVSS ≥ 7.0 fails the build (PART 12).
+- **Pre-flight before adding any new dependency:** check its vulnerability status first (OWASP DependencyCheck locally, or the upstream advisory feed). Never add a dependency carrying an unpatched critical/high CVE; if no unaffected version exists, record the decision and the mitigating controls in IDEA.md.
 
 ## Make targets (canonical set)
 
 | Target | Effect | Output |
 |---|---|---|
 | `help` | list targets | stdout |
-| `check` | compile + lint + JVM unit tests inside Docker (fast, device-free gate) | stdout |
+| `check` | compile + `ktlint`/`detekt` lint + JVM unit tests inside Docker (fast, device-free gate) | stdout |
 | `build` | debug APKs inside Docker | `./binaries/` |
 | `release` | release APKs inside Docker (local verification only — real releases are CI) | `./releases/` |
 | `test` | everything in `check` plus instrumented/UI tests when an emulator/device is reachable | report |
@@ -636,12 +651,13 @@ build:
 	  --memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) \
 	  -v $(PWD):/workspace -w /workspace \
 	  -e GRADLE_USER_HOME=/workspace/.gradle \
-	  $(DOCKER_IMAGE) ./gradlew assembleDebug
+	  $(DOCKER_IMAGE) \
+	  sh -c 'mkdir -p /workspace/.gradle; [ -d /workspace/.gradle/wrapper ] || cp -a /root/.gradle/wrapper /workspace/.gradle/; ./gradlew assembleDebug'
 ```
 
 Rules:
 - Source tree → `/workspace`; Gradle cache → `GRADLE_USER_HOME=/workspace/.gradle` (project-scoped, safe for concurrent projects).
-- That override bypasses the image's pre-warmed wrapper dist at `/root/.gradle` — seed it once so `./gradlew` never re-downloads Gradle: `[ -d /workspace/.gradle/wrapper ] || cp -a /root/.gradle/wrapper /workspace/.gradle/` as the first step of the containerized command.
+- That override bypasses the image's pre-warmed wrapper dist at `/root/.gradle` — seed it once so `./gradlew` never re-downloads Gradle: `mkdir -p /workspace/.gradle; [ -d /workspace/.gradle/wrapper ] || cp -a /root/.gradle/wrapper /workspace/.gradle/` as the first step of the containerized command (shown in the sample above).
 - **Never volume-mount `/opt/android-sdk`** — it overlays the baked SDK. `ANDROID_HOME` is preset in the image.
 - `--rm --name {project_name}-XXXXXX` on every run; resource limits always set; never `-it` for batch commands.
 - Native (JNI/NDK) projects: `cmake`/`ndk` versions are pinned in `app/build.gradle` AND pre-baked into the toolchain image at those same versions — Gradle must never lazily download SDK components mid-build (nondeterministic, and corrupt mid-build `sdkmanager` downloads are a known CI flake).
@@ -659,6 +675,7 @@ The Room/database sections apply only if the IDEA.md `## Applicability` matrix d
 - One `RoomDatabase` subclass; version constant is the single source of truth.
 - `exportSchema = true`; `app/schemas/` JSON committed with every version bump.
 - DAOs are suspend-first; no `allowMainThreadQueries()`.
+- **Queries are always parameterized.** Use `@Query` with `:named` bind parameters; never build SQL by string concatenation or interpolation. `@RawQuery`/`SupportSQLiteQuery` is a last resort — when unavoidable, the SQL text is a fixed literal and every value goes through the `bindArgs` array; identifiers (table/column names) are never taken from user input.
 
 ## Migration protocol (every schema change)
 
@@ -720,6 +737,90 @@ Offer per-credential persistence levels where secrets are cached:
 - Material 3, dark mode default, `dark`/`light`/`auto` selectable.
 - Never hardcode colors: theme attributes + a central theme definition. If the app has user-selectable themes, model them as a data class (name, isDark, semantic colors, optional palette) with a `ThemeManager` exposing the current theme as `StateFlow`.
 - Contrast validation for user-created/custom themes: WCAG 2.1 AA (4.5:1) minimum, AAA (7:1) advisory; surface issues in the theme editor in real time.
+
+### Color tokens → Material 3 `ColorScheme`
+
+The canonical design tokens (`~/.claude/memory/ui_ux_conventions.md` → Design Token System) are the single source for every hex value in this app. Build `lightColorScheme()`/`darkColorScheme()` from them — never invent a parallel palette:
+
+| Token | Material 3 role | Dark hex | Light hex |
+|-------|-----------------|----------|-----------|
+| `--bg` | `background` / `surface` | `#282a36` | `#ffffff` |
+| `--bg-subtle` | `surfaceVariant` | `#21222c` | `#f6f8fa` |
+| `--bg-elevated` | `surfaceContainer` | `#2b2d3a` | `#ffffff` |
+| `--bg-overlay` | `surfaceContainerHigh` | `#343746` | `#ffffff` |
+| `--bg-inset` | `surfaceContainerHighest` | `#1e1f29` | `#eaeef2` |
+| `--fg` | `onBackground` / `onSurface` | `#f8f8f2` | `#1f2328` |
+| `--fg-muted` | `onSurfaceVariant` | `#a3a9cc` | `#636c76` |
+| `--fg-disabled` | `outline` | `#565f89` | `#adb5c0` |
+| `--border` | `outlineVariant` | `#44475a` | `#d0d7de` |
+| `--accent` | `primary` | `#bd93f9` | `#0969da` |
+| `--accent-subtle` | `primaryContainer` | `#3d3a5c` | `#ddf4ff` |
+| `--accent-fg` | `onPrimaryContainer` | `#bd93f9` | `#0969da` |
+| `--fg-on-accent` | `onPrimary` | `#282a36` | `#ffffff` |
+| `--color-error-fg` | `error` | `#ff5555` | `#d1242f` |
+| `--color-error-bg` | `errorContainer` | `#2e1616` | `#ffebe9` |
+| `--color-success-fg` / `--color-warning-fg` / `--color-info-fg` | no stock M3 role — extended custom roles, see below | — | — |
+
+```kotlin
+// Material 3 ships no success/warning/info roles - extend the scheme with a
+// second CompositionLocal instead of hardcoding a Color literal at any call site.
+data class ExtendedColors(
+    val successFg: Color, val successBg: Color, val successBorder: Color,
+    val warningFg: Color, val warningBg: Color, val warningBorder: Color,
+    val infoFg: Color, val infoBg: Color, val infoBorder: Color,
+)
+
+val LocalExtendedColors = staticCompositionLocalOf<ExtendedColors> {
+    error("ExtendedColors not provided - wrap content in AppTheme")
+}
+
+@Composable
+fun AppTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+    val colorScheme = if (darkTheme) {
+        darkColorScheme(
+            background = Color(0xFF282A36), surface = Color(0xFF282A36),
+            onBackground = Color(0xFFF8F8F2), onSurface = Color(0xFFF8F8F2),
+            surfaceVariant = Color(0xFF21222C), onSurfaceVariant = Color(0xFFA3A9CC),
+            primary = Color(0xFFBD93F9), onPrimary = Color(0xFF282A36),
+            primaryContainer = Color(0xFF3D3A5C), onPrimaryContainer = Color(0xFFBD93F9),
+            error = Color(0xFFFF5555), errorContainer = Color(0xFF2E1616), onErrorContainer = Color(0xFFFF5555),
+            outline = Color(0xFF565F89), outlineVariant = Color(0xFF44475A),
+        )
+    } else {
+        lightColorScheme(
+            background = Color(0xFFFFFFFF), surface = Color(0xFFFFFFFF),
+            onBackground = Color(0xFF1F2328), onSurface = Color(0xFF1F2328),
+            surfaceVariant = Color(0xFFF6F8FA), onSurfaceVariant = Color(0xFF636C76),
+            primary = Color(0xFF0969DA), onPrimary = Color(0xFFFFFFFF),
+            primaryContainer = Color(0xFFDDF4FF), onPrimaryContainer = Color(0xFF0969DA),
+            error = Color(0xFFD1242F), errorContainer = Color(0xFFFFEBE9), onErrorContainer = Color(0xFFD1242F),
+            outline = Color(0xFFADB5C0), outlineVariant = Color(0xFFD0D7DE),
+        )
+    }
+    val extendedColors = if (darkTheme) {
+        ExtendedColors(
+            successFg = Color(0xFF50FA7B), successBg = Color(0xFF16281D), successBorder = Color(0xFF2FA855),
+            warningFg = Color(0xFFFFB86C), warningBg = Color(0xFF2E2113), warningBorder = Color(0xFFD68F3E),
+            infoFg = Color(0xFF8BE9FD), infoBg = Color(0xFF16282A), infoBorder = Color(0xFF4FC4DC),
+        )
+    } else {
+        ExtendedColors(
+            successFg = Color(0xFF1A7F37), successBg = Color(0xFFDAFBE1), successBorder = Color(0xFF82CFB0),
+            warningFg = Color(0xFF9A6700), warningBg = Color(0xFFFFF8C5), warningBorder = Color(0xFFD4A72C),
+            infoFg = Color(0xFF0969DA), infoBg = Color(0xFFDDF4FF), infoBorder = Color(0xFF54AEFF),
+        )
+    }
+    CompositionLocalProvider(LocalExtendedColors provides extendedColors) {
+        MaterialTheme(colorScheme = colorScheme, content = content)
+    }
+}
+```
+
+Rules:
+- `MaterialTheme.colorScheme` is the only source for standard roles; `LocalExtendedColors.current` is the only source for success/warning/info — never a literal `Color(0x...)` at a call site (Reuse Before Creating → Styling, below).
+- Dynamic Color (Material You, Android 12+) is opt-in per IDEA.md `## Applicability`; when enabled it overrides `primary`/`primaryContainer` from the user's wallpaper, and the token table above becomes the fallback for API < 31 or when the user disables Dynamic Color in-app.
+- `--accent-hover`/`--accent-pressed` have no static Compose equivalent — implement via `Modifier.indication`/state-layer opacity over `primary` per Material 3 interaction states, never a second hardcoded color.
+- Views-toolkit apps: the same hex values go into `res/values/colors.xml` + `res/values-night/colors.xml`, referenced from a `Theme.Material3.*` XML theme — the token table is the source of truth regardless of toolkit.
 
 ## Reuse Before Creating
 
@@ -793,6 +894,7 @@ This rule governs the entire spec — it is not restricted to the Theming sectio
 - **views:** one layout per screen; shared row items as `item_*.xml`; dialogs as `dialog_*.xml`.
 - **compose:** one screen-level composable per destination; shared row items as reusable composables; dialogs as `*Dialog` composables.
 - No pixel literals for spacing — dimension resources (views) or a central spacing/dimension token object (compose).
+- Safe areas: respect status bar, navigation bar, cutout/notch, and gesture-nav insets via `WindowInsets`/`Scaffold` content padding (compose) or `ViewCompat.setOnApplyWindowInsetsListener` (views) — content never draws under system chrome unless the screen intentionally goes edge-to-edge with a contrast-safe scrim behind the chrome.
 
 ## Form factors
 
@@ -800,6 +902,34 @@ This rule governs the entire spec — it is not restricted to the Theming sectio
 - Additional targets declared in IDEA.md: `wear` · `tv` · `auto` · `widget`.
 - Each extra factor gets its own Gradle module (PART 0 → Identity); note the differences: wear (min SDK 26+, rotary/ambient input), tv (leanback/D-pad navigation, no touch assumption), auto (templated UI only), widget (Glance for compose apps, RemoteViews for views apps).
 - Never gate the phone app's features on a companion factor being installed.
+
+## Content & Feedback States
+
+- **No placeholder content** — every screen ships with real, functional content; no "Coming soon" screens, and no empty state without a meaningful message plus a clear next action.
+- **Every state handled** — loading, empty, error, and success each get a distinct, informative UI; a bare spinner or a blank screen is never the final state for an error.
+- **Feedback for every action** — button press, form submit, background work request: the user always sees something changed (loading indicator, `Snackbar`, state transition) — no silent no-ops.
+
+## Dynamic Interaction
+
+- **Gestures** — swipe-to-dismiss (`SwipeToDismissBox`), pull-to-refresh (`PullToRefreshBox`), swipe actions on list rows; every gesture ships with a visible non-gesture equivalent (button/menu item) — never gesture-only.
+- **Haptics** — `HapticFeedback`/`View.performHapticFeedback()` on confirm, delete, and drag-reorder; respect the system haptics toggle, never force-vibrate when the user has disabled it.
+- **Animations & Transitions** — Compose `animate*AsState`/`AnimatedVisibility`/shared-element transitions for navigation; respect the "Remove animations" accessibility setting (`Settings.Global.ANIMATOR_DURATION_SCALE == 0`) by skipping or shortening animations.
+- **Custom Keyboards & Input Extensions** — standard `IME`/`KeyboardOptions` only unless IDEA.md declares a custom input method; never intercept system keyboard shortcuts.
+- **Dynamic Layout Adaptation** — `WindowSizeClass` breakpoints drive layout (list-detail on expanded width, single-pane on compact) — the same rule as Form factors above, applied at the composable level, not only the module level.
+- **Scroll Behavior** — `TopAppBarScrollBehavior` for collapsing headers; `LazyListState`/`rememberSaveable` to restore scroll position across navigation and process death.
+- **Context Menus & Drag-and-Drop** — long-press `ContextMenu`/`DropdownMenu` for secondary actions; drag handles for reorderable lists; always keep a non-drag reorder path (move up/down menu items) for accessibility.
+- **State Persistence Across Interruptions** — `rememberSaveable` for UI-local state, `SavedStateHandle` in ViewModels for process death; never lose in-progress form input to a rotation or a backgrounding.
+- **Focus Management** — logical focus order via `Modifier.focusOrder`/`focusRequester`; focus returns to a sensible target after a dialog/sheet closes, never left on a now-gone element.
+- **Toast / Snackbar / Banner** — transient confirmations via `SnackbarHost` (compose) or `Snackbar` (views); reserve `Toast` for fire-and-forget system-level messages only; persistent or actionable warnings use an in-layout banner, not a toast.
+- **Bottom Sheets & Modal Presentation** — `ModalBottomSheet` for secondary flows that shouldn't lose the underlying screen's context; a full-screen `Dialog`/navigation destination for anything requiring undivided attention.
+- **Popovers & Tooltips** — `PlainTooltip`/`RichTooltip` for supplementary info only; never for content required to complete the primary task.
+- **Selection Mode & Multi-select** — contextual action mode (top app bar swaps to selection count + actions) on long-press; selection state visible for every item in selection mode, not just the interacted one.
+- **Undo & Redo** — destructive-but-reversible actions (delete, archive) surface a `Snackbar` with an `Undo` action before the change is finalized; reserve a confirmation dialog for genuinely irreversible actions only.
+- **Offline & Network-aware UI** — see PART 9 "Offline-first"; connectivity state surfaces as a persistent, non-blocking banner, never a modal dialog.
+- **Pointer & Hover Adaptation** — Chromebook/tablet-with-mouse and stylus hover states (`PointerIcon`, hover elevation) enhance but never gate functionality that must also work via touch.
+- **Voice Input** — `SpeechRecognizer`/`RecognizerIntent` as an alternative input method for text fields where declared in IDEA.md; never the only way to enter required data.
+- **Stylus & Pen Input** — low-latency ink via stylus `MotionEvent` data where the app supports drawing/annotation; pressure/tilt are enhancements, never required for basic use.
+- **Biometric Authentication Overlay** — `BiometricPrompt` for app-lock/sensitive-action gating; always ship a device-credential (PIN/pattern/password) fallback — biometric-only lockout is never acceptable.
 
 ---
 
@@ -949,7 +1079,8 @@ Creation order: security-only workflows first, `ci.yml` and the channel workflow
 - Signing keystore decoded from a `KEYSTORE_BASE64` secret at job time — never committed.
 - Gradle cache keyed on `hashFiles('**/*.gradle*', '**/gradle-wrapper.properties')`.
 - TruffleHog secret scan on every push/PR.
-- OWASP DependencyCheck in `release.yml`; CVSS ≥ 7.0 fails; suppressions live in `config/dependency-check-suppressions.xml` with a reason comment per entry.
+- Public repos ship `.github/SECURITY.md`: supported versions, private vulnerability reporting as the primary channel (never a public issue tracker), and the disclosure timeline. `CODEOWNERS` lists explicit owners for workflows, signing/release files, and crypto/Keystore code.
+- OWASP DependencyCheck in `release.yml`; CVSS ≥ 7.0 fails; suppressions live in `.github/dependency-check-suppressions.xml` (shared by every provider's workflow) with a reason comment per entry — never a root-level `config/` directory, which is globally forbidden.
 - Custom security greps (e.g. hardcoded-password patterns) maintain their exclusion list in the workflow with a documented reason per exclusion — never delete an exclusion without checking why it exists.
 - Release-managing jobs that run inside the toolchain container (the `development.yml` rolling delete + recreate, asset uploads) use the provider CLI (`gh`/`glab`/`tea`) shipped in the image — never inline-installed in a step.
 - Renovate for dependency updates — never Dependabot.
@@ -1004,7 +1135,7 @@ build (`BUILD_EPOCH` captured once) → stage APK splits (PART 4 naming) + `mapp
 
 ## Signing
 
-- Debug/dev: repo-local dev keystore (documented dev-only).
+- Debug/dev: locally generated, gitignored, never-committed dev keystore (documented dev-only, PART 3).
 - Release: CI-injected keystore (`KEYSTORE_BASE64` + passwords as secrets). The production keystore file never exists in the repo or on dev machines.
 - Losing the production keystore is unrecoverable for updates — IDEA.md records where it is escrowed.
 
@@ -1048,7 +1179,7 @@ Sample resolution step (applies identically to all three workflows):
     echo "Keystore decoded and ready"
 ```
 
-Never commit a fixed fallback password (local dev keystore excepted, since that keystore is itself a throwaway dev-only artifact already in the repo). Reference implementation: `/root/Projects/github/tabssh/android/.github/workflows/{beta,release}.yml` — note that as of this writing `development.yml` in that project still uses an ephemeral-keystore fallback, which is the pattern this spec explicitly rejects; that workflow is due for a follow-up update to match `beta.yml`/`release.yml`.
+Never commit a fixed fallback password (the `Makefile`'s dev-keystore default excepted, since that keystore is itself a throwaway, gitignored, never-committed dev artifact regenerated on demand). Reference implementation: `/root/Projects/github/tabssh/android/.github/workflows/{beta,release}.yml` — note that as of this writing `development.yml` in that project still uses an ephemeral-keystore fallback, which is the pattern this spec explicitly rejects; that workflow is due for a follow-up update to match `beta.yml`/`release.yml`.
 
 ## R8 / ProGuard
 
@@ -1088,15 +1219,23 @@ solves. Free-form prose, 1–3 paragraphs.}
 ## Project variables
 project_name: ...
 project_org: ...
-internal_name: ...        # frozen at first setup
-internal_org: ...         # frozen at first setup
-app_id: ...               # frozen forever; from shipped applicationId if the app exists
-min_sdk: 24               # or the shipped value
+# FROZEN — set once at first-time setup, never edit
+internal_name: ...
+# FROZEN — set once at first-time setup, never edit
+internal_org: ...
+# FROZEN forever — from the shipped applicationId if the app already exists
+app_id: ...
+# Default 24, or the shipped value for an existing app
+min_sdk: 24
 license: MIT
-ui_toolkit: compose       # compose (new apps) or views (existing apps)
-di: manual                # manual (default), koin, or hilt (declared need only)
-store_targets: fdroid, provider-releases   # play is opt-in
-form_factors: phone       # add wear/tv/auto/widget as needed
+# compose (new apps) or views (existing apps)
+ui_toolkit: compose
+# manual (default), koin, or hilt (declared need only)
+di: manual
+# play is opt-in
+store_targets: fdroid, provider-releases
+# add wear/tv/auto/widget as needed
+form_factors: phone
 
 ### Applicability
 database: yes|no
@@ -1114,7 +1253,8 @@ agp: ...
 gradle: ...
 compile_sdk: ...
 target_sdk: ...
-version_code_scheme: ...  # semver-derived or manual
+# semver-derived or manual
+version_code_scheme: ...
 
 ## Business logic
 

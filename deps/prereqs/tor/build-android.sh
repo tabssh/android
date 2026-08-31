@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 ##@Version 202608310000-git
-# deps/tor/build-android.sh — Cross-compile the tor client for one Android ABI.
+# deps/prereqs/tor/build-android.sh — Cross-compile the tor client for one Android ABI.
 #
-# Runs INSIDE the Docker image built from deps/tor/Dockerfile.
+# Runs INSIDE the Docker image built from deps/prereqs/tor/Dockerfile.
 #
 # Usage (from the host):
-#   docker build -t tabssh/tor-build deps/tor/
-#   docker run --rm -v $(pwd)/deps/tor:/work tabssh/tor-build \
+#   docker build -t tabssh/tor-build deps/prereqs/tor/
+#   docker run --rm -v $(pwd)/deps/prereqs/tor:/work tabssh/tor-build \
 #     /work/build-android.sh <abi>
 #
 #   abi ∈ {arm64-v8a, x86_64, armeabi-v7a, x86}

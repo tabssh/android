@@ -172,7 +172,7 @@ keystore.jks
 
 # Mosh native binaries — fetched from GH releases at build time
 # (see scripts/fetch-mosh-binaries.sh + .github/workflows/mosh-binaries.yml)
-deps/mosh/out/
+deps/prereqs/mosh/out/
 app/src/main/jniLibs/*/libmosh-client.so
 
 # Tor native binaries — fetched from GH releases at build time
@@ -180,8 +180,8 @@ app/src/main/jniLibs/*/libmosh-client.so
 app/src/main/jniLibs/*/libtor.so
 
 # SPICE native library — cross-compiled by spice-libs.yml, fetched from GH
-# releases at build time (see scripts/fetch-spice-libs.sh + deps/spice/Dockerfile).
-deps/spice/out/
+# releases at build time (see scripts/fetch-spice-libs.sh + deps/prereqs/spice/Dockerfile).
+deps/prereqs/spice/out/
 app/src/main/jniLibs/*/libtabssh_native.so
 
 # Nerd Fonts — fetched from upstream nerd-fonts at build time

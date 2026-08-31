@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 ##@Version 202608310000-git
-# deps/mosh/build-android.sh — Cross-compile mosh-client for one Android ABI.
+# deps/prereqs/mosh/build-android.sh — Cross-compile mosh-client for one Android ABI.
 #
-# Wave 9.2 — runs INSIDE the Docker image built from deps/mosh/Dockerfile.
+# Wave 9.2 — runs INSIDE the Docker image built from deps/prereqs/mosh/Dockerfile.
 #
 # Usage (from the host):
-#   docker build -t tabssh/mosh-build deps/mosh/
-#   docker run --rm -v $(pwd)/deps/mosh:/work tabssh/mosh-build \
+#   docker build -t tabssh/mosh-build deps/prereqs/mosh/
+#   docker run --rm -v $(pwd)/deps/prereqs/mosh:/work tabssh/mosh-build \
 #     /work/build-android.sh <abi>
 #
 #   abi ∈ {arm64-v8a, x86_64, armeabi-v7a, x86}

@@ -55,5 +55,5 @@ is in progress.
     xfce4-style arrow-key swipe emulation on the alt screen. Blink Shell
     solved this properly by patching mosh to expose scrolled-off lines to
     the host terminal. TabSSH cross-compiles its own mosh-client in
-    deps/mosh/, so the same patch route is available. Investigate Blink's
+    deps/prereqs/mosh/, so the same patch route is available. Investigate Blink's
     mosh fork and estimate the patch surface before committing to it.

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 ##@Version 202608310000-git
-# deps/spice/build-android.sh — Cross-compile the SPICE client stack and link
+# deps/prereqs/spice/build-android.sh — Cross-compile the SPICE client stack and link
 # the TabSSH JNI bridge into libtabssh_native.so for one Android ABI.
 #
-# Runs INSIDE the Docker image built from deps/spice/Dockerfile.
+# Runs INSIDE the Docker image built from deps/prereqs/spice/Dockerfile.
 #
 # Usage (from the host):
-#   docker build -t tabssh/spice-build deps/spice/
-#   docker run --rm -v $(pwd)/deps/spice:/work tabssh/spice-build \
+#   docker build -t tabssh/spice-build deps/prereqs/spice/
+#   docker run --rm -v $(pwd)/deps/prereqs/spice:/work tabssh/spice-build \
 #     /work/build-android.sh <abi>
 #
 #   abi in {arm64-v8a, armeabi-v7a, x86_64, x86}

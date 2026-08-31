@@ -110,7 +110,7 @@ android {
         // Multi-architecture support for all Android devices. This also
         // scopes which per-ABI jniLibs are packaged — including the SPICE
         // native library `libtabssh_native.so`, which is cross-compiled
-        // out-of-tree (see deps/spice/Dockerfile + deps/spice/build-android.sh) and
+        // out-of-tree (see deps/prereqs/spice/Dockerfile + deps/prereqs/spice/build-android.sh) and
         // fetched into app/src/main/jniLibs/<abi>/ by
         // scripts/fetch-spice-libs.sh at build time, exactly like the mosh
         // client. The APK build itself runs no native toolchain; when the

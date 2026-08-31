@@ -8,8 +8,8 @@ import io.github.tabssh.utils.logging.Logger
  * Loads `libtabssh_native.so` exactly once and reports whether it was
  * built against a real libspice-client-glib prebuilt or is simply
  * absent from this APK. The library is cross-compiled out-of-tree by
- * the `spice-libs.yml` CI workflow (see `deps/spice/Dockerfile` +
- * `deps/spice/build-android.sh`), published as a prerelease, and dropped
+ * the `spice-libs.yml` CI workflow (see `deps/prereqs/spice/Dockerfile` +
+ * `deps/prereqs/spice/build-android.sh`), published as a prerelease, and dropped
  * into `app/src/main/jniLibs/<abi>/libtabssh_native.so` at build time
  * by `scripts/fetch-spice-libs.sh`. When no such release exists yet the
  * APK simply ships without the library.
@@ -63,7 +63,7 @@ object SpiceLoader {
     /**
      * Returns 1 when the native library was compiled with
      * `TABSSH_SPICE_AVAILABLE=1`, 0 otherwise. Implemented in
-     * `deps/spice/cpp/spice_client.c`.
+     * `deps/prereqs/spice/cpp/spice_client.c`.
      */
     @JvmStatic
     private external fun nativeIsSpiceAvailable(): Int

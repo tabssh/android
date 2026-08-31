@@ -35,7 +35,7 @@ fi
 mkdir -p "$SHARED"
 
 echo "==> Building $IMAGE"
-docker build -t "$IMAGE" "$ROOT/docker/test-sshd"
+docker build -t "$IMAGE" "$ROOT/deps/tests/sshd"
 
 for stale in tabssh-mosh-test "$NAME"; do
     if docker ps -a --format '{{.Names}}' | grep -qx -- "$stale"; then

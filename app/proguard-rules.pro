@@ -136,7 +136,7 @@
 # The default `-keepclasseswithmembernames class * { native <methods>; }`
 # rule from proguard-android-optimize.txt covers the Kotlin -> C direction
 # (SpiceClient.nativeXxx / SpiceLoader.nativeIsSpiceAvailable), but NOT the
-# C -> Kotlin direction: deps/spice/cpp/spice_client_glib.c resolves the eight
+# C -> Kotlin direction: deps/prereqs/spice/cpp/spice_client_glib.c resolves the eight
 # `onNative*` callbacks by literal name+signature through GetMethodID. R8
 # sees no Kotlin caller for them, so without this rule it strips or renames
 # every one and the whole SPICE stack dies at handshake time in every

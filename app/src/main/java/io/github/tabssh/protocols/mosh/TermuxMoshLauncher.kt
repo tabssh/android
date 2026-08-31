@@ -21,7 +21,7 @@ import java.io.File
  * honest UX trade-off: the user gets real Mosh (UDP transport, roaming,
  * predictive echo) in exchange for switching to Termux's terminal.
  * In-app Mosh requires bundling the binary + its .so deps and is tracked
- * as the next-session item (`deps/mosh/build-android.sh`).
+ * as the next-session item (`deps/prereqs/mosh/build-android.sh`).
  *
  * Requirements on the user side:
  *   1. Install Termux (F-Droid is the recommended source).
