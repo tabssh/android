@@ -58,16 +58,14 @@ is in progress.
     deps/prereqs/mosh/, so the same patch route is available. Investigate Blink's
     mosh fork and estimate the patch surface before committing to it.
 
-57. Password/biometric TTL discrepancy between IDEA.md and code. IDEA.md
-    claims "Biometric unlock for stored passwords with configurable TTL",
-    but SecurePasswordManager deliberately removed TTL expiry (code comment
-    at the retrieval path: Keystore keys are device-unlock-bound; the old
-    24h expiry silently deleted saved passwords) and biometric keys use
-    setUserAuthenticationValidityDurationSeconds(0) — re-auth on every use,
-    no window. The security_password_ttl_hours preference still exists in
-    PreferenceManager and is exported by backup/sync but has no runtime
-    effect and no Settings UI. Decide: (a) accept no-TTL as the design —
-    update IDEA.md (drop "configurable TTL", record it under Accepted
-    design decisions) and remove the dead preference from PreferenceManager,
-    BackupExporter/Importer, and SyncDataCollector/Applier; or (b) keep the
-    spec — implement TTL enforcement and surface the setting in Settings.
+57. Remove the dead password-TTL knob (decision made: no TTL — AI.md
+    PART 5 "Storage levels" now mandates ENCRYPTED credentials never
+    expire; IDEA.md updated to match). Remaining cleanup: the
+    security_password_ttl_hours preference in PreferenceManager has no
+    runtime effect and no Settings UI, but is still exported/imported by
+    BackupExporter/BackupImporter ("passwordTTLHours") and synced by
+    SyncDataCollector/SyncDataApplier. Removing it touches the backup and
+    sync shared formats — keep importer/applier tolerant of the key from
+    older archives/blobs (read-and-ignore), drop it from export/collect,
+    add the compatibility note in IDEA.md "Must be compatible with", and
+    give the sibling repos a heads-up per that section's rule.

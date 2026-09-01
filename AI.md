@@ -730,7 +730,20 @@ never bolt a silent-delete TTL onto `ENCRYPTED`.
 ## Hardening defaults
 
 - `FLAG_SECURE` on screens showing secrets (toggleable).
-- Clipboard auto-clear timeout after copying sensitive values.
+- Clipboard auto-clear timeout after copying sensitive values — **ownership-checked, never
+  a blind wall-clock clear.** An earlier revision of this spec described a plain timeout:
+  clear the clipboard N seconds after this app copies a secret. Implementations built
+  against that revision cleared the system clipboard unconditionally when the timer fired,
+  with no check that the clipboard still held what this app put there. Real bug reports
+  followed: a user copies something in another app (e.g. a browser), switches into this
+  app briefly, then switches away again (e.g. to Facebook) within the timeout window — the
+  timer fires and wipes clipboard content that this app never set and has nothing to do
+  with. The correct behavior: on copy, record a reference to what was placed on the
+  clipboard (e.g. a hash of the copied value, or the `ClipDescription` timestamp where the
+  platform exposes one); when the timer fires, compare the clipboard's *current* primary
+  clip against that reference and clear only on a match — if the clipboard content has
+  changed (this app's own subsequent copy counts as a change too), skip the clear
+  silently. Never clear on timeout alone without first re-checking current ownership.
 - Certificate/host trust: TOFU with explicit user confirmation on change; never silent trust-all. TLS bypass, if offered, is per-entity opt-in with a warning.
 - Constant-time comparison for any secret verification.
 - Logger sanitizes: regex-masks anything matching credential patterns; never log raw tokens.

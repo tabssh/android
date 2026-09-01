@@ -88,7 +88,7 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 ### Security requirements
 - All passwords and private key passphrases must never be stored in plaintext or in the database
 - Credential storage with tiered access levels: never / session-only / encrypted / biometric — encrypted tiers are backed by hardware-backed device key storage
-- Biometric unlock for stored passwords with configurable TTL
+- Biometric unlock for stored passwords — re-authentication gates every read; encrypted credentials persist until the user removes them, never expiring on a timer (no TTL)
 - App-lock PIN with a failed-attempt lockout — the PIN must never be stored in plaintext or in any recoverable form
 - Screenshot capture prevention (configurable); always enforced on PIN and auth screens
 - SSH host key verification on first connect (TOFU) with fingerprint display
@@ -182,6 +182,14 @@ compatibility note here (and a heads-up to the sibling repos) is incomplete:
   on another
 - Session recording/transcript format — interchangeable so a transcript
   captured on one platform is readable on the others
+
+Compatibility notes:
+
+- Password TTL removed (2026-08): the security settings block in backup
+  archives and sync blobs no longer carries a password-TTL value — encrypted
+  credentials never expire (no TTL). Importers on all platforms must
+  read-and-ignore the old TTL key from archives/blobs written before the
+  removal; nothing may reintroduce an expiry timer on stored credentials
 
 ### Trust boundaries
 - Remote SSH/telnet hosts, hypervisor and cloud APIs, clipboard contents, QR payloads, imported config/bulk files, and user-supplied sync storage are all untrusted input
