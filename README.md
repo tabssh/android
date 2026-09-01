@@ -327,8 +327,8 @@ android/
 ├── app/src/main/res/   # Layouts, strings, themes, drawables
 ├── app/schemas/        # Room migration JSON schemas
 ├── .github/workflows/  # CI/CD (ci, security, development, beta, release,
-│                       #        build-toolchain, mosh-binaries, spice-libs, tor-binaries)
-├── docker/             # Dockerfile.build (toolchain image), docker-compose.yml
+│                       #        mosh-binaries, spice-libs, tor-binaries)
+├── docker/             # docker-compose.yml (build/test services)
 ├── scripts/            # Build and automation scripts
 ├── metadata/           # F-Droid metadata
 ├── Makefile
@@ -347,7 +347,7 @@ docker compose -f docker/docker-compose.yml run --rm tabssh-build
 make build
 ```
 
-The `:build` image (`docker/Dockerfile.build`) contains the Android SDK, JDK 17, and Gradle. It is rebuilt monthly by the `build-toolchain.yml` workflow.
+The `casjaysdev/android:latest` toolchain image contains the Android SDK, JDK 17, and Gradle. It is maintained externally — this repo builds no toolchain image of its own.
 
 ---
 

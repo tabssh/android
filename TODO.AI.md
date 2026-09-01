@@ -57,3 +57,17 @@ is in progress.
     the host terminal. TabSSH cross-compiles its own mosh-client in
     deps/prereqs/mosh/, so the same patch route is available. Investigate Blink's
     mosh fork and estimate the patch surface before committing to it.
+
+57. Password/biometric TTL discrepancy between IDEA.md and code. IDEA.md
+    claims "Biometric unlock for stored passwords with configurable TTL",
+    but SecurePasswordManager deliberately removed TTL expiry (code comment
+    at the retrieval path: Keystore keys are device-unlock-bound; the old
+    24h expiry silently deleted saved passwords) and biometric keys use
+    setUserAuthenticationValidityDurationSeconds(0) — re-auth on every use,
+    no window. The security_password_ttl_hours preference still exists in
+    PreferenceManager and is exported by backup/sync but has no runtime
+    effect and no Settings UI. Decide: (a) accept no-TTL as the design —
+    update IDEA.md (drop "configurable TTL", record it under Accepted
+    design decisions) and remove the dead preference from PreferenceManager,
+    BackupExporter/Importer, and SyncDataCollector/Applier; or (b) keep the
+    spec — implement TTL enforcement and surface the setting in Settings.

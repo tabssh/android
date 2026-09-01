@@ -713,7 +713,19 @@ The Room/database sections apply only if the IDEA.md `## Applicability` matrix d
 ## Storage levels
 
 Offer per-credential persistence levels where secrets are cached:
-`NEVER` (always prompt) · `SESSION_ONLY` (cleared on process death) · `ENCRYPTED` (Keystore-persisted, optional biometric gate + TTL).
+`NEVER` (always prompt) · `SESSION_ONLY` (cleared on process death) · `ENCRYPTED` (Keystore-persisted, optional biometric gate, no expiry).
+
+**`ENCRYPTED` credentials never expire — no TTL.** An earlier revision of this
+spec paired `ENCRYPTED` with a TTL. Implementations built against that
+revision used a 24h expiry, which silently deleted saved passwords once it
+lapsed, surfacing only as user bug reports ("my saved password disappeared")
+with no error or warning at delete time. `ENCRYPTED` means persisted until
+the user explicitly removes the credential or the app is uninstalled —
+re-authentication (biometric/device-credential) gates *read access* to an
+already-stored credential, it must never be implemented as an automatic
+deletion timer. If a time-boxed credential is a genuine product requirement,
+model it as `SESSION_ONLY` (or a new, explicitly named persistence level) —
+never bolt a silent-delete TTL onto `ENCRYPTED`.
 
 ## Hardening defaults
 
