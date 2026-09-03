@@ -3,16 +3,16 @@ package io.github.tabssh.ui.views
 import android.content.Context
 import android.text.Editable
 import android.text.TextWatcher
-import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
-import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import io.github.tabssh.R
 
 /**
  * Wave 2.6 — VSCode/Termius-style command palette overlay.
@@ -35,33 +35,23 @@ object PaletteDialog {
     fun show(context: Context, title: String, items: List<Item>) {
         if (items.isEmpty()) return
 
-        val root = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            val pad = (context.resources.displayMetrics.density * 8).toInt()
-            setPadding(pad, pad, pad, pad)
-        }
-
-        val search = EditText(context).apply {
-            hint = "Type to filter…"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-        }
-        root.addView(search)
-
-        val rv = RecyclerView(context).apply {
+        val root = LayoutInflater.from(context).inflate(R.layout.dialog_palette, null)
+        val search = root.findViewById<EditText>(R.id.edit_search)
+        val rv = root.findViewById<RecyclerView>(R.id.list_palette_items).apply {
             layoutManager = LinearLayoutManager(context)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                (context.resources.displayMetrics.heightPixels * 0.5).toInt()
-            )
+            // Half the screen height — a proportion of the device, not a
+            // fixed dp value, so it stays a runtime calculation rather than
+            // a dimens.xml resource.
+            layoutParams = layoutParams.apply {
+                height = (context.resources.displayMetrics.heightPixels * 0.5).toInt()
+            }
         }
-        root.addView(rv)
 
         var filtered: List<Item> = items
         val dialog = MaterialAlertDialogBuilder(context)
             .setTitle(title)
             .setView(root)
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .create()
 
         val adapter = Adapter(filtered) { item ->
@@ -116,28 +106,11 @@ object PaletteDialog {
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-            val container = LinearLayout(parent.context).apply {
-                orientation = LinearLayout.VERTICAL
-                val pad = (parent.resources.displayMetrics.density * 12).toInt()
-                setPadding(pad, pad, pad, pad)
-                isClickable = true
-                isFocusable = true
-                gravity = Gravity.CENTER_VERTICAL
-                layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                setBackgroundResource(android.R.drawable.list_selector_background)
-            }
-            val title = TextView(parent.context).apply {
-                textSize = 15f
-                // Theme-paired resources so rows stay readable in both day and night modes
-                setTextColor(androidx.core.content.ContextCompat.getColor(parent.context, io.github.tabssh.R.color.on_surface))
-            }
-            val subtitle = TextView(parent.context).apply {
-                textSize = 12f
-                setTextColor(androidx.core.content.ContextCompat.getColor(parent.context, io.github.tabssh.R.color.on_surface_variant))
-            }
-            container.addView(title)
-            container.addView(subtitle)
-            return VH(container, title, subtitle)
+            val view = LayoutInflater.from(parent.context)
+                .inflate(R.layout.item_palette_row, parent, false)
+            val title = view.findViewById<TextView>(R.id.text_title)
+            val subtitle = view.findViewById<TextView>(R.id.text_subtitle)
+            return VH(view, title, subtitle)
         }
 
         override fun onBindViewHolder(holder: VH, position: Int) {

@@ -30,7 +30,6 @@ class KeyboardRowView @JvmOverloads constructor(
 ) : HorizontalScrollView(context, attrs, defStyleAttr) {
 
     companion object {
-        private const val KEY_MARGIN_DP = 4
         /** Fixed width (dp) for pinned anchor keys so they never shift position. */
         private const val KEY_PINNED_WIDTH_DP = 52
         /** Delay before a held key starts auto-repeating (matches typical soft keyboards). */
@@ -59,7 +58,9 @@ class KeyboardRowView @JvmOverloads constructor(
         keyContainer = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dpToPx(4), dpToPx(2), dpToPx(4), dpToPx(2))
+            val horizontalPad = resources.getDimensionPixelSize(R.dimen.space_xs)
+            val verticalPad = resources.getDimensionPixelSize(R.dimen.space_2dp)
+            setPadding(horizontalPad, verticalPad, horizontalPad, verticalPad)
         }
         addView(keyContainer)
 
@@ -196,7 +197,7 @@ class KeyboardRowView @JvmOverloads constructor(
             // Flex keys: weight = widthMultiplier (1f normal, 2f double-wide).
             LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, key.widthMultiplier)
         }
-        params.marginEnd = dpToPx(KEY_MARGIN_DP)
+        params.marginEnd = resources.getDimensionPixelSize(R.dimen.space_xs)
         btn.layoutParams = params
 
         when (key.category) {
@@ -278,8 +279,6 @@ class KeyboardRowView @JvmOverloads constructor(
         var label: String = label
             set(v) { field = v; invalidate() }
 
-        private val density = context.resources.displayMetrics.density
-        private val scaledDensity = context.resources.displayMetrics.scaledDensity
 
         // Default stroke/text colors — resolved from the theme (single-attr resolution,
         // not obtainStyledAttributes, so the perf note above still holds) because the
@@ -299,7 +298,7 @@ class KeyboardRowView @JvmOverloads constructor(
         private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             color = defaultStrokeColor
-            strokeWidth = density
+            strokeWidth = context.resources.getDimension(R.dimen.keyboard_key_stroke_width)
         }
         private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
@@ -308,7 +307,7 @@ class KeyboardRowView @JvmOverloads constructor(
         private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = defaultTextColor
             textAlign = Paint.Align.CENTER
-            textSize = 13f * scaledDensity
+            textSize = context.resources.getDimension(R.dimen.keyboard_key_text_size)
         }
         private val pressPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
@@ -322,11 +321,11 @@ class KeyboardRowView @JvmOverloads constructor(
         private val lockPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             color = activeTextColor
-            strokeWidth = 2f * density
+            strokeWidth = context.resources.getDimension(R.dimen.keyboard_key_stroke_width_locked)
         }
         private val rectF = RectF()
         private val lockRectF = RectF()
-        private val cornerR = 4f * density
+        private val cornerR = context.resources.getDimension(R.dimen.keyboard_key_corner_radius)
         // true = latched modifier / active PREFIX
         private var isActive = false
         // true = modifier locked on (inner ring)
@@ -443,7 +442,7 @@ class KeyboardRowView @JvmOverloads constructor(
 
             // Locked modifier: inner ring inside the green fill.
             if (isLocked) {
-                val d = 3f * density
+                val d = resources.getDimension(R.dimen.keyboard_key_locked_ring_inset)
                 lockRectF.set(rectF.left + d, rectF.top + d, rectF.right - d, rectF.bottom - d)
                 canvas.drawRoundRect(lockRectF, cornerR, cornerR, lockPaint)
             }

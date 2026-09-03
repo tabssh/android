@@ -52,7 +52,14 @@
     <dimen name="large_touch_target">56dp</dimen>
     <dimen name="button_height">48dp</dimen>
     <dimen name="input_field_height">56dp</dimen>
-    
+    <!-- Accessibility "large touch target" override applied on top of
+         min_touch_target/large_touch_target when the user opts in; kept as
+         its own token since it is not currently equal to either. -->
+    <dimen name="accessibility_touch_target_boost">64dp</dimen>
+    <!-- Tab-swipe edge-zone width: two Material touch targets wide, so a
+         reliable swipe start doesn't require pixel-precise aim. -->
+    <dimen name="tab_swipe_edge_width">96dp</dimen>
+
     <!-- Cards and containers -->
     <dimen name="card_corner_radius_small">8dp</dimen>
     <dimen name="card_corner_radius">12dp</dimen>
@@ -118,7 +125,13 @@
     <!-- Per-row height of MultiRowKeyboardView. Overridden in values-land/ to
          save vertical space when the screen is short. -->
     <dimen name="keyboard_row_height">42dp</dimen>
-    
+    <!-- KeyButton Canvas paint properties (KeyboardRowView). -->
+    <dimen name="keyboard_key_stroke_width">1dp</dimen>
+    <dimen name="keyboard_key_stroke_width_locked">2dp</dimen>
+    <dimen name="keyboard_key_corner_radius">4dp</dimen>
+    <dimen name="keyboard_key_locked_ring_inset">3dp</dimen>
+    <dimen name="keyboard_key_text_size">13sp</dimen>
+
     <!-- Accessibility dimensions -->
     <dimen name="accessibility_min_touch_target">48dp</dimen>
     <dimen name="accessibility_large_touch_target">56dp</dimen>

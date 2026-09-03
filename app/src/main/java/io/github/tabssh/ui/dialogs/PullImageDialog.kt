@@ -107,7 +107,10 @@ object PullImageDialog {
                                 null
                             } else {
                                 val text = TextView(context)
-                                text.textSize = 12f
+                                text.setTextSize(
+                                    android.util.TypedValue.COMPLEX_UNIT_PX,
+                                    context.resources.getDimension(R.dimen.text_size_caption)
+                                )
                                 text.typeface = android.graphics.Typeface.MONOSPACE
                                 containerLayers.addView(text)
                                 layerRows[key] = text

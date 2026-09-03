@@ -3877,6 +3877,7 @@
     <string name="terminal_cmdpalette_copy_screen_sub">Copy visible terminal output to clipboard</string>
     <string name="terminal_cmdpalette_cluster_send">Cluster: send to all sessions…</string>
     <string name="terminal_cmdpalette_cluster_send_sub">Broadcast a command to every open tab</string>
+    <string name="palette_search_hint">Type to filter…</string>
     <string name="terminal_mosh_failed_using_ssh">Mosh failed — using SSH</string>
     <string name="terminal_mosh_not_available_using_ssh">Mosh not available — using SSH</string>
     <string name="terminal_connected_to_fmt">Connected to %1$s</string>

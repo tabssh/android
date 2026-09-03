@@ -19,7 +19,7 @@ set -euo pipefail
 
 VERSION="202608150001-git"
 
-ASSETS="$(cd "$(dirname "$0")/.." && pwd)/app/src/main/assets/fonts"
+ASSETS="$(cd "${0%/*}/.." && pwd)/app/src/main/assets/fonts"
 
 # Pairs are: <upstream zip basename>:<filename inside the zip we want>
 # The "filename in the zip" sometimes differs from the FontManager-mapped

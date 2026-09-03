@@ -18,7 +18,7 @@ VERSION="202608150001-git"
 
 REPO="${TABSSH_REPO:-tabssh/android}"
 ABIS=(arm64-v8a armeabi-v7a x86_64 x86)
-JNI_ROOT="$(cd "$(dirname "$0")/.." && pwd)/app/src/main/jniLibs"
+JNI_ROOT="$(cd "${0%/*}/.." && pwd)/app/src/main/jniLibs"
 
 FORCE=false
 [[ "${1:-}" == "--force" ]] && FORCE=true

@@ -8,7 +8,7 @@ set -euo pipefail
 
 VERSION="202608310001-git"
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "${0%/*}/.." && pwd)"
 
 exec docker run --rm -it \
     -v "$ROOT:/workspace" \

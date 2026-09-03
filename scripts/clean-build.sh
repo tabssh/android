@@ -9,7 +9,7 @@ VERSION="202608142059-git"
 
 # Every rm -rf below is a relative path, so anchor to the repo root instead
 # of trusting the caller's working directory.
-cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." || exit 1
+cd -- "${BASH_SOURCE[0]%/*}/.." || exit 1
 
 echo "🧹 TabSSH Clean Build"
 echo "====================="

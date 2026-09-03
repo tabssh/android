@@ -239,7 +239,7 @@ class ImportFromQrActivity : TabSSHActivity() {
         // don't push the dialog buttons off-screen.
         val message = TextView(this).apply {
             text = body.toString()
-            setPadding((24 * resources.displayMetrics.density).toInt())
+            setPadding(resources.getDimensionPixelSize(R.dimen.space_lg))
             textSize = 14f
         }
         val container = LinearLayout(this).apply {

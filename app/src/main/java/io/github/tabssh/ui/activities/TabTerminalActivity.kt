@@ -864,13 +864,13 @@ class TabTerminalActivity : TabSSHActivity() {
                 viewType: Int
             ): RecyclerView.ViewHolder {
                 val ctx = parent.context
-                val dp = ctx.resources.displayMetrics.density
 
                 // Outer row: horizontal LinearLayout, 48dp min height, 16dp horizontal padding.
                 val row = LinearLayout(ctx).apply {
                     orientation = LinearLayout.HORIZONTAL
-                    minimumHeight = (48 * dp).toInt()
-                    setPadding((16 * dp).toInt(), 0, (16 * dp).toInt(), 0)
+                    minimumHeight = ctx.resources.getDimensionPixelSize(R.dimen.min_touch_target)
+                    val horizontalPadding = ctx.resources.getDimensionPixelSize(R.dimen.space_md)
+                    setPadding(horizontalPadding, 0, horizontalPadding, 0)
                     gravity = Gravity.CENTER_VERTICAL
                     isClickable = true
                     isFocusable = true
@@ -885,12 +885,13 @@ class TabTerminalActivity : TabSSHActivity() {
                 }
 
                 // State dot icon: 20×20dp.
+                val stateIconSize = ctx.resources.getDimensionPixelSize(R.dimen.icon_size_action)
                 val stateIcon = ImageView(ctx).apply {
                     id = View.generateViewId()
                     layoutParams = LinearLayout.LayoutParams(
-                        (20 * dp).toInt(),
-                        (20 * dp).toInt()
-                    ).also { it.marginEnd = (12 * dp).toInt() }
+                        stateIconSize,
+                        stateIconSize
+                    ).also { it.marginEnd = ctx.resources.getDimensionPixelSize(R.dimen.space_12dp) }
                     scaleType = ImageView.ScaleType.FIT_CENTER
                     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
                 }
@@ -913,12 +914,13 @@ class TabTerminalActivity : TabSSHActivity() {
                 }
 
                 // Right-side status icon: 16×16dp, visible only to distinguish active vs navigable.
+                val rightIconSize = ctx.resources.getDimensionPixelSize(R.dimen.icon_size_small)
                 val rightIcon = ImageView(ctx).apply {
                     id = View.generateViewId()
                     layoutParams = LinearLayout.LayoutParams(
-                        (16 * dp).toInt(),
-                        (16 * dp).toInt()
-                    ).also { it.marginStart = (8 * dp).toInt() }
+                        rightIconSize,
+                        rightIconSize
+                    ).also { it.marginStart = ctx.resources.getDimensionPixelSize(R.dimen.space_sm) }
                     scaleType = ImageView.ScaleType.FIT_CENTER
                 }
 
@@ -1236,7 +1238,7 @@ class TabTerminalActivity : TabSSHActivity() {
                     else -> false
                 }
                 val effectiveEdgePx = if (forceEdgeOnly && tabSwipeEdgePx <= 0) {
-                    (96 * resources.displayMetrics.density).toInt()
+                    resources.getDimensionPixelSize(R.dimen.tab_swipe_edge_width)
                 } else {
                     tabSwipeEdgePx
                 }
@@ -2297,7 +2299,7 @@ class TabTerminalActivity : TabSSHActivity() {
         // matters mainly for buttons/icons in the bottom toolbar and the
         // floating menu FAB.
         if (prefs.getBoolean("accessibility_large_touch_targets", false)) {
-            val targetPx = (64 * resources.displayMetrics.density).toInt()
+            val targetPx = resources.getDimensionPixelSize(R.dimen.accessibility_touch_target_boost)
             applyLargeTouchTargets(binding.root, targetPx)
         }
     }
@@ -5910,7 +5912,7 @@ class TabTerminalActivity : TabSSHActivity() {
             // inside the same form column so both the prompt and the field are visible.
             val promptLabel = TextView(this).apply {
                 text = message
-                setPadding(0, 0, 0, (8 * resources.displayMetrics.density).toInt())
+                setPadding(0, 0, 0, resources.getDimensionPixelSize(R.dimen.space_sm))
             }
             form.column.addView(promptLabel, 0)
             val editText = DialogFields.addSecret(

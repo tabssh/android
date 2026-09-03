@@ -9,7 +9,7 @@ set -euo pipefail
 
 VERSION="202608150001-git"
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "${0%/*}/.." && pwd)"
 
 # mktemp -d, not a fixed path: the previous $TMPDIR/tabssh-android/... path was
 # predictable and then rm -rf'd, so on a shared machine another user could

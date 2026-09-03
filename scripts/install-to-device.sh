@@ -11,7 +11,7 @@ VERSION="202608142059-git"
 # instead of trusting the caller's working directory. Remember where the
 # caller was so a relative APK argument still resolves against it.
 ORIG_PWD="$PWD"
-cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." || exit 1
+cd -- "${BASH_SOURCE[0]%/*}/.." || exit 1
 
 echo "📱 TabSSH APK Installer"
 echo "========================"

@@ -17,7 +17,7 @@
 set -euo pipefail
 
 VERSION="202608142059-git"
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERE="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 SHARED="/tmp/tabssh-android/sshd"
 NAME="tabssh-test-sshd"

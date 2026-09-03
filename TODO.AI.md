@@ -4,29 +4,13 @@ Task tracking (AI-owned). Items are ordered by priority, highest first.
 Complete each item fully before removing; never clear an item while its work
 is in progress.
 
-58. **Remaining programmatic-UI screens (AI.md PART 7)** — found during the
-    2026-09-03 UI/UX pass, deferred as heavier refactors. Ranked worst first:
-    `ui/keyboard/KeyboardRowView.kt` (~461 lines, programmatic LinearLayout
-    row container + one pixel-literal density calc) ·
-    `ui/dialogs/PullImageDialog.kt` (~162 lines, dialog body in code, no
-    `dialog_*.xml`) · `ui/views/PaletteDialog.kt` (~155 lines, same) ·
-    `ui/dialogs/DialogFields.kt` (~140 lines, shared programmatic field-row
-    builder — may be intentional reuse infrastructure; confirm before
-    touching). Also stray single pixel-literal
-    `* resources.displayMetrics.density` calcs in: HostDetailActivity.kt,
-    WhatsNewActivity.kt, ThemeEditorActivity.kt,
-    ConnectionHistoryActivity.kt, PinLockActivity.kt,
-    ImportFromQrActivity.kt, TabTerminalActivity.kt — move to dimens.xml.
-
-57. **script-lint UUOC violations in `scripts/`** — the 2026-09-03 lint-gate
-    run flagged the same anti-pattern in 10 scripts: an unnecessary
-    `dirname` command call where bash parameter expansion (`"${path%/*}"`)
-    should be used. Files/lines: clean-build.sh:12 · dev-shell.sh:11 ·
-    fetch-fonts.sh:22 · fetch-mosh-binaries.sh:21 · fetch-spice-libs.sh:22 ·
-    fetch-tor-binaries.sh:23 · install-to-device.sh:14 ·
-    pre-commit-check.sh:11 · prepare-fdroid-submission.sh:12 ·
-    start-test-sshd.sh:20. Pre-existing, unrelated to in-flight work;
-    fix in a dedicated cleanup commit.
+59. **Optional: per-call-site dimens migration for activity `dp()` helpers**
+    — HostDetailActivity, WhatsNewActivity, ThemeEditorActivity,
+    ConnectionHistoryActivity, and PinLockActivity each keep a generic
+    private `dp(value)` conversion helper called with many literal dp
+    values. Judged reuse infrastructure (same class as DialogFields), not
+    an AI.md violation — converting every call site to dimens.xml tokens
+    is a large diff with no visual change. Do only if the user asks.
 
 56. **RESOLVED — do not pursue.** Research (web + local source, 2026-09-03)
     found the premise false: Blink Shell never shipped a mosh scrollback

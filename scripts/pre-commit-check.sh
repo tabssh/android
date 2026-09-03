@@ -8,7 +8,7 @@ set -euo pipefail
 
 VERSION="202608150001-git"
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "${0%/*}/.." && pwd)"
 cd "$ROOT"
 
 echo "🚦 TabSSH pre-commit check"
