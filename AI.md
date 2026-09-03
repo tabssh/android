@@ -1095,6 +1095,8 @@ Every project targets all five CI/CD providers — same gates, different syntax,
 | Beta | `beta.yml` | `beta` stage (tag-triggered) | `beta.yml` | `Beta` stage (tag-triggered) | tag `*beta` | canonical release flow (PART 13) on the `release` variant → prerelease |
 | Release | `release.yml` | `release` stage (tag-triggered) | `release.yml` | `Release` stage (tag-triggered) | tag `v*` | tests + DependencyCheck + coverage → canonical release flow (PART 13) on the `release` variant (+ `assembleFdroidRelease` smoke build if F-Droid flavor exists; + `bundleRelease` AAB only if `store_targets` includes `play`) → provider release |
 
+**Container-job user rule:** every GitHub Actions-syntax `container:` job (e.g. `container: image: casjaysdev/android:latest`) MUST set `options: "--user 0:0"`. The runner (and actions/checkout's post-job cleanup) execs into the job container — e.g. `cat /etc/*release` for OS diagnostics — as a user the image's `/etc/passwd` may not define, which fails or flakes the job after all real work already passed. Numeric `0:0` needs no `/etc/passwd` lookup, so it is immune regardless of the image's user table.
+
 Creation order: security-only workflows first, `ci.yml` and the channel workflows (`release.yml`, `beta.yml`, `development.yml`) last; every staged workflow passes `act --list -W {file}` before commit (GitHub Actions-syntax providers only — GitLab and Jenkins have no `act` equivalent, validate those with their own native lint: `gitlab-ci-lint` / Jenkins `Pipeline Linter`).
 
 ## Rules
