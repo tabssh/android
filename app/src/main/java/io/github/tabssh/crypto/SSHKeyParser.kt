@@ -652,6 +652,11 @@ object SSHKeyParser {
         passphrase: String
     ): ByteArray {
         try {
+            // openssh-key-v1 defines exactly one KDF for encrypted keys
+            if (kdfName != "bcrypt") {
+                throw IllegalArgumentException("Unsupported KDF: $kdfName")
+            }
+
             // Parse KDF options to get salt and rounds
             val kdfBuffer = ByteBuffer.wrap(kdfOptions)
             val salt = readString(kdfBuffer)
@@ -683,30 +688,29 @@ object SSHKeyParser {
             cipher.init(javax.crypto.Cipher.DECRYPT_MODE, secretKey, ivSpec)
 
             return cipher.doFinal(encrypted)
+        } catch (e: IllegalArgumentException) {
+            // Already a precise, user-facing message (unsupported cipher/KDF) — never
+            // rewrap it as a passphrase problem. A genuinely wrong passphrase does not
+            // throw here at all: AES-CBC/CTR with NoPadding decrypts garbage silently
+            // and the check1 != check2 test in parseOpenSSHPrivateKey catches it.
+            Logger.e("SSHKeyParser", "Failed to decrypt OpenSSH private key", e)
+            throw e
         } catch (e: Exception) {
             Logger.e("SSHKeyParser", "Failed to decrypt OpenSSH private key", e)
-            throw IllegalArgumentException("Failed to decrypt key (wrong passphrase?): ${e.message}", e)
+            throw IllegalArgumentException("Failed to decrypt key: ${e.message}", e)
         }
     }
 
-    // bcrypt_pbkdf is intentionally unimplemented.
-    //
-    // OpenSSH's bcrypt_pbkdf uses a custom 32-byte bcrypt-hash core
-    // ("OxychromaticBlowfishSwatDynamite" magic, little-endian output) that
-    // BouncyCastle 1.79 does not expose. Hand-rolling Blowfish + EksBlowfishSetup
-    // for a key-import path is a high-risk crypto liability we refuse to ship.
-    //
-    // The previous PBKDF2-WithHmacSHA256 fallback produced garbage key material and
-    // would never have decrypted a real OpenSSH-encrypted key — it only masked the
-    // missing feature with a misleading error. Surface a clear, actionable error
-    // instead: instruct the user to convert the key to an unencrypted PEM
-    // (`ssh-keygen -p -m PEM -f keyfile`) before importing.
+    // OpenSSH's bcrypt_pbkdf (the only KDF openssh-key-v1 uses for encrypted keys) is a
+    // custom construction — bcrypt-hash core with "OxychromaticBlowfishSwatDynamite"
+    // magic, little-endian output — that BouncyCastle 1.79 does not expose. Rather than
+    // hand-rolling Blowfish + EksBlowfishSetup, delegate to the implementation already
+    // bundled in the JSch dependency (com.jcraft.jsch.jbcrypt.BCrypt#pbkdf), the exact
+    // code JSch itself uses to load these keys.
     private fun bcryptPbkdf(password: ByteArray, salt: ByteArray, rounds: Int, keyLen: Int): ByteArray {
-        throw UnsupportedOperationException(
-            "Encrypted OpenSSH (openssh-key-v1, bcrypt KDF) keys are not supported on import. " +
-            "Convert the key to unencrypted PEM with " +
-            "`ssh-keygen -p -m PEM -N \"\" -f /path/to/key` and re-import."
-        )
+        val output = ByteArray(keyLen)
+        com.jcraft.jsch.jbcrypt.BCrypt().pbkdf(password, salt, rounds, output)
+        return output
     }
 
     private fun decryptPuTTYPrivateBlob(blob: ByteArray, passphrase: String, encryption: String): ByteArray {

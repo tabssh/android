@@ -233,10 +233,9 @@ object SSHKeyGenerator {
      * Export key pair in OpenSSH private key format.
      *
      * Passphrase-protected export: the OpenSSH v1 binary format requires
-     * `bcrypt_pbkdf` key derivation, which we do not ship a verified
-     * implementation of. To avoid producing files that look correct in the
-     * `aes256-cbc`/`kdf=bcrypt` header but are unreadable by every other SSH
-     * client, an encrypted export is automatically routed through the
+     * `bcrypt_pbkdf` key derivation. Import (SSHKeyParser) delegates that to
+     * JSch's bundled implementation, but rather than also hand-assembling the
+     * encrypted v1 container here, an encrypted export is routed through the
      * standard PKCS#8 PEM path (handled by BouncyCastle's
      * `JcePEMEncryptorBuilder`, which produces an OpenSSL-compatible
      * `-----BEGIN ENCRYPTED PRIVATE KEY-----` PEM that OpenSSH, PuTTY,
