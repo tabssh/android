@@ -3478,6 +3478,11 @@
     <string name="pane_group_window_host_required_toast">Choose a connection for every window</string>
     <string name="pane_group_step2_title_fmt">%1$s — Windows</string>
     <string name="pane_window_close_content_description">Close this pane</string>
+    <string name="connectable_host_label_fmt">%1$s — %2$s</string>
+    <string name="connectable_host_label_badged_fmt">%1$s — %2$s · %3$s</string>
+    <string name="connectable_host_badge_cloud">Cloud</string>
+    <string name="connectable_host_badge_telnet">Telnet</string>
+    <string name="connectable_host_badge_container">Container host</string>
     <string name="pane_group_split_direction_label">Split direction</string>
     <string name="pane_group_split_horizontal">Horizontal (side by side)</string>
     <string name="pane_group_split_vertical">Vertical (stacked)</string>

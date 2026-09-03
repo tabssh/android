@@ -256,7 +256,7 @@ object PaneGroupEditDialog {
             holder.hostSpinner.adapter = ArrayAdapter(
                 holder.itemView.context,
                 android.R.layout.simple_spinner_dropdown_item,
-                hosts.map { it.name }
+                hosts.map { io.github.tabssh.ui.utils.ConnectableHostLabels.pickerLabel(holder.itemView.context, it) }
             )
             val hostIndex = hosts.indexOfFirst { it.id == slot.hostId }.coerceAtLeast(0)
             holder.hostSpinner.setSelection(hostIndex)

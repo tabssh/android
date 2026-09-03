@@ -8,8 +8,9 @@ import kotlinx.serialization.Serializable
 /**
  * ConnectableHost — an internal-only cross-feature lookup row unifying the
  * sources of terminal-capable (SSH/Telnet/Mosh) hosts: Hosts-tab
- * [ConnectionProfile] rows, direct [TelnetHost] rows, and live Cloud Account
- * instances. It exists so
+ * [ConnectionProfile] rows, direct [TelnetHost] rows, live Cloud Account
+ * instances, and [ContainerHost] endpoints (SSH to the machine running the
+ * container engine). It exists so
  * Panes (and later Cluster Commands) can offer one stable, queryable ID
  * space across both sources without merging the Hosts and Cloud Accounts
  * tabs into one visible list — this table is never rendered as its own
@@ -18,7 +19,10 @@ import kotlinx.serialization.Serializable
  * For a connection-profile-backed or [TelnetHost]-backed row, [id] IS the
  * source row's own id (1:1 reuse, simplifies refresh/dedup). For a
  * cloud-instance-backed row,
- * [id] is `"cloud:${cloudAccountId}:${instanceId}"`. Cloud instances are
+ * [id] is `"cloud:${cloudAccountId}:${instanceId}"`. For a
+ * container-host-backed row, [id] is [ContainerHost.ephemeralProfileId]
+ * (`"container_host_${id}"`) — the same alias the container feature already
+ * uses for its ephemeral profiles, so credential lookups stay unified. Cloud instances are
  * NEVER auto-imported into [ConnectionProfile] — [hostPreview] is display
  * text only, never used as connection truth; launch-time connection for a
  * cloud-instance member re-fetches the live IP and builds an ephemeral,
@@ -34,7 +38,7 @@ data class ConnectableHost(
     @ColumnInfo(name = "id")
     val id: String,
 
-    /** One of [SOURCE_CONNECTION_PROFILE] / [SOURCE_CLOUD_INSTANCE]. */
+    /** One of the SOURCE_* constants in the companion object. */
     @ColumnInfo(name = "source_type")
     val sourceType: String,
 
@@ -70,5 +74,6 @@ data class ConnectableHost(
         const val SOURCE_CONNECTION_PROFILE = "connection_profile"
         const val SOURCE_CLOUD_INSTANCE = "cloud_instance"
         const val SOURCE_TELNET_HOST = "telnet_host"
+        const val SOURCE_CONTAINER_HOST = "container_host"
     }
 }

@@ -744,8 +744,14 @@ class XCPngManagerActivity : TabSSHActivity() {
         lifecycleScope.launch {
             try {
                 val connectionName = "XCP-ng: $vmLabel"
+                // Deterministic per-VM profile id keyed on the VM's UUID, so
+                // renaming the profile in Hosts never breaks the mapping —
+                // getByName remains only as a one-time legacy fallback for
+                // rows created before the deterministic id existed.
+                val profileId = "xcpng-vm:${vm.uuid}"
                 var connection = withContext(Dispatchers.IO) {
-                    app.database.connectionDao().getByName(connectionName)
+                    app.database.connectionDao().getConnectionById(profileId)
+                        ?: app.database.connectionDao().getByName(connectionName)
                 }
                 if (connection == null) {
                     val groupId = withContext(Dispatchers.IO) {
@@ -754,6 +760,7 @@ class XCPngManagerActivity : TabSSHActivity() {
                         )
                     }
                     connection = ConnectionProfile(
+                        id = profileId,
                         name = connectionName,
                         host = ip,
                         port = 22,

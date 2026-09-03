@@ -724,7 +724,11 @@ class SyncDataApplier {
                         }
                         TombstoneRecorder.CONTAINER_HOST -> {
                             val row = containerHostsByKey[t.entityKey]
-                            if (row != null) database.containerHostDao().delete(row)
+                            if (row != null) {
+                                database.containerHostDao().delete(row)
+                                // Cascade: registry row + saved pane-group member references
+                                io.github.tabssh.storage.registry.ConnectableHostRegistry.removeContainerHost(database, row.id)
+                            }
                             false
                         }
                         TombstoneRecorder.REGISTRY_CREDENTIAL -> {

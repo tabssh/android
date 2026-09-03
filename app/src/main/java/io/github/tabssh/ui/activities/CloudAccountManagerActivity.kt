@@ -378,10 +378,13 @@ class CloudAccountManagerActivity : TabSSHActivity() {
     /**
      * SharedPreferences key for per-instance SSH credentials.
      * Scoped to the cloud account so two accounts with the same instance ID
-     * (unlikely but possible across providers) don't collide.
+     * (unlikely but possible across providers) don't collide. Delegates to
+     * the shared [io.github.tabssh.storage.registry.ConnectableHostResolver]
+     * helper so the writer (this dialog) and every reader (panes, monitoring,
+     * port forwarding) can never drift on the key format.
      */
     private fun hostCredKey(accountId: String, instanceId: String) =
-        "cloud_host_creds_${accountId}_${instanceId}"
+        io.github.tabssh.storage.registry.ConnectableHostResolver.cloudHostCredKey(accountId, instanceId)
 
     /**
      * Edit dialog for SSH credentials associated with a specific cloud instance.

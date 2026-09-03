@@ -11,7 +11,7 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
-import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.storage.database.entities.ConnectableHost
 import io.github.tabssh.storage.database.entities.ForwardType
 import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.storage.database.entities.PortForward
@@ -69,7 +69,7 @@ class PortForwardEditActivity : TabSSHActivity() {
     // Data
     private val types = listOf(ForwardType.LOCAL, ForwardType.REMOTE, ForwardType.DYNAMIC)
     private var selectedType: ForwardType = ForwardType.LOCAL
-    private var connections: List<ConnectionProfile> = emptyList()
+    private var connections: List<ConnectableHost> = emptyList()
     private var identities: List<Identity> = emptyList()
     private var selectedConnectionId: String? = null
     private var selectedIdentityId: String? = null
@@ -254,8 +254,16 @@ class PortForwardEditActivity : TabSSHActivity() {
 
     private fun loadData() {
         lifecycleScope.launch {
+            // Registry-backed so cloud instances and container hosts are
+            // selectable alongside saved connections. SSH-only — a port
+            // forward tunnels over an SSH transport; telnet rows can't carry
+            // one. Saved-connection registry ids ARE the profile ids, so
+            // existing PortForward.connectionId values keep matching.
             val loadedConnections = withContext(Dispatchers.IO) {
-                app.database.connectionDao().getAllConnectionsList()
+                io.github.tabssh.storage.registry.ConnectableHostRegistry.refreshAll(app.database, app)
+                app.database.connectableHostDao().getAllList()
+                    .filter { it.protocol.equals("ssh", ignoreCase = true) }
+                    .sortedBy { it.name.lowercase() }
             }
             val loadedIdentities = withContext(Dispatchers.IO) {
                 app.database.identityDao().getAllIdentitiesList()
@@ -288,7 +296,7 @@ class PortForwardEditActivity : TabSSHActivity() {
     }
 
     private fun setupConnectionSpinner() {
-        val labels = connections.map { it.getDisplayName() }
+        val labels = connections.map { io.github.tabssh.ui.utils.ConnectableHostLabels.pickerLabel(this, it) }
         spinnerConnection.setAdapter(
             ArrayAdapter(this, android.R.layout.simple_list_item_1, labels)
         )
@@ -316,7 +324,7 @@ class PortForwardEditActivity : TabSSHActivity() {
         val match = connections.firstOrNull { it.id == prefill } ?: return
         applyEndpointMode(useSaved = true)
         selectedConnectionId = match.id
-        spinnerConnection.setText(match.getDisplayName(), false)
+        spinnerConnection.setText(io.github.tabssh.ui.utils.ConnectableHostLabels.pickerLabel(this, match), false)
     }
 
     private fun populate(pf: PortForward) {
@@ -327,7 +335,7 @@ class PortForwardEditActivity : TabSSHActivity() {
             applyEndpointMode(useSaved = true)
             selectedConnectionId = pf.connectionId
             connections.firstOrNull { it.id == pf.connectionId }?.let {
-                spinnerConnection.setText(it.getDisplayName(), false)
+                spinnerConnection.setText(io.github.tabssh.ui.utils.ConnectableHostLabels.pickerLabel(this, it), false)
             }
         } else {
             applyEndpointMode(useSaved = false)

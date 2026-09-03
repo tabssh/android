@@ -9,8 +9,9 @@ import io.github.tabssh.utils.logging.Logger
 
 /**
  * Pull/refresh helper that keeps the internal-only `connectable_hosts`
- * registry in sync with its two sources — Hosts-tab [io.github.tabssh
- * .storage.database.entities.ConnectionProfile] rows and live Cloud Account
+ * registry in sync with its sources — Hosts-tab [io.github.tabssh
+ * .storage.database.entities.ConnectionProfile] rows, TelnetHost rows,
+ * ContainerHost endpoints, and live Cloud Account
  * instances. Deliberately does NOT hook `ConnectionDao` insert/update/delete
  * call sites (too many, too easy to miss one) — instead callers (the Panes
  * member picker, and later the pane-launch path) call these functions
@@ -64,6 +65,44 @@ object ConnectableHostRegistry {
         db.connectableHostDao().deleteBySourceType(ConnectableHost.SOURCE_TELNET_HOST)
         db.connectableHostDao().insertAll(hosts)
         Logger.d(TAG, "Refreshed ${hosts.size} telnet-host-backed connectable hosts")
+    }
+
+    /**
+     * Reads every [io.github.tabssh.storage.database.entities.ContainerHost]
+     * with a reachable SSH endpoint (a linked connection profile or a custom
+     * host/user endpoint) and replaces all `container_host`-sourced rows in
+     * the registry. Registry id = `ContainerHost.ephemeralProfileId()` — the
+     * exact alias the container feature already keys its ephemeral profiles
+     * and stored credentials on. Hosts with neither a linked connection nor
+     * a custom endpoint (e.g. local-socket-only) are skipped: there is no
+     * machine to SSH into.
+     */
+    suspend fun refreshContainerHosts(db: TabSSHDatabase) {
+        val containerHosts = db.containerHostDao().getAllList()
+        val profilesById = db.connectionDao().getAllConnectionsList().associateBy { it.id }
+        val hosts = containerHosts.mapNotNull { host ->
+            val preview = when {
+                host.linkedConnectionId != null -> {
+                    val linked = profilesById[host.linkedConnectionId] ?: return@mapNotNull null
+                    "${linked.username}@${linked.host}:${linked.port}"
+                }
+                host.usesCustomEndpoint() ->
+                    "${host.customUsername ?: "root"}@${host.customHost}:${host.customPort ?: 22}"
+                else -> return@mapNotNull null
+            }
+            ConnectableHost(
+                id = host.ephemeralProfileId(),
+                sourceType = ConnectableHost.SOURCE_CONTAINER_HOST,
+                cloudAccountId = null,
+                instanceId = null,
+                name = host.name,
+                hostPreview = preview,
+                protocol = "ssh"
+            )
+        }
+        db.connectableHostDao().deleteBySourceType(ConnectableHost.SOURCE_CONTAINER_HOST)
+        db.connectableHostDao().insertAll(hosts)
+        Logger.d(TAG, "Refreshed ${hosts.size} container-host-backed connectable hosts")
     }
 
     /**
@@ -122,6 +161,7 @@ object ConnectableHostRegistry {
     suspend fun refreshAll(db: TabSSHDatabase, app: TabSSHApplication) {
         refreshConnectionProfiles(db)
         refreshTelnetHosts(db)
+        refreshContainerHosts(db)
         val enabledAccounts = db.cloudAccountDao().getAll().filter { it.enabled }
         for (account in enabledAccounts) {
             refreshCloudInstances(db, app, account.id)
@@ -156,6 +196,19 @@ object ConnectableHostRegistry {
         db.connectableHostDao().deleteById(telnetHostId)
         stripMemberHostId(db, telnetHostId)
         Logger.d(TAG, "Removed telnet-host-backed connectable host id=$telnetHostId")
+    }
+
+    /**
+     * Eager cascade for a deleted [io.github.tabssh.storage.database.entities
+     * .ContainerHost]: removes its `connectable_hosts` row and strips its id
+     * out of every saved PaneGroup's `memberHostIds`. Same call-site rule as
+     * [removeConnectionProfile]. Takes the ContainerHost's numeric row id.
+     */
+    suspend fun removeContainerHost(db: TabSSHDatabase, containerHostRowId: Long) {
+        val registryId = io.github.tabssh.storage.database.entities.ContainerHost.ALIAS_PREFIX + containerHostRowId
+        db.connectableHostDao().deleteById(registryId)
+        stripMemberHostId(db, registryId)
+        Logger.d(TAG, "Removed container-host-backed connectable host id=$registryId")
     }
 
     /**

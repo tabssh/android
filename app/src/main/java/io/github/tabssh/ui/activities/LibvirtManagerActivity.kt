@@ -518,8 +518,15 @@ class LibvirtManagerActivity : TabSSHActivity() {
         lifecycleScope.launch {
             try {
                 val connectionName = "libvirt: $vmLabel"
+                // Deterministic per-VM profile id (server row id + libvirt
+                // domain name — the stable domain identifier virsh exposes),
+                // so renaming the profile in Hosts never breaks the mapping —
+                // getByName remains only as a one-time legacy fallback for
+                // rows created before the deterministic id existed.
+                val profileId = "libvirt-vm:${currentHypervisorId}:${vm.name}"
                 var existing = withContext(Dispatchers.IO) {
-                    app.database.connectionDao().getByName(connectionName)
+                    app.database.connectionDao().getConnectionById(profileId)
+                        ?: app.database.connectionDao().getByName(connectionName)
                 }
                 val host = ip ?: existing?.host ?: ""
 
@@ -540,6 +547,7 @@ class LibvirtManagerActivity : TabSSHActivity() {
                         )
                     }
                     existing = ConnectionProfile(
+                        id = profileId,
                         name = connectionName,
                         host = host,
                         port = 22,

@@ -215,14 +215,21 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
 
     /**
      * Build the [ConnectionProfile] used to open the session. For a saved
-     * connection this is the stored profile. For a manual endpoint this is an
-     * ephemeral, non-persisted profile whose id equals the endpoint key (so
-     * [SSHSessionManager.getConnection] can find and reuse it) and whose auth
-     * is taken from the selected Identity.
+     * connection this is the stored profile; when [PortForward.connectionId]
+     * is not a saved profile it falls back to the ConnectableHost registry
+     * (cloud instance / container host picked in the edit spinner) via the
+     * shared resolver, whose `profile.id == registry id` invariant keeps
+     * [endpointKey] and session reuse working unchanged. For a manual
+     * endpoint this is an ephemeral, non-persisted profile whose id equals
+     * the endpoint key (so [SSHSessionManager.getConnection] can find and
+     * reuse it) and whose auth is taken from the selected Identity.
      */
     private suspend fun resolveProfile(pf: PortForward): ConnectionProfile? {
         if (pf.usesSavedConnection) {
-            return app.database.connectionDao().getConnectionById(pf.connectionId!!)
+            val connectionId = pf.connectionId!!
+            app.database.connectionDao().getConnectionById(connectionId)?.let { return it }
+            val registryRow = app.database.connectableHostDao().getById(connectionId) ?: return null
+            return io.github.tabssh.storage.registry.ConnectableHostResolver.resolveProfile(app, registryRow)
         }
         val host = pf.sshHost?.takeIf { it.isNotBlank() } ?: return null
         val username = pf.sshUsername?.takeIf { it.isNotBlank() } ?: return null

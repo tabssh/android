@@ -367,20 +367,28 @@ class VMwareManagerActivity : TabSSHActivity() {
                         app.database, "vm_hosts", getString(R.string.vmware_group_name_vm_hosts), "vm"
                     )
                 }
+                // Deterministic per-VM profile id (server row id + managed
+                // object id), so renaming the profile in Hosts never breaks
+                // the mapping — getByName remains only as a one-time legacy
+                // fallback for rows created before the deterministic id.
+                val profileId = "vmware-vm:${currentHypervisorId}:${vm.vm}"
                 val existing = withContext(Dispatchers.IO) {
-                    app.database.connectionDao().getByName(connectionName)
+                    app.database.connectionDao().getConnectionById(profileId)
+                        ?: app.database.connectionDao().getByName(connectionName)
                 }
-                // The lookup key is derived from a hypervisor-supplied VM name, so
-                // a VM renamed to collide with a user's own saved profile would
-                // otherwise repoint that profile's host at the VM's address.
-                // Only profiles this screen itself created (vm_hosts group) may
-                // be rewritten.
-                if (existing != null && existing.groupId != vmHostsGroupId) {
+                // The legacy lookup key is derived from a hypervisor-supplied VM
+                // name, so a VM renamed to collide with a user's own saved
+                // profile would otherwise repoint that profile's host at the
+                // VM's address. Only legacy profiles this screen itself created
+                // (vm_hosts group) may be rewritten; id-matched rows are ours
+                // by construction, wherever the user has moved them.
+                if (existing != null && existing.id != profileId && existing.groupId != vmHostsGroupId) {
                     showError(getString(R.string.vmware_connection_name_exists_fmt, connectionName))
                     return@launch
                 }
                 val connection = if (existing == null) {
                     val created = ConnectionProfile(
+                        id = profileId,
                         name = connectionName,
                         host = ip,
                         port = 22,

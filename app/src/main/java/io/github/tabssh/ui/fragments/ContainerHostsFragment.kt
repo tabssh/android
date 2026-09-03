@@ -293,6 +293,8 @@ class ContainerHostsFragment : Fragment() {
                             app.database.singleContainerConfigDao().deleteForHost(host.id)
                             app.database.containerAutoUpdatePolicyDao().deleteForHost(host.id)
                             app.database.containerHostDao().delete(host)
+                            // Cascade: drop the connectable-hosts registry row and strip the id from saved pane groups
+                            io.github.tabssh.storage.registry.ConnectableHostRegistry.removeContainerHost(app.database, host.id)
                             io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
                                 appContext, io.github.tabssh.sync.tombstone.TombstoneRecorder.CONTAINER_HOST,
                                 io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(host))

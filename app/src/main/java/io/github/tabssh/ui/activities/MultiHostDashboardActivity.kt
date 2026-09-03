@@ -548,22 +548,47 @@ class MultiHostDashboardActivity : TabSSHActivity() {
             lastLoadError = null
             profiles.forEach { profileCache[it.id] = it }
 
+            // Ids not backed by a saved connection may be registry-backed
+            // (cloud instance / container host) — resolve them through the
+            // shared resolver. The resolver guarantees profile.id == registry
+            // id so all dashboard maps stay on one id space. A registry row
+            // that exists but fails to resolve right now (offline, expired
+            // token) is kept in its group — never treated as deleted.
+            val registryBacked = mutableSetOf<String>()
+            for (id in allIds - profiles.map { it.id }.toSet()) {
+                val row = withContext(Dispatchers.IO) {
+                    try { app.database.connectableHostDao().getById(id) }
+                    catch (e: Exception) { Logger.w(TAG, "registry lookup failed for $id", e); null }
+                } ?: continue
+                registryBacked.add(id)
+                val resolved = try {
+                    io.github.tabssh.storage.registry.ConnectableHostResolver.resolveProfile(app, row)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Logger.w(TAG, "resolveProfile failed for ${row.name}", e)
+                    null
+                }
+                if (resolved != null) profileCache[id] = resolved
+            }
+
             // Load monitor slots
             withContext(Dispatchers.IO) {
-                profiles.forEach { p ->
-                    app.database.monitorSlotDao().getByConnectionId(p.id)?.let {
-                        monitorSlots[p.id] = it
+                allIds.filter { it in profileCache }.forEach { id ->
+                    app.database.monitorSlotDao().getByConnectionId(id)?.let {
+                        monitorSlots[id] = it
                     }
                 }
             }
 
-            // Remove stale IDs (profile was deleted)
-            val validIds = profiles.map { it.id }.toSet()
+            // Remove stale IDs (source row was deleted from both the
+            // connections table and the registry)
+            val validIds = profiles.map { it.id }.toSet() + registryBacked
             val staleIds = allIds - validIds
             staleIds.forEach { removeHostFromAllGroups(it) }
 
             // Start metric pumps
-            profiles.forEach { startPumpIfNeeded(it) }
+            allIds.mapNotNull { profileCache[it] }.forEach { startPumpIfNeeded(it) }
             rebuildAndSubmit()
         }
     }
@@ -862,17 +887,32 @@ class MultiHostDashboardActivity : TabSSHActivity() {
 
     // ── Host picker ───────────────────────────────────────────────────────────
 
-    /** Show a multi-select host picker that targets [targetGroupId] for additions. */
+    /**
+     * Show a multi-select host picker that targets [targetGroupId] for
+     * additions. Backed by the [io.github.tabssh.storage.registry
+     * .ConnectableHostRegistry] so cloud instances and container hosts are
+     * selectable alongside saved connections — only SSH-capable rows are
+     * offered (metric pumps run shell commands over an [SSHConnection];
+     * telnet rows are filtered out). Registry ids for saved connections ARE
+     * the profile ids, so previously persisted `groupHosts` buckets keep
+     * working unchanged.
+     */
     private fun showHostPicker(targetGroupId: String) {
         lifecycleScope.launch {
             val all = withContext(Dispatchers.IO) {
-                try { app.database.connectionDao().getAllConnectionsList() }
-                catch (e: Exception) { Logger.e(TAG, "getAllConnections failed", e); emptyList() }
+                try {
+                    io.github.tabssh.storage.registry.ConnectableHostRegistry.refreshAll(app.database, app)
+                    app.database.connectableHostDao().getAllList()
+                        .filter { it.protocol.equals("ssh", ignoreCase = true) }
+                        .sortedBy { it.name.lowercase() }
+                } catch (e: Exception) { Logger.e(TAG, "host registry load failed", e); emptyList() }
             }
             if (all.isEmpty()) { toast(getString(R.string.dashboard_no_saved_connections)); return@launch }
 
             val inThisGroup = groupHosts[targetGroupId] ?: emptySet<String>()
-            val labels  = all.map { it.getDisplayName() }.toTypedArray()
+            val labels  = all.map {
+                io.github.tabssh.ui.utils.ConnectableHostLabels.pickerLabel(this@MultiHostDashboardActivity, it)
+            }.toTypedArray()
             val checked = BooleanArray(all.size) { i -> all[i].id in inThisGroup }
 
             MaterialAlertDialogBuilder(this@MultiHostDashboardActivity)
@@ -892,11 +932,11 @@ class MultiHostDashboardActivity : TabSSHActivity() {
 
     private suspend fun applyHostPickerResult(
         targetGroupId: String,
-        allProfiles: List<ConnectionProfile>,
+        allHosts: List<io.github.tabssh.storage.database.entities.ConnectableHost>,
         checked: BooleanArray
     ) {
         val bucket = groupHosts.getOrPut(targetGroupId) { mutableSetOf() }
-        val newIds = allProfiles.filterIndexed { i, _ -> checked[i] }.map { it.id }.toSet()
+        val newIds = allHosts.filterIndexed { i, _ -> checked[i] }.map { it.id }.toSet()
         val removed = bucket - newIds
         bucket.clear()
         bucket.addAll(newIds)
@@ -911,14 +951,22 @@ class MultiHostDashboardActivity : TabSSHActivity() {
             if (!allHostIds().contains(id)) stopPump(id)
         }
 
-        // Load profiles and slots for new IDs
+        // Resolve profiles for new IDs through the shared resolver — the
+        // resolver guarantees profile.id == registry id, so profileCache,
+        // monitorSlots, pumps, and metric maps all stay on one id space.
+        val hostsById = allHosts.associateBy { it.id }
         val neededProfiles = newIds.filter { it !in profileCache }
-        if (neededProfiles.isNotEmpty()) {
-            val fetched = withContext(Dispatchers.IO) {
-                try { allProfiles.filter { it.id in neededProfiles } }
-                catch (e: Exception) { emptyList() }
+        for (id in neededProfiles) {
+            val host = hostsById[id] ?: continue
+            val profile = try {
+                io.github.tabssh.storage.registry.ConnectableHostResolver.resolveProfile(app, host)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.w(TAG, "resolveProfile failed for ${host.name}", e)
+                null
             }
-            fetched.forEach { profileCache[it.id] = it }
+            if (profile != null) profileCache[id] = profile
         }
         withContext(Dispatchers.IO) {
             newIds.forEach { id ->

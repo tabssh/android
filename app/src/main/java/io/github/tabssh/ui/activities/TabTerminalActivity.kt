@@ -130,12 +130,10 @@ import io.github.tabssh.ui.keyboard.KeyboardKey
 import io.github.tabssh.ui.keyboard.KeyboardLayoutManager
 import io.github.tabssh.ui.keyboard.MultiRowKeyboardView
 import io.github.tabssh.ui.tabs.VncTab
-import io.github.tabssh.cloud.CloudProviderType
-import io.github.tabssh.cloud.newClient
 import io.github.tabssh.storage.database.entities.ConnectableHost
+import io.github.tabssh.storage.registry.ConnectableHostResolver
 import io.github.tabssh.ui.tabs.PaneWindow
 import io.github.tabssh.ui.tabs.PanesTab
-import org.json.JSONObject
 import io.github.tabssh.ui.views.PaletteDialog
 import io.github.tabssh.ui.views.PerformanceOverlayView
 import io.github.tabssh.utils.ClipboardHelper
@@ -4355,24 +4353,14 @@ class TabTerminalActivity : TabSSHActivity() {
     }
 
     /**
-     * SharedPreferences key for per-instance SSH credentials, scoped to the
-     * cloud account. Deliberately a private, self-contained copy of
-     * CloudAccountManagerActivity's own `hostCredKey` (same string format,
-     * same storage the group-edit picker's underlying ConnectableHost rows
-     * were built from) — NOT a call into that activity, per NO REGRESSIONS.
-     */
-    private fun paneCloudHostCredKey(accountId: String, instanceId: String) =
-        "cloud_host_creds_${accountId}_${instanceId}"
-
-    /**
      * Panes plan Step 3 — resolve one [ConnectableHost] pane-group member
-     * into a connected [SSHTab]. Self-contained and NOT a refactor of
-     * connectToProfile/openSplitWithProfile/CloudAccountManagerActivity
-     * .handleConnect (NO REGRESSIONS) — it mirrors openSplitWithProfile's
-     * direct-SSHTab-construction style for connection-profile-backed
-     * members, and handleConnect's tempProfile pattern (live IP re-fetch +
-     * hostCredKey lookup) for cloud-instance-backed members. Returns null
-     * (never throws, except on cancellation) on any resolution/connect
+     * into a connected [SSHTab]. Profile resolution (saved profile / cloud
+     * live-IP re-fetch / ephemeral telnet / container-host endpoint) is
+     * delegated to the shared [ConnectableHostResolver] so every
+     * registry-backed feature resolves identically; this method keeps only
+     * the pane-specific connect/SSHTab construction, mirroring
+     * openSplitWithProfile's direct-SSHTab style (NO REGRESSIONS). Returns
+     * null (never throws, except on cancellation) on any resolution/connect
      * failure so the caller can skip this member and keep launching the
      * rest of the group. [workingDir], if non-blank, is applied via the
      * existing `postConnectScript` auto-send pipeline (`SSHTab
@@ -4381,104 +4369,11 @@ class TabTerminalActivity : TabSSHActivity() {
      * agnostic (SSH/Telnet/Mosh). NO changes to SSHTab.kt itself.
      */
     private suspend fun connectPaneMember(host: ConnectableHost, workingDir: String? = null): SSHTab? {
-        var profile: ConnectionProfile = when (host.sourceType) {
-            ConnectableHost.SOURCE_CONNECTION_PROFILE -> {
-                withContext(Dispatchers.IO) { app.database.connectionDao().getConnectionById(host.id) }
-                    ?: run {
-                        Logger.w("TabTerminalActivity", "connectPaneMember: connection profile ${host.id} not found")
-                        return null
-                    }
-            }
-            ConnectableHost.SOURCE_CLOUD_INSTANCE -> {
-                val accountId = host.cloudAccountId
-                val instanceId = host.instanceId
-                if (accountId == null || instanceId == null) {
-                    Logger.w("TabTerminalActivity", "connectPaneMember: cloud host ${host.id} missing accountId/instanceId")
-                    return null
-                }
-                val account = withContext(Dispatchers.IO) { app.database.cloudAccountDao().getById(accountId) }
-                if (account == null) {
-                    Logger.w("TabTerminalActivity", "connectPaneMember: cloud account $accountId not found")
-                    return null
-                }
-                val token = withContext(Dispatchers.IO) {
-                    app.securePasswordManager.retrievePassword("cloud_token_${account.id}")
-                }
-                if (token.isNullOrBlank()) {
-                    Logger.w("TabTerminalActivity", "connectPaneMember: no stored token for cloud account ${account.name}")
-                    return null
-                }
-                val providerType = CloudProviderType.fromTag(account.provider)
-                if (providerType == null) {
-                    Logger.w("TabTerminalActivity", "connectPaneMember: unknown provider tag ${account.provider}")
-                    return null
-                }
-                val liveInstance = try {
-                    withContext(Dispatchers.IO) { providerType.newClient().fetchLiveInstances(token) }
-                        .firstOrNull { it.id == instanceId }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Logger.w("TabTerminalActivity", "connectPaneMember: fetchLiveInstances failed for ${account.name}", e)
-                    null
-                }
-                val ip = liveInstance?.ip ?: liveInstance?.privateIp
-                if (liveInstance == null || ip.isNullOrBlank()) {
-                    Logger.w("TabTerminalActivity", "connectPaneMember: no live IP for cloud instance $instanceId")
-                    return null
-                }
-                val credsJson = withContext(Dispatchers.IO) {
-                    app.securePasswordManager.retrievePassword(paneCloudHostCredKey(account.id, instanceId))
-                }
-                val creds = credsJson?.let {
-                    runCatching { JSONObject(it) }
-                        .onFailure { e -> Logger.w("TabTerminalActivity", "connectPaneMember: stored creds JSON corrupt", e) }
-                        .getOrNull()
-                }
-                val username = creds?.optString("username").takeIf { !it.isNullOrBlank() } ?: "root"
-                val password = creds?.optString("password").takeIf { !it.isNullOrBlank() }
-                val identityId = creds?.optString("identityId").takeIf { !it.isNullOrBlank() }
-                val port = creds?.optInt("port", 22)?.takeIf { it in 1..65535 } ?: 22
-                if (password != null) {
-                    withContext(Dispatchers.IO) {
-                        app.securePasswordManager.storePassword(
-                            liveInstance.id, password, SecurePasswordManager.StorageLevel.SESSION_ONLY
-                        )
-                    }
-                }
-                ConnectionProfile(
-                    id = liveInstance.id,
-                    name = liveInstance.name,
-                    host = ip,
-                    port = port,
-                    username = username,
-                    identityId = identityId
-                )
-            }
-            ConnectableHost.SOURCE_TELNET_HOST -> {
-                val telnetHost = withContext(Dispatchers.IO) { app.database.telnetHostDao().getById(host.id) }
-                    ?: run {
-                        Logger.w("TabTerminalActivity", "connectPaneMember: telnet host ${host.id} not found")
-                        return null
-                    }
-                // Ephemeral, unsaved ConnectionProfile — same id as the TelnetHost
-                // row so a saved password (Keystore alias = bare id) is picked up
-                // transparently by the normal SSH/Telnet connect path.
-                ConnectionProfile(
-                    id = telnetHost.id,
-                    name = telnetHost.name,
-                    host = telnetHost.host,
-                    port = telnetHost.port,
-                    username = telnetHost.username,
-                    protocol = "telnet",
-                    savePassword = telnetHost.savePassword
-                )
-            }
-            else -> {
-                Logger.w("TabTerminalActivity", "connectPaneMember: unknown source type ${host.sourceType}")
+        var profile: ConnectionProfile = ConnectableHostResolver.resolveProfile(app, host)
+            ?: run {
+                Logger.w("TabTerminalActivity", "connectPaneMember: could not resolve ${host.sourceType} host ${host.id}")
                 return null
             }
-        }
 
         if (!workingDir.isNullOrBlank()) {
             val cdCommand = "cd -- ${'"'}$workingDir${'"'}"
