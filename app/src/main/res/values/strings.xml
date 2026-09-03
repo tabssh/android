@@ -1217,6 +1217,11 @@
     <string name="libvirt_hard_reset_title_fmt">Hard Reset %1$s?</string>
     <string name="libvirt_hard_reset_message">This is equivalent to pulling the power cord. Any unsaved data will be lost.</string>
     <string name="libvirt_reset_button">Reset</string>
+    <string name="libvirt_power_action_start_progress_fmt">Starting %1$s…</string>
+    <string name="libvirt_power_action_stop_progress_fmt">Stopping %1$s…</string>
+    <string name="libvirt_power_action_reboot_progress_fmt">Rebooting %1$s…</string>
+    <string name="libvirt_power_action_reset_progress_fmt">Resetting %1$s…</string>
+    <string name="libvirt_power_action_sent_fmt">%1$s: %2$s sent</string>
     <string name="libvirt_opening_console_fmt">Opening console for %1$s…</string>
     <string name="libvirt_console_error_title">Console Error</string>
     <string name="libvirt_error_open_console_fmt">Could not open console: %1$s</string>
@@ -3361,7 +3366,7 @@
     <string name="dashboard_load_fmt">LOAD %1$d%%, %2$d%%, %3$d%%</string>
     <string name="dashboard_procs_fmt">⚙ %1$d/%2$d</string>
     <string name="dashboard_empty_state">No hosts — tap  New Group  to create a group, then ⊕ to add hosts</string>
-    <string name="dashboard_load_error_fmt">%1$s Tap to retry.</string>
+    <string name="dashboard_load_error_fmt">Couldn\'t load the dashboard: %1$s</string>
     <string name="dashboard_context_monitor_settings">Monitor settings</string>
     <string name="dashboard_context_move_to_group">Move to group…</string>
     <string name="dashboard_context_remove_from_dashboard">Remove from dashboard</string>
@@ -3374,6 +3379,10 @@
     <string name="dashboard_metrics_mem_label"> | MEM: </string>
     <string name="dashboard_metrics_disk_label">DISK: </string>
     <string name="dashboard_metrics_load_label"> | LOAD: </string>
+    <string name="dashboard_metrics_load_sep" translatable="false">,</string>
+    <string name="dashboard_host_port_fmt" translatable="false">%1$s:%2$d</string>
+    <string name="dashboard_subtitle_os_kernel_fmt" translatable="false">%1$s · %2$s</string>
+    <string name="dashboard_error_icon" translatable="false">⚠</string>
 
     <!-- ProxmoxManagerActivity -->
     <string name="proxmox_vm_ip_fmt">IP: %1$s</string>
@@ -3478,6 +3487,7 @@
     <string name="pane_group_window_host_required_toast">Choose a connection for every window</string>
     <string name="pane_group_step2_title_fmt">%1$s — Windows</string>
     <string name="pane_window_close_content_description">Close this pane</string>
+    <string name="pane_window_close_glyph" translatable="false">✕</string>
     <string name="connectable_host_label_fmt">%1$s — %2$s</string>
     <string name="connectable_host_label_badged_fmt">%1$s — %2$s · %3$s</string>
     <string name="connectable_host_badge_cloud">Cloud</string>

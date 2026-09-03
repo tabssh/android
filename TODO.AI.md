@@ -4,6 +4,20 @@ Task tracking (AI-owned). Items are ordered by priority, highest first.
 Complete each item fully before removing; never clear an item while its work
 is in progress.
 
+58. **Remaining programmatic-UI screens (AI.md PART 7)** — found during the
+    2026-09-03 UI/UX pass, deferred as heavier refactors. Ranked worst first:
+    `ui/keyboard/KeyboardRowView.kt` (~461 lines, programmatic LinearLayout
+    row container + one pixel-literal density calc) ·
+    `ui/dialogs/PullImageDialog.kt` (~162 lines, dialog body in code, no
+    `dialog_*.xml`) · `ui/views/PaletteDialog.kt` (~155 lines, same) ·
+    `ui/dialogs/DialogFields.kt` (~140 lines, shared programmatic field-row
+    builder — may be intentional reuse infrastructure; confirm before
+    touching). Also stray single pixel-literal
+    `* resources.displayMetrics.density` calcs in: HostDetailActivity.kt,
+    WhatsNewActivity.kt, ThemeEditorActivity.kt,
+    ConnectionHistoryActivity.kt, PinLockActivity.kt,
+    ImportFromQrActivity.kt, TabTerminalActivity.kt — move to dimens.xml.
+
 57. **script-lint UUOC violations in `scripts/`** — the 2026-09-03 lint-gate
     run flagged the same anti-pattern in 10 scripts: an unnecessary
     `dirname` command call where bash parameter expansion (`"${path%/*}"`)

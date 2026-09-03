@@ -60,4 +60,7 @@
 
     <!-- Selected-row tint — lighter base hue so it reads on dark surfaces -->
     <color name="selection_tint">#2264B5F6</color>
+
+    <!-- Panes grid focused-tile border — lighter 300-tone for dark surfaces -->
+    <color name="pane_focus_border">#FF81C784</color>
 </resources>

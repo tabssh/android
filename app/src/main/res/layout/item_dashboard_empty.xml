@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Dashboard empty/error state row (MultiHostDashboardActivity.EmptyStateHolder).
+  The same layout renders both variants: a genuine empty dashboard (message +
+  "Add hosts" action) and a failed load (error-colored message + "Retry").
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:padding="@dimen/space_xl">
+
+    <TextView
+        android:id="@+id/tv_empty_message"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+        android:textColor="?attr/colorOnSurfaceVariant" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_empty_action"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:minHeight="@dimen/min_touch_target"
+        android:layout_marginTop="@dimen/space_md" />
+
+</LinearLayout>

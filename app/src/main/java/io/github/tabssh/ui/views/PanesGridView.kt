@@ -11,6 +11,7 @@ import android.widget.FrameLayout
 import android.widget.ScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import io.github.tabssh.R
 
 /** Split direction for a 2-window Panes group. Persisted on [io.github.tabssh.storage.database.entities.PaneGroup.splitDirection]. */
@@ -42,11 +43,8 @@ class PanesGridView @JvmOverloads constructor(
 ) : FrameLayout(context, attrs, defStyleAttr) {
 
     companion object {
-        private const val FOCUS_BORDER_COLOR = 0xFF4CAF50.toInt()
         private const val UNFOCUSED_BORDER_COLOR = Color.TRANSPARENT
-        private const val BORDER_WIDTH_DP = 2
         private const val NARROW_WIDTH_DP = 600
-        private const val CLOSE_BUTTON_SIZE_DP = 28
     }
 
     /** One tile: the border frame wrapping a caller-supplied content view, plus a per-window close button. */
@@ -55,17 +53,22 @@ class PanesGridView @JvmOverloads constructor(
         val content: View,
         onClose: () -> Unit
     ) : FrameLayout(context) {
+        // Day/night-aware focus border — resolved once per tile, not per focus change
+        private val focusBorderColor = ContextCompat.getColor(context, R.color.pane_focus_border)
+
         init {
             addView(
                 content,
                 LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
             )
-            val closeSizePx = (CLOSE_BUTTON_SIZE_DP * resources.displayMetrics.density).toInt()
+            // 48dp minimum touch target — a smaller close button over a live
+            // terminal is too easy to miss and taps fall through to focus
+            val closeSizePx = resources.getDimensionPixelSize(R.dimen.min_touch_target)
             val closeButton = TextView(context).apply {
-                text = "✕"
-                setTextColor(Color.WHITE)
+                text = context.getString(R.string.pane_window_close_glyph)
+                setTextColor(ContextCompat.getColor(context, R.color.white))
                 gravity = Gravity.CENTER
-                setBackgroundColor(0x99000000.toInt())
+                setBackgroundColor(ContextCompat.getColor(context, R.color.pane_close_scrim))
                 contentDescription = context.getString(R.string.pane_window_close_content_description)
                 setOnClickListener { onClose() }
             }
@@ -73,16 +76,14 @@ class PanesGridView @JvmOverloads constructor(
                 closeButton,
                 LayoutParams(closeSizePx, closeSizePx, Gravity.TOP or Gravity.END)
             )
-            setPadding(borderPx(), borderPx(), borderPx(), borderPx())
+            val borderPx = resources.getDimensionPixelSize(R.dimen.border_width)
+            setPadding(borderPx, borderPx, borderPx, borderPx)
             setBackgroundColor(UNFOCUSED_BORDER_COLOR)
         }
 
         fun setFocused(focused: Boolean) {
-            setBackgroundColor(if (focused) FOCUS_BORDER_COLOR else UNFOCUSED_BORDER_COLOR)
+            setBackgroundColor(if (focused) focusBorderColor else UNFOCUSED_BORDER_COLOR)
         }
-
-        private fun borderPx(): Int =
-            (BORDER_WIDTH_DP * resources.displayMetrics.density).toInt()
     }
 
     private val stackScroll = ScrollView(context)
@@ -136,7 +137,7 @@ class PanesGridView @JvmOverloads constructor(
                     tile,
                     LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
-                        (240 * resources.displayMetrics.density).toInt()
+                        resources.getDimensionPixelSize(R.dimen.pane_stacked_tile_height)
                     )
                 )
             }

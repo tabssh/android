@@ -3,7 +3,6 @@ package io.github.tabssh.ui.activities
 import io.github.tabssh.sync.tombstone.TombstoneRecorder
 
 import android.content.Context
-import android.graphics.Color
 import android.os.Bundle
 import android.text.InputType
 import android.view.LayoutInflater
@@ -12,23 +11,20 @@ import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
-import android.widget.CheckBox
-import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.SeekBar
-import android.widget.Spinner
 import android.widget.TextView
-import android.widget.Toast
-import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.databinding.ActivityMultiHostDashboardBinding
+import io.github.tabssh.databinding.DialogDashboardMonitorConfigBinding
+import io.github.tabssh.databinding.ItemDashboardEmptyBinding
 import io.github.tabssh.databinding.ItemDashboardGroupHeaderBinding
 import io.github.tabssh.databinding.ItemDashboardHostCardBinding
 import io.github.tabssh.performance.MetricsCollector
@@ -152,8 +148,101 @@ class MultiHostDashboardActivity : TabSSHActivity() {
         private const val VT_HOST            = 2
         private const val VT_EMPTY           = 3
 
-        private fun dp(ctx: Context, v: Int) =
-            (v * ctx.resources.displayMetrics.density).toInt()
+        /** Check-interval spinner values in minutes — parallel to the option labels. */
+        private val INTERVAL_MINUTES = intArrayOf(15, 30, 60, 240, 720)
+        /** Alert-cooldown spinner values in minutes — parallel to the option labels. */
+        private val COOLDOWN_MINUTES = intArrayOf(15, 30, 60, 240, 1440)
+
+        /**
+         * Inflate and pre-fill the shared monitor-config form
+         * (dialog_dashboard_monitor_config.xml) used by both the per-host and
+         * the per-group dialogs.
+         */
+        private fun inflateMonitorForm(
+            context: Context,
+            enabled: Boolean,
+            alertOnDown: Boolean,
+            alertOnRecovery: Boolean,
+            intervalMinutes: Int,
+            cooldownMinutes: Int,
+            perfChecks: Boolean,
+            cpuThreshold: Int?,
+            memoryThreshold: Int?,
+            diskThreshold: Int?
+        ): DialogDashboardMonitorConfigBinding {
+            val b = DialogDashboardMonitorConfigBinding.inflate(LayoutInflater.from(context))
+            b.cbEnabled.isChecked       = enabled
+            b.cbAlertDown.isChecked     = alertOnDown
+            b.cbAlertRecovery.isChecked = alertOnRecovery
+            b.cbPerfChecks.isChecked    = perfChecks
+
+            fun makeAdapter(labels: Array<String>) =
+                ArrayAdapter(context, android.R.layout.simple_spinner_item, labels).apply {
+                    setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                }
+            b.spinnerInterval.adapter = makeAdapter(arrayOf(
+                context.getString(R.string.dashboard_duration_15min),
+                context.getString(R.string.dashboard_duration_30min),
+                context.getString(R.string.dashboard_duration_1h),
+                context.getString(R.string.dashboard_duration_4h),
+                context.getString(R.string.dashboard_duration_12h)
+            ))
+            b.spinnerInterval.setSelection(
+                INTERVAL_MINUTES.indexOfFirst { it >= intervalMinutes }.coerceAtLeast(0)
+            )
+            b.spinnerCooldown.adapter = makeAdapter(arrayOf(
+                context.getString(R.string.dashboard_duration_15min),
+                context.getString(R.string.dashboard_duration_30min),
+                context.getString(R.string.dashboard_duration_1h),
+                context.getString(R.string.dashboard_duration_4h),
+                context.getString(R.string.dashboard_duration_24h)
+            ))
+            b.spinnerCooldown.setSelection(
+                COOLDOWN_MINUTES.indexOfFirst { it >= cooldownMinutes }.coerceAtLeast(0)
+            )
+
+            // Read global threshold defaults so the form pre-fills with them when no override is set
+            val globalPrefs = TabPreferenceManager(context)
+            bindThreshold(context, b.tvCpuThresholdLabel, b.tvCpuValue, b.sbCpu,
+                R.string.dashboard_cpu_threshold_label_fmt,
+                globalPrefs.getInt("monitoring_default_cpu_threshold", 85), cpuThreshold)
+            bindThreshold(context, b.tvMemThresholdLabel, b.tvMemValue, b.sbMem,
+                R.string.dashboard_memory_threshold_label_fmt,
+                globalPrefs.getInt("monitoring_default_memory_threshold", 90), memoryThreshold)
+            bindThreshold(context, b.tvDiskThresholdLabel, b.tvDiskValue, b.sbDisk,
+                R.string.dashboard_disk_threshold_label_fmt,
+                globalPrefs.getInt("monitoring_default_disk_threshold", 80), diskThreshold)
+            return b
+        }
+
+        /**
+         * Wire one threshold section (label + value readout + SeekBar).
+         * Progress 0 = "use global default" (matches the label and what Save
+         * stores) — starting the thumb at the global value made a plain Save
+         * silently persist it as an explicit override.
+         */
+        private fun bindThreshold(
+            context: Context,
+            label: TextView,
+            value: TextView,
+            seek: SeekBar,
+            labelRes: Int,
+            globalDefault: Int,
+            current: Int?
+        ) {
+            label.text = context.getString(labelRes, globalDefault)
+            fun render(v: Int) {
+                value.text = if (v == 0) context.getString(R.string.dashboard_global_default_pct_fmt, globalDefault)
+                             else context.getString(R.string.dashboard_percent_fmt, v)
+            }
+            seek.progress = current?.takeIf { it > 0 } ?: 0
+            render(seek.progress)
+            seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar, v: Int, fromUser: Boolean) = render(v)
+                override fun onStartTrackingTouch(sb: SeekBar) {}
+                override fun onStopTrackingTouch(sb: SeekBar) {}
+            })
+        }
 
         /**
          * Show a monitor-configuration dialog for [profile].
@@ -175,158 +264,33 @@ class MultiHostDashboardActivity : TabSSHActivity() {
         ) {
             val app  = TabSSHApplication.get()
             val slot = existing ?: MonitorSlot(connectionId = profile.id)
-            val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
-            val WRAP  = ViewGroup.LayoutParams.WRAP_CONTENT
-
-            val scroll = ScrollView(context)
-            val form   = LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(context, 20))
-            }
-            scroll.addView(form)
-
-            fun label(text: String) = TextView(context).apply {
-                this.text = text
-                textSize = 12f
-                setTextColor(ContextCompat.getColor(context, R.color.on_surface_variant))
-                val lp = LinearLayout.LayoutParams(MATCH, WRAP)
-                lp.topMargin = dp(context, 12)
-                layoutParams = lp
-            }
-
-            val cbEnabled = CheckBox(context).apply {
-                text = context.getString(R.string.dashboard_enable_monitoring_host)
-                isChecked = slot.enabled
-            }
-            form.addView(cbEnabled)
-
-            val cbDown = CheckBox(context).apply {
-                text = context.getString(R.string.dashboard_notify_unreachable)
-                isChecked = slot.alertOnDown
-            }
-            form.addView(cbDown)
-
-            val cbUp = CheckBox(context).apply {
-                text = context.getString(R.string.dashboard_notify_recovers)
-                isChecked = slot.alertOnRecovery
-            }
-            form.addView(cbUp)
-
-            form.addView(label(context.getString(R.string.dashboard_check_interval_label)))
-            val intervalOptions = arrayOf(
-                context.getString(R.string.dashboard_duration_15min),
-                context.getString(R.string.dashboard_duration_30min),
-                context.getString(R.string.dashboard_duration_1h),
-                context.getString(R.string.dashboard_duration_4h),
-                context.getString(R.string.dashboard_duration_12h)
+            val form = inflateMonitorForm(
+                context,
+                enabled         = slot.enabled,
+                alertOnDown     = slot.alertOnDown,
+                alertOnRecovery = slot.alertOnRecovery,
+                intervalMinutes = slot.checkIntervalMinutes,
+                cooldownMinutes = slot.alertCooldownMinutes,
+                perfChecks      = slot.enablePerformanceChecks,
+                cpuThreshold    = slot.cpuThreshold,
+                memoryThreshold = slot.memoryThreshold,
+                diskThreshold   = slot.diskThreshold
             )
-            val intervalValues  = intArrayOf(15, 30, 60, 240, 720)
-            val intervalAdapter = ArrayAdapter(context, android.R.layout.simple_spinner_item, intervalOptions)
-            intervalAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            val spInterval = Spinner(context).apply { adapter = intervalAdapter }
-            spInterval.setSelection(intervalValues.indexOfFirst { it >= slot.checkIntervalMinutes }.coerceAtLeast(0))
-            form.addView(spInterval)
-
-            form.addView(label(context.getString(R.string.dashboard_alert_cooldown_label)))
-            val cooldownOptions = arrayOf(
-                context.getString(R.string.dashboard_duration_15min),
-                context.getString(R.string.dashboard_duration_30min),
-                context.getString(R.string.dashboard_duration_1h),
-                context.getString(R.string.dashboard_duration_4h),
-                context.getString(R.string.dashboard_duration_24h)
-            )
-            val cooldownValues  = intArrayOf(15, 30, 60, 240, 1440)
-            val cooldownAdapter = ArrayAdapter(context, android.R.layout.simple_spinner_item, cooldownOptions)
-            cooldownAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            val spCooldown = Spinner(context).apply { adapter = cooldownAdapter }
-            spCooldown.setSelection(cooldownValues.indexOfFirst { it >= slot.alertCooldownMinutes }.coerceAtLeast(0))
-            form.addView(spCooldown)
-
-            val cbPerf = CheckBox(context).apply {
-                text = context.getString(R.string.dashboard_enable_ssh_metric_checks)
-                isChecked = slot.enablePerformanceChecks
-            }
-            form.addView(cbPerf)
-
-            // Read global threshold defaults so per-host form pre-fills with them when no override is set
-            val globalPrefs = TabPreferenceManager(context)
-            val globalCpu  = globalPrefs.getInt("monitoring_default_cpu_threshold",    85)
-            val globalMem  = globalPrefs.getInt("monitoring_default_memory_threshold", 90)
-            val globalDisk = globalPrefs.getInt("monitoring_default_disk_threshold",   80)
-
-            // CPU threshold
-            form.addView(label(context.getString(R.string.dashboard_cpu_threshold_label_fmt, globalCpu)))
-            val tvCpuVal = TextView(context).apply {
-                text = if (slot.cpuThreshold != null) context.getString(R.string.dashboard_percent_fmt, slot.cpuThreshold)
-                       else context.getString(R.string.dashboard_global_default_pct_fmt, globalCpu)
-            }
-            form.addView(tvCpuVal)
-            // Progress 0 = "use global default" (matches the label and what Save
-            // stores) — starting the thumb at the global value made plain Save
-            // silently persist it as a per-host override.
-            val sbCpu = SeekBar(context).apply { max = 100; progress = slot.cpuThreshold ?: 0 }
-            sbCpu.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
-                    tvCpuVal.text = if (v == 0) context.getString(R.string.dashboard_global_default_pct_fmt, globalCpu)
-                                    else context.getString(R.string.dashboard_percent_fmt, v)
-                }
-                override fun onStartTrackingTouch(sb: SeekBar) {}
-                override fun onStopTrackingTouch(sb: SeekBar) {}
-            })
-            form.addView(sbCpu)
-
-            // Memory threshold
-            form.addView(label(context.getString(R.string.dashboard_memory_threshold_label_fmt, globalMem)))
-            val tvMemVal = TextView(context).apply {
-                text = if (slot.memoryThreshold != null) context.getString(R.string.dashboard_percent_fmt, slot.memoryThreshold)
-                       else context.getString(R.string.dashboard_global_default_pct_fmt, globalMem)
-            }
-            form.addView(tvMemVal)
-            // Progress 0 = "use global default" — see sbCpu above
-            val sbMem = SeekBar(context).apply { max = 100; progress = slot.memoryThreshold ?: 0 }
-            sbMem.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
-                    tvMemVal.text = if (v == 0) context.getString(R.string.dashboard_global_default_pct_fmt, globalMem)
-                                    else context.getString(R.string.dashboard_percent_fmt, v)
-                }
-                override fun onStartTrackingTouch(sb: SeekBar) {}
-                override fun onStopTrackingTouch(sb: SeekBar) {}
-            })
-            form.addView(sbMem)
-
-            // Disk threshold
-            form.addView(label(context.getString(R.string.dashboard_disk_threshold_label_fmt, globalDisk)))
-            val tvDiskVal = TextView(context).apply {
-                text = if (slot.diskThreshold != null) context.getString(R.string.dashboard_percent_fmt, slot.diskThreshold)
-                       else context.getString(R.string.dashboard_global_default_pct_fmt, globalDisk)
-            }
-            form.addView(tvDiskVal)
-            // Progress 0 = "use global default" — see sbCpu above
-            val sbDisk = SeekBar(context).apply { max = 100; progress = slot.diskThreshold ?: 0 }
-            sbDisk.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
-                    tvDiskVal.text = if (v == 0) context.getString(R.string.dashboard_global_default_pct_fmt, globalDisk)
-                                     else context.getString(R.string.dashboard_percent_fmt, v)
-                }
-                override fun onStartTrackingTouch(sb: SeekBar) {}
-                override fun onStopTrackingTouch(sb: SeekBar) {}
-            })
-            form.addView(sbDisk)
 
             MaterialAlertDialogBuilder(context)
                 .setTitle(context.getString(R.string.dashboard_monitor_title_fmt, profile.getDisplayName()))
-                .setView(scroll)
+                .setView(form.root)
                 .setPositiveButton(context.getString(R.string.save)) { _, _ ->
                     val updated = slot.copy(
-                        enabled                 = cbEnabled.isChecked,
-                        alertOnDown             = cbDown.isChecked,
-                        alertOnRecovery         = cbUp.isChecked,
-                        checkIntervalMinutes    = intervalValues[spInterval.selectedItemPosition],
-                        alertCooldownMinutes    = cooldownValues[spCooldown.selectedItemPosition],
-                        enablePerformanceChecks = cbPerf.isChecked,
-                        cpuThreshold            = sbCpu.progress.takeIf { it > 0 },
-                        memoryThreshold         = sbMem.progress.takeIf { it > 0 },
-                        diskThreshold           = sbDisk.progress.takeIf { it > 0 },
+                        enabled                 = form.cbEnabled.isChecked,
+                        alertOnDown             = form.cbAlertDown.isChecked,
+                        alertOnRecovery         = form.cbAlertRecovery.isChecked,
+                        checkIntervalMinutes    = INTERVAL_MINUTES[form.spinnerInterval.selectedItemPosition],
+                        alertCooldownMinutes    = COOLDOWN_MINUTES[form.spinnerCooldown.selectedItemPosition],
+                        enablePerformanceChecks = form.cbPerfChecks.isChecked,
+                        cpuThreshold            = form.sbCpu.progress.takeIf { it > 0 },
+                        memoryThreshold         = form.sbMem.progress.takeIf { it > 0 },
+                        diskThreshold           = form.sbDisk.progress.takeIf { it > 0 },
                         modifiedAt              = System.currentTimeMillis()
                     )
                     app.applicationScope.launch(Dispatchers.IO) {
@@ -606,14 +570,14 @@ class MultiHostDashboardActivity : TabSSHActivity() {
             .setView(form.root)
             .setPositiveButton(getString(R.string.container_create)) { _, _ ->
                 val name = et.text.toString().trim()
-                if (name.isBlank()) { toast(getString(R.string.group_mgmt_name_empty)); return@setPositiveButton }
+                if (name.isBlank()) { showMessage(getString(R.string.group_mgmt_name_empty)); return@setPositiveButton }
                 val g = DashboardGroup(name = name, order = dashboardGroups.size)
                 dashboardGroups.add(g)
                 groupHosts[g.id] = mutableSetOf()
                 saveGroups()
                 saveGroupHosts(g.id)
                 rebuildAndSubmit()
-                toast(getString(R.string.dashboard_group_created_toast_fmt, name))
+                showMessage(getString(R.string.dashboard_group_created_toast_fmt, name))
             }
             .setNegativeButton(getString(R.string.cancel), null)
             .show()
@@ -631,7 +595,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
             .setView(form.root)
             .setPositiveButton(getString(R.string.connections_group_rename_confirm)) { _, _ ->
                 val name = et.text.toString().trim()
-                if (name.isBlank()) { toast(getString(R.string.group_mgmt_name_empty)); return@setPositiveButton }
+                if (name.isBlank()) { showMessage(getString(R.string.group_mgmt_name_empty)); return@setPositiveButton }
                 val idx = dashboardGroups.indexOfFirst { it.id == group.id }
                 if (idx >= 0) {
                     dashboardGroups[idx] = group.copy(name = name)
@@ -677,164 +641,44 @@ class MultiHostDashboardActivity : TabSSHActivity() {
      * threshold fields are always overwritten.
      */
     private fun showBulkMonitorConfigDialog(groupId: String, groupName: String) {
-        val hostIds = groupHosts[groupId] ?: run { toast(getString(R.string.dashboard_group_has_no_hosts)); return }
-        if (hostIds.isEmpty()) { toast(getString(R.string.dashboard_group_has_no_hosts)); return }
+        val hostIds = groupHosts[groupId] ?: run { showMessage(getString(R.string.dashboard_group_has_no_hosts)); return }
+        if (hostIds.isEmpty()) { showMessage(getString(R.string.dashboard_group_has_no_hosts)); return }
 
-        val app     = TabSSHApplication.get()
-        val MATCH   = ViewGroup.LayoutParams.MATCH_PARENT
-        val WRAP    = ViewGroup.LayoutParams.WRAP_CONTENT
-
-        val scroll = ScrollView(this)
-        val form   = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(this@MultiHostDashboardActivity, 20))
-        }
-        scroll.addView(form)
-
-        fun label(text: String) = TextView(this).apply {
-            this.text = text
-            textSize = 12f
-            setTextColor(ContextCompat.getColor(context, R.color.on_surface_variant))
-            val lp = LinearLayout.LayoutParams(MATCH, WRAP)
-            lp.topMargin = dp(this@MultiHostDashboardActivity, 12)
-            layoutParams = lp
-        }
+        val app = TabSSHApplication.get()
 
         // Use first available slot as defaults; fall back to blank if none yet.
         val firstSlot = hostIds.firstOrNull()?.let { monitorSlots[it] }
 
-        val cbEnabled = CheckBox(this).apply {
-            text = getString(R.string.dashboard_enable_monitoring)
-            isChecked = firstSlot?.enabled ?: true
-        }
-        form.addView(cbEnabled)
-
-        val cbDown = CheckBox(this).apply {
-            text = getString(R.string.dashboard_notify_unreachable)
-            isChecked = firstSlot?.alertOnDown ?: true
-        }
-        form.addView(cbDown)
-
-        val cbUp = CheckBox(this).apply {
-            text = getString(R.string.dashboard_notify_recovers)
-            isChecked = firstSlot?.alertOnRecovery ?: true
-        }
-        form.addView(cbUp)
-
-        form.addView(label(getString(R.string.dashboard_check_interval_label)))
-        val intervalOptions = arrayOf(
-            getString(R.string.dashboard_duration_15min),
-            getString(R.string.dashboard_duration_30min),
-            getString(R.string.dashboard_duration_1h),
-            getString(R.string.dashboard_duration_4h),
-            getString(R.string.dashboard_duration_12h)
+        val form = inflateMonitorForm(
+            this,
+            enabled         = firstSlot?.enabled ?: true,
+            alertOnDown     = firstSlot?.alertOnDown ?: true,
+            alertOnRecovery = firstSlot?.alertOnRecovery ?: true,
+            intervalMinutes = firstSlot?.checkIntervalMinutes ?: 60,
+            cooldownMinutes = firstSlot?.alertCooldownMinutes ?: 60,
+            perfChecks      = firstSlot?.enablePerformanceChecks ?: false,
+            cpuThreshold    = firstSlot?.cpuThreshold,
+            memoryThreshold = firstSlot?.memoryThreshold,
+            diskThreshold   = firstSlot?.diskThreshold
         )
-        val intervalValues  = intArrayOf(15, 30, 60, 240, 720)
-        val intervalAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, intervalOptions)
-        intervalAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        val spInterval = Spinner(this).apply { adapter = intervalAdapter }
-        val currentInterval = firstSlot?.checkIntervalMinutes ?: 60
-        spInterval.setSelection(intervalValues.indexOfFirst { it >= currentInterval }.coerceAtLeast(0))
-        form.addView(spInterval)
-
-        form.addView(label(getString(R.string.dashboard_alert_cooldown_label)))
-        val cooldownOptions = arrayOf(
-            getString(R.string.dashboard_duration_15min),
-            getString(R.string.dashboard_duration_30min),
-            getString(R.string.dashboard_duration_1h),
-            getString(R.string.dashboard_duration_4h),
-            getString(R.string.dashboard_duration_24h)
-        )
-        val cooldownValues  = intArrayOf(15, 30, 60, 240, 1440)
-        val cooldownAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, cooldownOptions)
-        cooldownAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        val spCooldown = Spinner(this).apply { adapter = cooldownAdapter }
-        val currentCooldown = firstSlot?.alertCooldownMinutes ?: 60
-        spCooldown.setSelection(cooldownValues.indexOfFirst { it >= currentCooldown }.coerceAtLeast(0))
-        form.addView(spCooldown)
-
-        val cbPerf = CheckBox(this).apply {
-            text = getString(R.string.dashboard_enable_ssh_metric_checks_group)
-            isChecked = firstSlot?.enablePerformanceChecks ?: false
-        }
-        form.addView(cbPerf)
-
-        // Read global threshold defaults so the group form pre-fills with them when no per-host override is set
-        val globalPrefsG = TabPreferenceManager(this)
-        val globalCpuG   = globalPrefsG.getInt("monitoring_default_cpu_threshold",    85)
-        val globalMemG   = globalPrefsG.getInt("monitoring_default_memory_threshold", 90)
-        val globalDiskG  = globalPrefsG.getInt("monitoring_default_disk_threshold",   80)
-
-        form.addView(label(getString(R.string.dashboard_cpu_threshold_label_fmt, globalCpuG)))
-        val tvCpuVal = TextView(this).apply {
-            val v = firstSlot?.cpuThreshold
-            text = v?.takeIf { it > 0 }?.let { getString(R.string.dashboard_percent_fmt, it) }
-                ?: getString(R.string.dashboard_global_default_pct_fmt, globalCpuG)
-        }
-        form.addView(tvCpuVal)
-        // Progress 0 = "use global default" (matches the label and what Apply
-        // stores) — starting the thumb at the global value made plain Apply
-        // silently persist it as an explicit override on every host.
-        val sbCpu = SeekBar(this).apply { max = 100; progress = firstSlot?.cpuThreshold ?: 0 }
-        sbCpu.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
-                tvCpuVal.text = if (v == 0) getString(R.string.dashboard_global_default_pct_fmt, globalCpuG) else getString(R.string.dashboard_percent_fmt, v)
-            }
-            override fun onStartTrackingTouch(sb: SeekBar) {}
-            override fun onStopTrackingTouch(sb: SeekBar) {}
-        })
-        form.addView(sbCpu)
-
-        form.addView(label(getString(R.string.dashboard_memory_threshold_label_fmt, globalMemG)))
-        val tvMemVal = TextView(this).apply {
-            val v = firstSlot?.memoryThreshold
-            text = v?.takeIf { it > 0 }?.let { getString(R.string.dashboard_percent_fmt, it) }
-                ?: getString(R.string.dashboard_global_default_pct_fmt, globalMemG)
-        }
-        form.addView(tvMemVal)
-        // Progress 0 = "use global default" — see sbCpu above
-        val sbMem = SeekBar(this).apply { max = 100; progress = firstSlot?.memoryThreshold ?: 0 }
-        sbMem.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
-                tvMemVal.text = if (v == 0) getString(R.string.dashboard_global_default_pct_fmt, globalMemG) else getString(R.string.dashboard_percent_fmt, v)
-            }
-            override fun onStartTrackingTouch(sb: SeekBar) {}
-            override fun onStopTrackingTouch(sb: SeekBar) {}
-        })
-        form.addView(sbMem)
-
-        form.addView(label(getString(R.string.dashboard_disk_threshold_label_fmt, globalDiskG)))
-        val tvDiskVal = TextView(this).apply {
-            val v = firstSlot?.diskThreshold
-            text = v?.takeIf { it > 0 }?.let { getString(R.string.dashboard_percent_fmt, it) }
-                ?: getString(R.string.dashboard_global_default_pct_fmt, globalDiskG)
-        }
-        form.addView(tvDiskVal)
-        // Progress 0 = "use global default" — see sbCpu above
-        val sbDisk = SeekBar(this).apply { max = 100; progress = firstSlot?.diskThreshold ?: 0 }
-        sbDisk.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
-                tvDiskVal.text = if (v == 0) getString(R.string.dashboard_global_default_pct_fmt, globalDiskG) else getString(R.string.dashboard_percent_fmt, v)
-            }
-            override fun onStartTrackingTouch(sb: SeekBar) {}
-            override fun onStopTrackingTouch(sb: SeekBar) {}
-        })
-        form.addView(sbDisk)
+        // Group variant — swap the per-host checkbox texts for the group wording
+        form.cbEnabled.text    = getString(R.string.dashboard_enable_monitoring)
+        form.cbPerfChecks.text = getString(R.string.dashboard_enable_ssh_metric_checks_group)
 
         MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.dashboard_monitor_group_title_fmt, groupName))
             .setMessage(resources.getQuantityString(R.plurals.dashboard_hosts_will_be_updated_fmt, hostIds.size, hostIds.size))
-            .setView(scroll)
+            .setView(form.root)
             .setPositiveButton(getString(R.string.dashboard_apply_to_all)) { _, _ ->
-                val enabled      = cbEnabled.isChecked
-                val alertOnDown  = cbDown.isChecked
-                val alertOnRecov = cbUp.isChecked
-                val interval     = intervalValues[spInterval.selectedItemPosition]
-                val cooldown     = cooldownValues[spCooldown.selectedItemPosition]
-                val perfChecks   = cbPerf.isChecked
-                val cpuThr       = sbCpu.progress.takeIf { it > 0 }
-                val memThr       = sbMem.progress.takeIf { it > 0 }
-                val diskThr      = sbDisk.progress.takeIf { it > 0 }
+                val enabled      = form.cbEnabled.isChecked
+                val alertOnDown  = form.cbAlertDown.isChecked
+                val alertOnRecov = form.cbAlertRecovery.isChecked
+                val interval     = INTERVAL_MINUTES[form.spinnerInterval.selectedItemPosition]
+                val cooldown     = COOLDOWN_MINUTES[form.spinnerCooldown.selectedItemPosition]
+                val perfChecks   = form.cbPerfChecks.isChecked
+                val cpuThr       = form.sbCpu.progress.takeIf { it > 0 }
+                val memThr       = form.sbMem.progress.takeIf { it > 0 }
+                val diskThr      = form.sbDisk.progress.takeIf { it > 0 }
 
                 app.applicationScope.launch(Dispatchers.IO) {
                     hostIds.forEach { connId ->
@@ -856,7 +700,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
                     }
                     withContext(Dispatchers.Main) {
                         rebuildAndSubmit()
-                        toast(resources.getQuantityString(R.plurals.dashboard_monitor_applied_toast_fmt, hostIds.size, hostIds.size))
+                        showMessage(resources.getQuantityString(R.plurals.dashboard_monitor_applied_toast_fmt, hostIds.size, hostIds.size))
                         if (enabled) {
                             BatteryOptimizationHelper.requestExemptionIfNeeded(this@MultiHostDashboardActivity) {
                                 BatteryOptimizationHelper.showManufacturerGuidanceIfNeeded(this@MultiHostDashboardActivity)
@@ -907,7 +751,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
                         .sortedBy { it.name.lowercase() }
                 } catch (e: Exception) { Logger.e(TAG, "host registry load failed", e); emptyList() }
             }
-            if (all.isEmpty()) { toast(getString(R.string.dashboard_no_saved_connections)); return@launch }
+            if (all.isEmpty()) { showMessage(getString(R.string.dashboard_no_saved_connections)); return@launch }
 
             val inThisGroup = groupHosts[targetGroupId] ?: emptySet<String>()
             val labels  = all.map {
@@ -1209,9 +1053,9 @@ class MultiHostDashboardActivity : TabSSHActivity() {
                 VT_HOST -> HostCardHolder(
                     ItemDashboardHostCardBinding.inflate(inflater, parent, false)
                 )
-                else -> EmptyStateHolder(inflater.inflate(
-                    android.R.layout.simple_list_item_1, parent, false
-                ))
+                else -> EmptyStateHolder(
+                    ItemDashboardEmptyBinding.inflate(inflater, parent, false)
+                )
             }
         }
 
@@ -1335,9 +1179,9 @@ class MultiHostDashboardActivity : TabSSHActivity() {
             sb.appendColored(ctx.getString(R.string.dashboard_percent_fmt, agg.avgDisk), metricColor(agg.avgDisk, warnAt = 70, critAt = 85))
             sb.append(ctx.getString(R.string.dashboard_metrics_load_label))
             sb.appendColored(ctx.getString(R.string.dashboard_percent_fmt, agg.avgLoad1), metricColor(agg.avgLoad1, warnAt = 60, critAt = 90))
-            sb.append(",")
+            sb.append(ctx.getString(R.string.dashboard_metrics_load_sep))
             sb.appendColored(ctx.getString(R.string.dashboard_percent_fmt, agg.avgLoad5), metricColor(agg.avgLoad5, warnAt = 60, critAt = 90))
-            sb.append(",")
+            sb.append(ctx.getString(R.string.dashboard_metrics_load_sep))
             sb.appendColored(ctx.getString(R.string.dashboard_percent_fmt, agg.avgLoad15), metricColor(agg.avgLoad15, warnAt = 60, critAt = 90))
 
             b.tvGroupMetrics.text = sb
@@ -1352,7 +1196,8 @@ class MultiHostDashboardActivity : TabSSHActivity() {
         fun bind(item: DashboardItem.Host) {
             val profile = item.profile
             b.tvHostname.text = profile.getDisplayName()
-            b.tvSubtitle.text = "${profile.host}:${profile.port}"
+            b.tvSubtitle.text =
+                b.root.context.getString(R.string.dashboard_host_port_fmt, profile.host, profile.port)
 
             // Status dot from MonitorSlot state
             val slot = monitorSlots[profile.id]
@@ -1394,7 +1239,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
 
             val ctx = b.root.context
             if (error != null) {
-                b.tvOsIcon.text   = "⚠"
+                b.tvOsIcon.text   = ctx.getString(R.string.dashboard_error_icon)
                 b.tvSubtitle.text = ctx.getString(R.string.dashboard_error_prefix_fmt, error)
                 b.pbCpu.progress  = 0; b.tvCpu.text  = ctx.getString(R.string.container_dashboard_count_unavailable)
                 b.pbMem.progress  = 0; b.tvMem.text  = ctx.getString(R.string.container_dashboard_count_unavailable)
@@ -1452,7 +1297,9 @@ class MultiHostDashboardActivity : TabSSHActivity() {
         private fun buildSubtitle(m: PerformanceMetrics): String {
             val os = m.platformInfo.getDisplayName()
             val kern = m.platformInfo.kernelRelease.substringBefore("-").take(20)
-            return if (kern.isNotBlank()) "$os · $kern" else os
+            return if (kern.isNotBlank())
+                itemView.context.getString(R.string.dashboard_subtitle_os_kernel_fmt, os, kern)
+            else os
         }
 
         private fun setBar(bar: LinearProgressIndicator, pct: Int) {
@@ -1470,23 +1317,23 @@ class MultiHostDashboardActivity : TabSSHActivity() {
         )
     }
 
-    inner class EmptyStateHolder(view: View) : RecyclerView.ViewHolder(view) {
+    inner class EmptyStateHolder(
+        private val b: ItemDashboardEmptyBinding
+    ) : RecyclerView.ViewHolder(b.root) {
         /** [errorMessage] non-null renders the load-error variant: error-colored
-         *  text plus a tap-to-retry hint, distinct from the genuine empty state. */
+         *  message plus a Retry button, distinct from the genuine empty state. */
         fun bind(errorMessage: String?) {
-            (itemView as? TextView)?.apply {
-                gravity = android.view.Gravity.CENTER
-                setPadding(dp(this@MultiHostDashboardActivity, 32))
-                textSize = 14f
-                if (errorMessage != null) {
-                    text = context.getString(R.string.dashboard_load_error_fmt, errorMessage)
-                    setTextColor(ContextCompat.getColor(context, R.color.error))
-                    itemView.setOnClickListener { loadPersistedState() }
-                } else {
-                    text = context.getString(R.string.dashboard_empty_state)
-                    setTextColor(ContextCompat.getColor(context, R.color.on_surface_variant))
-                    itemView.setOnClickListener(null)
-                }
+            val ctx = b.root.context
+            if (errorMessage != null) {
+                b.tvEmptyMessage.text = ctx.getString(R.string.dashboard_load_error_fmt, errorMessage)
+                b.tvEmptyMessage.setTextColor(ContextCompat.getColor(ctx, R.color.status_error))
+                b.btnEmptyAction.text = ctx.getString(R.string.retry)
+                b.btnEmptyAction.setOnClickListener { loadPersistedState() }
+            } else {
+                b.tvEmptyMessage.text = ctx.getString(R.string.dashboard_empty_state)
+                b.tvEmptyMessage.setTextColor(ContextCompat.getColor(ctx, R.color.on_surface_variant))
+                b.btnEmptyAction.text = ctx.getString(R.string.dashboard_add_hosts_title)
+                b.btnEmptyAction.setOnClickListener { showHostPicker(UNGROUPED_ID) }
             }
         }
     }
@@ -1551,9 +1398,10 @@ class MultiHostDashboardActivity : TabSSHActivity() {
     // ── Utility ───────────────────────────────────────────────────────────────
 
 
-    private fun toast(msg: String) =
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-
-    private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).toInt()
+    // Transient confirmations use a Snackbar (anchored above the FAB), per the
+    // Toast-vs-Snackbar rule — Toast is reserved for fire-and-forget messages
+    private fun showMessage(msg: String) =
+        Snackbar.make(binding.root, msg, Snackbar.LENGTH_SHORT)
+            .setAnchorView(binding.fabNewGroup)
+            .show()
 }

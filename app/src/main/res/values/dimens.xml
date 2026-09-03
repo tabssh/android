@@ -67,6 +67,8 @@
     <dimen name="border_width">2dp</dimen>
     <dimen name="focus_border_width">3dp</dimen>
     <dimen name="tab_indicator_height">3dp</dimen>
+    <!-- Panes grid — fixed tile height in the narrow-screen stacked column -->
+    <dimen name="pane_stacked_tile_height">240dp</dimen>
     
     <!-- Icons -->
     <dimen name="icon_size_small">16dp</dimen>

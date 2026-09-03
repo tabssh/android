@@ -248,8 +248,17 @@ class LibvirtManagerActivity : TabSSHActivity() {
         if (powerActionInFlight) return
         powerActionInFlight = true
         val vmLabel = safeText(vm.name, 64)
+        // Progress copy and the past-tense confirmation toast both key off the
+        // action verb — resolved once here so neither needs an English-only
+        // string concatenation ("${action}ing") that would break translations.
+        val (progressFmtRes, actionLabelRes) = when (action) {
+            "start"  -> R.string.libvirt_power_action_start_progress_fmt to R.string.container_action_start
+            "stop"   -> R.string.libvirt_power_action_stop_progress_fmt to R.string.container_action_stop
+            "reboot" -> R.string.libvirt_power_action_reboot_progress_fmt to R.string.hypervisor_vm_action_reboot
+            else     -> R.string.libvirt_power_action_reset_progress_fmt to R.string.libvirt_reset_button
+        }
         lifecycleScope.launch {
-            showProgress("${action.replaceFirstChar { it.uppercase() }}ing $vmLabel…")
+            showProgress(getString(progressFmtRes, vmLabel))
             try {
                 withContext(Dispatchers.IO) {
                     when (action) {
@@ -263,7 +272,10 @@ class LibvirtManagerActivity : TabSSHActivity() {
                     }
                 }
                 if (!isFinishing && !isDestroyed) {
-                    Toast.makeText(this@LibvirtManagerActivity, "$vmLabel: $action sent", Toast.LENGTH_SHORT).show()
+                    val sentMessage = getString(
+                        R.string.libvirt_power_action_sent_fmt, vmLabel, getString(actionLabelRes)
+                    )
+                    Toast.makeText(this@LibvirtManagerActivity, sentMessage, Toast.LENGTH_SHORT).show()
                 }
                 loadDomains(client)
             } catch (e: LibvirtException) {

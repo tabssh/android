@@ -129,6 +129,12 @@
     <color name="vnc_toolbar_scrim">#CC1A1A1A</color>
     <color name="vnc_toolbar_divider">#44FFFFFF</color>
 
+    <!-- Panes grid — focused-tile border; brightened in values-night -->
+    <color name="pane_focus_border">#FF4CAF50</color>
+    <!-- Panes grid close button — floats over live terminal content, so it
+         keeps a constant dark scrim with white glyph in both modes -->
+    <color name="pane_close_scrim">#99000000</color>
+
     <!-- Keyboard customization key categories -->
     <color name="keyboard_key_modifier">@color/info</color>
     <color name="keyboard_key_arrow">@color/success</color>

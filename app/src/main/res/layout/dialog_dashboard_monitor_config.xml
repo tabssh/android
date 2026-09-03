@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Monitor configuration form shared by the per-host and per-group dialogs on
+  the multi-host dashboard (MultiHostDashboardActivity.showMonitorConfigDialog
+  and showBulkMonitorConfigDialog). The enable/perf-check checkbox texts are
+  overridden at runtime for the group variant; the threshold labels carry the
+  current global default so they are always set at runtime.
+-->
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/space_lg"
+        android:paddingEnd="@dimen/space_lg"
+        android:paddingTop="@dimen/space_sm"
+        android:paddingBottom="@dimen/space_sm">
+
+        <!-- Master enable toggle — text swapped for the group variant -->
+        <CheckBox
+            android:id="@+id/cb_enabled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/min_touch_target"
+            android:text="@string/dashboard_enable_monitoring_host" />
+
+        <CheckBox
+            android:id="@+id/cb_alert_down"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/min_touch_target"
+            android:text="@string/dashboard_notify_unreachable" />
+
+        <CheckBox
+            android:id="@+id/cb_alert_recovery"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/min_touch_target"
+            android:text="@string/dashboard_notify_recovers" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_12dp"
+            android:text="@string/dashboard_check_interval_label"
+            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <Spinner
+            android:id="@+id/spinner_interval"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/min_touch_target" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_12dp"
+            android:text="@string/dashboard_alert_cooldown_label"
+            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <Spinner
+            android:id="@+id/spinner_cooldown"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/min_touch_target" />
+
+        <!-- SSH metric checks toggle — text swapped for the group variant -->
+        <CheckBox
+            android:id="@+id/cb_perf_checks"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/min_touch_target"
+            android:text="@string/dashboard_enable_ssh_metric_checks" />
+
+        <!-- CPU threshold — label text carries the global default, set at runtime -->
+        <TextView
+            android:id="@+id/tv_cpu_threshold_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_12dp"
+            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <TextView
+            android:id="@+id/tv_cpu_value"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+            android:textColor="?attr/colorOnSurface" />
+
+        <SeekBar
+            android:id="@+id/sb_cpu"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/min_touch_target"
+            android:max="100" />
+
+        <!-- Memory threshold -->
+        <TextView
+            android:id="@+id/tv_mem_threshold_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_12dp"
+            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <TextView
+            android:id="@+id/tv_mem_value"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+            android:textColor="?attr/colorOnSurface" />
+
+        <SeekBar
+            android:id="@+id/sb_mem"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/min_touch_target"
+            android:max="100" />
+
+        <!-- Disk threshold -->
+        <TextView
+            android:id="@+id/tv_disk_threshold_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_12dp"
+            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <TextView
+            android:id="@+id/tv_disk_value"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+            android:textColor="?attr/colorOnSurface" />
+
+        <SeekBar
+            android:id="@+id/sb_disk"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/min_touch_target"
+            android:max="100" />
+
+    </LinearLayout>
+
+</ScrollView>
