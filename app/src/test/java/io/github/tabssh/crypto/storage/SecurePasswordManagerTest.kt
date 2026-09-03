@@ -206,7 +206,6 @@ class SecurePasswordManagerTest {
     fun `test security policy configuration`() {
         passwordManager.setSecurityPolicy(
             defaultLevel = SecurePasswordManager.StorageLevel.BIOMETRIC,
-            passwordTTLHours = 12,
             requireBiometric = true,
             maxAttempts = 5,
             autoDelete = false

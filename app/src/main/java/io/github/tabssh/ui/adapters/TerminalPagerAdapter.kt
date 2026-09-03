@@ -43,10 +43,6 @@ class TerminalPagerAdapter(
     private val fontSize: Int = 14,
     private val fontValue: String = "monospace",
     private val onUrlDetected: ((String) -> Unit)? = null,
-    private val gesturesEnabled: Boolean = false,
-    private val multiplexerType: io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType = io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.NONE,
-    private val customPrefix: String? = null,
-    private val onCommandSent: ((ByteArray) -> Unit)? = null,
     private var currentTheme: Theme? = null,
     /**
      * Invoked when the user enters selection mode on a per-page
@@ -230,10 +226,6 @@ class TerminalPagerAdapter(
                     fontSize,
                     fontValue,
                     onUrlDetected,
-                    gesturesEnabled,
-                    multiplexerType,
-                    customPrefix,
-                    onCommandSent,
                     onSelectionStarted,
                     onSelectionEnded,
                     onContextMenuRequested
@@ -286,10 +278,6 @@ class TerminalPagerAdapter(
         private val fontSize: Int,
         private val fontValue: String,
         private val onUrlDetected: ((String) -> Unit)?,
-        private val gesturesEnabled: Boolean,
-        private val multiplexerType: io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType,
-        private val customPrefix: String?,
-        private val onCommandSent: ((ByteArray) -> Unit)?,
         private val onSelectionStarted: ((TerminalView) -> Unit)? = null,
         private val onSelectionEnded: (() -> Unit)? = null,
         private val onContextMenuRequested: ((Float, Float) -> Unit)? = null
@@ -322,12 +310,6 @@ class TerminalPagerAdapter(
             }
             onSelectionEnded?.let { cb ->
                 terminalView.onSelectionEnded = cb
-            }
-
-            // Set up gesture support
-            if (gesturesEnabled) {
-                terminalView.enableGestureSupport(multiplexerType, customPrefix)
-                terminalView.onCommandSent = onCommandSent
             }
 
             // Terminal theme is already applied in TerminalView initialization

@@ -78,7 +78,7 @@ android {
     // Pinned to a version baked into the toolchain image (AI.md PART 4):
     // leaving it to the AGP default lets a Gradle/AGP bump silently trigger a
     // mid-build sdkmanager download, which is nondeterministic and a known CI
-    // flake. Bump this and docker/Dockerfile.build together.
+    // flake. Bump this when the toolchain image's baked-in build-tools bumps.
     buildToolsVersion '35.0.0'
 
     // F-Droid builder detection. The recipe in metadata/io.github.tabssh.yml

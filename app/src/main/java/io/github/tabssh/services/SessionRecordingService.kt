@@ -229,7 +229,7 @@ class SessionRecordingService : Service() {
 
     /**
      * Bitrate for the "Video Recording Quality" setting
-     * (`preferences_terminal.xml`'s `video_recording_quality` list — same
+     * (`preferences_recording.xml`'s `video_recording_quality` list — same
      * raw-string-key idiom as `auto_record_sessions`, no typed
      * `PreferencesManager` accessor needed for a single-consumer setting).
      */

@@ -13,7 +13,6 @@ concurrency:
 
 permissions:
   contents: read
-  packages: read
 
 jobs:
   # Pull-only, fail-fast gate: every other job runs inside this image, so if it
@@ -21,26 +20,15 @@ jobs:
   ensure-build-image:
     name: Ensure build image
     runs-on: ubuntu-latest
-    permissions:
-      packages: read
     outputs:
       image: ${{ steps.pull.outputs.image }}
     steps:
-    - name: Log in to GitHub Container Registry
-      uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
     - id: pull
       name: Pull build image (fail fast if missing)
       run: |
-        IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build"
+        IMAGE="casjaysdev/android:latest"
         if ! docker pull "$IMAGE"; then
-          echo "::error::Build image $IMAGE not found."
-          echo "::error::Trigger the 'Build Toolchain Image' workflow (workflow_dispatch) to create it."
-          echo "::error::Never rely on ci.yml before the build image exists in the registry."
+          echo "::error::Build image $IMAGE could not be pulled from Docker Hub."
           exit 1
         fi
         echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
@@ -51,9 +39,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ${{ needs.ensure-build-image.outputs.image }}
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
     # Actions can't detect bash inside a container image and falls back to
     # `sh -e`, which breaks the bash-array syntax used below.
     defaults:

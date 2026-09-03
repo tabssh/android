@@ -37,7 +37,7 @@
       android:summary="@string/prefs_terminal_font_summary"
       android:entries="@array/terminal_font_entries"
       android:entryValues="@array/terminal_font_values"
-      android:defaultValue="jetbrains_mono_nerd"
+      android:defaultValue="hack_nerd"
       app:useSimpleSummaryProvider="true" />
 
     <SeekBarPreference
@@ -140,19 +140,13 @@
 
   </PreferenceCategory>
 
-  <!-- Multiplexer gestures live on the Terminal screen, not Connection: the
-       prefix keys they send are a terminal concern, and gesture_multiplexer_type
-       depends on enable_custom_gestures, which AndroidX only resolves within a
-       single screen (the target must also be declared before its dependent). -->
+  <!-- Multiplexer prefixes live on the Terminal screen, not Connection: the
+       prefix keys they configure (PREFIX keyboard key, auto-launch default)
+       are a terminal concern. gesture_multiplexer_type keeps its shipped key
+       name even though gestures were removed — never rename a shipped key. -->
   <PreferenceCategory
     android:key="category_multiplexer_prefixes"
     android:title="@string/prefcat_terminal_multiplexer">
-
-    <SwitchPreferenceCompat
-      android:key="enable_custom_gestures"
-      android:title="@string/prefs_enable_custom_gestures_title"
-      android:summary="@string/prefs_enable_custom_gestures_summary"
-      android:defaultValue="false" />
 
     <ListPreference
       android:key="gesture_multiplexer_type"
@@ -160,15 +154,14 @@
       android:summary="@string/prefs_gesture_multiplexer_type_summary"
       android:entries="@array/multiplexer_type_entries"
       android:entryValues="@array/multiplexer_type_values"
-      android:defaultValue="tmux"
-      android:dependency="enable_custom_gestures" />
+      android:defaultValue="tmux" />
 
     <EditTextPreference
       android:key="multiplexer_custom_prefix_tmux"
       android:title="@string/prefs_multiplexer_custom_prefix_tmux_title"
       android:summary="@string/prefs_multiplexer_custom_prefix_tmux_summary"
       android:dialogMessage="@string/prefs_multiplexer_custom_prefix_tmux_dialog"
-      android:defaultValue="C-b"
+      android:defaultValue="C-Space"
       android:inputType="text"
       app:useSimpleSummaryProvider="true" />
 
@@ -177,7 +170,7 @@
       android:title="@string/prefs_multiplexer_custom_prefix_zellij_title"
       android:summary="@string/prefs_multiplexer_custom_prefix_zellij_summary"
       android:dialogMessage="@string/prefs_multiplexer_custom_prefix_zellij_dialog"
-      android:defaultValue="C-g"
+      android:defaultValue="C-Space"
       android:inputType="text"
       app:useSimpleSummaryProvider="true" />
 
@@ -186,7 +179,7 @@
       android:title="@string/prefs_multiplexer_custom_prefix_screen_title"
       android:summary="@string/prefs_multiplexer_custom_prefix_screen_summary"
       android:dialogMessage="@string/prefs_multiplexer_custom_prefix_screen_dialog"
-      android:defaultValue="C-a"
+      android:defaultValue="C-x"
       android:inputType="text"
       app:useSimpleSummaryProvider="true" />
 
@@ -265,41 +258,6 @@
       android:title="@string/prefs_show_performance_overlay_title"
       android:summary="@string/prefs_show_performance_overlay_summary"
       android:defaultValue="false" />
-
-  </PreferenceCategory>
-
-  <PreferenceCategory
-    android:key="category_terminal_recording"
-    android:title="@string/prefcat_terminal_recording">
-
-    <SwitchPreferenceCompat
-      android:key="auto_record_sessions"
-      android:title="@string/prefs_auto_record_sessions_title"
-      android:summary="@string/prefs_auto_record_sessions_summary"
-      android:defaultValue="false" />
-
-    <ListPreference
-      android:key="video_recording_quality"
-      android:title="@string/prefs_video_recording_quality_title"
-      android:summary="@string/prefs_video_recording_quality_summary"
-      android:entries="@array/video_recording_quality_entries"
-      android:entryValues="@array/video_recording_quality_values"
-      android:defaultValue="medium"
-      app:useSimpleSummaryProvider="true" />
-
-    <SwitchPreferenceCompat
-      android:key="video_recording_include_cast_by_default"
-      android:title="@string/prefs_video_recording_include_cast_title"
-      android:summary="@string/prefs_video_recording_include_cast_summary"
-      android:defaultValue="false" />
-
-    <EditTextPreference
-      android:key="asciinema_server_url"
-      android:title="@string/prefs_asciinema_server_url_title"
-      android:summary="@string/prefs_asciinema_server_url_summary"
-      android:defaultValue="https://asciinema.org"
-      android:inputType="textUri"
-      app:useSimpleSummaryProvider="true" />
 
   </PreferenceCategory>
 

@@ -77,11 +77,12 @@ class SecurePasswordManager(private val context: Context) {
     // `defaultStorageLevel` is the only field actually consulted at runtime —
     // it selects whether savePassword() falls back to SESSION_ONLY when the
     // Keystore is unavailable. The other policy knobs from a prior design
-    // (TTL, biometric-required, failed-attempt limit, auto-delete) were never
+    // (biometric-required, failed-attempt limit, auto-delete) were never
     // wired into any read path; they are accepted by setSecurityPolicy() for
-    // API/test compatibility but otherwise ignored. Persisted policy lives in
-    // PreferenceManager (e.g. passwordTTLHours) — that is the source of truth
-    // consumed by the rest of the app.
+    // API/test compatibility but otherwise ignored. The prior design's TTL is
+    // gone entirely — ENCRYPTED credentials never expire (AI.md PART 5).
+    // Persisted policy lives in PreferenceManager (e.g. requireBiometric) —
+    // that is the source of truth consumed by the rest of the app.
     private var defaultStorageLevel = StorageLevel.ENCRYPTED
     
     private var isInitialized = false
@@ -594,7 +595,6 @@ class SecurePasswordManager(private val context: Context) {
     @Suppress("UNUSED_PARAMETER")
     fun setSecurityPolicy(
         defaultLevel: StorageLevel = StorageLevel.ENCRYPTED,
-        passwordTTLHours: Int = 24,
         requireBiometric: Boolean = true,
         maxAttempts: Int = 3,
         autoDelete: Boolean = true

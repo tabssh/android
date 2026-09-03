@@ -1,6 +1,7 @@
 package io.github.tabssh.utils
 
 import android.content.Context
+import android.text.format.DateUtils
 import io.github.tabssh.R
 import java.text.NumberFormat
 import java.util.Locale
@@ -113,6 +114,38 @@ object Format {
      */
     fun rate(context: Context, bytesPerSecond: Long): String =
         context.getString(R.string.format_rate_fmt, size(context, bytesPerSecond))
+
+    /**
+     * A past event timestamp in hybrid style: relative within the last week
+     * (`22 hours ago`, `2 days ago`), an absolute locale-formatted date beyond
+     * it (`Aug 23, 2026`) — so recent activity reads at a glance while old
+     * activity stays unambiguous. Every screen showing "when did this last
+     * happen" uses this one helper instead of a per-screen SimpleDateFormat.
+     */
+    fun pastTimestamp(context: Context, timestampMillis: Long): String {
+        val now = System.currentTimeMillis()
+        return if (now - timestampMillis < DateUtils.WEEK_IN_MILLIS) {
+            DateUtils.getRelativeTimeSpanString(
+                timestampMillis,
+                now,
+                DateUtils.MINUTE_IN_MILLIS
+            ).toString()
+        } else {
+            DateUtils.formatDateTime(
+                context,
+                timestampMillis,
+                DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_YEAR or DateUtils.FORMAT_ABBREV_MONTH
+            )
+        }
+    }
+
+    /**
+     * A connection-usage count with correct pluralization, e.g.
+     * `Connected 1 time` / `Connected 5 times`, via a plurals resource so
+     * translations control the forms.
+     */
+    fun connectedTimes(context: Context, count: Int): String =
+        context.resources.getQuantityString(R.plurals.format_connected_times, count, count)
 
     /** A single quantified unit, e.g. `3 minutes`. */
     private fun unit(context: Context, pluralRes: Int, amount: Long): String =

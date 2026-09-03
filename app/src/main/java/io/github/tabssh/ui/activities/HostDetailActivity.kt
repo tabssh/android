@@ -27,9 +27,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import io.github.tabssh.utils.tabSSHApp
 
 /**
@@ -80,8 +77,6 @@ class HostDetailActivity : TabSSHActivity() {
 
     private val pumpScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var pumpJob: Job? = null
-
-    private val dateFmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -199,7 +194,9 @@ class HostDetailActivity : TabSSHActivity() {
         return valueTv
     }
 
-    private fun actionButton(label: String) = android.widget.Button(this).apply {
+    // MaterialButton picks up the app's M3 theme (filled, colorPrimary) —
+    // a plain widget.Button rendered as an unthemed gray legacy button
+    private fun actionButton(label: String) = com.google.android.material.button.MaterialButton(this).apply {
         text = label
         isAllCaps = false
         val lp = LinearLayout.LayoutParams(MATCH, WRAP)
@@ -253,13 +250,15 @@ class HostDetailActivity : TabSSHActivity() {
             tvStatus.text = getString(R.string.host_detail_status_up)
             tvStatus.setTextColor(ContextCompat.getColor(this, R.color.status_success))
         }
+        // Hybrid past-timestamp format ("22 hours ago" / "Aug 23, 2026") — a
+        // bare HH:mm:ss hid how stale a deferred background check really was
         tvLastChecked.text = if (slot.lastCheckedAt > 0) {
-            dateFmt.format(Date(slot.lastCheckedAt))
+            Format.pastTimestamp(this, slot.lastCheckedAt)
         } else {
             getString(R.string.host_detail_never_checked)
         }
         tvLastSeenUp.text = if (slot.lastSeenUp > 0) {
-            dateFmt.format(Date(slot.lastSeenUp))
+            Format.pastTimestamp(this, slot.lastSeenUp)
         } else {
             getString(R.string.host_detail_last_seen_unknown)
         }

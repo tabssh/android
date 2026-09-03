@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.ui.models.ConnectionListItem
+import io.github.tabssh.utils.Format
 import io.github.tabssh.utils.logging.Logger
 
 /**
@@ -160,9 +161,17 @@ class GroupedConnectionAdapter(
             textName.text = profile.name
             textDetails.text = "${profile.username}@${profile.host}:${profile.port}"
 
-            // Show connection count if > 0
+            // Show connection count + last-connected time if > 0 — same
+            // pluralized/hybrid formatting as ConnectionAdapter's cards
             if (profile.connectionCount > 0) {
-                textCount.text = "Connected ${profile.connectionCount} times"
+                val ctx = itemView.context
+                textCount.text = buildString {
+                    append(Format.connectedTimes(ctx, profile.connectionCount))
+                    if (profile.lastConnected > 0) {
+                        append(" • ")
+                        append(Format.pastTimestamp(ctx, profile.lastConnected))
+                    }
+                }
                 textCount.visibility = View.VISIBLE
             } else {
                 textCount.visibility = View.GONE
@@ -190,7 +199,8 @@ class GroupedConnectionAdapter(
 
         private fun updateStatusIndicator(profile: ConnectionProfile) {
             val app = itemView.context.applicationContext as? io.github.tabssh.TabSSHApplication
-            val active = app?.sshSessionManager?.isConnectionActive(profile.id) == true
+            // Same dual-source check as ConnectionAdapter — see TabSSHApplication.hasLiveSessionFor
+            val active = app?.hasLiveSessionFor(profile.id) == true
             indicatorStatus.setBackgroundResource(
                 if (active) R.drawable.connection_status_indicator
                 else        R.drawable.connection_status_disconnected

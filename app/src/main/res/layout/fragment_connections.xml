@@ -11,15 +11,6 @@
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- Outer Hosts toolbar — no menu of its own; sort/bulk-edit live
-             on the SSH sub-tab's own toolbar. -->
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar_hosts"
-            android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
-            android:elevation="@dimen/card_elevation"
-            style="@style/Widget.TabSSH.Toolbar.Section" />
-
         <!-- Unified search — queries SSH + VNC + Telnet hosts and active
              sessions together, regardless of which sub-tab is showing. -->
         <com.google.android.material.card.MaterialCardView

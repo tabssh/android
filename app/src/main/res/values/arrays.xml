@@ -51,22 +51,48 @@
          and the last entry as "show custom field". -->
     <string-array name="remote_command_entries">
         <item>@string/arr_remote_command_default_login_shell</item>
+        <item>@string/arr_remote_command_shell_bash</item>
+        <item>@string/arr_remote_command_shell_zsh</item>
+        <item>@string/arr_remote_command_shell_fish</item>
+        <item>@string/arr_remote_command_shell_sh</item>
+        <item>@string/arr_remote_command_shell_ksh</item>
+        <item>@string/arr_remote_command_shell_dash</item>
+        <item>@string/arr_remote_command_shell_tcsh</item>
         <item>@string/arr_remote_command_sftp_sftp_only_accounts</item>
         <item>@string/arr_remote_command_internal_sftp_openssh_sftp_s</item>
+        <item>@string/arr_remote_command_tmux_main</item>
         <item>@string/arr_remote_command_tmux_attach_d_tmux_new_auto</item>
         <item>@string/arr_remote_command_screen_dr_auto_attach_to_scr</item>
+        <item>@string/arr_remote_command_screen_multi</item>
+        <item>@string/arr_remote_command_zellij_main</item>
+        <item>@string/arr_remote_command_byobu</item>
+        <item>@string/arr_remote_command_tmux_new</item>
         <item>@string/arr_remote_command_create_sourceforge_shell_sou</item>
         <item>@string/arr_remote_command_custom</item>
     </string-array>
     <!-- Parallel values array — index N matches `remote_command_entries[N]`.
          Index 0 (default) is the empty string. Index last (Custom…) is also
-         empty — the activity reads the EditText instead. -->
+         empty — the activity reads the EditText instead. The tmux-new entry
+         (value starts with "tmux-new") also reveals the EditText, prefilled
+         with its value so the session type stays editable. -->
     <string-array name="remote_command_values">
         <item></item>
+        <item>exec bash -l</item>
+        <item>exec zsh -l</item>
+        <item>exec fish -l</item>
+        <item>exec sh -l</item>
+        <item>exec ksh -l</item>
+        <item>exec dash -l</item>
+        <item>exec tcsh -l</item>
         <item>sftp</item>
         <item>internal-sftp</item>
+        <item>tmux new -A -s main</item>
         <item>tmux attach -d || tmux new</item>
         <item>screen -DR</item>
+        <item>screen -xRR</item>
+        <item>zellij attach -c main</item>
+        <item>byobu</item>
+        <item>tmux-new single</item>
         <item>create</item>
         <item></item>
     </string-array>

@@ -123,7 +123,6 @@ import io.github.tabssh.storage.database.entities.Macro
 import io.github.tabssh.storage.database.entities.Snippet
 import io.github.tabssh.storage.database.entities.Workspace
 import io.github.tabssh.terminal.TermuxBridge
-import io.github.tabssh.terminal.gestures.GestureCommandMapper
 import io.github.tabssh.terminal.gestures.PrefixParser
 import io.github.tabssh.terminal.recording.SessionRecorder
 import io.github.tabssh.ui.dialogs.DialogFields
@@ -142,6 +141,7 @@ import io.github.tabssh.ui.views.PerformanceOverlayView
 import io.github.tabssh.utils.ClipboardHelper
 import io.github.tabssh.utils.NotificationHelper
 import io.github.tabssh.utils.TerminalLinkClassifier
+import io.github.tabssh.utils.RecordingActions
 import io.github.tabssh.utils.VideoRecordingStorage
 import java.util.Collections
 import java.util.UUID
@@ -1093,14 +1093,14 @@ class TabTerminalActivity : TabSSHActivity() {
 
         view.findViewById<MaterialButton>(R.id.btn_record_video)
             ?.apply {
-                text = if (SessionRecordingService.isRecording) {
+                text = if (isVideoRecordingActive()) {
                     getString(R.string.terminal_menu_stop_video_recording)
                 } else {
                     getString(R.string.terminal_menu_record_video)
                 }
                 setOnClickListener {
                     bottomSheet.dismiss()
-                    if (SessionRecordingService.isRecording) {
+                    if (isVideoRecordingActive()) {
                         stopVideoRecording()
                     } else {
                         startVideoRecordingFlow()
@@ -1354,7 +1354,7 @@ class TabTerminalActivity : TabSSHActivity() {
             // Set up terminal view
             binding.terminalView.apply {
                 // Load font from preferences
-                val fontValue = app.preferencesManager.getString("terminal_font", "jetbrains_mono_nerd")
+                val fontValue = app.preferencesManager.getString("terminal_font", "hack_nerd")
                 setFont(fontValue)
 
                 // Load font size from preferences
@@ -1407,34 +1407,6 @@ class TabTerminalActivity : TabSSHActivity() {
                         if (direction < 0) tabManager.switchToPreviousTab()
                         else               tabManager.switchToNextTab()
                         switchToTab(tabManager.getActiveTabIndex())
-                    }
-                }
-                
-                // Set up custom gesture support
-                val gesturesEnabled = app.preferencesManager.getBoolean("enable_custom_gestures", false)
-                if (gesturesEnabled) {
-                    val multiplexerTypeStr = app.preferencesManager.getString("gesture_multiplexer_type", "tmux")
-                    val multiplexerType = when (multiplexerTypeStr) {
-                        "tmux" -> GestureCommandMapper.MultiplexerType.TMUX
-                        "screen" -> GestureCommandMapper.MultiplexerType.SCREEN
-                        "zellij" -> GestureCommandMapper.MultiplexerType.ZELLIJ
-                        else -> GestureCommandMapper.MultiplexerType.TMUX
-                    }
-                    
-                    val customPrefix = resolvePrefixBinding(tabManager.getActiveTab()?.profile, multiplexerTypeStr)
-                    enableGestureSupport(multiplexerType, customPrefix)
-
-                    // Set up command callback
-                    onCommandSent = { command ->
-                        // Send command to active terminal
-                        tabManager.getActiveTab()?.let { tab ->
-                            tab.termuxBridge.sendText(String(command, Charsets.UTF_8))
-                            Toast.makeText(
-                                this@TabTerminalActivity,
-                                getString(R.string.terminal_gesture_command_sent),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
                     }
                 }
 
@@ -3028,38 +3000,11 @@ class TabTerminalActivity : TabSSHActivity() {
 
         // Get font preferences
         val fontSize = app.preferencesManager.getInt("terminal_font_size", 14)
-        val fontValue = app.preferencesManager.getString("terminal_font", "jetbrains_mono_nerd")
+        val fontValue = app.preferencesManager.getString("terminal_font", "hack_nerd")
 
         // Create URL detection callback if enabled
         val urlDetectionCallback = if (app.preferencesManager.getBoolean("detect_urls", true)) {
             { url: String -> showUrlDialog(url) }
-        } else {
-            null
-        }
-        
-        // Get gesture settings
-        val gesturesEnabled = app.preferencesManager.getBoolean("enable_custom_gestures", false)
-        val multiplexerTypeStr = app.preferencesManager.getString("gesture_multiplexer_type", "tmux")
-        val multiplexerType = when (multiplexerTypeStr) {
-            "tmux" -> GestureCommandMapper.MultiplexerType.TMUX
-            "screen" -> GestureCommandMapper.MultiplexerType.SCREEN
-            "zellij" -> GestureCommandMapper.MultiplexerType.ZELLIJ
-            else -> GestureCommandMapper.MultiplexerType.TMUX
-        }
-        val customPrefix = resolvePrefixBinding(tabManager.getActiveTab()?.profile, multiplexerTypeStr)
-
-        // Create command send callback for gestures
-        val commandCallback: ((ByteArray) -> Unit)? = if (gesturesEnabled) {
-            { command ->
-                tabManager.getActiveTab()?.let { tab ->
-                    tab.termuxBridge.sendText(String(command, Charsets.UTF_8))
-                    Toast.makeText(
-                        this,
-                        getString(R.string.terminal_gesture_command_sent),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
         } else {
             null
         }
@@ -3071,10 +3016,6 @@ class TabTerminalActivity : TabSSHActivity() {
                 fontSize,
                 fontValue,
                 urlDetectionCallback,
-                gesturesEnabled,
-                multiplexerType,
-                customPrefix,
-                commandCallback,
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) },
                 onSelectionEnded = { selectionActionMode?.finish() },
                 onContextMenuRequested = { _, _ -> showTerminalMenu() },
@@ -3141,10 +3082,6 @@ class TabTerminalActivity : TabSSHActivity() {
                 fontSize,
                 fontValue,
                 urlDetectionCallback,
-                gesturesEnabled,
-                multiplexerType,
-                customPrefix,
-                commandCallback,
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) },
                 onSelectionEnded = { selectionActionMode?.finish() },
                 onContextMenuRequested = { _, _ -> showTerminalMenu() },
@@ -3385,7 +3322,7 @@ class TabTerminalActivity : TabSSHActivity() {
      * .multiplexerPrefixTmuxOverride`/`...ScreenOverride`/`...ZellijOverride`)
      * if set and valid > the app-wide global default
      * (`PreferenceManager.getMultiplexerPrefix(type)`). Lets one host bind
-     * PRE to "C-a" for tmux while every other host keeps the global "C-b",
+     * PRE to "C-b" for tmux while every other host keeps the global "C-Space",
      * independently for each of tmux/screen/zellij.
      */
     private fun resolvePrefixBinding(profile: ConnectionProfile?, type: String?): String {
@@ -3981,7 +3918,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 true
             }
             R.id.action_view_transcripts -> {
-                startActivity(Intent(this, TranscriptViewerActivity::class.java))
+                startActivity(Intent(this, RecordingsActivity::class.java))
                 true
             }
             R.id.action_command_palette -> { showCommandPalette(); true }
@@ -4161,7 +4098,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 }
                 val labels = all.map { ws ->
                     val n = try { org.json.JSONArray(ws.connectionIdsJson).length() } catch (_: Exception) { 0 }
-                    "${ws.name} ($n tab${if (n == 1) "" else "s"})"
+                    resources.getQuantityString(R.plurals.terminal_workspace_tab_count, n, ws.name, n)
                 }.toTypedArray()
                 MaterialAlertDialogBuilder(this@TabTerminalActivity)
                     .setTitle(R.string.terminal_open_workspace_title)
@@ -4935,6 +4872,14 @@ class TabTerminalActivity : TabSSHActivity() {
      * the tab currently on screen is recording. Called after every toggle and
      * whenever the active tab changes, since recording state is per-tab.
      */
+    /**
+     * True while any Record Video flow is capturing — mp4 (service running)
+     * or a cast-only recording, which runs without the capture service and is
+     * tracked purely by [recordingTabId].
+     */
+    private fun isVideoRecordingActive(): Boolean =
+        SessionRecordingService.isRecording || recordingTabId != null
+
     private fun updateRecordingKeyIndicator() {
         val recording = tabManager.getActiveTab()?.sessionRecorder?.isRecording() == true
         binding.multiRowKeyboard.setRecordingIndicatorVisible(recording)
@@ -4943,12 +4888,13 @@ class TabTerminalActivity : TabSSHActivity() {
     /**
      * "Record Video" entry point (TODO.AI.md item 53). Any visible tab type
      * can be mp4-recorded (full-screen capture via MediaProjection is
-     * type-agnostic); the paired asciinema `.cast` writer is SSH-only, so
-     * only an [Tab.Ssh] active tab gets the format chooser — any other tab
-     * type skips straight to the consent dialog, mp4-only.
+     * type-agnostic); the asciinema `.cast` writer is SSH-only, so only an
+     * [Tab.Ssh] active tab gets the format chooser — Terminal Cast only
+     * (default), Video only, or Video + Terminal Cast; any other tab type
+     * skips straight to the consent dialog, mp4-only.
      */
     private fun startVideoRecordingFlow() {
-        if (SessionRecordingService.isRecording) {
+        if (isVideoRecordingActive()) {
             Toast.makeText(this, getString(R.string.video_recording_already_active), Toast.LENGTH_SHORT).show()
             return
         }
@@ -4959,26 +4905,62 @@ class TabTerminalActivity : TabSSHActivity() {
         }
         if (activeTabSealed is Tab.Ssh) {
             val options = arrayOf(
+                getString(R.string.video_recording_choose_format_cast_only),
                 getString(R.string.video_recording_choose_format_video_only),
                 getString(R.string.video_recording_choose_format_video_and_cast)
             )
             // "Include Terminal Cast by Default" setting pre-checks the
-            // second option — it only sets the chooser's starting selection,
-            // never bypasses the chooser itself (plan Step 7).
+            // "Video + Terminal Cast" option — it only sets the chooser's
+            // starting selection, never bypasses the chooser itself (plan
+            // Step 7). Without it, "Terminal Cast only" is the default.
             val includeCastByDefault = PreferenceManager.getDefaultSharedPreferences(this)
                 .getBoolean("video_recording_include_cast_by_default", false)
-            var selected = if (includeCastByDefault) 1 else 0
+            var selected = if (includeCastByDefault) 2 else 0
             MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.video_recording_choose_format_title)
                 .setSingleChoiceItems(options, selected) { _, which -> selected = which }
                 .setPositiveButton(R.string.terminal_menu_record_video) { _, _ ->
-                    requestScreenCaptureConsent(activeTabSealed, includeCast = selected == 1)
+                    when (selected) {
+                        // Cast-only captures the SSH byte stream, nothing on
+                        // screen — no MediaProjection consent needed.
+                        0 -> beginCastOnlyRecording(activeTabSealed)
+                        1 -> requestScreenCaptureConsent(activeTabSealed, includeCast = false)
+                        else -> requestScreenCaptureConsent(activeTabSealed, includeCast = true)
+                    }
                 }
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()
         } else {
             requestScreenCaptureConsent(activeTabSealed, includeCast = false)
         }
+    }
+
+    // Attach an asciinema .cast writer to the tab's SSH byte stream and track
+    // it for teardown/share in stopVideoRecording()/offerShareForFinishedRecording().
+    private fun startCastWriter(tab: Tab.Ssh) {
+        val sshTab = tab.sshTab
+        val writer = AsciinemaCastWriter(
+            this,
+            sshTab.profile.getDisplayName(),
+            sshTab.termuxBridge.getColumns(),
+            sshTab.termuxBridge.getRows()
+        )
+        sshTab.castWriter = writer
+        writer.startRecording()
+        recordingSshTabRef = sshTab
+        recordingCastFilename = writer.getCurrentFilePath()
+    }
+
+    /**
+     * "Terminal Cast only" — records the asciinema `.cast` with no mp4 and
+     * therefore no MediaProjection consent or foreground capture service;
+     * stop/share reuse the same [stopVideoRecording] path (the service stop
+     * is skipped when the service never started).
+     */
+    private fun beginCastOnlyRecording(tab: Tab.Ssh) {
+        startCastWriter(tab)
+        recordingTabId = tab.tabId
+        Toast.makeText(this, getString(R.string.video_recording_started), Toast.LENGTH_SHORT).show()
     }
 
     private fun requestScreenCaptureConsent(tab: Tab, includeCast: Boolean) {
@@ -4994,17 +4976,7 @@ class TabTerminalActivity : TabSSHActivity() {
         val filename = "video_${sanitizedName}_$timestamp.mp4"
 
         if (includeCast && tab is Tab.Ssh) {
-            val sshTab = tab.sshTab
-            val writer = AsciinemaCastWriter(
-                this,
-                sshTab.profile.getDisplayName(),
-                sshTab.termuxBridge.getColumns(),
-                sshTab.termuxBridge.getRows()
-            )
-            sshTab.castWriter = writer
-            writer.startRecording()
-            recordingSshTabRef = sshTab
-            recordingCastFilename = writer.getCurrentFilePath()
+            startCastWriter(tab)
         }
 
         recordingTabId = tab.tabId
@@ -5019,7 +4991,10 @@ class TabTerminalActivity : TabSSHActivity() {
      * (see [TabManagerListener.onTabClosed]/[TabManagerListener.onGraphicalTabClosed]).
      */
     private fun stopVideoRecording(tabClosed: Boolean = false) {
-        SessionRecordingService.stopRecording(this)
+        // Cast-only recordings never start the capture service — don't poke it.
+        if (SessionRecordingService.isRecording) {
+            SessionRecordingService.stopRecording(this)
+        }
         recordingSshTabRef?.let { sshTab ->
             sshTab.castWriter?.stopRecording()
             sshTab.castWriter = null
@@ -5056,11 +5031,11 @@ class TabTerminalActivity : TabSSHActivity() {
             if (isFinishing || isDestroyed) return@postDelayed
             val actions = mutableListOf<Pair<String, () -> Unit>>()
             videoFilename?.let { name ->
-                actions.add(getString(R.string.video_recording_share_video) to { shareRecordingFile(name, "video/mp4") })
+                actions.add(getString(R.string.video_recording_share_video) to { RecordingActions.share(this, name, "video/mp4") })
             }
             castFilename?.let { name ->
-                actions.add(getString(R.string.video_recording_share_cast) to { shareRecordingFile(name, "application/json") })
-                actions.add(getString(R.string.video_recording_upload_cast) to { uploadCastToAsciinema(name) })
+                actions.add(getString(R.string.video_recording_share_cast) to { RecordingActions.share(this, name, "application/json") })
+                actions.add(getString(R.string.video_recording_upload_cast) to { RecordingActions.uploadCast(this, name) })
             }
             if (actions.isEmpty()) return@postDelayed
             MaterialAlertDialogBuilder(this)
@@ -5071,81 +5046,6 @@ class TabTerminalActivity : TabSSHActivity() {
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()
         }, 500L)
-    }
-
-    private fun shareRecordingFile(filename: String, mimeType: String) {
-        val legacyFile = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            java.io.File(
-                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MOVIES),
-                "TabSSH/$filename"
-            )
-        } else {
-            null
-        }
-        val uri = VideoRecordingStorage.shareableUriFor(this, filename, legacyFile)
-        if (uri == null) {
-            showError(getString(R.string.sftp_error_share))
-            return
-        }
-        try {
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = mimeType
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            startActivity(Intent.createChooser(intent, filename))
-        } catch (e: Exception) {
-            Logger.e("TabTerminalActivity", "Error sharing recording $filename", e)
-            showError(getString(R.string.sftp_error_share))
-        }
-    }
-    
-    /**
-     * "Upload to Asciinema" action for a finished `.cast` recording — the
-     * configurable-server counterpart to [shareRecordingFile]'s local OS
-     * share. Server URL comes from `preferences_terminal.xml`'s
-     * `asciinema_server_url` key (self-hostable, defaults to
-     * [io.github.tabssh.terminal.recording.AsciinemaUploader.DEFAULT_SERVER_URL]).
-     * On success, the returned cast URL is copied to the clipboard, mirroring
-     * how the rest of the app (e.g. QR pairing secrets) surfaces
-     * one-off generated values.
-     */
-    private fun uploadCastToAsciinema(filename: String) {
-        val legacyFile = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            java.io.File(
-                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MOVIES),
-                "TabSSH/$filename"
-            )
-        } else {
-            null
-        }
-        val serverUrl = app.preferencesManager.getString(
-            "asciinema_server_url",
-            io.github.tabssh.terminal.recording.AsciinemaUploader.DEFAULT_SERVER_URL
-        )
-        Toast.makeText(this, R.string.video_recording_upload_cast, Toast.LENGTH_SHORT).show()
-        lifecycleScope.launch {
-            val result = runCatching {
-                withContext(Dispatchers.IO) {
-                    io.github.tabssh.terminal.recording.AsciinemaUploader.uploadByFilename(
-                        this@TabTerminalActivity, filename, legacyFile, serverUrl
-                    )
-                }
-            }
-            if (isFinishing || isDestroyed) return@launch
-            result.onSuccess { url ->
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("Asciinema URL", url))
-                Toast.makeText(this@TabTerminalActivity, getString(R.string.video_recording_upload_success, url), Toast.LENGTH_LONG).show()
-            }.onFailure { e ->
-                Logger.e("TabTerminalActivity", "Asciinema upload failed for $filename", e)
-                Toast.makeText(
-                    this@TabTerminalActivity,
-                    getString(R.string.video_recording_upload_failure, e.message ?: e.toString()),
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {

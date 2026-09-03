@@ -101,8 +101,8 @@ data class KeyboardKey(
             KeyboardKey("CLIPBOARD", "📋", "", KeyCategory.ACTION),
             KeyboardKey("TOGGLE", "⌨", "", KeyCategory.ACTION),
 
-            // PREFIX sends the current multiplexer prefix byte (C-b for
-            // tmux, C-a for screen, C-g for zellij). The active multiplexer
+            // PREFIX sends the current multiplexer prefix byte (C-Space for
+            // tmux/zellij, C-x for screen by default). The active multiplexer
             // is auto-detected after connect or falls back to the global
             // `gesture_multiplexer_type` preference. Placed in the default
             // layout under ENT so it's always reachable in a tmux/screen

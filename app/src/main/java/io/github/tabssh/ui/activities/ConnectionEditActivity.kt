@@ -1788,8 +1788,14 @@ class ConnectionEditActivity : TabSSHActivity() {
     // Remote command spinner (Issue #37)
     // -------------------------------------------------------------------------
 
+    // Index of the tmux-new template entry — the one non-custom row whose command stays editable
+    private fun tmuxNewIndex(values: Array<String>): Int =
+        values.indexOfFirst { it.startsWith("tmux-new") }
+
     private fun setupRemoteCommandSpinner() {
-        val customIndex = resources.getStringArray(R.array.remote_command_values).size - 1
+        val values = resources.getStringArray(R.array.remote_command_values)
+        val customIndex = values.size - 1
+        val tmuxNewIndex = tmuxNewIndex(values)
         binding.spinnerRemoteCommand.onItemSelectedListener =
             object : android.widget.AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(
@@ -1798,8 +1804,15 @@ class ConnectionEditActivity : TabSSHActivity() {
                     position: Int,
                     id: Long
                 ) {
+                    val editable = position == customIndex || position == tmuxNewIndex
                     binding.layoutRemoteCommandCustom.visibility =
-                        if (position == customIndex) View.VISIBLE else View.GONE
+                        if (editable) View.VISIBLE else View.GONE
+                    // Prefill the tmux-new template ("tmux-new single") so the session type is one tap from editable
+                    if (position == tmuxNewIndex &&
+                        !binding.editRemoteCommandCustom.text.toString().trim().startsWith("tmux-new")
+                    ) {
+                        binding.editRemoteCommandCustom.setText(values[tmuxNewIndex])
+                    }
                 }
                 override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
             }
@@ -1814,11 +1827,18 @@ class ConnectionEditActivity : TabSSHActivity() {
             binding.layoutRemoteCommandCustom.visibility = View.GONE
             return
         }
-        val matchIndex = values.indexOfFirst { it == remoteCommand }.takeIf { it > 0 && it != customIndex }
+        val tmuxNewIndex = tmuxNewIndex(values)
+        val matchIndex = values.indexOfFirst { it == remoteCommand }
+            .takeIf { it > 0 && it != customIndex && it != tmuxNewIndex }
         if (matchIndex != null) {
             binding.spinnerRemoteCommand.setSelection(matchIndex)
             binding.editRemoteCommandCustom.setText("")
             binding.layoutRemoteCommandCustom.visibility = View.GONE
+        } else if (tmuxNewIndex >= 0 && remoteCommand.startsWith("tmux-new")) {
+            // Any tmux-new invocation round-trips to the template row with its editable command shown
+            binding.spinnerRemoteCommand.setSelection(tmuxNewIndex)
+            binding.editRemoteCommandCustom.setText(remoteCommand)
+            binding.layoutRemoteCommandCustom.visibility = View.VISIBLE
         } else {
             binding.spinnerRemoteCommand.setSelection(customIndex)
             binding.editRemoteCommandCustom.setText(remoteCommand)
@@ -1829,10 +1849,14 @@ class ConnectionEditActivity : TabSSHActivity() {
     private fun readRemoteCommandFromUi(): String? {
         val values = resources.getStringArray(R.array.remote_command_values)
         val customIndex = values.size - 1
+        val tmuxNewIndex = tmuxNewIndex(values)
         val pos = binding.spinnerRemoteCommand.selectedItemPosition
         return when {
             pos == 0 -> null
             pos == customIndex -> binding.editRemoteCommandCustom.text.toString().trim().takeIf { it.isNotEmpty() }
+            // tmux-new row: the edited command wins; fall back to the template if the field was cleared
+            pos == tmuxNewIndex -> binding.editRemoteCommandCustom.text.toString().trim()
+                .takeIf { it.isNotEmpty() } ?: values[tmuxNewIndex]
             pos in values.indices -> values[pos].takeIf { it.isNotBlank() }
             else -> null
         }

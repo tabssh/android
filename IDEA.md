@@ -67,10 +67,12 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 - Agent forwarding
 - SFTP file browser with upload, download, rename, chmod, delete; remote file editor; SCP fallback
 - Session recording and replay (transcript) — transcripts stay on-device and must be readable by the user outside the app
-- Session video recorder — screen capture to mp4 for any visible tab (SSH, VNC, Panes); SSH tabs can additionally record an asciinema v2 `.cast` alongside the mp4, captured independently of the session transcript recorder so neither recorder can interfere with the other; both files save to `Movies/TabSSH` and offer a post-stop Share action; recording pauses (not stops) when the user swipes away from the recorded tab and auto-stops with a toast if that tab is closed
+- Session video recorder — screen capture to mp4 for any visible tab (SSH, VNC, Panes); SSH tabs choose between Terminal Cast only (the default — an asciinema v2 `.cast` with no screen capture and no capture consent prompt), Video only, or Video + Terminal Cast recording the `.cast` alongside the mp4, captured independently of the session transcript recorder so neither recorder can interfere with the other; both files save to `Movies/TabSSH` and offer a post-stop Share action; recording pauses (not stops) when the user swipes away from the recorded tab and auto-stops with a toast if that tab is closed
+- Recordings browser — one list of everything the recorders produce (videos, terminal casts, session transcripts) from any tab type, filterable by kind, with per-item actions: play/share videos, upload/share casts, view transcripts, delete any; reachable from the terminal menu and from settings
+- Dedicated Recording & Transcripts settings screen — recording and transcription options live in their own settings section (not under Terminal), so they apply to every tab type that can record and leave room for new recording features
 - `~/.ssh/config` import
 - Bulk import: CSV, JSON, PuTTY .reg, Terraform `.tf` config files — each format maps its fields onto connection profiles (host, port, user, auth, group)
-- Custom on-screen keyboard with configurable rows and gesture bindings
+- Custom on-screen keyboard with configurable rows
 - Find-in-scrollback
 - Snippet library with `{var}` placeholder substitution — placeholders are filled through a prompt UI at run time
 - Macro library — record raw byte sequences and replay them into any session
@@ -92,7 +94,7 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 - App-lock PIN with a failed-attempt lockout — the PIN must never be stored in plaintext or in any recoverable form
 - Screenshot capture prevention (configurable); always enforced on PIN and auth screens
 - SSH host key verification on first connect (TOFU) with fingerprint display
-- Clipboard auto-clear for sensitive pastes
+- Clipboard auto-clear after copying sensitive values — never wipes clipboard content that another app put there
 - Audit log of SSH commands and session events — stays on-device, with user-configurable size (MB) and age (days) retention caps and separate command/output capture toggles
 
 ### Sync and backup

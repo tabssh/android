@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:app="http://schemas.android.com/apk/res-auto">
+
+  <Preference
+    android:key="open_recordings"
+    android:title="@string/prefs_open_recordings_title"
+    android:summary="@string/prefs_open_recordings_summary"
+    android:icon="@drawable/ic_videocam" />
+
+  <PreferenceCategory
+    android:key="category_recording_transcripts"
+    android:title="@string/prefcat_terminal_recording">
+
+    <SwitchPreferenceCompat
+      android:key="auto_record_sessions"
+      android:title="@string/prefs_auto_record_sessions_title"
+      android:summary="@string/prefs_auto_record_sessions_summary"
+      android:defaultValue="false" />
+
+  </PreferenceCategory>
+
+  <PreferenceCategory
+    android:key="category_recording_video"
+    android:title="@string/prefcat_recording_video">
+
+    <ListPreference
+      android:key="video_recording_quality"
+      android:title="@string/prefs_video_recording_quality_title"
+      android:summary="@string/prefs_video_recording_quality_summary"
+      android:entries="@array/video_recording_quality_entries"
+      android:entryValues="@array/video_recording_quality_values"
+      android:defaultValue="medium"
+      app:useSimpleSummaryProvider="true" />
+
+    <SwitchPreferenceCompat
+      android:key="video_recording_include_cast_by_default"
+      android:title="@string/prefs_video_recording_include_cast_title"
+      android:summary="@string/prefs_video_recording_include_cast_summary"
+      android:defaultValue="false" />
+
+    <EditTextPreference
+      android:key="asciinema_server_url"
+      android:title="@string/prefs_asciinema_server_url_title"
+      android:summary="@string/prefs_asciinema_server_url_summary"
+      android:defaultValue="https://asciinema.org"
+      android:inputType="textUri"
+      app:useSimpleSummaryProvider="true" />
+
+  </PreferenceCategory>
+
+</PreferenceScreen>

@@ -89,7 +89,8 @@ class TabSSHApplication : Application() {
         io.github.tabssh.ssh.forwarding.PortForwardCoordinator(this)
     }
     val auditLogManager by lazy { io.github.tabssh.audit.AuditLogManager(this, database, preferencesManager) }
-    val tabManager by lazy { io.github.tabssh.ui.tabs.TabManager(database) }
+    private val tabManagerLazy = lazy { io.github.tabssh.ui.tabs.TabManager(database) }
+    val tabManager: io.github.tabssh.ui.tabs.TabManager by tabManagerLazy
     private val sessionPersistenceManagerLazy = lazy {
         io.github.tabssh.background.SessionPersistenceManager(this, tabManager)
     }
@@ -98,6 +99,21 @@ class TabSSHApplication : Application() {
     /** App-wide network state observer. Single instance so every connection
      *  type (SSH, VNC, Telnet) shares one [ConnectivityManager] callback. */
     val networkDetector by lazy { io.github.tabssh.network.detection.NetworkDetector(this) }
+
+    /**
+     * True when the profile has a live session from the user's point of view —
+     * either a pooled SSH connection in [sshSessionManager], or an open tab in
+     * [tabManager] whose session is connected. The tab check matters for mosh:
+     * the bootstrap SSH connection is torn down after the mosh handshake, so
+     * the session manager alone reports such tabs as disconnected. This is the
+     * same dual-source truth ConnectionLauncher uses for its reattach prompt —
+     * status dots must never disagree with that dialog.
+     */
+    fun hasLiveSessionFor(profileId: String): Boolean {
+        if (sshSessionManager.isConnectionActive(profileId)) return true
+        if (!tabManagerLazy.isInitialized()) return false
+        return tabManager.getAllTabs().any { it.profile.id == profileId && it.isConnected() }
+    }
 
     // ANR watchdog — single instance, only running when debug logging is
     // active. Public start/stop so the Settings → Logging toggle can flip

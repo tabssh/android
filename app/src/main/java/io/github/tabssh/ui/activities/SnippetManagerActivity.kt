@@ -404,7 +404,7 @@ class SnippetManagerActivity : TabSSHActivity() {
             holder.categoryText.text = snippet.category
 
             if (snippet.usageCount > 0) {
-                holder.usageText.text = holder.usageText.context.getString(R.string.snippet_mgr_usage_count, snippet.usageCount)
+                holder.usageText.text = holder.usageText.context.resources.getQuantityString(R.plurals.snippet_mgr_usage_count, snippet.usageCount, snippet.usageCount)
                 holder.usageText.visibility = View.VISIBLE
             } else {
                 holder.usageText.visibility = View.GONE

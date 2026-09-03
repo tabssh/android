@@ -618,7 +618,6 @@ class BackupExporter(
             put("clearClipboardTimeout", preferenceManager.getClearClipboardTimeout())
             put("autoLockEnabled", preferenceManager.isAutoLockOnBackground())
             put("lockTimeout", preferenceManager.getAutoLockTimeout())
-            put("passwordTTLHours", preferenceManager.getPasswordTTLHours())
             put("preventScreenshots", preferenceManager.isPreventScreenshots())
         })
 
@@ -769,10 +768,10 @@ class BackupExporter(
             put("updateCheckEnabled", preferenceManager.isContainerUpdateCheckEnabled())
         })
 
-        // Multiplexer key bindings: gesture type/enable in default SharedPreferences;
-        // per-type prefix overrides in PreferenceManager.
+        // Multiplexer key bindings: default type in default SharedPreferences
+        // (key name is historical — never rename a shipped key); per-type
+        // prefix overrides in PreferenceManager.
         root.put("multiplexer", JSONObject().apply {
-            put("gestureEnabled", defaultPrefs.getBoolean("enable_custom_gestures", false))
             put("gestureType",    defaultPrefs.getString("gesture_multiplexer_type", "tmux"))
             put("prefixTmux",     preferenceManager.getMultiplexerPrefix("tmux"))
             put("prefixScreen",   preferenceManager.getMultiplexerPrefix("screen"))

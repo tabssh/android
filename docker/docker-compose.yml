@@ -1,17 +1,14 @@
 # TabSSH Android — CI/build container.
 #
 # Convention: build-time content (SDK, gradle binary, JDK) lives in
-# the Dockerfile's rootfs. This file mounts only runtime-mutable
-# state as volumes (gradle dependency cache, source bind-mount).
-# Don't add a `/opt/android-sdk` or `/opt/gradle` volume here —
-# they'd shadow the baked-in installs.
+# the toolchain image's rootfs (casjaysdev/android:latest, AI.md PART 4).
+# This file mounts only runtime-mutable state as volumes (gradle
+# dependency cache, source bind-mount). Don't add a `/opt/android-sdk`
+# or `/opt/gradle` volume here — they'd shadow the baked-in installs.
 
 services:
   tabssh-builder:
-    build:
-      context: .
-      dockerfile: Dockerfile.build
-    image: ghcr.io/tabssh/android:build
+    image: casjaysdev/android:latest
     volumes:
       - ../:/workspace
       # AI.md PART 4 pins GRADLE_USER_HOME to the project-scoped
@@ -41,10 +38,7 @@ services:
       "
 
   tabssh-test:
-    build:
-      context: .
-      dockerfile: Dockerfile.build
-    image: ghcr.io/tabssh/android:build
+    image: casjaysdev/android:latest
     volumes:
       - ../:/workspace
       - gradle-cache:/workspace/.gradle
@@ -66,10 +60,7 @@ services:
       "
 
   tabssh-build:
-    build:
-      context: .
-      dockerfile: Dockerfile.build
-    image: ghcr.io/tabssh/android:build
+    image: casjaysdev/android:latest
     volumes:
       - ../:/workspace
       - gradle-cache:/workspace/.gradle

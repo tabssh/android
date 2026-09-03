@@ -108,8 +108,8 @@ data class ConnectionProfile(
      * app-wide global prefix for that multiplexer type
      * (`PreferenceManager.getMultiplexerPrefix(type)`); non-null = use this
      * connection's own binding for that type instead, so e.g. one host's
-     * tmux session can bind PRE to "C-a" while the global default stays
-     * "C-b". Lets a single device have different real multiplexer
+     * tmux session can bind PRE to "C-b" while the global default stays
+     * "C-Space". Lets a single device have different real multiplexer
      * keybindings per host without changing the global default.
      */
     @ColumnInfo(name = "multiplexer_prefix_tmux_override")

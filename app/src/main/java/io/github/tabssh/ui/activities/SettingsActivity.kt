@@ -120,6 +120,20 @@ class SettingsMainFragment : PreferenceFragmentCompat() {
     }
 }
 
+// Dedicated recording/transcript settings screen — the preference keys here
+// moved verbatim from preferences_terminal.xml so stored values, backup
+// archives, and sync payloads keep working with zero migration.
+class RecordingSettingsFragment : PreferenceFragmentCompat() {
+    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+        setPreferencesFromResource(R.xml.preferences_recording, rootKey)
+
+        findPreference<Preference>("open_recordings")?.setOnPreferenceClickListener {
+            startActivity(Intent(requireContext(), RecordingsActivity::class.java))
+            true
+        }
+    }
+}
+
 class GeneralSettingsFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_general, rootKey)
@@ -341,7 +355,7 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
 
     // Strong reference to the SharedPreferences listener — Android holds it
     // via WeakReference, so without this field it would be garbage-collected
-    // and the Gesture Multiplexer Type summary would stop refreshing.
+    // and the Default Multiplexer summary would stop refreshing.
     private var multiplexerPrefsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     private val themeImportLauncher = registerForActivityResult(
@@ -504,7 +518,7 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
     }
 
     /**
-     * Gesture Multiplexer Type summary: show the *live* custom prefix
+     * Default Multiplexer summary: show the *live* custom prefix
      * (e.g. "tmux (C-Space)") instead of a hardcoded "(Ctrl+B)" — the
      * displayed prefix must reflect what each multiplexer is actually
      * configured to send, not the upstream default.
@@ -520,9 +534,9 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
         }
         val defaultPrefixFor: (String?) -> String = { type ->
             when (type) {
-                "screen" -> "C-a"
-                "zellij" -> "C-g"
-                else -> "C-b"
+                "screen" -> io.github.tabssh.storage.preferences.PreferenceManager.DEFAULT_PREFIX_SCREEN
+                "zellij" -> io.github.tabssh.storage.preferences.PreferenceManager.DEFAULT_PREFIX_ZELLIJ
+                else -> io.github.tabssh.storage.preferences.PreferenceManager.DEFAULT_PREFIX_TMUX
             }
         }
         // SummaryProvider re-runs on every bind, so the displayed prefix

@@ -756,7 +756,8 @@ class BackupImporter(
             preferenceManager.setClearClipboardTimeout(s.optInt("clearClipboardTimeout", 60))
             preferenceManager.setAutoLockOnBackground(s.optBoolean("autoLockEnabled", false))
             preferenceManager.setAutoLockTimeout(s.optInt("lockTimeout", 300))
-            preferenceManager.setPasswordTTLHours(s.optInt("passwordTTLHours", 24))
+            // "passwordTTLHours" from pre-removal archives is deliberately read-and-ignored:
+            // ENCRYPTED credentials never expire (AI.md PART 5, Storage levels — no TTL)
             preferenceManager.setPreventScreenshots(s.optBoolean("preventScreenshots", false))
         }
         root.optJSONObject("terminal")?.let { t ->
@@ -879,12 +880,11 @@ class BackupImporter(
         }
         root.optJSONObject("multiplexer")?.let { m ->
             defaultPrefs.edit().apply {
-                putBoolean("enable_custom_gestures",  m.optBoolean("gestureEnabled", false))
                 putString("gesture_multiplexer_type", m.optString("gestureType", "tmux"))
             }.apply()
-            preferenceManager.setMultiplexerPrefix("tmux",   m.optString("prefixTmux",   "C-b"))
-            preferenceManager.setMultiplexerPrefix("screen", m.optString("prefixScreen", "C-a"))
-            preferenceManager.setMultiplexerPrefix("zellij", m.optString("prefixZellij", "C-g"))
+            preferenceManager.setMultiplexerPrefix("tmux",   m.optString("prefixTmux",   PreferenceManager.DEFAULT_PREFIX_TMUX))
+            preferenceManager.setMultiplexerPrefix("screen", m.optString("prefixScreen", PreferenceManager.DEFAULT_PREFIX_SCREEN))
+            preferenceManager.setMultiplexerPrefix("zellij", m.optString("prefixZellij", PreferenceManager.DEFAULT_PREFIX_ZELLIJ))
         }
         root.optJSONObject("accessibility")?.let { a ->
             preferenceManager.setHighContrastMode(a.optBoolean("highContrast", false))

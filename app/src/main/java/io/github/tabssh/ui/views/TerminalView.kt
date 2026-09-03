@@ -251,10 +251,6 @@ class TerminalView @JvmOverloads constructor(
     // Context menu callback for long press on text
     var onContextMenuRequested: ((x: Float, y: Float) -> Unit)? = null
     
-    // Multi-touch gesture handler for tmux/screen shortcuts
-    private var terminalGestureHandler: io.github.tabssh.terminal.gestures.TerminalGestureHandler? = null
-    var onCommandSent: ((ByteArray) -> Unit)? = null
-
     // Issue #168 — edge-swipe callback. Fires when a single-finger fling
     // starts within edgeSwipeDp of the left or right edge AND the
     // dominant axis is horizontal AND the swipe heads back into the
@@ -537,13 +533,14 @@ class TerminalView @JvmOverloads constructor(
         gestureDetector = GestureDetector(context, TerminalGestureListener())
         scaleGestureDetector = ScaleGestureDetector(context, PinchZoomListener())
 
-        // Setup default text paint. Init with the bundled JetBrains Mono
-        // Nerd Font (better hinting than the system mono on most OEM ROMs).
+        // Setup default text paint. Init with the bundled Hack Nerd Font
+        // (the app default — matches the user-facing terminal_font default;
+        // better hinting than the system mono on most OEM ROMs).
         // The host activity calls `setFont(prefValue)` shortly after — this
         // is just so a TerminalView shown before that read still draws with
         // a decent typeface instead of the previous Typeface.MONOSPACE.
         textPaint.typeface = io.github.tabssh.utils.FontManager.getTypeface(
-            context, "jetbrains_mono_nerd"
+            context, "hack_nerd"
         )
         textPaint.textSize = 14f * resources.displayMetrics.density
         textPaint.color = Color.WHITE
@@ -748,6 +745,19 @@ class TerminalView @JvmOverloads constructor(
         bridge.addListener(listener)
 
         calculateCellDimensions()
+
+        // The bridge's rows/cols set above reflect that TAB's last-known
+        // size — stale (or still the initialize() default) if it was
+        // created or last resized while a different tab was on screen. This
+        // view's own pixel size hasn't changed on a tab switch (ViewPager2
+        // reuses the same TerminalView), so onSizeChanged never re-fires to
+        // correct it. Re-push the CURRENT view size into the newly attached
+        // bridge/PTY now, otherwise the terminal renders at the wrong row
+        // count until the next unrelated resize (rotation, keyboard toggle,
+        // font change).
+        if (cellWidth > 0f && cellHeight > 0f && width > 0 && height > 0) {
+            updateGridSize()
+        }
 
         // Force refresh the buffer reference in case bridge is already connected
         termuxBuffer = bridge.getBuffer()
@@ -1170,48 +1180,6 @@ class TerminalView @JvmOverloads constructor(
         updateGridSize()
         fullRedrawNeeded = true
         invalidate()
-    }
-
-    /**
-     * Enable custom gesture support for terminal multiplexers
-     * @param multiplexerType The multiplexer type (tmux, screen, zellij, or none)
-     * @param customPrefix Optional custom prefix notation (e.g., "C-a", "C-Space")
-     */
-    fun enableGestureSupport(
-        multiplexerType: io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType,
-        customPrefix: String? = null
-    ) {
-        if (multiplexerType == io.github.tabssh.terminal.gestures.GestureCommandMapper.MultiplexerType.NONE) {
-            terminalGestureHandler = null
-            Logger.d("TerminalView", "Gesture support disabled")
-        } else {
-            terminalGestureHandler = io.github.tabssh.terminal.gestures.TerminalGestureHandler(context) { gestureType ->
-                // Get command for gesture with custom prefix
-                val command = io.github.tabssh.terminal.gestures.GestureCommandMapper.getCommand(
-                    gestureType, 
-                    multiplexerType,
-                    customPrefix
-                )
-                val description = io.github.tabssh.terminal.gestures.GestureCommandMapper.getDescription(
-                    gestureType, 
-                    multiplexerType,
-                    customPrefix
-                )
-                
-                command?.let {
-                    // Send command via callback
-                    onCommandSent?.invoke(it)
-                    Logger.d("TerminalView", "Gesture detected: $description")
-                }
-            }
-            
-            val prefixInfo = if (!customPrefix.isNullOrEmpty()) {
-                " with custom prefix: ${io.github.tabssh.terminal.gestures.PrefixParser.getDescription(customPrefix)}"
-            } else {
-                ""
-            }
-            Logger.d("TerminalView", "Gesture support enabled for $multiplexerType$prefixInfo")
-        }
     }
 
     /**
@@ -2273,13 +2241,6 @@ class TerminalView @JvmOverloads constructor(
             }
         }
 
-        // Handle custom multi-touch gestures (tmux/screen shortcuts)
-        if (terminalGestureHandler != null && event.pointerCount >= 2) {
-            if (terminalGestureHandler?.onTouchEvent(event) == true) {
-                return true
-            }
-        }
-
         // Selection mode swallows single-finger taps + drags so the
         // gesture detector doesn't fire keyboard-toggle / double-tap-
         // word-select / URL-detect while the user is shaping a range.
@@ -3185,17 +3146,78 @@ class TerminalView @JvmOverloads constructor(
         // to avoid falsely joining a hard line that happens to fill the width.
         val joinFullLines = termuxBridge?.isMoshSessionAlive() == true
         return try {
-            // Termux's getSelectedText takes (col1, row1, col2, row2) and
-            // reads line-by-line through the rectangle. We pass through
-            // the user-visible cells; +1 on the trailing column / row
-            // would over-include, so use the same inclusive convention
-            // the existing scrollback-extraction path uses. joinBackLines=true
-            // honours the emulator's soft-wrap flag (join wrapped rows).
-            buffer.getSelectedText(startCol, extStartRow, endCol, extEndRow, true, joinFullLines)
+            getWrapAwareSelectionText(buffer, startCol, extStartRow, endCol, extEndRow, joinFullLines)
         } catch (e: Exception) {
             Logger.w("TerminalView", "getSelectedText failed: ${e.message}")
             null
         }?.takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * Reconstruct the selected text row-by-row instead of delegating the whole
+     * rectangle to Termux's own multi-row getSelectedText() in one call.
+     *
+     * Termux's own join only ever calls a row "wrapped" via the real mLineWrap
+     * flag. Under mosh (and any absolute-cursor-positioning full-screen program —
+     * see isRowSoftWrapped()'s "Ink, ncurses" note) that flag is never set, so
+     * joinFullLines is used as a fallback signal instead. But a genuine
+     * word-wrapping layout engine that decides where to break a line NEVER
+     * writes the separating space to either row — it treats whitespace as the
+     * break point and omits it, the same way any text-reflow algorithm treats
+     * a wrap as replacing a space, not keeping one. That space is not merely
+     * trimmed by Termux's join, it was never in the screen buffer to begin
+     * with, so there is nothing to recover: the fix has to supply the space
+     * itself when this heuristic is the reason two rows are being joined.
+     *
+     * A real DECAWM auto-wrap (genuine mLineWrap) is different in kind: only
+     * the terminal's column limit forces those breaks, so it is the only wrap
+     * source that ever splits an unbroken run of non-space characters
+     * mid-token — and in that case the real boundary character (found on
+     * whichever row the terminal actually wrote it to) is already present
+     * verbatim in both rows' extracted text, so no extra separator is added.
+     */
+    private fun getWrapAwareSelectionText(
+        buffer: com.termux.terminal.TerminalBuffer,
+        startCol: Int,
+        startRow: Int,
+        endCol: Int,
+        endRow: Int,
+        joinFullLines: Boolean
+    ): String {
+        val cols = terminalCols
+        val sb = StringBuilder()
+        for (row in startRow..endRow) {
+            val isLastRow = row == endRow
+            val x1 = if (row == startRow) startCol else 0
+            val x2 = if (isLastRow) endCol else cols
+            // Single-row (selY1 == selY2 == row) calls into Termux never append
+            // their own '\n' — the join between rows is decided below instead.
+            sb.append(
+                try {
+                    buffer.getSelectedText(x1, row, x2, row, true, false) ?: ""
+                } catch (e: Exception) {
+                    ""
+                }
+            )
+            if (isLastRow) continue
+            val genuineWrap = try { buffer.getLineWrap(row) } catch (e: Exception) { false }
+            when {
+                genuineWrap -> Unit
+                joinFullLines && rowFillsWidth(buffer, row, cols) -> sb.append(' ')
+                else -> sb.append('\n')
+            }
+        }
+        return sb.toString()
+    }
+
+    /**
+     * True when row [row]'s own content (independent of what is selected)
+     * fills every column with non-space text — the same full-width heuristic
+     * isRowSoftWrapped() uses, kept in sync with it deliberately.
+     */
+    private fun rowFillsWidth(buffer: com.termux.terminal.TerminalBuffer, row: Int, cols: Int): Boolean {
+        val full = try { buffer.getSelectedText(0, row, cols, row) ?: "" } catch (e: Exception) { "" }
+        return full.trimEnd().length >= cols
     }
 
     /**

@@ -801,6 +801,10 @@
         <item quantity="other">Save workspace (%1$d tabs)</item>
     </plurals>
     <string name="terminal_open_workspace_title">Open workspace</string>
+    <plurals name="terminal_workspace_tab_count">
+        <item quantity="one">%1$s (%2$d tab)</item>
+        <item quantity="other">%1$s (%2$d tabs)</item>
+    </plurals>
     <string name="terminal_delete_workspace_action">Delete…</string>
     <string name="terminal_delete_workspace_title">Delete workspace</string>
     <string name="terminal_split_bottom_pane_title">Split — open in bottom pane</string>
@@ -1339,7 +1343,7 @@
     <string name="activity_label_cloud_instances">Cloud Instances</string>
     <string name="activity_label_pair_from_desktop">Pair from Desktop</string>
     <string name="activity_label_tasker_action">TabSSH Action</string>
-    <string name="activity_label_session_transcripts">Session Transcripts</string>
+    <string name="activity_label_recordings">Recordings</string>
     <string name="activity_label_configure_widget">Configure Widget</string>
     <string name="activity_label_vnc_host">VNC Host</string>
     <string name="activity_label_manage_groups">Manage Groups</string>
@@ -1492,6 +1496,11 @@
     <string name="prefcat_terminal_bell">Bell &amp; alerts</string>
     <string name="prefcat_terminal_display">Display</string>
     <string name="prefcat_terminal_recording">Session transcripts</string>
+    <string name="prefcat_recording_video">Video recording</string>
+    <string name="prefs_recording_settings_title">Recording &amp; Transcripts</string>
+    <string name="prefs_recording_settings_summary">Session recording, video quality, transcripts, and the recordings browser</string>
+    <string name="prefs_open_recordings_title">Recordings</string>
+    <string name="prefs_open_recordings_summary">Browse, play, share, upload, and delete saved recordings and transcripts</string>
     <string name="prefs_terminal_theme_title">Theme / Colors</string>
     <string name="prefs_terminal_theme_summary">Terminal color scheme</string>
     <string name="prefs_import_custom_theme_title">Import Custom Theme</string>
@@ -1554,7 +1563,7 @@
     <string name="prefcat_connection_session">Session behaviour</string>
     <string name="prefcat_connection_forwarding">Forwarding</string>
     <string name="prefcat_connection_files">Files &amp; transfers</string>
-    <string name="prefcat_terminal_multiplexer">Multiplexer gestures</string>
+    <string name="prefcat_terminal_multiplexer">Multiplexer</string>
     <string name="prefs_default_username_title">Default Username</string>
     <string name="prefs_default_username_summary">Username for new SSH/Mosh connections and quick connect (not used for VNC)</string>
     <string name="prefs_default_port_title">Default Port</string>
@@ -1573,19 +1582,17 @@
     <string name="prefs_agent_forwarding_default_summary">Forward SSH agent by default for new connections</string>
     <string name="prefs_file_open_size_limit_mb_title">Open Size Limit (MB)</string>
     <string name="prefs_file_open_size_limit_mb_summary">Prompt before downloading a file this large to open it externally or in the SFTP browser</string>
-    <string name="prefs_enable_custom_gestures_title">Custom Gestures</string>
-    <string name="prefs_enable_custom_gestures_summary">Enable multi-touch gestures for multiplexer shortcuts (tmux/screen/zellij)</string>
-    <string name="prefs_gesture_multiplexer_type_title">Gesture Multiplexer Type</string>
-    <string name="prefs_gesture_multiplexer_type_summary">Which multiplexer the gestures and the PRE key target</string>
+    <string name="prefs_gesture_multiplexer_type_title">Default Multiplexer</string>
+    <string name="prefs_gesture_multiplexer_type_summary">Which multiplexer the PRE key and auto-launch target</string>
     <string name="prefs_multiplexer_custom_prefix_tmux_title">tmux prefix</string>
-    <string name="prefs_multiplexer_custom_prefix_tmux_summary">Sent by the PRE key and gestures when tmux is active (default: C-b)</string>
-    <string name="prefs_multiplexer_custom_prefix_tmux_dialog">Enter the prefix key for tmux.\n\nExamples:\n• C-b or ^b → Ctrl+B (tmux default)\n• C-a or ^a → Ctrl+A\n• C-Space or ^Space → Ctrl+Space\n• M-b or Alt-b → Alt+B\n• 0x02 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-b).</string>
+    <string name="prefs_multiplexer_custom_prefix_tmux_summary">Sent by the PRE key when tmux is active (default: C-Space)</string>
+    <string name="prefs_multiplexer_custom_prefix_tmux_dialog">Enter the prefix key for tmux.\n\nExamples:\n• C-Space or ^Space → Ctrl+Space (app default)\n• C-b or ^b → Ctrl+B (tmux upstream default)\n• C-a or ^a → Ctrl+A\n• M-b or Alt-b → Alt+B\n• 0x02 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-Space).</string>
     <string name="prefs_multiplexer_custom_prefix_zellij_title">zellij prefix</string>
-    <string name="prefs_multiplexer_custom_prefix_zellij_summary">Sent by the PRE key and gestures when zellij is active (default: C-g)</string>
-    <string name="prefs_multiplexer_custom_prefix_zellij_dialog">Enter the prefix key for zellij.\n\nExamples:\n• C-g or ^g → Ctrl+G (zellij default)\n• C-b or ^b → Ctrl+B\n• C-Space or ^Space → Ctrl+Space\n• M-b or Alt-b → Alt+B\n• 0x07 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-g).</string>
+    <string name="prefs_multiplexer_custom_prefix_zellij_summary">Sent by the PRE key when zellij is active (default: C-Space)</string>
+    <string name="prefs_multiplexer_custom_prefix_zellij_dialog">Enter the prefix key for zellij.\n\nExamples:\n• C-Space or ^Space → Ctrl+Space (app default)\n• C-g or ^g → Ctrl+G (zellij upstream default)\n• C-b or ^b → Ctrl+B\n• M-b or Alt-b → Alt+B\n• 0x07 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-Space).</string>
     <string name="prefs_multiplexer_custom_prefix_screen_title">screen prefix</string>
-    <string name="prefs_multiplexer_custom_prefix_screen_summary">Sent by the PRE key and gestures when screen is active (default: C-a)</string>
-    <string name="prefs_multiplexer_custom_prefix_screen_dialog">Enter the prefix key for GNU screen.\n\nExamples:\n• C-a or ^a → Ctrl+A (screen default)\n• C-b or ^b → Ctrl+B\n• C-Space or ^Space → Ctrl+Space\n• M-b or Alt-b → Alt+B\n• 0x01 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-a).</string>
+    <string name="prefs_multiplexer_custom_prefix_screen_summary">Sent by the PRE key when screen is active (default: C-x)</string>
+    <string name="prefs_multiplexer_custom_prefix_screen_dialog">Enter the prefix key for GNU screen.\n\nExamples:\n• C-x or ^x → Ctrl+X (app default)\n• C-a or ^a → Ctrl+A (screen upstream default)\n• C-b or ^b → Ctrl+B\n• C-Space or ^Space → Ctrl+Space\n• M-b or Alt-b → Alt+B\n• 0x01 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-x).</string>
 
     <!-- Settings: App Security screen -->
     <string name="prefcat_security_app_lock">App lock</string>
@@ -2118,6 +2125,11 @@
         <item quantity="one">%1$s day</item>
         <item quantity="other">%1$s days</item>
     </plurals>
+    <!-- Connection-usage count shown on connection cards -->
+    <plurals name="format_connected_times">
+        <item quantity="one">Connected %1$d time</item>
+        <item quantity="other">Connected %1$d times</item>
+    </plurals>
     <!-- Joins the two units of a duration; translations control the separator -->
     <string name="format_duration_pair_fmt">%1$s %2$s</string>
     <!-- Per-second suffix appended to an already-formatted size -->
@@ -2510,7 +2522,7 @@
     <string name="connection_edit_multiplexer_session_name_hint">Session Name (optional)</string>
     <string name="connection_edit_multiplexer_override_hint">PRE Key Override</string>
     <string name="connection_edit_multiplexer_prefix_title">PRE Key Bindings (this host)</string>
-    <string name="connection_edit_multiplexer_prefix_description">Leave blank to use the global default from Settings. Set one to bind PRE differently for this host only, e.g. tmux “C-a” here while the global default stays “C-b”.</string>
+    <string name="connection_edit_multiplexer_prefix_description">Leave blank to use the global default from Settings. Set one to bind PRE differently for this host only, e.g. tmux “C-b” here while the global default stays “C-Space”.</string>
     <string name="connection_edit_multiplexer_prefix_tmux_hint">tmux PRE binding (optional)</string>
     <string name="connection_edit_multiplexer_prefix_screen_hint">screen PRE binding (optional)</string>
     <string name="connection_edit_multiplexer_prefix_zellij_hint">zellij PRE binding (optional)</string>
@@ -2694,9 +2706,9 @@
     <string name="tab_terminal_action_snippets">Snip</string>
     <string name="tab_terminal_action_menu">Menu</string>
 
-    <!-- Session transcript viewer (activity_transcript_viewer.xml) -->
-    <string name="transcript_empty_title">📄 No Transcripts</string>
-    <string name="transcript_empty_message">Start a transcript from the terminal menu</string>
+    <!-- Recordings browser (activity_recordings.xml) -->
+    <string name="recordings_empty_title">🎬 No Recordings</string>
+    <string name="recordings_empty_message">Start a recording or transcript from the terminal menu</string>
 
     <!-- Log viewer (activity_log_viewer.xml, item_log_entry.xml) -->
     <string name="log_viewer_empty_message">📝 No logs available\n\nLogs will appear here when enabled</string>
@@ -2761,9 +2773,6 @@
     <string name="snippet_item_command_placeholder">command goes here</string>
     <string name="snippet_item_category_placeholder">Category</string>
     <string name="snippet_item_usage_count_placeholder">Used 5 times</string>
-
-    <!-- Transcript list item (item_transcript.xml) -->
-    <string name="transcript_item_view_description">View</string>
 
     <!-- Transfer list item (item_transfer.xml) -->
     <string name="transferrow_type_description">Transfer type</string>
@@ -3216,7 +3225,10 @@
     <string name="snippet_mgr_toast_deleted">Snippet deleted</string>
     <string name="snippet_mgr_error_delete_failed">Failed to delete snippet</string>
     <string name="snippet_mgr_toast_copied">Snippet copied: %1$s</string>
-    <string name="snippet_mgr_usage_count">Used %1$d times</string>
+    <plurals name="snippet_mgr_usage_count">
+        <item quantity="one">Used %1$d time</item>
+        <item quantity="other">Used %1$d times</item>
+    </plurals>
 
     <!-- Sync settings -->
     <string name="sync_settings_toast_location_set">Sync location set</string>
@@ -3320,13 +3332,22 @@
     <string name="dashboard_enable_monitoring">Enable monitoring</string>
     <string name="dashboard_enable_ssh_metric_checks_group">Enable SSH metric checks (CPU/memory/disk)</string>
     <string name="dashboard_monitor_group_title_fmt">Monitor: all hosts in \"%1$s\"</string>
-    <string name="dashboard_hosts_will_be_updated_fmt">%1$d host%2$s will be updated.</string>
+    <plurals name="dashboard_hosts_will_be_updated_fmt">
+        <item quantity="one">%1$d host will be updated.</item>
+        <item quantity="other">%1$d hosts will be updated.</item>
+    </plurals>
     <string name="dashboard_apply_to_all">Apply to all</string>
-    <string name="dashboard_monitor_applied_toast_fmt">Monitor config applied to %1$d host%2$s</string>
+    <plurals name="dashboard_monitor_applied_toast_fmt">
+        <item quantity="one">Monitor config applied to %1$d host</item>
+        <item quantity="other">Monitor config applied to %1$d hosts</item>
+    </plurals>
     <string name="dashboard_no_saved_connections">No saved connections</string>
     <string name="dashboard_add_hosts_title">Add hosts</string>
     <string name="dashboard_move_host_title_fmt">Move %1$s</string>
-    <string name="dashboard_host_count_fmt">%1$d host%2$s</string>
+    <plurals name="dashboard_host_count_fmt">
+        <item quantity="one">%1$d host</item>
+        <item quantity="other">%1$d hosts</item>
+    </plurals>
     <string name="dashboard_error_prefix_fmt">error: %1$s</string>
     <string name="dashboard_load_dash">LOAD —</string>
     <string name="dashboard_uptime_dash">⏱ —</string>
@@ -3493,6 +3514,11 @@
     <string name="identity_vm_cred_edit_title">Edit VM Credential</string>
     <string name="identity_username_required">Username is required</string>
     <string name="identity_vm_cred_delete_title">Delete VM Credential</string>
+    <string name="identity_vm_cred_delete_message_fmt">Delete \"%1$s\"?\n\nThe stored password will be cleared from the Keystore.</string>
+    <plurals name="identity_vm_cred_linked_hypervisors">
+        <item quantity="one">%1$d hypervisor still links to \"%2$s\". Unlink it in its edit screen first.</item>
+        <item quantity="other">%1$d hypervisors still link to \"%2$s\". Unlink them in their edit screens first.</item>
+    </plurals>
 
     <!-- IdentitiesFragment: SSH Keys -->
     <string name="identity_add_ssh_key_title">Add SSH Key</string>
@@ -3591,9 +3617,14 @@
     <string name="theme_editor_save_failed_title">Save failed</string>
 
     <!-- Session transcript viewer dialogs -->
-    <string name="transcript_viewer_delete_title">Delete Transcript</string>
-    <string name="transcript_viewer_deleted_toast">Transcript deleted</string>
-    <string name="transcript_viewer_delete_failed_toast">Failed to delete transcript</string>
+    <string name="recordings_delete_title">Delete Recording</string>
+    <string name="recordings_deleted_toast">Recording deleted</string>
+    <string name="recordings_delete_failed_toast">Failed to delete recording</string>
+    <string name="recordings_action_play">Play Video</string>
+    <string name="recordings_filter_all">All</string>
+    <string name="recordings_filter_videos">Videos</string>
+    <string name="recordings_filter_casts">Casts</string>
+    <string name="recordings_filter_transcripts">Transcripts</string>
 
     <!-- Terminal activity: clipboard toast -->
     <string name="terminal_copied_toast">Copied</string>
@@ -3632,9 +3663,9 @@
     <string name="item_snapshot_placeholder_name">Snapshot Name</string>
     <string name="item_snapshot_placeholder_created">Created: 2024-01-01 12:00:00</string>
 
-    <!-- item_transcript.xml row template placeholders -->
-    <string name="item_transcript_placeholder_name">session_server_20250203</string>
-    <string name="item_transcript_placeholder_meta">15 KB • Dec 03, 2025 14:30</string>
+    <!-- item_recording.xml row template placeholders -->
+    <string name="item_recording_placeholder_name">session_server_20250203</string>
+    <string name="item_recording_placeholder_meta">15 KB • Dec 03, 2025 14:30</string>
 
     <!-- SFTP: default path text -->
     <string name="sftp_path_default_storage">/storage/emulated/0</string>
@@ -3756,6 +3787,7 @@
 
     <!-- Session video recorder (TODO.AI.md item 53): mp4 + asciinema .cast -->
     <string name="video_recording_choose_format_title">Record Video</string>
+    <string name="video_recording_choose_format_cast_only">Terminal Cast only</string>
     <string name="video_recording_choose_format_video_only">Video only</string>
     <string name="video_recording_choose_format_video_and_cast">Video + Terminal Cast</string>
     <string name="video_recording_permission_denied">Screen recording permission was denied</string>
@@ -3772,7 +3804,6 @@
     <string name="video_recording_notification_title">TabSSH is recording</string>
     <string name="video_recording_notification_text">Recording %1$s to Movies/TabSSH</string>
     <string name="video_recording_notification_stop_action">Stop</string>
-    <string name="terminal_gesture_command_sent">Gesture command sent</string>
     <string name="terminal_reattached_to_fmt">Reattached to %1$s</string>
     <string name="terminal_ssh_key_not_found_prompt_fmt">SSH key not found. Enter password for %1$s@%2$s</string>
     <string name="terminal_password_required_prompt_fmt">Password required for %1$s@%2$s</string>
@@ -3869,7 +3900,7 @@
     <string name="menu_connections_bulk_edit_desc">Bulk edit connections</string>
 
     <!-- Menu titles: terminal overflow menu -->
-    <string name="terminal_menu_view_transcripts">View Transcripts</string>
+    <string name="terminal_menu_recordings">Recordings</string>
     <string name="terminal_menu_command_palette">Command Palette (Ctrl+K)</string>
     <string name="terminal_menu_quick_switcher">Quick Switcher (Ctrl+J)</string>
     <string name="terminal_menu_broadcast_choose_targets">Broadcast input: choose targets…</string>
@@ -3910,6 +3941,18 @@
     <string name="arr_remote_command_tmux_attach_d_tmux_new_auto">tmux attach -d || tmux new  (auto-attach to tmux)</string>
     <string name="arr_remote_command_screen_dr_auto_attach_to_scr">screen -DR  (auto-attach to screen)</string>
     <string name="arr_remote_command_create_sourceforge_shell_sou">create  (SourceForge shell.sourceforge.net)</string>
+    <string name="arr_remote_command_shell_bash">exec bash -l  (Bash login shell)</string>
+    <string name="arr_remote_command_shell_zsh">exec zsh -l  (Zsh login shell)</string>
+    <string name="arr_remote_command_shell_fish">exec fish -l  (Fish login shell)</string>
+    <string name="arr_remote_command_shell_sh">exec sh -l  (POSIX sh login shell)</string>
+    <string name="arr_remote_command_shell_ksh">exec ksh -l  (Korn login shell)</string>
+    <string name="arr_remote_command_shell_dash">exec dash -l  (Dash login shell)</string>
+    <string name="arr_remote_command_shell_tcsh">exec tcsh -l  (Tcsh login shell)</string>
+    <string name="arr_remote_command_tmux_main">tmux new -A -s main  (attach or create \"main\")</string>
+    <string name="arr_remote_command_screen_multi">screen -xRR  (shared multi-display attach)</string>
+    <string name="arr_remote_command_zellij_main">zellij attach -c main  (attach or create \"main\")</string>
+    <string name="arr_remote_command_byobu">byobu  (Byobu session wrapper)</string>
+    <string name="arr_remote_command_tmux_new">tmux-new single  (tmux-new script — session type editable)</string>
     <string name="arr_remote_command_custom">Custom…</string>
     <string name="arr_theme_dark">Dark</string>
     <string name="arr_theme_light">Light</string>

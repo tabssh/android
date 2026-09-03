@@ -5,8 +5,7 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.databinding.ItemConnectionBinding
 import io.github.tabssh.storage.database.entities.ConnectionProfile
-import java.text.SimpleDateFormat
-import java.util.*
+import io.github.tabssh.utils.Format
 
 /**
  * RecyclerView adapter for displaying SSH connection profiles.
@@ -37,8 +36,6 @@ class ConnectionAdapter(
         onItemLongClickListener = listener
     }
 
-    private val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-    
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ConnectionViewHolder {
         val binding = ItemConnectionBinding.inflate(LayoutInflater.from(parent.context), parent, false)
         return ConnectionViewHolder(binding)
@@ -92,17 +89,12 @@ class ConnectionAdapter(
                 // new layout view for the relative-time subtitle.
                 if (connection.connectionCount > 0) {
                     textConnectionCount.visibility = android.view.View.VISIBLE
+                    val ctx = binding.root.context
                     textConnectionCount.text = buildString {
-                        append("Connected ${connection.connectionCount} times")
+                        append(Format.connectedTimes(ctx, connection.connectionCount))
                         if (connection.lastConnected > 0) {
                             append(" • ")
-                            append(
-                                android.text.format.DateUtils.getRelativeTimeSpanString(
-                                    connection.lastConnected,
-                                    System.currentTimeMillis(),
-                                    android.text.format.DateUtils.MINUTE_IN_MILLIS
-                                )
-                            )
+                            append(Format.pastTimestamp(ctx, connection.lastConnected))
                         }
                     }
                 } else {
@@ -141,7 +133,7 @@ class ConnectionAdapter(
                     }
                     append(". Authentication: ${getAuthTypeDisplay(connection.getAuthTypeEnum())}")
                     if (connection.lastConnected > 0) {
-                        append(". Last connected ${dateFormat.format(Date(connection.lastConnected))}")
+                        append(". Last connected ${Format.pastTimestamp(binding.root.context, connection.lastConnected)}")
                     }
                 }
             }
@@ -166,12 +158,13 @@ class ConnectionAdapter(
         }
         
         private fun updateStatusIndicator(connection: ConnectionProfile) {
-            // Green when SSHSessionManager has a live channel for this
-            // profile id, grey otherwise. Pulled off the singleton on
-            // the application object — no DI here.
+            // Green when the profile has a live session (pooled SSH connection
+            // OR a connected tab — the tab check covers mosh, whose bootstrap
+            // SSH connection is gone after the handshake), grey otherwise.
+            // Pulled off the singleton on the application object — no DI here.
             val app = binding.root.context.applicationContext
                 as? io.github.tabssh.TabSSHApplication
-            val active = app?.sshSessionManager?.isConnectionActive(connection.id) == true
+            val active = app?.hasLiveSessionFor(connection.id) == true
             binding.indicatorStatus.setBackgroundResource(
                 if (active) io.github.tabssh.R.drawable.connection_status_indicator
                 else        io.github.tabssh.R.drawable.connection_status_disconnected

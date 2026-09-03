@@ -397,18 +397,57 @@ class TerminalBuffer(
     }
 
     fun resize(newRows: Int, newCols: Int) {
+        val oldRows = rows
         val oldScreen = screen
         val oldRowWrapped = rowWrapped
         val oldAlternate = if (alternateScreen) mainScreen else alternateScreenBuffer
+        val rowDelta = newRows.coerceAtLeast(1) - oldRows
+
+        // Bottom-anchor a row-count change on the MAIN screen: growing the
+        // view pulls lines back from scrollback ABOVE the existing content
+        // so the prompt stays glued to the bottom row — matching
+        // xterm/Termux — instead of staying glued to the top and opening a
+        // dead band of blank rows below it (visible as empty terminal
+        // background above the extra-keys bar after the keyboard closes and
+        // the grid grows). Shrinking pushes just enough top rows into
+        // scrollback to keep the cursor visible rather than truncating
+        // them. Skipped for the alternate screen (curses apps redraw
+        // explicitly on SIGWINCH) and for a partial scroll region (DECSTBM),
+        // where rows must stay in place — see scrollbackEligible().
+        val bottomAnchor = !alternateScreen && rowDelta != 0 && scrollbackEligible()
+
         rows = newRows.coerceAtLeast(1)
         cols = newCols.coerceAtLeast(1)
-        screen = resizedGrid(oldScreen)
-        rowWrapped = BooleanArray(rows)
 
-        // Carry the wrap flags across for the rows that survived the resize
-        val copyRows = minOf(oldScreen.size, rows)
-        for (r in 0 until copyRows) {
-            rowWrapped[r] = oldRowWrapped.getOrElse(r) { false }
+        if (bottomAnchor) {
+            // Shift only by what actually needs to move: growing pulls in at
+            // most the lines scrollback really holds (an empty-scrollback
+            // session stays top-anchored — xterm/Termux never pad blanks
+            // above content); shrinking evicts only the top rows required
+            // to keep the cursor row on screen (blank bottom rows are
+            // truncated first).
+            val shift = if (rowDelta > 0) {
+                minOf(rowDelta, scrollback.size)
+            } else {
+                (cursorY - (rows - 1)).coerceAtLeast(0)
+            }
+            val (newScreen, newWrapped) = if (rowDelta > 0) {
+                growBottomAnchored(oldScreen, oldRowWrapped, shift)
+            } else {
+                shrinkBottomAnchored(oldScreen, oldRowWrapped, shift)
+            }
+            screen = newScreen
+            rowWrapped = newWrapped
+            cursorY = (cursorY + if (rowDelta > 0) shift else -shift).coerceIn(0, rows - 1)
+        } else {
+            screen = resizedGrid(oldScreen)
+            rowWrapped = BooleanArray(rows)
+            // Carry the wrap flags across for the rows that survived the resize
+            val copyRows = minOf(oldScreen.size, rows)
+            for (r in 0 until copyRows) {
+                rowWrapped[r] = oldRowWrapped.getOrElse(r) { false }
+            }
+            cursorY = cursorY.coerceIn(0, rows - 1)
         }
 
         // The off-screen buffer must be resized too. Leaving it at the old
@@ -425,7 +464,6 @@ class TerminalBuffer(
 
         // Adjust cursor position and the scrolling region to the new geometry
         cursorX = cursorX.coerceIn(0, cols - 1)
-        cursorY = cursorY.coerceIn(0, rows - 1)
         pendingWrap = false
         scrollTop = scrollTop.coerceIn(0, rows - 1)
         scrollBottom = scrollBottom.coerceIn(scrollTop, rows - 1)
@@ -444,6 +482,75 @@ class TerminalBuffer(
             }
         }
         return target
+    }
+
+    /**
+     * Grow the main screen, restoring [shiftRows] lines from scrollback
+     * (most-recently-scrolled-off first — the one immediately above the old
+     * top row, mirroring [scrollDown]'s restore order) into the new TOP rows
+     * and moving the old content down by the same amount. The caller caps
+     * [shiftRows] at the scrollback size, so no blank rows are ever padded
+     * above content — any leftover growth appears as blank rows at the
+     * bottom, exactly like xterm/Termux.
+     */
+    private fun growBottomAnchored(
+        oldScreen: Array<Array<TerminalChar>>,
+        oldRowWrapped: BooleanArray,
+        shiftRows: Int
+    ): Pair<Array<Array<TerminalChar>>, BooleanArray> {
+        val target = Array(rows) { Array(cols) { TerminalChar(' ', 7, 0, false, false, false) } }
+        val wrapped = BooleanArray(rows)
+
+        for (i in shiftRows - 1 downTo 0) {
+            val restored = scrollback.removeLastOrNull() ?: continue
+            val copyCols = minOf(restored.size, cols)
+            for (c in 0 until copyCols) target[i][c] = restored[c]
+            // Scrollback lines don't carry a wrap flag (see scrollDown), so
+            // restored rows default to unwrapped, matching that behavior.
+        }
+
+        val copyRows = minOf(oldScreen.size, rows - shiftRows)
+        for (r in 0 until copyRows) {
+            val copyCols = minOf(oldScreen[r].size, cols)
+            for (c in 0 until copyCols) target[r + shiftRows][c] = oldScreen[r][c]
+            wrapped[r + shiftRows] = oldRowWrapped.getOrElse(r) { false }
+        }
+
+        return target to wrapped
+    }
+
+    /**
+     * Shrink the main screen, pushing the top [shiftRows] rows into
+     * scrollback (oldest first, same order [scrollUp] uses) and moving the
+     * remaining content up by the same amount. The caller computes
+     * [shiftRows] as just enough to keep the cursor row visible — content
+     * that already fits stays put and only blank bottom rows are truncated,
+     * exactly like xterm/Termux.
+     */
+    private fun shrinkBottomAnchored(
+        oldScreen: Array<Array<TerminalChar>>,
+        oldRowWrapped: BooleanArray,
+        shiftRows: Int
+    ): Pair<Array<Array<TerminalChar>>, BooleanArray> {
+        val evictCount = minOf(shiftRows, oldScreen.size)
+        for (r in 0 until evictCount) {
+            scrollback.add(oldScreen[r].copyOf())
+        }
+        if (maxScrollbackLines != -1 && scrollback.size > maxScrollbackLines) {
+            val toRemove = scrollback.size - maxScrollbackLines
+            repeat(toRemove) { scrollback.removeAt(0) }
+        }
+
+        val target = Array(rows) { Array(cols) { TerminalChar(' ', 7, 0, false, false, false) } }
+        val wrapped = BooleanArray(rows)
+        val copyRows = (oldScreen.size - shiftRows).coerceAtLeast(0).coerceAtMost(rows)
+        for (r in 0 until copyRows) {
+            val srcRow = r + shiftRows
+            val copyCols = minOf(oldScreen[srcRow].size, cols)
+            for (c in 0 until copyCols) target[r][c] = oldScreen[srcRow][c]
+            wrapped[r] = oldRowWrapped.getOrElse(srcRow) { false }
+        }
+        return target to wrapped
     }
 
     fun setCharacterAttributes(

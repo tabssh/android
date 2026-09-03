@@ -586,8 +586,8 @@
         </provider>
 
         <activity
-            android:name=".ui.activities.TranscriptViewerActivity"
-            android:label="@string/activity_label_session_transcripts"
+            android:name=".ui.activities.RecordingsActivity"
+            android:label="@string/activity_label_recordings"
             android:parentActivityName=".ui.activities.TabTerminalActivity"
             android:exported="false" />
 

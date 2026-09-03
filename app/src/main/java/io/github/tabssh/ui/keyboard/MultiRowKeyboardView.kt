@@ -594,7 +594,7 @@ class MultiRowKeyboardView @JvmOverloads constructor(
             val pgup  = KeyboardKey("PGUP",  "PGUP", "\u001b[5~")
             val pgdn  = KeyboardKey("PGDN",  "PGDN", "\u001b[6~")
             val clip   = KeyboardKey("CLIPBOARD", "📋", "", KeyboardKey.KeyCategory.ACTION)
-            // PREFIX(2×): sends the current multiplexer prefix (C-b / C-a / C-g).
+            // PREFIX(2×): sends the current multiplexer prefix (C-Space / C-x defaults).
             // Placed at the start of row3 so it sits directly under ENT on row2,
             // matching the user's "pinned left under ENT" spec.
             val prefix = KeyboardKey("PREFIX", "PRE", "", KeyboardKey.KeyCategory.ACTION, 2f)

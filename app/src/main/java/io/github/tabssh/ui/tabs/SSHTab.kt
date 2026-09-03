@@ -46,9 +46,9 @@ class SSHTab(
     // the mosh-fallback path doesn't accumulate observers.
     private var stateCollectorJob: Job? = null
 
-    // Connection (public for gesture command sending).
+    // Connection (public for command sending).
     // @Volatile: written from Dispatchers.IO (connect/disconnect coroutines)
-    // and read from Main (gesture send, UI status) and from JSch/TermuxBridge
+    // and read from Main (command send, UI status) and from JSch/TermuxBridge
     // worker threads (listener callbacks).
     @Volatile
     var connection: SSHConnection? = null
@@ -65,7 +65,7 @@ class SSHTab(
     private var ownChannel: Channel? = null
 
     // Wave 2.3 — telnet alternative. Only one of `connection` / `telnetConnection`
-    // is set; gesture command sending and clean disconnect both check both.
+    // is set; command sending and clean disconnect both check both.
     @Volatile
     var telnetConnection: TelnetConnection? = null
 
@@ -998,9 +998,9 @@ class SSHTab(
      *     order). Both are sent down the same shell channel; the remote
      *     reads them as if the user typed them.
      *
-     * Multiplexer type comes from the global preference (`gesture_multiplexer_type`,
-     * default tmux), session name from profile.multiplexerSessionName
-     * (default `tabssh`).
+     * Multiplexer type comes from the global preference (`gesture_multiplexer_type`
+     * — key name is historical, gestures were removed; default tmux), session
+     * name from profile.multiplexerSessionName (default `tabssh`).
      *
      * ASK mode (IDEA.md feature 21) defers the launch: the remote's existing
      * sessions are listed over an exec channel and surfaced through
@@ -1177,6 +1177,8 @@ class SSHTab(
                     "if [ -n \"\$STY\" ]; then echo screen:env; exit 0; fi; " +
                     "if [ -n \"\$ZELLIJ_SESSION_NAME\" ]; then echo zellij:env; exit 0; fi; " +
                     "if command -v tmux >/dev/null 2>&1 && tmux ls >/dev/null 2>&1; then echo tmux:live-socket; exit 0; fi; " +
+                    // The tmux-new session manager runs its server on a named socket (`-L tmux-new`), invisible to a default `tmux ls` — probe that socket explicitly so PREFIX works there too
+                    "if command -v tmux >/dev/null 2>&1 && tmux -L tmux-new ls >/dev/null 2>&1; then echo tmux:live-socket; exit 0; fi; " +
                     "if command -v screen >/dev/null 2>&1 && screen -ls 2>/dev/null | grep -qE \"[0-9]+\\.[^[:space:]]+\"; then echo screen:live-socket; exit 0; fi; " +
                     // `zellij list-sessions` prints "No active zellij sessions found."
                     // to STDOUT with exit 0 when nothing is running — a bare

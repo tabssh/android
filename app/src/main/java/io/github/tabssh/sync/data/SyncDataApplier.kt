@@ -1259,20 +1259,21 @@ class SyncDataApplier {
             prefs.forEach { (key, value) ->
                 try {
                     when (key) {
-                        "gestureEnabled" -> defaultPrefs.edit()
-                            .putBoolean("enable_custom_gestures", value as Boolean).apply()
                         "gestureType"    -> defaultPrefs.edit()
                             .putString("gesture_multiplexer_type", when (value) {
                                 is String -> value; is Number -> value.toString(); else -> "tmux"
                             }).apply()
                         "prefixTmux"    -> preferenceManager.setMultiplexerPrefix("tmux",   when (value) {
-                            is String -> value; is Number -> value.toString(); else -> "C-b"
+                            is String -> value; is Number -> value.toString()
+                            else -> io.github.tabssh.storage.preferences.PreferenceManager.DEFAULT_PREFIX_TMUX
                         })
                         "prefixScreen"  -> preferenceManager.setMultiplexerPrefix("screen", when (value) {
-                            is String -> value; is Number -> value.toString(); else -> "C-a"
+                            is String -> value; is Number -> value.toString()
+                            else -> io.github.tabssh.storage.preferences.PreferenceManager.DEFAULT_PREFIX_SCREEN
                         })
                         "prefixZellij"  -> preferenceManager.setMultiplexerPrefix("zellij", when (value) {
-                            is String -> value; is Number -> value.toString(); else -> "C-g"
+                            is String -> value; is Number -> value.toString()
+                            else -> io.github.tabssh.storage.preferences.PreferenceManager.DEFAULT_PREFIX_ZELLIJ
                         })
                     }
                     count++
@@ -1466,14 +1467,8 @@ class SyncDataApplier {
                         }
                         preferenceManager.setAutoLockTimeout(timeout)
                     }
-                    "passwordTTLHours" -> {
-                        val hours = when (value) {
-                            is Number -> value.toInt()
-                            is String -> value.toInt()
-                            else -> 24
-                        }
-                        preferenceManager.setPasswordTTLHours(hours)
-                    }
+                    // "passwordTTLHours" from older peers falls through this when unmatched
+                    // and is deliberately ignored: no TTL (AI.md PART 5, Storage levels)
                     "preventScreenshots" -> preferenceManager.setPreventScreenshots(value as Boolean)
                 }
                 count++

@@ -58,7 +58,6 @@ class PreferenceManager(private val context: Context) {
         // Security preferences
         private const val KEY_PASSWORD_STORAGE_LEVEL = "security_password_storage_level"
         private const val KEY_REQUIRE_BIOMETRIC = "biometric_auth"
-        private const val KEY_PASSWORD_TTL = "security_password_ttl_hours"
         private const val KEY_AUTO_LOCK_ON_BACKGROUND = "security_auto_lock_background"
         private const val KEY_AUTO_LOCK_TIMEOUT = "security_auto_lock_timeout"
         private const val KEY_STRICT_HOST_KEY_CHECKING = "strict_host_key_checking"
@@ -187,12 +186,12 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_HOST_LOG_MAX_SIZE_MB = "host_log_max_size_mb"
 
         // Defaults
-        // tmux default
-        const val DEFAULT_PREFIX_TMUX = "C-b"
-        // screen default
-        const val DEFAULT_PREFIX_SCREEN = "C-a"
-        // zellij default
-        const val DEFAULT_PREFIX_ZELLIJ = "C-g"
+        // tmux default — C-Space (dfmgr tmux.conf: `set -g prefix C-Space`)
+        const val DEFAULT_PREFIX_TMUX = "C-Space"
+        // screen default — C-x (dfmgr screen defaultrc: `escape ^Xx`)
+        const val DEFAULT_PREFIX_SCREEN = "C-x"
+        // zellij default — C-Space (dfmgr zellij config.kdl binds Ctrl+Space to enter tmux-mode)
+        const val DEFAULT_PREFIX_ZELLIJ = "C-Space"
         const val DEFAULT_STARTUP_BEHAVIOR = "last_session"
         const val DEFAULT_PASSWORD_STORAGE_LEVEL = "encrypted"
         const val DEFAULT_THEME = "dracula"
@@ -221,9 +220,6 @@ class PreferenceManager(private val context: Context) {
     
     fun isRequireBiometricForSensitive(): Boolean = getBoolean(KEY_REQUIRE_BIOMETRIC, true)
     fun setRequireBiometricForSensitive(require: Boolean) = setBoolean(KEY_REQUIRE_BIOMETRIC, require)
-    
-    fun getPasswordTTLHours(): Int = getInt(KEY_PASSWORD_TTL, 24)
-    fun setPasswordTTLHours(hours: Int) = setInt(KEY_PASSWORD_TTL, hours)
     
     fun isAutoLockOnBackground(): Boolean = getBoolean(KEY_AUTO_LOCK_ON_BACKGROUND, false)
     fun setAutoLockOnBackground(enabled: Boolean) = setBoolean(KEY_AUTO_LOCK_ON_BACKGROUND, enabled)

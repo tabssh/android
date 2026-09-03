@@ -8,7 +8,7 @@ PROJECT := tabssh
 # carried backticks that every recipe then ran as command substitution.
 VERSION := $(shell grep -m1 -E -- '^[[:space:]]*versionName[[:space:]]+"' app/build.gradle | sed 's/.*"\(.*\)".*/\1/')
 # Toolchain image declared in IDEA.md ## Toolchain (build_image)
-BUILD_IMAGE ?= ghcr.io/tabssh/android:build
+BUILD_IMAGE ?= casjaysdev/android:latest
 # 4g proved too small: the Gradle daemon (Xmx2048m) plus Kotlin/KSP daemons
 # plus lintDebug got OOM-killed mid-check under a 4g cgroup limit
 DOCKER_MEM ?= 6g
@@ -130,10 +130,10 @@ logs: ## View device logs
 test-install: ## Build, install, then run UI tests
 	$(MAKE) build install test
 
-image: ## Build Docker image
-	@echo -e "$(BLUE)🐳 Building image...$(NC)"
-	@docker build -t $(BUILD_IMAGE) -f docker/Dockerfile.build .
-	@echo -e "$(GREEN)✅ Built: $(BUILD_IMAGE)$(NC)"
+image: ## Pull toolchain image
+	@echo -e "$(BLUE)🐳 Pulling image...$(NC)"
+	@docker pull $(BUILD_IMAGE)
+	@echo -e "$(GREEN)✅ Pulled: $(BUILD_IMAGE)$(NC)"
 
 _ensure-image:
 	@docker image inspect $(BUILD_IMAGE) > /dev/null 2>&1 || $(MAKE) image

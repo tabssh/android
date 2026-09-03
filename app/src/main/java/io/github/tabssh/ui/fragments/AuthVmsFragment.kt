@@ -188,10 +188,9 @@ class AuthVmsFragment : Fragment() {
             } catch (_: Exception) { 0 }
 
             val message = if (linked > 0) {
-                "$linked hypervisor${if (linked == 1) "" else "s"} still link to \"${account.name}\". " +
-                "Unlink them in their edit screen first."
+                resources.getQuantityString(R.plurals.identity_vm_cred_linked_hypervisors, linked, linked, account.name)
             } else {
-                "Delete \"${account.name}\"?\n\nThe stored password will be cleared from the Keystore."
+                getString(R.string.identity_vm_cred_delete_message_fmt, account.name)
             }
 
             MaterialAlertDialogBuilder(requireContext())

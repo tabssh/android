@@ -261,7 +261,10 @@ class MultiHostDashboardActivity : TabSSHActivity() {
                        else context.getString(R.string.dashboard_global_default_pct_fmt, globalCpu)
             }
             form.addView(tvCpuVal)
-            val sbCpu = SeekBar(context).apply { max = 100; progress = slot.cpuThreshold ?: globalCpu }
+            // Progress 0 = "use global default" (matches the label and what Save
+            // stores) — starting the thumb at the global value made plain Save
+            // silently persist it as a per-host override.
+            val sbCpu = SeekBar(context).apply { max = 100; progress = slot.cpuThreshold ?: 0 }
             sbCpu.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
                     tvCpuVal.text = if (v == 0) context.getString(R.string.dashboard_global_default_pct_fmt, globalCpu)
@@ -279,7 +282,8 @@ class MultiHostDashboardActivity : TabSSHActivity() {
                        else context.getString(R.string.dashboard_global_default_pct_fmt, globalMem)
             }
             form.addView(tvMemVal)
-            val sbMem = SeekBar(context).apply { max = 100; progress = slot.memoryThreshold ?: globalMem }
+            // Progress 0 = "use global default" — see sbCpu above
+            val sbMem = SeekBar(context).apply { max = 100; progress = slot.memoryThreshold ?: 0 }
             sbMem.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
                     tvMemVal.text = if (v == 0) context.getString(R.string.dashboard_global_default_pct_fmt, globalMem)
@@ -297,7 +301,8 @@ class MultiHostDashboardActivity : TabSSHActivity() {
                        else context.getString(R.string.dashboard_global_default_pct_fmt, globalDisk)
             }
             form.addView(tvDiskVal)
-            val sbDisk = SeekBar(context).apply { max = 100; progress = slot.diskThreshold ?: globalDisk }
+            // Progress 0 = "use global default" — see sbCpu above
+            val sbDisk = SeekBar(context).apply { max = 100; progress = slot.diskThreshold ?: 0 }
             sbDisk.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
                     tvDiskVal.text = if (v == 0) context.getString(R.string.dashboard_global_default_pct_fmt, globalDisk)
@@ -352,6 +357,12 @@ class MultiHostDashboardActivity : TabSSHActivity() {
                 }
                 .setNegativeButton(context.getString(R.string.cancel), null)
                 .show()
+                .apply {
+                    // Remove is destructive — tint it error red so it can't be
+                    // mistaken for Cancel/Save (M3 colors all dialog buttons alike)
+                    getButton(android.content.DialogInterface.BUTTON_NEUTRAL)
+                        ?.setTextColor(ContextCompat.getColor(context, R.color.status_error))
+                }
         }
     }
 
@@ -736,7 +747,10 @@ class MultiHostDashboardActivity : TabSSHActivity() {
                 ?: getString(R.string.dashboard_global_default_pct_fmt, globalCpuG)
         }
         form.addView(tvCpuVal)
-        val sbCpu = SeekBar(this).apply { max = 100; progress = firstSlot?.cpuThreshold ?: globalCpuG }
+        // Progress 0 = "use global default" (matches the label and what Apply
+        // stores) — starting the thumb at the global value made plain Apply
+        // silently persist it as an explicit override on every host.
+        val sbCpu = SeekBar(this).apply { max = 100; progress = firstSlot?.cpuThreshold ?: 0 }
         sbCpu.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
                 tvCpuVal.text = if (v == 0) getString(R.string.dashboard_global_default_pct_fmt, globalCpuG) else getString(R.string.dashboard_percent_fmt, v)
@@ -753,7 +767,8 @@ class MultiHostDashboardActivity : TabSSHActivity() {
                 ?: getString(R.string.dashboard_global_default_pct_fmt, globalMemG)
         }
         form.addView(tvMemVal)
-        val sbMem = SeekBar(this).apply { max = 100; progress = firstSlot?.memoryThreshold ?: globalMemG }
+        // Progress 0 = "use global default" — see sbCpu above
+        val sbMem = SeekBar(this).apply { max = 100; progress = firstSlot?.memoryThreshold ?: 0 }
         sbMem.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
                 tvMemVal.text = if (v == 0) getString(R.string.dashboard_global_default_pct_fmt, globalMemG) else getString(R.string.dashboard_percent_fmt, v)
@@ -770,7 +785,8 @@ class MultiHostDashboardActivity : TabSSHActivity() {
                 ?: getString(R.string.dashboard_global_default_pct_fmt, globalDiskG)
         }
         form.addView(tvDiskVal)
-        val sbDisk = SeekBar(this).apply { max = 100; progress = firstSlot?.diskThreshold ?: globalDiskG }
+        // Progress 0 = "use global default" — see sbCpu above
+        val sbDisk = SeekBar(this).apply { max = 100; progress = firstSlot?.diskThreshold ?: 0 }
         sbDisk.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar, v: Int, f: Boolean) {
                 tvDiskVal.text = if (v == 0) getString(R.string.dashboard_global_default_pct_fmt, globalDiskG) else getString(R.string.dashboard_percent_fmt, v)
@@ -782,7 +798,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
 
         MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.dashboard_monitor_group_title_fmt, groupName))
-            .setMessage(getString(R.string.dashboard_hosts_will_be_updated_fmt, hostIds.size, if (hostIds.size == 1) "" else "s"))
+            .setMessage(resources.getQuantityString(R.plurals.dashboard_hosts_will_be_updated_fmt, hostIds.size, hostIds.size))
             .setView(scroll)
             .setPositiveButton(getString(R.string.dashboard_apply_to_all)) { _, _ ->
                 val enabled      = cbEnabled.isChecked
@@ -815,7 +831,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
                     }
                     withContext(Dispatchers.Main) {
                         rebuildAndSubmit()
-                        toast(getString(R.string.dashboard_monitor_applied_toast_fmt, hostIds.size, if (hostIds.size == 1) "" else "s"))
+                        toast(resources.getQuantityString(R.plurals.dashboard_monitor_applied_toast_fmt, hostIds.size, hostIds.size))
                         if (enabled) {
                             BatteryOptimizationHelper.requestExemptionIfNeeded(this@MultiHostDashboardActivity) {
                                 BatteryOptimizationHelper.showManufacturerGuidanceIfNeeded(this@MultiHostDashboardActivity)
@@ -1193,7 +1209,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
         fun bind(item: DashboardItem.GroupHeader) {
             val g = item.group
             b.tvGroupName.text  = g.name
-            b.tvHostCount.text  = b.root.context.getString(R.string.dashboard_host_count_fmt, item.memberCount, if (item.memberCount == 1) "" else "s")
+            b.tvHostCount.text  = b.root.context.resources.getQuantityString(R.plurals.dashboard_host_count_fmt, item.memberCount, item.memberCount)
             b.btnToggle.setImageResource(
                 if (g.collapsed) R.drawable.ic_expand_more else R.drawable.ic_expand_less
             )
@@ -1212,7 +1228,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
 
         fun bindUngrouped(item: DashboardItem.UngroupedHeader) {
             b.tvGroupName.text  = b.root.context.getString(R.string.import_export_ungrouped)
-            b.tvHostCount.text  = b.root.context.getString(R.string.dashboard_host_count_fmt, item.count, if (item.count == 1) "" else "s")
+            b.tvHostCount.text  = b.root.context.resources.getQuantityString(R.plurals.dashboard_host_count_fmt, item.count, item.count)
             b.btnToggle.setImageResource(
                 if (item.collapsed) R.drawable.ic_expand_more else R.drawable.ic_expand_less
             )

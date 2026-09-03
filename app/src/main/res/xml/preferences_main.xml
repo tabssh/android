@@ -20,6 +20,13 @@
       android:fragment="io.github.tabssh.ui.activities.TerminalSettingsFragment" />
 
     <Preference
+      android:key="recording_settings"
+      android:title="@string/prefs_recording_settings_title"
+      android:summary="@string/prefs_recording_settings_summary"
+      android:icon="@drawable/ic_videocam"
+      android:fragment="io.github.tabssh.ui.activities.RecordingSettingsFragment" />
+
+    <Preference
       android:key="security_settings"
       android:title="@string/prefs_security_settings_title"
       android:summary="@string/prefs_security_settings_summary"

@@ -167,4 +167,101 @@ object VideoRecordingStorage {
             null
         }
     }
+
+    /** One saved recording file (mp4 or `.cast`) under [RELATIVE_PATH]. */
+    data class Recording(
+        val filename: String,
+        val size: Long,
+        val timestamp: Long,
+        val isCast: Boolean,
+    )
+
+    /**
+     * Enumerate all finished recordings in the `Movies/TabSSH` folder for the
+     * Recordings browser. API 29+ queries MediaStore (videos from the Video
+     * collection, `.cast` files from the generic Files collection); the
+     * legacy path lists the public directory itself. Rows still marked
+     * `IS_PENDING` (a recording in progress) are excluded by MediaStore's
+     * default query behavior.
+     */
+    fun listRecordings(context: Context): List<Recording> {
+        val results = mutableListOf<Recording>()
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val projection = arrayOf(
+                    MediaStore.MediaColumns.DISPLAY_NAME,
+                    MediaStore.MediaColumns.SIZE,
+                    MediaStore.MediaColumns.DATE_MODIFIED,
+                )
+                // RELATIVE_PATH is stored with a trailing slash ("Movies/TabSSH/").
+                val selection = "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
+                val args = arrayOf("$RELATIVE_PATH%")
+                val collections = listOf(
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                    MediaStore.Files.getContentUri("external"),
+                )
+                for (collection in collections) {
+                    context.contentResolver.query(collection, projection, selection, args, null)?.use { cursor ->
+                        val nameIdx = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+                        val sizeIdx = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
+                        val dateIdx = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
+                        while (cursor.moveToNext()) {
+                            val name = cursor.getString(nameIdx) ?: continue
+                            val isCast = name.endsWith(".cast")
+                            // The Files collection also indexes the mp4s the Video
+                            // collection already returned — keep only `.cast` rows
+                            // from it to avoid duplicates.
+                            if (collection != MediaStore.Video.Media.EXTERNAL_CONTENT_URI && !isCast) continue
+                            if (collection == MediaStore.Video.Media.EXTERNAL_CONTENT_URI && isCast) continue
+                            results.add(
+                                Recording(
+                                    filename = name,
+                                    size = cursor.getLong(sizeIdx),
+                                    timestamp = cursor.getLong(dateIdx) * 1000L,
+                                    isCast = isCast,
+                                )
+                            )
+                        }
+                    }
+                }
+            } else {
+                val dir = File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
+                    "TabSSH"
+                )
+                dir.listFiles { f -> f.isFile }?.forEach { file ->
+                    results.add(
+                        Recording(
+                            filename = file.name,
+                            size = file.length(),
+                            timestamp = file.lastModified(),
+                            isCast = file.name.endsWith(".cast"),
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to list recordings", e)
+        }
+        return results.sortedByDescending { it.timestamp }
+    }
+
+    /**
+     * Delete a finished recording file. MediaStore rows this app inserted are
+     * deletable without extra permissions; the legacy path deletes the file
+     * directly and lets the media scanner drop the stale index entry.
+     */
+    fun deleteRecording(context: Context, filename: String, legacyFile: File?): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val uri = shareableUriFor(context, filename, null) ?: return false
+                context.contentResolver.delete(uri, null, null) > 0
+            } else {
+                legacyFile != null && legacyFile.delete()
+            }
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to delete recording $filename", e)
+            false
+        }
+    }
 }

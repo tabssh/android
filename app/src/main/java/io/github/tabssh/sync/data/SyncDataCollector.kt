@@ -1098,7 +1098,6 @@ class SyncDataCollector {
             "clearClipboardTimeout" to preferenceManager.getClearClipboardTimeout(),
             "autoLockEnabled" to preferenceManager.isAutoLockOnBackground(),
             "lockTimeout" to preferenceManager.getAutoLockTimeout(),
-            "passwordTTLHours" to preferenceManager.getPasswordTTLHours(),
             "preventScreenshots" to preferenceManager.isPreventScreenshots()
         )
     }
@@ -1244,7 +1243,6 @@ class SyncDataCollector {
     private fun collectMultiplexerPreferences(): Map<String, Any> {
         val defaultPrefs = AndroidPreferenceManager.getDefaultSharedPreferences(context)
         return mapOf(
-            "gestureEnabled" to defaultPrefs.getBoolean("enable_custom_gestures", false),
             "gestureType"    to (defaultPrefs.getString("gesture_multiplexer_type", "tmux") ?: "tmux"),
             "prefixTmux"     to preferenceManager.getMultiplexerPrefix("tmux"),
             "prefixScreen"   to preferenceManager.getMultiplexerPrefix("screen"),

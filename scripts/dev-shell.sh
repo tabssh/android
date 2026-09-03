@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-##@Version 202608150001-git
+##@Version 202608310001-git
 # scripts/dev-shell.sh — enter an interactive development container shell.
 # Mounts the project source at /workspace with the build image.
 # Use this for one-off Gradle commands outside of `make`.
 
 set -euo pipefail
 
-VERSION="202608150001-git"
+VERSION="202608310001-git"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -14,5 +14,5 @@ exec docker run --rm -it \
     -v "$ROOT:/workspace" \
     -w /workspace \
     -e "GRADLE_USER_HOME=/workspace/.gradle-home" \
-    ghcr.io/tabssh/android:build \
+    casjaysdev/android:latest \
     bash

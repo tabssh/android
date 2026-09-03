@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
  * Uploads a finished `.cast` file (from [AsciinemaCastWriter]) to an
  * asciinema-API-compatible server — official `asciinema.org` by default, or
  * any self-hosted instance the user points the "Asciinema Server"
- * preference (`preferences_terminal.xml`'s `asciinema_server_url` key) at.
+ * preference (`preferences_recording.xml`'s `asciinema_server_url` key) at.
  *
  * Uses the same upload protocol as the official `asciinema` CLI: a
  * multipart POST of the cast file to `{server}/api/asciicasts`,
