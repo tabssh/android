@@ -1,6 +1,9 @@
 [ ] find and fix any main thread issues
 [ ] fix keyboard not showing in panes
 [ ] fix panes broadcast to work like tmux as input box is bad UX
+[ ] there is no way to tell if the builtin tor is qctually running/working
+[ ] fix the vps to autodetect, for example: date is Aug 10 monthly then its due on 10th of every month.
+[ ] fix all vim/neovim bugs. a big 9ne is keyboard toggling breaks the output
 [ ] can not pick an cloud VPS in infra > containers
 [ ] fix container hosts shoing instead of actual running containers.
 [ ] fix hosts not showing when going to infra>container, need to switch tabs and fo back for them to show.
