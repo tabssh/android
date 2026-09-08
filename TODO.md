@@ -1,3 +1,4 @@
+[ ] fix pastebins to use the configured addresses?
 [ ] fix ssh/mosh exit hang
 [ ] fix the reattech bug as it shows reattach when there is no active connection
 [ ] custom keyboard not working in vnc/spice connections
