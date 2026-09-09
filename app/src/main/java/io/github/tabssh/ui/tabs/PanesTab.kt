@@ -71,12 +71,53 @@ class PanesTab(
     var tabIndex: Int = 0
         internal set
 
+    // tmux synchronize-panes equivalent: when on, every keystroke typed into
+    // the focused window's TerminalView is mirrored live (raw bytes, via
+    // TermuxBridge.broadcastTargets, the same fan-out Wave 2.7's tab-wide
+    // broadcast uses) to every other connected window in this pane group.
+    // Replaces the old "Broadcast to All Windows in Pane…" input-box dialog,
+    // which composed a whole command before sending instead of mirroring
+    // input as it's typed.
+    private val _syncInputEnabled = MutableStateFlow(false)
+    val syncInputEnabled: StateFlow<Boolean> = _syncInputEnabled.asStateFlow()
+
     /** Current snapshot of this tab's windows. */
     fun currentEntries(): List<PaneWindow> = _entries.value
 
     /** Replace the full window list (e.g. after resolving/attaching a window's SSHTab). */
     fun updateEntries(newEntries: List<PaneWindow>) {
         _entries.value = newEntries
+        applySyncInputRouting()
+    }
+
+    /**
+     * Toggle synchronize-panes style input mirroring for this pane group.
+     * Turning it off clears every window's [io.github.tabssh.terminal.TermuxBridge.broadcastTargets]
+     * so input goes back to targeting only the focused window.
+     */
+    fun setSyncInputEnabled(enabled: Boolean) {
+        _syncInputEnabled.value = enabled
+        applySyncInputRouting()
+    }
+
+    /**
+     * Re-point the focused window's [io.github.tabssh.terminal.TermuxBridge.broadcastTargets]
+     * at every other connected window's output stream, and clear targets
+     * everywhere else. Called whenever sync is toggled, focus moves, or the
+     * window list changes (open/close/reconnect) so the mirror always tracks
+     * "whichever pane is currently driving input".
+     */
+    private fun applySyncInputRouting() {
+        val entries = _entries.value
+        val focused = entries.getOrNull(_focusedPaneIndex.value)
+        entries.forEach { window ->
+            val bridge = window.sshTab?.termuxBridge ?: return@forEach
+            bridge.broadcastTargets = if (_syncInputEnabled.value && window === focused) {
+                entries.filter { it !== window }.mapNotNull { it.sshTab?.termuxBridge?.peerOutputStream() }
+            } else {
+                emptyList()
+            }
+        }
     }
 
     /** The [PaneWindow] currently focused for keyboard input, if any. */
@@ -88,6 +129,7 @@ class PanesTab(
         if (entries.isEmpty()) return
         val clamped = index.coerceIn(0, entries.lastIndex)
         _focusedPaneIndex.value = clamped
+        applySyncInputRouting()
         Logger.d("PanesTab", "Focused pane $clamped in group $groupId")
     }
 
@@ -112,6 +154,8 @@ class PanesTab(
         _entries.value = remaining
         if (remaining.isNotEmpty()) {
             setFocusedPane(_focusedPaneIndex.value)
+        } else {
+            applySyncInputRouting()
         }
         Logger.d("PanesTab", "Closed window $index in group $groupId (${remaining.size} remaining)")
     }

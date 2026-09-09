@@ -1,4 +1,3 @@
-[ ] fix panes broadcast to work like tmux as input box is bad UX
 [ ] there is no way to tell if the builtin tor is qctually running/working
 [ ] fix the vps to autodetect, for example: date is Aug 10 monthly then its due on 10th of every month.
 [ ] container/cloud hosts not showing in new tab menu
@@ -16,7 +15,6 @@
 [ ] fix oci certs not pinning/persisting even when accept and pin.
 [ ] move registery credentials to auth > Registeries, after the keys tab
 [ ] fix vim bug on keyboard toggle
-[ ] make the broadcast work like tmux instead of the input box.
 [ ] Update all of the screenshots in metadata/en-US/images/phoneScreenshots/ and also ame them(not 1, 2, 3, etc), then update the docs for the new file names. 
 [x] add the ability tonopen up to 6 hosts in a single tab, clicking on a pane switches to that host(think of a very basic fmux implementation useful for running quick commands but dont need each host in a separate tab. this is separate from cluster commands as each pane is a separate thing nd user clcks to switch.
 [x] move the Stats tab to an item in the nav drawer directly under Insights Above the Multihost dashboard, but Keep the existing UI/UX.

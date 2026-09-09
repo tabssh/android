@@ -1111,15 +1111,21 @@ class TabTerminalActivity : TabSSHActivity() {
         // Session section. When opened from inside a Panes tab, broadcasting
         // "to all tabs" is misleading — getAllTabs() only returns top-level
         // Tab.Ssh entries and silently excludes every window living inside a
-        // Panes tab. Swap the action (and its label) for a pane-scoped
-        // broadcast instead, matching what the user is actually looking at.
+        // Panes tab. Swap the action (and its label) for a pane-scoped,
+        // tmux synchronize-panes style toggle instead, matching what the
+        // user is actually looking at.
         val activeTabSealed = tabManager.getActiveTabSealed()
         val broadcastButton = view.findViewById<MaterialButton>(R.id.btn_cluster_broadcast)
         if (activeTabSealed is Tab.Panes) {
-            broadcastButton?.text = getString(R.string.terminal_menu_broadcast_to_pane_windows)
+            val panesTab = activeTabSealed.panesTab
+            broadcastButton?.text = if (panesTab.syncInputEnabled.value) {
+                getString(R.string.terminal_menu_sync_input_disable)
+            } else {
+                getString(R.string.terminal_menu_sync_input_enable)
+            }
             broadcastButton?.setOnClickListener {
                 bottomSheet.dismiss()
-                showPanesBroadcastDialog(activeTabSealed.panesTab)
+                togglePanesSyncInput(panesTab)
             }
         } else {
             broadcastButton?.setOnClickListener {
@@ -1983,64 +1989,31 @@ class TabTerminalActivity : TabSSHActivity() {
     }
 
     /**
-     * Pane broadcast — the Panes-tab counterpart of [showClusterBroadcastDialog].
+     * Pane sync-input toggle — the Panes-tab counterpart of
+     * [showClusterBroadcastDialog], reworked to behave like tmux's
+     * synchronize-panes rather than a compose-then-send input box.
      * [tabManager.getAllTabs] only surfaces top-level [Tab.Ssh] entries, so a
      * Panes tab's windows are invisible to the tab-wide broadcast; this
-     * targets every currently-connected [io.github.tabssh.ui.tabs.PaneWindow]
-     * in [panesTab] instead, scoped to the pane the user is actually looking
-     * at rather than every open tab in the app.
+     * flips [io.github.tabssh.ui.tabs.PanesTab.syncInputEnabled] for
+     * [panesTab] instead, which makes every keystroke typed into the
+     * focused window mirror live to the pane group's other windows via
+     * [io.github.tabssh.terminal.TermuxBridge.broadcastTargets] — no
+     * separate dialog, no command composed up front.
      */
-    private fun showPanesBroadcastDialog(panesTab: io.github.tabssh.ui.tabs.PanesTab) {
+    private fun togglePanesSyncInput(panesTab: io.github.tabssh.ui.tabs.PanesTab) {
         val windows = panesTab.currentEntries().filter { it.sshTab != null }
-        if (windows.isEmpty()) {
+        if (windows.size < 2) {
             Toast.makeText(this, getString(R.string.terminal_no_pane_windows), Toast.LENGTH_SHORT).show()
             return
         }
-        val form = DialogFields.form(this)
-        val input = DialogFields.addText(
-            form,
-            hint = getString(R.string.pane_broadcast_command_hint, windows.size),
-            inputType = InputType.TYPE_CLASS_TEXT or
-                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS,
-            monospace = true
-        )
-        MaterialAlertDialogBuilder(this)
-            .setTitle(getString(R.string.terminal_pane_broadcast_title, windows.size))
-            .setView(form.root)
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.next) { _, _ ->
-                val cmd = input.text.toString()
-                if (cmd.isBlank()) {
-                    Toast.makeText(this, getString(R.string.terminal_empty_command), Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                val windowList = windows.joinToString("\n") {
-                    "• ${it.customTitle ?: it.sshTab?.profile?.getDisplayName() ?: it.hostId}"
-                }
-                MaterialAlertDialogBuilder(this)
-                    .setTitle(R.string.terminal_confirm_broadcast_title)
-                    .setMessage(getString(R.string.terminal_confirm_pane_broadcast_message, windows.size, cmd, windowList))
-                    .setNegativeButton(R.string.cancel, null)
-                    .setPositiveButton(R.string.terminal_send_to_all) { _, _ ->
-                        val payload = (cmd + "\n").toByteArray(Charsets.UTF_8)
-                        // Same reasoning as showClusterBroadcastDialog: route
-                        // through each SSHTab's TermuxBridge write funnel
-                        // rather than writing to the channel stream directly.
-                        var sent = 0
-                        windows.forEach { window ->
-                            val sshTab = window.sshTab ?: return@forEach
-                            try {
-                                sshTab.termuxBridge.write(payload)
-                                sent++
-                            } catch (e: Exception) {
-                                Logger.w("TabTerminalActivity", "Pane broadcast to ${window.customTitle ?: window.hostId} failed", e)
-                            }
-                        }
-                        Toast.makeText(this, getString(R.string.terminal_sent_to_fmt, sent, windows.size), Toast.LENGTH_SHORT).show()
-                    }
-                    .show()
-            }
-            .show()
+        val enabling = !panesTab.syncInputEnabled.value
+        panesTab.setSyncInputEnabled(enabling)
+        val message = if (enabling) {
+            getString(R.string.terminal_pane_sync_input_on_fmt, windows.size)
+        } else {
+            getString(R.string.terminal_pane_sync_input_off)
+        }
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 
     /**
