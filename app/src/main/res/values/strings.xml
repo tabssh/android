@@ -429,6 +429,12 @@
     <string name="route_preset_orbot">Orbot (SOCKS5 127.0.0.1:9050)</string>
     <string name="route_preset_tor">Tor (built-in)</string>
     <string name="route_preset_tor_desc">Route through the app\'s bundled Tor client.</string>
+    <string name="route_tor_status_stopped">Tor is not running</string>
+    <string name="route_tor_status_starting">Starting Tor…</string>
+    <string name="route_tor_status_bootstrapping">Bootstrapping Tor circuit… %1$d%%</string>
+    <string name="route_tor_status_connected">Tor circuit established — usable as a proxy</string>
+    <string name="route_tor_status_failed">Tor failed: %1$s</string>
+    <string name="route_tor_test_button">Test Tor Connection</string>
     <string name="route_host_hint">Host</string>
     <string name="route_port_hint">Port</string>
     <string name="route_username_optional_helper">Optional</string>

@@ -5,6 +5,9 @@ import io.github.tabssh.utils.logging.Logger
 import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Owns the lifecycle of the single bundled tor process.
@@ -25,6 +28,11 @@ class TorManager private constructor(private val appContext: Context) {
     @Volatile
     private var socksPort: Int = 0
 
+    private val _status = MutableStateFlow<TorStatus>(TorStatus.Stopped)
+
+    /** Live tor state — process spawned vs. actually bootstrapped/usable. */
+    val status: StateFlow<TorStatus> = _status.asStateFlow()
+
     /** True when a bundled tor binary exists for this device's ABI. */
     fun isAvailable(): Boolean = TorNativeClient.isAvailable(appContext)
 
@@ -39,6 +47,7 @@ class TorManager private constructor(private val appContext: Context) {
         synchronized(lock) {
             val existing = session
             if (existing != null && existing.isAlive() && socksPort > 0) {
+                _status.value = TorStatus.Connected
                 return socksPort
             }
             // Clean up a dead session before restarting.
@@ -46,15 +55,21 @@ class TorManager private constructor(private val appContext: Context) {
             session = null
             socksPort = 0
 
+            _status.value = TorStatus.Starting
             val port = findFreeLoopbackPort()
             val dataDir = File(appContext.filesDir, TOR_DATA_DIR)
-            val started = TorNativeClient.spawn(appContext, port, dataDir)
+            val started = TorNativeClient.spawn(appContext, port, dataDir) { percent ->
+                _status.value = TorStatus.Bootstrapping(percent)
+            }
             if (!started.awaitBootstrap(BOOTSTRAP_TIMEOUT_MS)) {
                 started.close()
-                throw IllegalStateException("Tor failed to bootstrap within ${BOOTSTRAP_TIMEOUT_MS}ms")
+                val reason = "Tor failed to bootstrap within ${BOOTSTRAP_TIMEOUT_MS}ms"
+                _status.value = TorStatus.Failed(reason)
+                throw IllegalStateException(reason)
             }
             session = started
             socksPort = port
+            _status.value = TorStatus.Connected
             Logger.i(TAG, "Tor bootstrapped; loopback SOCKS on 127.0.0.1:$port")
             return port
         }
@@ -66,6 +81,7 @@ class TorManager private constructor(private val appContext: Context) {
             session?.close()
             session = null
             socksPort = 0
+            _status.value = TorStatus.Stopped
         }
     }
 

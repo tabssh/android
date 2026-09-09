@@ -135,6 +135,40 @@
                         android:visibility="gone"
                         tools:visibility="visible" />
 
+                    <LinearLayout
+                        android:id="@+id/layout_tor_status"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_sm"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:visibility="gone"
+                        tools:visibility="visible">
+
+                        <View
+                            android:id="@+id/tor_status_dot"
+                            android:layout_width="@dimen/space_sm"
+                            android:layout_height="@dimen/space_sm"
+                            android:layout_marginEnd="@dimen/space_xs"
+                            android:background="@drawable/state_dot_disconnected" />
+
+                        <TextView
+                            android:id="@+id/text_tor_status"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/route_tor_status_stopped"
+                            android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_test_tor"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/route_tor_test_button" />
+
+                    </LinearLayout>
+
                 </LinearLayout>
 
             </com.google.android.material.card.MaterialCardView>

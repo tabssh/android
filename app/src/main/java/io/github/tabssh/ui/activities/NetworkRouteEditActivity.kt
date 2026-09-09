@@ -5,8 +5,12 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.ArrayAdapter
+import android.widget.TextView
 import androidx.appcompat.widget.Toolbar
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
@@ -14,11 +18,14 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.protocols.tor.TorManager
 import io.github.tabssh.protocols.tor.TorNativeClient
+import io.github.tabssh.protocols.tor.TorStatus
 import io.github.tabssh.storage.database.entities.NetworkRoute
 import io.github.tabssh.storage.database.entities.NetworkRouteType
 import io.github.tabssh.storage.database.entities.StoredKey
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import io.github.tabssh.utils.tabSSHApp
@@ -47,6 +54,13 @@ class NetworkRouteEditActivity : TabSSHActivity() {
     private lateinit var chipOrbot: Chip
     private lateinit var chipTor: Chip
     private lateinit var textTorDesc: View
+    private lateinit var layoutTorStatus: View
+    private lateinit var torStatusDot: View
+    private lateinit var textTorStatus: TextView
+    private lateinit var btnTestTor: MaterialButton
+
+    private val torManager: TorManager
+        get() = TorManager.getInstance(this)
 
     private lateinit var layoutHost: TextInputLayout
     private lateinit var editHost: TextInputEditText
@@ -91,8 +105,32 @@ class NetworkRouteEditActivity : TabSSHActivity() {
         setupAuthTypeSpinner()
         setupButtons()
         setupUnsavedChangesGuard()
+        observeTorStatus()
 
         loadData()
+    }
+
+    /** Live-reflects [TorManager.status] in the Tor preset section, whenever it's visible. */
+    private fun observeTorStatus() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                torManager.status.collectLatest { status -> renderTorStatus(status) }
+            }
+        }
+    }
+
+    private fun renderTorStatus(status: TorStatus) {
+        val (drawableRes, text) = when (status) {
+            is TorStatus.Stopped -> R.drawable.state_dot_disconnected to getString(R.string.route_tor_status_stopped)
+            is TorStatus.Starting -> R.drawable.state_dot_connecting to getString(R.string.route_tor_status_starting)
+            is TorStatus.Bootstrapping -> R.drawable.state_dot_connecting to
+                getString(R.string.route_tor_status_bootstrapping, status.percent)
+            is TorStatus.Connected -> R.drawable.state_dot_connected to getString(R.string.route_tor_status_connected)
+            is TorStatus.Failed -> R.drawable.state_dot_error to getString(R.string.route_tor_status_failed, status.reason)
+        }
+        torStatusDot.setBackgroundResource(drawableRes)
+        textTorStatus.text = text
+        btnTestTor.isEnabled = status !is TorStatus.Starting && status !is TorStatus.Bootstrapping
     }
 
     /**
@@ -121,6 +159,11 @@ class NetworkRouteEditActivity : TabSSHActivity() {
         chipOrbot = findViewById(R.id.chip_preset_orbot)
         chipTor = findViewById(R.id.chip_preset_tor)
         textTorDesc = findViewById(R.id.text_preset_tor_desc)
+        layoutTorStatus = findViewById(R.id.layout_tor_status)
+        torStatusDot = findViewById(R.id.tor_status_dot)
+        textTorStatus = findViewById(R.id.text_tor_status)
+        btnTestTor = findViewById(R.id.btn_test_tor)
+        btnTestTor.setOnClickListener { testTorConnection() }
 
         layoutHost = findViewById(R.id.layout_host)
         editHost = findViewById(R.id.edit_host)
@@ -234,8 +277,24 @@ class NetworkRouteEditActivity : TabSSHActivity() {
             if (isJump) null else getString(R.string.route_username_optional_helper)
         layoutJumpAuth.visibility = if (isJump && showEndpoint) View.VISIBLE else View.GONE
         textTorDesc.visibility = if (builtInTor) View.VISIBLE else View.GONE
+        layoutTorStatus.visibility = if (builtInTor) View.VISIBLE else View.GONE
         updateKeyVisibility()
         updatePresetVisibility()
+    }
+
+    /**
+     * Actually spawns/reuses the bundled tor process so the status row (wired
+     * to [TorManager.status] in [observeTorStatus]) shows a real result instead
+     * of leaving "enabled" as the only signal of whether Tor works.
+     */
+    private fun testTorConnection() {
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { torManager.ensureStarted() }
+            } catch (_: Exception) {
+                // TorManager already published TorStatus.Failed; nothing else to do here.
+            }
+        }
     }
 
     /**

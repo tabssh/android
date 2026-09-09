@@ -35,6 +35,7 @@ object TorNativeClient {
     private const val TAG = "TorNativeClient"
     private const val BINARY_FILE_NAME = "libtor.so"
     private const val BOOTSTRAP_MARKER = "Bootstrapped 100%"
+    private val BOOTSTRAP_PERCENT_REGEX = Regex("""Bootstrapped (\d{1,3})%""")
 
     // Pinned versions of the statically-linked native stack. These MUST track
     // the pins in deps/prereqs/tor/Dockerfile and deps/prereqs/tor/build-android.sh — the bundled binary
@@ -76,7 +77,12 @@ object TorNativeClient {
      *
      * @throws IllegalStateException if the binary is not bundled.
      */
-    fun spawn(context: Context, socksPort: Int, dataDir: File): Session {
+    fun spawn(
+        context: Context,
+        socksPort: Int,
+        dataDir: File,
+        onBootstrapProgress: (Int) -> Unit = {}
+    ): Session {
         val binary = resolveBinary(context)
             ?: throw IllegalStateException("tor native binary is not bundled in this APK build")
         require(socksPort in 1..65535) { "Invalid Tor SOCKS port: $socksPort" }
@@ -96,14 +102,18 @@ object TorNativeClient {
             directory(File(context.filesDir.absolutePath))
         }
         Logger.i(TAG, "Spawning tor on loopback SOCKS 127.0.0.1:$socksPort (binary=${binary.absolutePath})")
-        return Session(pb.start())
+        return Session(pb.start(), onBootstrapProgress)
     }
 
     /**
-     * A running tor process. Watches tor's log for the bootstrap-complete
-     * marker; callers await [awaitBootstrap] before routing traffic.
+     * A running tor process. Watches tor's log for bootstrap-progress lines,
+     * reporting each percentage via [onBootstrapProgress]; callers await
+     * [awaitBootstrap] before routing traffic.
      */
-    class Session internal constructor(private val process: Process) {
+    class Session internal constructor(
+        private val process: Process,
+        private val onBootstrapProgress: (Int) -> Unit = {}
+    ) {
 
         private val bootstrapped = AtomicBoolean(false)
         private val bootstrapLatch = CountDownLatch(1)
@@ -112,6 +122,9 @@ object TorNativeClient {
             try {
                 process.inputStream.bufferedReader().forEachLine { line ->
                     Logger.d(TAG, "tor: $line")
+                    BOOTSTRAP_PERCENT_REGEX.find(line)?.let { match ->
+                        onBootstrapProgress(match.groupValues[1].toInt())
+                    }
                     if (line.contains(BOOTSTRAP_MARKER)) {
                         if (bootstrapped.compareAndSet(false, true)) {
                             bootstrapLatch.countDown()
