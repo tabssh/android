@@ -971,7 +971,7 @@ Apply only the sections the IDEA.md `## Applicability` matrix declares (`notific
 
 ## Foreground services
 
-- Only when genuinely required (live connections, active transfers, playback); correct `foregroundServiceType`; `START_NOT_STICKY` unless resurrection is a feature.
+- Only when genuinely required (live connections, active transfers, playback); correct `foregroundServiceType`; `START_NOT_STICKY` unless resurrection is a feature — i.e. `START_STICKY` is used only when losing the service to a system kill must resume the same ongoing work with no user data loss (e.g. an active call/tracking session), and that choice plus its resumption behavior is documented in IDEA.md; the default for everything else is `START_NOT_STICKY`.
 - Declared type must match the actual work — each type is justified in IDEA.md:
 
 | `foregroundServiceType` | Use case | Notes |
@@ -980,7 +980,7 @@ Apply only the sections the IDEA.md `## Applicability` matrix declares (`notific
 | `mediaPlayback` | Audio/video playback | Media3 ExoPlayer + `MediaSessionService`; media-style notification driven by the session — never a hand-built one |
 | `location` | Active tracking the user started | Visible indicator; stop control always present |
 | `camera` / `microphone` | Active capture | While-in-use permission rules apply |
-- Auto-stop within a short grace period after the last unit of work completes.
+- Auto-stop within a 30-second grace period after the last unit of work completes (`stopSelf()` from a `Handler.postDelayed`/`WorkManager` one-shot check) — a new unit of work arriving within that window cancels the pending stop; document a different value in IDEA.md only when the use case genuinely needs one.
 - Every ongoing notification carries a direct action (stop/disconnect/cancel) — confirmation via a transparent dialog activity if destructive.
 
 ## Background work
