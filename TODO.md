@@ -1,4 +1,3 @@
-[ ] custom keyboard not working in vnc/spice connections
 [ ] find and fix any main thread issues
 [ ] fix keyboard not showing in panes
 [ ] fix panes broadcast to work like tmux as input box is bad UX
