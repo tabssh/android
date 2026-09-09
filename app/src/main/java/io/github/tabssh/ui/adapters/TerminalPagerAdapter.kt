@@ -744,7 +744,16 @@ class TerminalPagerAdapter(
                     // through this callback instead so a tap both selects the
                     // pane (updating the highlighted border) and no longer
                     // toggles the keyboard as an uncoordinated side effect.
-                    onPaneTapped = { boundPanesTab?.setFocusedPane(index) }
+                    // Report whether this pane was already focused so
+                    // TerminalView can fall through to toggleKeyboard() for
+                    // it — otherwise tapping into a pane never raises the
+                    // keyboard at all.
+                    onPaneTapped = {
+                        val tab = boundPanesTab
+                        val wasFocused = tab?.focusedPaneIndex?.value == index
+                        tab?.setFocusedPane(index)
+                        wasFocused
+                    }
                     // Long-press opens the same bottom-sheet terminal menu
                     // (tab list, Toggle System Keyboard, Close Current Tab,
                     // etc.) every other tab type already gets — see the

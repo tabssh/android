@@ -1,4 +1,3 @@
-[ ] fix keyboard not showing in panes
 [ ] fix panes broadcast to work like tmux as input box is bad UX
 [ ] there is no way to tell if the builtin tor is qctually running/working
 [ ] fix the vps to autodetect, for example: date is Aug 10 monthly then its due on 10th of every month.
