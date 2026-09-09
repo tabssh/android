@@ -3595,7 +3595,13 @@ class TabTerminalActivity : TabSSHActivity() {
             tabManager.closeTabById(tabId)
             lifecycleScope.launch {
                 try {
-                    connectToProfile(profile.copy(moshMode = "off"), forceNew = true)
+                    // Re-read from DB: `profile` is the tab's construction-time
+                    // snapshot, which goes stale if settings (e.g. the PRE key
+                    // multiplexer override) were changed and persisted mid-session.
+                    val fresh = withContext(Dispatchers.IO) {
+                        app.database.connectionDao().getConnectionById(profile.id)
+                    } ?: profile
+                    connectToProfile(fresh.copy(moshMode = "off"), forceNew = true)
                 } finally {
                     isReconnecting = false
                     if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
@@ -3625,8 +3631,14 @@ class TabTerminalActivity : TabSSHActivity() {
                 tabManager.closeTabById(tabId)
                 lifecycleScope.launch {
                     try {
+                        // Re-read from DB: `profile` is the tab's construction-time
+                        // snapshot, which goes stale if settings (e.g. the PRE key
+                        // multiplexer override) were changed and persisted mid-session.
+                        val fresh = withContext(Dispatchers.IO) {
+                            app.database.connectionDao().getConnectionById(profile.id)
+                        } ?: profile
                         // forceNew=true: old tab was just closed; always open a fresh session.
-                        connectToProfile(profile, forceNew = true)
+                        connectToProfile(fresh, forceNew = true)
                     } finally {
                         isReconnecting = false
                         // If the reconnect failed (no new tab landed) and
@@ -3655,7 +3667,13 @@ class TabTerminalActivity : TabSSHActivity() {
                 tabManager.closeTabById(tabId)
                 lifecycleScope.launch {
                     try {
-                        connectToProfile(profile.copy(moshMode = "off"), forceNew = true)
+                        // Re-read from DB: `profile` is the tab's construction-time
+                        // snapshot, which goes stale if settings (e.g. the PRE key
+                        // multiplexer override) were changed and persisted mid-session.
+                        val fresh = withContext(Dispatchers.IO) {
+                            app.database.connectionDao().getConnectionById(profile.id)
+                        } ?: profile
+                        connectToProfile(fresh.copy(moshMode = "off"), forceNew = true)
                     } finally {
                         isReconnecting = false
                         if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
