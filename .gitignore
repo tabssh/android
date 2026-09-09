@@ -191,7 +191,10 @@ app/src/main/jniLibs/*/libtabssh_native.so
 app/src/main/assets/fonts/*.ttf
 
 # Claude agent working files — never commit these
-.claude/
+# .claude/memory/ is durable project knowledge (AI.md) and stays tracked;
+# a parent-directory ignore can't be negated, so ignore only its siblings.
+.claude/*
+!.claude/memory/
 .agent/
 
 # Core dumps
