@@ -1,4 +1,3 @@
-[ ] fix vnc/spice disconnect bug/keyboard not working when reconnecting
 [ ] custom keyboard not working in vnc/spice connections
 [ ] find and fix any main thread issues
 [ ] fix keyboard not showing in panes

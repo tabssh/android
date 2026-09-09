@@ -3903,6 +3903,12 @@ class TabTerminalActivity : TabSSHActivity() {
                 }
                 val idx = tabManager.getAllTabsSealed().indexOfFirst { it.tabId == vncTab.tabId }
                 if (idx >= 0) pagerAdapter?.notifyItemChanged(idx)
+                // Give the rebound VncView focus so hardware key events and the IME
+                // attach to it again — notifyItemChanged() rebinds the ViewHolder to
+                // the fresh rfbClient asynchronously, so the focus request is posted
+                // to run after that rebind lands (same "console keyboard fix" pattern
+                // as syncActiveTabUi()/onPageSelected()).
+                viewPager?.post { getActiveInputView()?.requestFocus() }
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(
                     this@TabTerminalActivity, "TabTerminalActivity", e, "VNC reconnect failed for '${host.name}'"
@@ -6036,8 +6042,15 @@ class TabTerminalActivity : TabSSHActivity() {
             activeTab.activate()
             supportActionBar?.title = activeTab.getDisplayTitle()
         }
+        // Re-focus the active tab's input view — resuming from background can
+        // reclaim a parked VNC session (above) or simply return focus to the
+        // window without it, either way leaving VncView/SpiceView unfocused
+        // and hardware/IME key events silently dead-ending in Activity.onKeyDown()
+        // until the user taps the console (same "console keyboard fix" pattern
+        // as syncActiveTabUi()/onPageSelected()).
+        viewPager?.post { getActiveInputView()?.requestFocus() }
     }
-    
+
     override fun onPause() {
         super.onPause()
 
