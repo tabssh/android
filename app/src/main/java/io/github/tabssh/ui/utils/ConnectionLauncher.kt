@@ -37,7 +37,12 @@ object ConnectionLauncher {
         val app = context.applicationContext as TabSSHApplication
 
         val allTabs = app.tabManager.getAllTabs()
-        val existingTab = allTabs.firstOrNull { it.profile.id == profile.id }
+        // Only a live tab counts as "already connected" — a tab for this
+        // profile that has disconnected but hasn't been closed yet (e.g.
+        // showing its own reconnect dialog) must not trigger the reattach
+        // prompt, matching the isConnected() filter TabTerminalActivity's
+        // own reattach short-circuit already uses.
+        val existingTab = allTabs.firstOrNull { it.profile.id == profile.id && it.isConnected() }
 
         // A pooled SSH session can outlive its UI tab (foreground service keeps
         // it alive). Surface that too — a literal "tab" isn't required for the
