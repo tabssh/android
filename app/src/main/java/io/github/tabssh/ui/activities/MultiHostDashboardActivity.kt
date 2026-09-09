@@ -48,7 +48,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -415,17 +414,18 @@ class MultiHostDashboardActivity : TabSSHActivity() {
     override fun onDestroy() {
         super.onDestroy()
         pumpScope.cancel()
-        // Blocking disconnect — JSch teardown is blocking I/O; runBlocking keeps
-        // the teardown synchronous so the Activity is fully cleaned up before the
-        // OS reclaims it, without blocking the UI earlier in the lifecycle.
-        runBlocking {
-            ownedSessions.values.forEach {
+        // JSch teardown is blocking I/O — hop onto the application-wide scope
+        // (outlives this Activity) so onDestroy() returns immediately instead
+        // of blocking the main thread until every session disconnects.
+        val sessionsToClose = ownedSessions.values.toList()
+        ownedSessions.clear()
+        TabSSHApplication.get().applicationScope.launch(Dispatchers.IO) {
+            sessionsToClose.forEach {
                 try { it.disconnect() } catch (e: Exception) {
                     Logger.w(TAG, "onDestroy disconnect: ${e.message}")
                 }
             }
         }
-        ownedSessions.clear()
     }
 
     // ── Persistence ───────────────────────────────────────────────────────────

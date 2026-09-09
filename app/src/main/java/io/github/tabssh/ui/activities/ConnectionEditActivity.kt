@@ -176,19 +176,28 @@ class ConnectionEditActivity : TabSSHActivity() {
         ) { result ->
             if (result.resultCode == RESULT_OK) {
                 result.data?.data?.let { uri ->
-                    try {
-                        contentResolver.openInputStream(uri)?.use { inputStream ->
-                            val keyContent = inputStream.bufferedReader().readText()
+                    // Content-provider reads (readText()/query()) can hit disk or a
+                    // cloud-backed document provider — keep them off the main thread.
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        try {
+                            val keyContent = contentResolver.openInputStream(uri)?.use { inputStream ->
+                                inputStream.bufferedReader().readText()
+                            }
                             val display = resolveDisplayName(uri) ?: uri.lastPathSegment ?: "imported_key"
                             val suggestion = display.replace(Regex("\\.(pem|key|pub)$"), "")
                                 .replace("_", " ").trim()
-                            promptForKeyName(suggestion) { confirmedName ->
-                                importKeyFromContent(keyContent, confirmedName)
+                            withContext(Dispatchers.Main) {
+                                if (keyContent == null) return@withContext
+                                promptForKeyName(suggestion) { confirmedName ->
+                                    importKeyFromContent(keyContent, confirmedName)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            withContext(Dispatchers.Main) {
+                                val mapped = ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Failed to read key file")
+                                showError(getString(R.string.identity_read_key_file_failed_fmt, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
                             }
                         }
-                    } catch (e: Exception) {
-                        val mapped = ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Failed to read key file")
-                        showError(getString(R.string.identity_read_key_file_failed_fmt, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
                     }
                 }
             }

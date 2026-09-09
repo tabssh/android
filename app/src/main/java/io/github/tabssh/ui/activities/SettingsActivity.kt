@@ -1194,35 +1194,43 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
     private fun exportLogs() {
         lifecycleScope.launch {
             try {
-                val logs = io.github.tabssh.utils.logging.Logger.getRecentLogs()
-                
-                val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
-                    .format(java.util.Date())
-                val filename = "tabssh_logs_$timestamp.txt"
-                
-                val file = java.io.File(requireContext().getExternalFilesDir(null), filename)
-                file.writeText(buildString {
-                    append("TabSSH Application Logs\n")
-                    append("Exported: $timestamp\n")
-                    append("=".repeat(80) + "\n\n")
-                    
-                    logs.forEach { log ->
-                        append("${log.timestamp} [${log.level}] ${log.tag}: ${log.message}\n")
-                    }
-                })
-                
+                // getRecentLogs() reads the log file and writeText() writes the
+                // export — both blocking disk I/O, kept off the main thread.
+                val (filename, logCount) = withContext(Dispatchers.IO) {
+                    val logs = io.github.tabssh.utils.logging.Logger.getRecentLogs()
+
+                    val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+                        .format(java.util.Date())
+                    val exportFilename = "tabssh_logs_$timestamp.txt"
+
+                    val file = java.io.File(requireContext().getExternalFilesDir(null), exportFilename)
+                    file.writeText(buildString {
+                        append("TabSSH Application Logs\n")
+                        append("Exported: $timestamp\n")
+                        append("=".repeat(80) + "\n\n")
+
+                        logs.forEach { log ->
+                            append("${log.timestamp} [${log.level}] ${log.tag}: ${log.message}\n")
+                        }
+                    })
+
+                    exportFilename to logs.size
+                }
+
+                if (!isAdded) return@launch
                 android.widget.Toast.makeText(
                     requireContext(),
                     resources.getQuantityString(
                         R.plurals.settings_toast_log_entries_exported,
-                        logs.size,
-                        io.github.tabssh.utils.Format.count(logs.size),
+                        logCount,
+                        io.github.tabssh.utils.Format.count(logCount),
                         filename
                     ),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
 
             } catch (e: Exception) {
+                if (!isAdded) return@launch
                 android.widget.Toast.makeText(
                     requireContext(),
                     getString(R.string.settings_toast_export_failed, e.message.orEmpty()),
