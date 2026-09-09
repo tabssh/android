@@ -108,8 +108,9 @@ class StikkedProvider(private val baseUrl: String) : PasteProvider {
     }
 }
 
-class PastebinProvider(private val apiKey: String) : PasteProvider {
+class PastebinProvider(private val apiKey: String, private val baseUrl: String) : PasteProvider {
     override suspend fun upload(title: String, content: String): String = withContext(Dispatchers.IO) {
+        val base = baseUrl.trimEnd('/')
         val requestBody = FormBody.Builder()
             .add("api_dev_key", apiKey)
             .add("api_option", "paste")
@@ -119,7 +120,7 @@ class PastebinProvider(private val apiKey: String) : PasteProvider {
             .add("api_paste_expire_date", "1W")
             .build()
         val request = Request.Builder()
-            .url("https://pastebin.com/api/api_post.php")
+            .url("$base/api/api_post.php")
             .post(requestBody)
             .build()
         val responseText = sharedHttpClient.newCall(request).execute().use { response ->
@@ -142,7 +143,7 @@ object PasteProviderFactory {
     ): PasteProvider = when (serviceId) {
         "lenpaste" -> LenpasteProvider(prefs.getPasteLenpasteUrl())
         "stikked"  -> StikkedProvider(prefs.getPasteStikkedUrl())
-        "pastebin" -> PastebinProvider(prefs.getPastebinApiKey())
+        "pastebin" -> PastebinProvider(prefs.getPastebinApiKey(), prefs.getPastebinUrl())
         "microbin" -> MicroBinProvider(prefs.getPasteMicrobinUrl())
         else       -> StikkedProvider(prefs.getPasteStikkedUrl())
     }
@@ -155,7 +156,7 @@ object PasteProviderFactory {
         "microbin" -> "MicroBin  —  ${prefs.getPasteMicrobinUrl()}"
         "lenpaste" -> "Lenpaste  —  ${prefs.getPasteLenpasteUrl()}"
         "stikked"  -> "Stikked  —  ${prefs.getPasteStikkedUrl()}"
-        "pastebin" -> "pastebin.com (API key required)"
+        "pastebin" -> "Pastebin  —  ${prefs.getPastebinUrl()} (API key required)"
         else       -> "Stikked  —  ${prefs.getPasteStikkedUrl()}"
     }
 }

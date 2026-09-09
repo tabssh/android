@@ -1663,6 +1663,7 @@
     <string name="prefs_paste_stikked_url_title">Stikked Server</string>
     <string name="prefs_paste_microbin_url_title">MicroBin Server</string>
     <string name="prefs_paste_lenpaste_url_title">Lenpaste Server</string>
+    <string name="prefs_paste_pastebin_url_title">Pastebin Server</string>
     <string name="prefs_paste_pastebin_api_key_title">Pastebin API Key</string>
     <string name="prefs_paste_pastebin_api_key_summary">Required only when paste service is set to pastebin.com</string>
 

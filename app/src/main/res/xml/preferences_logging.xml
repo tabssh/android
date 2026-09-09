@@ -170,6 +170,13 @@
       app:useSimpleSummaryProvider="true" />
 
     <EditTextPreference
+      android:key="paste_pastebin_url"
+      android:title="@string/prefs_paste_pastebin_url_title"
+      android:defaultValue="https://pastebin.com"
+      android:inputType="textUri"
+      app:useSimpleSummaryProvider="true" />
+
+    <EditTextPreference
       android:key="paste_pastebin_api_key"
       android:title="@string/prefs_paste_pastebin_api_key_title"
       android:summary="@string/prefs_paste_pastebin_api_key_summary"

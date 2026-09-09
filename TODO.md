@@ -1,6 +1,4 @@
 [ ] fix vnc/spice disconnect bug/keyboard not working when reconnecting
-[ ] fix pastebins to use the configured addresses confirm its not hardcoded ip addresses?
-[ ] fix ssh/mosh exit hang
 [ ] fix the reattech bug as it shows reattach when there is no active connection
 [ ] custom keyboard not working in vnc/spice connections
 [ ] find and fix any main thread issues

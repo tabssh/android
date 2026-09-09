@@ -2177,8 +2177,17 @@ class SSHConnection(
         x11Proxy?.stop()
         x11Proxy = null
 
-        session?.disconnect()
-        session = null
+        // JSch's disconnect() can block indefinitely on a blackholed or
+        // half-closed socket (e.g. remote dropped the connection without a
+        // clean FIN). Bound it so a hung teardown can't hang the caller —
+        // the session reference is still cleared either way.
+        try {
+            withTimeout(5_000) { session?.disconnect() }
+        } catch (_: TimeoutCancellationException) {
+            Logger.w("SSHConnection", "Session disconnect timed out after 5s")
+        } finally {
+            session = null
+        }
 
         // Disconnect jump host session if active
         if (jumpHostSession != null) {
@@ -2190,9 +2199,14 @@ class SSHConnection(
             } catch (e: Exception) {
                 Logger.w("SSHConnection", "Failed to remove port forwarding", e)
             }
-            jumpHostSession?.disconnect()
-            jumpHostSession = null
-            jumpHostLocalPort = 0
+            try {
+                withTimeout(5_000) { jumpHostSession?.disconnect() }
+            } catch (_: TimeoutCancellationException) {
+                Logger.w("SSHConnection", "Jump host session disconnect timed out after 5s")
+            } finally {
+                jumpHostSession = null
+                jumpHostLocalPort = 0
+            }
         }
 
         cachedPassword = null

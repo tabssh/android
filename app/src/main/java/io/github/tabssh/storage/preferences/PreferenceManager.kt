@@ -738,6 +738,9 @@ class PreferenceManager(private val context: Context) {
     fun getPasteStikkedUrl(): String = getString("paste_stikked_url", "https://pste.us").trimEnd('/')
     fun setPasteStikkedUrl(url: String) = setString("paste_stikked_url", url)
 
+    fun getPastebinUrl(): String = getString("paste_pastebin_url", "https://pastebin.com").trimEnd('/')
+    fun setPastebinUrl(url: String) = setString("paste_pastebin_url", url)
+
     fun getPastebinApiKey(): String = getString("paste_pastebin_api_key", "")
     fun setPastebinApiKey(key: String) = setString("paste_pastebin_api_key", key)
 

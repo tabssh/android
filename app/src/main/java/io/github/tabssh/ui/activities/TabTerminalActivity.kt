@@ -3545,15 +3545,23 @@ class TabTerminalActivity : TabSSHActivity() {
                             ?: tab.termuxBridge.moshLastExitCode
                         Logger.i("TabTerminalActivity",
                             "Tab ${tab.tabId} disconnected (exit=$exitStatus)")
-                        runOnUiThread {
-                            if (exitStatus == 0) {
-                                // closeTabById fires onTabClosed which calls finish()
-                                // when tab count reaches 0 — don't call finish()
-                                // here too or we get a double-finish race.
+                        if (exitStatus == 0) {
+                            // closeTabById → SSHTab.cleanup() → disconnect() is
+                            // blocking I/O (JSch socket teardown + termux bridge
+                            // stream close) — same hazard closeSplitPane() already
+                            // guards against. A half-closed socket right after the
+                            // remote drops the channel can block on the OS TCP
+                            // timeout, hanging the UI thread on a clean `exit`.
+                            // onTabClosed's own callbacks already post back to the
+                            // main looper, so it is safe to close off-thread here.
+                            // closeTabById fires onTabClosed which calls finish()
+                            // when tab count reaches 0 — don't call finish()
+                            // here too or we get a double-finish race.
+                            app.applicationScope.launch(Dispatchers.IO) {
                                 tabManager.closeTabById(tab.tabId)
-                            } else {
-                                showReconnectDialog(tab)
                             }
+                        } else {
+                            showReconnectDialog(tab)
                         }
                     }
                     else -> {}
