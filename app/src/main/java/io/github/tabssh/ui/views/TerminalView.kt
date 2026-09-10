@@ -1366,6 +1366,13 @@ class TerminalView @JvmOverloads constructor(
         termuxBridge?.resize(terminalCols, terminalRows)
         terminalBuffer?.resize(terminalRows, terminalCols)
         terminalEmulator?.resize(terminalRows, terminalCols)
+        // The buffer/emulator now hold a different grid than what's on
+        // screen, and a full-screen app like vim/neovim may not emit any
+        // new PTY bytes right after a resize (it just repaints in place at
+        // the new dimensions) — without this, the stale pre-resize pixels
+        // stay on screen, showing as corrupted/frozen output until the
+        // next unrelated redraw.
+        invalidate()
         Logger.d(
             "TerminalView",
             "Terminal resized: ${terminalRows}x${terminalCols} " +
