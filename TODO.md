@@ -8,7 +8,6 @@
 [ ] no way to enter containers that are part of stack
 [ ] when clicking on stack names it should open a ui similiar to the containers, add edit to the stacks menu.
 [ ] fix routing/forwardering UI/UX
-[ ] fix builtin tor still having the proxy type.
 [ ] fix container image update mechinism
 [ ] fix oci certs not pinning/persisting even when accept and pin debug log: https://pste.us/raw/5Wyh0QXD.
 [ ] move registery credentials to auth > Registeries, after the keys tab

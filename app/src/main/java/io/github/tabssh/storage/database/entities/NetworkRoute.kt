@@ -120,8 +120,12 @@ data class NetworkRoute(
             NetworkRouteType.PROXY_HTTP -> "HTTP proxy → ${host ?: "?"}:$port"
             NetworkRouteType.PROXY_SOCKS4 -> "SOCKS4 proxy → ${host ?: "?"}:$port"
             NetworkRouteType.PROXY_SOCKS5 ->
+                // Legacy rows: a route saved before the dedicated TOR type
+                // existed is still typed PROXY_SOCKS5 with built_in_tor=true
+                // until it's next re-saved through the edit screen.
                 if (builtInTor) "Tor (built-in)"
                 else "SOCKS5 proxy → ${host ?: "?"}:$port"
+            NetworkRouteType.TOR -> "Tor (built-in)"
         }
     }
 
@@ -176,7 +180,8 @@ enum class NetworkRouteType(val displayName: String) {
     PROXY_HTTP("HTTP proxy"),
     PROXY_SOCKS4("SOCKS4 proxy"),
     PROXY_SOCKS5("SOCKS5 proxy"),
-    JUMP_HOST("SSH jump host");
+    JUMP_HOST("SSH jump host"),
+    TOR("Tor (built-in)");
 
     val isProxy: Boolean
         get() = this != JUMP_HOST

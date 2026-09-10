@@ -49,7 +49,7 @@ class NetworkRouteAdapter(
             val context = itemView.context
 
             textName.text = route.name.ifBlank { route.getSummary() }
-            chipType.text = context.getString(typeLabelRes(route.routeType))
+            chipType.text = context.getString(typeLabelRes(route))
             textSummary.text = route.getSummary()
 
             val (labelRes, colorAttr) = if (route.enabled) {
@@ -75,11 +75,18 @@ class NetworkRouteAdapter(
             itemView.setOnClickListener { onEdit(route) }
         }
 
-        private fun typeLabelRes(type: NetworkRouteType): Int = when (type) {
-            NetworkRouteType.PROXY_HTTP -> R.string.route_type_proxy_http
-            NetworkRouteType.PROXY_SOCKS4 -> R.string.route_type_proxy_socks4
-            NetworkRouteType.PROXY_SOCKS5 -> R.string.route_type_proxy_socks5
-            NetworkRouteType.JUMP_HOST -> R.string.route_type_jump_host
+        // Checks builtInTor first so a legacy row (saved before the dedicated
+        // TOR type existed, still typed PROXY_SOCKS5) still shows as Tor
+        // instead of a generic SOCKS5 proxy.
+        private fun typeLabelRes(route: NetworkRoute): Int = when {
+            route.builtInTor -> R.string.route_type_tor
+            else -> when (route.routeType) {
+                NetworkRouteType.PROXY_HTTP -> R.string.route_type_proxy_http
+                NetworkRouteType.PROXY_SOCKS4 -> R.string.route_type_proxy_socks4
+                NetworkRouteType.PROXY_SOCKS5 -> R.string.route_type_proxy_socks5
+                NetworkRouteType.JUMP_HOST -> R.string.route_type_jump_host
+                NetworkRouteType.TOR -> R.string.route_type_tor
+            }
         }
 
         private fun showMenu(route: NetworkRoute) {

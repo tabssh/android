@@ -208,6 +208,7 @@ class NetworkRouteEditActivity : TabSSHActivity() {
         NetworkRouteType.PROXY_SOCKS4 -> R.string.route_type_proxy_socks4
         NetworkRouteType.PROXY_SOCKS5 -> R.string.route_type_proxy_socks5
         NetworkRouteType.JUMP_HOST -> R.string.route_type_jump_host
+        NetworkRouteType.TOR -> R.string.route_type_tor
     }
 
     /** Reflect [type] in the dropdown and show the fields that type uses. */
@@ -231,7 +232,7 @@ class NetworkRouteEditActivity : TabSSHActivity() {
         chipTor.setOnClickListener {
             hasUnsavedChanges = true
             builtInTor = true
-            applyType(NetworkRouteType.PROXY_SOCKS5)
+            applyType(NetworkRouteType.TOR)
         }
     }
 
@@ -304,7 +305,8 @@ class NetworkRouteEditActivity : TabSSHActivity() {
      * only when the current type is the one they actually configure.
      */
     private fun updatePresetVisibility() {
-        val applicable = selectedType == NetworkRouteType.PROXY_SOCKS5
+        val applicable = selectedType == NetworkRouteType.PROXY_SOCKS5 ||
+            selectedType == NetworkRouteType.TOR
         // The built-in Tor preset additionally only makes sense when a
         // bundled tor binary is actually present on this device/ABI.
         val torAvailable = applicable && TorNativeClient.isAvailable(this)
@@ -363,7 +365,11 @@ class NetworkRouteEditActivity : TabSSHActivity() {
         }
 
         switchEnabled.isChecked = route.enabled
-        applyType(route.routeType)
+        // Legacy rows saved before the dedicated TOR type existed are still
+        // typed PROXY_SOCKS5 with built_in_tor=true; treat them as TOR here
+        // so the editor shows the right type, and re-saving normalizes the
+        // stored type without needing a data migration.
+        applyType(if (route.builtInTor) NetworkRouteType.TOR else route.routeType)
     }
 
     private fun save() {

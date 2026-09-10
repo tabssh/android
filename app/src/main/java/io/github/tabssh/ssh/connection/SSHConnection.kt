@@ -1208,6 +1208,7 @@ class SSHConnection(
                 NetworkRouteType.PROXY_HTTP -> "HTTP"
                 NetworkRouteType.PROXY_SOCKS4 -> "SOCKS4"
                 NetworkRouteType.PROXY_SOCKS5 -> "SOCKS5"
+                NetworkRouteType.TOR -> "SOCKS5"
             }
         }
 
