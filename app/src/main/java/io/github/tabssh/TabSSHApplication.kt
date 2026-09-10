@@ -43,6 +43,7 @@ class TabSSHApplication : Application() {
         private const val KEY_CONTAINER_NAMING_MIGRATED = "container_naming_migrated"
         private const val KEY_LEGACY_CONTAINER_WORK_CANCELLED = "legacy_docker_update_work_cancelled"
         private const val LEGACY_KEY_PREFIX_KEY_ENABLED = "terminal_prefix_key_enabled"
+        private const val KEY_DEFAULT_SNIPPETS_SEEDED = "default_snippets_seeded"
 
         // Docker-only identifiers replaced by the engine-agnostic container
         // naming — see migrateDockerNamingToContainer().
@@ -314,6 +315,7 @@ class TabSSHApplication : Application() {
             migrateProfileKeyedOciSecrets()
             migrateContainerHostAliases()
             migrateDockerNamingToContainer()
+            seedDefaultSnippets()
             // Re-register periodic sync work on every cold start. WorkManager's
             // DB survives process death but can be wiped by reinstall or system
             // maintenance. Re-registering is idempotent when
@@ -461,6 +463,61 @@ class TabSSHApplication : Application() {
      *
      * Every part is idempotent; the done-flag is set only when all of them complete.
      */
+    /**
+     * One-time seed of a starter set of common command snippets, spread
+     * across a handful of categories, so the Snippets manager isn't a blank
+     * empty state on first launch. Runs only once (guarded by
+     * KEY_DEFAULT_SNIPPETS_SEEDED) and only when the table is still empty —
+     * a user who deletes every seeded snippet, or who already had snippets
+     * before this migration shipped, never has them silently reappear.
+     */
+    private suspend fun seedDefaultSnippets() {
+        val prefs = getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_DEFAULT_SNIPPETS_SEEDED, false)) return
+        try {
+            val dao = database.snippetDao()
+            if (dao.getSnippetCount() == 0) {
+                dao.insertSnippets(defaultSnippets())
+            }
+            prefs.edit().putBoolean(KEY_DEFAULT_SNIPPETS_SEEDED, true).apply()
+        } catch (e: Exception) {
+            Logger.e("TabSSHApplication", "Default snippet seed failed", e)
+        }
+    }
+
+    private fun defaultSnippets(): List<io.github.tabssh.storage.database.entities.Snippet> {
+        fun snippet(name: String, command: String, description: String, category: String, order: Int) =
+            io.github.tabssh.storage.database.entities.Snippet(
+                name = name,
+                command = command,
+                description = description,
+                category = category,
+                sortOrder = order
+            )
+        return listOf(
+            snippet("Disk usage", "df -h", "Show free/used disk space, human-readable", "System", 0),
+            snippet("Memory usage", "free -h", "Show free/used RAM and swap, human-readable", "System", 1),
+            snippet("Top processes", "top -o %CPU", "Live process list sorted by CPU usage", "System", 2),
+            snippet("System info", "uname -a", "Kernel, hostname, and architecture in one line", "System", 3),
+            snippet("Uptime", "uptime", "How long the system has been running plus load average", "System", 4),
+            snippet("Listening ports", "ss -tulnp", "TCP/UDP sockets currently listening, with owning process", "Networking", 0),
+            snippet("Ping host", "ping -c 4 {host}", "Send 4 ICMP echo requests to a host", "Networking", 1),
+            snippet("Public IP", "curl -s ifconfig.me", "Print this machine's public-facing IP address", "Networking", 2),
+            snippet("DNS lookup", "dig +short {host}", "Resolve a hostname to its IP address(es)", "Networking", 3),
+            snippet("Tail log", "tail -f {?path|/var/log/syslog}", "Follow a log file as new lines are appended", "Files & Logs", 0),
+            snippet("Find large files", "find . -type f -size +100M", "List files over 100MB under the current directory", "Files & Logs", 1),
+            snippet("Grep recursive", "grep -rn \"{?pattern}\" .", "Search every file under the current directory for a pattern", "Files & Logs", 2),
+            snippet("Disk usage by dir", "du -sh */ | sort -rh", "Show each subdirectory's size, largest first", "Files & Logs", 3),
+            snippet("List running containers", "docker ps", "Show currently running Docker containers", "Docker", 0),
+            snippet("Container logs", "docker logs -f {?container}", "Follow a container's logs", "Docker", 1),
+            snippet("Shell into container", "docker exec -it {?container} sh", "Open an interactive shell inside a running container", "Docker", 2),
+            snippet("Prune unused", "docker system prune -f", "Remove stopped containers, dangling images, and unused networks", "Docker", 3),
+            snippet("Service status", "systemctl status {?service}", "Show a systemd unit's current status", "Services", 0),
+            snippet("Restart service", "sudo systemctl restart {?service}", "Restart a systemd unit", "Services", 1),
+            snippet("Journal follow", "journalctl -u {?service} -f", "Follow a systemd unit's journal log", "Services", 2)
+        )
+    }
+
     private suspend fun migrateDockerNamingToContainer() {
         val prefs = getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE)
         if (prefs.getBoolean(KEY_CONTAINER_NAMING_MIGRATED, false)) return

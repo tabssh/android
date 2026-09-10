@@ -1,5 +1,4 @@
 [ ] fix tor error debug log: https://pste.us/raw/ttuak5q
-[ ] add some common snippets and catergories
 [ ] fix Domain tracker not showing a warning when tbere is nothing to import(ie: empty file, no domqins, etc), possible export issue as well, and also check VPS tracker for same issues
 [ ] fix routing/forwardering UI/UX
 [ ] move registery credentials to auth > Registeries, after the keys tab
