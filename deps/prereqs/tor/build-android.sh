@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-##@Version 202608310000-git
+##@Version 202609100000-git
 # deps/prereqs/tor/build-android.sh — Cross-compile the tor client for one Android ABI.
 #
 # Runs INSIDE the Docker image built from deps/prereqs/tor/Dockerfile.
@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-VERSION="202608310000-git"
+VERSION="202609100000-git"
 
 ABI="${1:-arm64-v8a}"
 # TabSSH has minSdk 24; tor cross-compiles cleanly against API 24 and the
@@ -167,6 +167,13 @@ make -j"$(nproc)" src/app/tor >&2
 cp src/app/tor "$OUT/tor"
 "$STRIP" "$OUT/tor" 2>&2 || true
 cd ..
+
+# The static openssl/libevent/tor link can leave the PT_TLS segment
+# underaligned (p_align=8), which Bionic's dynamic linker rejects outright
+# on install/launch with "executable's TLS segment is underaligned" —
+# see fix-tls-align.py for the full explanation. Applies to every ABI; a
+# no-op when the segment is already aligned correctly.
+python3 "$(dirname "$0")/fix-tls-align.py" "$OUT/tor" >&2
 
 echo "═════════════════════════════════════════════════════════════════"
 echo "✅ Built $OUT/tor"
