@@ -1,3 +1,4 @@
+[ ] fix tor error debug log: https://pste.us/raw/ttuak5q
 [ ] fix the vps to autodetect, for example: date is Aug 10 monthly then its due on 10th of every month.
 [ ] container/cloud hosts not showing in new tab menu
 [ ] fix all vim/neovim bugs. a big 9ne is keyboard toggling breaks the output
@@ -11,9 +12,10 @@
 [ ] fix routing/forwardering UI/UX
 [ ] fix builtin tor still having the proxy type.
 [ ] fix container image update mechinism
-[ ] fix oci certs not pinning/persisting even when accept and pin.
+[ ] fix oci certs not pinning/persisting even when accept and pin debug log: https://pste.us/raw/5Wyh0QXD.
 [ ] move registery credentials to auth > Registeries, after the keys tab
 [ ] fix vim bug on keyboard toggle
 [ ] Update all of the screenshots in metadata/en-US/images/phoneScreenshots/ and also ame them(not 1, 2, 3, etc), then update the docs for the new file names. 
 [x] add the ability tonopen up to 6 hosts in a single tab, clicking on a pane switches to that host(think of a very basic fmux implementation useful for running quick commands but dont need each host in a separate tab. this is separate from cluster commands as each pane is a separate thing nd user clcks to switch.
 [x] move the Stats tab to an item in the nav drawer directly under Insights Above the Multihost dashboard, but Keep the existing UI/UX.
+
