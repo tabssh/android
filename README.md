@@ -21,7 +21,7 @@ created, synced, or paired on any one of the three works unmodified on the other
 
 | Connections | Terminal | Host Key (TOFU) | Navigation | Settings |
 |:---:|:---:|:---:|:---:|:---:|
-| ![Connections list with an active session](metadata/en-US/images/phoneScreenshots/1.png) | ![Live SSH terminal session](metadata/en-US/images/phoneScreenshots/2.png) | ![First-connect host key verification](metadata/en-US/images/phoneScreenshots/3.png) | ![Navigation drawer](metadata/en-US/images/phoneScreenshots/4.png) | ![Settings](metadata/en-US/images/phoneScreenshots/5.png) |
+| ![Connections list with an active session](metadata/en-US/images/phoneScreenshots/1-connections.png) | ![Live SSH terminal session](metadata/en-US/images/phoneScreenshots/2-terminal.png) | ![First-connect host key verification](metadata/en-US/images/phoneScreenshots/3-host-key-tofu.png) | ![Navigation drawer](metadata/en-US/images/phoneScreenshots/4-navigation.png) | ![Settings](metadata/en-US/images/phoneScreenshots/5-settings.png) |
 
 ---
 
