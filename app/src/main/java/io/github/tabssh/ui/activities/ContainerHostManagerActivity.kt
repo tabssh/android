@@ -25,7 +25,6 @@ import io.github.tabssh.containers.ContainerSessionManager
 import io.github.tabssh.containers.transport.ContainerResult
 import io.github.tabssh.ui.dialogs.ContainerErrorPresenter
 import io.github.tabssh.ui.dialogs.PruneConfirmDialog
-import io.github.tabssh.ui.dialogs.RegistryCredentialDialog
 import io.github.tabssh.ui.fragments.containers.ContainerTabSpec
 import io.github.tabssh.ui.fragments.containers.ContainerTabs
 import io.github.tabssh.ui.utils.ContainerEngineLabels
@@ -209,10 +208,6 @@ class ContainerHostManagerActivity : TabSSHActivity() {
         return when (item.itemId) {
             R.id.action_refresh -> {
                 refreshFlow.tryEmit(Unit)
-                true
-            }
-            R.id.action_registry_credentials -> {
-                RegistryCredentialDialog.show(this, app)
                 true
             }
             R.id.action_retest_transport -> {

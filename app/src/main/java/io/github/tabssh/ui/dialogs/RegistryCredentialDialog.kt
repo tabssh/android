@@ -1,12 +1,8 @@
 package io.github.tabssh.ui.dialogs
 
 import android.view.LayoutInflater
-import android.widget.ListView
-import android.widget.SimpleAdapter
-import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
@@ -22,12 +18,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Registry credential manager: list, add, edit, and
- * delete credentials for private registries. Both the list and the editor
- * explain what the credentials are for: the auto-update checker's on-device
- * HEAD /v2 manifest digest checks. The secret never touches Room — it goes
- * straight to RegistryCredentialStore (Keystore-encrypted) keyed by the
- * credential row id.
+ * Registry credential editor/menu: add, edit, and delete credentials for
+ * private registries. The embedded list itself lives in
+ * `AuthRegistriesFragment` (Auth > Registries sub-tab); this object supplies
+ * the shared editor dialog, item menu, and delete confirmation it calls into.
+ * The editor explains what the credentials are for: the auto-update
+ * checker's on-device HEAD /v2 manifest digest checks. The secret never
+ * touches Room — it goes straight to RegistryCredentialStore
+ * (Keystore-encrypted) keyed by the credential row id.
  */
 object RegistryCredentialDialog {
 
@@ -61,53 +59,8 @@ object RegistryCredentialDialog {
         }
     }
 
-    /** Show the credential list for [app]'s database. */
-    fun show(activity: AppCompatActivity, app: TabSSHApplication) {
-        activity.lifecycleScope.launch {
-            val credentials = app.database.registryCredentialDao().getAllList()
-            // The DAO read suspends — the activity can be gone by the time it
-            // returns, and inflating/showing against a dead window throws.
-            if (activity.isFinishing || activity.isDestroyed) return@launch
-            val view = LayoutInflater.from(activity)
-                .inflate(R.layout.dialog_registry_credential_list, null)
-            val list = view.findViewById<ListView>(R.id.list_credentials)
-            val empty = view.findViewById<TextView>(R.id.text_registry_empty)
-
-            val dialog = MaterialAlertDialogBuilder(activity)
-                .setTitle(R.string.container_registry_title)
-                .setView(view)
-                .setPositiveButton(R.string.container_registry_add) { _, _ ->
-                    showEditor(activity, app, null)
-                }
-                .setNegativeButton(R.string.close, null)
-                .create()
-
-            if (credentials.isEmpty()) {
-                empty.isVisible = true
-            } else {
-                list.isVisible = true
-                val rows = credentials.map { credential ->
-                    mapOf(
-                        "host" to credential.registryHost,
-                        "detail" to listItemDetail(activity, credential)
-                    )
-                }
-                list.adapter = SimpleAdapter(
-                    activity, rows, android.R.layout.simple_list_item_2,
-                    arrayOf("host", "detail"),
-                    intArrayOf(android.R.id.text1, android.R.id.text2)
-                )
-                list.setOnItemClickListener { _, _, position, _ ->
-                    dialog.dismiss()
-                    showItemMenu(activity, app, credentials[position])
-                }
-            }
-            dialog.show()
-        }
-    }
-
     /** Second list-row line: username when present, else the auth-type label. */
-    private fun listItemDetail(
+    internal fun listItemDetail(
         activity: AppCompatActivity,
         credential: RegistryCredential
     ): String {
@@ -118,7 +71,8 @@ object RegistryCredentialDialog {
         )
     }
 
-    private fun showItemMenu(
+    /** Tap-target menu (edit/delete) for a credential row in the Registries sub-tab. */
+    internal fun showItemMenu(
         activity: AppCompatActivity,
         app: TabSSHApplication,
         credential: RegistryCredential
@@ -139,7 +93,8 @@ object RegistryCredentialDialog {
             .show()
     }
 
-    private fun showEditor(
+    /** Add/edit editor dialog for a registry credential, from the Registries sub-tab. */
+    internal fun showEditor(
         activity: AppCompatActivity,
         app: TabSSHApplication,
         existing: RegistryCredential?

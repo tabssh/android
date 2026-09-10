@@ -467,6 +467,7 @@
     <string name="auth_tab_vms">VMs</string>
     <string name="auth_tab_vnc">VNC</string>
     <string name="auth_tab_keys">Keys</string>
+    <string name="auth_tab_registries">Registries</string>
     <string name="main_tab_infra">Infra</string>
 
     <!-- Infra tab (Docker Hosts / Hypervisors / Cloud sub-tabs) -->
@@ -610,7 +611,6 @@
     <string name="container_manager_tab_profiles">Profiles</string>
     <string name="container_manager_tab_projects">Projects</string>
     <string name="container_manager_tab_stacks">Stacks</string>
-    <string name="container_menu_registry_credentials">Registry credentials</string>
     <string name="container_menu_prune_group">Free up space</string>
     <string name="container_menu_prune_images">Prune unused images</string>
     <string name="container_menu_prune_volumes">Prune unused volumes</string>
@@ -915,7 +915,6 @@
     <string name="container_update_apply_done">Update complete</string>
     <string name="container_update_apply_failed">Update failed at %1$s: %2$s</string>
     <string name="container_update_apply_failed_rolled_back">Update failed at %1$s: %2$s (rolled back)</string>
-    <string name="container_registry_title">Registry Credentials</string>
     <string name="container_registry_description">The auto-update checker queries registries directly from this device (HEAD /v2 manifest requests). Add a credential for private registries, private Docker Hub repositories, or to avoid Docker Hub anonymous rate limits.</string>
     <string name="container_registry_empty">No registry credentials yet. Public images on registries without rate limits work without any.</string>
     <string name="container_registry_add">Add credential</string>

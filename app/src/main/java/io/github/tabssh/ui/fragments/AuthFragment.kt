@@ -14,9 +14,10 @@ import io.github.tabssh.R
 
 /**
  * Combined "Auth" tab that hosts SSH Identities, VM Credentials, VNC
- * Identities, and SSH Keys as sub-tabs within a single main-tab slot.
- * Replaces the standalone "Identities" tab (IdentitiesFragment), which
- * stacked all four sections into one long scrolling screen.
+ * Identities, SSH Keys, and Registry Credentials as sub-tabs within a single
+ * main-tab slot. Replaces the standalone "Identities" tab
+ * (IdentitiesFragment), which stacked all four original sections into one
+ * long scrolling screen.
  */
 class AuthFragment : Fragment() {
 
@@ -46,6 +47,7 @@ class AuthFragment : Fragment() {
                 1 -> getString(R.string.auth_tab_vms)
                 2 -> getString(R.string.auth_tab_vnc)
                 3 -> getString(R.string.auth_tab_keys)
+                4 -> getString(R.string.auth_tab_registries)
                 else -> ""
             }
         }.attach()
@@ -67,13 +69,14 @@ class AuthFragment : Fragment() {
     }
 
     private inner class AuthPagerAdapter(fragment: Fragment) : FragmentStateAdapter(fragment) {
-        override fun getItemCount(): Int = 4
+        override fun getItemCount(): Int = 5
 
         override fun createFragment(position: Int): Fragment = when (position) {
             0 -> AuthSshFragment.newInstance()
             1 -> AuthVmsFragment.newInstance()
             2 -> AuthVncFragment.newInstance()
             3 -> AuthKeysFragment.newInstance()
+            4 -> AuthRegistriesFragment.newInstance()
             else -> error("Invalid Auth sub-tab position $position")
         }
     }

@@ -13,11 +13,6 @@
         android:title="@string/container_menu_reconnect"
         app:showAsAction="never" />
 
-    <item
-        android:id="@+id/action_registry_credentials"
-        android:title="@string/container_menu_registry_credentials"
-        app:showAsAction="never" />
-
     <!-- Destructive prunes live in their own submenu: options menus render no
          dividers, so a named group is the only real visual separation -->
     <item
