@@ -1,5 +1,4 @@
 [ ] fix tor error debug log: https://pste.us/raw/ttuak5q
 [ ] Retake the screenshots in metadata/en-US/images/phoneScreenshots/ against current UI (files renamed from 1-5.png to 1-connections.png/2-terminal.png/3-host-key-tofu.png/4-navigation.png/5-settings.png, keeping the numeric prefix so Fastlane/F-Droid store display order is preserved, and README.md updated already; actual recapture needs a device/emulator with a display, unavailable in this headless environment).
-[ ] add sorting to both VPS/Domain tracking UI, fix import export icon visibility.
 [x] add the ability tonopen up to 6 hosts in a single tab, clicking on a pane switches to that host(think of a very basic fmux implementation useful for running quick commands but dont need each host in a separate tab. this is separate from cluster commands as each pane is a separate thing nd user clcks to switch.
 [x] move the Stats tab to an item in the nav drawer directly under Insights Above the Multihost dashboard, but Keep the existing UI/UX.

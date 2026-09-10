@@ -3,15 +3,21 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
+        android:id="@+id/action_sort"
+        android:title="@string/menu_sort"
+        android:icon="@drawable/ic_toolbar_sort"
+        app:showAsAction="ifRoom" />
+
+    <item
         android:id="@+id/action_import"
         android:title="@string/menu_import"
-        android:icon="@drawable/ic_download"
+        android:icon="@drawable/ic_toolbar_import"
         app:showAsAction="ifRoom" />
 
     <item
         android:id="@+id/action_export"
         android:title="@string/menu_export"
-        android:icon="@drawable/ic_upload"
+        android:icon="@drawable/ic_toolbar_export"
         app:showAsAction="ifRoom" />
 
 </menu>

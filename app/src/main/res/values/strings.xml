@@ -2339,6 +2339,10 @@
     <string name="domain_tracker_import_empty">No domains found to import — the file was empty or had no valid rows</string>
     <string name="domain_tracker_export_success">Domains exported</string>
     <string name="domain_tracker_export_empty">Nothing to export — the domain tracker is empty</string>
+    <string name="domain_tracker_sort_name_asc">Name (A-Z)</string>
+    <string name="domain_tracker_sort_name_desc">Name (Z-A)</string>
+    <string name="domain_tracker_sort_expiration_asc">Expiration (soonest first)</string>
+    <string name="domain_tracker_sort_expiration_desc">Expiration (latest first)</string>
     <string name="domain_delete_title">Delete \'%1$s\'?</string>
     <string name="domain_delete_failed_fmt">Delete failed: %1$s</string>
 
@@ -2374,6 +2378,10 @@
     <string name="vps_tracker_import_empty">No hosts found to import — the file was empty or had no valid rows</string>
     <string name="vps_tracker_export_success">VPS hosts exported</string>
     <string name="vps_tracker_export_empty">Nothing to export — the VPS tracker is empty</string>
+    <string name="vps_tracker_sort_name_asc">Hostname (A-Z)</string>
+    <string name="vps_tracker_sort_name_desc">Hostname (Z-A)</string>
+    <string name="vps_tracker_sort_renewal_asc">Renewal (soonest first)</string>
+    <string name="vps_tracker_sort_renewal_desc">Renewal (latest first)</string>
 
     <!-- ── Renewal urgency pill (shared: VPS Tracker + Domain Tracker rows) ── -->
     <string name="renewal_pill_unknown">—</string>

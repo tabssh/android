@@ -12,6 +12,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
+import androidx.annotation.StringRes
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -48,11 +49,22 @@ class DomainTrackerActivity : TabSSHActivity() {
 
     private companion object {
         private const val TAG = "DomainTrackerActivity"
+        private const val PREFS_NAME = "TabSSH"
+        private const val PREF_SORT_OPTION = "domain_tracker_sort"
+    }
+
+    private enum class SortOption(@StringRes val displayNameRes: Int) {
+        NAME_ASC(R.string.domain_tracker_sort_name_asc),
+        NAME_DESC(R.string.domain_tracker_sort_name_desc),
+        EXPIRATION_ASC(R.string.domain_tracker_sort_expiration_asc),
+        EXPIRATION_DESC(R.string.domain_tracker_sort_expiration_desc)
     }
 
     private lateinit var binding: ActivityDomainTrackerBinding
     private lateinit var app: TabSSHApplication
     private lateinit var adapter: DomainAdapter
+    private var allDomains: List<Domain> = emptyList()
+    private var currentSortOption: SortOption = SortOption.NAME_ASC
 
     private val isAlive: Boolean
         get() = !isFinishing && !isDestroyed
@@ -79,6 +91,8 @@ class DomainTrackerActivity : TabSSHActivity() {
         binding.sectionHeader.textHeaderTitle.text = getString(R.string.nav_item_domain_tracker)
         binding.sectionHeader.textHeaderSubtitle.text = getString(R.string.domain_tracker_header_subtitle)
 
+        currentSortOption = loadSortPreference()
+
         adapter = DomainAdapter(onLongPress = { domain -> showDomainMenu(domain) })
         binding.recyclerDomains.layoutManager = LinearLayoutManager(this)
         binding.recyclerDomains.adapter = adapter
@@ -95,7 +109,8 @@ class DomainTrackerActivity : TabSSHActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 app.database.domainDao().getAll().collect { domains ->
-                    adapter.submitList(domains)
+                    allDomains = domains
+                    applySort()
                     if (domains.isEmpty()) {
                         binding.recyclerDomains.visibility = View.GONE
                         binding.emptyState.visibility = View.VISIBLE
@@ -115,6 +130,10 @@ class DomainTrackerActivity : TabSSHActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
+            R.id.action_sort -> {
+                showSortDialog()
+                true
+            }
             R.id.action_import -> {
                 io.github.tabssh.ui.dialogs.ImportExportChooserDialog.showImportSource(
                     this,
@@ -136,6 +155,50 @@ class DomainTrackerActivity : TabSSHActivity() {
                 true
             }
             else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    // ── Sorting ──────────────────────────────────────────────────────────────
+
+    private fun applySort() {
+        val sorted = when (currentSortOption) {
+            SortOption.NAME_ASC -> allDomains.sortedBy { it.domainName.lowercase() }
+            SortOption.NAME_DESC -> allDomains.sortedByDescending { it.domainName.lowercase() }
+            SortOption.EXPIRATION_ASC -> allDomains.sortedBy { it.expirationDate ?: Long.MAX_VALUE }
+            SortOption.EXPIRATION_DESC -> allDomains.sortedByDescending { it.expirationDate ?: Long.MIN_VALUE }
+        }
+        adapter.submitList(sorted)
+    }
+
+    private fun showSortDialog() {
+        val options = SortOption.values()
+        val labels = options.map { getString(it.displayNameRes) }.toTypedArray()
+        val checkedIndex = options.indexOf(currentSortOption)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.connections_sort_dialog_title)
+            .setSingleChoiceItems(labels, checkedIndex) { dialog, which ->
+                currentSortOption = options[which]
+                saveSortPreference(currentSortOption)
+                applySort()
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun saveSortPreference(option: SortOption) {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+            .putString(PREF_SORT_OPTION, option.name)
+            .apply()
+    }
+
+    private fun loadSortPreference(): SortOption {
+        val stored = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(PREF_SORT_OPTION, null)
+            ?: return SortOption.NAME_ASC
+        return try {
+            SortOption.valueOf(stored)
+        } catch (e: IllegalArgumentException) {
+            SortOption.NAME_ASC
         }
     }
 

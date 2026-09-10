@@ -12,6 +12,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
+import androidx.annotation.StringRes
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -47,11 +48,22 @@ class VpsTrackerActivity : TabSSHActivity() {
 
     private companion object {
         private const val TAG = "VpsTrackerActivity"
+        private const val PREFS_NAME = "TabSSH"
+        private const val PREF_SORT_OPTION = "vps_tracker_sort"
+    }
+
+    private enum class SortOption(@StringRes val displayNameRes: Int) {
+        NAME_ASC(R.string.vps_tracker_sort_name_asc),
+        NAME_DESC(R.string.vps_tracker_sort_name_desc),
+        RENEWAL_ASC(R.string.vps_tracker_sort_renewal_asc),
+        RENEWAL_DESC(R.string.vps_tracker_sort_renewal_desc)
     }
 
     private lateinit var binding: ActivityVpsTrackerBinding
     private lateinit var app: TabSSHApplication
     private lateinit var adapter: VpsHostAdapter
+    private var allHosts: List<VpsHost> = emptyList()
+    private var currentSortOption: SortOption = SortOption.NAME_ASC
 
     private val isAlive: Boolean
         get() = !isFinishing && !isDestroyed
@@ -78,6 +90,8 @@ class VpsTrackerActivity : TabSSHActivity() {
         binding.sectionHeader.textHeaderTitle.text = getString(R.string.nav_item_vps_tracker)
         binding.sectionHeader.textHeaderSubtitle.text = getString(R.string.vps_tracker_header_subtitle)
 
+        currentSortOption = loadSortPreference()
+
         adapter = VpsHostAdapter(onLongPress = { host -> showHostMenu(host) })
         binding.recyclerVpsHosts.layoutManager = LinearLayoutManager(this)
         binding.recyclerVpsHosts.adapter = adapter
@@ -97,7 +111,8 @@ class VpsTrackerActivity : TabSSHActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 app.database.vpsHostDao().getAll().collect { hosts ->
-                    adapter.submitList(hosts)
+                    allHosts = hosts
+                    applySort()
                     if (hosts.isEmpty()) {
                         binding.recyclerVpsHosts.visibility = View.GONE
                         binding.emptyState.visibility = View.VISIBLE
@@ -117,6 +132,10 @@ class VpsTrackerActivity : TabSSHActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
+            R.id.action_sort -> {
+                showSortDialog()
+                true
+            }
             R.id.action_import -> {
                 io.github.tabssh.ui.dialogs.ImportExportChooserDialog.showImportSource(
                     this,
@@ -138,6 +157,54 @@ class VpsTrackerActivity : TabSSHActivity() {
                 true
             }
             else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    // ── Sorting ──────────────────────────────────────────────────────────────
+
+    private fun applySort() {
+        val sorted = when (currentSortOption) {
+            SortOption.NAME_ASC -> allHosts.sortedBy { it.hostname.lowercase() }
+            SortOption.NAME_DESC -> allHosts.sortedByDescending { it.hostname.lowercase() }
+            SortOption.RENEWAL_ASC -> allHosts.sortedBy {
+                RenewalUrgency.effectiveDate(it.renewalDate, it.billingCycle) ?: Long.MAX_VALUE
+            }
+            SortOption.RENEWAL_DESC -> allHosts.sortedByDescending {
+                RenewalUrgency.effectiveDate(it.renewalDate, it.billingCycle) ?: Long.MIN_VALUE
+            }
+        }
+        adapter.submitList(sorted)
+    }
+
+    private fun showSortDialog() {
+        val options = SortOption.values()
+        val labels = options.map { getString(it.displayNameRes) }.toTypedArray()
+        val checkedIndex = options.indexOf(currentSortOption)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.connections_sort_dialog_title)
+            .setSingleChoiceItems(labels, checkedIndex) { dialog, which ->
+                currentSortOption = options[which]
+                saveSortPreference(currentSortOption)
+                applySort()
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun saveSortPreference(option: SortOption) {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+            .putString(PREF_SORT_OPTION, option.name)
+            .apply()
+    }
+
+    private fun loadSortPreference(): SortOption {
+        val stored = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(PREF_SORT_OPTION, null)
+            ?: return SortOption.NAME_ASC
+        return try {
+            SortOption.valueOf(stored)
+        } catch (e: IllegalArgumentException) {
+            SortOption.NAME_ASC
         }
     }
 
