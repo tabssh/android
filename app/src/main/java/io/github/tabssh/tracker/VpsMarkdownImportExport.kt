@@ -1,6 +1,7 @@
 package io.github.tabssh.tracker
 
 import io.github.tabssh.storage.database.entities.VpsHost
+import io.github.tabssh.utils.RenewalUrgency
 import io.github.tabssh.utils.logging.Logger
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -13,8 +14,8 @@ import java.util.UUID
  * the grouped-by-tenant layout of `~/Documents/VPS.md`:
  *
  * ```
- * ## Tenant   - hosteons.com
- * dns         - 82.29.128.43    - 2402:d0c0:12:47ab::1   [40Gx2G]   [dns.casjaydns.com]  [June 7th, yearly    $79.99]  [primary dns/backup mx]
+ * ## Tenant   - example-host.com
+ * dns         - 198.51.100.10   - 2001:db8:12:47ab::1     [40Gx2G]   [dns.example.com]    [June 7th, yearly    $79.99]  [primary dns/backup mx]
  * ----------------------------------------------
  * ```
  *
@@ -133,7 +134,7 @@ object VpsMarkdownImportExport {
                 }
             }
 
-            val renewalDate = renewalRaw?.let { parseBestEffortDate(it) }
+            val renewalDate = renewalRaw?.let { parseBestEffortDate(it, billingCycle) }
 
             hosts.add(
                 VpsHost(
@@ -161,10 +162,15 @@ object VpsMarkdownImportExport {
     /**
      * Best-effort date parse for renewal text. Handles exact dates with a
      * 4-digit year ("May 15, 2027") and year-less recurring text ("June 7th,
-     * yearly") by computing the next occurrence of that month/day from now.
-     * Non-date text ("Free/Never", "TBD") returns null.
+     * yearly") by anchoring that month/day to this year, then projecting it
+     * to the next occurrence using [billingCycle] (e.g. a "10" with a
+     * "monthly" cycle rolls forward month-by-month rather than assuming a
+     * yearly cadence — see [RenewalUrgency.effectiveDate], which this
+     * delegates the rollover to so the two stay in sync). A null/unrecognized
+     * cycle falls back to the previous yearly-recurrence behavior. Non-date
+     * text ("Free/Never", "TBD") returns null.
      */
-    fun parseBestEffortDate(rawText: String): Long? {
+    fun parseBestEffortDate(rawText: String, billingCycle: String? = null): Long? {
         val cleaned = ORDINAL_SUFFIX_REGEX.replace(rawText, "$1").trim()
         if (cleaned.isEmpty()) return null
 
@@ -178,7 +184,8 @@ object VpsMarkdownImportExport {
         }
 
         // Year-less recurring text: take the leading "Month Day" fragment
-        // (everything up to the first comma) and project the next occurrence.
+        // (everything up to the first comma), anchor it to this year, then
+        // project forward to the next occurrence using the actual cycle.
         val monthDayFragment = cleaned.substringBefore(",").trim()
         return try {
             val parsed = MONTH_DAY_FORMAT.format().parse(monthDayFragment) ?: return null
@@ -186,10 +193,7 @@ object VpsMarkdownImportExport {
             target.time = parsed
             val now = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
             target.set(Calendar.YEAR, now.get(Calendar.YEAR))
-            if (target.before(now)) {
-                target.add(Calendar.YEAR, 1)
-            }
-            target.timeInMillis
+            RenewalUrgency.effectiveDate(target.timeInMillis, billingCycle ?: "yearly", now.timeInMillis)
         } catch (_: Exception) {
             null
         }

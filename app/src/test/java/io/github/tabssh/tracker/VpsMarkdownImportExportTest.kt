@@ -1,6 +1,8 @@
 package io.github.tabssh.tracker
 
 import org.junit.Test
+import java.util.Calendar
+import java.util.TimeZone
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -15,28 +17,28 @@ class VpsMarkdownImportExportTest {
         # My VPS HOST MAPPINGS
 
         ```text
-        ## Tenant   - hosteons.com
-        dns         - 82.29.128.43    - 2402:d0c0:12:47ab::1                       [40Gx2G]    [dns.casjaydns.com]  [June 7th, 2027, biennially $79.99]  [primary dns/backup mx]
-        dns1        - 103.124.104.139 - 2402:d0c0:15:87::f7f3:b529                 [40Gx2G]    [dns1.casjaydns.com] [June 7th, 2027, biennially $79.99]  [backup dns/mx]
-        ns          - 82.29.128.140   - 2402:d0c0:12:b52::1                        [40Gx2G]    [casjaydns.fyi]      [June 9th, 2027, annually $29.99]  [technitium dns]
+        ## Tenant   - tenant-one.example
+        dns         - 198.51.100.10   - 2001:db8:12:47ab::1                       [40Gx2G]    [dns.example.com]    [June 7th, 2027, biennially $79.99]  [primary dns/backup mx]
+        dns1        - 198.51.100.11   - 2001:db8:15:87::f7f3:b529                 [40Gx2G]    [dns1.example.com]   [June 7th, 2027, biennially $79.99]  [backup dns/mx]
+        ns          - 198.51.100.12   - 2001:db8:12:b52::1                        [40Gx2G]    [ns.example.org]     [June 9th, 2027, annually $29.99]  [technitium dns]
         ----------------------------------------------
 
-        ## Tenant   - interserver.net
-        apis        - 104.218.50.148  - 2604:a00:11:3305:216:3eff:fe36:1ffe        [16T/32G]   [apis.apimgr.us]     [August  10 monthly  $48.00]  [TBD]
+        ## Tenant   - tenant-two.example
+        apis        - 198.51.100.20   - 2001:db8:11:3305:216:3eff:fe36:1ffe       [16T/32G]   [apis.example.net]   [August  10 monthly  $48.00]  [TBD]
         ----------------------------------------------
 
-        ## Tenant   - racknerd.com
-        mail        - 66.63.179.3     -                                            [100Gx5G]   [casjay.email]       [May  15, 2027, biennially $109.48] [mail server]
-        pbx         - 23.238.70.236   - 2607:9d00:2000:0145::27d8:f296             [150Gx8G]   [casjay.tel]         [November 21, 2027, biennially $124.48] [PBX/Fax server]
+        ## Tenant   - tenant-three.example
+        mail        - 198.51.100.30   -                                            [100Gx5G]   [mail.example.com]   [May  15, 2027, biennially $109.48] [mail server]
+        pbx         - 198.51.100.31   - 2001:db8:2000:0145::27d8:f296             [150Gx8G]   [pbx.example.net]    [November 21, 2027, biennially $124.48] [PBX/Fax server]
         ----------------------------------------------
 
-        ## Tenant   - ssdnodes.com
-        hosting     - 104.225.216.132 - 2602:ff16:3:12eb::1                        [160Gx8G]   [casjay.xyz]         [June 04, 2028, triennially $252.00]  [hosting server]
-        pve         - 23.227.180.26   - 2604:4500:000a:048d:0000:0000:0000:0002    [480Gx64G]  [casjayvps.us]       [June 05, 2028, triennially $36.00]   [proxmox virtualization host]
+        ## Tenant   - tenant-four.example
+        hosting     - 198.51.100.40   - 2001:db8:3:12eb::1                        [160Gx8G]   [hosting.example.org] [June 04, 2028, triennially $252.00]  [hosting server]
+        pve         - 198.51.100.41   - 2001:db8:a:48d:0000:0000:0000:0002        [480Gx64G]  [pve.example.com]    [June 05, 2028, triennially $36.00]   [proxmox virtualization host]
         ---------------------------------------------
 
-        ## Tenant   - cloud.oracle.com
-        ip          - 132.226.33.75   - 2603:c020:4005:4d00:6e70:8e31:88e9:7a42    [50Gx1G]    [ifcfg.us]           [Free/Never]         [IP detection service]
+        ## Tenant   - tenant-five.example
+        ip          - 198.51.100.50   - 2001:db8:4005:4d00:6e70:8e31:88e9:7a42    [50Gx1G]    [example.invalid]    [Free/Never]         [IP detection service]
         ---------------------------------------------
         ```
     """.trimIndent()
@@ -78,7 +80,7 @@ class VpsMarkdownImportExportTest {
     @Test
     fun `handles rows with a blank ipv6 field`() {
         val mail = VpsMarkdownImportExport.parse(sample).hosts.single { it.hostname == "mail" }
-        assertEquals("66.63.179.3", mail.ipv4)
+        assertEquals("198.51.100.30", mail.ipv4)
         assertEquals(null, mail.ipv6)
     }
 
@@ -94,10 +96,28 @@ class VpsMarkdownImportExportTest {
     @Test
     fun `tenant blocks are attributed correctly`() {
         val hosts = VpsMarkdownImportExport.parse(sample).hosts
-        assertEquals("hosteons.com", hosts.single { it.hostname == "dns" }.tenant)
-        assertEquals("racknerd.com", hosts.single { it.hostname == "pbx" }.tenant)
-        assertEquals("ssdnodes.com", hosts.single { it.hostname == "pve" }.tenant)
-        assertEquals("cloud.oracle.com", hosts.single { it.hostname == "ip" }.tenant)
+        assertEquals("tenant-one.example", hosts.single { it.hostname == "dns" }.tenant)
+        assertEquals("tenant-three.example", hosts.single { it.hostname == "pbx" }.tenant)
+        assertEquals("tenant-four.example", hosts.single { it.hostname == "pve" }.tenant)
+        assertEquals("tenant-five.example", hosts.single { it.hostname == "ip" }.tenant)
+    }
+
+    @Test
+    fun `year-less monthly cycle anchors to the day-of-month, not a yearly projection`() {
+        // "August 10 monthly" has no year — the parser used to always
+        // project year-less month/day text forward by a whole year
+        // regardless of billing cycle, so a monthly host's due date landed
+        // up to a year out instead of on the 10th of the correct month.
+        val apis = VpsMarkdownImportExport.parse(sample).hosts.single { it.hostname == "apis" }
+        val renewalDate = requireNotNull(apis.renewalDate)
+        // renewalDate is always anchored in UTC (see VpsMarkdownImportExport),
+        // so it must be read back in UTC too — a local-timezone Calendar would
+        // read the wrong day-of-month whenever the device's offset crosses
+        // local midnight, which is exactly the class of bug this test guards.
+        val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+        cal.timeInMillis = renewalDate
+        assertEquals(10, cal.get(Calendar.DAY_OF_MONTH))
+        assertEquals(true, renewalDate >= System.currentTimeMillis())
     }
 
     @Test

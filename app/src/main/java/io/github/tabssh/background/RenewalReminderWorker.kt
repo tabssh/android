@@ -11,6 +11,7 @@ import androidx.work.WorkRequest
 import androidx.work.WorkerParameters
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.utils.NotificationHelper
+import io.github.tabssh.utils.RenewalUrgency
 import io.github.tabssh.utils.logging.Logger
 import java.util.concurrent.TimeUnit
 
@@ -114,7 +115,13 @@ class RenewalReminderWorker(
 
         val vpsHosts = db.vpsHostDao().getAllWithRenewal()
         for (host in vpsHosts) {
-            val renewal = host.renewalDate ?: continue
+            // A recurring host's stored renewalDate is the last known due
+            // date, not necessarily the next one — project it forward by
+            // billingCycle first (same as the tracker list/detail screens),
+            // so a monthly host that's months past its stored date still
+            // gets reminded for its actual next due date instead of being
+            // silently skipped as "too far overdue" below.
+            val renewal = RenewalUrgency.effectiveDate(host.renewalDate, host.billingCycle, now) ?: continue
             val daysRemaining = (renewal - now) / dayMs
             if (daysRemaining > host.reminderDaysBefore) continue
             if (host.lastReminderSentAt == renewal) continue

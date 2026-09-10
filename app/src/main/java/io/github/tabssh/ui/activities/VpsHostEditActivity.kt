@@ -189,10 +189,13 @@ class VpsHostEditActivity : TabSSHActivity() {
         }
 
         val renewalRaw = editRenewalRaw.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
+        val billingCycle = editBillingCycle.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
         // Best-effort parse the free-text renewal field to a concrete date so
         // the renewal reminder worker has something to compare against, same
-        // as VpsMarkdownImportExport.parse() does for imported rows.
-        val renewalDate = renewalRaw?.let { VpsMarkdownImportExport.parseBestEffortDate(it) }
+        // as VpsMarkdownImportExport.parse() does for imported rows — passing
+        // billingCycle so a year-less "Aug 10" + "Monthly" anchors to the
+        // right cadence instead of always assuming yearly.
+        val renewalDate = renewalRaw?.let { VpsMarkdownImportExport.parseBestEffortDate(it, billingCycle) }
         val reminderDays = editReminderDays.text?.toString()?.toIntOrNull() ?: 7
         val now = System.currentTimeMillis()
         val existing = editingExisting
@@ -208,7 +211,7 @@ class VpsHostEditActivity : TabSSHActivity() {
             linkedDomain = editLinkedDomain.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
             renewalRaw = renewalRaw,
             renewalDate = renewalDate,
-            billingCycle = editBillingCycle.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+            billingCycle = billingCycle,
             price = editPrice.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
             description = editDescription.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
             reminderDaysBefore = reminderDays,

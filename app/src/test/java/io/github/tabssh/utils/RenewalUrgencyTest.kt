@@ -113,6 +113,25 @@ class RenewalUrgencyTest {
     }
 
     @Test
+    fun `effectiveDate matches billing cycle case-insensitively`() {
+        // VpsHostEditActivity's billing-cycle field is free text, so a
+        // manually entered "Monthly" (capitalized, as a user would type it)
+        // must roll forward the same as the imported/canonical "monthly".
+        val cal = Calendar.getInstance()
+        cal.set(2025, Calendar.JANUARY, 10, 0, 0, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        val staleDate = cal.timeInMillis
+        val referenceNow = staleDate + 75L * dayMillis
+
+        val result = RenewalUrgency.effectiveDate(staleDate, "Monthly", referenceNow)
+        requireNotNull(result)
+        assertEquals(true, result >= referenceNow)
+        val resultCal = Calendar.getInstance()
+        resultCal.timeInMillis = result
+        assertEquals(10, resultCal.get(Calendar.DAY_OF_MONTH))
+    }
+
+    @Test
     fun `effectiveDate rolls a stale yearly date forward by whole years`() {
         val cal = Calendar.getInstance()
         cal.set(2020, Calendar.MARCH, 1, 0, 0, 0)

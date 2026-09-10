@@ -3,6 +3,8 @@ package io.github.tabssh.utils
 import android.content.Context
 import io.github.tabssh.R
 import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
 
 /**
  * Shared renewal-urgency tiering for the VPS Hosting Tracker and Domain
@@ -83,22 +85,35 @@ enum class RenewalUrgency {
          */
         fun effectiveDate(date: Long?, billingCycle: String?, now: Long = System.currentTimeMillis()): Long? {
             if (date == null || billingCycle == null || date >= now) return date
-            val field = when (billingCycle) {
-                "daily" -> Calendar.DAY_OF_YEAR
-                "weekly" -> Calendar.DAY_OF_YEAR
-                "monthly" -> Calendar.MONTH
-                "yearly" -> Calendar.YEAR
-                "biennially" -> Calendar.YEAR
-                "triennially" -> Calendar.YEAR
+            // Hosts imported from VPS.md get a normalized cycle string, but
+            // ones entered by hand (VpsHostEditActivity's billing-cycle
+            // field is free text) may carry any case/synonym the user typed
+            // ("Monthly", "MONTHLY", "annual") — match case-insensitively
+            // against the same synonym set the importer recognizes so
+            // auto-detection doesn't silently no-op on those.
+            val normalizedCycle = billingCycle.trim().lowercase(Locale.US)
+            val field = when (normalizedCycle) {
+                "daily", "day" -> Calendar.DAY_OF_YEAR
+                "weekly", "week" -> Calendar.DAY_OF_YEAR
+                "monthly", "month" -> Calendar.MONTH
+                "yearly", "annually", "annual", "year" -> Calendar.YEAR
+                "biennially", "biennial" -> Calendar.YEAR
+                "triennially", "triennial" -> Calendar.YEAR
                 else -> return date
             }
-            val amount = when (billingCycle) {
-                "weekly" -> 7
-                "biennially" -> 2
-                "triennially" -> 3
+            val amount = when (normalizedCycle) {
+                "weekly", "week" -> 7
+                "biennially", "biennial" -> 2
+                "triennially", "triennial" -> 3
                 else -> 1
             }
-            val calendar = Calendar.getInstance()
+            // renewalDate is always anchored in UTC by VpsMarkdownImportExport
+            // (both the exact-date and year-less best-effort parse paths use a
+            // UTC Calendar) — rolling forward in the default/local timezone
+            // here would read the wrong day-of-month whenever the device's
+            // offset crosses local midnight, silently shifting the "due on
+            // the Nth" day by one. Stay in UTC to match how the date was built.
+            val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
             calendar.timeInMillis = date
             // Safety cap: bounds the loop even for a pathological input
             // (e.g. a decades-old date on a daily cycle) instead of
