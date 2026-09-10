@@ -67,9 +67,9 @@ SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES.
 
 ### Bouncy Castle Cryptography APIs
 
-**Version:** 1.77 (bcprov-jdk18on, bcpkix-jdk18on)  
+**Version:** 1.79 (bcprov-jdk18on, bcpkix-jdk18on)  
 **License:** MIT License  
-**Copyright:** (c) 2000-2023 The Legion of the Bouncy Castle Inc.  
+**Copyright:** (c) 2000-2025 The Legion of the Bouncy Castle Inc.  
 **Website:** https://www.bouncycastle.org/
 
 Java cryptography APIs with support for all SSH key formats.
@@ -99,19 +99,21 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
 **Website:** https://developer.android.com/jetpack/androidx
 
 Used libraries:
-- `androidx.appcompat:appcompat:1.6.1`
-- `androidx.core:core-ktx:1.12.0`
-- `androidx.fragment:fragment-ktx:1.6.2`
+- `androidx.appcompat:appcompat:1.7.1`
+- `androidx.core:core-ktx:1.16.0`
+- `androidx.fragment:fragment-ktx:1.8.9`
 - `androidx.recyclerview:recyclerview:1.3.2`
+- `androidx.swiperefreshlayout:swiperefreshlayout:1.1.0`
 - `androidx.viewpager2:viewpager2:1.0.0`
 - `androidx.preference:preference-ktx:1.2.1`
 - `androidx.constraintlayout:constraintlayout:2.1.4`
-- `androidx.lifecycle:lifecycle-*:2.7.0`
+- `androidx.lifecycle:lifecycle-viewmodel-ktx:2.9.4`
 - `androidx.work:work-runtime-ktx:2.9.0`
 - `androidx.biometric:biometric:1.1.0`
-- `androidx.security:security-crypto:1.1.0-alpha06`
-- `androidx.room:room-*:2.6.1`
+- `androidx.room:room-runtime:2.8.4`, `androidx.room:room-ktx:2.8.4`
 - `androidx.documentfile:documentfile:1.0.1`
+- `androidx.concurrent:concurrent-futures:1.2.0`
+- `androidx.window:window:1.3.0`
 
 ```
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -144,49 +146,14 @@ Licensed under the Apache License, Version 2.0
 
 ### Kotlin Standard Library
 
-**Version:** 2.0.21  
 **License:** Apache License 2.0  
-**Copyright:** 2010-2024 JetBrains s.r.o. and Kotlin Programming Language contributors  
+**Copyright:** 2010-2025 JetBrains s.r.o. and Kotlin Programming Language contributors  
 **Website:** https://kotlinlang.org/
 
 Used libraries:
 - `org.jetbrains.kotlin:kotlin-stdlib`
-- `org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3`
-- `org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0`
-
-```
-Licensed under the Apache License, Version 2.0
-```
-
----
-
-### Gson
-
-**Version:** 2.10.1  
-**License:** Apache License 2.0  
-**Copyright:** 2008 Google Inc.  
-**Website:** https://github.com/google/gson
-
-JSON serialization/deserialization library.
-
-```
-Licensed under the Apache License, Version 2.0
-```
-
----
-
-### Google Play Services & APIs
-
-**License:** Apache License 2.0  
-**Copyright:** Google LLC  
-**Website:** https://developers.google.com/android
-
-Used libraries:
-- `com.google.android.gms:play-services-auth:20.7.0`
-- `com.google.apis:google-api-services-drive:v3-rev20230822-2.0.0`
-- `com.google.api-client:google-api-client-android:2.2.0`
-- `com.google.http-client:google-http-client-android:1.43.3`
-- `com.google.http-client:google-http-client-gson:1.43.3`
+- `org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0`
+- `org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0`
 
 ```
 Licensed under the Apache License, Version 2.0
@@ -207,21 +174,6 @@ Licensed under the Apache License, Version 2.0
 
 ---
 
-### Sardine Android (WebDAV Client)
-
-**Version:** 0.9  
-**License:** Apache License 2.0  
-**Copyright:** TheGrizzlyLabs  
-**Website:** https://github.com/thegrizzlylabs/sardine-android
-
-WebDAV client for Android.
-
-```
-Licensed under the Apache License, Version 2.0
-```
-
----
-
 ### OkHttp
 
 **Version:** 4.12.0  
@@ -229,7 +181,70 @@ Licensed under the Apache License, Version 2.0
 **Copyright:** 2019 Square, Inc.  
 **Website:** https://square.github.io/okhttp/
 
-HTTP client for Java and Android.
+HTTP client for Java and Android. Used by the hypervisor console WebSocket client.
+
+```
+Licensed under the Apache License, Version 2.0
+```
+
+---
+
+### SnakeYAML
+
+**Version:** 2.4  
+**License:** Apache License 2.0  
+**Copyright:** SnakeYAML project contributors  
+**Website:** https://bitbucket.org/snakeyaml/snakeyaml
+
+YAML parsing for Docker `run.yml` single-container configs. Only the safe compose/dump API is used — no JavaBean reflection.
+
+```
+Licensed under the Apache License, Version 2.0
+```
+
+---
+
+### MPAndroidChart
+
+**Version:** v3.1.0  
+**License:** Apache License 2.0  
+**Copyright:** Philipp Jahoda  
+**Website:** https://github.com/PhilJay/MPAndroidChart
+
+Chart library backing the performance dashboard and Multi-Host Dashboard metric graphs.
+
+```
+Licensed under the Apache License, Version 2.0
+```
+
+---
+
+### Termux Terminal Emulator
+
+**Version:** v0.118.1 (`terminal-emulator` module only, not `terminal-view`)  
+**License:** Apache License 2.0  
+**Copyright:** Fredrik Fornwall and Termux contributors  
+**Website:** https://github.com/termux/termux-app
+
+Terminal emulation engine (VT100/ANSI/xterm-256color). TabSSH renders with its own `TerminalView`, so only the `terminal-emulator` module is pulled in — `terminal-view` is explicitly excluded. Although the parent `termux-app` repository is GPLv3, the `terminal-emulator` module is carved out under Apache 2.0 (originally from `jackpal/Android-Terminal-Emulator`), so this dependency introduces no copyleft obligation.
+
+```
+Licensed under the Apache License, Version 2.0
+```
+
+---
+
+### ZXing (QR Code Processing)
+
+**License:** Apache License 2.0  
+**Copyright:** ZXing authors  
+**Website:** https://github.com/zxing/zxing
+
+Used libraries:
+- `com.google.zxing:core:3.5.2` — pure-Java QR decoding
+- `com.journeyapps:zxing-android-embedded:4.3.0` — Android scan UI wrapper
+
+Chosen over ML Kit Barcode scanning so QR pairing needs no Google Play Services dependency, keeping de-Googled ROMs a first-class platform.
 
 ```
 Licensed under the Apache License, Version 2.0
@@ -328,7 +343,9 @@ Special thanks to:
 - **JetBrains** for Kotlin programming language
 - **Google** for Android SDK and APIs
 - **Square** for OkHttp
+- **Termux contributors** for the terminal emulation engine
+- **Philipp Jahoda** for MPAndroidChart
+- **ZXing authors** for QR code processing
 - **All open-source contributors** whose work makes TabSSH possible
 
 TabSSH stands on the shoulders of giants. We are forever grateful.
-

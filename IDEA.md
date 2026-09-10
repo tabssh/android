@@ -57,6 +57,7 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 
 ### Core SSH features the app must have
 - Multi-tab SSH sessions modeled on browser tabs — swipe and keyboard navigation between live sessions
+- Panes — tile up to 6 SSH/Telnet/Mosh sessions in a resizable grid inside one terminal tab; tap a pane to focus it, close individually or as a group (Disconnect All / Keep Running in Background); auto-stacks to a single column on narrow screens
 - Full VT100/ANSI/xterm-256color terminal emulation
 - SSH authentication: password, SSH key (RSA, ECDSA, Ed25519, OpenSSH format), keyboard-interactive
 - SSH key management: import (file / paste / clipboard), generate, fingerprint display, passphrase protection, OpenSSH certificate attachment
@@ -84,6 +85,8 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 - Per-connection color tags, font size overrides, custom themes
 - URL detection on long-press
 - Performance dashboard with configurable monitor slots per host and metric graphs
+- Multi-Host Dashboard — side-by-side CPU/memory/disk metric graphs across hosts, grouped independently from connection groups
+- Domain & VPS Renewal Tracking — two trackers (Domain Tracker, VPS Hosting Tracker) for upcoming renewal dates, with CSV/Markdown import-export and reminder notifications as expiry approaches
 - Touchpad-emulating terminal surface with three distinct zones: a left-edge wheel zone (mouse-wheel-notch scrolling — a quick flick fires one notch, a sustained drag repeats one notch per line of travel; notch size is user-configurable, default 3 lines), a right-edge desktop-terminal scrollbar (konsole/xfce4-terminal style) — a persistent track and draggable thumb that scrolls the terminal's own scrollback, the thumb fills the track when there is nothing to scroll back through — and everywhere else acting as a 1:1 touchpad (proportional drag/swipe scrolling, no gearing); swipe left/right still changes tabs; none of the three zones may interfere with each other or with left/right tab-switch swipes
 - Per-session status notifications — every open tab gets its own shade entry (even when tabs share one host), tapping jumps to that exact tab, a Disconnect action closes just that session, and entries clear as soon as their tab closes
 

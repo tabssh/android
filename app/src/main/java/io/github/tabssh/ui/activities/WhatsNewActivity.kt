@@ -11,8 +11,12 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.setPadding
+import androidx.lifecycle.lifecycleScope
 import io.github.tabssh.R
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Wave 3.6 — In-app changelog viewer ("What's new").
@@ -31,6 +35,9 @@ class WhatsNewActivity : TabSSHActivity() {
         private const val ASSET = "whats_new.md"
         private const val GH_HISTORY = "https://github.com/tabssh/android/commits/main"
     }
+
+    private val isAlive: Boolean
+        get() = !isFinishing && !isDestroyed
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,11 +79,17 @@ class WhatsNewActivity : TabSSHActivity() {
         setContentView(root)
         setSupportActionBar(toolbar)
 
-        text.text = try {
-            assets.open(ASSET).bufferedReader().use { it.readText() }
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to read $ASSET", e)
-            getString(R.string.whats_new_asset_missing_fmt, GH_HISTORY)
+        lifecycleScope.launch {
+            val content = try {
+                withContext(Dispatchers.IO) {
+                    assets.open(ASSET).bufferedReader().use { it.readText() }
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to read $ASSET", e)
+                getString(R.string.whats_new_asset_missing_fmt, GH_HISTORY)
+            }
+            if (!isAlive) return@launch
+            text.text = content
         }
     }
 

@@ -46,9 +46,22 @@ TabSSH is a comprehensive, open-source SSH client for Android that provides a tr
 • Background connection persistence and app switching support
 • Background host monitoring — TCP reachability probes, down/recovery alerts,
   CPU/memory/disk threshold notifications, configurable cooldown (15 min–12 h)
-• Hypervisor management — Proxmox VE, XCP-ng, Xen Orchestra, VMware, OCI Compute
+• Multi-Host Dashboard — side-by-side CPU/memory/disk metric graphs across hosts
+• Hypervisor management — Proxmox VE, XCP-ng, Xen Orchestra, VMware, QEMU/libvirt (KVM)
 • Cloud instance management — DigitalOcean, Hetzner, Linode, Vultr,
-  AWS EC2, Google Cloud Compute, Azure VMs
+  AWS EC2, Google Cloud Compute, Azure VMs, Oracle Cloud (OCI)
+• Container host management — Docker, Incus, Podman, and LXC/LXD at full
+  parity over SSH; containers, images, volumes, networks, and compose stacks
+• Panes — tile up to 6 SSH/Telnet/Mosh sessions in a resizable grid inside
+  one terminal tab
+• Session video recorder — capture any tab (SSH, VNC, Panes) to mp4, with
+  optional asciinema `.cast` recording alongside it for SSH tabs
+• Domain & VPS renewal tracking — CSV/Markdown import-export and reminder
+  notifications as expiry approaches
+• Snippet library with placeholder substitution, and a macro library for
+  recording and replaying raw byte sequences
+• Tasker/Locale plugin, quick-connect home-screen widgets, and QR pairing
+  for importing connection profiles from a Desktop or Web companion
 • Keyboard drag-to-reorder: rearrange keys in any row of the custom key editor
 
 🔒 SECURITY & PRIVACY:

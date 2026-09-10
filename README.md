@@ -238,18 +238,18 @@ Cloud          → Cloud Accounts → tap account → view live instances
 
 | Metric | Value |
 |---|---|
-| Kotlin files | 411 |
-| Lines of code | ~131,000 |
-| Activities | 50 |
-| Fragments | 24 |
-| Services | 2 (`SSHConnectionService`, `VncKeepAliveService`) |
+| Kotlin files | 441 |
+| Lines of code | ~140,700 |
+| Activities | 51 |
+| Fragments | 30 |
+| Services | 3 (`SSHConnectionService`, `VncKeepAliveService`, `SessionRecordingService`) |
 | Built-in themes | 23 |
 | Translations | 4 (EN/ES/FR/DE) |
 | APK variants | 5 (universal + 4 arch-specific) |
 | Hypervisor backends | 4 (Proxmox, XCP-ng, VMware, QEMU/libvirt) |
 | Container engines | 4 (Docker, Incus, Podman, LXC/LXD) |
 | Cloud providers | 8 (DO, Hetzner, Linode, Vultr, AWS, GCP, Azure, OCI) |
-| Room DB version | 24 (21 forward migrations from v2) |
+| Room DB version | 27 (24 forward migrations from v3) |
 | Trackers | 2 (Domain Tracker, VPS Hosting Tracker) |
 
 ---
