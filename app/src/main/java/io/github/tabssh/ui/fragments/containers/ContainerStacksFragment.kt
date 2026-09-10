@@ -20,6 +20,7 @@ import io.github.tabssh.containers.transport.ComposeLsEntry
 import io.github.tabssh.containers.transport.ContainerResult
 import io.github.tabssh.storage.database.entities.ComposeStack
 import io.github.tabssh.ui.activities.ComposeEditorActivity
+import io.github.tabssh.ui.activities.StackDetailActivity
 import io.github.tabssh.ui.activities.StackLogsActivity
 import io.github.tabssh.ui.adapters.ComposeStackAdapter
 import io.github.tabssh.ui.adapters.StackListItem
@@ -76,7 +77,7 @@ class ContainerStacksFragment : ContainerPageFragment() {
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.adapter = adapter
 
-        adapter.setOnItemClickListener { item -> openEditor(item) }
+        adapter.setOnItemClickListener { item -> openStackDetail(item) }
         adapter.setOnItemLongClickListener { item -> showStackMenu(item) }
         adapter.setOnMoreClickListener { item -> showStackMenu(item) }
 
@@ -177,14 +178,37 @@ class ContainerStacksFragment : ContainerPageFragment() {
         startActivity(intent)
     }
 
+    /** Opens the stack's member-container list — tap target for a stack row. */
+    private fun openStackDetail(item: StackListItem) {
+        if (!isAdded) return
+        val intent = Intent(requireContext(), StackDetailActivity::class.java)
+        intent.putExtra(StackDetailActivity.EXTRA_HOST_ID, manager.hostId)
+        intent.putExtra(StackDetailActivity.EXTRA_STACK_NAME, item.name)
+        when (item) {
+            is StackListItem.Tracked -> {
+                intent.putExtra(StackDetailActivity.EXTRA_STACK_ID, item.stack.id)
+                intent.putExtra(StackDetailActivity.EXTRA_STACK_DIR, item.stack.remotePath)
+            }
+            is StackListItem.External -> {
+                intent.putExtra(StackDetailActivity.EXTRA_CONFIG_FILE, item.entry.primaryConfigFile)
+                intent.putExtra(StackDetailActivity.EXTRA_EXTERNAL_NAME, item.entry.name)
+            }
+        }
+        startActivity(intent)
+    }
+
     /**
-     * Action sheet ordered by frequency — read-only logs/services first,
-     * lifecycle verbs next, service-stopping down and destructive delete last.
+     * Action sheet ordered by frequency — edit and read-only logs/services
+     * first, lifecycle verbs next, service-stopping down and destructive
+     * delete last.
      */
     private fun showStackMenu(item: StackListItem) {
         if (!isAdded) return
         val current = session ?: return
         val actions = mutableListOf<ContainerActionSheet.Action>()
+        actions += ContainerActionSheet.Action(R.drawable.ic_edit, getString(R.string.edit)) {
+            openEditor(item)
+        }
         actions += ContainerActionSheet.Action(R.drawable.ic_logs, getString(R.string.container_action_logs)) {
             openLogs(item)
         }

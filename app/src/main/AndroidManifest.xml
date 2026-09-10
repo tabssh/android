@@ -289,6 +289,13 @@
             android:label="@string/activity_label_stack_logs"
             android:parentActivityName=".ui.activities.ContainerHostManagerActivity" />
 
+        <!-- Compose stack detail: member containers (tracked or discovered/external) -->
+        <activity
+            android:name=".ui.activities.StackDetailActivity"
+            android:exported="false"
+            android:label="@string/activity_label_stack_detail"
+            android:parentActivityName=".ui.activities.ContainerHostManagerActivity" />
+
         <!-- System-wide ssh://, sftp://, spice://, spice+tls:// and vnc://
              link
              handler, plus virt-viewer .vv connection files — see

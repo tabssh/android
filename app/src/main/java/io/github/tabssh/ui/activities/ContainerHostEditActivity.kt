@@ -23,11 +23,14 @@ import io.github.tabssh.containers.ContainerSessionManager
 import io.github.tabssh.containers.transport.ContainerResult
 import io.github.tabssh.containers.transport.SshExecRunner
 import io.github.tabssh.containers.transport.TransportCapabilityDetector
-import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.storage.database.entities.ConnectableHost
 import io.github.tabssh.storage.database.entities.ContainerHost
 import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.storage.database.entities.StoredKey
+import io.github.tabssh.storage.registry.ConnectableHostRegistry
+import io.github.tabssh.storage.registry.ConnectableHostResolver
 import io.github.tabssh.ui.dialogs.ContainerErrorPresenter
+import io.github.tabssh.ui.utils.ConnectableHostLabels
 import io.github.tabssh.ui.utils.ContainerEngineLabels
 import io.github.tabssh.ui.utils.ContainerText
 import io.github.tabssh.utils.logging.Logger
@@ -41,8 +44,10 @@ import io.github.tabssh.utils.tabSSHApp
 /**
  * Add/edit one container host. Mirrors the hypervisor editor: optional name,
  * an engine dropdown in the same position as the hypervisor type selector,
- * then either a saved SSH connection or a manually entered endpoint. Auth is
- * SSH only — password, SSH key, or a saved identity.
+ * then either a saved SSH connection (Hosts-tab or a live Cloud Account
+ * instance — the same [ConnectableHost] registry TabTerminalActivity's New
+ * Tab picker uses) or a manually entered endpoint. Auth is SSH only —
+ * password, SSH key, or a saved identity.
  *
  * The engine settings below it — socket path, the two remote base-path
  * overrides, optional CLI path — are all optional; a blank socket path stores
@@ -177,7 +182,8 @@ class ContainerHostEditActivity : TabSSHActivity() {
     private lateinit var buttonSave: MaterialButton
     private lateinit var buttonCancel: MaterialButton
 
-    private var connections: List<ConnectionProfile> = emptyList()
+    /** Hosts-tab connections and live Cloud Account instances — the "saved connection" spinner's backing data. */
+    private var linkableHosts: List<ConnectableHost> = emptyList()
     private var keys: List<StoredKey> = emptyList()
     private var identities: List<Identity> = emptyList()
     private var existingHost: ContainerHost? = null
@@ -378,13 +384,21 @@ class ContainerHostEditActivity : TabSSHActivity() {
     private fun loadData() {
         lifecycleScope.launch {
             val (lists, host) = withContext(Dispatchers.IO) {
-                val conns = app.database.connectionDao().getAllConnectionsList()
+                // refreshAll() keeps the registry current so a cloud instance
+                // added/renamed since this screen was last opened shows up —
+                // same entry point TabTerminalActivity's New Tab picker and
+                // PaneGroupEditDialog use before listing connectable hosts.
+                ConnectableHostRegistry.refreshAll(app.database, app)
+                val linkable = app.database.connectableHostDao().getAllList().filter {
+                    it.sourceType == ConnectableHost.SOURCE_CONNECTION_PROFILE ||
+                        it.sourceType == ConnectableHost.SOURCE_CLOUD_INSTANCE
+                }
                 val keyList = app.database.keyDao().getAllKeysList()
                 val idList = app.database.identityDao().getAllIdentitiesList()
                 val host = hostId?.let { app.database.containerHostDao().getById(it) }
-                Triple(conns, keyList, idList) to host
+                Triple(linkable, keyList, idList) to host
             }
-            connections = lists.first
+            linkableHosts = lists.first
             keys = lists.second
             identities = lists.third
             existingHost = host
@@ -392,7 +406,7 @@ class ContainerHostEditActivity : TabSSHActivity() {
             spinnerConnection.adapter = ArrayAdapter(
                 this@ContainerHostEditActivity,
                 android.R.layout.simple_spinner_dropdown_item,
-                connections.map { it.name }
+                linkableHosts.map { ConnectableHostLabels.pickerLabel(this@ContainerHostEditActivity, it) }
             )
             spinnerEngine.adapter = ArrayAdapter(
                 this@ContainerHostEditActivity,
@@ -463,7 +477,7 @@ class ContainerHostEditActivity : TabSSHActivity() {
                 val identIdx = identities.indexOfFirst { it.id == host.customIdentityId }
                 if (identIdx >= 0) spinnerCustomIdentity.setSelection(identIdx)
             } else {
-                val idx = connections.indexOfFirst { it.id == host.linkedConnectionId }
+                val idx = linkableHosts.indexOfFirst { it.id == host.linkedConnectionId }
                 if (idx >= 0) spinnerConnection.setSelection(idx)
             }
 
@@ -533,14 +547,14 @@ class ContainerHostEditActivity : TabSSHActivity() {
                 customIdentityId = identity?.id
             )
         } else {
-            val connection = connections.getOrNull(spinnerConnection.selectedItemPosition)
-            if (connection == null) {
+            val linked = linkableHosts.getOrNull(spinnerConnection.selectedItemPosition)
+            if (linked == null) {
                 showError(getString(R.string.container_host_error_connection))
                 return null
             }
             base.copy(
-                name = typedName.ifEmpty { connection.name },
-                linkedConnectionId = connection.id,
+                name = typedName.ifEmpty { linked.name },
+                linkedConnectionId = linked.id,
                 customHost = null,
                 customPort = null,
                 customUsername = null,
@@ -718,7 +732,9 @@ class ContainerHostEditActivity : TabSSHActivity() {
                 }
                 ContainerSessionManager.resolveCustomProfile(app, host)
             } else {
-                connections.getOrNull(spinnerConnection.selectedItemPosition)
+                linkableHosts.getOrNull(spinnerConnection.selectedItemPosition)?.let {
+                    ConnectableHostResolver.resolveProfile(app, it)
+                }
             }
             if (profile == null) {
                 return ContainerResult.Error(getString(R.string.container_host_error_connection))

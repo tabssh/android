@@ -171,9 +171,25 @@ object ConnectableHostResolver {
             return null
         }
         // Same precedence as ContainerSessionManager.acquire: a linked saved
-        // connection wins; otherwise the custom endpoint's ephemeral profile.
+        // connection or cloud instance wins; otherwise the custom endpoint's
+        // ephemeral profile.
         val linkedId = containerHost.linkedConnectionId
         if (linkedId != null) {
+            val cloudParts = ConnectableHost.parseCloudInstanceId(linkedId)
+            if (cloudParts != null) {
+                val (accountId, instanceId) = cloudParts
+                return resolveCloudInstance(
+                    app,
+                    ConnectableHost(
+                        id = linkedId,
+                        sourceType = ConnectableHost.SOURCE_CLOUD_INSTANCE,
+                        cloudAccountId = accountId,
+                        instanceId = instanceId,
+                        name = "",
+                        hostPreview = ""
+                    )
+                )
+            }
             val linked = withContext(Dispatchers.IO) { app.database.connectionDao().getConnectionById(linkedId) }
             if (linked != null) return linked
             Logger.w(TAG, "resolveProfile: linked connection $linkedId for container host $rowId not found")

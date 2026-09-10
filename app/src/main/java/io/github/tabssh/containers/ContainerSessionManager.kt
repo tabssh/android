@@ -8,8 +8,10 @@ import io.github.tabssh.containers.transport.SshExecRunner
 import io.github.tabssh.containers.transport.TransportCapabilityDetector
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.ssh.connection.SSHConnection
+import io.github.tabssh.storage.database.entities.ConnectableHost
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.ContainerHost
+import io.github.tabssh.storage.registry.ConnectableHostResolver
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -129,7 +131,7 @@ object ContainerSessionManager {
                 }
             val linkedId = host.linkedConnectionId
             val profile = if (linkedId != null) {
-                app.database.connectionDao().getConnectionById(linkedId)
+                resolveLinkedProfile(app, linkedId)
                     ?: run {
                         Logger.w(TAG, "acquire failed: linked connection missing for host $hostId")
                         return@withContext ContainerResult.NotFound(
@@ -207,6 +209,32 @@ object ContainerSessionManager {
                 }
             }
         }
+    }
+
+    /**
+     * Resolves a [ContainerHost.linkedConnectionId] to its live
+     * [ConnectionProfile] — a saved Hosts-tab connection, or (when the id
+     * names one, per [ConnectableHost.parseCloudInstanceId]) an ephemeral
+     * profile for a live Cloud Account instance, resolved through the same
+     * [ConnectableHostResolver] every other connectable-host picker uses.
+     */
+    private suspend fun resolveLinkedProfile(app: TabSSHApplication, linkedId: String): ConnectionProfile? {
+        val cloudParts = ConnectableHost.parseCloudInstanceId(linkedId)
+        if (cloudParts != null) {
+            val (accountId, instanceId) = cloudParts
+            return ConnectableHostResolver.resolveProfile(
+                app,
+                ConnectableHost(
+                    id = linkedId,
+                    sourceType = ConnectableHost.SOURCE_CLOUD_INSTANCE,
+                    cloudAccountId = accountId,
+                    instanceId = instanceId,
+                    name = "",
+                    hostPreview = ""
+                )
+            )
+        }
+        return app.database.connectionDao().getConnectionById(linkedId)
     }
 
     /**

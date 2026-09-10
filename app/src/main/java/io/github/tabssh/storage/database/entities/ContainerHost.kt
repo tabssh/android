@@ -137,6 +137,14 @@ data class ContainerHost(
     /** True when this host connects via its own endpoint instead of a saved connection. */
     fun usesCustomEndpoint(): Boolean = linkedConnectionId == null && !customHost.isNullOrBlank()
 
+    /**
+     * True when [linkedConnectionId] names a live Cloud Account instance
+     * (`ConnectableHost.cloudInstanceId` format) rather than a saved
+     * Hosts-tab [ConnectionProfile].
+     */
+    fun linksCloudInstance(): Boolean =
+        linkedConnectionId != null && ConnectableHost.parseCloudInstanceId(linkedConnectionId) != null
+
     /** Typed view of [engine]; an unknown stored id resolves to Docker. */
     fun engineType(): ContainerEngine = ContainerEngine.fromId(engine)
 

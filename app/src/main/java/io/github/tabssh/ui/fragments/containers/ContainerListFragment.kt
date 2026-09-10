@@ -23,12 +23,14 @@ import io.github.tabssh.containers.EngineCapability
 import io.github.tabssh.containers.transport.ContainerAction
 import io.github.tabssh.containers.transport.ContainerSummary
 import io.github.tabssh.containers.transport.ContainerResult
+import io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy
 import io.github.tabssh.ui.activities.ContainerDetailActivity
 import io.github.tabssh.ui.activities.SingleContainerConfigEditorActivity
 import io.github.tabssh.ui.adapters.ContainerListAdapter
 import io.github.tabssh.ui.dialogs.AutoUpdatePolicyDialog
 import io.github.tabssh.ui.dialogs.ContainerActionSheet
 import io.github.tabssh.ui.dialogs.ContainerErrorPresenter
+import io.github.tabssh.ui.dialogs.UpdateApplyDialog
 import io.github.tabssh.ui.utils.ContainerExecLauncher
 import io.github.tabssh.ui.utils.ContainerText
 import kotlinx.coroutines.CancellationException
@@ -60,6 +62,11 @@ class ContainerListFragment : ContainerPageFragment() {
     // a lifecycle call is in flight, and double-tapping start/stop/kill/remove
     // fires the operation twice against the daemon.
     private var actionInFlight = false
+
+    // Latest auto-update policy rows for this host, kept alongside the
+    // adapter's pending-name badge set so showContainerSheet can resolve the
+    // policy id for a row's "Update now" action without a fresh query.
+    private var pendingPolicies: List<ContainerAutoUpdatePolicy> = emptyList()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -127,6 +134,7 @@ class ContainerListFragment : ContainerPageFragment() {
                 .getPoliciesForHost(manager.hostId)
                 .collect { policies ->
                     if (!isAdded) return@collect
+                    pendingPolicies = policies
                     adapter.updatePendingNames(
                         policies.filter { it.pendingUpdateDigest != null }
                             .map { it.containerNameOrStackName }
@@ -286,6 +294,16 @@ class ContainerListFragment : ContainerPageFragment() {
                 }
             }
         }
+        val pendingPolicy = pendingPolicies.firstOrNull {
+            it.containerNameOrStackName == name && it.pendingUpdateDigest != null
+        }
+        if (pendingPolicy != null) {
+            actions += ContainerActionSheet.Action(
+                R.drawable.ic_download, getString(R.string.container_action_update_now)
+            ) {
+                applyPendingUpdate(pendingPolicy, name)
+            }
+        }
         actions += ContainerActionSheet.Action(R.drawable.ic_download, getString(R.string.container_action_auto_update)) {
             AutoUpdatePolicyDialog.show(requireContext(), app, manager.hostId, name)
         }
@@ -305,6 +323,26 @@ class ContainerListFragment : ContainerPageFragment() {
             confirmRemove(container, name)
         }
         ContainerActionSheet.show(requireContext(), name, container.image, actions)
+    }
+
+    /**
+     * Manual counterpart to the background worker's unattended recreate:
+     * pulls the registry image this policy flagged as pending and recreates
+     * the container on it. Refreshes the list either way so the badge
+     * reflects the outcome (cleared on success, unchanged on failure).
+     */
+    private fun applyPendingUpdate(policy: ContainerAutoUpdatePolicy, name: String) {
+        val current = session ?: return
+        UpdateApplyDialog.show(
+            requireContext(),
+            viewLifecycleOwner,
+            app.database.containerAutoUpdatePolicyDao(),
+            policy.id,
+            current.transport,
+            name
+        ) {
+            if (isAdded) onSessionReady(current)
+        }
     }
 
     /** One-tap docker exec into the container, opening a terminal tab. */

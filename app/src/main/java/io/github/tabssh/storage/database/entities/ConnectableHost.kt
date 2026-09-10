@@ -75,5 +75,26 @@ data class ConnectableHost(
         const val SOURCE_CLOUD_INSTANCE = "cloud_instance"
         const val SOURCE_TELNET_HOST = "telnet_host"
         const val SOURCE_CONTAINER_HOST = "container_host"
+
+        /** [SOURCE_CLOUD_INSTANCE] id prefix: `"cloud:{cloudAccountId}:{instanceId}"`. */
+        private const val CLOUD_ID_PREFIX = "cloud:"
+
+        /** Builds a [SOURCE_CLOUD_INSTANCE] row's [id]. */
+        fun cloudInstanceId(cloudAccountId: String, instanceId: String) =
+            "$CLOUD_ID_PREFIX$cloudAccountId:$instanceId"
+
+        /**
+         * Parses a [cloudInstanceId] back into (cloudAccountId, instanceId), or
+         * null when [id] does not name a cloud instance. Lets a caller holding
+         * only the id string (e.g. [ContainerHost.linkedConnectionId]) resolve a
+         * cloud-backed link without a round trip through the registry table.
+         */
+        fun parseCloudInstanceId(id: String): Pair<String, String>? {
+            if (!id.startsWith(CLOUD_ID_PREFIX)) return null
+            val rest = id.removePrefix(CLOUD_ID_PREFIX)
+            val colon = rest.indexOf(':')
+            if (colon <= 0 || colon == rest.length - 1) return null
+            return rest.substring(0, colon) to rest.substring(colon + 1)
+        }
     }
 }

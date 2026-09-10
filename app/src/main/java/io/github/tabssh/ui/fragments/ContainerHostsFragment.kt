@@ -178,6 +178,17 @@ class ContainerHostsFragment : Fragment() {
                     } else {
                         swipeRefresh.visibility = View.VISIBLE
                         emptyState.visibility = View.GONE
+                        // This fragment is sub-tab 0 of a ViewPager2 nested
+                        // inside the main-tab ViewPager2: it can be inflated
+                        // while its page still has a stale/zero measured
+                        // size from the outer page-change animation, so the
+                        // first data emission lands in a RecyclerView that
+                        // never gets a proper layout pass until some other
+                        // event (e.g. switching sub-tabs) forces one — rows
+                        // exist in the adapter but nothing draws. Request a
+                        // fresh layout on every emission so the fix does not
+                        // depend on that timing.
+                        recyclerView.requestLayout()
                     }
 
                     progressBar.visibility = View.GONE

@@ -104,8 +104,9 @@ class UpdateApplier(
             emit(ApplyEvent.PullProgress(event))
             if (event.error != null && pullError == null) pullError = event.error
         }
-        if (pullError != null) {
-            return@flow emit(ApplyEvent.Failed(RecreateStep.PULL_IMAGE, pullError!!, false))
+        val capturedPullError = pullError
+        if (capturedPullError != null) {
+            return@flow emit(ApplyEvent.Failed(RecreateStep.PULL_IMAGE, capturedPullError, false))
         }
 
         // STOP_OLD — recoverable by simply restarting the old container.

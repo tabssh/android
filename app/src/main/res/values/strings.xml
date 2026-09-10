@@ -703,6 +703,7 @@
     <string name="container_action_remove">Remove…</string>
     <string name="container_action_terminal">Enter terminal</string>
     <string name="container_action_auto_update">Auto-update policy…</string>
+    <string name="container_action_update_now">Update now…</string>
     <string name="container_action_details">Details</string>
     <string name="container_more_actions_desc">More actions</string>
     <string name="container_menu_reconnect">Reconnect</string>
@@ -741,6 +742,8 @@
     <string name="container_stack_logs_title">%1$s logs</string>
     <string name="container_stack_logs_all_services">All services</string>
     <string name="container_stack_logs_service_label">Service</string>
+    <string name="container_stack_detail_empty">No containers yet</string>
+    <string name="container_stack_detail_empty_hint">Start this stack to see its containers here.</string>
     <string name="container_run_container_not_found">Container not found</string>
     <string name="container_run_new_title">New Container Config</string>
     <string name="container_run_edit_title">Edit Container Config</string>
@@ -898,6 +901,19 @@
     <string name="container_pull_error_ref">Enter an image reference</string>
     <string name="container_pull_done">Pull complete</string>
     <string name="container_pull_failed">Pull failed: %1$s</string>
+    <string name="container_update_apply_title">Update %1$s</string>
+    <string name="container_update_apply_confirm">Pull the latest image and recreate %1$s? The container restarts during this.</string>
+    <string name="container_update_apply_action">Update</string>
+    <string name="container_update_step_pull_image">Pulling new image…</string>
+    <string name="container_update_step_stop_old">Stopping current container…</string>
+    <string name="container_update_step_rename_old">Freeing up container name…</string>
+    <string name="container_update_step_create_new">Creating updated container…</string>
+    <string name="container_update_step_verify_new">Verifying new container…</string>
+    <string name="container_update_step_remove_old">Removing old container…</string>
+    <string name="container_update_step_rollback">Rolling back…</string>
+    <string name="container_update_apply_done">Update complete</string>
+    <string name="container_update_apply_failed">Update failed at %1$s: %2$s</string>
+    <string name="container_update_apply_failed_rolled_back">Update failed at %1$s: %2$s (rolled back)</string>
     <string name="container_registry_title">Registry Credentials</string>
     <string name="container_registry_description">The auto-update checker queries registries directly from this device (HEAD /v2 manifest requests). Add a credential for private registries, private Docker Hub repositories, or to avoid Docker Hub anonymous rate limits.</string>
     <string name="container_registry_empty">No registry credentials yet. Public images on registries without rate limits work without any.</string>
@@ -1349,6 +1365,7 @@
     <string name="activity_label_compose_stack">Compose Stack</string>
     <string name="activity_label_container_config">Container Config</string>
     <string name="activity_label_stack_logs">Stack Logs</string>
+    <string name="activity_label_stack_detail">Compose Stack</string>
     <string name="activity_label_app_lock">App Lock</string>
     <string name="activity_label_host_detail">Host Detail</string>
     <string name="activity_label_cloud_accounts">Cloud Accounts</string>

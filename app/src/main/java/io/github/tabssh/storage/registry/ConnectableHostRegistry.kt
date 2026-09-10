@@ -69,19 +69,28 @@ object ConnectableHostRegistry {
 
     /**
      * Reads every [io.github.tabssh.storage.database.entities.ContainerHost]
-     * with a reachable SSH endpoint (a linked connection profile or a custom
-     * host/user endpoint) and replaces all `container_host`-sourced rows in
-     * the registry. Registry id = `ContainerHost.ephemeralProfileId()` — the
-     * exact alias the container feature already keys its ephemeral profiles
-     * and stored credentials on. Hosts with neither a linked connection nor
-     * a custom endpoint (e.g. local-socket-only) are skipped: there is no
-     * machine to SSH into.
+     * with a reachable SSH endpoint (a linked connection profile, a linked
+     * live Cloud Account instance, or a custom host/user endpoint) and
+     * replaces all `container_host`-sourced rows in the registry. Registry
+     * id = `ContainerHost.ephemeralProfileId()` — the exact alias the
+     * container feature already keys its ephemeral profiles and stored
+     * credentials on. Hosts with none of the three (e.g. local-socket-only)
+     * are skipped: there is no machine to SSH into.
+     *
+     * Callers must refresh cloud-instance rows first (see [refreshAll]'s
+     * ordering) — a cloud-linked host's preview is read from those cached
+     * rows instead of re-fetching from the provider a second time.
      */
     suspend fun refreshContainerHosts(db: TabSSHDatabase) {
         val containerHosts = db.containerHostDao().getAllList()
         val profilesById = db.connectionDao().getAllConnectionsList().associateBy { it.id }
+        val cloudPreviewById = db.connectableHostDao().getAllList()
+            .filter { it.sourceType == ConnectableHost.SOURCE_CLOUD_INSTANCE }
+            .associate { it.id to it.hostPreview }
         val hosts = containerHosts.mapNotNull { host ->
             val preview = when {
+                host.linksCloudInstance() ->
+                    cloudPreviewById[host.linkedConnectionId] ?: return@mapNotNull null
                 host.linkedConnectionId != null -> {
                     val linked = profilesById[host.linkedConnectionId] ?: return@mapNotNull null
                     "${linked.username}@${linked.host}:${linked.port}"
@@ -136,7 +145,7 @@ object ConnectableHostRegistry {
             val hosts = instances.map { instance ->
                 val previewAddress = instance.ip ?: instance.privateIp ?: "?"
                 ConnectableHost(
-                    id = "cloud:${account.id}:${instance.id}",
+                    id = ConnectableHost.cloudInstanceId(account.id, instance.id),
                     sourceType = ConnectableHost.SOURCE_CLOUD_INSTANCE,
                     cloudAccountId = account.id,
                     instanceId = instance.id,
@@ -156,16 +165,18 @@ object ConnectableHostRegistry {
     /**
      * Convenience entry point for the picker-open call site — refreshes
      * connection-profile rows plus every enabled [io.github.tabssh.storage
-     * .database.entities.CloudAccount]'s instances.
+     * .database.entities.CloudAccount]'s instances. Cloud instances refresh
+     * before container hosts so a cloud-linked container host's preview
+     * (read from the cached cloud rows) reflects the current instance data.
      */
     suspend fun refreshAll(db: TabSSHDatabase, app: TabSSHApplication) {
         refreshConnectionProfiles(db)
         refreshTelnetHosts(db)
-        refreshContainerHosts(db)
         val enabledAccounts = db.cloudAccountDao().getAll().filter { it.enabled }
         for (account in enabledAccounts) {
             refreshCloudInstances(db, app, account.id)
         }
+        refreshContainerHosts(db)
     }
 
     /**
