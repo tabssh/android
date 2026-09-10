@@ -131,9 +131,11 @@ import io.github.tabssh.ui.keyboard.KeyboardLayoutManager
 import io.github.tabssh.ui.keyboard.MultiRowKeyboardView
 import io.github.tabssh.ui.tabs.VncTab
 import io.github.tabssh.storage.database.entities.ConnectableHost
+import io.github.tabssh.storage.registry.ConnectableHostRegistry
 import io.github.tabssh.storage.registry.ConnectableHostResolver
 import io.github.tabssh.ui.tabs.PaneWindow
 import io.github.tabssh.ui.tabs.PanesTab
+import io.github.tabssh.ui.utils.ConnectableHostLabels
 import io.github.tabssh.ui.views.PaletteDialog
 import io.github.tabssh.ui.views.PerformanceOverlayView
 import io.github.tabssh.utils.ClipboardHelper
@@ -5493,14 +5495,35 @@ class TabTerminalActivity : TabSSHActivity() {
     
     private fun showConnectionSelector() {
         lifecycleScope.launch {
-            val connections = try {
-                withContext(Dispatchers.IO) { app.database.connectionDao().getRecentConnections(50) }
+            // Same cache-first, background-refresh strategy as
+            // PaneGroupEditDialog.show(): refreshAll() hits live cloud-provider
+            // APIs, so only block on it when the registry is empty (first-ever
+            // use); otherwise show whatever's cached and refresh underneath.
+            var hosts = try {
+                withContext(Dispatchers.IO) { app.database.connectableHostDao().getAllList() }
             } catch (e: Exception) {
-                Logger.e("TabTerminalActivity", "Failed to load connections for picker", e)
+                Logger.e("TabTerminalActivity", "Failed to load connectable hosts for picker", e)
                 emptyList()
             }
+            if (hosts.isEmpty()) {
+                try {
+                    withContext(Dispatchers.IO) { ConnectableHostRegistry.refreshAll(app.database, app) }
+                    hosts = withContext(Dispatchers.IO) { app.database.connectableHostDao().getAllList() }
+                } catch (e: Exception) {
+                    Logger.e("TabTerminalActivity", "Failed to refresh connectable hosts for picker", e)
+                }
+            } else {
+                lifecycleScope.launch(Dispatchers.IO) {
+                    try {
+                        ConnectableHostRegistry.refreshAll(app.database, app)
+                    } catch (e: Exception) {
+                        Logger.e("TabTerminalActivity", "Background connectable-host refresh failed", e)
+                    }
+                }
+            }
             runOnUiThread {
-                val labels = connections.map { it.getDisplayName() }.toTypedArray()
+                val labels = hosts.map { ConnectableHostLabels.pickerLabel(this@TabTerminalActivity, it) }
+                    .toTypedArray()
                 val items = arrayOf(getString(R.string.terminal_add_new_connection)) + labels
 
                 MaterialAlertDialogBuilder(this@TabTerminalActivity)
@@ -5509,10 +5532,19 @@ class TabTerminalActivity : TabSSHActivity() {
                         if (which == 0) {
                             startActivity(Intent(this@TabTerminalActivity, ConnectionEditActivity::class.java))
                         } else {
-                            val profile = connections[which - 1]
+                            val host = hosts[which - 1]
                             // forceNew=true: the user explicitly chose "Open new tab".
                             // Never reattach to an existing session from this path.
-                            lifecycleScope.launch { connectToProfile(profile, forceNew = true) }
+                            lifecycleScope.launch {
+                                val profile = withContext(Dispatchers.IO) {
+                                    ConnectableHostResolver.resolveProfile(app, host)
+                                }
+                                if (profile != null) {
+                                    connectToProfile(profile, forceNew = true)
+                                } else {
+                                    showToast(getString(R.string.terminal_connection_not_found))
+                                }
+                            }
                         }
                     }
                     .setNegativeButton(R.string.cancel, null)
