@@ -420,6 +420,7 @@ class NetworkRouteEditActivity : TabSSHActivity() {
                     authType = "KEY"
                     if (selectedKeyId == null) {
                         layoutKey.error = getString(R.string.route_error_key)
+                        spinnerKey.requestFocus()
                         return
                     }
                     keyId = selectedKeyId

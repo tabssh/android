@@ -383,23 +383,27 @@ class PortForwardEditActivity : TabSSHActivity() {
             connectionId = selectedConnectionId
             if (connectionId == null) {
                 layoutConnection.error = getString(R.string.port_forward_error_connection)
+                layoutConnection.requestFocus()
                 return
             }
         } else {
             sshHost = editSshHost.text?.toString()?.trim().orEmpty()
             if (sshHost.isEmpty()) {
                 layoutSshHost.error = getString(R.string.port_forward_error_ssh_host)
+                layoutSshHost.requestFocus()
                 return
             }
             val portValue = editSshPort.text?.toString()?.trim()?.toIntOrNull()
             if (portValue == null || portValue !in 1..65535) {
                 layoutSshPort.error = getString(R.string.route_error_port_range)
+                layoutSshPort.requestFocus()
                 return
             }
             sshPort = portValue
             sshUsername = editSshUsername.text?.toString()?.trim().orEmpty()
             if (sshUsername.isEmpty()) {
                 layoutSshUsername.error = getString(R.string.port_forward_error_ssh_username)
+                layoutSshUsername.requestFocus()
                 return
             }
             identityId = selectedIdentityId
@@ -414,6 +418,7 @@ class PortForwardEditActivity : TabSSHActivity() {
                 hostIp = editHostIp.text?.toString()?.trim().orEmpty()
                 if (hostIp.isEmpty()) {
                     layoutHostIp.error = getString(R.string.port_forward_error_host_ip)
+                    layoutHostIp.requestFocus()
                     return
                 }
                 remotePort = validPort(layoutRemotePort) ?: return
@@ -421,6 +426,7 @@ class PortForwardEditActivity : TabSSHActivity() {
                 localPort = editLocalPort.text?.toString()?.trim()?.toIntOrNull() ?: 0
                 if (localPort != 0 && localPort !in 1..65535) {
                     layoutLocalPort.error = getString(R.string.route_error_port_range)
+                    layoutLocalPort.requestFocus()
                     return
                 }
             }
@@ -428,6 +434,7 @@ class PortForwardEditActivity : TabSSHActivity() {
                 hostIp = editHostIp.text?.toString()?.trim().orEmpty()
                 if (hostIp.isEmpty()) {
                     layoutHostIp.error = getString(R.string.port_forward_error_host_ip)
+                    layoutHostIp.requestFocus()
                     return
                 }
                 localPort = validPort(layoutLocalPort) ?: return
@@ -467,6 +474,7 @@ class PortForwardEditActivity : TabSSHActivity() {
         val value = layout.editText?.text?.toString()?.trim()?.toIntOrNull()
         if (value == null || value !in 1..65535) {
             layout.error = getString(R.string.route_error_port_range)
+            layout.requestFocus()
             return null
         }
         return value

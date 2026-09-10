@@ -1,5 +1,4 @@
 [ ] fix tor error debug log: https://pste.us/raw/ttuak5q
-[ ] fix routing/forwardering UI/UX
 [ ] move registery credentials to auth > Registeries, after the keys tab
 [ ] Update all of the screenshots in metadata/en-US/images/phoneScreenshots/ and also ame them(not 1, 2, 3, etc), then update the docs for the new file names. 
 [ ] add sorting to both VPS/Domain tracking UI, fix import export icon visibility.

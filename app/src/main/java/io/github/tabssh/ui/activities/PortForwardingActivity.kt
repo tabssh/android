@@ -184,6 +184,9 @@ class PortForwardingActivity : TabSSHActivity() {
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
                 app.database.networkRouteDao().delete(route)
+                TombstoneRecorder.record(
+                    this@PortForwardingActivity, TombstoneRecorder.NETWORK_ROUTE, route.id
+                )
                 // If it was the global default, clear the dangling reference.
                 if (app.preferencesManager.getDefaultRouteId() == route.id) {
                     app.preferencesManager.setDefaultRouteId(null)
