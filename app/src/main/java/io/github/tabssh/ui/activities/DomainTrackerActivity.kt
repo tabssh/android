@@ -214,6 +214,12 @@ class DomainTrackerActivity : TabSSHActivity() {
         lifecycleScope.launch {
             try {
                 val result = DomainCsvImportExport.parse(text)
+                if (result.domains.isEmpty()) {
+                    for (warning in result.warnings) Logger.w(TAG, "CSV import: $warning")
+                    if (!isAlive) return@launch
+                    Toast.makeText(this@DomainTrackerActivity, getString(R.string.domain_tracker_import_empty), Toast.LENGTH_LONG).show()
+                    return@launch
+                }
                 var added = 0
                 var updated = 0
                 withContext(Dispatchers.IO) {
@@ -252,13 +258,19 @@ class DomainTrackerActivity : TabSSHActivity() {
     private fun exportTo(uri: Uri) {
         lifecycleScope.launch {
             try {
+                var isEmpty = false
                 withContext(Dispatchers.IO) {
                     val domains = app.database.domainDao().getAllList()
+                    isEmpty = domains.isEmpty()
                     val csv = DomainCsvImportExport.export(domains)
                     contentResolver.openOutputStream(uri)?.use { out -> out.write(csv.toByteArray()) }
                 }
                 if (!isAlive) return@launch
-                Toast.makeText(this@DomainTrackerActivity, getString(R.string.domain_tracker_export_success), Toast.LENGTH_SHORT).show()
+                if (isEmpty) {
+                    Toast.makeText(this@DomainTrackerActivity, getString(R.string.domain_tracker_export_empty), Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(this@DomainTrackerActivity, getString(R.string.domain_tracker_export_success), Toast.LENGTH_SHORT).show()
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {

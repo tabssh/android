@@ -219,6 +219,12 @@ class VpsTrackerActivity : TabSSHActivity() {
         lifecycleScope.launch {
             try {
                 val result = VpsMarkdownImportExport.parse(text)
+                if (result.hosts.isEmpty()) {
+                    for (warning in result.warnings) Logger.w(TAG, "Markdown import: $warning")
+                    if (!isAlive) return@launch
+                    Toast.makeText(this@VpsTrackerActivity, getString(R.string.vps_tracker_import_empty), Toast.LENGTH_LONG).show()
+                    return@launch
+                }
                 var added = 0
                 var updated = 0
                 withContext(Dispatchers.IO) {
@@ -257,13 +263,19 @@ class VpsTrackerActivity : TabSSHActivity() {
     private fun exportTo(uri: Uri) {
         lifecycleScope.launch {
             try {
+                var isEmpty = false
                 withContext(Dispatchers.IO) {
                     val hosts = app.database.vpsHostDao().getAllList()
+                    isEmpty = hosts.isEmpty()
                     val markdown = VpsMarkdownImportExport.export(hosts)
                     contentResolver.openOutputStream(uri)?.use { out -> out.write(markdown.toByteArray()) }
                 }
                 if (!isAlive) return@launch
-                Toast.makeText(this@VpsTrackerActivity, getString(R.string.vps_tracker_export_success), Toast.LENGTH_SHORT).show()
+                if (isEmpty) {
+                    Toast.makeText(this@VpsTrackerActivity, getString(R.string.vps_tracker_export_empty), Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(this@VpsTrackerActivity, getString(R.string.vps_tracker_export_success), Toast.LENGTH_SHORT).show()
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
