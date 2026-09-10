@@ -333,6 +333,10 @@ class OciManagerActivity : TabSSHActivity() {
                 val ok = client.instanceAction(inst.id, action)
                 if (!isAlive) return@launch
                 if (ok) {
+                    // Persist the iaas-endpoint TLS pin captured during this
+                    // action call — same reasoning as loadInstances(): without
+                    // it, an unpinned/rotated cert re-prompts TOFU next time.
+                    persistCapturedPins(client)
                     Toast.makeText(
                         this@OciManagerActivity,
                         getString(R.string.oci_action_sent_fmt, action.wireValue, name),
