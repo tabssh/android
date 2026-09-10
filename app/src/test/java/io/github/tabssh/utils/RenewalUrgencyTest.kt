@@ -148,6 +148,62 @@ class RenewalUrgencyTest {
         assertEquals(true, result >= referenceNow)
     }
 
+    @Test
+    fun `effectiveDate treats biannually and triannually as every-2 and every-3 years`() {
+        // "biannually"/"triannually" strictly mean twice/three-times a year,
+        // but the app treats them as common misspellings of biennially/
+        // triennially (every 2/3 years) per user-confirmed terminology.
+        val cal = Calendar.getInstance()
+        cal.set(2020, Calendar.MARCH, 1, 0, 0, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        val staleDate = cal.timeInMillis
+        val referenceNow = staleDate + 1500L * dayMillis
+
+        val biannual = RenewalUrgency.effectiveDate(staleDate, "biannually", referenceNow)
+        val triannual = RenewalUrgency.effectiveDate(staleDate, "triannually", referenceNow)
+        requireNotNull(biannual)
+        requireNotNull(triannual)
+        assertEquals(true, biannual >= referenceNow)
+        assertEquals(true, triannual >= referenceNow)
+
+        val biCal = Calendar.getInstance()
+        biCal.timeInMillis = biannual
+        assertEquals(Calendar.MARCH, biCal.get(Calendar.MONTH))
+        assertEquals(1, biCal.get(Calendar.DAY_OF_MONTH))
+        assertEquals(0, (biCal.get(Calendar.YEAR) - 2020) % 2)
+    }
+
+    @Test
+    fun `effectiveDate rolls an arbitrary N-year cycle forward by N years at a time`() {
+        val cal = Calendar.getInstance()
+        cal.set(2016, Calendar.JUNE, 9, 0, 0, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        val staleDate = cal.timeInMillis
+        // Well past one 5-year period but short of two, so the result must
+        // land exactly 2 periods (10 years) forward, not drift by 1 year.
+        val referenceNow = staleDate + 365L * 7 * dayMillis
+
+        val result = RenewalUrgency.effectiveDate(staleDate, "5 years", referenceNow)
+        requireNotNull(result)
+        assertEquals(true, result >= referenceNow)
+
+        val resultCal = Calendar.getInstance()
+        resultCal.timeInMillis = result
+        assertEquals(Calendar.JUNE, resultCal.get(Calendar.MONTH))
+        assertEquals(9, resultCal.get(Calendar.DAY_OF_MONTH))
+        assertEquals(0, (resultCal.get(Calendar.YEAR) - 2016) % 5)
+    }
+
+    @Test
+    fun `effectiveDate rolls an arbitrary N-month and N-week cycle forward`() {
+        val staleDate = daysFromNow(-400)
+        val monthsResult = requireNotNull(RenewalUrgency.effectiveDate(staleDate, "18 months", now))
+        assertEquals(true, monthsResult >= now)
+
+        val weeksResult = requireNotNull(RenewalUrgency.effectiveDate(staleDate, "6 weeks", now))
+        assertEquals(true, weeksResult >= now)
+    }
+
     // ── pillText() — i18n label text ────────────────────────────────────────
 
     @Test

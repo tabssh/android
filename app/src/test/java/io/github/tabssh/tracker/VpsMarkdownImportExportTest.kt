@@ -121,6 +121,30 @@ class VpsMarkdownImportExportTest {
     }
 
     @Test
+    fun `recognizes biannually and triannually as synonyms for every-2 and every-3 years`() {
+        val text = """
+            ## Tenant   - tenant-synonym.example
+            dns  - 198.51.100.60 - [40Gx2G] [dns.example.com] [June 7th, 2027, biannually ${'$'}79.99] [note]
+            svc  - 198.51.100.61 - [40Gx2G] [svc.example.com] [June 7th, 2027, triannually ${'$'}12.00] [note]
+        """.trimIndent()
+        val hosts = VpsMarkdownImportExport.parse(text).hosts
+        assertEquals("biennially", hosts.single { it.hostname == "dns" }.billingCycle)
+        assertEquals("triennially", hosts.single { it.hostname == "svc" }.billingCycle)
+    }
+
+    @Test
+    fun `recognizes an arbitrary N years cycle`() {
+        val text = """
+            ## Tenant   - tenant-nyear.example
+            vps5  - 198.51.100.70 - [40Gx2G] [vps5.example.com] [June 9th, 2026, 5 years ${'$'}299.99] [note]
+            vps10 - 198.51.100.71 - [40Gx2G] [vps10.example.com] [June 9th, 2026, 10 years ${'$'}499.99] [note]
+        """.trimIndent()
+        val hosts = VpsMarkdownImportExport.parse(text).hosts
+        assertEquals("5 years", hosts.single { it.hostname == "vps5" }.billingCycle)
+        assertEquals("10 years", hosts.single { it.hostname == "vps10" }.billingCycle)
+    }
+
+    @Test
     fun `export then re-parse round-trips billing cycle and price`() {
         val original = VpsMarkdownImportExport.parse(sample).hosts
         val reparsed = VpsMarkdownImportExport.parse(VpsMarkdownImportExport.export(original)).hosts

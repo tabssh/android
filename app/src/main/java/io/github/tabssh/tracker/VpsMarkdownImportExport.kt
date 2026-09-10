@@ -26,7 +26,12 @@ import java.util.UUID
  * lines, and an optional wrapping ` ```text ` / ` ``` ` fenced-code-block
  * (common when the source note is kept in a Markdown-aware editor) are all
  * skipped rather than misread as data rows. Recognized billing-cycle
- * keywords: yearly/annually, monthly, weekly, daily, biennially, triennially.
+ * keywords: yearly/annually, monthly, weekly, daily, biennially/biannually
+ * (every 2 years), triennially/triannually (every 3 years), and an
+ * arbitrary "N years"/"N months"/"N weeks" (or "yr(s)"/"mo(s)"/"wk(s)")
+ * cycle such as "5 years" or "10 years" for longer prepaid terms. A fully
+ * explicit one-time date with no recognized cycle word is kept as-is
+ * (`billingCycle = null`) rather than treated as an error.
  */
 object VpsMarkdownImportExport {
 
@@ -36,6 +41,7 @@ object VpsMarkdownImportExport {
     private val HEADER_REGEX = Regex("""^##\s*Tenant\s*-\s*(.+?)\s*$""", RegexOption.IGNORE_CASE)
     private val BRACKET_REGEX = Regex("""\[([^\]]*)]""")
     private val ORDINAL_SUFFIX_REGEX = Regex("""(\d+)(st|nd|rd|th)""", RegexOption.IGNORE_CASE)
+    private val N_UNIT_CYCLE_REGEX = Regex("""(\d+)\s*(years?|yrs?|months?|mos?|weeks?|wks?)""", RegexOption.IGNORE_CASE)
 
     private val EXACT_DATE_FORMATS: List<ThreadLocal<SimpleDateFormat>> = listOf(
         "MMMM d, yyyy", "MMM d, yyyy", "MMMM d yyyy", "MMM d yyyy"
@@ -124,13 +130,29 @@ object VpsMarkdownImportExport {
             val billingCycle = renewalRaw?.let { raw ->
                 val lower = raw.lowercase(Locale.US)
                 when {
-                    "biennially" in lower || "biennial" in lower -> "biennially"
-                    "triennially" in lower || "triennial" in lower -> "triennially"
+                    // "biannually"/"triannually" are common misspellings of
+                    // "biennially"/"triennially" (every 2/3 years) — the
+                    // correct terms mean "twice"/"three times a year", a
+                    // different cadence — so both spellings are accepted on
+                    // input but normalized to the correct term for storage.
+                    "biennially" in lower || "biennial" in lower ||
+                        "biannually" in lower || "biannual" in lower -> "biennially"
+                    "triennially" in lower || "triennial" in lower ||
+                        "triannually" in lower || "triannual" in lower -> "triennially"
                     "yearly" in lower || "annual" in lower -> "yearly"
                     "monthly" in lower -> "monthly"
                     "weekly" in lower -> "weekly"
                     "daily" in lower -> "daily"
-                    else -> null
+                    else -> N_UNIT_CYCLE_REGEX.find(lower)?.let { m ->
+                        val n = m.groupValues[1].toInt()
+                        val unit = m.groupValues[2]
+                        val unitWord = when {
+                            unit.startsWith("year") || unit.startsWith("yr") -> "year"
+                            unit.startsWith("month") || unit.startsWith("mo") -> "month"
+                            else -> "week"
+                        }
+                        "$n $unitWord${if (n == 1) "" else "s"}"
+                    }
                 }
             }
 

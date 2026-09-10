@@ -48,6 +48,13 @@ enum class RenewalUrgency {
         private const val WARNING_MAX_DAYS = 27
         private const val MILLIS_PER_DAY = 86_400_000L
 
+        // Generic "N years"/"N months"/"N weeks" cycle (also "yr(s)"/"mo(s)"/
+        // "wk(s)" abbreviations), for hosts on a cadence outside the fixed
+        // yearly/biennially/triennially set (e.g. a 5-year or 10-year
+        // prepaid plan) — see [VpsMarkdownImportExport]'s matching regex,
+        // which normalizes import text into this same "N <unit>" shape.
+        private val N_UNIT_REGEX = Regex("""^(\d+)\s*(years?|yrs?|months?|mos?|weeks?|wks?)$""")
+
         /** [renewalOrExpirationDate] is epoch millis, or null when no date is tracked. */
         fun of(renewalOrExpirationDate: Long?, now: Long = System.currentTimeMillis()): RenewalUrgency {
             if (renewalOrExpirationDate == null) return UNKNOWN
@@ -92,20 +99,38 @@ enum class RenewalUrgency {
             // against the same synonym set the importer recognizes so
             // auto-detection doesn't silently no-op on those.
             val normalizedCycle = billingCycle.trim().lowercase(Locale.US)
-            val field = when (normalizedCycle) {
-                "daily", "day" -> Calendar.DAY_OF_YEAR
-                "weekly", "week" -> Calendar.DAY_OF_YEAR
-                "monthly", "month" -> Calendar.MONTH
-                "yearly", "annually", "annual", "year" -> Calendar.YEAR
-                "biennially", "biennial" -> Calendar.YEAR
-                "triennially", "triennial" -> Calendar.YEAR
-                else -> return date
-            }
-            val amount = when (normalizedCycle) {
-                "weekly", "week" -> 7
-                "biennially", "biennial" -> 2
-                "triennially", "triennial" -> 3
-                else -> 1
+            // "biannually"/"triannually" are the common misspellings for
+            // "every 2/3 years" (their strict dictionary meaning is "twice"/
+            // "three times a year" — a different cadence entirely) — accepted
+            // here as synonyms of biennially/triennially so free-typed entry
+            // still rolls forward correctly, while the importer normalizes
+            // to the correct term on the way in (see VpsMarkdownImportExport).
+            val nUnitMatch = N_UNIT_REGEX.find(normalizedCycle)
+            val (field, amount) = if (nUnitMatch != null) {
+                val n = nUnitMatch.groupValues[1].toIntOrNull() ?: return date
+                val unit = nUnitMatch.groupValues[2]
+                when {
+                    unit.startsWith("year") || unit.startsWith("yr") -> Calendar.YEAR to n
+                    unit.startsWith("month") || unit.startsWith("mo") -> Calendar.MONTH to n
+                    else -> Calendar.DAY_OF_YEAR to (n * 7)
+                }
+            } else {
+                val field = when (normalizedCycle) {
+                    "daily", "day" -> Calendar.DAY_OF_YEAR
+                    "weekly", "week" -> Calendar.DAY_OF_YEAR
+                    "monthly", "month" -> Calendar.MONTH
+                    "yearly", "annually", "annual", "year" -> Calendar.YEAR
+                    "biennially", "biennial", "biannually", "biannual" -> Calendar.YEAR
+                    "triennially", "triennial", "triannually", "triannual" -> Calendar.YEAR
+                    else -> return date
+                }
+                val amount = when (normalizedCycle) {
+                    "weekly", "week" -> 7
+                    "biennially", "biennial", "biannually", "biannual" -> 2
+                    "triennially", "triennial", "triannually", "triannual" -> 3
+                    else -> 1
+                }
+                field to amount
             }
             // renewalDate is always anchored in UTC by VpsMarkdownImportExport
             // (both the exact-date and year-less best-effort parse paths use a
