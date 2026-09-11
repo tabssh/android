@@ -31,6 +31,11 @@ import java.io.File
 import io.github.tabssh.utils.showError
 import io.github.tabssh.utils.announceAccessibility
 import io.github.tabssh.utils.tabSSHApp
+import io.github.tabssh.utils.LocalFileSource
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.documentfile.provider.DocumentFile
+import android.net.Uri
+import java.util.UUID
 
 /**
  * SFTP file browser activity with dual-pane interface
@@ -73,6 +78,20 @@ class SFTPActivity : TabSSHActivity() {
     private var currentLocalPath = "/storage/emulated/0"
     private var currentRemotePath = "/"
 
+    // Storage Access Framework local browser. currentLocalSaf != null means
+    // the local browser is showing a granted SAF tree instead of
+    // currentLocalPath — java.io.File listing is unreliable under scoped
+    // storage on Android 11+/API 30+, so this is the fix for "local files
+    // not showing" once the user grants a folder via the "Browse folder…"
+    // storage-picker option.
+    private var localSafRoot: DocumentFile? = null
+    private var currentLocalSaf: DocumentFile? = null
+
+    private val openLocalSafTreeLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            if (uri != null) grantLocalSafRoot(uri)
+        }
+
     /**
      * Wave 8.5 — multi-connection SFTP tabs. Each [SftpTab] holds the
      * SFTPManager + last remembered remote path for one connection. Tap a
@@ -90,7 +109,7 @@ class SFTPActivity : TabSSHActivity() {
     private var activeSftpTabIndex: Int = -1
     
     // File lists
-    private val localFiles = mutableListOf<File>()
+    private val localFiles = mutableListOf<LocalFileSource>()
     private val remoteFiles = mutableListOf<RemoteFileInfo>()
     private val activeTransfers = mutableListOf<TransferTask>()
 
@@ -119,9 +138,10 @@ class SFTPActivity : TabSSHActivity() {
         setupTransferAdapter()
         setupButtons()
         setupPathNavigation()
+        restoreLocalSafRoot()
 
         // Load initial directories
-        loadLocalDirectory(currentLocalPath)
+        loadLocalFiles()
         loadRemoteDirectory(currentRemotePath)
         
         Logger.i("SFTPActivity", "SFTP activity created")
@@ -402,7 +422,44 @@ class SFTPActivity : TabSSHActivity() {
         }
     }
     
-    private fun loadLocalDirectory(path: String) {
+    /**
+     * Restores a previously granted local-browser SAF tree (if any) so the
+     * user doesn't have to re-pick "Browse folder…" every time this
+     * activity is created. Silently falls back to the legacy File-path
+     * browser if the permission grant is gone (revoked, uninstalled app
+     * that owned the tree, etc.).
+     */
+    private fun restoreLocalSafRoot() {
+        val saved = tabSSHApp.preferencesManager.getSftpLocalSafTreeUri() ?: return
+        val doc = DocumentFile.fromTreeUri(this, Uri.parse(saved))
+        if (doc != null && doc.canRead()) {
+            localSafRoot = doc
+            currentLocalSaf = doc
+        } else {
+            tabSSHApp.preferencesManager.clearSftpLocalSafTreeUri()
+        }
+    }
+
+    /** Called once the user grants a tree via [openLocalSafTreeLauncher]. */
+    private fun grantLocalSafRoot(uri: Uri) {
+        contentResolver.takePersistableUriPermission(
+            uri,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        )
+        tabSSHApp.preferencesManager.setSftpLocalSafTreeUri(uri.toString())
+        val doc = DocumentFile.fromTreeUri(this, uri) ?: return
+        localSafRoot = doc
+        currentLocalSaf = doc
+        loadLocalFiles()
+    }
+
+    /** Dispatches to the SAF-tree browser or the legacy File-path browser. */
+    private fun loadLocalFiles() {
+        val saf = currentLocalSaf
+        if (saf != null) loadLocalDirectorySaf(saf) else loadLocalDirectoryPlain(currentLocalPath)
+    }
+
+    private fun loadLocalDirectoryPlain(path: String) {
         lifecycleScope.launch {
             try {
                 val directory = File(path)
@@ -412,12 +469,13 @@ class SFTPActivity : TabSSHActivity() {
                     }
 
                     val sorted = files.sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name })
+                        .map { LocalFileSource.Plain(it) }
 
                     runOnUiThread {
                         localFileAdapter.replaceAllWithDiff(
                             items = localFiles,
                             newItems = sorted,
-                            areItemsTheSame = { a, b -> a.absolutePath == b.absolutePath }
+                            areItemsTheSame = { a, b -> a.id == b.id }
                         )
                         binding.textLocalPath.text = path
                         currentLocalPath = path
@@ -429,6 +487,33 @@ class SFTPActivity : TabSSHActivity() {
                 }
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Failed to load local directory: $path", e)
+                showError(getString(R.string.sftp_error_load_local))
+            }
+        }
+    }
+
+    private fun loadLocalDirectorySaf(dir: DocumentFile) {
+        lifecycleScope.launch {
+            try {
+                val children = withContext(Dispatchers.IO) { dir.listFiles().toList() }
+                val sorted = children.sortedWith(compareBy<DocumentFile> { !it.isDirectory }.thenBy { it.name ?: "" })
+                    .map { LocalFileSource.Saf(it) }
+
+                runOnUiThread {
+                    localFileAdapter.replaceAllWithDiff(
+                        items = localFiles,
+                        newItems = sorted,
+                        areItemsTheSame = { a, b -> a.id == b.id }
+                    )
+                    currentLocalSaf = dir
+                    binding.textLocalPath.text = dir.name ?: dir.uri.toString()
+                    binding.emptyLocal.visibility =
+                        if (localFiles.isEmpty()) View.VISIBLE else View.GONE
+                }
+
+                Logger.d("SFTPActivity", "Loaded SAF local directory: ${dir.uri} (${children.size} items)")
+            } catch (e: Exception) {
+                Logger.e("SFTPActivity", "Failed to load SAF local directory: ${dir.uri}", e)
                 showError(getString(R.string.sftp_error_load_local))
             }
         }
@@ -481,9 +566,12 @@ class SFTPActivity : TabSSHActivity() {
             if (activeTransfers.isEmpty()) View.GONE else View.VISIBLE
     }
     
-    private fun handleLocalFileClick(file: File) {
+    private fun handleLocalFileClick(file: LocalFileSource) {
         if (file.isDirectory) {
-            loadLocalDirectory(file.absolutePath)
+            when (file) {
+                is LocalFileSource.Plain -> loadLocalDirectoryPlain(file.file.absolutePath)
+                is LocalFileSource.Saf -> loadLocalDirectorySaf(file.doc)
+            }
         } else {
             // Select file for upload
             selectLocalFile(file)
@@ -499,7 +587,7 @@ class SFTPActivity : TabSSHActivity() {
         }
     }
     
-    private fun selectLocalFile(file: File) {
+    private fun selectLocalFile(file: LocalFileSource) {
         // Highlight selected file and enable upload button
         binding.btnUpload.isEnabled = true
         binding.btnUpload.text = getString(R.string.sftp_btn_upload_file_fmt, file.name)
@@ -515,6 +603,47 @@ class SFTPActivity : TabSSHActivity() {
         Logger.d("SFTPActivity", "Selected remote file: ${file.name}")
     }
     
+    /**
+     * SFTPManager/SCPClient's transfer APIs take a plain java.io.File —
+     * rewriting them to be DocumentFile-aware is out of scope here. For a
+     * SAF-mode entry, materialize it into a real temp file under [cacheDir]
+     * first and upload that instead; the caller is responsible for calling
+     * [cleanupMaterialized] once the upload completes.
+     */
+    private suspend fun materializeForUpload(entry: LocalFileSource): File = withContext(Dispatchers.IO) {
+        when (entry) {
+            is LocalFileSource.Plain -> entry.file
+            is LocalFileSource.Saf -> {
+                val tempRoot = File(cacheDir, "saf-upload/${UUID.randomUUID()}")
+                tempRoot.mkdirs()
+                val dest = File(tempRoot, entry.name)
+                copySafToLocal(entry.doc, dest)
+                dest
+            }
+        }
+    }
+
+    private fun copySafToLocal(doc: DocumentFile, dest: File) {
+        if (doc.isDirectory) {
+            dest.mkdirs()
+            doc.listFiles().forEach { child ->
+                val childName = child.name ?: return@forEach
+                copySafToLocal(child, File(dest, childName))
+            }
+        } else {
+            contentResolver.openInputStream(doc.uri)?.use { input ->
+                dest.outputStream().use { output -> input.copyTo(output) }
+            }
+        }
+    }
+
+    /** Deletes the temp materialized copy for a [LocalFileSource.Saf] entry; no-op for [LocalFileSource.Plain]. */
+    private fun cleanupMaterialized(entry: LocalFileSource, materialized: File) {
+        if (entry is LocalFileSource.Saf) {
+            materialized.parentFile?.deleteRecursively()
+        }
+    }
+
     private fun uploadSelectedFiles() {
         if (!::sftpManager.isInitialized) {
             showToast(getString(R.string.sftp_not_connected))
@@ -531,12 +660,17 @@ class SFTPActivity : TabSSHActivity() {
             try {
                 val successCount = withContext(Dispatchers.IO) {
                     var count = 0
-                    for (file in selectedFiles) {
-                        val remotePath = currentRemotePath + "/" + file.name
-                        if (file.isDirectory) {
-                            sftpManager.uploadDirectory(localDir = file, remoteDir = remotePath)
-                        } else {
-                            sftpManager.uploadFile(localFile = file, remotePath = remotePath)
+                    for (entry in selectedFiles) {
+                        val remotePath = currentRemotePath + "/" + entry.name
+                        val materialized = materializeForUpload(entry)
+                        try {
+                            if (entry.isDirectory) {
+                                sftpManager.uploadDirectory(localDir = materialized, remoteDir = remotePath)
+                            } else {
+                                sftpManager.uploadFile(localFile = materialized, remotePath = remotePath)
+                            }
+                        } finally {
+                            cleanupMaterialized(entry, materialized)
                         }
                         count++
                     }
@@ -591,10 +725,15 @@ class SFTPActivity : TabSSHActivity() {
             val (ok, fail) = withContext(Dispatchers.IO) {
                 var okCount = 0
                 var failCount = 0
-                for (file in selected) {
-                    if (file.isDirectory) continue
-                    val remote = "$currentRemotePath/${file.name}"
-                    if (client.uploadFile(file, remote, null)) okCount++ else failCount++
+                for (entry in selected) {
+                    if (entry.isDirectory) continue
+                    val remote = "$currentRemotePath/${entry.name}"
+                    val materialized = materializeForUpload(entry)
+                    try {
+                        if (client.uploadFile(materialized, remote, null)) okCount++ else failCount++
+                    } finally {
+                        cleanupMaterialized(entry, materialized)
+                    }
                 }
                 okCount to failCount
             }
@@ -622,13 +761,19 @@ class SFTPActivity : TabSSHActivity() {
             try {
                 val successCount = withContext(Dispatchers.IO) {
                     var count = 0
+                    val saf = currentLocalSaf
                     for (file in selectedFiles) {
                         if (file.isDirectory) continue
-                        val localFile = File(currentLocalPath, file.name)
-                        sftpManager.downloadFile(
-                            remotePath = file.path,
-                            localFile = localFile
-                        )
+                        if (saf != null) {
+                            val temp = File(cacheDir, "saf-download/${UUID.randomUUID()}/${file.name}")
+                            temp.parentFile?.mkdirs()
+                            sftpManager.downloadFile(remotePath = file.path, localFile = temp)
+                            copyLocalFileIntoSaf(temp, saf, file.name)
+                            temp.parentFile?.deleteRecursively()
+                        } else {
+                            val localFile = File(currentLocalPath, file.name)
+                            sftpManager.downloadFile(remotePath = file.path, localFile = localFile)
+                        }
                         count++
                     }
                     count
@@ -641,11 +786,22 @@ class SFTPActivity : TabSSHActivity() {
                     )
                 )
                 remoteFileAdapter.clearSelection()
-                loadLocalDirectory(currentLocalPath)
+                loadLocalFiles()
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Download failed", e)
                 showError(getString(R.string.sftp_toast_download_failed_fmt, e.message.orEmpty()))
             }
+        }
+    }
+
+    /** Copies a downloaded temp file into a granted SAF tree, overwriting an existing entry of the same name. */
+    private fun copyLocalFileIntoSaf(src: File, parentDoc: DocumentFile, name: String) {
+        val extension = name.substringAfterLast('.', "")
+        val mime = android.webkit.MimeTypeMap.getSingleton()
+            .getMimeTypeFromExtension(extension) ?: "application/octet-stream"
+        val target = parentDoc.findFile(name) ?: parentDoc.createFile(mime, name) ?: return
+        contentResolver.openOutputStream(target.uri, "w")?.use { output ->
+            src.inputStream().use { input -> input.copyTo(output) }
         }
     }
     
@@ -690,9 +846,17 @@ class SFTPActivity : TabSSHActivity() {
     }
     
     private fun navigateLocalUp() {
+        val saf = currentLocalSaf
+        if (saf != null) {
+            val root = localSafRoot
+            if (root != null && saf.uri == root.uri) return
+            val parent = saf.parentFile
+            if (parent != null) loadLocalDirectorySaf(parent)
+            return
+        }
         val parent = File(currentLocalPath).parentFile
         if (parent != null && parent.canRead()) {
-            loadLocalDirectory(parent.absolutePath)
+            loadLocalDirectoryPlain(parent.absolutePath)
         }
     }
     
@@ -704,7 +868,7 @@ class SFTPActivity : TabSSHActivity() {
     }
     
     private fun refreshDirectories() {
-        loadLocalDirectory(currentLocalPath)
+        loadLocalFiles()
         loadRemoteDirectory(currentRemotePath)
         
         // Refresh transfers
@@ -730,7 +894,7 @@ class SFTPActivity : TabSSHActivity() {
             .show()
     }
 
-    private fun showLocalFileMenu(file: File) {
+    private fun showLocalFileMenu(file: LocalFileSource) {
         val entries: List<Pair<Int, () -> Unit>> = if (file.isDirectory) {
             listOf(
                 R.string.sftp_menu_open to { handleLocalFileClick(file) },
@@ -934,12 +1098,14 @@ class SFTPActivity : TabSSHActivity() {
         startActivity(editorIntent)
     }
     
-    private fun uploadFile(localFile: File) {
+    private fun uploadFile(entry: LocalFileSource) {
         if (!::sftpManager.isInitialized) return
-        
+
         lifecycleScope.launch {
             try {
-                val remotePath = "$currentRemotePath/${localFile.name}"
+                val remotePath = "$currentRemotePath/${entry.name}"
+                val entryName = entry.name
+                val materialized = materializeForUpload(entry)
 
                 val transferTask = withContext(Dispatchers.IO) {
                     val listener = object : TransferListener {
@@ -951,7 +1117,7 @@ class SFTPActivity : TabSSHActivity() {
                                 io.github.tabssh.utils.NotificationHelper.showFileTransferProgress(
                                     this@SFTPActivity,
                                     transfer.id.hashCode(),
-                                    localFile.name,
+                                    entryName,
                                     bytesTransferred,
                                     totalBytes,
                                     isUpload = true
@@ -960,6 +1126,7 @@ class SFTPActivity : TabSSHActivity() {
                         }
 
                         override fun onCompleted(transfer: TransferTask, result: io.github.tabssh.sftp.TransferResult) {
+                            cleanupMaterialized(entry, materialized)
                             runOnUiThread {
                                 handleTransferCompleted(transfer, result)
                                 // Refresh remote files
@@ -971,14 +1138,14 @@ class SFTPActivity : TabSSHActivity() {
                                         io.github.tabssh.utils.NotificationHelper.showFileTransferComplete(
                                             this@SFTPActivity,
                                             transfer.id.hashCode(),
-                                            localFile.name,
+                                            entryName,
                                             isUpload = true
                                         )
                                     }
                                     is io.github.tabssh.sftp.TransferResult.Error -> {
                                         io.github.tabssh.utils.NotificationHelper.showConnectionError(
                                             this@SFTPActivity,
-                                            localFile.name,
+                                            entryName,
                                             getString(R.string.sftp_upload_failed_fmt, result.message)
                                         )
                                     }
@@ -994,15 +1161,15 @@ class SFTPActivity : TabSSHActivity() {
                         }
                     }
 
-                    if (localFile.isDirectory) {
+                    if (materialized.isDirectory) {
                         sftpManager.uploadDirectory(
-                            localDir = localFile,
+                            localDir = materialized,
                             remoteDir = remotePath,
                             listener = listener
                         )
                     } else {
                         sftpManager.uploadFile(
-                            localFile = localFile,
+                            localFile = materialized,
                             remotePath = remotePath,
                             listener = listener
                         )
@@ -1013,8 +1180,8 @@ class SFTPActivity : TabSSHActivity() {
                 transferAdapter.notifyItemInserted(activeTransfers.size - 1)
                 refreshTransferCardVisibility()
 
-                Logger.i("SFTPActivity", "Started upload: ${localFile.name}")
-                
+                Logger.i("SFTPActivity", "Started upload: $entryName")
+
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Failed to start upload", e)
                 showError(getString(R.string.sftp_upload_failed_fmt, e.message.orEmpty()))
@@ -1025,7 +1192,14 @@ class SFTPActivity : TabSSHActivity() {
     private fun downloadFile(remoteFile: RemoteFileInfo) {
         lifecycleScope.launch {
             try {
-                val localFile = File(currentLocalPath, remoteFile.name)
+                val saf = currentLocalSaf
+                val localFile = if (saf != null) {
+                    File(cacheDir, "saf-download/${UUID.randomUUID()}/${remoteFile.name}").also {
+                        it.parentFile?.mkdirs()
+                    }
+                } else {
+                    File(currentLocalPath, remoteFile.name)
+                }
 
                 val transferTask = withContext(Dispatchers.IO) {
                     sftpManager.downloadFile(
@@ -1049,10 +1223,14 @@ class SFTPActivity : TabSSHActivity() {
                             }
 
                             override fun onCompleted(transfer: TransferTask, result: io.github.tabssh.sftp.TransferResult) {
+                                if (saf != null && result is io.github.tabssh.sftp.TransferResult.Success) {
+                                    copyLocalFileIntoSaf(localFile, saf, remoteFile.name)
+                                    localFile.parentFile?.deleteRecursively()
+                                }
                                 runOnUiThread {
                                     handleTransferCompleted(transfer, result)
                                     // Refresh local files
-                                    loadLocalDirectory(currentLocalPath)
+                                    loadLocalFiles()
 
                                     // Show completion notification
                                     when (result) {
@@ -1220,15 +1398,19 @@ class SFTPActivity : TabSSHActivity() {
         }
     }
     
-    private fun deleteLocalFile(file: File) {
+    private fun deleteLocalFile(file: LocalFileSource) {
         MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.sftp_delete_title_fmt, file.name))
             .setMessage(deleteConfirmMessage(file.isDirectory))
             .setPositiveButton(R.string.delete) { _, _ ->
-                if (file.delete()) {
+                val deleted = when (file) {
+                    is LocalFileSource.Plain -> file.file.delete()
+                    is LocalFileSource.Saf -> file.doc.delete()
+                }
+                if (deleted) {
                     showToast(getString(R.string.sftp_deleted_fmt, file.name))
                     // Refresh
-                    loadLocalDirectory(currentLocalPath)
+                    loadLocalFiles()
                 } else {
                     showError(getString(R.string.sftp_error_delete_fmt, file.name))
                 }
@@ -1242,18 +1424,22 @@ class SFTPActivity : TabSSHActivity() {
         if (isDirectory) R.string.sftp_delete_message_folder else R.string.sftp_delete_message_file
     )
     
-    private fun shareFile(file: File) {
+    private fun shareFile(file: LocalFileSource) {
         try {
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "*/*"
-                putExtra(Intent.EXTRA_STREAM, androidx.core.content.FileProvider.getUriForFile(
+            val shareUri = when (file) {
+                is LocalFileSource.Plain -> androidx.core.content.FileProvider.getUriForFile(
                     this@SFTPActivity,
                     "${packageName}.fileprovider",
-                    file
-                ))
+                    file.file
+                )
+                is LocalFileSource.Saf -> file.doc.uri
+            }
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "*/*"
+                putExtra(Intent.EXTRA_STREAM, shareUri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            
+
             startActivity(
                 Intent.createChooser(intent, getString(R.string.sftp_share_chooser_fmt, file.name))
             )
@@ -1334,21 +1520,25 @@ class SFTPActivity : TabSSHActivity() {
 
     /**
      * Lets the user switch the local file browser's root between internal
-     * storage and any inserted SD card. A single-volume device (no SD card)
-     * has nothing to choose between, so the dialog is skipped in that case.
+     * storage, any inserted SD card, and an arbitrary folder granted via the
+     * Storage Access Framework — the SAF option is what actually lists
+     * files correctly under scoped storage on Android 11+/API 30+, since
+     * java.io.File listing of most non-app-private paths silently returns
+     * nothing there.
      */
     private fun showChooseLocalStorageDialog() {
         val roots = externalStorageRoots()
-        if (roots.size <= 1) {
-            showToast(getString(R.string.sftp_storage_internal))
-            return
-        }
-        val labels = roots.map { it.first }.toTypedArray()
+        val labels = (roots.map { it.first } + getString(R.string.sftp_storage_browse_folder)).toTypedArray()
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.sftp_choose_storage_title)
             .setItems(labels) { _, which ->
-                currentLocalPath = roots[which].second
-                loadLocalDirectory(currentLocalPath)
+                if (which == roots.size) {
+                    openLocalSafTreeLauncher.launch(null)
+                } else {
+                    currentLocalSaf = null
+                    currentLocalPath = roots[which].second
+                    loadLocalFiles()
+                }
             }
             .show()
     }

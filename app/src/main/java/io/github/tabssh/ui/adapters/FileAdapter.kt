@@ -9,7 +9,7 @@ import io.github.tabssh.R
 import io.github.tabssh.databinding.ItemFileBinding
 import io.github.tabssh.sftp.RemoteFileInfo
 import io.github.tabssh.utils.Format
-import java.io.File
+import io.github.tabssh.utils.LocalFileSource
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -36,10 +36,10 @@ fun RemoteFileInfo.typeLabel(context: Context): String = context.getString(
 class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
 
     // Local files
-    private var localFiles: List<File> = emptyList()
-    private var onFileClick: ((File) -> Unit)? = null
-    private var onFileLongClick: ((File) -> Unit)? = null
-    private val selectedLocalFiles = mutableSetOf<File>()
+    private var localFiles: List<LocalFileSource> = emptyList()
+    private var onFileClick: ((LocalFileSource) -> Unit)? = null
+    private var onFileLongClick: ((LocalFileSource) -> Unit)? = null
+    private val selectedLocalFiles = mutableSetOf<LocalFileSource>()
 
     // Remote files
     private var remoteFiles: List<RemoteFileInfo> = emptyList()
@@ -53,7 +53,7 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
     /**
      * Get selected local files
      */
-    fun getSelectedFiles(): List<File> {
+    fun getSelectedFiles(): List<LocalFileSource> {
         return if (isRemote) emptyList() else selectedLocalFiles.toList()
     }
     
@@ -100,7 +100,7 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
     /**
      * Toggle file selection
      */
-    fun toggleSelection(file: File) {
+    fun toggleSelection(file: LocalFileSource) {
         if (selectedLocalFiles.contains(file)) {
             selectedLocalFiles.remove(file)
         } else {
@@ -127,9 +127,9 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
      * Set local files to display
      */
     fun setLocalFiles(
-        files: List<File>,
-        onFileClick: ((File) -> Unit)? = null,
-        onFileLongClick: ((File) -> Unit)? = null
+        files: List<LocalFileSource>,
+        onFileClick: ((LocalFileSource) -> Unit)? = null,
+        onFileLongClick: ((LocalFileSource) -> Unit)? = null
     ) {
         val wasRemote = this.isRemote
         val old = if (wasRemote) emptyList() else this.localFiles
@@ -147,13 +147,13 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
                 override fun getOldListSize(): Int = old.size
                 override fun getNewListSize(): Int = files.size
                 override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
-                    old[oldItemPosition].absolutePath == files[newItemPosition].absolutePath
+                    old[oldItemPosition].id == files[newItemPosition].id
                 override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
                     val a = old[oldItemPosition]
                     val b = files[newItemPosition]
-                    return a.absolutePath == b.absolutePath &&
-                        a.length() == b.length() &&
-                        a.lastModified() == b.lastModified()
+                    return a.id == b.id &&
+                        a.length == b.length &&
+                        a.lastModified == b.lastModified
                 }
             })
             diff.dispatchUpdatesTo(this)
@@ -214,27 +214,27 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
         private val binding: ItemFileBinding
     ) : RecyclerView.ViewHolder(binding.root) {
         
-        fun bindLocalFile(file: File) {
+        fun bindLocalFile(file: LocalFileSource) {
             binding.apply {
                 val isSelected = selectedLocalFiles.contains(file)
-                
+
                 // Visual selection indicator
                 root.alpha = if (isSelected) 0.7f else 1.0f
                 root.setBackgroundColor(if (isSelected) androidx.core.content.ContextCompat.getColor(root.context, io.github.tabssh.R.color.selection_tint) else android.graphics.Color.TRANSPARENT)
-                
+
                 iconFile.setImageResource(getLocalFileIcon(file))
                 textFileName.text = file.name
                 textFileSize.text = if (file.isDirectory) {
-                    val itemCount = file.listFiles()?.size ?: 0
+                    val itemCount = file.childCount()
                     root.context.resources.getQuantityString(
                         R.plurals.filerow_item_count,
                         itemCount,
                         Format.count(itemCount)
                     )
                 } else {
-                    Format.size(root.context, file.length())
+                    Format.size(root.context, file.length)
                 }
-                textFileDate.text = dateFormat.format(Date(file.lastModified()))
+                textFileDate.text = dateFormat.format(Date(file.lastModified))
                 textFilePermissions.text = getLocalFilePermissions(file)
                 
                 // Click listeners
@@ -311,13 +311,13 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
             }
         }
         
-        private fun getLocalFileIcon(file: File): Int {
+        private fun getLocalFileIcon(file: LocalFileSource): Int {
             return when {
                 file.isDirectory -> R.drawable.ic_folder
                 file.name.endsWith(".txt") || file.name.endsWith(".log") -> R.drawable.ic_file_text
                 file.name.endsWith(".jpg") || file.name.endsWith(".png") -> R.drawable.ic_file_image
                 file.name.endsWith(".zip") || file.name.endsWith(".tar.gz") -> R.drawable.ic_file_archive
-                file.canExecute() -> R.drawable.ic_file_executable
+                file.canExecute -> R.drawable.ic_file_executable
                 else -> R.drawable.ic_file_generic
             }
         }
@@ -334,13 +334,13 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
             }
         }
         
-        private fun getLocalFilePermissions(file: File): String {
+        private fun getLocalFilePermissions(file: LocalFileSource): String {
             return buildString {
                 append(if (file.isDirectory) "d" else "-")
-                append(if (file.canRead()) "r" else "-")
-                append(if (file.canWrite()) "w" else "-")
-                append(if (file.canExecute()) "x" else "-")
-                // Other permissions not available in Java
+                append(if (file.canRead) "r" else "-")
+                append(if (file.canWrite) "w" else "-")
+                append(if (file.canExecute) "x" else "-")
+                // Other permissions not available for local files
                 append("------")
             }
         }

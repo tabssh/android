@@ -127,6 +127,7 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_X11_FORWARDING_DEFAULT = "x11_forwarding_default"
         private const val KEY_AGENT_FORWARDING_DEFAULT = "agent_forwarding_default"
         private const val KEY_FILE_OPEN_SIZE_LIMIT_MB = "file_open_size_limit_mb"
+        private const val KEY_SFTP_LOCAL_SAF_TREE_URI = "sftp_local_saf_tree_uri"
 
 
         // Accessibility preferences
@@ -513,6 +514,13 @@ class PreferenceManager(private val context: Context) {
     fun getFileOpenSizeLimitMb(): Int =
         getStringAsInt(KEY_FILE_OPEN_SIZE_LIMIT_MB, io.github.tabssh.utils.FileOpenPolicy.DEFAULT_SIZE_LIMIT_MB)
     fun setFileOpenSizeLimitMb(mb: Int) = setString(KEY_FILE_OPEN_SIZE_LIMIT_MB, mb.toString())
+
+    // SFTP local browser — persisted Storage Access Framework tree URI, used
+    // once the user grants a folder via ACTION_OPEN_DOCUMENT_TREE so local
+    // files are still listable on scoped-storage Android 11+ devices.
+    fun getSftpLocalSafTreeUri(): String? = getString(KEY_SFTP_LOCAL_SAF_TREE_URI, "").ifEmpty { null }
+    fun setSftpLocalSafTreeUri(uri: String) = setString(KEY_SFTP_LOCAL_SAF_TREE_URI, uri)
+    fun clearSftpLocalSafTreeUri() = remove(KEY_SFTP_LOCAL_SAF_TREE_URI)
 
     fun isX11ForwardingDefault(): Boolean = getBoolean(KEY_X11_FORWARDING_DEFAULT, false)
     fun setX11ForwardingDefault(enabled: Boolean) = setBoolean(KEY_X11_FORWARDING_DEFAULT, enabled)

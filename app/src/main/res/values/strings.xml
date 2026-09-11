@@ -3974,6 +3974,7 @@
     <string name="sftp_choose_storage_title">Choose local storage</string>
     <string name="sftp_storage_internal">Internal storage</string>
     <string name="sftp_storage_sd_card_fmt">SD card (%1$s)</string>
+    <string name="sftp_storage_browse_folder">Browse folder…</string>
 
     <!-- Menu titles: keyboard customization menu -->
     <string name="kbdcustom_menu_reset_to_default">Reset to default</string>
