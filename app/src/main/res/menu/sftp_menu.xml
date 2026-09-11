@@ -20,4 +20,10 @@
         android:icon="@drawable/ic_clear"
         app:showAsAction="ifRoom" />
 
+    <item
+        android:id="@+id/action_choose_local_storage"
+        android:title="@string/sftp_menu_choose_storage"
+        android:icon="@drawable/ic_folder"
+        app:showAsAction="never" />
+
 </menu>

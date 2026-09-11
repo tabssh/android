@@ -181,7 +181,12 @@ class SFTPManager(private val sshConnection: SSHConnection) {
 
             } catch (e: SftpException) {
                 Logger.e("SFTPManager", "Failed to list remote files in $path", e)
-                emptyList()
+                // Re-thrown (not swallowed as an empty list) so the caller can
+                // tell "genuinely empty directory" apart from "listing failed"
+                // and surface the real reason (permission denied, bad path,
+                // connection drop) to the user instead of rendering a blank
+                // panel with no explanation.
+                throw e
             }
         }
     }
@@ -241,7 +246,168 @@ class SFTPManager(private val sshConnection: SSHConnection) {
         Logger.d("SFTPManager", "Started upload: ${localFile.name} -> $remotePath")
         return task
     }
-    
+
+    /**
+     * Recursively upload a local directory to the remote server.
+     *
+     * A single [TransferTask] spans the whole subtree — progress reflects
+     * total bytes across every contained file, so the transfer list shows
+     * one row per folder upload rather than one per file inside it.
+     */
+    suspend fun uploadDirectory(
+        localDir: File,
+        remoteDir: String,
+        listener: TransferListener? = null
+    ): TransferTask {
+
+        val transferId = generateTransferId()
+        val totalBytes = localDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+
+        val task = TransferTask(
+            id = transferId,
+            type = TransferType.UPLOAD,
+            localPath = localDir.absolutePath,
+            remotePath = remoteDir,
+            totalBytes = totalBytes,
+            listener = listener
+        )
+
+        activeTransfers[transferId] = task
+
+        transferScope.launch {
+            performDirectoryUpload(task, localDir, remoteDir)
+        }
+
+        Logger.d("SFTPManager", "Started directory upload: ${localDir.name} -> $remoteDir")
+        return task
+    }
+
+    private suspend fun performDirectoryUpload(
+        task: TransferTask,
+        localDir: File,
+        remoteDir: String
+    ) = withContext(Dispatchers.IO) {
+        // Same dedicated-channel rationale as performUpload — a long-running
+        // transfer must not block or corrupt the shared metadata channel.
+        val channel = sshConnection.openDedicatedSftpChannel()
+        if (channel == null) {
+            task.complete(TransferResult.Error("SFTP not connected"))
+            return@withContext
+        }
+
+        try {
+            task.updateState(TransferState.ACTIVE)
+
+            if (!localDir.isDirectory) {
+                task.complete(TransferResult.Error("Local directory does not exist"))
+                return@withContext
+            }
+
+            uploadDirectoryContents(channel, localDir, remoteDir, task)
+
+            if (task.isCancelled()) {
+                task.complete(TransferResult.Cancelled)
+                Logger.i("SFTPManager", "Directory upload cancelled: ${task.localPath}")
+                return@withContext
+            }
+
+            task.complete(TransferResult.Success)
+            Logger.i("SFTPManager", "Directory upload completed: ${task.localPath}")
+
+            // Audit logging — best-effort, never break the SFTP success path.
+            try {
+                val app = sshConnection.context.applicationContext as? io.github.tabssh.TabSSHApplication
+                app?.auditLogManager?.logSftpUpload(
+                    sshConnection.profile,
+                    sshConnection.id,
+                    remoteDir,
+                    task.totalBytes
+                )
+            } catch (e: Exception) {
+                Logger.w("SFTPManager", "Audit log (sftpUpload) failed: ${e.message}")
+            }
+
+        } catch (e: CancellationException) {
+            task.complete(TransferResult.Cancelled)
+            throw e
+        } catch (e: Exception) {
+            Logger.e("SFTPManager", "Directory upload failed: ${task.localPath}", e)
+            task.complete(TransferResult.Error(e.message ?: "Directory upload failed"))
+        } finally {
+            // The dedicated channel is owned by this transfer — always release it.
+            try {
+                channel.disconnect()
+            } catch (e: Exception) {
+                Logger.w("SFTPManager", "Failed to disconnect transfer channel", e)
+            }
+            activeTransfers.remove(task.id)
+        }
+    }
+
+    /**
+     * Recursively mirrors [localDir]'s contents under [remoteDir]: creates
+     * each remote directory (tolerating "already exists") before descending
+     * into it or uploading its files. Reuses [transferWithProgress] so a
+     * directory upload accounts bytes through the same path as a single-file
+     * one, keeping the one [TransferTask]'s progress accurate across the
+     * whole subtree.
+     */
+    private suspend fun uploadDirectoryContents(
+        channel: ChannelSftp,
+        localDir: File,
+        remoteDir: String,
+        task: TransferTask
+    ) {
+        try {
+            channel.mkdir(remoteDir)
+        } catch (e: SftpException) {
+            val alreadyExists = try {
+                channel.stat(remoteDir).isDir
+            } catch (statError: SftpException) {
+                false
+            }
+            if (!alreadyExists) throw e
+        }
+
+        val children = localDir.listFiles()?.sortedBy { it.name } ?: emptyList()
+        for (child in children) {
+            if (task.isCancelled()) return
+
+            val remoteChildPath = if (remoteDir.endsWith("/")) {
+                "$remoteDir${child.name}"
+            } else {
+                "$remoteDir/${child.name}"
+            }
+
+            if (child.isDirectory) {
+                uploadDirectoryContents(channel, child, remoteChildPath, task)
+                continue
+            }
+
+            channel.put(remoteChildPath).use { out ->
+                child.inputStream().use { input ->
+                    transferWithProgress(input, out, task)
+                }
+            }
+
+            if (preservePermissions) {
+                try {
+                    channel.chmod(getLocalFilePermissions(child), remoteChildPath)
+                } catch (e: Exception) {
+                    Logger.w("SFTPManager", "Failed to preserve permissions for $remoteChildPath", e)
+                }
+            }
+
+            if (preserveTimestamps) {
+                try {
+                    channel.setMtime(remoteChildPath, (child.lastModified() / 1000).toInt())
+                } catch (e: Exception) {
+                    Logger.w("SFTPManager", "Failed to preserve timestamp for $remoteChildPath", e)
+                }
+            }
+        }
+    }
+
     /**
      * Download file from remote server
      */

@@ -2235,6 +2235,7 @@
     <string name="sftp_error_open_tab_failed_fmt">Failed to open SFTP for %1$s</string>
     <string name="sftp_error_load_local">Failed to load local directory</string>
     <string name="sftp_error_load_remote">Failed to load remote directory</string>
+    <string name="sftp_error_load_remote_fmt">Failed to load remote directory: %1$s</string>
     <string name="sftp_btn_upload_file_fmt">Upload %1$s</string>
     <string name="sftp_btn_download_file_fmt">Download %1$s</string>
     <string name="sftp_not_connected">SFTP not connected yet</string>
@@ -3969,6 +3970,10 @@
     <string name="sftp_menu_select_all_local">Select All Local</string>
     <string name="sftp_menu_select_all_remote">Select All Remote</string>
     <string name="sftp_menu_clear_completed">Clear Completed</string>
+    <string name="sftp_menu_choose_storage">Choose Storage</string>
+    <string name="sftp_choose_storage_title">Choose local storage</string>
+    <string name="sftp_storage_internal">Internal storage</string>
+    <string name="sftp_storage_sd_card_fmt">SD card (%1$s)</string>
 
     <!-- Menu titles: keyboard customization menu -->
     <string name="kbdcustom_menu_reset_to_default">Reset to default</string>

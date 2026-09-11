@@ -465,7 +465,7 @@ class SFTPActivity : TabSSHActivity() {
                 runOnUiThread {
                     binding.loadingRemote.visibility = View.GONE
                 }
-                showError(getString(R.string.sftp_error_load_remote))
+                showError(getString(R.string.sftp_error_load_remote_fmt, e.message.orEmpty()))
             }
         }
     }
@@ -532,11 +532,12 @@ class SFTPActivity : TabSSHActivity() {
                 val successCount = withContext(Dispatchers.IO) {
                     var count = 0
                     for (file in selectedFiles) {
-                        if (file.isDirectory) continue
-                        sftpManager.uploadFile(
-                            localFile = file,
-                            remotePath = currentRemotePath + "/" + file.name
-                        )
+                        val remotePath = currentRemotePath + "/" + file.name
+                        if (file.isDirectory) {
+                            sftpManager.uploadDirectory(localDir = file, remoteDir = remotePath)
+                        } else {
+                            sftpManager.uploadFile(localFile = file, remotePath = remotePath)
+                        }
                         count++
                     }
                     count
@@ -941,61 +942,71 @@ class SFTPActivity : TabSSHActivity() {
                 val remotePath = "$currentRemotePath/${localFile.name}"
 
                 val transferTask = withContext(Dispatchers.IO) {
-                    sftpManager.uploadFile(
-                        localFile = localFile,
-                        remotePath = remotePath,
-                        listener = object : TransferListener {
-                            override fun onProgress(transfer: TransferTask, bytesTransferred: Long, totalBytes: Long) {
-                                runOnUiThread {
-                                    updateTransferProgress(transfer)
+                    val listener = object : TransferListener {
+                        override fun onProgress(transfer: TransferTask, bytesTransferred: Long, totalBytes: Long) {
+                            runOnUiThread {
+                                updateTransferProgress(transfer)
 
-                                    // Update notification with progress
-                                    io.github.tabssh.utils.NotificationHelper.showFileTransferProgress(
-                                        this@SFTPActivity,
-                                        transfer.id.hashCode(),
-                                        localFile.name,
-                                        bytesTransferred,
-                                        totalBytes,
-                                        isUpload = true
-                                    )
-                                }
+                                // Update notification with progress
+                                io.github.tabssh.utils.NotificationHelper.showFileTransferProgress(
+                                    this@SFTPActivity,
+                                    transfer.id.hashCode(),
+                                    localFile.name,
+                                    bytesTransferred,
+                                    totalBytes,
+                                    isUpload = true
+                                )
                             }
+                        }
 
-                            override fun onCompleted(transfer: TransferTask, result: io.github.tabssh.sftp.TransferResult) {
-                                runOnUiThread {
-                                    handleTransferCompleted(transfer, result)
-                                    // Refresh remote files
-                                    loadRemoteDirectory(currentRemotePath)
+                        override fun onCompleted(transfer: TransferTask, result: io.github.tabssh.sftp.TransferResult) {
+                            runOnUiThread {
+                                handleTransferCompleted(transfer, result)
+                                // Refresh remote files
+                                loadRemoteDirectory(currentRemotePath)
 
-                                    // Show completion notification
-                                    when (result) {
-                                        is io.github.tabssh.sftp.TransferResult.Success -> {
-                                            io.github.tabssh.utils.NotificationHelper.showFileTransferComplete(
-                                                this@SFTPActivity,
-                                                transfer.id.hashCode(),
-                                                localFile.name,
-                                                isUpload = true
-                                            )
-                                        }
-                                        is io.github.tabssh.sftp.TransferResult.Error -> {
-                                            io.github.tabssh.utils.NotificationHelper.showConnectionError(
-                                                this@SFTPActivity,
-                                                localFile.name,
-                                                getString(R.string.sftp_upload_failed_fmt, result.message)
-                                            )
-                                        }
-                                        is io.github.tabssh.sftp.TransferResult.Cancelled -> {
-                                            // Cancel notification silently
-                                            io.github.tabssh.utils.NotificationHelper.cancelNotification(
-                                                this@SFTPActivity,
-                                                transfer.id.hashCode()
-                                            )
-                                        }
+                                // Show completion notification
+                                when (result) {
+                                    is io.github.tabssh.sftp.TransferResult.Success -> {
+                                        io.github.tabssh.utils.NotificationHelper.showFileTransferComplete(
+                                            this@SFTPActivity,
+                                            transfer.id.hashCode(),
+                                            localFile.name,
+                                            isUpload = true
+                                        )
+                                    }
+                                    is io.github.tabssh.sftp.TransferResult.Error -> {
+                                        io.github.tabssh.utils.NotificationHelper.showConnectionError(
+                                            this@SFTPActivity,
+                                            localFile.name,
+                                            getString(R.string.sftp_upload_failed_fmt, result.message)
+                                        )
+                                    }
+                                    is io.github.tabssh.sftp.TransferResult.Cancelled -> {
+                                        // Cancel notification silently
+                                        io.github.tabssh.utils.NotificationHelper.cancelNotification(
+                                            this@SFTPActivity,
+                                            transfer.id.hashCode()
+                                        )
                                     }
                                 }
                             }
                         }
-                    )
+                    }
+
+                    if (localFile.isDirectory) {
+                        sftpManager.uploadDirectory(
+                            localDir = localFile,
+                            remoteDir = remotePath,
+                            listener = listener
+                        )
+                    } else {
+                        sftpManager.uploadFile(
+                            localFile = localFile,
+                            remotePath = remotePath,
+                            listener = listener
+                        )
+                    }
                 }
 
                 activeTransfers.add(transferTask)
@@ -1313,7 +1324,56 @@ class SFTPActivity : TabSSHActivity() {
                 clearCompletedTransfers()
                 true
             }
+            R.id.action_choose_local_storage -> {
+                showChooseLocalStorageDialog()
+                true
+            }
             else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    /**
+     * Lets the user switch the local file browser's root between internal
+     * storage and any inserted SD card. A single-volume device (no SD card)
+     * has nothing to choose between, so the dialog is skipped in that case.
+     */
+    private fun showChooseLocalStorageDialog() {
+        val roots = externalStorageRoots()
+        if (roots.size <= 1) {
+            showToast(getString(R.string.sftp_storage_internal))
+            return
+        }
+        val labels = roots.map { it.first }.toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.sftp_choose_storage_title)
+            .setItems(labels) { _, which ->
+                currentLocalPath = roots[which].second
+                loadLocalDirectory(currentLocalPath)
+            }
+            .show()
+    }
+
+    /**
+     * Enumerates this device's external storage volumes (internal "primary"
+     * storage plus any inserted SD card) as (label, absolute root path)
+     * pairs. Derived from [Context.getExternalFilesDirs] — index 0 is always
+     * the primary volume — whose app-private directory always ends in
+     * "/Android/data/<package>/files"; stripping that fixed suffix recovers
+     * the volume root without depending on StorageVolume.getDirectory(),
+     * which only exists on API 30+ while this app's minSdk is 24.
+     */
+    private fun externalStorageRoots(): List<Pair<String, String>> {
+        val suffix = "/Android/data/$packageName/files"
+        return getExternalFilesDirs(null).filterNotNull().mapIndexedNotNull { index, dir ->
+            val path = dir.absolutePath
+            if (!path.endsWith(suffix)) return@mapIndexedNotNull null
+            val root = path.removeSuffix(suffix)
+            val label = if (index == 0) {
+                getString(R.string.sftp_storage_internal)
+            } else {
+                getString(R.string.sftp_storage_sd_card_fmt, File(root).name)
+            }
+            label to root
         }
     }
     
