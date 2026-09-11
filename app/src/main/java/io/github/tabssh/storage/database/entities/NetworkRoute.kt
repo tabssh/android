@@ -73,7 +73,9 @@ data class NetworkRoute(
 
     // Marks the bundled-Tor preset: selecting this route starts the embedded
     // tor process (TorManager) and routes SOCKS5 through its loopback listener.
-    // An Orbot route is an ordinary PROXY_SOCKS5 with this flag false.
+    // A manually configured SOCKS5 proxy (including one pointed at a
+    // separately installed Orbot) is an ordinary PROXY_SOCKS5 with this flag
+    // false.
     @ColumnInfo(name = "built_in_tor")
     val builtInTor: Boolean = false,
 
@@ -136,9 +138,6 @@ data class NetworkRoute(
          * means "inherit the global default"; this value means "opt out".
          */
         const val DIRECT = "DIRECT"
-
-        /** Standard loopback SOCKS port Orbot exposes by default. */
-        const val ORBOT_SOCKS_PORT = 9050
 
         /**
          * Build a NetworkRoute from the legacy inline proxy columns on a

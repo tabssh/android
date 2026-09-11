@@ -101,28 +101,14 @@
                         android:textAppearance="?attr/textAppearanceLabelLarge"
                         android:layout_marginBottom="@dimen/space_sm" />
 
-                    <com.google.android.material.chip.ChipGroup
-                        android:layout_width="match_parent"
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_preset_tor"
+                        style="@style/Widget.Material3.Chip.Suggestion"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        app:singleLine="false">
-
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chip_preset_orbot"
-                            style="@style/Widget.Material3.Chip.Suggestion"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/route_preset_orbot" />
-
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chip_preset_tor"
-                            style="@style/Widget.Material3.Chip.Suggestion"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:visibility="gone"
-                            android:text="@string/route_preset_tor"
-                            tools:visibility="visible" />
-
-                    </com.google.android.material.chip.ChipGroup>
+                        android:visibility="gone"
+                        android:text="@string/route_preset_tor"
+                        tools:visibility="visible" />
 
                     <TextView
                         android:id="@+id/text_preset_tor_desc"

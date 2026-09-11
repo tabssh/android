@@ -427,7 +427,6 @@
     <string name="route_type_proxy_socks5">SOCKS5 proxy</string>
     <string name="route_type_jump_host">SSH jump host</string>
     <string name="route_type_tor">Tor (built-in)</string>
-    <string name="route_preset_orbot">Orbot (SOCKS5 127.0.0.1:9050)</string>
     <string name="route_preset_tor">Tor (built-in)</string>
     <string name="route_preset_tor_desc">Route through the app\'s bundled Tor client.</string>
     <string name="route_tor_status_stopped">Tor is not running</string>

@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * In-app native Tor client — the bundled counterpart to Orbot.
+ * In-app native Tor client — a zero-configuration, bundled Tor proxy.
  *
  * Spawns the bundled `tor` binary (cross-compiled per ABI under
  * `app/src/main/jniLibs/<abi>/libtor.so` — the `lib*.so` naming trick is what
