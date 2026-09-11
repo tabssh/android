@@ -441,7 +441,186 @@ class SFTPManager(private val sshConnection: SSHConnection) {
         Logger.d("SFTPManager", "Started download: $remotePath -> ${localFile.name}")
         return task
     }
-    
+
+    /**
+     * Recursively download a remote directory to a local directory.
+     *
+     * Mirrors [uploadDirectory]: a single [TransferTask] spans the whole
+     * subtree, with total bytes computed up front by walking the remote
+     * tree via `ls`, so the transfer list shows one row per folder download
+     * rather than one per file inside it.
+     */
+    suspend fun downloadDirectory(
+        remotePath: String,
+        localDir: File,
+        listener: TransferListener? = null
+    ): TransferTask {
+
+        val transferId = generateTransferId()
+        val totalBytes = withContext(Dispatchers.IO) {
+            withChannel(0L) { channel -> remoteDirectorySize(channel, remotePath) }
+        }
+
+        val task = TransferTask(
+            id = transferId,
+            type = TransferType.DOWNLOAD,
+            localPath = localDir.absolutePath,
+            remotePath = remotePath,
+            totalBytes = totalBytes,
+            listener = listener
+        )
+
+        activeTransfers[transferId] = task
+
+        transferScope.launch {
+            performDirectoryDownload(task, remotePath, localDir)
+        }
+
+        Logger.d("SFTPManager", "Started directory download: $remotePath -> ${localDir.name}")
+        return task
+    }
+
+    /**
+     * Sums file sizes under [remoteDir] recursively via `ls`, skipping any
+     * entry with an unsafe name (same rule as [listRemoteFiles]). Assumes
+     * the caller already holds [channelMutex] (via [withChannel]).
+     */
+    private fun remoteDirectorySize(channel: ChannelSftp, remoteDir: String): Long {
+        val entries = try {
+            @Suppress("UNCHECKED_CAST")
+            channel.ls(remoteDir) as Vector<ChannelSftp.LsEntry>
+        } catch (e: SftpException) {
+            Logger.w("SFTPManager", "Failed to size remote directory $remoteDir", e)
+            return 0L
+        }
+
+        var total = 0L
+        for (entry in entries) {
+            if (!isSafeRemoteName(entry.filename)) continue
+            val childPath = if (remoteDir.endsWith("/")) "$remoteDir${entry.filename}" else "$remoteDir/${entry.filename}"
+            total += if (entry.attrs.isDir) {
+                remoteDirectorySize(channel, childPath)
+            } else {
+                entry.attrs.size
+            }
+        }
+        return total
+    }
+
+    private suspend fun performDirectoryDownload(
+        task: TransferTask,
+        remoteDir: String,
+        localDir: File
+    ) = withContext(Dispatchers.IO) {
+        // Same dedicated-channel rationale as performDownload — a long-running
+        // transfer must not block or corrupt the shared metadata channel.
+        val channel = sshConnection.openDedicatedSftpChannel()
+        if (channel == null) {
+            task.complete(TransferResult.Error("SFTP not connected"))
+            return@withContext
+        }
+
+        try {
+            task.updateState(TransferState.ACTIVE)
+
+            downloadDirectoryContents(channel, remoteDir, localDir, task)
+
+            if (task.isCancelled()) {
+                task.complete(TransferResult.Cancelled)
+                Logger.i("SFTPManager", "Directory download cancelled: ${task.remotePath}")
+                return@withContext
+            }
+
+            task.complete(TransferResult.Success)
+            Logger.i("SFTPManager", "Directory download completed: ${task.remotePath}")
+
+            // Audit logging — best-effort, never break the SFTP success path.
+            try {
+                val app = sshConnection.context.applicationContext as? io.github.tabssh.TabSSHApplication
+                app?.auditLogManager?.logSftpDownload(
+                    sshConnection.profile,
+                    sshConnection.id,
+                    remoteDir,
+                    task.totalBytes
+                )
+            } catch (e: Exception) {
+                Logger.w("SFTPManager", "Audit log (sftpDownload) failed: ${e.message}")
+            }
+
+        } catch (e: CancellationException) {
+            task.complete(TransferResult.Cancelled)
+            throw e
+        } catch (e: Exception) {
+            Logger.e("SFTPManager", "Directory download failed: ${task.remotePath}", e)
+            task.complete(TransferResult.Error(e.message ?: "Directory download failed"))
+        } finally {
+            // The dedicated channel is owned by this transfer — always release it.
+            try {
+                channel.disconnect()
+            } catch (e: Exception) {
+                Logger.w("SFTPManager", "Failed to disconnect transfer channel", e)
+            }
+            activeTransfers.remove(task.id)
+        }
+    }
+
+    /**
+     * Recursively mirrors [remoteDir]'s contents into [localDir]: creates
+     * each local directory before descending into it or downloading its
+     * files. Reuses [transferWithProgress] so a directory download accounts
+     * bytes through the same path as a single-file one.
+     */
+    private suspend fun downloadDirectoryContents(
+        channel: ChannelSftp,
+        remoteDir: String,
+        localDir: File,
+        task: TransferTask
+    ) {
+        if (!localDir.exists() && !localDir.mkdirs()) {
+            throw IOException("Failed to create local directory: ${localDir.absolutePath}")
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        val entries = channel.ls(remoteDir) as Vector<ChannelSftp.LsEntry>
+        val children = entries
+            .filter { isSafeRemoteName(it.filename) }
+            .sortedWith(compareBy<ChannelSftp.LsEntry> { !it.attrs.isDir }.thenBy { it.filename.lowercase() })
+
+        for (entry in children) {
+            if (task.isCancelled()) return
+
+            val childRemotePath = if (remoteDir.endsWith("/")) "$remoteDir${entry.filename}" else "$remoteDir/${entry.filename}"
+            val childLocalFile = File(localDir, entry.filename)
+
+            if (entry.attrs.isDir) {
+                downloadDirectoryContents(channel, childRemotePath, childLocalFile, task)
+                continue
+            }
+
+            channel.get(childRemotePath).use { inputStream ->
+                FileOutputStream(childLocalFile, false).use { output ->
+                    transferWithProgress(inputStream, output, task)
+                }
+            }
+
+            if (preservePermissions) {
+                try {
+                    setLocalFilePermissions(childLocalFile, entry.attrs.permissionsString)
+                } catch (e: Exception) {
+                    Logger.w("SFTPManager", "Failed to preserve permissions for $childRemotePath", e)
+                }
+            }
+
+            if (preserveTimestamps) {
+                try {
+                    childLocalFile.setLastModified(entry.attrs.mTime * 1000L)
+                } catch (e: Exception) {
+                    Logger.w("SFTPManager", "Failed to preserve timestamp for $childRemotePath", e)
+                }
+            }
+        }
+    }
+
     private suspend fun performUpload(task: TransferTask) = withContext(Dispatchers.IO) {
         // Each transfer runs on its own dedicated ChannelSftp. JSch channels are
         // not thread-safe, and a long-running transfer must not block or corrupt

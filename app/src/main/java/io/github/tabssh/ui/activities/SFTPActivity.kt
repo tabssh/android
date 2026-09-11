@@ -726,11 +726,15 @@ class SFTPActivity : TabSSHActivity() {
                 var okCount = 0
                 var failCount = 0
                 for (entry in selected) {
-                    if (entry.isDirectory) continue
                     val remote = "$currentRemotePath/${entry.name}"
                     val materialized = materializeForUpload(entry)
                     try {
-                        if (client.uploadFile(materialized, remote, null)) okCount++ else failCount++
+                        val ok = if (entry.isDirectory) {
+                            client.uploadDirectory(materialized, remote, null)
+                        } else {
+                            client.uploadFile(materialized, remote, null)
+                        }
+                        if (ok) okCount++ else failCount++
                     } finally {
                         cleanupMaterialized(entry, materialized)
                     }
@@ -763,16 +767,24 @@ class SFTPActivity : TabSSHActivity() {
                     var count = 0
                     val saf = currentLocalSaf
                     for (file in selectedFiles) {
-                        if (file.isDirectory) continue
                         if (saf != null) {
                             val temp = File(cacheDir, "saf-download/${UUID.randomUUID()}/${file.name}")
                             temp.parentFile?.mkdirs()
-                            sftpManager.downloadFile(remotePath = file.path, localFile = temp)
-                            copyLocalFileIntoSaf(temp, saf, file.name)
+                            if (file.isDirectory) {
+                                sftpManager.downloadDirectory(remotePath = file.path, localDir = temp)
+                                copyLocalDirectoryIntoSaf(temp, saf, file.name)
+                            } else {
+                                sftpManager.downloadFile(remotePath = file.path, localFile = temp)
+                                copyLocalFileIntoSaf(temp, saf, file.name)
+                            }
                             temp.parentFile?.deleteRecursively()
                         } else {
                             val localFile = File(currentLocalPath, file.name)
-                            sftpManager.downloadFile(remotePath = file.path, localFile = localFile)
+                            if (file.isDirectory) {
+                                sftpManager.downloadDirectory(remotePath = file.path, localDir = localFile)
+                            } else {
+                                sftpManager.downloadFile(remotePath = file.path, localFile = localFile)
+                            }
                         }
                         count++
                     }
@@ -802,6 +814,25 @@ class SFTPActivity : TabSSHActivity() {
         val target = parentDoc.findFile(name) ?: parentDoc.createFile(mime, name) ?: return
         contentResolver.openOutputStream(target.uri, "w")?.use { output ->
             src.inputStream().use { input -> input.copyTo(output) }
+        }
+    }
+
+    /**
+     * Recursively copies a downloaded temp directory tree into a granted
+     * SAF tree, mirroring [copySafToLocal]'s upload-side reverse. Creates
+     * (or reuses) the named child directory under [parentDoc], then walks
+     * [src]'s children, dispatching each to [copyLocalDirectoryIntoSaf]
+     * (subdirectories) or [copyLocalFileIntoSaf] (files).
+     */
+    private fun copyLocalDirectoryIntoSaf(src: File, parentDoc: DocumentFile, name: String) {
+        val targetDir = parentDoc.findFile(name)?.takeIf { it.isDirectory }
+            ?: parentDoc.createDirectory(name) ?: return
+        src.listFiles()?.forEach { child ->
+            if (child.isDirectory) {
+                copyLocalDirectoryIntoSaf(child, targetDir, child.name)
+            } else {
+                copyLocalFileIntoSaf(child, targetDir, child.name)
+            }
         }
     }
     
@@ -1202,10 +1233,7 @@ class SFTPActivity : TabSSHActivity() {
                 }
 
                 val transferTask = withContext(Dispatchers.IO) {
-                    sftpManager.downloadFile(
-                        remotePath = remoteFile.path,
-                        localFile = localFile,
-                        listener = object : TransferListener {
+                    val listener = object : TransferListener {
                             override fun onProgress(transfer: TransferTask, bytesTransferred: Long, totalBytes: Long) {
                                 runOnUiThread {
                                     updateTransferProgress(transfer)
@@ -1224,7 +1252,11 @@ class SFTPActivity : TabSSHActivity() {
 
                             override fun onCompleted(transfer: TransferTask, result: io.github.tabssh.sftp.TransferResult) {
                                 if (saf != null && result is io.github.tabssh.sftp.TransferResult.Success) {
-                                    copyLocalFileIntoSaf(localFile, saf, remoteFile.name)
+                                    if (remoteFile.isDirectory) {
+                                        copyLocalDirectoryIntoSaf(localFile, saf, remoteFile.name)
+                                    } else {
+                                        copyLocalFileIntoSaf(localFile, saf, remoteFile.name)
+                                    }
                                     localFile.parentFile?.deleteRecursively()
                                 }
                                 runOnUiThread {
@@ -1260,7 +1292,20 @@ class SFTPActivity : TabSSHActivity() {
                                 }
                             }
                         }
-                    )
+
+                    if (remoteFile.isDirectory) {
+                        sftpManager.downloadDirectory(
+                            remotePath = remoteFile.path,
+                            localDir = localFile,
+                            listener = listener
+                        )
+                    } else {
+                        sftpManager.downloadFile(
+                            remotePath = remoteFile.path,
+                            localFile = localFile,
+                            listener = listener
+                        )
+                    }
                 }
 
                 activeTransfers.add(transferTask)

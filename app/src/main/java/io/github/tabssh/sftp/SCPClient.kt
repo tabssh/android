@@ -147,6 +147,155 @@ class SCPClient(private val sshConnection: SSHConnection) {
     }
 
     /**
+     * Recursively upload a local directory to the remote server, mirroring
+     * [SFTPManager.uploadDirectory]. SCP's directory mode is `scp -t -r`:
+     * the server expects a `D<mode> 0 <name>\n` record before descending
+     * into a directory and an `E\n` record after finishing it, interleaved
+     * with the same `C<mode> <len> <name>\n` file records [uploadFile]
+     * already sends.
+     *
+     * A single [TransferTask] spans the whole subtree so the transfer list
+     * shows one row per folder upload rather than one per file inside it.
+     */
+    suspend fun uploadDirectory(
+        localDir: File,
+        remoteDir: String,
+        listener: TransferListener? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (!localDir.isDirectory) {
+            Logger.e(TAG, "Local directory missing or not a directory: $localDir")
+            return@withContext false
+        }
+
+        val session = sshConnection.jschSession()
+        if (session == null || !session.isConnected) {
+            Logger.e(TAG, "Underlying SSH session not connected")
+            return@withContext false
+        }
+
+        val totalBytes = localDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        val task = TransferTask(
+            id = "scp-dir-${System.currentTimeMillis()}",
+            type = TransferType.UPLOAD,
+            localPath = localDir.absolutePath,
+            remotePath = remoteDir,
+            totalBytes = totalBytes,
+            listener = listener
+        )
+        task.updateState(TransferState.ACTIVE)
+
+        var channel: ChannelExec? = null
+        var out: OutputStream? = null
+        var inStream: InputStream? = null
+        try {
+            // -r enables directory mode on the server-side scp process.
+            val cmd = "scp -t -r " + shellEscape(remoteDir)
+            channel = session.openChannel("exec") as ChannelExec
+            channel.setCommand(cmd)
+
+            out = channel.outputStream
+            inStream = channel.inputStream
+            channel.connect()
+
+            if (!checkAck(inStream)) {
+                Logger.e(TAG, "SCP server didn't ack initial handshake")
+                task.complete(TransferResult.Error("SCP handshake failed"))
+                return@withContext false
+            }
+
+            uploadDirectoryContents(localDir, out, inStream, task)
+
+            if (task.isCancelled()) {
+                task.complete(TransferResult.Cancelled)
+                Logger.i(TAG, "SCP directory upload cancelled: ${localDir.name}")
+                return@withContext false
+            }
+
+            task.complete(TransferResult.Success)
+            Logger.i(TAG, "SCP directory upload complete: ${localDir.name} → $remoteDir")
+            true
+        } catch (e: Exception) {
+            Logger.e(TAG, "SCP directory upload failed", e)
+            task.complete(TransferResult.Error(e.message ?: "SCP error"))
+            false
+        } finally {
+            try { out?.close() } catch (_: Exception) {}
+            try { inStream?.close() } catch (_: Exception) {}
+            try { channel?.disconnect() } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * Streams [localDir]'s contents as SCP directory-mode records: a
+     * `D<mode> 0 <name>` push before descending into a child directory,
+     * matching `C<mode> <len> <name>` + data for each file, and an `E`
+     * pop once a directory's entries are exhausted. Each record and each
+     * file's payload is ack-checked exactly like the single-file path in
+     * [uploadFile].
+     */
+    private fun uploadDirectoryContents(
+        localDir: File,
+        out: OutputStream,
+        inStream: InputStream,
+        task: TransferTask
+    ) {
+        val children = localDir.listFiles()?.sortedBy { it.name } ?: emptyList()
+        for (child in children) {
+            if (task.isCancelled()) return
+
+            if (child.name.isEmpty() || child.name == "." || child.name == ".." ||
+                child.name.contains('/') || child.name.any { it.code < 0x20 }
+            ) {
+                Logger.w(TAG, "SCP skipped unsafe local filename: ${child.name}")
+                continue
+            }
+
+            if (child.isDirectory) {
+                val header = "D0755 0 ${child.name}\n"
+                out.write(header.toByteArray(Charsets.US_ASCII))
+                out.flush()
+                if (!checkAck(inStream)) {
+                    throw java.io.IOException("SCP server rejected directory header for ${child.name}")
+                }
+
+                uploadDirectoryContents(child, out, inStream, task)
+
+                out.write("E\n".toByteArray(Charsets.US_ASCII))
+                out.flush()
+                if (!checkAck(inStream)) {
+                    throw java.io.IOException("SCP server rejected directory pop for ${child.name}")
+                }
+                continue
+            }
+
+            val header = "C0644 ${child.length()} ${child.name}\n"
+            out.write(header.toByteArray(Charsets.US_ASCII))
+            out.flush()
+            if (!checkAck(inStream)) {
+                throw java.io.IOException("SCP server rejected file header for ${child.name}")
+            }
+
+            child.inputStream().use { fin ->
+                val buf = ByteArray(BUFFER_SIZE)
+                while (true) {
+                    val read = fin.read(buf)
+                    if (read <= 0) break
+                    out.write(buf, 0, read)
+                    task.addBytesTransferred(read.toLong())
+                    task.notifyProgress()
+                }
+                out.flush()
+            }
+
+            out.write(byteArrayOf(0))
+            out.flush()
+            if (!checkAck(inStream)) {
+                throw java.io.IOException("SCP server rejected transfer terminator for ${child.name}")
+            }
+        }
+    }
+
+    /**
      * SCP "ack" byte protocol: server writes 0=ok, 1=warn (followed by
      * message+\n), 2=error (followed by message+\n). Returns true on 0.
      */
