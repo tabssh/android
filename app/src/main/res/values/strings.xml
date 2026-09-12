@@ -1118,6 +1118,18 @@
     <string name="virt_viewer_password_message">%1$s requires a password. It is used for this session only and is never saved.</string>
     <string name="virt_viewer_password_required">A password is required for this connection</string>
 
+    <!-- JNLP console-launcher files (BMC "Launch Console" downloads) -->
+    <string name="jnlp_dialog_title">Open console from JNLP file?</string>
+    <string name="jnlp_dialog_message">%1$s\n\nThis was extracted from a Java console launcher file. TabSSH will attempt a standard VNC connection — if the console uses a proprietary protocol, this will fail.</string>
+    <string name="jnlp_host_hint">Host</string>
+    <string name="jnlp_port_hint">Port</string>
+    <string name="save_as_vnc_host">Save as VNC host</string>
+    <string name="jnlp_unreadable_file">Could not read this JNLP file</string>
+    <string name="jnlp_invalid_file">Could not parse this JNLP file: %1$s</string>
+    <string name="jnlp_invalid_port">Enter a valid port (1–65535)</string>
+    <string name="jnlp_save_failed">Could not save VNC host: %1$s</string>
+    <string name="jnlp_connect_failed">Connection failed: %1$s\n\nThis console may not use a standard VNC protocol.</string>
+
     <!-- Hypervisor list -->
     <string name="hypervisor_icon_proxmox">🌐</string>
     <string name="hypervisor_icon_xcpng">☁️</string>

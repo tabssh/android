@@ -59,6 +59,7 @@ object VncDirectConnector {
                 tlsPort = effectivePort,
                 tlsVerify = host.tlsVerify,
                 vncUsername = username,
+                securityType = host.securityType,
                 consoleMode = consoleMode
             )
             Logger.d(TAG, "Socket connected; RfbClient constructed for ${host.name}")

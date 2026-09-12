@@ -371,6 +371,28 @@
                 <data android:pathPattern=".*\\..*\\.vv" />
                 <data android:pathPattern=".*\\..*\\..*\\.vv" />
             </intent-filter>
+            <!-- JNLP console-launcher files handed out by BMC/KVM-over-IP web
+                 UIs (iLO, iDRAC, Supermicro/AMI MegaRAC "Launch Console"
+                 buttons). Same typed-MIME-plus-extension-fallback shape as
+                 the .vv filters above. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:mimeType="application/x-java-jnlp-file" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.jnlp" />
+                <data android:pathPattern=".*\\..*\\.jnlp" />
+                <data android:pathPattern=".*\\..*\\..*\\.jnlp" />
+            </intent-filter>
         </activity>
 
         <!-- SFTP file browser activity -->

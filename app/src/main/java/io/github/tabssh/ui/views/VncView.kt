@@ -19,6 +19,7 @@ import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
 import io.github.tabssh.hypervisor.console.rfb.RfbConstants
 import io.github.tabssh.hypervisor.console.rfb.RfbListener
+import io.github.tabssh.hypervisor.vnc.console.VncConsoleChannel
 import io.github.tabssh.utils.logging.Logger
 import kotlin.math.max
 import kotlin.math.min
@@ -569,11 +570,21 @@ class VncView @JvmOverloads constructor(
      * Takes a code point rather than a [Char] so characters outside the BMP
      * (emoji, supplementary planes) can be sent as one keysym instead of two
      * meaningless surrogate halves.
+     *
+     * Shifted characters are bracketed with a synthetic Shift_L for the same
+     * reason [VncConsoleChannel.charNeedsShift] documents: without it, a '|'
+     * or '@' tapped on the custom keyboard bar arrives at QEMU/libvirt as the
+     * unshifted glyph. Text typed through the IME already gets this treatment
+     * on the channel's own `sendText` path; this closes the gap for the bar
+     * and for any other direct caller.
      */
     fun sendCodePoint(cp: Int) {
         val keysym = codePointToKeysym(cp)
+        val needsShift = cp in 0..0xFFFF && VncConsoleChannel.charNeedsShift(cp.toChar())
+        if (needsShift) onKeyEvent?.invoke(RfbConstants.KEY_SHIFT_L, true)
         onKeyEvent?.invoke(keysym, true)
         onKeyEvent?.invoke(keysym, false)
+        if (needsShift) onKeyEvent?.invoke(RfbConstants.KEY_SHIFT_L, false)
     }
 
     private fun androidKeyToKeysym(keyCode: Int, event: KeyEvent): Long? {
@@ -581,6 +592,7 @@ class VncView @JvmOverloads constructor(
             KeyEvent.KEYCODE_DEL -> RfbConstants.KEY_BACK_SPACE
             KeyEvent.KEYCODE_TAB        -> RfbConstants.KEY_TAB
             KeyEvent.KEYCODE_ENTER      -> RfbConstants.KEY_RETURN
+            KeyEvent.KEYCODE_NUMPAD_ENTER -> RfbConstants.KEY_RETURN
             KeyEvent.KEYCODE_ESCAPE     -> RfbConstants.KEY_ESCAPE
             KeyEvent.KEYCODE_FORWARD_DEL -> RfbConstants.KEY_DELETE
             KeyEvent.KEYCODE_INSERT     -> RfbConstants.KEY_INSERT

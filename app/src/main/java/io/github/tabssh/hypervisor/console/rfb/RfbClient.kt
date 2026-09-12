@@ -50,6 +50,18 @@ class RfbClient(
     /** Username for VeNCrypt Plain sub-types. */
     private val vncUsername: String? = null,
     /**
+     * The security type the user demanded for this host, as stored on
+     * `VncHost.securityType`: `"auto"`, `"none"`, `"vnc_auth"`,
+     * `"vencrypt_tls_none"`, or `"vencrypt_x509_none"`.
+     *
+     * `"auto"` (the default) keeps the built-in preference order — VeNCrypt,
+     * then None, then VNC auth. Any other value restricts the handshake to
+     * exactly that type and fails with a clear message when the server does
+     * not offer it, rather than silently negotiating something the user did
+     * not ask for.
+     */
+    private val securityType: String = SECURITY_PREF_AUTO,
+    /**
      * When true, operate in text-console mode:
      *  - ClientInit shared-flag = 0 (exclusive access) instead of 1 (shared)
      *  - Support ExtendedDesktopSize for client-initiated resize
@@ -65,6 +77,16 @@ class RfbClient(
     companion object {
         private const val TAG = "RfbClient"
         private const val RFB_VERSION = "RFB 003.008\n"
+
+        /**
+         * Values of `VncHost.securityType`, written by the security-type
+         * dropdown in `VncHostEditActivity` and honoured by [authenticate].
+         */
+        const val SECURITY_PREF_AUTO = "auto"
+        const val SECURITY_PREF_NONE = "none"
+        const val SECURITY_PREF_VNC_AUTH = "vnc_auth"
+        const val SECURITY_PREF_VENCRYPT_TLS_NONE = "vencrypt_tls_none"
+        const val SECURITY_PREF_VENCRYPT_X509_NONE = "vencrypt_x509_none"
 
         /**
          * If this many milliseconds pass without receiving a FramebufferUpdate,
@@ -517,7 +539,10 @@ class RfbClient(
         val hasPlainFallback = types.contains(RfbConstants.SECURITY_NONE.toByte()) ||
             (types.contains(RfbConstants.SECURITY_VNC_AUTH.toByte()) && vncPassword != null)
         val preferVeNCrypt = rawSocket != null && (anonTlsUsable || !hasPlainFallback)
-        if (!preferVeNCrypt && types.contains(RfbConstants.SECURITY_VENCRYPT.toByte()) && rawSocket != null) {
+        val autoNegotiate = securityType == SECURITY_PREF_AUTO
+        if (autoNegotiate && !preferVeNCrypt &&
+            types.contains(RfbConstants.SECURITY_VENCRYPT.toByte()) && rawSocket != null
+        ) {
             Logger.event(
                 TAG,
                 "VNC server offers VeNCrypt over anonymous TLS, which Android cannot negotiate — " +
@@ -527,17 +552,37 @@ class RfbClient(
 
         // Prefer VeNCrypt (when rawSocket is available), then None, then VNC Auth.
         // VeNCrypt requires RFB 3.7+, which is already satisfied here.
-        val chosen = when {
-            types.contains(RfbConstants.SECURITY_VENCRYPT.toByte()) && preferVeNCrypt ->
-                RfbConstants.SECURITY_VENCRYPT
-            types.contains(RfbConstants.SECURITY_NONE.toByte()) -> RfbConstants.SECURITY_NONE
-            types.contains(RfbConstants.SECURITY_VNC_AUTH.toByte()) && vncPassword != null ->
-                RfbConstants.SECURITY_VNC_AUTH
-            types.contains(RfbConstants.SECURITY_VNC_AUTH.toByte()) ->
-                throw Exception(
-                    "Server requires VNC password authentication but no password was provided."
-                )
-            else -> throw Exception("No supported security type in ${types.map { it.toInt() and 0xFF }}")
+        // A securityType other than "auto" pins the choice instead: the user
+        // asked for one specific type, so anything else is an error rather
+        // than a silent downgrade.
+        val chosen = when (securityType) {
+            SECURITY_PREF_NONE -> requireOffered(types, RfbConstants.SECURITY_NONE, "None")
+            SECURITY_PREF_VNC_AUTH -> {
+                if (vncPassword == null) {
+                    throw Exception("VNC Auth was selected for this host but no password was provided.")
+                }
+                requireOffered(types, RfbConstants.SECURITY_VNC_AUTH, "VNC Auth")
+            }
+            SECURITY_PREF_VENCRYPT_TLS_NONE, SECURITY_PREF_VENCRYPT_X509_NONE -> {
+                if (rawSocket == null) {
+                    throw Exception(
+                        "VeNCrypt was selected for this host but this transport cannot upgrade to TLS."
+                    )
+                }
+                requireOffered(types, RfbConstants.SECURITY_VENCRYPT, "VeNCrypt")
+            }
+            else -> when {
+                types.contains(RfbConstants.SECURITY_VENCRYPT.toByte()) && preferVeNCrypt ->
+                    RfbConstants.SECURITY_VENCRYPT
+                types.contains(RfbConstants.SECURITY_NONE.toByte()) -> RfbConstants.SECURITY_NONE
+                types.contains(RfbConstants.SECURITY_VNC_AUTH.toByte()) && vncPassword != null ->
+                    RfbConstants.SECURITY_VNC_AUTH
+                types.contains(RfbConstants.SECURITY_VNC_AUTH.toByte()) ->
+                    throw Exception(
+                        "Server requires VNC password authentication but no password was provided."
+                    )
+                else -> throw Exception("No supported security type in ${types.map { it.toInt() and 0xFF }}")
+            }
         }
         Logger.d(TAG, "Chose security type: $chosen")
         synchronized(outLock) { dout.writeByte(chosen); dout.flush() }
@@ -550,7 +595,9 @@ class RfbClient(
                 // Read 16-byte DES challenge, encrypt with bit-reversed password key.
                 val challenge = ByteArray(16)
                 din.readFully(challenge)
-                val response = vncDesEncrypt(vncPassword!!, challenge)
+                val password = vncPassword
+                    ?: throw Exception("VNC password required for VncAuth but none was provided")
+                val response = vncDesEncrypt(password, challenge)
                 synchronized(outLock) { dout.write(response); dout.flush() }
             }
 
@@ -581,6 +628,23 @@ class RfbClient(
         } else {
             Logger.d(TAG, "Authentication OK (RFB 3.7 None — no SecurityResult)")
         }
+    }
+
+    /**
+     * Return [type] if the server offered it, otherwise fail with a message
+     * naming both what the host demanded and what the server actually offers.
+     *
+     * Used only on the non-"auto" [securityType] paths, where falling back to
+     * a different type would defeat the point of the user having picked one.
+     */
+    private fun requireOffered(types: ByteArray, type: Int, label: String): Int {
+        if (!types.contains(type.toByte())) {
+            throw Exception(
+                "This host is set to $label security, which the server does not offer " +
+                    "(offered: ${types.map { it.toInt() and 0xFF }})"
+            )
+        }
+        return type
     }
 
     /**
@@ -713,15 +777,21 @@ class RfbClient(
         val subTypes = IntArray(subTypeCount) { din.readInt() }
         Logger.d(TAG, "VeNCrypt sub-types offered: ${subTypes.toList()}")
 
-        // Preference order: X509None > TLSNone > X509Vnc > TLSVnc > X509Plain > TLSPlain
-        val preferenceOrder = listOf(
-            RfbConstants.VENCRYPT_X509_NONE,
-            RfbConstants.VENCRYPT_TLS_NONE,
-            RfbConstants.VENCRYPT_X509_VNC,
-            RfbConstants.VENCRYPT_TLS_VNC,
-            RfbConstants.VENCRYPT_X509_PLAIN,
-            RfbConstants.VENCRYPT_TLS_PLAIN
-        )
+        // Preference order: X509None > TLSNone > X509Vnc > TLSVnc > X509Plain > TLSPlain,
+        // unless the host pinned one specific sub-type, in which case only that one
+        // is acceptable.
+        val preferenceOrder = when (securityType) {
+            SECURITY_PREF_VENCRYPT_TLS_NONE -> listOf(RfbConstants.VENCRYPT_TLS_NONE)
+            SECURITY_PREF_VENCRYPT_X509_NONE -> listOf(RfbConstants.VENCRYPT_X509_NONE)
+            else -> listOf(
+                RfbConstants.VENCRYPT_X509_NONE,
+                RfbConstants.VENCRYPT_TLS_NONE,
+                RfbConstants.VENCRYPT_X509_VNC,
+                RfbConstants.VENCRYPT_TLS_VNC,
+                RfbConstants.VENCRYPT_X509_PLAIN,
+                RfbConstants.VENCRYPT_TLS_PLAIN
+            )
+        }
         val chosen = preferenceOrder.firstOrNull { subTypes.contains(it) }
             ?: throw Exception("No supported VeNCrypt sub-type in ${subTypes.toList()}")
         Logger.d(TAG, "Chose VeNCrypt sub-type: $chosen")
@@ -994,7 +1064,7 @@ class RfbClient(
         }
         synchronized(outLock) {
             // SetDesktopSize message type
-            dout.writeByte(251)
+            dout.writeByte(RfbConstants.C2S_SET_DESKTOP_SIZE)
             // padding
             dout.writeByte(0)
             dout.writeShort(width)
