@@ -298,6 +298,18 @@ object RfbConstants {
     const val KEY_SUPER_L: Long = 0xFFEBL
     const val KEY_SUPER_R: Long = 0xFFECL
 
+    // Lock keys and the system keys Android reports with no Unicode character.
+    // Without explicit keysyms these fall through to the "no unicodeChar"
+    // branch of the key mapper and are silently dropped before reaching the
+    // server, so a guest can never toggle Caps/Num/Scroll Lock or invoke
+    // PrintScreen / Pause / Menu from a physical keyboard.
+    const val KEY_CAPS_LOCK: Long = 0xFFE5L
+    const val KEY_NUM_LOCK: Long = 0xFF7FL
+    const val KEY_SCROLL_LOCK: Long = 0xFF14L
+    const val KEY_PRINT: Long = 0xFF61L
+    const val KEY_PAUSE: Long = 0xFF13L
+    const val KEY_MENU: Long = 0xFF67L
+
     // ── Pointer button mask bits ─────────────────────────────────────────────
     const val BTN_LEFT: Int = 1
     const val BTN_MIDDLE: Int = 2

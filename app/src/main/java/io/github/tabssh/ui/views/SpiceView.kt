@@ -562,17 +562,36 @@ class SpiceView @JvmOverloads constructor(
 
     // ── Keyboard ─────────────────────────────────────────────────────────
 
+    // Key codes whose key-down synthesised a shift press. Deciding again at
+    // key-up from the then-current metaState is wrong: the user can press or
+    // release the physical Shift while a key is held, which would emit an
+    // unmatched shift release (guest loses the modifier) or a duplicate make.
+    // Releasing exactly what was pressed keeps the bracket symmetric.
+    private val syntheticShiftKeys = mutableSetOf<Int>()
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         val t = SpiceKeyMap.translate(keyCode, event) ?: return super.onKeyDown(keyCode, event)
-        if (t.needsShift) onKeyEvent?.invoke(SpiceConstants.SC_LEFT_SHIFT, true)
+        // A physically held Shift is already down on the guest via its own
+        // KEYCODE_SHIFT_* event; synthesising a second one would release the
+        // real modifier early when this key comes back up.
+        val hardwareShift = event.metaState and KeyEvent.META_SHIFT_ON != 0
+        if (t.needsShift && !hardwareShift && syntheticShiftKeys.add(keyCode)) {
+            onKeyEvent?.invoke(SpiceConstants.SC_LEFT_SHIFT, true)
+        }
         onKeyEvent?.invoke(t.scancode, true)
         return true
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-        val t = SpiceKeyMap.translate(keyCode, event) ?: return super.onKeyUp(keyCode, event)
+        val t = SpiceKeyMap.translate(keyCode, event)
+        if (t == null) {
+            syntheticShiftKeys.remove(keyCode)
+            return super.onKeyUp(keyCode, event)
+        }
         onKeyEvent?.invoke(t.scancode, false)
-        if (t.needsShift) onKeyEvent?.invoke(SpiceConstants.SC_LEFT_SHIFT, false)
+        if (syntheticShiftKeys.remove(keyCode)) {
+            onKeyEvent?.invoke(SpiceConstants.SC_LEFT_SHIFT, false)
+        }
         return true
     }
 
@@ -668,6 +687,7 @@ class SpiceView @JvmOverloads constructor(
 
     fun recycle() {
         onViewSizeReady = null
+        syntheticShiftKeys.clear()
         synchronized(fbLock) {
             bitmap?.recycle()
             bitmap = null

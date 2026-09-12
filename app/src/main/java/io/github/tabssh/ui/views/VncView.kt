@@ -624,6 +624,16 @@ class VncView @JvmOverloads constructor(
             KeyEvent.KEYCODE_ALT_RIGHT   -> RfbConstants.KEY_ALT_R
             KeyEvent.KEYCODE_META_LEFT   -> RfbConstants.KEY_SUPER_L
             KeyEvent.KEYCODE_META_RIGHT  -> RfbConstants.KEY_SUPER_R
+            // Android reports these with unicodeChar == 0, so without an
+            // explicit entry they reach the else branch below and are dropped
+            // instead of being sent. SPICE's SpiceKeyMap already covers them;
+            // this keeps the two console stacks at parity.
+            KeyEvent.KEYCODE_CAPS_LOCK   -> RfbConstants.KEY_CAPS_LOCK
+            KeyEvent.KEYCODE_NUM_LOCK    -> RfbConstants.KEY_NUM_LOCK
+            KeyEvent.KEYCODE_SCROLL_LOCK -> RfbConstants.KEY_SCROLL_LOCK
+            KeyEvent.KEYCODE_SYSRQ       -> RfbConstants.KEY_PRINT
+            KeyEvent.KEYCODE_BREAK       -> RfbConstants.KEY_PAUSE
+            KeyEvent.KEYCODE_MENU        -> RfbConstants.KEY_MENU
             else -> {
                 // Printable characters. getUnicodeChar() returns 0 when a
                 // modifier suppresses the character (Ctrl+C reports 0), so fall
