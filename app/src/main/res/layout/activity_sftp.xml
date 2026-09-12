@@ -105,7 +105,10 @@
 
                 </LinearLayout>
 
-                <!-- Empty state — shown by adapter listener when count=0. -->
+                <!-- Empty state — shown by adapter listener when count=0, and by
+                     showLocalStorageNotGranted() when no SAF folder has been
+                     granted yet on API 30+. Clickable so the latter case gives
+                     the user a direct way to grant a folder instead of a dead end. -->
                 <LinearLayout
                     android:id="@+id/empty_local"
                     android:layout_width="wrap_content"
@@ -114,6 +117,9 @@
                     android:orientation="vertical"
                     android:gravity="center"
                     android:padding="@dimen/space_md"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="?attr/selectableItemBackground"
                     android:visibility="gone">
 
                     <ImageView
@@ -125,6 +131,7 @@
                         android:importantForAccessibility="no" />
 
                     <TextView
+                        android:id="@+id/text_empty_local"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"

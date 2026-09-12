@@ -2752,6 +2752,7 @@
     <!-- SFTP browser (activity_sftp.xml) -->
     <string name="sftp_browser_go_up_description">Go up</string>
     <string name="sftp_browser_empty_folder">Empty folder</string>
+    <string name="sftp_local_no_access">No folder selected. Tap to choose a folder to browse.</string>
     <string name="sftp_browser_file_icon_description">File icon</string>
 
     <!-- Tab terminal activity (activity_tab_terminal.xml) -->

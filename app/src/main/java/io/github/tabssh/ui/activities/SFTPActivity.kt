@@ -2,6 +2,7 @@ package io.github.tabssh.ui.activities
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -64,6 +65,14 @@ class SFTPActivity : TabSSHActivity() {
         }
     }
     
+    // A drilled-into detail screen for one connection, not a main-tab
+    // destination — matches every other Edit/detail activity (VncHostEdit,
+    // ConnectionEdit, …). Without this override the base class's DRAWER
+    // default applies, so the toolbar icon opened the nav drawer instead of
+    // exiting the screen, with no other visible way to leave and close the
+    // still-open SFTP connection.
+    override val navigationAffordance: NavigationAffordance = NavigationAffordance.UP
+
     private lateinit var binding: ActivitySftpBinding
     private lateinit var app: TabSSHApplication
     private lateinit var sftpManager: SFTPManager
@@ -420,6 +429,13 @@ class SFTPActivity : TabSSHActivity() {
         binding.btnRemoteUp.setOnClickListener {
             navigateRemoteUp()
         }
+
+        // Lets the user grant a SAF folder directly from the "no folder
+        // selected" empty state, instead of having to find the overflow
+        // menu's "Choose local storage" entry first.
+        binding.emptyLocal.setOnClickListener {
+            if (currentLocalSaf == null) showChooseLocalStorageDialog()
+        }
     }
     
     /**
@@ -453,10 +469,32 @@ class SFTPActivity : TabSSHActivity() {
         loadLocalFiles()
     }
 
-    /** Dispatches to the SAF-tree browser or the legacy File-path browser. */
+    /**
+     * Dispatches to the SAF-tree browser or the legacy File-path browser.
+     *
+     * On API 30+ the plain-path browser can't list anything outside this
+     * app's sandbox (scoped storage), so calling it with no SAF root granted
+     * would just render a silent, permanently-empty view. Show an explicit
+     * "choose a folder" prompt instead of that dead end.
+     */
     private fun loadLocalFiles() {
         val saf = currentLocalSaf
-        if (saf != null) loadLocalDirectorySaf(saf) else loadLocalDirectoryPlain(currentLocalPath)
+        when {
+            saf != null -> loadLocalDirectorySaf(saf)
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> showLocalStorageNotGranted()
+            else -> loadLocalDirectoryPlain(currentLocalPath)
+        }
+    }
+
+    /** Shown on API 30+ when no SAF folder has been granted yet. */
+    private fun showLocalStorageNotGranted() {
+        localFileAdapter.replaceAllWithDiff(
+            items = localFiles,
+            newItems = emptyList(),
+            areItemsTheSame = { a, b -> a.id == b.id }
+        )
+        binding.textEmptyLocal.text = getString(R.string.sftp_local_no_access)
+        binding.emptyLocal.visibility = View.VISIBLE
     }
 
     private fun loadLocalDirectoryPlain(path: String) {
@@ -479,6 +517,7 @@ class SFTPActivity : TabSSHActivity() {
                         )
                         binding.textLocalPath.text = path
                         currentLocalPath = path
+                        binding.textEmptyLocal.text = getString(R.string.sftp_browser_empty_folder)
                         binding.emptyLocal.visibility =
                             if (localFiles.isEmpty()) View.VISIBLE else View.GONE
                     }
@@ -507,6 +546,7 @@ class SFTPActivity : TabSSHActivity() {
                     )
                     currentLocalSaf = dir
                     binding.textLocalPath.text = dir.name ?: dir.uri.toString()
+                    binding.textEmptyLocal.text = getString(R.string.sftp_browser_empty_folder)
                     binding.emptyLocal.visibility =
                         if (localFiles.isEmpty()) View.VISIBLE else View.GONE
                 }
@@ -1566,13 +1606,19 @@ class SFTPActivity : TabSSHActivity() {
     /**
      * Lets the user switch the local file browser's root between internal
      * storage, any inserted SD card, and an arbitrary folder granted via the
-     * Storage Access Framework — the SAF option is what actually lists
-     * files correctly under scoped storage on Android 11+/API 30+, since
-     * java.io.File listing of most non-app-private paths silently returns
-     * nothing there.
+     * Storage Access Framework.
+     *
+     * The plain-path entries (internal storage, SD card) only work below
+     * Android 11/API 30: from API 30 on, scoped storage makes
+     * `java.io.File.listFiles()` silently return nothing for paths outside
+     * this app's own sandbox, which showed up as "every directory is empty"
+     * even though the device has files there. Offering an entry that always
+     * renders empty is worse than not offering it, so on API 30+ only the
+     * SAF "Browse folder…" option — which actually lists files correctly —
+     * is shown.
      */
     private fun showChooseLocalStorageDialog() {
-        val roots = externalStorageRoots()
+        val roots = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) emptyList() else externalStorageRoots()
         val labels = (roots.map { it.first } + getString(R.string.sftp_storage_browse_folder)).toTypedArray()
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.sftp_choose_storage_title)
