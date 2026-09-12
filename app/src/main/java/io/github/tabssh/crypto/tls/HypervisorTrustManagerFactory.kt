@@ -68,13 +68,25 @@ object HypervisorTrustManagerFactory {
      * dialogs (Phase 2) so the user sees which server they're being
      * asked to verify.
      */
+    /**
+     * @param onPinCaptured Invoked synchronously, still on the handshake
+     * thread, the instant `captured.sha256` is set (TOFU accept, silent
+     * system-CA accept, or an explicit ACCEPT_AND_PIN on a changed cert).
+     * Callers use this to persist the new pin to the DB immediately rather
+     * than waiting for the surrounding business call (e.g. an instance
+     * list refresh) to finish successfully — a later, unrelated failure in
+     * that call used to make the whole accept vanish once the in-memory
+     * client was discarded, forcing the same TOFU/mismatch prompt again on
+     * the very next connect even though the user had just confirmed it.
+     */
     fun installTrust(
         builder: OkHttpClient.Builder,
         verifySsl: Boolean,
         pinnedSha256: String?,
         captured: CapturedPin,
         host: String = "",
-        port: Int = 0
+        port: Int = 0,
+        onPinCaptured: (() -> Unit)? = null
     ) {
         if (!verifySsl) {
             // verifySsl=off is a deliberate per-host opt-out of CA/first-use
@@ -82,10 +94,10 @@ object HypervisorTrustManagerFactory {
             // pinning is the compensating control. Log it so a verifySsl=off
             // row is distinguishable in postmortem triage.
             Logger.w(TAG, "TLS verification off for ${if (host.isNotEmpty()) "$host:$port" else "<unspecified host>"} — first-seen cert will be pinned without a prompt (TOFU). Consider verifySsl=on instead.")
-            installQuietTofu(builder, pinnedSha256, captured, host, port)
+            installQuietTofu(builder, pinnedSha256, captured, host, port, onPinCaptured)
             return
         }
-        installPinning(builder, pinnedSha256, captured, host, port)
+        installPinning(builder, pinnedSha256, captured, host, port, onPinCaptured)
     }
 
     /**
@@ -104,7 +116,8 @@ object HypervisorTrustManagerFactory {
         pinnedSha256: String?,
         captured: CapturedPin,
         host: String,
-        port: Int
+        port: Int,
+        onPinCaptured: (() -> Unit)? = null
     ) {
         // checkClientTrusted is empty by design — we are the TLS client,
         // never validating an inbound client cert.
@@ -129,6 +142,7 @@ object HypervisorTrustManagerFactory {
                     // means the user opted out of first-use verification, so
                     // no dialog; the pin still protects every later connect.
                     captured.sha256 = presented
+                    onPinCaptured?.invoke()
                     Logger.i(TAG, "First-seen cert pinned silently (verifySsl=off): $presented (host=$host:$port)")
                     return
                 }
@@ -141,6 +155,7 @@ object HypervisorTrustManagerFactory {
                 when (action) {
                     HypervisorCertPromptDialog.Action.ACCEPT_AND_PIN -> {
                         captured.sha256 = presented
+                        onPinCaptured?.invoke()
                         Logger.i(TAG, "User accepted pin update: $pinnedSha256 → $presented")
                     }
                     HypervisorCertPromptDialog.Action.ACCEPT_ONCE -> {
@@ -184,7 +199,8 @@ object HypervisorTrustManagerFactory {
         pinnedSha256: String?,
         captured: CapturedPin,
         host: String,
-        port: Int
+        port: Int,
+        onPinCaptured: (() -> Unit)? = null
     ) {
         // Resolved once at install time and closed over by the TrustManager.
         val systemTm = resolveSystemTrustManager()
@@ -240,6 +256,7 @@ object HypervisorTrustManagerFactory {
 
                     if (systemTrusted) {
                         captured.sha256 = presented
+                        onPinCaptured?.invoke()
                         systemTrustedLeaves.add(presented)
                         Logger.i(TAG, "Publicly-trusted cert accepted silently — captured pin: $presented (host=$host:$port)")
                         return
@@ -251,6 +268,7 @@ object HypervisorTrustManagerFactory {
                     when (action) {
                         HypervisorCertPromptDialog.Action.ACCEPT_AND_PIN -> {
                             captured.sha256 = presented
+                            onPinCaptured?.invoke()
                             Logger.i(TAG, "User accepted + pinned: $presented")
                         }
                         HypervisorCertPromptDialog.Action.ACCEPT_ONCE -> {
@@ -276,6 +294,7 @@ object HypervisorTrustManagerFactory {
                     when (action) {
                         HypervisorCertPromptDialog.Action.ACCEPT_AND_PIN -> {
                             captured.sha256 = presented
+                            onPinCaptured?.invoke()
                             Logger.i(TAG, "User accepted pin update: $pinnedSha256 → $presented")
                         }
                         HypervisorCertPromptDialog.Action.ACCEPT_ONCE -> {

@@ -27,6 +27,7 @@ import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.ui.adapters.CloudInstanceAdapter
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -150,6 +151,7 @@ class CloudAccountManagerActivity : TabSSHActivity() {
                     getString(R.string.cloud_manager_toast_unknown_provider, acct.provider), Toast.LENGTH_LONG).show()
                 return@launch
             }
+            wireOciPinPersist(acct, token, client)
 
             val instances = try {
                 withContext(Dispatchers.IO) {
@@ -206,6 +208,7 @@ class CloudAccountManagerActivity : TabSSHActivity() {
             }
 
             val client = providerClientFor(acct.provider) ?: return@launch
+            wireOciPinPersist(acct, token, client)
 
             val success = try {
                 withContext(Dispatchers.IO) {
@@ -258,6 +261,7 @@ class CloudAccountManagerActivity : TabSSHActivity() {
                 return@launch
             }
             val client = providerClientFor(acct.provider) ?: return@launch
+            wireOciPinPersist(acct, token, client)
             val success = try {
                 withContext(Dispatchers.IO) {
                     if (force) client.forceRestartInstance(token, inst.id)
@@ -341,6 +345,29 @@ class CloudAccountManagerActivity : TabSSHActivity() {
             startActivity(
                 TabTerminalActivity.createIntent(this@CloudAccountManagerActivity, tempProfile, autoConnect = true)
             )
+        }
+    }
+
+    /**
+     * No-ops for non-OCI providers. For [OciCloudClient], registers a callback
+     * that persists the captured pin the instant it's captured — TOFU accept,
+     * silent system-CA accept, or explicit user ACCEPT_AND_PIN — rather than
+     * only after the whole (possibly multi-instance, possibly throwing) call
+     * finishes. Must be called before any suspend call on [client] that can
+     * trigger a handshake.
+     */
+    private fun wireOciPinPersist(acct: CloudAccount, token: String, client: io.github.tabssh.cloud.CloudProvider) {
+        val ociClient = client as? OciCloudClient ?: return
+        ociClient.onPinCaptured = {
+            lifecycleScope.launch(Dispatchers.Main.immediate) {
+                try {
+                    persistOciCloudPin(acct, token, client)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Immediate cloud pin persist failed: ${e.message}")
+                }
+            }
         }
     }
 

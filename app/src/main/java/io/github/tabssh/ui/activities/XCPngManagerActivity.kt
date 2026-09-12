@@ -324,6 +324,38 @@ class XCPngManagerActivity : TabSSHActivity() {
         return Pair(false, false)
     }
 
+    /**
+     * Persist [currentXoClient]'s captured TLS pin, if any, to [profile]'s
+     * row and refresh the in-memory [hypervisors] list. Safe to call more
+     * than once — a blank/unchanged capture is a no-op inside
+     * [io.github.tabssh.crypto.storage.HypervisorPasswordStore.persistCapturedPinIfAny].
+     */
+    private suspend fun persistXoCapturedPin(profile: HypervisorProfile) {
+        val capturedSha = currentXoClient?.getCapturedCertSha256()
+        io.github.tabssh.crypto.storage.HypervisorPasswordStore
+            .persistCapturedPinIfAny(this@XCPngManagerActivity, profile, capturedSha)
+        if (!capturedSha.isNullOrBlank() && !capturedSha.equals(profile.pinnedCertSha256, ignoreCase = true)) {
+            val idx = hypervisors.indexOfFirst { it.id == profile.id }
+            if (idx >= 0) hypervisors[idx] = hypervisors[idx].copy(pinnedCertSha256 = capturedSha)
+        }
+    }
+
+    /**
+     * Persist [currentClient]'s captured TLS pin, if any, to [profile]'s
+     * row and refresh the in-memory [hypervisors] list. Safe to call more
+     * than once — a blank/unchanged capture is a no-op inside
+     * [io.github.tabssh.crypto.storage.HypervisorPasswordStore.persistCapturedPinIfAny].
+     */
+    private suspend fun persistXcpCapturedPin(profile: HypervisorProfile) {
+        val capturedSha = currentClient?.getCapturedCertSha256()
+        io.github.tabssh.crypto.storage.HypervisorPasswordStore
+            .persistCapturedPinIfAny(this@XCPngManagerActivity, profile, capturedSha)
+        if (!capturedSha.isNullOrBlank() && !capturedSha.equals(profile.pinnedCertSha256, ignoreCase = true)) {
+            val idx = hypervisors.indexOfFirst { it.id == profile.id }
+            if (idx >= 0) hypervisors[idx] = hypervisors[idx].copy(pinnedCertSha256 = capturedSha)
+        }
+    }
+
     private suspend fun tryXenOrchestra(profile: HypervisorProfile): Boolean? {
         return try {
             Logger.d(TAG, "Trying Xen Orchestra REST API...")
@@ -338,18 +370,27 @@ class XCPngManagerActivity : TabSSHActivity() {
                 email = creds.username,
                 password = creds.password,
                 verifySsl = profile.verifySsl,
-                pinnedCertSha256 = profile.pinnedCertSha256
+                pinnedCertSha256 = profile.pinnedCertSha256,
+                // Persist the instant a pin is captured rather than only
+                // after authenticate() (or a later shared-client call)
+                // finishes without throwing — see OciManagerActivity for
+                // the full rationale.
+                onPinCaptured = {
+                    lifecycleScope.launch(Dispatchers.Main.immediate) {
+                        try {
+                            persistXoCapturedPin(profile)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Logger.w(TAG, "Immediate pin persist failed: ${e.message}")
+                        }
+                    }
+                }
             )
 
             if (currentXoClient?.authenticate() == true) {
                 Logger.i(TAG, "Xen Orchestra REST API authentication successful")
-                val capturedSha = currentXoClient?.getCapturedCertSha256()
-                io.github.tabssh.crypto.storage.HypervisorPasswordStore
-                    .persistCapturedPinIfAny(this@XCPngManagerActivity, profile, capturedSha)
-                if (!capturedSha.isNullOrBlank()) {
-                    val idx = hypervisors.indexOfFirst { it.id == profile.id }
-                    if (idx >= 0) hypervisors[idx] = hypervisors[idx].copy(pinnedCertSha256 = capturedSha)
-                }
+                persistXoCapturedPin(profile)
                 true
             } else {
                 false
@@ -376,18 +417,27 @@ class XCPngManagerActivity : TabSSHActivity() {
                 username = creds.username,
                 password = creds.password,
                 verifySsl = profile.verifySsl,
-                pinnedCertSha256 = profile.pinnedCertSha256
+                pinnedCertSha256 = profile.pinnedCertSha256,
+                // Persist the instant a pin is captured rather than only
+                // after authenticate() (or a later shared-client call)
+                // finishes without throwing — see OciManagerActivity for
+                // the full rationale.
+                onPinCaptured = {
+                    lifecycleScope.launch(Dispatchers.Main.immediate) {
+                        try {
+                            persistXcpCapturedPin(profile)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Logger.w(TAG, "Immediate pin persist failed: ${e.message}")
+                        }
+                    }
+                }
             )
 
             if (currentClient?.authenticate() == true) {
                 Logger.i(TAG, "XCP-ng XML-RPC API authentication successful")
-                val capturedSha = currentClient?.getCapturedCertSha256()
-                io.github.tabssh.crypto.storage.HypervisorPasswordStore
-                    .persistCapturedPinIfAny(this@XCPngManagerActivity, profile, capturedSha)
-                if (!capturedSha.isNullOrBlank()) {
-                    val idx = hypervisors.indexOfFirst { it.id == profile.id }
-                    if (idx >= 0) hypervisors[idx] = hypervisors[idx].copy(pinnedCertSha256 = capturedSha)
-                }
+                persistXcpCapturedPin(profile)
                 true
             } else {
                 false

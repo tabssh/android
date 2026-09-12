@@ -181,6 +181,21 @@ class VMwareManagerActivity : TabSSHActivity() {
 
     // ── Connection ────────────────────────────────────────────────────────────
 
+    /**
+     * Persist [client]'s captured TLS pin, if any, to the profile row and
+     * refresh [currentProfile] in memory. Safe to call more than once — a
+     * blank/unchanged capture is a no-op inside
+     * [HypervisorPasswordStore.persistCapturedPinIfAny].
+     */
+    private suspend fun persistCapturedPin(client: VMwareApiClient) {
+        val profile = currentProfile ?: return
+        val capturedSha = client.getCapturedCertSha256()
+        HypervisorPasswordStore.persistCapturedPinIfAny(this@VMwareManagerActivity, profile, capturedSha)
+        if (!capturedSha.isNullOrBlank() && !capturedSha.equals(profile.pinnedCertSha256, ignoreCase = true)) {
+            currentProfile = profile.copy(pinnedCertSha256 = capturedSha)
+        }
+    }
+
     private fun connectAndRefresh(hypervisorId: Long) {
         lifecycleScope.launch {
             showProgress(getString(R.string.status_connecting))
@@ -198,23 +213,35 @@ class VMwareManagerActivity : TabSSHActivity() {
 
             try {
                 val creds = HypervisorPasswordStore.resolveCredentials(this@VMwareManagerActivity, profile)
-                val client = VMwareApiClient(
+                lateinit var client: VMwareApiClient
+                client = VMwareApiClient(
                     host = profile.host,
                     username = creds.username,
                     password = creds.password,
                     verifySsl = profile.verifySsl,
-                    pinnedCertSha256 = profile.pinnedCertSha256
+                    pinnedCertSha256 = profile.pinnedCertSha256,
+                    // Persist the instant a pin is captured rather than only
+                    // after authenticate() (or a later shared-client call)
+                    // finishes without throwing — see OciManagerActivity /
+                    // ProxmoxManagerActivity for the full rationale.
+                    onPinCaptured = {
+                        lifecycleScope.launch(Dispatchers.Main.immediate) {
+                            try {
+                                persistCapturedPin(client)
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Logger.w(TAG, "Immediate pin persist failed: ${e.message}")
+                            }
+                        }
+                    }
                 )
                 val ok = client.authenticate()
                 if (!ok) {
                     showError(getString(R.string.vmware_error_auth_failed))
                     return@launch
                 }
-                val capturedSha = client.getCapturedCertSha256()
-                HypervisorPasswordStore.persistCapturedPinIfAny(
-                    this@VMwareManagerActivity, profile, capturedSha
-                )
-                if (!capturedSha.isNullOrBlank()) currentProfile = profile.copy(pinnedCertSha256 = capturedSha)
+                persistCapturedPin(client)
                 val serverType = if (client.isVCenter()) "vCenter" else "ESXi"
                 Logger.i(TAG, "Connected to ${safeName(profile.name)} ($serverType)")
                 app.database.hypervisorDao().updateLastConnected(profile.id, System.currentTimeMillis())

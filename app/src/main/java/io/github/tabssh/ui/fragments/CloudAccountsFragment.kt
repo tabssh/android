@@ -29,7 +29,9 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.cloud.CloudProvider
 import io.github.tabssh.cloud.CloudProviderType
+import io.github.tabssh.cloud.OciCloudClient
 import io.github.tabssh.cloud.newClient
 import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.databinding.ItemCloudAccountBinding
@@ -39,9 +41,11 @@ import io.github.tabssh.ui.dialogs.DialogFields
 import io.github.tabssh.utils.ThrowableMapper
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.showError
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -620,6 +624,50 @@ class CloudAccountsFragment : Fragment() {
         }
     }
 
+    /**
+     * Wires [OciCloudClient.onPinCaptured] so a TLS pin captured mid-refresh is
+     * persisted immediately, on the handshake thread's coroutine, rather than only
+     * after [CloudProvider.fetchInventory] returns. Without this, a captured pin was
+     * never written back at all — every refresh could re-trigger a TOFU/cert-mismatch
+     * prompt indefinitely. No-op for non-OCI providers.
+     */
+    private fun wireOciPinPersist(provider: CloudProvider, acct: CloudAccount, token: String) {
+        val ociClient = provider as? OciCloudClient ?: return
+        ociClient.onPinCaptured = {
+            viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main.immediate) {
+                try {
+                    persistOciCloudPin(acct, token, ociClient)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Immediate cloud pin persist failed: ${e.message}")
+                }
+            }
+        }
+    }
+
+    /** Mirrors [CloudAccountManagerActivity]'s persist helper. */
+    private suspend fun persistOciCloudPin(acct: CloudAccount, currentToken: String, ociClient: OciCloudClient) {
+        val captured = ociClient.getCapturedCertSha256() ?: return
+        val existing = try {
+            JSONObject(currentToken).optString("tls_pin").takeIf { it.isNotBlank() }
+        } catch (_: Exception) { null }
+        if (captured == existing) return
+        try {
+            val updatedJson = JSONObject(currentToken).put("tls_pin", captured).toString()
+            withContext(Dispatchers.IO) {
+                app.securePasswordManager.storePassword(
+                    "cloud_token_${acct.id}",
+                    updatedJson,
+                    SecurePasswordManager.StorageLevel.ENCRYPTED
+                )
+            }
+            Logger.i(TAG, "OCI cloud account '${acct.name}' TLS pin updated: $captured")
+        } catch (e: Exception) {
+            Logger.w(TAG, "Failed to persist OCI cloud pin for ${acct.name}", e)
+        }
+    }
+
     private fun refreshAccount(account: CloudAccount) {
         if (!isAdded) return
         if (!account.enabled) {
@@ -645,9 +693,11 @@ class CloudAccountsFragment : Fragment() {
                     getString(R.string.cloud_manager_toast_unknown_provider, account.provider), Toast.LENGTH_LONG).show()
                 return@launch
             }
+            val providerClient = providerType.newClient()
+            wireOciPinPersist(providerClient, account, token)
             val count = try {
                 withContext(Dispatchers.IO) {
-                    providerType.newClient().fetchInventory(token, account.name).size
+                    providerClient.fetchInventory(token, account.name).size
                 }
             } catch (e: io.github.tabssh.cloud.CloudAuthException) {
                 val mapped = ThrowableMapper.map(requireContext(), TAG, e, "Inventory auth failed for ${account.name}")

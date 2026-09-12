@@ -1624,6 +1624,15 @@ class SFTPActivity : TabSSHActivity() {
             .setTitle(R.string.sftp_choose_storage_title)
             .setItems(labels) { _, which ->
                 if (which == roots.size) {
+                    // Android's own document-tree picker (DocumentsUI, or the
+                    // OEM equivalent) hard-refuses granting the top-level
+                    // "Internal storage"/"This device" root or the "Download"
+                    // folder — "Can't use this folder. Please choose another
+                    // folder." with no way for this app to detect or bypass
+                    // it (uri callback just looks like a plain cancel). Warn
+                    // up front so the user navigates into a real subfolder
+                    // instead of retrying the same blocked root repeatedly.
+                    Toast.makeText(this, R.string.sftp_saf_picker_hint, Toast.LENGTH_LONG).show()
                     openLocalSafTreeLauncher.launch(null)
                 } else {
                     currentLocalSaf = null

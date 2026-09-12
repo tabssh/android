@@ -2753,6 +2753,7 @@
     <string name="sftp_browser_go_up_description">Go up</string>
     <string name="sftp_browser_empty_folder">Empty folder</string>
     <string name="sftp_local_no_access">No folder selected. Tap to choose a folder to browse.</string>
+    <string name="sftp_saf_picker_hint">Android won\'t allow granting the top-level "Internal storage" or "Download" folder directly. In the picker that opens, tap into an actual folder (e.g. Documents, or one you created) before tapping "Use this folder".</string>
     <string name="sftp_browser_file_icon_description">File icon</string>
 
     <!-- Tab terminal activity (activity_tab_terminal.xml) -->

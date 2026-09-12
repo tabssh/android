@@ -69,6 +69,19 @@ class OciCloudClient : CloudProvider {
      */
     fun getCapturedCertSha256(): String? = lastApiClient?.getCapturedCertSha256()
 
+    /**
+     * Set by the caller (e.g. `CloudAccountManagerActivity`) right after
+     * obtaining this client. Invoked synchronously, on the handshake
+     * thread, the instant any pin is captured — TOFU accept, silent
+     * system-CA accept, or an explicit user ACCEPT_AND_PIN — so the
+     * caller can persist immediately rather than only after a whole
+     * multi-instance `fetchLiveInstances`/`fetchInventory` call finishes
+     * without throwing. A per-instance failure partway through that loop
+     * used to make an already-confirmed pin vanish, since the next call
+     * builds a brand-new `OciApiClient` from the still-stale stored pin.
+     */
+    var onPinCaptured: (() -> Unit)? = null
+
     private fun buildApiClient(creds: JSONObject): OciApiClient {
         val tenancy     = creds.getString("tenancy")
         val user        = creds.getString("user")
@@ -84,7 +97,8 @@ class OciCloudClient : CloudProvider {
             fingerprint      = fingerprint,
             region           = region,
             keyMaterial      = keyMaterial,
-            pinnedCertSha256 = pinnedSha
+            pinnedCertSha256 = pinnedSha,
+            onPinCaptured    = { onPinCaptured?.invoke() }
         ).also { lastApiClient = it }
     }
 

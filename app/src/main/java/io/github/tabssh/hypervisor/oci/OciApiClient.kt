@@ -35,7 +35,18 @@ class OciApiClient(
     private val region: String,
     private val keyMaterial: OciKeyMaterial,
     private val verifySsl: Boolean = true,
-    private val pinnedCertSha256: String? = null
+    private val pinnedCertSha256: String? = null,
+    /**
+     * Invoked synchronously, on the handshake thread, the instant either
+     * [identityCapturedPin] or [iaasCapturedPin] receives a new SHA-256 —
+     * TOFU accept, silent system-CA accept, or an explicit user
+     * ACCEPT_AND_PIN on a changed cert. Callers use this to persist
+     * [getCapturedCertSha256] to the DB right away instead of waiting for
+     * a later business call (e.g. [listInstances]) to finish without
+     * throwing — a failure anywhere after the handshake used to make an
+     * already-confirmed pin vanish once this client was discarded.
+     */
+    private val onPinCaptured: (() -> Unit)? = null
 ) {
 
     internal companion object {
@@ -120,7 +131,8 @@ class OciApiClient(
         .callTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         .also { b ->
             io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
-                b, verifySsl, identityPinnedSha, identityCapturedPin, identityHost, 443
+                b, verifySsl, identityPinnedSha, identityCapturedPin, identityHost, 443,
+                onPinCaptured = onPinCaptured
             )
         }
         .addInterceptor(signer.asInterceptor())
@@ -133,7 +145,8 @@ class OciApiClient(
         .callTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         .also { b ->
             io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
-                b, verifySsl, iaasPinnedSha, iaasCapturedPin, iaasHost, 443
+                b, verifySsl, iaasPinnedSha, iaasCapturedPin, iaasHost, 443,
+                onPinCaptured = onPinCaptured
             )
         }
         .addInterceptor(signer.asInterceptor())

@@ -32,7 +32,18 @@ class ProxmoxApiClient(
     // insecure choice. Profiles that need the TOFU-only path pass false
     // explicitly (per-entity opt-out, AI.md PART 6).
     private val verifySsl: Boolean = true,
-    private val pinnedCertSha256: String? = null
+    private val pinnedCertSha256: String? = null,
+    /**
+     * Invoked synchronously, on the handshake thread, the instant
+     * [capturedPin] receives a new SHA-256 — TOFU accept, silent
+     * system-CA accept, or an explicit user ACCEPT_AND_PIN on a changed
+     * cert. Callers use this to persist [getCapturedCertSha256] to the DB
+     * right away instead of waiting for [authenticate] (or a later call
+     * on this same shared client) to finish without throwing — a failure
+     * anywhere after the handshake used to make an already-confirmed pin
+     * vanish once this client was discarded.
+     */
+    private val onPinCaptured: (() -> Unit)? = null
 ) {
 
     private val baseUrl = "https://$host:$port/api2/json"
@@ -123,7 +134,8 @@ class ProxmoxApiClient(
             .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
             .callTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
-            builder, verifySsl, pinnedCertSha256, capturedPin, host, port
+            builder, verifySsl, pinnedCertSha256, capturedPin, host, port,
+            onPinCaptured = onPinCaptured
         )
         client = builder.build()
     }

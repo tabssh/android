@@ -175,14 +175,36 @@ class OciManagerActivity : TabSSHActivity() {
                 val km = withContext(Dispatchers.Default) {
                     OciKeyMaterial.fromPem(pem, passphrase?.toCharArray())
                 }
-                val client = OciApiClient(
+                lateinit var client: OciApiClient
+                client = OciApiClient(
                     tenancyOcid = tenancy,
                     userOcid = user,
                     fingerprint = fingerprint,
                     region = region,
                     keyMaterial = km,
                     verifySsl = profile.verifySsl,
-                    pinnedCertSha256 = profile.pinnedCertSha256
+                    pinnedCertSha256 = profile.pinnedCertSha256,
+                    // Persist the instant a pin is captured — TOFU accept, silent
+                    // system-CA accept, or an explicit user ACCEPT_AND_PIN on a
+                    // changed cert — rather than only after this whole connect
+                    // flow (or a later refresh) finishes without throwing. This
+                    // is what stopped an already-confirmed mismatch accept from
+                    // being discarded and re-prompted on the very next connect.
+                    onPinCaptured = {
+                        // currentProfile is only ever written from Main, so
+                        // hop back onto it here rather than IO — the actual
+                        // DB write inside persistCapturedPins() still does
+                        // its own withContext(Dispatchers.IO).
+                        lifecycleScope.launch(Dispatchers.Main.immediate) {
+                            try {
+                                persistCapturedPins(client)
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Logger.w(TAG, "Immediate pin persist failed: ${e.message}")
+                            }
+                        }
+                    }
                 )
 
                 showProgress(getString(R.string.oci_validating))

@@ -281,6 +281,7 @@ object PaneGroupEditDialog {
                 if (row == RecyclerView.NO_POSITION) return@doAfterTextChanged
                 slots[row] = slots[row].copy(workingDir = text?.toString()?.trim().takeUnless { it.isNullOrBlank() })
             }
+            attachExplicitKeyboardShow(holder.workingDir)
 
             holder.customTitle.removeTextChangedListener(holder.customTitleWatcher)
             holder.customTitle.setText(slot.customTitle ?: "")
@@ -288,6 +289,28 @@ object PaneGroupEditDialog {
                 val row = holder.bindingAdapterPosition
                 if (row == RecyclerView.NO_POSITION) return@doAfterTextChanged
                 slots[row] = slots[row].copy(customTitle = text?.toString()?.trim().takeUnless { it.isNullOrBlank() })
+            }
+            attachExplicitKeyboardShow(holder.customTitle)
+        }
+
+        /**
+         * Bug fix: tapping a working-dir/custom-title field inside this
+         * RecyclerView (itself inside a Dialog) visually focused the
+         * EditText (blinking cursor) but never raised the soft keyboard.
+         * The dialog window's default IME-on-focus behavior races against
+         * RecyclerView's own layout/rebind passes, which can steal or
+         * re-deliver focus before the IME has a chance to attach. Forcing
+         * an explicit `showSoftInput` call on focus-gain sidesteps that
+         * race entirely instead of relying on the implicit system behavior.
+         */
+        private fun attachExplicitKeyboardShow(editText: TextInputEditText) {
+            editText.setOnFocusChangeListener { view, hasFocus ->
+                if (!hasFocus) return@setOnFocusChangeListener
+                view.post {
+                    val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE)
+                        as? android.view.inputmethod.InputMethodManager
+                    imm?.showSoftInput(view, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                }
             }
         }
     }

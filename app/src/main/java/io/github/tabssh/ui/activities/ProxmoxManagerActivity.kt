@@ -189,25 +189,41 @@ class ProxmoxManagerActivity : TabSSHActivity() {
 
             try {
                 val creds = HypervisorPasswordStore.resolveCredentials(this@ProxmoxManagerActivity, profile)
-                val client = ProxmoxApiClient(
+                lateinit var client: ProxmoxApiClient
+                client = ProxmoxApiClient(
                     host = profile.host,
                     port = profile.port,
                     username = creds.username,
                     password = creds.password,
                     realm = creds.realm ?: "pam",
                     verifySsl = profile.verifySsl,
-                    pinnedCertSha256 = profile.pinnedCertSha256
+                    pinnedCertSha256 = profile.pinnedCertSha256,
+                    // Persist the instant a pin is captured — TOFU accept,
+                    // silent system-CA accept, or an explicit user
+                    // ACCEPT_AND_PIN on a changed cert — rather than only
+                    // after authenticate() (or a later call sharing this
+                    // same client) finishes without throwing. Otherwise an
+                    // already-confirmed mismatch accept during e.g.
+                    // getAllVMs() or a power action is discarded and
+                    // re-prompted on the very next connect.
+                    onPinCaptured = {
+                        lifecycleScope.launch(Dispatchers.Main.immediate) {
+                            try {
+                                persistCapturedPin(client)
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Logger.w(TAG, "Immediate pin persist failed: ${e.message}")
+                            }
+                        }
+                    }
                 )
                 val ok = client.authenticate()
                 if (!ok) {
                     showError(getString(R.string.proxmox_connect_auth_failed))
                     return@launch
                 }
-                val capturedSha = client.getCapturedCertSha256()
-                HypervisorPasswordStore.persistCapturedPinIfAny(
-                    this@ProxmoxManagerActivity, profile, capturedSha
-                )
-                if (!capturedSha.isNullOrBlank()) currentProfile = profile.copy(pinnedCertSha256 = capturedSha)
+                persistCapturedPin(client)
                 app.database.hypervisorDao().updateLastConnected(profile.id, System.currentTimeMillis())
                 currentClient = client
                 loadVMs(client)
@@ -220,6 +236,21 @@ class ProxmoxManagerActivity : TabSSHActivity() {
                 // request path (which carries the auth ticket) on some errors.
                 showError(getString(R.string.proxmox_connect_failed_fmt, safeName(profile.name), safeDetail(e.message)))
             }
+        }
+    }
+
+    /**
+     * Persist [client]'s captured TLS pin, if any, to the profile row and
+     * refresh [currentProfile] in memory. Safe to call more than once — a
+     * blank/unchanged capture is a no-op inside
+     * [HypervisorPasswordStore.persistCapturedPinIfAny].
+     */
+    private suspend fun persistCapturedPin(client: ProxmoxApiClient) {
+        val profile = currentProfile ?: return
+        val capturedSha = client.getCapturedCertSha256()
+        HypervisorPasswordStore.persistCapturedPinIfAny(this@ProxmoxManagerActivity, profile, capturedSha)
+        if (!capturedSha.isNullOrBlank() && !capturedSha.equals(profile.pinnedCertSha256, ignoreCase = true)) {
+            currentProfile = profile.copy(pinnedCertSha256 = capturedSha)
         }
     }
 

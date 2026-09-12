@@ -24,7 +24,16 @@ class XCPngApiClient(
     private val username: String,
     private val password: String,
     private val verifySsl: Boolean = false,
-    private val pinnedCertSha256: String? = null
+    private val pinnedCertSha256: String? = null,
+    /**
+     * Invoked synchronously, on the handshake thread, the instant
+     * [capturedPin] receives a new SHA-256 — TOFU accept, silent
+     * system-CA accept, or an explicit user ACCEPT_AND_PIN on a changed
+     * cert. Callers use this to persist [getCapturedCertSha256] to the DB
+     * right away instead of waiting for [authenticate] (or a later call
+     * on this same shared client) to finish without throwing.
+     */
+    private val onPinCaptured: (() -> Unit)? = null
 ) {
 
     internal companion object {
@@ -92,7 +101,8 @@ class XCPngApiClient(
             .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
             .callTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
-            builder, verifySsl, pinnedCertSha256, capturedPin, host, port
+            builder, verifySsl, pinnedCertSha256, capturedPin, host, port,
+            onPinCaptured = onPinCaptured
         )
         client = builder.build()
     }
