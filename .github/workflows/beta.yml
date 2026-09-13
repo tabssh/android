@@ -17,6 +17,7 @@ on:
   push:
     tags:
       - '*beta*'
+  workflow_dispatch: {}
 
 # Group by tag ref — re-pushing the same beta tag cancels any in-flight
 # rebuild for that tag; distinct beta tags each complete and publish.

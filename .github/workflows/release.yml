@@ -23,6 +23,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch: {}
 
 # Group by tag ref — re-pushing the same tag cancels any in-flight rebuild
 # for that tag, but distinct version tags pushed back-to-back each get to

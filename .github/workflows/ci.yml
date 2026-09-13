@@ -5,6 +5,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch: {}
 
 # One validation run per ref/PR at a time; cancel older runs on new push.
 concurrency:
