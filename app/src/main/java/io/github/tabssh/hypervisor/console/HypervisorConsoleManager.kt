@@ -99,6 +99,7 @@ class HypervisorConsoleManager {
     private var proxmoxVncFallbackPinnedCert: String? = null
     private var proxmoxVncFallbackDisplayHost: String = ""
     private var proxmoxVncFallbackDisplayPort: Int = 0
+    private var proxmoxVncFallbackOnPinCaptured: (() -> Unit)? = null
 
     /**
      * Console connection result — sealed so callers must handle both variants.
@@ -186,6 +187,17 @@ class HypervisorConsoleManager {
         pinnedCertSha256: String? = null,
         displayHost: String = "",
         displayPort: Int = 0,
+        // Invoked synchronously, on the TLS handshake thread, the instant a
+        // pin is captured (TOFU accept, silent system-CA accept, or an
+        // explicit user ACCEPT_AND_PIN) — for ANY WebSocket this connection
+        // opens, including the VNC-fallback and rejected-resize reconnects
+        // below. Callers use [getCapturedCertSha256] inside this callback to
+        // persist the pin to the DB immediately, decoupled from whether the
+        // console session itself ultimately stays connected. Previously this
+        // path had no such hook at all, so every console-viewer TLS pin was
+        // captured in memory and discarded, forcing the same TOFU/mismatch
+        // prompt on every subsequent console open.
+        onPinCaptured: (() -> Unit)? = null,
         listener: ConsoleEventListener? = null
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
         activeListener = listener
@@ -275,6 +287,7 @@ class HypervisorConsoleManager {
         proxmoxVncFallbackPinnedCert = pinnedCertSha256
         proxmoxVncFallbackDisplayHost = displayHost
         proxmoxVncFallbackDisplayPort = displayPort
+        proxmoxVncFallbackOnPinCaptured = onPinCaptured
 
         // Phase 2: open the WebSocket console connection.
         try {
@@ -286,7 +299,8 @@ class HypervisorConsoleManager {
                 protocol = protocol,
                 pinnedCertSha256 = pinnedCertSha256,
                 displayHost = displayHost,
-                displayPort = displayPort
+                displayPort = displayPort,
+                onPinCaptured = onPinCaptured
             )
             val wsClient = webSocketClient ?: run {
                 Logger.e(TAG, "WebSocket client not initialized")
@@ -436,6 +450,8 @@ class HypervisorConsoleManager {
         pinnedCertSha256: String? = null,
         displayHost: String = "",
         displayPort: Int = 0,
+        // See [connectProxmoxConsole]'s onPinCaptured doc — same contract.
+        onPinCaptured: (() -> Unit)? = null,
         listener: ConsoleEventListener? = null
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
         activeListener = listener
@@ -489,7 +505,8 @@ class HypervisorConsoleManager {
                 protocol = ConsoleWebSocketClient.ConsoleProtocol.XCPNG,
                 pinnedCertSha256 = pinnedCertSha256,
                 displayHost = displayHost,
-                displayPort = displayPort
+                displayPort = displayPort,
+                onPinCaptured = onPinCaptured
             )
             val xcpClient = webSocketClient ?: run {
                 Logger.e(TAG, "WebSocket client not initialized")
@@ -576,6 +593,8 @@ class HypervisorConsoleManager {
         pinnedCertSha256: String? = null,
         displayHost: String = "",
         displayPort: Int = 0,
+        // See [connectProxmoxConsole]'s onPinCaptured doc — same contract.
+        onPinCaptured: (() -> Unit)? = null,
         listener: ConsoleEventListener? = null
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
         activeListener = listener
@@ -614,7 +633,8 @@ class HypervisorConsoleManager {
                 protocol = ConsoleWebSocketClient.ConsoleProtocol.XO,
                 pinnedCertSha256 = pinnedCertSha256,
                 displayHost = displayHost,
-                displayPort = displayPort
+                displayPort = displayPort,
+                onPinCaptured = onPinCaptured
             )
             val xoClient = webSocketClient ?: run {
                 Logger.e(TAG, "WebSocket client not initialized")
@@ -784,6 +804,14 @@ class HypervisorConsoleManager {
                 displayPort = displayPort,
                 consoleMode = false,
                 protocol = ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC,
+                // onClientReady fires right after construction, before the
+                // handshake — assigning webSocketClient here (instead of only
+                // after connectWss returns below) means onPinCaptured below
+                // reads the correct, current client via getCapturedCertSha256()
+                // even though the pin is captured mid-handshake, well before
+                // this call returns.
+                onClientReady = { webSocketClient = it },
+                onPinCaptured = proxmoxVncFallbackOnPinCaptured,
                 listener = wsListener
             )
             webSocketClient = ws
@@ -911,6 +939,9 @@ class HypervisorConsoleManager {
                 displayPort = displayPort,
                 consoleMode = false,
                 protocol = ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC,
+                // Same early-assignment reasoning as retryProxmoxWithVnc above.
+                onClientReady = { webSocketClient = it },
+                onPinCaptured = proxmoxVncFallbackOnPinCaptured,
                 listener = wsListener
             )
             webSocketClient = ws
@@ -956,6 +987,18 @@ class HypervisorConsoleManager {
      * Get WebSocket client for sending control messages (resize, etc.)
      */
     fun getWebSocketClient(): ConsoleWebSocketClient? = webSocketClient
+
+    /**
+     * The SHA-256 of the TLS certificate captured by the currently-active
+     * [webSocketClient] (primary connect, VNC fallback, or rejected-resize
+     * reconnect — whichever is live right now), or null if none was
+     * captured (e.g. cleartext, or a pin was already enforced with no
+     * change). Callers normally don't need to poll this directly — read it
+     * from inside the `onPinCaptured` callback passed to [connectProxmoxConsole]
+     * / [connectXCPngConsole] / [connectXenOrchestraConsole], which fires the
+     * instant it's available.
+     */
+    fun getCapturedCertSha256(): String? = webSocketClient?.getCapturedCertSha256()
 
     /**
      * Detach the currently registered [ConsoleEventListener] without tearing

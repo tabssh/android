@@ -331,7 +331,17 @@ class XCPngManagerActivity : TabSSHActivity() {
      * [io.github.tabssh.crypto.storage.HypervisorPasswordStore.persistCapturedPinIfAny].
      */
     private suspend fun persistXoCapturedPin(profile: HypervisorProfile) {
-        val capturedSha = currentXoClient?.getCapturedCertSha256()
+        persistCapturedPinSha(profile, currentXoClient?.getCapturedCertSha256())
+    }
+
+    /**
+     * Persist an already-captured SHA-256, if any, to [profile]'s row and
+     * refresh the in-memory [hypervisors] list. Shared by [persistXoCapturedPin],
+     * [persistXcpCapturedPin] (REST API clients) and the console-connect
+     * `onPinCaptured` callbacks below — same no-op-if-blank-or-unchanged
+     * safety via [io.github.tabssh.crypto.storage.HypervisorPasswordStore.persistCapturedPinIfAny].
+     */
+    private suspend fun persistCapturedPinSha(profile: HypervisorProfile, capturedSha: String?) {
         io.github.tabssh.crypto.storage.HypervisorPasswordStore
             .persistCapturedPinIfAny(this@XCPngManagerActivity, profile, capturedSha)
         if (!capturedSha.isNullOrBlank() && !capturedSha.equals(profile.pinnedCertSha256, ignoreCase = true)) {
@@ -347,13 +357,7 @@ class XCPngManagerActivity : TabSSHActivity() {
      * [io.github.tabssh.crypto.storage.HypervisorPasswordStore.persistCapturedPinIfAny].
      */
     private suspend fun persistXcpCapturedPin(profile: HypervisorProfile) {
-        val capturedSha = currentClient?.getCapturedCertSha256()
-        io.github.tabssh.crypto.storage.HypervisorPasswordStore
-            .persistCapturedPinIfAny(this@XCPngManagerActivity, profile, capturedSha)
-        if (!capturedSha.isNullOrBlank() && !capturedSha.equals(profile.pinnedCertSha256, ignoreCase = true)) {
-            val idx = hypervisors.indexOfFirst { it.id == profile.id }
-            if (idx >= 0) hypervisors[idx] = hypervisors[idx].copy(pinnedCertSha256 = capturedSha)
-        }
+        persistCapturedPinSha(profile, currentClient?.getCapturedCertSha256())
     }
 
     private suspend fun tryXenOrchestra(profile: HypervisorProfile): Boolean? {
@@ -670,6 +674,17 @@ class XCPngManagerActivity : TabSSHActivity() {
                         pinnedCertSha256 = profile.pinnedCertSha256,
                         displayHost = profile.host,
                         displayPort = profile.port,
+                        onPinCaptured = {
+                            lifecycleScope.launch(Dispatchers.Main.immediate) {
+                                try {
+                                    persistCapturedPinSha(profile, manager.getCapturedCertSha256())
+                                } catch (e: kotlinx.coroutines.CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Logger.w(TAG, "Immediate console pin persist failed: ${e.message}")
+                                }
+                            }
+                        },
                         listener = listener
                     )
                 } else {
@@ -687,6 +702,17 @@ class XCPngManagerActivity : TabSSHActivity() {
                         pinnedCertSha256 = profile.pinnedCertSha256,
                         displayHost = profile.host,
                         displayPort = profile.port,
+                        onPinCaptured = {
+                            lifecycleScope.launch(Dispatchers.Main.immediate) {
+                                try {
+                                    persistCapturedPinSha(profile, manager.getCapturedCertSha256())
+                                } catch (e: kotlinx.coroutines.CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Logger.w(TAG, "Immediate console pin persist failed: ${e.message}")
+                                }
+                            }
+                        },
                         listener = listener
                     )
                 }

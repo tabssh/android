@@ -101,6 +101,16 @@ object VncDirectConnector {
         displayPort: Int = 0,
         consoleMode: Boolean = false,
         protocol: ConsoleWebSocketClient.ConsoleProtocol = ConsoleWebSocketClient.ConsoleProtocol.RFB_WSS,
+        // Forwarded straight to the ConsoleWebSocketClient constructor — see
+        // its own onPinCaptured doc. Fires synchronously mid-handshake,
+        // inside connect() below.
+        onPinCaptured: (() -> Unit)? = null,
+        // Invoked with the constructed client immediately, before connect()
+        // triggers the handshake — lets a caller (HypervisorConsoleManager)
+        // publish the client to its own state *before* onPinCaptured can
+        // possibly fire, so that callback can reliably read the right
+        // client's captured pin instead of racing this function's return.
+        onClientReady: ((ConsoleWebSocketClient) -> Unit)? = null,
         listener: io.github.tabssh.hypervisor.console.ConsoleConnectionListener? = null
     ): Pair<RfbClient, ConsoleWebSocketClient> = withContext(Dispatchers.IO) {
         Logger.d(TAG, "Connecting RFB-over-WSS to $displayHost:$displayPort consoleMode=$consoleMode")
@@ -109,8 +119,10 @@ object VncDirectConnector {
             protocol = protocol,
             pinnedCertSha256 = pinnedCertSha256,
             displayHost = displayHost,
-            displayPort = displayPort
+            displayPort = displayPort,
+            onPinCaptured = onPinCaptured
         )
+        onClientReady?.invoke(ws)
         // Without a listener OkHttp's onFailure/onClosed are discarded: a TLS
         // failure or a server-side close reaches the RFB side only as EOF, which
         // ConsoleDisconnectClassifier reads as a clean, user-initiated

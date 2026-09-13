@@ -246,8 +246,18 @@ class ProxmoxManagerActivity : TabSSHActivity() {
      * [HypervisorPasswordStore.persistCapturedPinIfAny].
      */
     private suspend fun persistCapturedPin(client: ProxmoxApiClient) {
+        persistCapturedPinSha(client.getCapturedCertSha256())
+    }
+
+    /**
+     * Persist an already-captured SHA-256, if any, to [currentProfile]'s row
+     * and refresh it in memory. Shared by [persistCapturedPin] (REST API
+     * client) and the console-connect `onPinCaptured` callback below — same
+     * no-op-if-blank-or-unchanged safety via
+     * [HypervisorPasswordStore.persistCapturedPinIfAny].
+     */
+    private suspend fun persistCapturedPinSha(capturedSha: String?) {
         val profile = currentProfile ?: return
-        val capturedSha = client.getCapturedCertSha256()
         HypervisorPasswordStore.persistCapturedPinIfAny(this@ProxmoxManagerActivity, profile, capturedSha)
         if (!capturedSha.isNullOrBlank() && !capturedSha.equals(profile.pinnedCertSha256, ignoreCase = true)) {
             currentProfile = profile.copy(pinnedCertSha256 = capturedSha)
@@ -438,6 +448,17 @@ class ProxmoxManagerActivity : TabSSHActivity() {
                     pinnedCertSha256 = profile.pinnedCertSha256,
                     displayHost = profile.host,
                     displayPort = profile.port,
+                    onPinCaptured = {
+                        lifecycleScope.launch(Dispatchers.Main.immediate) {
+                            try {
+                                persistCapturedPinSha(manager.getCapturedCertSha256())
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Logger.w(TAG, "Immediate console pin persist failed: ${e.message}")
+                            }
+                        }
+                    },
                     listener = listener
                 )
                 if (connection == null) {

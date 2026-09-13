@@ -25,7 +25,19 @@ class ConsoleWebSocketClient(
      *  "Server: $host:$port" in the body text. The actual WS URL
      *  passed to connect() is the source of truth for routing. */
     private val displayHost: String = "",
-    private val displayPort: Int = 0
+    private val displayPort: Int = 0,
+    /**
+     * Invoked synchronously, on the handshake thread, the instant
+     * [capturedPin] receives a new SHA-256 — TOFU accept, silent
+     * system-CA accept, or an explicit user ACCEPT_AND_PIN on a changed
+     * cert. Callers use this to persist [getCapturedCertSha256] to the DB
+     * right away instead of only reading it after [connect] succeeds —
+     * a console WebSocket that disconnects/errors right after the
+     * handshake (a common console-viewer failure mode) used to make an
+     * already-confirmed pin vanish, forcing the same TOFU/mismatch prompt
+     * on every subsequent console open. See [io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust].
+     */
+    private val onPinCaptured: (() -> Unit)? = null
 ) {
     companion object {
         private const val TAG = "ConsoleWebSocket"
@@ -213,7 +225,8 @@ class ConsoleWebSocketClient(
             .pingInterval(PING_INTERVAL_SECONDS, TimeUnit.SECONDS)
 
         io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
-            builder, verifySsl, pinnedCertSha256, capturedPin, displayHost, displayPort
+            builder, verifySsl, pinnedCertSha256, capturedPin, displayHost, displayPort,
+            onPinCaptured = onPinCaptured
         )
 
         client = builder.build()
