@@ -22,6 +22,7 @@ on:
     - cron: '17 4 * * *'
   push:
     branches: [ main ]
+  workflow_dispatch: {}
 
 # Only one development build at a time — cancel any in-flight run when a
 # newer push arrives so we don't race on the rolling `development` tag.
