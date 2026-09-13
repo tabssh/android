@@ -45,6 +45,16 @@ class TermuxBridge(
         private const val TAG = "TermuxBridge"
         private const val READ_BUFFER_SIZE = 8192
 
+        // Heap cost of one terminal cell, measured from the emulator library's
+        // TerminalRow allocation (see estimateTranscriptBytes below).
+        private const val BYTES_PER_CELL_ESTIMATE = 12L
+
+        // How many rows of scrollback a session save captures and restores.
+        // Bounds a per-tab, every-30-seconds allocation that the scrollback
+        // preference would otherwise let reach 50,000 rows. See
+        // getScrollbackContent().
+        const val PERSISTED_SCROLLBACK_MAX_ROWS = 2000
+
         // Shared empty array for the pendingUtf8 hold-back buffer.
         private val EMPTY_BYTES = ByteArray(0)
 
@@ -132,7 +142,13 @@ class TermuxBridge(
         internal fun sanitizeOsc8Url(url: String): String? {
             val trimmed = url.trim()
             if (trimmed.isEmpty() || trimmed.length > OSC8_MAX_URL_LENGTH) return null
-            if (trimmed.any { it.code < 0x20 || it.code == 0x7F }) return null
+            // Control characters and DEL cannot appear in a usable URI and are
+            // the classic vector for smuggling terminal escapes back through a
+            // link. Hoisted out of the `if` because Android lint's
+            // SuspiciousIndentation check reports a false positive on the inline
+            // form and `abortOnError` fails the build on it.
+            val hasControlChars = trimmed.any { it.code < 0x20 || it.code == 0x7F }
+            if (hasControlChars) return null
             val scheme = trimmed.substringBefore(':', "").lowercase()
             if (scheme.isEmpty() || scheme !in OSC8_ALLOWED_SCHEMES) return null
             return trimmed
@@ -355,6 +371,17 @@ class TermuxBridge(
     // Serializes disconnect() so it is atomic and idempotent across threads.
     private val disconnectLock = Any()
 
+    // Serializes every mutation of the Termux emulator and its screen buffer.
+    // The library does no locking of its own: as of terminal-emulator v0.118.1
+    // neither TerminalEmulator.append() nor any TerminalBuffer mutator carries
+    // ACC_SYNCHRONIZED, and neither class contains a single monitorenter. The
+    // writers that genuinely run concurrently here are the SSH read loop (on
+    // sessionScope, a Dispatchers.IO pool), injectLocally() from the UI thread,
+    // and clearTranscript() from onTrimMemory(). Unserialized, an append()
+    // interleaving clearTranscript() can null rows that are still on screen or
+    // hand Arrays.fill() an out-of-range bound, so every writer must take this.
+    private val emulatorLock = Any()
+
     // Coroutine scope for write operations. Deliberately limited to a single
     // thread (Issue: intermittent single-character drop/reorder near the
     // cursor during history-recall + Enter): plain Dispatchers.IO is a
@@ -555,7 +582,16 @@ class TermuxBridge(
      * When rows scroll off the top during the append, all stored link row
      * indices are adjusted downward to stay aligned with screen coordinates.
      */
-    private fun appendWithOsc8Tracking(em: TerminalEmulator, rawData: ByteArray, rawLength: Int) {
+    private fun appendWithOsc8Tracking(em: TerminalEmulator, rawData: ByteArray, rawLength: Int) =
+        synchronized(emulatorLock) { appendWithOsc8TrackingLocked(em, rawData, rawLength) }
+
+    /**
+     * Body of [appendWithOsc8Tracking]. Callers must hold [emulatorLock]: this
+     * both feeds the emulator and rewrites [osc8Links] against the resulting
+     * scroll offset, so the append and the bookkeeping have to stay atomic
+     * with respect to every other emulator writer.
+     */
+    private fun appendWithOsc8TrackingLocked(em: TerminalEmulator, rawData: ByteArray, rawLength: Int) {
         // Re-assemble UTF-8 sequences across chunk boundaries. The ESC path
         // below decodes the chunk with String(bytes, UTF_8); a multi-byte
         // character split across two SSH reads would decode its halves as
@@ -1018,9 +1054,10 @@ class TermuxBridge(
                         continue
                     }
 
-                    // Feed data to Termux emulator. The append() call is
-                    // internally synchronized on the screen object so
-                    // injectLocally() from other threads cannot interleave.
+                    // Feed data to Termux emulator. appendWithOsc8Tracking
+                    // takes emulatorLock, which is what keeps this read loop
+                    // from interleaving with injectLocally() or the scrollback
+                    // trim — the library itself does no locking at all.
                     // appendWithOsc8Tracking wraps append() and intercepts
                     // OSC 8 hyperlink sequences before they reach the emulator.
                     val em = emulator
@@ -1199,21 +1236,82 @@ class TermuxBridge(
     }
 
     /**
-     * Get scrollback buffer content as text
+     * Get scrollback buffer content as text, most recent [maxRows] rows only.
+     *
+     * The cap matters because the scrollback preference tops out at 50,000 rows
+     * and maps "unlimited" onto that maximum: an uncapped read of a wide, full
+     * transcript builds a string on the order of 8-20MB, and the session save
+     * does this for every open tab on a 30-second timer. That is a recurring
+     * allocation easily large enough to cause the memory pressure the
+     * scrollback trim exists to relieve.
+     *
+     * Reads under [emulatorLock]. The library does no locking of its own, so
+     * without it this walks the buffer while the SSH read loop appends to it,
+     * and a torn read is then persisted as the tab's restored history.
      */
-    fun getScrollbackContent(): String {
-        val screen = emulator?.screen ?: return ""
-        // Get transcript (scrollback) - activeTranscriptRows gives us how many rows of history
-        return try {
-            val transcriptRows = screen.activeTranscriptRows
-            if (transcriptRows > 0) {
-                screen.getSelectedText(0, -transcriptRows, currentColumns, -1) ?: ""
-            } else {
+    fun getScrollbackContent(maxRows: Int = PERSISTED_SCROLLBACK_MAX_ROWS): String =
+        synchronized(emulatorLock) {
+            val screen = emulator?.screen ?: return ""
+            try {
+                val transcriptRows = screen.activeTranscriptRows.coerceAtMost(maxRows)
+                if (transcriptRows > 0) {
+                    screen.getSelectedText(0, -transcriptRows, currentColumns, -1) ?: ""
+                } else {
+                    ""
+                }
+            } catch (e: Exception) {
+                Logger.w(TAG, "Error getting scrollback content", e)
                 ""
             }
+        }
+
+    /**
+     * Rough heap cost of this session's scrollback, in bytes.
+     *
+     * Derived from the emulator library's own allocation shape rather than a
+     * guessed per-cell figure: `TerminalRow` allocates `char[(int)(columns *
+     * 1.5)]` for text (2 bytes per char) plus `long[columns]` for style (8
+     * bytes per entry), i.e. ~11 bytes per column, and ~1 more per column once
+     * the row object and array headers are amortised over an 80-column row.
+     *
+     * Only rows the terminal has actually scrolled off the screen are counted:
+     * the library allocates `TerminalRow` objects lazily as they are needed, so
+     * a tab that has never scrolled holds nothing here regardless of the
+     * configured scrollback length.
+     */
+    fun estimateTranscriptBytes(): Long {
+        val screen = emulator?.screen ?: return 0L
+        val rows = screen.activeTranscriptRows.coerceAtLeast(0)
+        return rows.toLong() * currentColumns.toLong() * BYTES_PER_CELL_ESTIMATE
+    }
+
+    /**
+     * Drops this session's scrollback, keeping the visible screen and the live
+     * connection intact. Returns the number of bytes this is estimated to have
+     * freed, or 0 if there was nothing to drop.
+     *
+     * The emulator library offers no partial trim — `clearTranscript()` is all
+     * or nothing, and transcript capacity is fixed at construction — so this is
+     * the only way to give memory back without tearing the session down.
+     *
+     * When the terminal is in alt-screen mode (vim, less, htop) `screen` is the
+     * alternate buffer, which keeps no transcript; clearing it is harmless but
+     * frees nothing, and the main buffer's scrollback is left alone until the
+     * application exits alt-screen.
+     *
+     * Takes [emulatorLock] for the whole measure-then-clear so no append can
+     * land between the two and make the returned figure describe rows that are
+     * no longer the ones being dropped.
+     */
+    fun clearTranscript(): Long = synchronized(emulatorLock) {
+        val screen = emulator?.screen ?: return 0L
+        try {
+            val freed = estimateTranscriptBytes()
+            screen.clearTranscript()
+            freed
         } catch (e: Exception) {
-            Logger.w(TAG, "Error getting scrollback content", e)
-            ""
+            Logger.w(TAG, "Error clearing transcript", e)
+            0L
         }
     }
 
@@ -1277,12 +1375,13 @@ class TermuxBridge(
      * cursor visibility, alt-screen, …) on the local renderer based on
      * user preferences without involving the remote.
      *
-     * Safe to call from any thread; `append` is internally synchronized
-     * on Termux's screen.
+     * Safe to call from any thread: the append is serialized against the SSH
+     * read loop and the scrollback trim by [emulatorLock]. Termux's own
+     * `append` does no locking, so that lock is the only guarantee.
      */
     fun injectLocally(bytes: ByteArray) {
         try {
-            emulator?.append(bytes, bytes.size)
+            synchronized(emulatorLock) { emulator?.append(bytes, bytes.size) }
         } catch (e: Exception) {
             Logger.w(TAG, "injectLocally failed: ${e.message}")
         }
@@ -1319,7 +1418,9 @@ class TermuxBridge(
                 // is harmless. SIGWINCH is 28 on every Android ABI (asm-generic).
                 sendSigwinch(ms)
             } else {
-                emulator?.resize(newColumns, newRows)
+                // Reflows every row in the buffer, so it is an emulator writer
+                // like append() and takes the same lock.
+                synchronized(emulatorLock) { emulator?.resize(newColumns, newRows) }
 
                 // SSH-side window-change MUST share the writeLock with the
                 // keystroke writes — both produce packets on the same JSch

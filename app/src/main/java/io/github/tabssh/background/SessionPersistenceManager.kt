@@ -264,7 +264,7 @@ class SessionPersistenceManager(
                 database.tabSessionDao().deactivateAllSessions()
 
                 tabs.forEachIndexed { index, tab ->
-                    saveTabSession(tab, index, immediate)
+                    saveTabSession(tab, index)
                 }
 
                 Logger.i("SessionPersistenceManager", "Saved session state for ${tabs.size} tabs")
@@ -275,7 +275,7 @@ class SessionPersistenceManager(
         }
     }
     
-    private suspend fun saveTabSession(tab: SSHTab, tabIndex: Int, immediate: Boolean) {
+    private suspend fun saveTabSession(tab: SSHTab, tabIndex: Int) {
         try {
             // Guard: the TabSession FK requires the connection profile to exist
             // in the `connections` table. Ephemeral / quick-connect profiles are
@@ -291,18 +291,33 @@ class SessionPersistenceManager(
             val terminal = tab.termuxBridge
             val stats = tab.getConnectionStats()
 
-            // Compress terminal content for storage (get scrollback from bridge)
-            val scrollbackContent = if (immediate || stats.isActive) {
-                compressTerminalContent(terminal.getScrollbackContent())
-            } else null
+            // Scrollback is captured for every tab being saved, not just the
+            // UI-focused one. `stats.isActive` means "this tab is the visible
+            // tab" (SSHTab.activate()/deactivate()), so gating on it used to
+            // persist a blank terminal for every background tab — invisible
+            // while those rows were also never restored (see the `isActive`
+            // field below), but a guaranteed blank restore now that they are.
+            val scrollbackContent = compressTerminalContent(terminal.getScrollbackContent())
 
             val tabSession = TabSession(
                 sessionId = java.util.UUID.randomUUID().toString(),
                 tabId = tab.tabId,
                 connectionId = tab.profile.id,
                 title = tab.getDisplayTitle(),
-                isActive = stats.isActive,
-                terminalContent = scrollbackContent ?: "",
+                // `is_active` is this table's "current persisted row for this
+                // tab" marker — deactivateAllSessions() above just zeroed every
+                // older row, and restoreSessionState() selects strictly on it.
+                // It was being written from stats.isActive, which is SSHTab's
+                // unrelated "currently visible tab" flag, so a save taken while
+                // a tab was not on screen inserted its only row with is_active=0
+                // and the very next restore reported "No saved sessions to
+                // restore" despite having just logged a successful save.
+                // Connection liveness stays on sessionState/connectionState
+                // below, which now read the tab's real ConnectionState instead
+                // of the same on-screen flag — a connected tab that simply was
+                // not the visible one used to persist as DISCONNECTED.
+                isActive = true,
+                terminalContent = scrollbackContent,
                 cursorRow = terminal.getCursorRow(),
                 cursorCol = terminal.getCursorCol(),
                 scrollPosition = 0,
@@ -310,11 +325,15 @@ class SessionPersistenceManager(
                 environmentVars = "{}",
                 createdAt = System.currentTimeMillis(),
                 lastActivity = stats.lastActivity,
-                sessionState = if (stats.isActive) TabSession.STATE_CONNECTED else TabSession.STATE_DISCONNECTED,
+                sessionState = if (stats.connectionState.isConnected()) {
+                    TabSession.STATE_CONNECTED
+                } else {
+                    TabSession.STATE_DISCONNECTED
+                },
                 terminalRows = terminal.getRows(),
                 terminalCols = terminal.getCols(),
                 fontSize = 14f,
-                connectionState = if (stats.isActive) "CONNECTED" else "DISCONNECTED",
+                connectionState = stats.connectionState.name,
                 lastError = null,
                 hasUnreadOutput = false,
                 unreadLines = 0,
@@ -413,11 +432,17 @@ class SessionPersistenceManager(
             // Restore terminal.size
             tab.termuxBridge.resize(session.terminalRows, session.terminalCols)
 
-            // Restore scrollback content if available
+            // Replay the saved scrollback into the fresh emulator. Line endings
+            // are normalised to CRLF first: the saved text is plain screen text
+            // with bare '\n', and a terminal treats a bare line feed as "down
+            // one row, same column", which would staircase the restored history
+            // diagonally across the screen instead of returning it to column 0.
             session.terminalContent.takeIf { it.isNotEmpty() }?.let { compressedContent ->
                 val content = decompressTerminalContent(compressedContent)
-                // This would restore terminal buffer content
-                // Implementation depends on terminal buffer restoration capability
+                if (content.isNotEmpty()) {
+                    val normalized = content.replace("\r\n", "\n").replace("\n", "\r\n")
+                    tab.termuxBridge.injectLocally(normalized.toByteArray(Charsets.UTF_8))
+                }
             }
 
             Logger.d("SessionPersistenceManager", "Restored terminal state for tab: ${session.title}")

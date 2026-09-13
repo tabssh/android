@@ -587,6 +587,88 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     fun getAllTabsSealed(): List<Tab> = synchronized(tabsLock) { tabs.toList() }
 
     /**
+     * Every live terminal session this manager owns, paired with the id of the
+     * tab it belongs to. A Panes tab contributes one entry per window, so a
+     * 6-window group is accounted for as six sessions rather than one.
+     */
+    private fun terminalSessions(): List<Pair<String, TermuxBridge>> =
+        getAllTabsSealed().flatMap { tab ->
+            when (tab) {
+                is Tab.Ssh -> listOf(tab.tabId to tab.sshTab.termuxBridge)
+                is Tab.Panes -> tab.panesTab.currentEntries()
+                    .mapNotNull { window -> window.sshTab?.let { tab.tabId to it.termuxBridge } }
+                is Tab.Vnc, is Tab.Console -> emptyList()
+            }
+        }
+
+    /**
+     * Most recent terminal activity on this tab, used to pick trim victims.
+     * A Panes tab is as recent as its most recently active window, and a tab
+     * with no terminal session of its own (VNC, hypervisor console) sorts
+     * first, since it has no scrollback to lose either way.
+     */
+    private fun Tab.lastTerminalActivity(): Long = when (this) {
+        is Tab.Ssh -> sshTab.lastActivity.value
+        is Tab.Panes -> panesTab.currentEntries()
+            .mapNotNull { it.sshTab?.lastActivity?.value }
+            .maxOrNull() ?: 0L
+        is Tab.Vnc, is Tab.Console -> 0L
+    }
+
+    /**
+     * Estimated heap currently held by terminal scrollback across every open
+     * tab, in bytes. See [TermuxBridge.estimateTranscriptBytes] for where the
+     * per-cell figure comes from.
+     */
+    fun estimateTranscriptMemoryBytes(): Long =
+        terminalSessions().sumOf { (_, bridge) -> bridge.estimateTranscriptBytes() }
+
+    /**
+     * Drops scrollback from the least-recently-active tabs until the total
+     * estimate is back under [budgetBytes], and returns the number of bytes
+     * this is estimated to have freed.
+     *
+     * The tab identified by [protectTabId] is never trimmed — dropping the
+     * scrollback the user is looking at is more disruptive than the memory is
+     * worth, and it is also the tab most likely to be scrolled back through
+     * next. Sessions are trimmed oldest-activity-first and only as far as the
+     * budget requires, so a single runaway tab does not cost every other tab
+     * its history.
+     *
+     * This is deliberately only driven by real OS memory pressure (see
+     * `TabSSHApplication.onTrimMemory`). Enforcing a budget during normal
+     * operation would silently delete history a user had every reason to
+     * expect, which is a worse outcome than the memory use it would prevent.
+     */
+    fun trimTranscriptsToBudget(budgetBytes: Long, protectTabId: String?): Long {
+        val sessions = terminalSessions()
+        if (sessions.sumOf { (_, bridge) -> bridge.estimateTranscriptBytes() } <= budgetBytes) return 0L
+
+        val lastActivity = getAllTabsSealed().associate { it.tabId to it.lastTerminalActivity() }
+        val candidates = sessions
+            .filter { (tabId, _) -> tabId != protectTabId }
+            .sortedBy { (tabId, _) -> lastActivity[tabId] ?: 0L }
+
+        // Only the trimmable sessions are counted against the budget. Including
+        // the protected tab here would make the target unreachable whenever that
+        // one tab is itself over budget, and the loop would then clear every
+        // other tab's history without ever satisfying the condition it was
+        // clearing them for.
+        var total = candidates.sumOf { (_, bridge) -> bridge.estimateTranscriptBytes() }
+
+        var freed = 0L
+        for ((tabId, bridge) in candidates) {
+            if (total <= budgetBytes) break
+            val bytes = bridge.clearTranscript()
+            if (bytes <= 0L) continue
+            freed += bytes
+            total -= bytes
+            Logger.d("TabManager", "Trimmed ${bytes / 1024}KB of scrollback from tab $tabId")
+        }
+        return freed
+    }
+
+    /**
      * Handle keyboard shortcuts (Tmux-style)
      */
     fun handleKeyboardShortcut(keyCode: Int, event: KeyEvent): Boolean = synchronized(tabsLock) {

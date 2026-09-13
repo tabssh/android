@@ -1,11 +1,16 @@
 package io.github.tabssh.storage.registry
 
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.cloud.CloudProvider
 import io.github.tabssh.cloud.CloudProviderType
+import io.github.tabssh.cloud.OciCloudClient
 import io.github.tabssh.cloud.newClient
+import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.storage.database.TabSSHDatabase
+import io.github.tabssh.storage.database.entities.CloudAccount
 import io.github.tabssh.storage.database.entities.ConnectableHost
 import io.github.tabssh.utils.logging.Logger
+import org.json.JSONObject
 
 /**
  * Pull/refresh helper that keeps the internal-only `connectable_hosts`
@@ -140,8 +145,13 @@ object ConnectableHostRegistry {
                 Logger.w(TAG, "refreshCloudInstances: unknown provider tag=${account.provider}")
                 return
             }
-            val instances = providerType.newClient().fetchLiveInstances(token)
-                .filter { it.ip != null || it.privateIp != null }
+            val client = providerType.newClient()
+            val instances = try {
+                client.fetchLiveInstances(token)
+                    .filter { it.ip != null || it.privateIp != null }
+            } finally {
+                persistOciCloudPin(app, account, token, client)
+            }
             val hosts = instances.map { instance ->
                 val previewAddress = instance.ip ?: instance.privateIp ?: "?"
                 ConnectableHost(
@@ -159,6 +169,44 @@ object ConnectableHostRegistry {
             Logger.d(TAG, "Refreshed ${hosts.size} cloud-instance-backed connectable hosts for account=${account.name}")
         } catch (e: Exception) {
             Logger.e(TAG, "refreshCloudInstances failed for account=${account.name}", e)
+        }
+    }
+
+    /**
+     * Writes back a TLS pin captured during [refreshCloudInstances]'s fetch,
+     * mirroring `CloudAccountsFragment.persistOciCloudPin`. Without this the
+     * registry refresh built a throwaway client from the stale stored pin and
+     * discarded every capture — a user who answered ACCEPT_AND_PIN on the
+     * "cert changed" dialog got the identical dialog again on the very next
+     * refresh, forever. Called from a `finally` so a partial-failure fetch
+     * still persists a pin the user already confirmed. No-op for non-OCI
+     * providers, a blank capture, or an unchanged pin.
+     */
+    private suspend fun persistOciCloudPin(
+        app: TabSSHApplication,
+        account: CloudAccount,
+        currentToken: String,
+        provider: CloudProvider
+    ) {
+        val ociClient = provider as? OciCloudClient ?: return
+        val captured = ociClient.getCapturedCertSha256()?.takeIf { it.isNotBlank() } ?: return
+        try {
+            val tokenJson = JSONObject(currentToken)
+            if (captured == tokenJson.optString("tls_pin").takeIf { it.isNotBlank() }) return
+            app.securePasswordManager.storePassword(
+                "cloud_token_${account.id}",
+                tokenJson.put("tls_pin", captured).toString(),
+                SecurePasswordManager.StorageLevel.ENCRYPTED
+            )
+            Logger.i(TAG, "OCI cloud account '${account.name}' TLS pin updated: $captured")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // This runs from a finally block, so a cancelled refresh reaches it
+            // with the coroutine already cancelled. Swallowing the cancellation
+            // here would break structured concurrency, matching what
+            // CloudAccountsFragment and OciCloudClient already guard against.
+            throw e
+        } catch (e: Exception) {
+            Logger.w(TAG, "Failed to persist OCI cloud pin for ${account.name}", e)
         }
     }
 

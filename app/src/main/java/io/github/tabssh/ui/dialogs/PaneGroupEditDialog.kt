@@ -123,13 +123,21 @@ object PaneGroupEditDialog {
                 return@setOnClickListener
             }
             val windowCount = counts[countSpinner.selectedItemPosition]
-            // Bug fix: dismissing this dialog and immediately (synchronously)
-            // showing the Step 2 dialog raced the first dialog's window
-            // teardown against the second dialog's IME focus request — the
-            // Step 2 EditTexts visually gained focus (blinking cursor) but
-            // the soft keyboard never actually appeared. Deferring the
-            // Step 2 show to this dialog's dismiss callback lets its window
-            // finish tearing down first.
+            // Root cause (see attachExplicitKeyboardShow doc below): this
+            // dialog's own window still holds an open IME session for
+            // nameInput at the moment it is dismissed. If that session is
+            // still live when the Step 2 window is created, WindowManager's
+            // IME-focus handoff to the new window can get stuck — the Step 2
+            // EditTexts visually gain focus (blinking cursor) but never
+            // recover a served input connection, so no `showSoftInput` call
+            // from that window will ever raise the keyboard again. Closing
+            // the IME here, before dismissing, means there is no session to
+            // hand off, so Step 2 starts clean.
+            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE)
+                as? android.view.inputmethod.InputMethodManager
+            imm?.hideSoftInputFromWindow(dialogView.windowToken, 0)
+            // Deferring the Step 2 show to this dialog's dismiss callback lets
+            // its window finish tearing down before the next one is created.
             dialog.setOnDismissListener {
                 showStep2(context, app, scope, existing, hosts, existingWindows, name, windowCount, onSaved)
             }
@@ -304,28 +312,84 @@ object PaneGroupEditDialog {
      * for the Step 2 per-window fields — but it was still reported as not
      * working.
      *
-     * Bug fix (round 2, this one): `SHOW_IMPLICIT` is a no-op once the user
-     * has *explicitly* dismissed the IME anywhere in this process —
+     * Bug fix (round 2, superseded): `SHOW_IMPLICIT` is a no-op once the
+     * user has *explicitly* dismissed the IME anywhere in this process —
      * `InputMethodManager`'s "was explicitly hidden" bookkeeping isn't
      * scoped per-window, so it persists across completely unrelated windows.
      * `TerminalView`/`TabTerminalActivity` call `hideSoftInputFromWindow`
      * constantly as part of their own keyboard toggle (BACK hides the
      * terminal's IME instead of leaving the activity, tab switches hide it,
      * etc.) — any one of those poisons the implicit-show path for the rest
-     * of the app session, including these dialogs, which never touch
-     * TerminalView at all. `SHOW_FORCED` shows the keyboard unconditionally
-     * regardless of that history, so it's used here instead. Applied to
+     * of the app session. `SHOW_FORCED` sidesteps that specific poisoning,
+     * but on its own it was still reported as not working for the Step 2
+     * fields, because `SHOW_FORCED` only forces the *request* — since
+     * Android 12 (S), `showSoftInput` is a no-op unless the calling
+     * window actually holds IME focus, and `SHOW_FORCED` does not override
+     * that check (deprecated since API 33 for the same reason).
+     *
+     * Bug fix (round 3, this one): the real gap was a window-focus handoff
+     * race between the two chained dialogs, not the focus-gain timing on
+     * the field itself. Step 2 is shown from Step 1's dismiss callback
+     * while Step 1's own IME session (opened for the group-name field) can
+     * still be live — see the `hideSoftInputFromWindow` call added in
+     * `showStep1`'s positive-button handler, which now closes that session
+     * before dismissing, so there is nothing left to hand off. This
+     * listener still posts a window-focus-aware fallback: if the field
+     * happens to gain view focus before its window has genuinely gained
+     * IME focus (e.g. a stray focus event during RecyclerView layout right
+     * after Step 2's window is created), waiting for the real window-focus
+     * signal instead of a fixed one-frame `view.post` avoids calling
+     * `showSoftInput` on a window that cannot yet serve it. Applied to
      * every editable text field across both steps (group name, per-window
      * working dir, per-window custom title).
+     *
+     * The request itself passes no flags: once the window holds IME focus a
+     * plain explicit `showSoftInput` is honoured, `SHOW_IMPLICIT` is the
+     * poisoned variant described above, and `SHOW_FORCED` adds nothing here
+     * beyond a deprecated API in committed code.
      */
     private fun attachExplicitKeyboardShow(editText: TextInputEditText) {
-        editText.setOnFocusChangeListener { view, hasFocus ->
-            if (!hasFocus) return@setOnFocusChangeListener
-            view.post {
-                val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE)
-                    as? android.view.inputmethod.InputMethodManager
-                imm?.showSoftInput(view, android.view.inputmethod.InputMethodManager.SHOW_FORCED)
-            }
+        // At most one window-focus listener is ever outstanding per field.
+        // Losing and regaining view focus before the window-focus event arrives
+        // would otherwise register a second listener on top of the first.
+        var pending: android.view.ViewTreeObserver.OnWindowFocusChangeListener? = null
+
+        fun clearPending(view: View) {
+            val listener = pending ?: return
+            pending = null
+            val observer = view.viewTreeObserver
+            if (observer.isAlive) observer.removeOnWindowFocusChangeListener(listener)
         }
+
+        editText.setOnFocusChangeListener { view, hasFocus ->
+            if (!hasFocus) {
+                clearPending(view)
+                return@setOnFocusChangeListener
+            }
+            if (view.hasWindowFocus()) {
+                clearPending(view)
+                view.post { showKeyboardExplicit(view) }
+                return@setOnFocusChangeListener
+            }
+            if (pending != null) return@setOnFocusChangeListener
+            val listener = object : android.view.ViewTreeObserver.OnWindowFocusChangeListener {
+                override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+                    if (!hasWindowFocus) return
+                    clearPending(view)
+                    if (view.isAttachedToWindow && view.isFocused) {
+                        view.post { showKeyboardExplicit(view) }
+                    }
+                }
+            }
+            pending = listener
+            view.viewTreeObserver.addOnWindowFocusChangeListener(listener)
+        }
+    }
+
+    /** Explicit, flagless `showSoftInput` — see [attachExplicitKeyboardShow] for why. */
+    private fun showKeyboardExplicit(view: View) {
+        val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE)
+            as? android.view.inputmethod.InputMethodManager
+        imm?.showSoftInput(view, 0)
     }
 }

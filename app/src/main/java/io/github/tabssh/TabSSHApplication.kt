@@ -1,6 +1,7 @@
 package io.github.tabssh
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.Application
 import android.os.Bundle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -11,7 +12,6 @@ import java.lang.ref.WeakReference
 import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.crypto.keys.KeyStorage
 import io.github.tabssh.ssh.connection.SSHSessionManager
-import io.github.tabssh.terminal.emulator.TerminalManager
 import io.github.tabssh.themes.definitions.ThemeManager
 import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.utils.logging.Logger
@@ -32,6 +32,11 @@ class TabSSHApplication : Application() {
         const val KEY_CRASH_THREAD = "crash_thread"
         const val KEY_CRASH_TIME   = "crash_time"
         const val KEY_LAST_LOGGED_COMMIT = "last_logged_commit"
+
+        // Scrollback budget under memory pressure: a quarter of the heap the
+        // OS grants this app. See trimTerminalScrollback().
+        private const val BYTES_PER_MB = 1024L * 1024L
+        private const val SCROLLBACK_HEAP_DIVISOR = 4L
 
         // One-time migration guard + legacy pref key for the removed global
         // "Enable PRE Key" toggle — see migrateLegacyPrefixKeyPref().
@@ -81,7 +86,6 @@ class TabSSHApplication : Application() {
     val keyStorage by lazy { KeyStorage(this) }
     private val sshSessionManagerLazy = lazy { SSHSessionManager(this) }
     val sshSessionManager: SSHSessionManager by sshSessionManagerLazy
-    val terminalManager by lazy { TerminalManager(this) }
     val themeManager by lazy { ThemeManager(this) }
     val performanceManager by lazy { PerformanceManager(this) }
     /** Owns the lifecycle of saved, persistent port forwards (start/stop,
@@ -708,7 +712,6 @@ class TabSSHApplication : Application() {
         tryInit("Passwords")    { securePasswordManager.initialize() }
         tryInit("KeyStorage")   { keyStorage.initialize() }
         tryInit("SSHSession")   { sshSessionManager.initialize() }
-        tryInit("Terminal")     { terminalManager.initialize() }
         tryInit("Performance")  { performanceManager.initialize() }
         // Issue #158 — pre-open the Room DB on the background scope so the
         // first Flow subscription from ConnectionsFragment doesn't pay for
@@ -1013,9 +1016,60 @@ class TabSSHApplication : Application() {
             TRIM_MEMORY_MODERATE,
             TRIM_MEMORY_COMPLETE -> {
                 // App is in background, trim memory usage
-                terminalManager.trimInactiveTerminals()
                 themeManager.clearCache()
                 Logger.d("TabSSHApplication", "Memory trimmed due to level $level")
+            }
+        }
+
+        // Scrollback is only given back when the system says it genuinely needs
+        // the memory: RUNNING_CRITICAL means the OS is about to start killing
+        // background processes, and COMPLETE means this process is next. At any
+        // lighter level the history is worth more than the bytes.
+        when (level) {
+            TRIM_MEMORY_RUNNING_CRITICAL,
+            TRIM_MEMORY_COMPLETE -> trimTerminalScrollback(level)
+        }
+    }
+
+    /**
+     * Enforces a scrollback budget across open terminals under real memory
+     * pressure, protecting the tab the user is currently looking at.
+     *
+     * The budget is a quarter of the heap the OS has actually granted this app
+     * ([ActivityManager.getMemoryClass], which varies from ~48MB on a small
+     * device to several hundred MB on a large one) rather than a fixed figure —
+     * the previous implementation of this idea hardcoded 50MB while tracking
+     * an empty collection, so it never enforced anything on any device.
+     *
+     * Scrollback is not silently lost where it matters most: the periodic
+     * session save persists each tab's scrollback to the database, and
+     * `SessionPersistenceManager.restoreTabTerminalState` replays it, so a
+     * trimmed tab still restores its history on the next app start.
+     *
+     * The work runs on [applicationScope] rather than inline: `onTrimMemory`
+     * is a main-thread callback, and each `clearTranscript()` takes that
+     * session's emulator lock, which the SSH read loop holds while appending
+     * and `resize()` holds while reflowing the whole buffer. Blocking the main
+     * thread on N such locks during memory pressure is how a trim turns into
+     * an ANR.
+     */
+    private fun trimTerminalScrollback(level: Int) {
+        if (!tabManagerLazy.isInitialized()) return
+        val activityManager = getSystemService(ACTIVITY_SERVICE) as? ActivityManager ?: return
+        val budgetBytes = activityManager.memoryClass.toLong() * BYTES_PER_MB / SCROLLBACK_HEAP_DIVISOR
+        applicationScope.launch {
+            try {
+                val protectedTabId = tabManager.getActiveTabSealed()?.tabId
+                val freed = tabManager.trimTranscriptsToBudget(budgetBytes, protectedTabId)
+                if (freed > 0L) {
+                    Logger.i(
+                        "TabSSHApplication",
+                        "Trimmed ${freed / 1024}KB of terminal scrollback at memory level $level " +
+                            "(budget ${budgetBytes / 1024 / 1024}MB)"
+                    )
+                }
+            } catch (e: Exception) {
+                Logger.w("TabSSHApplication", "Failed to trim terminal scrollback", e)
             }
         }
     }
