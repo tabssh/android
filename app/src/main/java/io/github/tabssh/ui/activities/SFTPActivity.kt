@@ -608,12 +608,21 @@ class SFTPActivity : TabSSHActivity() {
         return trail.asReversed()
     }
 
-    private fun renderLocalSafBreadcrumb(dir: DocumentFile) {
-        val trail = buildSafTrail(dir)
-        val segments = trail.map { doc ->
-            (doc.name ?: doc.uri.lastPathSegment ?: "/") to { loadLocalDirectorySaf(doc) }
-        }
-        renderBreadcrumb(binding.includeLocalBreadcrumb.breadcrumbSegments, segments)
+    /**
+     * Resolves [buildSafTrail] into (label, [DocumentFile]) pairs. Each
+     * `.name` read and `.parentFile` walk is a ContentResolver binder
+     * round-trip, so this must always be called off the main thread (see
+     * [loadLocalDirectorySaf]) — doing this synchronously inside
+     * `runOnUiThread`/`renderLocalSafBreadcrumb` was an ANR risk.
+     */
+    private fun safBreadcrumbSegments(dir: DocumentFile): List<Pair<String, DocumentFile>> {
+        return buildSafTrail(dir).map { doc -> (doc.name ?: doc.uri.lastPathSegment ?: "/") to doc }
+    }
+
+    /** UI-only: inflates precomputed [segments] — no binder calls here. */
+    private fun renderLocalSafBreadcrumb(segments: List<Pair<String, DocumentFile>>) {
+        val clickable = segments.map { (label, doc) -> label to { loadLocalDirectorySaf(doc) } }
+        renderBreadcrumb(binding.includeLocalBreadcrumb.breadcrumbSegments, clickable)
     }
 
     /**
@@ -715,12 +724,17 @@ class SFTPActivity : TabSSHActivity() {
             try {
                 val directory = File(path)
                 if (directory.exists() && directory.isDirectory) {
-                    val files = withContext(Dispatchers.IO) {
-                        directory.listFiles()?.toList() ?: emptyList()
+                    // Sorting and LocalFileSource.Plain's per-item stat()
+                    // snapshot both belong off the main thread alongside the
+                    // listFiles() call itself — see loadLocalDirectorySaf's
+                    // KDoc for why this used to be an ANR risk on the SAF
+                    // side; kept consistent here even though plain File I/O
+                    // is local (not binder) and lower-risk.
+                    val sorted = withContext(Dispatchers.IO) {
+                        (directory.listFiles()?.toList() ?: emptyList())
+                            .sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name })
+                            .map { LocalFileSource.Plain(it) }
                     }
-
-                    val sorted = files.sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name })
-                        .map { LocalFileSource.Plain(it) }
 
                     runOnUiThread {
                         localFileAdapter.replaceAllWithDiff(
@@ -735,7 +749,7 @@ class SFTPActivity : TabSSHActivity() {
                             if (localFiles.isEmpty()) View.VISIBLE else View.GONE
                     }
 
-                    Logger.d("SFTPActivity", "Loaded local directory: $path (${files.size} items)")
+                    Logger.d("SFTPActivity", "Loaded local directory: $path (${sorted.size} items)")
                 }
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Failed to load local directory: $path", e)
@@ -744,12 +758,29 @@ class SFTPActivity : TabSSHActivity() {
         }
     }
 
+    /**
+     * Every [DocumentFile] property read (`.name`, `.isDirectory`,
+     * `.length()`, `.lastModified()`, `.canRead()`, `.canWrite()`, and each
+     * `.parentFile` step) is a ContentResolver binder round-trip to the
+     * DocumentsProvider — not a local syscall like the [File] equivalents.
+     * Building [LocalFileSource.Saf] snapshots and resolving the breadcrumb
+     * trail (via [safBreadcrumbSegments]) both used to happen after
+     * `withContext(Dispatchers.IO)` returned — i.e. back on the main thread
+     * inside `runOnUiThread` — which meant up to `2 * childCount` synchronous
+     * binder calls per directory load on the UI thread: the actual cause of
+     * the reported occasional ANR when browsing large local SAF folders.
+     * Both are now computed entirely inside the IO dispatcher; the
+     * `runOnUiThread` block below only touches views.
+     */
     private fun loadLocalDirectorySaf(dir: DocumentFile) {
         lifecycleScope.launch {
             try {
-                val children = withContext(Dispatchers.IO) { dir.listFiles().toList() }
-                val sorted = children.sortedWith(compareBy<DocumentFile> { !it.isDirectory }.thenBy { it.name ?: "" })
-                    .map { LocalFileSource.Saf(it) }
+                val (sorted, breadcrumb) = withContext(Dispatchers.IO) {
+                    val children = dir.listFiles().toList()
+                        .sortedWith(compareBy<DocumentFile> { !it.isDirectory }.thenBy { it.name ?: "" })
+                        .map { LocalFileSource.Saf(it) }
+                    children to safBreadcrumbSegments(dir)
+                }
 
                 runOnUiThread {
                     localFileAdapter.replaceAllWithDiff(
@@ -758,13 +789,13 @@ class SFTPActivity : TabSSHActivity() {
                         areItemsTheSame = { a, b -> a.id == b.id }
                     )
                     currentLocalSaf = dir
-                    renderLocalSafBreadcrumb(dir)
+                    renderLocalSafBreadcrumb(breadcrumb)
                     binding.textEmptyLocal.text = getString(R.string.sftp_browser_empty_folder)
                     binding.emptyLocal.visibility =
                         if (localFiles.isEmpty()) View.VISIBLE else View.GONE
                 }
 
-                Logger.d("SFTPActivity", "Loaded SAF local directory: ${dir.uri} (${children.size} items)")
+                Logger.d("SFTPActivity", "Loaded SAF local directory: ${dir.uri} (${sorted.size} items)")
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Failed to load SAF local directory: ${dir.uri}", e)
                 showError(getString(R.string.sftp_error_load_local))
