@@ -1860,29 +1860,68 @@ class SFTPActivity : TabSSHActivity() {
      * that always renders empty is worse than not offering it, so those
      * entries are only shown once full access is actually granted; otherwise
      * only the SAF "Browse folder…" option — which actually lists files
-     * correctly without that permission — is shown.
+     * correctly without that permission — is shown, plus a "Grant full
+     * storage access…" entry.
+     *
+     * That grant entry exists because [loadLocalFiles] checks for an
+     * already-persisted SAF tree before it ever checks
+     * [StorageAccessHelper.hasFullAccess]: once a SAF folder has been
+     * granted (including from before this permission existed, or from a
+     * user who just prefers a narrower tree), the app keeps using it
+     * indefinitely and [requestFullAccessThenLoad] is never reached on its
+     * own — there is no other in-app entry point to the rationale dialog
+     * for that user, matching the promise in
+     * [R.string.storage_helper_denied_message] ("grant it later from the
+     * local browser's overflow menu").
      */
     private fun showChooseLocalStorageDialog() {
-        val roots = if (StorageAccessHelper.hasFullAccess(this)) externalStorageRoots() else emptyList()
-        val labels = (roots.map { it.first } + getString(R.string.sftp_storage_browse_folder)).toTypedArray()
+        val fullAccess = StorageAccessHelper.hasFullAccess(this)
+        val roots = if (fullAccess) externalStorageRoots() else emptyList()
+        val labels = (
+            roots.map { it.first } +
+                getString(R.string.sftp_storage_browse_folder) +
+                (if (fullAccess) emptyList() else listOf(getString(R.string.sftp_storage_grant_full_access)))
+            ).toTypedArray()
+        val browseIndex = roots.size
+        val grantIndex = roots.size + 1
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.sftp_choose_storage_title)
             .setItems(labels) { _, which ->
-                if (which == roots.size) {
-                    // Android's own document-tree picker (DocumentsUI, or the
-                    // OEM equivalent) hard-refuses granting the top-level
-                    // "Internal storage"/"This device" root or the "Download"
-                    // folder — "Can't use this folder. Please choose another
-                    // folder." with no way for this app to detect or bypass
-                    // it (uri callback just looks like a plain cancel). Warn
-                    // up front so the user navigates into a real subfolder
-                    // instead of retrying the same blocked root repeatedly.
-                    Toast.makeText(this, R.string.sftp_saf_picker_hint, Toast.LENGTH_LONG).show()
-                    openLocalSafTreeLauncher.launch(null)
-                } else {
-                    currentLocalSaf = null
-                    currentLocalPath = roots[which].second
-                    loadLocalFiles()
+                when (which) {
+                    browseIndex -> {
+                        // Android's own document-tree picker (DocumentsUI,
+                        // or the OEM equivalent) hard-refuses granting the
+                        // top-level "Internal storage"/"This device" root or
+                        // the "Download" folder — "Can't use this folder.
+                        // Please choose another folder." with no way for
+                        // this app to detect or bypass it (uri callback just
+                        // looks like a plain cancel). Warn up front so the
+                        // user navigates into a real subfolder instead of
+                        // retrying the same blocked root repeatedly.
+                        Toast.makeText(this, R.string.sftp_saf_picker_hint, Toast.LENGTH_LONG).show()
+                        openLocalSafTreeLauncher.launch(null)
+                    }
+                    // Not requestFullAccessThenLoad(): that function assumes
+                    // it's called from loadLocalFiles() with nothing valid
+                    // on screen yet, so it blanks the pane to the "no
+                    // access" empty state the instant the rationale dialog
+                    // is shown (before the user has answered it). Here a
+                    // SAF listing may already be showing correctly — only
+                    // react once the grant flow actually changes something.
+                    grantIndex -> StorageAccessHelper.requestFullAccessIfNeeded(
+                        activity = this,
+                        legacyPermissionLauncher = legacyStoragePermissionLauncher,
+                        onAlreadyGranted = {
+                            currentLocalSaf = null
+                            loadLocalFiles()
+                        },
+                        onSettingsLaunched = { awaitingFullAccessSettingsResult = true }
+                    )
+                    else -> {
+                        currentLocalSaf = null
+                        currentLocalPath = roots[which].second
+                        loadLocalFiles()
+                    }
                 }
             }
             .show()

@@ -3990,6 +3990,7 @@
     <string name="sftp_storage_internal">Internal storage</string>
     <string name="sftp_storage_sd_card_fmt">SD card (%1$s)</string>
     <string name="sftp_storage_browse_folder">Browse folder…</string>
+    <string name="sftp_storage_grant_full_access">Grant full storage access…</string>
     <string name="sftp_tab_local">Local</string>
     <string name="sftp_tab_remote">Remote</string>
 
