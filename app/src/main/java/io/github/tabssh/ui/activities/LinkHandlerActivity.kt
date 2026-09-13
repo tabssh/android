@@ -212,7 +212,7 @@ class LinkHandlerActivity : AppCompatActivity() {
         val connection = try {
             if (spice) SpiceUri.parse(rawUrl) else VncUri.parse(rawUrl)
         } catch (e: VirtViewerParseException) {
-            Logger.w(TAG, "Rejected display link: ${e.message}")
+            Logger.w(TAG, "Rejected display link: ${e.message}", e)
             Toast.makeText(
                 this,
                 getString(R.string.virt_viewer_invalid_link, e.message.orEmpty()),
@@ -241,7 +241,7 @@ class LinkHandlerActivity : AppCompatActivity() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.w(TAG, "Could not read connection file: ${e.message}")
+                Logger.w(TAG, "Could not read connection file: ${e.message}", e)
                 null
             }
 
@@ -258,7 +258,7 @@ class LinkHandlerActivity : AppCompatActivity() {
             val connection = try {
                 VirtViewerFile.parse(content)
             } catch (e: VirtViewerParseException) {
-                Logger.w(TAG, "Rejected .vv file: ${e.message}")
+                Logger.w(TAG, "Rejected .vv file: ${e.message}", e)
                 Toast.makeText(
                     this@LinkHandlerActivity,
                     getString(R.string.virt_viewer_invalid_link, e.message.orEmpty()),
@@ -339,7 +339,7 @@ class LinkHandlerActivity : AppCompatActivity() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.w(TAG, "Could not read JNLP file: ${e.message}")
+                Logger.w(TAG, "Could not read JNLP file: ${e.message}", e)
                 null
             }
 
@@ -352,7 +352,7 @@ class LinkHandlerActivity : AppCompatActivity() {
             val connection = try {
                 JnlpFile.parse(content)
             } catch (e: JnlpParseException) {
-                Logger.w(TAG, "Rejected .jnlp file: ${e.message}")
+                Logger.w(TAG, "Rejected .jnlp file: ${e.message}", e)
                 Toast.makeText(
                     this@LinkHandlerActivity,
                     getString(R.string.jnlp_invalid_file, e.message.orEmpty()),

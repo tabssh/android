@@ -1,5 +1,6 @@
 package io.github.tabssh.hypervisor.viewer
 
+import io.github.tabssh.utils.logging.Logger
 import org.w3c.dom.Element
 import java.io.StringReader
 import javax.xml.parsers.DocumentBuilderFactory
@@ -52,6 +53,8 @@ import javax.xml.parsers.ParserConfigurationException
  * is exercised by plain JVM unit tests.
  */
 object JnlpFile {
+
+    private const val TAG = "JnlpFile"
 
     /** Largest `.jnlp` document accepted, in characters. */
     const val MAX_CONTENT_LEN = 256 * 1024
@@ -145,17 +148,29 @@ object JnlpFile {
     /**
      * Build a DOM [Element] for the `<jnlp>` root, with every entity/DTD
      * feature that could make the parser reach outside this document
-     * turned off. A `<!DOCTYPE ...>` in the input causes a hard parse
-     * failure rather than being honoured, because
-     * `disallow-doctype-decl=true` rejects it outright — the strongest
-     * available guard against an XXE/billion-laughs payload.
+     * turned off.
+     *
+     * `disallow-doctype-decl=true` is the strongest available guard against
+     * an XXE/billion-laughs payload and is tried first, but this is an
+     * Apache/Xerces-specific feature URI that not every device's built-in
+     * `DocumentBuilderFactory` implementation honours — some throw
+     * [ParserConfigurationException] just for asking. When that happens this
+     * falls back to a manual literal `<!DOCTYPE` rejection on the raw text
+     * below, which is a weaker but still effective guard (any doctype
+     * declaration is refused outright, so no external entity/DTD can be
+     * referenced) rather than failing every `.jnlp` file on that device.
      */
     private fun parseDocument(content: String): Element {
         val factory = DocumentBuilderFactory.newInstance()
-        try {
+        val doctypeDeclDisallowed = try {
             factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+            true
         } catch (e: ParserConfigurationException) {
-            throw JnlpParseException("XML parser unavailable")
+            Logger.w(TAG, "disallow-doctype-decl unsupported by platform XML parser, falling back to manual check", e)
+            false
+        }
+        if (!doctypeDeclDisallowed && content.contains("<!DOCTYPE", ignoreCase = true)) {
+            throw JnlpParseException("DOCTYPE declarations are not allowed")
         }
         factory.isExpandEntityReferences = false
         factory.isXIncludeAware = false
@@ -166,7 +181,7 @@ object JnlpFile {
                 org.xml.sax.InputSource(StringReader(content))
             )
         } catch (e: Exception) {
-            throw JnlpParseException("malformed XML: ${e.message?.take(120)}")
+            throw JnlpParseException("malformed XML: ${e.message?.take(120)}", e)
         }
 
         val root = document.documentElement
@@ -274,6 +289,8 @@ data class JnlpConnection(
 /**
  * Raised when a `.jnlp` file cannot be turned into a [JnlpConnection]. The
  * message names the offending rule and is safe to display — the parser
- * never quotes a ticket value into it.
+ * never quotes a ticket value into it. [cause], when present, carries the
+ * real underlying platform exception (e.g. a SAX parse failure) purely for
+ * diagnostics — it is never shown to the user, only logged.
  */
-class JnlpParseException(message: String) : IllegalArgumentException(message)
+class JnlpParseException(message: String, cause: Throwable? = null) : IllegalArgumentException(message, cause)
