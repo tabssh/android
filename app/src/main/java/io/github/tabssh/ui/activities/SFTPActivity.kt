@@ -771,14 +771,19 @@ class SFTPActivity : TabSSHActivity() {
      * the reported occasional ANR when browsing large local SAF folders.
      * Both are now computed entirely inside the IO dispatcher; the
      * `runOnUiThread` block below only touches views.
+     *
+     * The listing itself goes through [LocalFileSource.Saf.listChildren],
+     * a single batched ContentResolver query, instead of
+     * `dir.listFiles()` + per-child property access — the latter is a
+     * binder round-trip per property per child (up to 6x the child count)
+     * and was still slow to open even after moving off the main thread.
      */
     private fun loadLocalDirectorySaf(dir: DocumentFile) {
         lifecycleScope.launch {
             try {
                 val (sorted, breadcrumb) = withContext(Dispatchers.IO) {
-                    val children = dir.listFiles().toList()
-                        .sortedWith(compareBy<DocumentFile> { !it.isDirectory }.thenBy { it.name ?: "" })
-                        .map { LocalFileSource.Saf(it) }
+                    val children = LocalFileSource.Saf.listChildren(this@SFTPActivity, dir)
+                        .sortedWith(compareBy<LocalFileSource.Saf> { !it.isDirectory }.thenBy { it.name })
                     children to safBreadcrumbSegments(dir)
                 }
 
