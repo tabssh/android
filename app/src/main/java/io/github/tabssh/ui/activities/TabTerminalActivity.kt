@@ -5370,9 +5370,15 @@ class TabTerminalActivity : TabSSHActivity() {
                 Logger.d("TabTerminalActivity", "IME show suppressed — hardware keyboard active")
                 return
             }
+            // SHOW_IMPLICIT is a no-op once the IME has been explicitly
+            // hidden anywhere in this process (the hideSoftInputFromWindow
+            // call above, or the same call from TerminalView's own toggle,
+            // sets that bookkeeping process-wide, not per-window) — the
+            // "IME shown" log below still ran, the request just got
+            // silently dropped. SHOW_FORCED bypasses that history.
             imm.showSoftInput(
                 inputView,
-                InputMethodManager.SHOW_IMPLICIT
+                InputMethodManager.SHOW_FORCED
             )
             Logger.d("TabTerminalActivity", "IME shown")
         }

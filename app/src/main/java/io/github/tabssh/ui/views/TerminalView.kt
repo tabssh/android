@@ -1239,7 +1239,16 @@ class TerminalView @JvmOverloads constructor(
                 return
             }
             requestFocus()
-            inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
+            // SHOW_IMPLICIT is a no-op once the IME has been explicitly
+            // hidden anywhere in this process — InputMethodManager's
+            // "explicitly hidden" bookkeeping isn't scoped per-window, and
+            // hideSoftInputFromWindow() a few lines above (or the same call
+            // from forceHideKeyboard()/BACK) sets it on every hide. That
+            // poisons every later implicit show for the rest of the app
+            // session: the log line below still runs (showSoftInput() was
+            // called), but the system silently drops the request, so the
+            // keyboard never reappears. SHOW_FORCED bypasses that history.
+            inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_FORCED)
             Logger.d("TerminalView", "Showing keyboard")
         }
     }

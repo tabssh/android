@@ -557,7 +557,12 @@ class SpiceView @JvmOverloads constructor(
         if (hasHardwareKeyboard) return
         requestFocus()
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-        imm?.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
+        // SHOW_IMPLICIT is a no-op once the IME has been explicitly hidden
+        // anywhere in this process — that bookkeeping isn't scoped
+        // per-window, so TerminalView's/TabTerminalActivity's own
+        // hideSoftInputFromWindow() calls poison it for this view too.
+        // SHOW_FORCED bypasses that history.
+        imm?.showSoftInput(this, InputMethodManager.SHOW_FORCED)
     }
 
     // ── Keyboard ─────────────────────────────────────────────────────────
