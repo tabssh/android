@@ -44,6 +44,29 @@
             app:singleLine="true"
             app:singleSelection="true" />
 
+        <!-- Local/Remote pane switcher — shown only on narrow screens
+             (screenWidthDp < 600, matching PanesGridView's existing
+             runtime-width-check precedent). On wide screens both panes
+             stay visible side-by-side below and this strip is gone. -->
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/local_remote_tabs"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:tabMode="fixed">
+
+            <com.google.android.material.tabs.TabItem
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/sftp_tab_local" />
+
+            <com.google.android.material.tabs.TabItem
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/sftp_tab_remote" />
+
+        </com.google.android.material.tabs.TabLayout>
+
         <!-- Dual-pane file browser -->
         <LinearLayout
             android:layout_width="match_parent"
@@ -54,6 +77,7 @@
 
             <!-- ───────────── Local pane ───────────── -->
             <FrameLayout
+                android:id="@+id/pane_local"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
@@ -82,18 +106,13 @@
                             app:tint="?attr/colorOnSurfaceVariant"
                             android:contentDescription="@string/sftp_browser_go_up_description" />
 
-                        <TextView
-                            android:id="@+id/text_local_path"
+                        <include
+                            android:id="@+id/include_local_breadcrumb"
+                            layout="@layout/include_path_breadcrumb"
                             android:layout_width="0dp"
-                            android:layout_height="wrap_content"
+                            android:layout_height="match_parent"
                             android:layout_weight="1"
-                            android:layout_marginHorizontal="@dimen/space_xs"
-                            android:text="@string/sftp_path_default_storage"
-                            android:textSize="@dimen/text_size_small_body"
-                            android:textColor="?attr/colorOnSurfaceVariant"
-                            android:singleLine="true"
-                            android:ellipsize="start"
-                            android:fontFamily="monospace" />
+                            android:layout_marginHorizontal="@dimen/space_xs" />
 
                     </LinearLayout>
 
@@ -144,12 +163,14 @@
 
             <!-- Vertical divider -->
             <View
+                android:id="@+id/pane_divider"
                 android:layout_width="@dimen/divider_height"
                 android:layout_height="match_parent"
                 android:background="?attr/colorOutlineVariant" />
 
             <!-- ───────────── Remote pane ───────────── -->
             <FrameLayout
+                android:id="@+id/pane_remote"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
@@ -178,18 +199,13 @@
                             app:tint="?attr/colorOnSurfaceVariant"
                             android:contentDescription="@string/sftp_browser_go_up_description" />
 
-                        <TextView
-                            android:id="@+id/text_remote_path"
+                        <include
+                            android:id="@+id/include_remote_breadcrumb"
+                            layout="@layout/include_path_breadcrumb"
                             android:layout_width="0dp"
-                            android:layout_height="wrap_content"
+                            android:layout_height="match_parent"
                             android:layout_weight="1"
-                            android:layout_marginHorizontal="@dimen/space_xs"
-                            android:text="@string/sftp_path_root"
-                            android:textSize="@dimen/text_size_small_body"
-                            android:textColor="?attr/colorOnSurfaceVariant"
-                            android:singleLine="true"
-                            android:ellipsize="start"
-                            android:fontFamily="monospace" />
+                            android:layout_marginHorizontal="@dimen/space_xs" />
 
                     </LinearLayout>
 

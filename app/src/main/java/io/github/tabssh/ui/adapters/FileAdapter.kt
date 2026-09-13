@@ -225,12 +225,12 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
                 iconFile.setImageResource(getLocalFileIcon(file))
                 textFileName.text = file.name
                 textFileSize.text = if (file.isDirectory) {
-                    val itemCount = file.childCount()
-                    root.context.resources.getQuantityString(
-                        R.plurals.filerow_item_count,
-                        itemCount,
-                        Format.count(itemCount)
-                    )
+                    // Matches bindRemoteFile below — a directory's row shows
+                    // a generic label, not an item count. Counting a
+                    // directory's children would mean listing it again on
+                    // every bind, reintroducing the same N+1 listing cost
+                    // this class exists to avoid.
+                    root.context.getString(R.string.filerow_type_directory)
                 } else {
                     Format.size(root.context, file.length)
                 }

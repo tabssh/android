@@ -2207,10 +2207,6 @@
     <string name="fileopen_upload_failed_kept">Upload failed — local copy kept</string>
 
     <!-- File browser rows -->
-    <plurals name="filerow_item_count">
-        <item quantity="one">%1$s item</item>
-        <item quantity="other">%1$s items</item>
-    </plurals>
     <string name="filerow_type_directory">Directory</string>
     <string name="filerow_type_folder">Folder</string>
     <string name="filerow_type_file">File</string>
@@ -2982,6 +2978,11 @@
     <string name="battery_helper_oem_title">One more step</string>
     <string name="battery_helper_oem_message">Your device (%1$s) has additional battery restrictions that can prevent background apps from running even after granting the exemption above.\n\nTo ensure host alerts arrive promptly, open your device\'s battery settings and make sure TabSSH is set to \'No restrictions\' or \'Allow background activity\'.</string>
     <string name="battery_helper_oem_open_settings">Open settings</string>
+
+    <!-- StorageAccessHelper -->
+    <string name="storage_helper_exemption_title">Allow full file access</string>
+    <string name="storage_helper_exemption_message">TabSSH\'s local file browser needs full storage access to show your device\'s files quickly, without picking a folder every time.\n\nTap OK to open the system prompt, then turn on \'Allow access to manage all files\' for TabSSH.</string>
+    <string name="storage_helper_denied_message">Full file access wasn\'t granted. You can still browse by picking a folder, or grant it later from the local browser\'s overflow menu.</string>
 
     <!-- SecurePasswordManager -->
     <string name="secure_password_store_prompt_title">Store Password Securely</string>
@@ -3989,6 +3990,8 @@
     <string name="sftp_storage_internal">Internal storage</string>
     <string name="sftp_storage_sd_card_fmt">SD card (%1$s)</string>
     <string name="sftp_storage_browse_folder">Browse folder…</string>
+    <string name="sftp_tab_local">Local</string>
+    <string name="sftp_tab_remote">Remote</string>
 
     <!-- Menu titles: keyboard customization menu -->
     <string name="kbdcustom_menu_reset_to_default">Reset to default</string>

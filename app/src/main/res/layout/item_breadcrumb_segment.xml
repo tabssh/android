@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    One tappable label in a path breadcrumb strip (a directory name, or the
+    "/" separator between two directory names). Inflated at runtime by
+    SFTPActivity's breadcrumb renderer — never referenced by a static
+    <include>, so it has no fixed id.
+-->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:paddingHorizontal="@dimen/space_xs"
+    android:textSize="@dimen/text_size_small_body"
+    android:fontFamily="monospace"
+    android:background="?attr/selectableItemBackground"
+    android:singleLine="true" />

@@ -33,9 +33,16 @@ import io.github.tabssh.utils.showError
 import io.github.tabssh.utils.announceAccessibility
 import io.github.tabssh.utils.tabSSHApp
 import io.github.tabssh.utils.LocalFileSource
+import io.github.tabssh.utils.StorageAccessHelper
+import io.github.tabssh.utils.PathBreadcrumbSegment
+import io.github.tabssh.utils.splitPathBreadcrumb
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.documentfile.provider.DocumentFile
 import android.net.Uri
+import android.util.TypedValue
+import android.widget.LinearLayout
+import android.widget.TextView
+import com.google.android.material.tabs.TabLayout
 import java.util.UUID
 
 /**
@@ -57,6 +64,10 @@ class SFTPActivity : TabSSHActivity() {
         // Ceiling for the in-app text editor. Anything larger is a download,
         // not an edit — the editor materialises the whole file in memory.
         private const val MAX_INLINE_EDIT_BYTES = 1_048_576L
+
+        // Matches PanesGridView.NARROW_WIDTH_DP — the codebase's existing
+        // runtime-width-check threshold for switching to a single-pane layout.
+        private const val NARROW_WIDTH_DP = 600
 
         fun createIntent(context: Context, connectionId: String): Intent {
             return Intent(context, SFTPActivity::class.java).apply {
@@ -100,6 +111,25 @@ class SFTPActivity : TabSSHActivity() {
         registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
             if (uri != null) grantLocalSafRoot(uri)
         }
+
+    // File-manager-class MANAGE_EXTERNAL_STORAGE grant (AI.md PART 2/5).
+    // The legacy (API ≤ 28) runtime-permission grant delivers its result
+    // through this launcher; the API ≥ 30 Settings flow has no such result
+    // contract, so [awaitingFullAccessSettingsResult] plus onResume() covers
+    // that path instead. SAF (openLocalSafTreeLauncher above) remains the
+    // fallback for declined grants and the permanent API 29 case.
+    private val legacyStoragePermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+            if (results.values.all { it }) {
+                currentLocalSaf = null
+                loadLocalFiles()
+            } else {
+                Toast.makeText(this, R.string.storage_helper_denied_message, Toast.LENGTH_LONG).show()
+                loadLocalFiles()
+            }
+        }
+
+    private var awaitingFullAccessSettingsResult = false
 
     /**
      * Wave 8.5 — multi-connection SFTP tabs. Each [SftpTab] holds the
@@ -147,6 +177,7 @@ class SFTPActivity : TabSSHActivity() {
         setupTransferAdapter()
         setupButtons()
         setupPathNavigation()
+        setupResponsivePaneLayout()
         restoreLocalSafRoot()
 
         // Load initial directories
@@ -155,7 +186,26 @@ class SFTPActivity : TabSSHActivity() {
         
         Logger.i("SFTPActivity", "SFTP activity created")
     }
-    
+
+    /**
+     * Re-checks [StorageAccessHelper.hasFullAccess] after a return from the
+     * API ≥ 30 "manage all files" Settings screen — that flow has no
+     * [androidx.activity.result.ActivityResultLauncher] result contract, so
+     * this is the only place the grant/denial is observable.
+     */
+    override fun onResume() {
+        super.onResume()
+        if (awaitingFullAccessSettingsResult) {
+            awaitingFullAccessSettingsResult = false
+            if (StorageAccessHelper.hasFullAccess(this)) {
+                currentLocalSaf = null
+            } else {
+                Toast.makeText(this, R.string.storage_helper_denied_message, Toast.LENGTH_LONG).show()
+            }
+            loadLocalFiles()
+        }
+    }
+
     private fun setupToolbar() {
         setSupportActionBar(binding.appBar.toolbar)
         supportActionBar?.apply {
@@ -419,9 +469,9 @@ class SFTPActivity : TabSSHActivity() {
     }
     
     private fun setupPathNavigation() {
-        binding.textLocalPath.text = currentLocalPath
-        binding.textRemotePath.text = currentRemotePath
-        
+        renderLocalPlainBreadcrumb(currentLocalPath)
+        renderRemoteBreadcrumb(currentRemotePath)
+
         binding.btnLocalUp.setOnClickListener {
             navigateLocalUp()
         }
@@ -437,16 +487,155 @@ class SFTPActivity : TabSSHActivity() {
             if (currentLocalSaf == null) showChooseLocalStorageDialog()
         }
     }
-    
+
+    /**
+     * Matches [io.github.tabssh.ui.views.PanesGridView]'s existing runtime
+     * width check rather than introducing the codebase's first
+     * resource-qualifier layout split — no `layout-sw600dp` folder exists
+     * anywhere in this project.
+     */
+    private fun isNarrowScreen(): Boolean {
+        val widthDp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
+        return widthDp < NARROW_WIDTH_DP
+    }
+
+    /**
+     * On narrow screens, shows a Local/Remote [TabLayout] and only one pane
+     * at a time; on wide screens (tablet/landscape), both panes stay side by
+     * side exactly as before and the tab strip is hidden.
+     */
+    private fun setupResponsivePaneLayout() {
+        val narrow = isNarrowScreen()
+        binding.localRemoteTabs.visibility = if (narrow) View.VISIBLE else View.GONE
+        binding.paneDivider.visibility = if (narrow) View.GONE else View.VISIBLE
+
+        if (!narrow) {
+            binding.paneLocal.visibility = View.VISIBLE
+            binding.paneRemote.visibility = View.VISIBLE
+            return
+        }
+
+        applyNarrowPaneSelection(binding.localRemoteTabs.selectedTabPosition)
+        binding.localRemoteTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                applyNarrowPaneSelection(tab.position)
+            }
+            override fun onTabUnselected(tab: TabLayout.Tab) {}
+            override fun onTabReselected(tab: TabLayout.Tab) {}
+        })
+    }
+
+    private fun applyNarrowPaneSelection(tabPosition: Int) {
+        binding.paneLocal.visibility = if (tabPosition == 0) View.VISIBLE else View.GONE
+        binding.paneRemote.visibility = if (tabPosition == 0) View.GONE else View.VISIBLE
+    }
+
+    /**
+     * Resolves a theme attribute (e.g. `?attr/colorPrimary`) to its current
+     * color at runtime, so breadcrumb chips can highlight the current
+     * segment without hardcoding a color.
+     */
+    private fun resolveThemeColor(attr: Int): Int {
+        val typedValue = TypedValue()
+        theme.resolveAttribute(attr, typedValue, true)
+        return typedValue.data
+    }
+
+    /**
+     * Inflates one [R.layout.item_breadcrumb_segment] chip per entry in
+     * [segments] into [container], with a non-clickable "/" separator chip
+     * between each pair. The last segment (the current directory) is
+     * highlighted with `?attr/colorPrimary` and not clickable; every earlier
+     * segment is `?attr/colorOnSurfaceVariant` and navigates to its [Pair.second]
+     * path when tapped.
+     */
+    private fun renderBreadcrumb(container: LinearLayout, segments: List<Pair<String, () -> Unit>>) {
+        container.removeAllViews()
+        val inflater = layoutInflater
+        val currentColor = resolveThemeColor(com.google.android.material.R.attr.colorPrimary)
+        val ancestorColor = resolveThemeColor(com.google.android.material.R.attr.colorOnSurfaceVariant)
+
+        segments.forEachIndexed { index, (label, onClick) ->
+            if (index > 0) {
+                val separator = inflater.inflate(R.layout.item_breadcrumb_segment, container, false) as TextView
+                separator.text = "/"
+                separator.setTextColor(ancestorColor)
+                container.addView(separator)
+            }
+            val chip = inflater.inflate(R.layout.item_breadcrumb_segment, container, false) as TextView
+            chip.text = label
+            val isCurrent = index == segments.lastIndex
+            chip.setTextColor(if (isCurrent) currentColor else ancestorColor)
+            if (!isCurrent) {
+                chip.setOnClickListener { onClick() }
+            } else {
+                chip.setOnClickListener(null)
+                chip.isClickable = false
+            }
+            container.addView(chip)
+        }
+    }
+
+    private fun renderLocalPlainBreadcrumb(path: String) {
+        val segments = splitPathBreadcrumb(path).map { segment: PathBreadcrumbSegment ->
+            segment.label to { loadLocalDirectoryPlain(segment.path) }
+        }
+        renderBreadcrumb(binding.includeLocalBreadcrumb.breadcrumbSegments, segments)
+    }
+
+    private fun renderRemoteBreadcrumb(path: String) {
+        val segments = splitPathBreadcrumb(path).map { segment: PathBreadcrumbSegment ->
+            segment.label to { loadRemoteDirectory(segment.path) }
+        }
+        renderBreadcrumb(binding.includeRemoteBreadcrumb.breadcrumbSegments, segments)
+    }
+
+    /**
+     * Walks `DocumentFile.parentFile` from [dir] up to (and including)
+     * [localSafRoot], since a SAF tree has no filesystem path string to
+     * split the way [splitPathBreadcrumb] does — only a live parent chain.
+     * Returns root-first order for left-to-right rendering.
+     */
+    private fun buildSafTrail(dir: DocumentFile): List<DocumentFile> {
+        val root = localSafRoot
+        val trail = mutableListOf(dir)
+        var current = dir
+        while (root == null || current.uri != root.uri) {
+            val parent = current.parentFile ?: break
+            trail.add(parent)
+            current = parent
+        }
+        return trail.asReversed()
+    }
+
+    private fun renderLocalSafBreadcrumb(dir: DocumentFile) {
+        val trail = buildSafTrail(dir)
+        val segments = trail.map { doc ->
+            (doc.name ?: doc.uri.lastPathSegment ?: "/") to { loadLocalDirectorySaf(doc) }
+        }
+        renderBreadcrumb(binding.includeLocalBreadcrumb.breadcrumbSegments, segments)
+    }
+
     /**
      * Restores a previously granted local-browser SAF tree (if any) so the
      * user doesn't have to re-pick "Browse folder…" every time this
      * activity is created. Silently falls back to the legacy File-path
      * browser if the permission grant is gone (revoked, uninstalled app
      * that owned the tree, etc.).
+     *
+     * If [StorageAccessHelper.hasFullAccess] is now granted (a user who
+     * picked a SAF folder before upgrading to the full-access grant, or on a
+     * device that already had it granted from another app-manager route),
+     * the persisted SAF tree is dropped: it's a strictly narrower view than
+     * the full device-rooted browser full access unlocks, so there's no
+     * reason to keep defaulting to it once the better path is available.
      */
     private fun restoreLocalSafRoot() {
         val saved = tabSSHApp.preferencesManager.getSftpLocalSafTreeUri() ?: return
+        if (StorageAccessHelper.hasFullAccess(this)) {
+            tabSSHApp.preferencesManager.clearSftpLocalSafTreeUri()
+            return
+        }
         val doc = DocumentFile.fromTreeUri(this, Uri.parse(saved))
         if (doc != null && doc.canRead()) {
             localSafRoot = doc
@@ -470,23 +659,47 @@ class SFTPActivity : TabSSHActivity() {
     }
 
     /**
-     * Dispatches to the SAF-tree browser or the legacy File-path browser.
+     * Dispatches to the SAF-tree browser or the fast plain-path browser.
      *
-     * On API 30+ the plain-path browser can't list anything outside this
-     * app's sandbox (scoped storage), so calling it with no SAF root granted
-     * would just render a silent, permanently-empty view. Show an explicit
-     * "choose a folder" prompt instead of that dead end.
+     * Order matters (AI.md PART 2/5 file-manager-class exception): an
+     * explicitly-chosen SAF root always wins (the user asked for that
+     * folder specifically); otherwise the fast [java.io.File] path is used
+     * whenever [StorageAccessHelper.hasFullAccess] is granted; API 29 has no
+     * full-filesystem-access API at all and permanently falls back to SAF;
+     * everything else (API ≤ 28 without the legacy permission yet, or
+     * API ≥ 30 without the MANAGE_EXTERNAL_STORAGE grant yet) requests full
+     * access lazily, in context, right here.
      */
     private fun loadLocalFiles() {
         val saf = currentLocalSaf
         when {
             saf != null -> loadLocalDirectorySaf(saf)
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> showLocalStorageNotGranted()
-            else -> loadLocalDirectoryPlain(currentLocalPath)
+            StorageAccessHelper.hasFullAccess(this) -> loadLocalDirectoryPlain(currentLocalPath)
+            Build.VERSION.SDK_INT == Build.VERSION_CODES.Q -> showLocalStorageNotGranted()
+            else -> requestFullAccessThenLoad()
         }
     }
 
-    /** Shown on API 30+ when no SAF folder has been granted yet. */
+    /**
+     * Shows the rationale dialog for [StorageAccessHelper], then leaves the
+     * local pane in the same "not granted" empty state as the SAF-only path
+     * below until the grant result comes back — either synchronously via
+     * [legacyStoragePermissionLauncher] (API ≤ 28) or via [onResume] after a
+     * Settings round trip (API ≥ 30, [awaitingFullAccessSettingsResult]).
+     */
+    private fun requestFullAccessThenLoad() {
+        StorageAccessHelper.requestFullAccessIfNeeded(
+            activity = this,
+            legacyPermissionLauncher = legacyStoragePermissionLauncher,
+            onAlreadyGranted = { loadLocalDirectoryPlain(currentLocalPath) },
+            onSettingsLaunched = { awaitingFullAccessSettingsResult = true }
+        )
+        if (!StorageAccessHelper.hasFullAccess(this)) {
+            showLocalStorageNotGranted()
+        }
+    }
+
+    /** Shown when no SAF folder has been granted and full access isn't available yet. */
     private fun showLocalStorageNotGranted() {
         localFileAdapter.replaceAllWithDiff(
             items = localFiles,
@@ -515,8 +728,8 @@ class SFTPActivity : TabSSHActivity() {
                             newItems = sorted,
                             areItemsTheSame = { a, b -> a.id == b.id }
                         )
-                        binding.textLocalPath.text = path
                         currentLocalPath = path
+                        renderLocalPlainBreadcrumb(path)
                         binding.textEmptyLocal.text = getString(R.string.sftp_browser_empty_folder)
                         binding.emptyLocal.visibility =
                             if (localFiles.isEmpty()) View.VISIBLE else View.GONE
@@ -545,7 +758,7 @@ class SFTPActivity : TabSSHActivity() {
                         areItemsTheSame = { a, b -> a.id == b.id }
                     )
                     currentLocalSaf = dir
-                    binding.textLocalPath.text = dir.name ?: dir.uri.toString()
+                    renderLocalSafBreadcrumb(dir)
                     binding.textEmptyLocal.text = getString(R.string.sftp_browser_empty_folder)
                     binding.emptyLocal.visibility =
                         if (localFiles.isEmpty()) View.VISIBLE else View.GONE
@@ -574,8 +787,8 @@ class SFTPActivity : TabSSHActivity() {
                         newItems = files,
                         areItemsTheSame = { a, b -> a.name == b.name }
                     )
-                    binding.textRemotePath.text = path
                     currentRemotePath = path
+                    renderRemoteBreadcrumb(path)
                     binding.loadingRemote.visibility = View.GONE
                     binding.emptyRemote.visibility =
                         if (remoteFiles.isEmpty()) View.VISIBLE else View.GONE
@@ -1608,17 +1821,18 @@ class SFTPActivity : TabSSHActivity() {
      * storage, any inserted SD card, and an arbitrary folder granted via the
      * Storage Access Framework.
      *
-     * The plain-path entries (internal storage, SD card) only work below
-     * Android 11/API 30: from API 30 on, scoped storage makes
-     * `java.io.File.listFiles()` silently return nothing for paths outside
-     * this app's own sandbox, which showed up as "every directory is empty"
-     * even though the device has files there. Offering an entry that always
-     * renders empty is worse than not offering it, so on API 30+ only the
-     * SAF "Browse folder…" option — which actually lists files correctly —
-     * is shown.
+     * The plain-path entries (internal storage, SD card) require
+     * [StorageAccessHelper.hasFullAccess] to be granted: without it, scoped
+     * storage makes `java.io.File.listFiles()` silently return nothing for
+     * paths outside this app's own sandbox on API 30+, and there is no
+     * legacy permission granted yet below API 30 either. Offering an entry
+     * that always renders empty is worse than not offering it, so those
+     * entries are only shown once full access is actually granted; otherwise
+     * only the SAF "Browse folder…" option — which actually lists files
+     * correctly without that permission — is shown.
      */
     private fun showChooseLocalStorageDialog() {
-        val roots = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) emptyList() else externalStorageRoots()
+        val roots = if (StorageAccessHelper.hasFullAccess(this)) externalStorageRoots() else emptyList()
         val labels = (roots.map { it.first } + getString(R.string.sftp_storage_browse_folder)).toTypedArray()
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.sftp_choose_storage_title)

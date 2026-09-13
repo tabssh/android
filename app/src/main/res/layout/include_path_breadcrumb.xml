@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Horizontally scrollable, tappable breadcrumb strip for a local/remote
+    pane's path bar in activity_sftp.xml — replaces a single-line,
+    ellipsize="start" TextView that hard-truncated long paths from the
+    front with no way to reach the truncated portion. Each segment is
+    inflated at runtime (item_breadcrumb_segment.xml) by SFTPActivity's
+    breadcrumb renderer; this file only provides the scroll container.
+
+    layout_width/height are placeholders — the including <include> tag in
+    activity_sftp.xml overrides both, plus layout_weight and margins.
+-->
+<HorizontalScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:scrollbars="none"
+    android:fadeScrollbars="false">
+
+    <LinearLayout
+        android:id="@+id/breadcrumb_segments"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:orientation="horizontal"
+        android:gravity="center_vertical" />
+
+</HorizontalScrollView>
