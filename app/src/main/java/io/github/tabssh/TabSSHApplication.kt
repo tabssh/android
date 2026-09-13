@@ -187,6 +187,7 @@ class TabSSHApplication : Application() {
         }
         Logger.initialize(this, debugLoggingActive)
         setupExceptionHandler()
+        checkNativeCrashMarker()
 
         // ANR watchdog tracks debug mode — when debug logging is on we
         // catch main-thread freezes and write the captured stack trace
@@ -881,6 +882,33 @@ class TabSSHApplication : Application() {
             Logger.d("TabSSHApplication", "Applied saved theme: $theme (mode=$mode)")
         } catch (e: Exception) {
             Logger.w("TabSSHApplication", "Failed to apply saved theme: ${e.message}")
+        }
+    }
+
+    /**
+     * Picks up a native-crash marker left by the signal handler
+     * SpiceLoader installs around the SPICE native stack (see
+     * `deps/prereqs/spice/cpp/spice_client.c`). A JVM-level crash is
+     * already caught by [setupExceptionHandler] and written to the
+     * Debug/App log before the process dies; a fault inside native
+     * code (SIGSEGV/SIGABRT/etc.) bypasses that entirely and would
+     * otherwise leave zero trace anywhere Kotlin can reach — the app
+     * would simply die with nothing in either log. The marker file the
+     * signal handler wrote (signal number + faulting address) is
+     * folded into the log here, on the next launch, then deleted so it
+     * is only reported once.
+     */
+    private fun checkNativeCrashMarker() {
+        try {
+            val markerFile = io.github.tabssh.hypervisor.spice.SpiceLoader.nativeCrashMarkerFile() ?: return
+            if (!markerFile.exists() || markerFile.length() == 0L) return
+            val marker = markerFile.readText().trim()
+            markerFile.delete()
+            if (marker.isNotEmpty()) {
+                Logger.wtf("TabSSHApplication", "Native crash detected from previous session: $marker")
+            }
+        } catch (e: Exception) {
+            Logger.w("TabSSHApplication", "Failed to check native crash marker: ${e.message}")
         }
     }
 

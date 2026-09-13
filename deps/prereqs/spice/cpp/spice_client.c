@@ -23,6 +23,9 @@
 #include <android/log.h>
 #include <stdint.h>
 #include <string.h>
+#include <signal.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #define LOG_TAG "tabssh_spice"
 #define LOGI(fmt, ...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, fmt, ##__VA_ARGS__)
@@ -85,6 +88,145 @@ static void log_unavailable_once(const char *entrypoint) {
     }
 }
 #endif
+
+/*
+ * Native crash handler — SpiceLoader.nativeInstallCrashHandler.
+ *
+ * The SPICE native stack (spice_client_glib.c + the static
+ * glib/spice-gtk/openssl link) is the only in-process native code
+ * this app loads: Tor and Mosh run as separate subprocesses via
+ * ProcessBuilder and cannot bring this process down. A fault inside
+ * that stack (SIGSEGV/SIGABRT/SIGBUS/SIGILL/SIGFPE) currently kills
+ * the process with nothing written anywhere Kotlin's Logger can
+ * reach, so the Debug Log stays silent even though the app crashed.
+ *
+ * This installs a minimal signal handler that writes a one-line
+ * marker (signal number + faulting address) to a file path supplied
+ * by Kotlin, then re-raises the original signal so Android's normal
+ * crash handling (debuggerd tombstone, process death) proceeds
+ * exactly as before. TabSSHApplication checks for this marker file on
+ * the next launch and folds it into the Debug Log.
+ *
+ * Every function the handler itself calls (write, close, sigaction,
+ * raise) is async-signal-safe per POSIX — no libc allocation, no
+ * printf-family calls, no JNI, no glib.
+ */
+static int g_crash_fd = -1;
+static struct sigaction g_prev_sigsegv;
+static struct sigaction g_prev_sigabrt;
+static struct sigaction g_prev_sigbus;
+static struct sigaction g_prev_sigill;
+static struct sigaction g_prev_sigfpe;
+
+static void tabssh_append_hex(char *buf, int *len, int cap, unsigned long value) {
+    char hex[2 * sizeof(unsigned long)];
+    int hi = 0;
+    if (value == 0) {
+        hex[hi++] = '0';
+    } else {
+        while (value > 0 && hi < (int) sizeof(hex)) {
+            unsigned long nibble = value & 0xFUL;
+            hex[hi++] = (char) (nibble < 10 ? ('0' + nibble) : ('a' + (nibble - 10)));
+            value >>= 4;
+        }
+    }
+    for (int i = hi - 1; i >= 0 && *len < cap - 1; i--) {
+        buf[(*len)++] = hex[i];
+    }
+}
+
+static void tabssh_append_dec(char *buf, int *len, int cap, unsigned long value) {
+    char dec[3 * sizeof(unsigned long)];
+    int di = 0;
+    if (value == 0) {
+        dec[di++] = '0';
+    } else {
+        while (value > 0 && di < (int) sizeof(dec)) {
+            dec[di++] = (char) ('0' + (value % 10));
+            value /= 10;
+        }
+    }
+    for (int i = di - 1; i >= 0 && *len < cap - 1; i--) {
+        buf[(*len)++] = dec[i];
+    }
+}
+
+static void tabssh_crash_handler(int sig, siginfo_t *info, void *ucontext) {
+    (void) ucontext;
+    if (g_crash_fd >= 0) {
+        char buf[256];
+        int len = 0;
+        static const char header[] = "=== NATIVE CRASH === signal=";
+        static const char addrtag[] = " fault_addr=0x";
+
+        for (unsigned i = 0; i < sizeof(header) - 1 && len < (int) sizeof(buf) - 1; i++) {
+            buf[len++] = header[i];
+        }
+        tabssh_append_dec(buf, &len, (int) sizeof(buf), (unsigned long) sig);
+        for (unsigned i = 0; i < sizeof(addrtag) - 1 && len < (int) sizeof(buf) - 1; i++) {
+            buf[len++] = addrtag[i];
+        }
+        unsigned long addr = (info != NULL) ? (unsigned long) info->si_addr : 0UL;
+        tabssh_append_hex(buf, &len, (int) sizeof(buf), addr);
+        if (len < (int) sizeof(buf) - 1) {
+            buf[len++] = '\n';
+        }
+        ssize_t written = write(g_crash_fd, buf, (size_t) len);
+        (void) written;
+        close(g_crash_fd);
+        g_crash_fd = -1;
+    }
+
+    struct sigaction *prev = NULL;
+    switch (sig) {
+        case SIGSEGV: prev = &g_prev_sigsegv; break;
+        case SIGABRT: prev = &g_prev_sigabrt; break;
+        case SIGBUS:  prev = &g_prev_sigbus;  break;
+        case SIGILL:  prev = &g_prev_sigill;  break;
+        case SIGFPE:  prev = &g_prev_sigfpe;  break;
+        default: break;
+    }
+    if (prev != NULL) {
+        sigaction(sig, prev, NULL);
+    }
+    raise(sig);
+}
+
+JNIEXPORT jint JNICALL
+Java_io_github_tabssh_hypervisor_spice_SpiceLoader_nativeInstallCrashHandler(
+    JNIEnv *env, jclass clazz, jstring path) {
+    (void) clazz;
+    if (path == NULL) {
+        return 0;
+    }
+    const char *cpath = (*env)->GetStringUTFChars(env, path, NULL);
+    if (cpath == NULL) {
+        return 0;
+    }
+
+    int fd = open(cpath, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    (*env)->ReleaseStringUTFChars(env, path, cpath);
+    if (fd < 0) {
+        LOGE("Failed to open native crash marker file");
+        return 0;
+    }
+    g_crash_fd = fd;
+
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = tabssh_crash_handler;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+
+    sigaction(SIGSEGV, &sa, &g_prev_sigsegv);
+    sigaction(SIGABRT, &sa, &g_prev_sigabrt);
+    sigaction(SIGBUS,  &sa, &g_prev_sigbus);
+    sigaction(SIGILL,  &sa, &g_prev_sigill);
+    sigaction(SIGFPE,  &sa, &g_prev_sigfpe);
+
+    LOGI("Native crash handler installed");
+    return 1;
+}
 
 JNIEXPORT jlong JNICALL
 Java_io_github_tabssh_hypervisor_spice_SpiceClient_nativeCreateSession(
