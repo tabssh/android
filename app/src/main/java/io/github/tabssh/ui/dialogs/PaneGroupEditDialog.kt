@@ -97,6 +97,7 @@ object PaneGroupEditDialog {
         val countSpinner = dialogView.findViewById<Spinner>(R.id.spinner_pane_group_window_count)
 
         nameInput.setText(existing?.name ?: "")
+        attachExplicitKeyboardShow(nameInput)
 
         val counts = (MIN_WINDOWS..MAX_WINDOWS).toList()
         countSpinner.adapter = ArrayAdapter(
@@ -292,25 +293,38 @@ object PaneGroupEditDialog {
             }
             attachExplicitKeyboardShow(holder.customTitle)
         }
+    }
 
-        /**
-         * Bug fix: tapping a working-dir/custom-title field inside this
-         * RecyclerView (itself inside a Dialog) visually focused the
-         * EditText (blinking cursor) but never raised the soft keyboard.
-         * The dialog window's default IME-on-focus behavior races against
-         * RecyclerView's own layout/rebind passes, which can steal or
-         * re-deliver focus before the IME has a chance to attach. Forcing
-         * an explicit `showSoftInput` call on focus-gain sidesteps that
-         * race entirely instead of relying on the implicit system behavior.
-         */
-        private fun attachExplicitKeyboardShow(editText: TextInputEditText) {
-            editText.setOnFocusChangeListener { view, hasFocus ->
-                if (!hasFocus) return@setOnFocusChangeListener
-                view.post {
-                    val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE)
-                        as? android.view.inputmethod.InputMethodManager
-                    imm?.showSoftInput(view, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
-                }
+    /**
+     * Bug fix (round 1, superseded): tapping a [TextInputEditText] hosted
+     * inside one of these dialogs visually focused it (blinking cursor) but never
+     * raised the soft keyboard. The original fix called `showSoftInput(view,
+     * SHOW_IMPLICIT)` on focus-gain, which sidesteps the dialog window's
+     * default IME-on-focus race against RecyclerView's layout/rebind passes
+     * for the Step 2 per-window fields — but it was still reported as not
+     * working.
+     *
+     * Bug fix (round 2, this one): `SHOW_IMPLICIT` is a no-op once the user
+     * has *explicitly* dismissed the IME anywhere in this process —
+     * `InputMethodManager`'s "was explicitly hidden" bookkeeping isn't
+     * scoped per-window, so it persists across completely unrelated windows.
+     * `TerminalView`/`TabTerminalActivity` call `hideSoftInputFromWindow`
+     * constantly as part of their own keyboard toggle (BACK hides the
+     * terminal's IME instead of leaving the activity, tab switches hide it,
+     * etc.) — any one of those poisons the implicit-show path for the rest
+     * of the app session, including these dialogs, which never touch
+     * TerminalView at all. `SHOW_FORCED` shows the keyboard unconditionally
+     * regardless of that history, so it's used here instead. Applied to
+     * every editable text field across both steps (group name, per-window
+     * working dir, per-window custom title).
+     */
+    private fun attachExplicitKeyboardShow(editText: TextInputEditText) {
+        editText.setOnFocusChangeListener { view, hasFocus ->
+            if (!hasFocus) return@setOnFocusChangeListener
+            view.post {
+                val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE)
+                    as? android.view.inputmethod.InputMethodManager
+                imm?.showSoftInput(view, android.view.inputmethod.InputMethodManager.SHOW_FORCED)
             }
         }
     }
