@@ -27,12 +27,13 @@ import io.github.tabssh.utils.logging.Logger
  *  | SDK level | Full access check                          | Grant flow |
  *  |-----------|---------------------------------------------|------------|
  *  | ≥ 30      | [Environment.isExternalStorageManager]       | [Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION] |
- *  | 29        | never available — no full-filesystem API exists on this one OS version | none — permanent SAF fallback |
+ *  | 29        | [Environment.isExternalStorageLegacy] + legacy runtime grant (`requestLegacyExternalStorage` opts back into the legacy model) | [legacyPermissionLauncher] |
  *  | ≤ 28      | legacy `READ_EXTERNAL_STORAGE`/`WRITE_EXTERNAL_STORAGE` runtime grant | [legacyPermissionLauncher] |
  *
- * If the user declines (or API 29 makes the permission unavailable), callers
- * fall back to the existing Storage Access Framework (SAF) tree-picker flow —
- * this helper never forces the permission, it only offers the faster path.
+ * If the user declines (or an API 29 install is stuck in scoped storage —
+ * legacy mode is fixed at install time), callers fall back to the existing
+ * Storage Access Framework (SAF) tree-picker flow — this helper never forces
+ * the permission, it only offers the faster path.
  */
 object StorageAccessHelper {
 
@@ -53,8 +54,12 @@ object StorageAccessHelper {
         return when {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ->
                 Environment.isExternalStorageManager()
+            // API 29: requestLegacyExternalStorage keeps the pre-scoped-storage model,
+            // so direct access works when legacy mode is active and both perms are held
             Build.VERSION.SDK_INT == Build.VERSION_CODES.Q ->
-                false // API 29: no full-filesystem-access API exists; permanent SAF fallback
+                Environment.isExternalStorageLegacy() && LEGACY_PERMISSIONS.all {
+                    ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+                }
             else ->
                 LEGACY_PERMISSIONS.all {
                     ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
@@ -67,8 +72,9 @@ object StorageAccessHelper {
      * then launches the appropriate grant flow. If already granted, calls
      * [onAlreadyGranted] immediately instead of showing the dialog.
      *
-     * On API 29 there is nothing to request — the dialog is skipped and the
-     * caller should treat this as a permanent SAF-fallback case.
+     * On API 29 the legacy runtime permissions are only worth requesting when
+     * the install actually runs in legacy mode ([Environment.isExternalStorageLegacy]);
+     * a scoped-storage install skips the dialog and stays on the SAF fallback.
      *
      * The actual grant result for the API ≥ 30 Settings flow is not delivered
      * via [ActivityResultLauncher] (no such contract exists for that intent);
@@ -90,8 +96,10 @@ object StorageAccessHelper {
             return
         }
 
-        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
-            Logger.d(TAG, "API 29 has no full-filesystem-access API; staying on SAF fallback")
+        // API 29 outside legacy mode: the legacy permissions grant nothing under
+        // scoped storage, so requesting them would be a pointless prompt — stay on SAF
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q && !Environment.isExternalStorageLegacy()) {
+            Logger.d(TAG, "API 29 install is in scoped-storage mode; staying on SAF fallback")
             return
         }
 

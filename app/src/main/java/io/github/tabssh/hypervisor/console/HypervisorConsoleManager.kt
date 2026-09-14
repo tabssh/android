@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -1022,7 +1023,10 @@ class HypervisorConsoleManager {
      */
     fun disconnect() {
         Logger.i(TAG, "Disconnecting console")
-        scope.coroutineContext[Job]?.cancel()
+        // cancelChildren, not cancel: disconnect() also re-arms vncFallbackStarted
+        // for reuse, but a fully-cancelled scope never runs another launch — a
+        // reused manager's serial→VNC fallback would silently never fire.
+        scope.coroutineContext[Job]?.cancelChildren()
         // Stop the RFB reader thread BEFORE closing the WebSocket pipe.
         // Without this, the reader sees IOException "Pipe closed" while
         // running=true and logs a spurious E/ error on every user-initiated close.

@@ -52,7 +52,6 @@ class PreferenceManager(private val context: Context) {
         // General preferences
         private const val KEY_STARTUP_BEHAVIOR = "general_startup_behavior"
         private const val KEY_AUTO_BACKUP = "general_auto_backup"
-        private const val KEY_BACKUP_FREQUENCY = "general_backup_frequency"
         private const val KEY_LANGUAGE = "app_language"
         
         // Security preferences
@@ -606,9 +605,7 @@ class PreferenceManager(private val context: Context) {
     }
     
     // Additional missing methods from compilation errors
-    fun getBackupFrequency(): String = getString(KEY_BACKUP_FREQUENCY, "weekly")
     fun setAutoBackup(enabled: Boolean) = setBoolean(KEY_AUTO_BACKUP, enabled)
-    fun setBackupFrequency(frequency: String) = setString(KEY_BACKUP_FREQUENCY, frequency)
 
     fun setCursorBlink(enabled: Boolean) = setBoolean(KEY_CURSOR_BLINK, enabled)
 

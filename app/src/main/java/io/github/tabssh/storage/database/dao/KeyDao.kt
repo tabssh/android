@@ -42,6 +42,13 @@ interface KeyDao {
     
     @Insert
     suspend fun insertKeys(keys: List<StoredKey>)
+
+    // Sync path only. A plain @Update matches zero rows when the key is absent
+    // locally (never synced here yet, or deleted on this device and then
+    // explicitly kept from the remote side), so the write would silently do
+    // nothing; REPLACE writes the row either way.
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertKey(key: StoredKey)
     
     @Update
     suspend fun updateKey(key: StoredKey)

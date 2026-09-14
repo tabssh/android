@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import io.github.tabssh.sync.SAFSyncManager
+import io.github.tabssh.sync.SyncDownload
 import io.github.tabssh.sync.SyncFileStatus
 import io.github.tabssh.sync.data.SyncDataCollector
 import io.github.tabssh.sync.merge.SyncMergeCoordinator
@@ -59,14 +60,24 @@ class SyncWorker(
             // BEFORE re-uploading. Without the download+apply step the worker
             // was upload-only, so a second device's changes were never ingested
             // and its deletes were resurrected on the next union upload.
-            val remote = syncManager.download()
-            if (remote != null) {
-                // §9.6 three-way merge. Headless: no dialog can be shown, so
-                // resolveConflicts is null — SyncMergeCoordinator auto-resolves
-                // when enabled, otherwise keeps local and flags the divergence.
-                val outcome = SyncMergeCoordinator(applicationContext)
-                    .merge(remote, syncManager.getEncryptionPassword(), resolveConflicts = null)
-                Logger.d(TAG, "Applied remote sync state (${outcome.totalConflicts} conflict(s), ${outcome.deferredConflicts} deferred)")
+            when (val remote = syncManager.download()) {
+                // The remote file exists but could not be read (IO error, wrong
+                // password, corrupt payload). Uploading now would overwrite a
+                // peer's data that we simply failed to read, so retry instead.
+                is SyncDownload.Failed -> {
+                    Logger.e(TAG, "Aborting sync, remote unreadable: ${remote.message}")
+                    return@withLock Result.retry()
+                }
+                // Nothing on the remote yet — safe to seed it from local state.
+                is SyncDownload.Empty -> Logger.d(TAG, "Remote sync file is empty, seeding from local state")
+                is SyncDownload.Data -> {
+                    // §9.6 three-way merge. Headless: no dialog can be shown, so
+                    // resolveConflicts is null — SyncMergeCoordinator auto-resolves
+                    // when enabled, otherwise keeps local and flags the divergence.
+                    val outcome = SyncMergeCoordinator(applicationContext)
+                        .merge(remote.payload, syncManager.getEncryptionPassword(), resolveConflicts = null)
+                    Logger.d(TAG, "Applied remote sync state (${outcome.totalConflicts} conflict(s), ${outcome.deferredConflicts} deferred)")
+                }
             }
 
             // Collect the merged local state. collectAll runs the tombstone
@@ -81,6 +92,8 @@ class SyncWorker(
                 // Refresh the shadow baseline only after a successful upload so
                 // the next backstop diffs against what we actually persisted.
                 collector.snapshotState()
+                // Purge only after a successful merge+upload — the payload just uploaded still carried every tombstone.
+                collector.purgeExpiredTombstones()
                 Logger.d(TAG, "Background sync completed successfully")
                 Result.success()
             } else {

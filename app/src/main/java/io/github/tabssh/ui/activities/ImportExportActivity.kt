@@ -276,6 +276,13 @@ class ImportExportActivity : TabSSHActivity() {
                     append(getString(R.string.import_export_item_count_line, count, type))
                 }
             }
+            // A restore with failed items must never look like a clean success.
+            if (result.errors.isNotEmpty()) {
+                append(getString(R.string.import_export_import_partial_header, result.errors.size))
+                result.errors.forEach { error ->
+                    append(getString(R.string.import_export_import_error_line, error))
+                }
+            }
         }
 
         MaterialAlertDialogBuilder(this@ImportExportActivity)
@@ -779,51 +786,19 @@ class ImportExportActivity : TabSSHActivity() {
     }
 
     /**
-     * Hard type-to-confirm gate for an unencrypted backup.
-     *
-     * An unencrypted archive still contains every credential the app holds, so
-     * the warning names exactly what is exposed and the export only proceeds
-     * once the user has typed the confirmation word verbatim. A single tap is
-     * deliberately not enough.
+     * Confirm an unencrypted export. Secrets are only ever written encrypted
+     * under a backup password, so an unencrypted archive contains no
+     * credentials at all — the dialog states exactly that before exporting.
      */
     private fun showUnencryptedExportWarning(uri: android.net.Uri) {
-        val confirmWord = getString(R.string.import_export_unencrypted_confirm_word)
-        val confirmInput = com.google.android.material.textfield.TextInputEditText(this).apply {
-            hint = getString(R.string.import_export_unencrypted_confirm_hint)
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
-        }
-        val layout = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(64, 32, 64, 0)
-            addView(confirmInput)
-        }
-
-        val dialog = MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.import_export_unencrypted_warning_title)
             .setMessage(R.string.import_export_unencrypted_warning_message)
-            .setView(layout)
-            .setPositiveButton(R.string.import_export_export_without_encryption, null)
-            .setNegativeButton(R.string.cancel, null)
-            .create()
-
-        // Bind the positive button after show() so a mistyped confirmation
-        // leaves the dialog open instead of silently cancelling the export.
-        dialog.setOnShowListener {
-            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
-                if (confirmInput.text.toString().trim() == confirmWord) {
-                    dialog.dismiss()
-                    performExport(uri, password = null, plaintextSecretsConfirmed = true)
-                } else {
-                    Toast.makeText(
-                        this,
-                        R.string.import_export_unencrypted_confirm_required,
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
+            .setPositiveButton(R.string.menu_export) { _, _ ->
+                performExport(uri, password = null)
             }
-        }
-        dialog.show()
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     /**
@@ -880,29 +855,17 @@ class ImportExportActivity : TabSSHActivity() {
     }
 
     /**
-     * Write the backup to [uri] with the chosen encryption settings.
-     *
-     * @param plaintextSecretsConfirmed must be true when [password] is null —
-     *   the user typed the confirmation word acknowledging that the archive
-     *   exposes every stored credential in readable form.
+     * Write the backup to [uri]. A non-null [password] includes credentials as
+     * an encrypted secrets entry; a null password exports without credentials.
      */
-    private fun performExport(
-        uri: android.net.Uri,
-        password: String?,
-        plaintextSecretsConfirmed: Boolean = false
-    ) {
+    private fun performExport(uri: android.net.Uri, password: String?) {
         lifecycleScope.launch {
             try {
                 val bm = backupManager ?: run {
                     android.widget.Toast.makeText(this@ImportExportActivity, getString(R.string.import_export_backup_initialising), android.widget.Toast.LENGTH_LONG).show()
                     return@launch
                 }
-                val result = bm.createBackup(
-                    outputUri = uri,
-                    encryptBackup = password != null,
-                    password = password,
-                    plaintextSecretsConfirmed = plaintextSecretsConfirmed
-                )
+                val result = bm.createBackup(outputUri = uri, password = password)
 
                 if (result.success) {
                     val encryptedLabel = if (password != null) {

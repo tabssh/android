@@ -212,6 +212,31 @@ class ConsoleWebSocketClient(
         try { webSocket?.close(1011, "send rejected") } catch (_: Exception) {}
     }
 
+    /**
+     * Terminate the connection after an inbound frame could not be written to
+     * the pipe (typically ByteStreamPipe's buffer cap). For an RFB-bearing
+     * protocol the byte stream is now permanently desynchronized, so keeping
+     * the socket open only produces a garbled framebuffer. Mirrors
+     * [handleSendFailure], reusing [sendFailureFired] so overlapping send and
+     * receive failures still surface exactly one error; the close(1011)
+     * drives OkHttp's onClosed → onDisconnected → cleanup() as usual.
+     */
+    private fun handleInboundPipeFailure(cause: Exception) {
+        if (!isConnected) return
+        if (sendFailureFired) return
+        sendFailureFired = true
+        Logger.w(TAG, "Inbound pipe write failed (${cause.message}) — RFB stream desynchronized; closing")
+        isConnected = false
+        try {
+            connectionListener?.onError(
+                java.io.IOException("Console stream overflowed and lost data — connection closed", cause)
+            )
+        } catch (e: Exception) {
+            Logger.w(TAG, "Listener.onError threw", e)
+        }
+        try { webSocket?.close(1011, "inbound pipe overflow") } catch (_: Exception) {}
+    }
+
     /** Phase 1 TLS pin holder — caller reads via getCapturedCertSha256
      *  after a successful connect to persist a TOFU capture. */
     private val capturedPin = io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.CapturedPin()
@@ -400,6 +425,18 @@ class ConsoleWebSocketClient(
                         inboundPipe?.sink?.write(bytes.toByteArray())
                     } catch (e: Exception) {
                         Logger.e(TAG, "Error writing binary to input pipe", e)
+                        // RFB is a framed byte stream with no resynchronisation
+                        // point: dropping one chunk (e.g. ByteStreamPipe's 8 MiB
+                        // cap while the reader stalls) makes every later rect
+                        // header parse at the wrong offset. Swallowing the
+                        // failure left the WebSocket open and silently corrupted
+                        // the framebuffer forever — fail the connection instead
+                        // so the session can be cleanly reconnected.
+                        if (protocol == ConsoleProtocol.PROXMOX_VNC ||
+                            protocol == ConsoleProtocol.RFB_WSS
+                        ) {
+                            handleInboundPipeFailure(e)
+                        }
                     }
                 }
 

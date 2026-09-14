@@ -5,6 +5,7 @@ import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.storage.database.entities.PendingSyncConflictCodec
 import io.github.tabssh.storage.preferences.PreferenceManager
+import io.github.tabssh.sync.data.ApplyResult
 import io.github.tabssh.sync.data.SyncDataApplier
 import io.github.tabssh.sync.log.SyncLogManager
 import io.github.tabssh.sync.models.Conflict
@@ -46,6 +47,14 @@ class SyncMergeCoordinator(private val context: Context) {
     )
 
     /**
+     * Raised when a merge cannot complete safely. The caller must treat this as
+     * a failed sync: nothing may be uploaded and the base snapshot must not
+     * advance, otherwise the next sync would three-way merge against an
+     * ancestor that never actually matched the local database.
+     */
+    class MergeAbortedException(message: String) : Exception(message)
+
+    /**
      * Apply a downloaded remote package to the local DB via three-way merge.
      *
      * @param remote the decrypted remote sync package
@@ -73,7 +82,15 @@ class SyncMergeCoordinator(private val context: Context) {
             themes = emptyList(),
             hostKeys = emptyList()
         )
-        applier.applyAll(remainder)
+        // A failed remainder apply used to be discarded, so a sync in which
+        // every row failed to write still reported success and still advanced
+        // the base snapshot, corrupting the ancestor for every later merge.
+        when (val remainderResult = applier.applyAll(remainder)) {
+            is ApplyResult.Error -> throw MergeAbortedException(
+                "Failed to apply remote data: ${remainderResult.message}"
+            )
+            is ApplyResult.Success -> Unit
+        }
 
         // 2. Load the shared ancestor. Absent on first sync -> empty maps ->
         //    MergeEngine degrades to last-write-wins with no false conflicts.
@@ -118,13 +135,38 @@ class SyncMergeCoordinator(private val context: Context) {
             remote.hostKeys
         )
 
-        // 6. Apply the auto-merged (non-conflicting) results. Preferences were
-        //    already applied by applyAll above, so pass an empty map here.
-        applier.applyMergeResult(connResult, keyResult, themeResult, hostKeyResult, emptyMap())
-
-        // 7. Resolve any conflicts.
         val conflicts = connResult.conflicts + keyResult.conflicts +
             themeResult.conflicts + hostKeyResult.conflicts
+
+        // 6. Decide up front whether conflicts will be deferred, because that
+        //    changes what may be written in this pass. MergeEngine puts the
+        //    timestamp winner of a conflicted row into `updated`; applying that
+        //    and *then* deferring overwrote the losing side's data before the
+        //    user ever saw the conflict, so "keep local" could no longer
+        //    restore what the user actually had. Defer now means defer.
+        val willDefer = conflicts.isNotEmpty() &&
+            resolveConflicts == null &&
+            !preferenceManager.isAutoResolveConflictsEnabled()
+        val conflictedIds = if (willDefer) conflicts.map { it.entityId }.toSet() else emptySet()
+
+        // 7. Apply the auto-merged (non-conflicting) results. Preferences were
+        //    already applied by applyAll above, so pass an empty map here.
+        when (
+            val mergeApply = applier.applyMergeResult(
+                connResult.withoutIds(conflictedIds) { it.id },
+                keyResult.withoutIds(conflictedIds) { it.keyId },
+                themeResult.withoutIds(conflictedIds) { it.themeId },
+                hostKeyResult.withoutIds(conflictedIds) { it.id },
+                emptyMap()
+            )
+        ) {
+            is ApplyResult.Error -> throw MergeAbortedException(
+                "Failed to apply merged data: ${mergeApply.message}"
+            )
+            is ApplyResult.Success -> Unit
+        }
+
+        // 8. Resolve any conflicts.
         var deferredConflicts = 0
         if (conflicts.isNotEmpty()) {
             when {
@@ -158,8 +200,13 @@ class SyncMergeCoordinator(private val context: Context) {
             }
         }
 
-        // 8. Persist the reconciled state as the next base snapshot.
-        if (password != null) {
+        // 9. Persist the reconciled state as the next base snapshot — but only
+        //    when nothing was deferred. A deferred conflict means the local row
+        //    is deliberately still divergent from remote; snapshotting it as
+        //    the common ancestor would make the next merge read "local
+        //    unchanged, remote changed" and quietly apply the remote side the
+        //    user was never asked about.
+        if (password != null && deferredConflicts == 0) {
             val snapshot = SyncBaseSnapshot(
                 connections = database.connectionDao().getAllConnectionsList(),
                 keys = database.keyDao().getAllKeysList(),

@@ -205,7 +205,11 @@ Compatibility notes:
 ### Permission justifications
 - Camera: QR pairing import only; declared optional (app fully works without it)
 - Notifications: per-session status entries and connection events
-- Foreground service: keeps SSH/mosh sessions alive while backgrounded
+- Foreground service (special use): keeps SSH/mosh sessions, their port
+  forwards, and opted-in VNC sessions alive while backgrounded; typed
+  `specialUse` because these are indefinite interactive connections — the
+  `dataSync` type's 6-hour hard cap on API 35+ would sever them — with the
+  subtype declared per service via `PROPERTY_SPECIAL_USE_FGS_SUBTYPE`
 - Foreground service (media projection): required by API 34+ to keep an
   active session video recording capturing while the app is backgrounded;
   the system's own screen-capture consent dialog is always shown before

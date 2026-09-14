@@ -31,6 +31,37 @@ class SCPClient(private val sshConnection: SSHConnection) {
         private const val TAG = "SCPClient"
         // Per-chunk buffer when streaming.
         private const val BUFFER_SIZE = 64 * 1024
+
+        /**
+         * Parent directory of a remote POSIX path, for use as the `scp -t`
+         * target when uploading a directory.
+         *
+         * Trailing slashes are ignored so `/home/user/photos/` and
+         * `/home/user/photos` agree. A path with no parent resolves to `/`
+         * for absolute paths and `.` for relative ones, which are the
+         * destinations a real scp client would use.
+         */
+        internal fun scpParentPath(remotePath: String): String {
+            val trimmed = remotePath.trimEnd('/')
+            if (trimmed.isEmpty()) return "/"
+            val idx = trimmed.lastIndexOf('/')
+            return when {
+                idx < 0 -> "."
+                idx == 0 -> "/"
+                else -> trimmed.substring(0, idx)
+            }
+        }
+
+        /**
+         * Final path segment of a remote POSIX path — the name the directory
+         * should be created under on the server. Trailing slashes ignored.
+         */
+        internal fun scpBaseName(remotePath: String): String {
+            val trimmed = remotePath.trimEnd('/')
+            if (trimmed.isEmpty()) return "/"
+            val idx = trimmed.lastIndexOf('/')
+            return if (idx < 0) trimmed else trimmed.substring(idx + 1)
+        }
     }
 
     /**
@@ -189,7 +220,16 @@ class SCPClient(private val sshConnection: SSHConnection) {
         var inStream: InputStream? = null
         try {
             // -r enables directory mode on the server-side scp process.
-            val cmd = "scp -t -r " + shellEscape(remoteDir)
+            //
+            // The sink must target the PARENT and receive a D/E record for the
+            // uploaded directory itself, exactly as a real scp client does.
+            // Targeting remoteDir and streaming only its children made every
+            // top-level C record write to remoteDir itself whenever that path
+            // did not already exist: uploading photos/{a.jpg,b.jpg} produced a
+            // single FILE named photos holding b.jpg's bytes.
+            val remoteParent = scpParentPath(remoteDir)
+            val remoteName = scpBaseName(remoteDir)
+            val cmd = "scp -t -r " + shellEscape(remoteParent)
             channel = session.openChannel("exec") as ChannelExec
             channel.setCommand(cmd)
 
@@ -203,7 +243,24 @@ class SCPClient(private val sshConnection: SSHConnection) {
                 return@withContext false
             }
 
+            // Push the uploaded directory itself, then its contents, then pop.
+            out.write("D0755 0 $remoteName\n".toByteArray(Charsets.US_ASCII))
+            out.flush()
+            if (!checkAck(inStream)) {
+                Logger.e(TAG, "SCP server rejected top-level directory header for $remoteName")
+                task.complete(TransferResult.Error("SCP rejected directory $remoteName"))
+                return@withContext false
+            }
+
             uploadDirectoryContents(localDir, out, inStream, task)
+
+            if (!task.isCancelled()) {
+                out.write("E\n".toByteArray(Charsets.US_ASCII))
+                out.flush()
+                if (!checkAck(inStream)) {
+                    throw java.io.IOException("SCP server rejected top-level directory pop for $remoteName")
+                }
+            }
 
             if (task.isCancelled()) {
                 task.complete(TransferResult.Cancelled)

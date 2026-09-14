@@ -62,8 +62,9 @@ import org.json.JSONObject
  * exactly one backup format; an archive that is not it is rejected rather
  * than best-effort parsed.
  *
- * Secrets policy (mirrors §9 sync coverage matrix). A backup always contains
- * every secret — encryption is a file-level choice, never a content one:
+ * Secrets policy (mirrors §9 sync coverage matrix). Secrets are gathered only
+ * when the caller supplies a backup password to encrypt them with — a backup
+ * created without a password contains no secrets in any form:
  *   - Connection password (per-host)              — exported in secrets.json (conn_pw_{id}).
  *   - SSH private key material                    — exported in secrets.json (ssh_keys map).
  *   - StoredKey.certificate (public OpenSSH cert) — included in keys.json; non-secret.
@@ -203,15 +204,14 @@ class BackupExporter(
 
     /**
      * Collect every backed-up table as a name→JSON map. Caller (BackupManager)
-     * decides whether to encrypt and how to write to disk.
+     * decides how to package and write the result to disk.
      *
-     * A backup always contains absolutely everything, unencrypted at the content
-     * level: restoring must reproduce the exact app state at capture time. All
-     * credentials (Keystore passwords, tokens, OCI keys, SSH key bytes, connection
-     * passwords) are always gathered — encryption is a file-level option the user
-     * controls, never a content choice.
+     * @param includeSecrets true only when the caller holds a backup password
+     *   to encrypt the secrets with. When false, no credential (Keystore
+     *   password, token, OCI key, SSH key bytes, connection password) is
+     *   gathered at all — an unencrypted backup must never contain a secret.
      */
-    suspend fun collectBackupData(): Map<String, String> = withContext(Dispatchers.IO) {
+    suspend fun collectBackupData(includeSecrets: Boolean): Map<String, String> = withContext(Dispatchers.IO) {
         val out = mutableMapOf<String, String>()
 
         out[FILE_CONNECTIONS]      = exportConnections()
@@ -248,7 +248,7 @@ class BackupExporter(
         out[FILE_PREFS_SNIPPET_VAR_RECALL] = exportSharedPrefs("snippet_var_recall")
         out[FILE_TAB_SESSIONS]     = exportTabSessions()
         out[FILE_AUDIT_LOG]        = exportAuditLog()
-        out[FILE_SECRETS]          = exportSecrets()
+        if (includeSecrets) out[FILE_SECRETS] = exportSecrets()
 
         out
     }
@@ -606,7 +606,6 @@ class BackupExporter(
 
         root.put("general", JSONObject().apply {
             put("autoBackup", preferenceManager.isAutoBackupEnabled())
-            put("backupFrequency", preferenceManager.getBackupFrequency())
             put("startupBehavior", preferenceManager.getStartupBehavior())
             put("language", preferenceManager.getLanguage())
         })

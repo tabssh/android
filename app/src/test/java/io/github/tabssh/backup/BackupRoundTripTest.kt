@@ -3,23 +3,29 @@ package io.github.tabssh.backup
 import android.content.Context
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
+import io.github.tabssh.backup.export.BackupExporter
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.io.ByteArrayInputStream
 import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * End-to-end backup behaviour over the single supported wire format.
+ * End-to-end backup behaviour over the ZIP wire format.
  *
- * Covers both output modes, the plaintext-secrets gate, and the rejection path:
- *  - encrypted (password) → round-trips, and will not restore without it;
- *  - plaintext-with-secrets → refused unless the caller passes the
- *    type-to-confirm acknowledgement, then round-trips;
- *  - an archive that is not the current format → refused with a clear error.
+ * Covers both output modes, the no-credentials guarantee, legacy-format
+ * compatibility, and the rejection path:
+ *  - password mode → ZIP with an encrypted secrets entry, round-trips with the
+ *    password and will not restore without it;
+ *  - passwordless mode → ZIP with NO secrets entry at all, restores freely;
+ *  - a legacy single-JSON v3 archive → still restores;
+ *  - an archive in any other version, or junk bytes → refused with a clear error.
  *
  * Everything runs inside one test method on purpose: [BackupManager] resolves
  * the Room database through its process-wide singleton, so spreading these
@@ -30,7 +36,7 @@ import kotlin.test.assertTrue
  * provider does not exist in a local JVM, so the exporter's secrets section is
  * empty in this environment and is covered by the instrumented suite instead.
  * What this locks in is the container format, the encryption choice, the
- * confirmation gate, and the format gate.
+ * secrets-only-with-password rule, and the format gate.
  */
 @RunWith(RobolectricTestRunner::class)
 class BackupRoundTripTest {
@@ -42,64 +48,85 @@ class BackupRoundTripTest {
         val archive = File(context.cacheDir, "roundtrip.tabssh")
         val uri: Uri = Uri.fromFile(archive)
 
-        // ── Encrypted mode ───────────────────────────────────────────────────
+        // ── Password mode ────────────────────────────────────────────────────
         archive.delete()
         val password = "Correct-Horse-Battery-Staple-9"
-        val encrypted = manager.createBackup(uri, encryptBackup = true, password = password)
-        assertTrue(encrypted.success, "encrypted create failed: ${encrypted.message}")
+        val encrypted = manager.createBackup(uri, password = password)
+        assertTrue(encrypted.success, "password-mode create failed: ${encrypted.message}")
         assertEquals(
-            "TABSSH_SYNC_V3",
-            archive.readBytes().copyOfRange(0, 14).toString(Charsets.ISO_8859_1),
-            "encrypted archive must carry the current magic, not readable JSON"
+            BackupManager.BackupFileFormat.ZIP,
+            BackupManager.sniffFormat(archive.readBytes().copyOfRange(0, 4)),
+            "a password-mode archive must be a ZIP container"
+        )
+        val (manifest, entries) = BackupManager.readBackupZip(
+            ByteArrayInputStream(archive.readBytes())
+        )
+        assertNotNull(manifest, "the archive must carry a manifest entry")
+        val secretsEntry = entries[BackupExporter.FILE_SECRETS]
+        assertNotNull(secretsEntry, "a password-mode archive must carry a secrets entry")
+        assertTrue(
+            BackupManager.isSyncEncrypted(secretsEntry),
+            "the secrets entry must be SyncEncryptor-encrypted, never plaintext"
         )
         assertTrue(
             manager.restoreBackup(uri, password = password).success,
-            "encrypted archive failed to restore with the correct password"
+            "password-mode archive failed to restore with the correct password"
         )
 
         val noPassword = manager.restoreBackup(uri, password = null)
-        assertFalse(noPassword.success, "encrypted archive restored with no password")
+        assertFalse(noPassword.success, "password-mode archive restored with no password")
         assertTrue(
             noPassword.message.contains("encrypted"),
             "expected a 'needs password' message, got: ${noPassword.message}"
         )
         assertFalse(
             manager.restoreBackup(uri, password = "not-the-password").success,
-            "encrypted archive restored with the wrong password"
+            "password-mode archive restored with the wrong password"
         )
 
-        // ── Encryption requested with no password ────────────────────────────
+        // ── Blank password ───────────────────────────────────────────────────
         archive.delete()
-        val noPasswordCreate = manager.createBackup(uri, encryptBackup = true, password = null)
-        assertFalse(noPasswordCreate.success, "encrypted create succeeded with no password")
+        val blank = manager.createBackup(uri, password = "   ")
+        assertFalse(blank.success, "a blank password was accepted")
         assertFalse(archive.exists(), "a refused export must not write any bytes")
 
-        // ── Plaintext mode, unconfirmed ──────────────────────────────────────
-        val unconfirmed = manager.createBackup(uri, encryptBackup = false, password = null)
-        assertFalse(unconfirmed.success, "unconfirmed plaintext export was allowed")
-        assertTrue(
-            unconfirmed.message.contains("confirmation"),
-            "expected a confirmation-required message, got: ${unconfirmed.message}"
+        // ── Passwordless mode ────────────────────────────────────────────────
+        val plain = manager.createBackup(uri, password = null)
+        assertTrue(plain.success, "passwordless create failed: ${plain.message}")
+        assertEquals(
+            BackupManager.BackupFileFormat.ZIP,
+            BackupManager.sniffFormat(archive.readBytes().copyOfRange(0, 4)),
+            "a passwordless archive must be a ZIP container"
         )
-        assertFalse(archive.exists(), "a refused export must not write any bytes")
-
-        // ── Plaintext mode, confirmed ────────────────────────────────────────
-        val plaintext = manager.createBackup(
-            outputUri = uri,
-            encryptBackup = false,
-            password = null,
-            plaintextSecretsConfirmed = true
+        val (plainManifest, plainEntries) = BackupManager.readBackupZip(
+            ByteArrayInputStream(archive.readBytes())
         )
-        assertTrue(plaintext.success, "confirmed plaintext create failed: ${plaintext.message}")
-        val text = archive.readText(Charsets.UTF_8)
-        assertTrue(text.startsWith("{"), "plaintext archive must be readable JSON")
+        assertNotNull(plainManifest, "the archive must carry a manifest entry")
+        assertNull(
+            plainEntries[BackupExporter.FILE_SECRETS],
+            "a passwordless archive must contain NO secrets entry in any form"
+        )
         assertTrue(
-            text.contains("\"v\":${BackupManager.BACKUP_VERSION}"),
-            "plaintext archive must declare the current version"
+            manager.validateBackup(uri).success,
+            "manifest-only validation failed on a freshly written archive"
         )
         assertTrue(
             manager.restoreBackup(uri).success,
-            "confirmed plaintext archive failed to restore"
+            "passwordless archive failed to restore"
+        )
+
+        // ── Legacy single-JSON v3 archive ────────────────────────────────────
+        archive.writeText(
+            """
+            {"v":3,"metadata":{"version":3,"createdAt":0,"appVersion":"legacy",
+             "deviceModel":"legacy","androidVersion":33,"itemCounts":{}},
+             "data":{"connections.json":"{\"v\":3,\"items\":[]}"}}
+            """.trimIndent(),
+            Charsets.UTF_8
+        )
+        assertTrue(
+            manager.restoreBackup(uri).success,
+            "a legacy v3 single-JSON archive must still restore"
         )
 
         // ── Unsupported format ───────────────────────────────────────────────

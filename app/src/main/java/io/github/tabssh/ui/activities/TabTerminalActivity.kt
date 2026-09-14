@@ -3473,6 +3473,9 @@ class TabTerminalActivity : TabSSHActivity() {
         // Recording is tracked per-tab — sync the keyboard's stop-recording
         // key to whatever the newly active tab's actual state is.
         updateRecordingKeyIndicator()
+        // Screen capture mirrors the whole display — pause the mp4 while any
+        // tab other than the recorded one is visible, resume when it returns.
+        syncVideoRecordingPause(index)
         // Give the newly active tab's input view focus so hardware key events
         // and the IME attach to it immediately, without requiring a tap first
         // (Issue: console keyboard input silently dropped after a tab switch).
@@ -4787,6 +4790,28 @@ class TabTerminalActivity : TabSSHActivity() {
      */
     private fun isVideoRecordingActive(): Boolean =
         SessionRecordingService.isRecording || recordingTabId != null
+
+    /**
+     * Pauses the mp4 capture while a tab other than the recorded one is
+     * visible and resumes it when the recorded tab is swiped back —
+     * MediaProjection mirrors the entire screen, so recording through a
+     * swipe-away would splice the other tab's content into the session
+     * video. The paired `.cast` writer taps the SSH byte stream, not the
+     * screen, so it is deliberately left running across swipes.
+     */
+    private fun syncVideoRecordingPause(index: Int) {
+        val recordedTabId = recordingTabId ?: return
+        if (!SessionRecordingService.isRecording) return
+        // Sent unconditionally: service intents arrive in order and both
+        // handlers are idempotent, so the last swipe always wins — checking
+        // the volatile isPaused here instead could act on a stale value
+        // while an earlier pause/resume intent is still in flight.
+        if (tabManager.getTabSealed(index)?.tabId == recordedTabId) {
+            SessionRecordingService.resumeRecording(this)
+        } else {
+            SessionRecordingService.pauseRecording(this)
+        }
+    }
 
     private fun updateRecordingKeyIndicator() {
         val recording = tabManager.getActiveTab()?.sessionRecorder?.isRecording() == true

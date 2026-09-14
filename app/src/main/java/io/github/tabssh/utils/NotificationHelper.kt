@@ -36,6 +36,7 @@ object NotificationHelper {
 
     const val NOTIFICATION_ID_SERVICE = 1001
     const val NOTIFICATION_ID_NO_NETWORK = 1002
+    const val NOTIFICATION_ID_FGS_BLOCKED = 1003
     const val NOTIFICATION_ID_FILE_TRANSFER = 3001
     const val NOTIFICATION_ID_ERROR = 4001
 
@@ -759,6 +760,36 @@ object NotificationHelper {
             .setAutoCancel(true)
             .build()
         nm.notify(NOTIFICATION_ID_NO_NETWORK, notif)
+    }
+
+    /**
+     * Posted when API 31+ denies a foreground-service start from the
+     * background (typically the boot-time port-forward auto-start without a
+     * battery-optimization exemption). Sessions keep running degraded — no
+     * FGS anchor keeping the process alive — so ask the user to open the
+     * app, which promotes the service legally from the foreground.
+     */
+    fun postFgsBlockedNotification(context: Context) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val tapIntent = Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val pi = PendingIntent.getActivity(
+            context, 0, tapIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notif = NotificationCompat.Builder(context, CHANNEL_SERVICE)
+            .setContentTitle("Open TabSSH to keep sessions alive")
+            .setContentText("Android blocked the background connection service — tap to restore it")
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentIntent(pi)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
+            .setOngoing(false)
+            .setAutoCancel(true)
+            .build()
+        nm.notify(NOTIFICATION_ID_FGS_BLOCKED, notif)
     }
 
     /**

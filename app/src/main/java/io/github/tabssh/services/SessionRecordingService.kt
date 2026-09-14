@@ -35,7 +35,11 @@ import io.github.tabssh.utils.logging.Logger
  * every MediaProjection-based screen recorder — there is no supported API to
  * crop capture to a single [io.github.tabssh.ui.views.TerminalView]'s region
  * without a custom GL compositing pass, so recording mirrors whatever is
- * visible, including if the user switches tabs mid-recording). The paired
+ * visible). Because of that, [TabTerminalActivity][io.github.tabssh.ui.activities.TabTerminalActivity]
+ * pauses the recorder via [ACTION_PAUSE_RECORDING] whenever a tab other than
+ * the recorded one becomes visible and resumes it when the recorded tab is
+ * swiped back — otherwise a swipe away would splice unrelated tab content
+ * into the session video. The paired
  * asciinema `.cast` file (SSH-tab-only) is written independently by
  * [io.github.tabssh.terminal.recording.AsciinemaCastWriter], which the caller
  * starts/stops in lockstep with this service — this service only owns the
@@ -83,6 +87,8 @@ class SessionRecordingService : Service() {
 
         const val ACTION_START_RECORDING = "io.github.tabssh.VIDEO_START_RECORDING"
         const val ACTION_STOP_RECORDING = "io.github.tabssh.VIDEO_STOP_RECORDING"
+        const val ACTION_PAUSE_RECORDING = "io.github.tabssh.VIDEO_PAUSE_RECORDING"
+        const val ACTION_RESUME_RECORDING = "io.github.tabssh.VIDEO_RESUME_RECORDING"
 
         const val EXTRA_RESULT_CODE = "result_code"
         const val EXTRA_RESULT_DATA = "result_data"
@@ -96,6 +102,12 @@ class SessionRecordingService : Service() {
 
         @Volatile
         var isRecording: Boolean = false
+            private set
+
+        // Visible so the Activity's tab-swipe sync can skip redundant
+        // pause/resume startService() round trips on every page change.
+        @Volatile
+        var isPaused: Boolean = false
             private set
 
         fun startRecording(context: Context, resultCode: Int, resultData: Intent, tabTitle: String, filename: String) {
@@ -119,6 +131,20 @@ class SessionRecordingService : Service() {
             }
             context.startService(intent)
         }
+
+        fun pauseRecording(context: Context) {
+            val intent = Intent(context, SessionRecordingService::class.java).apply {
+                action = ACTION_PAUSE_RECORDING
+            }
+            context.startService(intent)
+        }
+
+        fun resumeRecording(context: Context) {
+            val intent = Intent(context, SessionRecordingService::class.java).apply {
+                action = ACTION_RESUME_RECORDING
+            }
+            context.startService(intent)
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -133,6 +159,20 @@ class SessionRecordingService : Service() {
                 // never call it (e.g. a stray stop with nothing running).
                 startForeground(NOTIFICATION_ID, buildNotification(0L))
                 stopRecordingAndSelf()
+                return START_NOT_STICKY
+            }
+            ACTION_PAUSE_RECORDING, ACTION_RESUME_RECORDING -> {
+                startForeground(NOTIFICATION_ID, buildNotification(startedAtMillis, isPaused))
+                // A stray pause/resume with no active capture (service was
+                // freshly started just to deliver this intent) must still
+                // satisfy the startForeground() contract, then go away.
+                if (!isRecording) {
+                    stopRecordingAndSelf()
+                } else if (intent.action == ACTION_PAUSE_RECORDING) {
+                    pauseCapture()
+                } else {
+                    resumeCapture()
+                }
                 return START_NOT_STICKY
             }
             ACTION_START_RECORDING -> {
@@ -269,6 +309,36 @@ class SessionRecordingService : Service() {
         powerLocks.releaseWifiLock()
     }
 
+    /**
+     * Pauses the mp4 capture while the recorded tab is not the visible one —
+     * capture mirrors the whole screen, so continuing would record whatever
+     * other tab the user swiped to instead of the recorded session.
+     * [MediaRecorder.pause] needs API 24, which is exactly this app's minSdk.
+     */
+    private fun pauseCapture() {
+        if (isPaused) return
+        try {
+            mediaRecorder?.pause()
+            isPaused = true
+            Logger.i(TAG, "Recording paused — recorded tab no longer visible")
+            updateNotification()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Recorder pause failed", e)
+        }
+    }
+
+    private fun resumeCapture() {
+        if (!isPaused) return
+        try {
+            mediaRecorder?.resume()
+            isPaused = false
+            Logger.i(TAG, "Recording resumed — recorded tab visible again")
+            updateNotification()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Recorder resume failed", e)
+        }
+    }
+
     private fun stopRecordingAndSelf() {
         val filename = currentFilename
         teardownCapture()
@@ -282,6 +352,7 @@ class SessionRecordingService : Service() {
 
     private fun teardownCapture() {
         isRecording = false
+        isPaused = false
         try { mediaRecorder?.stop() } catch (e: Exception) { Logger.e(TAG, "Recorder stop failed", e) }
         try { mediaRecorder?.release() } catch (e: Exception) { Logger.e(TAG, "Recorder release failed", e) }
         mediaRecorder = null
@@ -297,10 +368,10 @@ class SessionRecordingService : Service() {
 
     private fun updateNotification() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        manager.notify(NOTIFICATION_ID, buildNotification(startedAtMillis))
+        manager.notify(NOTIFICATION_ID, buildNotification(startedAtMillis, isPaused))
     }
 
-    private fun buildNotification(startedAt: Long): Notification {
+    private fun buildNotification(startedAt: Long, paused: Boolean = false): Notification {
         val tapTarget = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this, 0, tapTarget,
@@ -313,7 +384,11 @@ class SessionRecordingService : Service() {
             this, 0, stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val text = if (startedAt > 0) "Recording session video" else "Starting session recording…"
+        val text = when {
+            paused -> "Recording paused — return to the recorded tab to resume"
+            startedAt > 0 -> "Recording session video"
+            else -> "Starting session recording…"
+        }
         return NotificationCompat.Builder(this, NotificationHelper.CHANNEL_SESSION_RECORDING)
             .setContentTitle("TabSSH")
             .setContentText(text)
@@ -325,7 +400,7 @@ class SessionRecordingService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOnlyAlertOnce(true)
             .setSilent(true)
-            .setUsesChronometer(startedAt > 0)
+            .setUsesChronometer(startedAt > 0 && !paused)
             .apply { if (startedAt > 0) setWhen(startedAt) }
             .build()
     }

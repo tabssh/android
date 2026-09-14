@@ -346,6 +346,22 @@ data class MergeResult<T>(
     fun hasConflicts(): Boolean = conflicts.isNotEmpty()
 
     fun isSuccessful(): Boolean = conflicts.isEmpty()
+
+    /**
+     * Drop every row whose id is in [ids] from the writable lists, so a caller
+     * that is going to defer those rows to a resolution UI does not write the
+     * timestamp winner over the losing side first. `conflicts` is untouched —
+     * the caller still needs the full list to persist and surface.
+     */
+    fun withoutIds(ids: Set<String>, idOf: (T) -> String): MergeResult<T> {
+        if (ids.isEmpty()) return this
+        return copy(
+            merged = merged.filterNot { idOf(it) in ids },
+            deleted = deleted.filterNot { it in ids },
+            added = added.filterNot { idOf(it) in ids },
+            updated = updated.filterNot { idOf(it) in ids }
+        )
+    }
 }
 
 /**

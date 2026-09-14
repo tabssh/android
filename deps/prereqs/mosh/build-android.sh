@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-##@Version 202608310000-git
+##@Version 202609130000-git
 # deps/prereqs/mosh/build-android.sh — Cross-compile mosh-client for one Android ABI.
 #
 # Wave 9.2 — runs INSIDE the Docker image built from deps/prereqs/mosh/Dockerfile.
@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-VERSION="202608310000-git"
+VERSION="202609130000-git"
 
 ABI="${1:-arm64-v8a}"
 # Mosh needs API 26+ — `nl_langinfo` was only added to Bionic in API 26.
@@ -49,7 +49,9 @@ NDK_CC="$TOOLCHAIN/bin/${TRIPLE}${API_LEVEL}-clang"
 NDK_CXX="$TOOLCHAIN/bin/${TRIPLE}${API_LEVEL}-clang++"
 NDK_CFLAGS="-fPIC -O2"
 NDK_CXXFLAGS="-fPIC -O2"
-NDK_LDFLAGS="-static-libstdc++"
+# 16 KB page-size compat: Android 15+ can boot with 16 KB pages; the ELF loader needs every LOAD segment aligned to 16384, so 4 KB-only binaries fail to load there.
+PAGE_ALIGN_LDFLAGS="-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384"
+NDK_LDFLAGS="-static-libstdc++ $PAGE_ALIGN_LDFLAGS"
 
 __use_ndk_toolchain() {
     export AR="$NDK_AR" RANLIB="$NDK_RANLIB" STRIP="$NDK_STRIP" NM="$NDK_NM"
@@ -175,7 +177,7 @@ echo "1.4.0" > VERSION
 PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" \
 PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig" \
 PROTOC="$HOST_PROTOC" \
-LDFLAGS="-static-libstdc++ -L$PREFIX/lib" \
+LDFLAGS="-static-libstdc++ $PAGE_ALIGN_LDFLAGS -L$PREFIX/lib" \
 CPPFLAGS="-I$PREFIX/include" \
 LIBS="-lcrypto -lssl -lncurses -lprotobuf -llog" \
 ./configure \

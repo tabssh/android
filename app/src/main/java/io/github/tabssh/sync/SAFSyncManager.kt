@@ -90,12 +90,23 @@ class SAFSyncManager(private val context: Context) {
             Logger.e(TAG, "Failed to store sync password in secure storage", e)
         }
 
-        // Fallback to in-memory only
+        // Fallback to in-memory only. The persisted "password set" flag stays
+        // OFF: setting it made isConfigured() report true after process death
+        // while the password itself was gone, so background syncs ran with no
+        // key, failed to decrypt, and looked like a corrupt remote file.
         Logger.w(TAG, "Using in-memory password storage (less secure)")
         inMemoryPassword = password
-        prefs.edit().putBoolean(KEY_SYNC_PASSWORD_SET, true).apply()
+        prefs.edit().putBoolean(KEY_SYNC_PASSWORD_SET, false).apply()
         return true
     }
+
+    /**
+     * True when the password only exists in memory for this process. The UI
+     * uses it to tell the user their sync password must be re-entered after a
+     * restart instead of letting sync silently fail later.
+     */
+    fun isPasswordMemoryOnly(): Boolean =
+        inMemoryPassword != null && !prefs.getBoolean(KEY_SYNC_PASSWORD_SET, false)
 
     /**
      * Public accessor for the sync password so the three-way merge coordinator
@@ -285,9 +296,17 @@ class SAFSyncManager(private val context: Context) {
     }
 
     /**
-     * Download data from sync file
+     * Download data from the sync file.
+     *
+     * The outcome is deliberately three-valued. A single nullable return used
+     * to collapse "no remote data yet" together with "the remote file exists
+     * but could not be read" (IO hiccup, wrong password after reinstall,
+     * corrupt payload). Callers read null as "nothing to merge", uploaded the
+     * local state over the peer's file and reported success, permanently
+     * destroying whatever only lived in that file. [SyncDownload.Failed] must
+     * never be followed by an upload.
      */
-    suspend fun download(): SyncDataPackage? = withContext(Dispatchers.IO) {
+    suspend fun download(): SyncDownload = withContext(Dispatchers.IO) {
         lastError = null
 
         val uri = getSyncUri()
@@ -295,7 +314,7 @@ class SAFSyncManager(private val context: Context) {
             val msg = "No sync location configured"
             lastError = msg
             Logger.e(TAG, msg)
-            return@withContext null
+            return@withContext SyncDownload.Failed(msg)
         }
 
         val password = getSyncPassword()
@@ -303,7 +322,7 @@ class SAFSyncManager(private val context: Context) {
             val msg = "Sync password not found - please re-enter your password in Settings"
             lastError = msg
             Logger.e(TAG, msg)
-            return@withContext null
+            return@withContext SyncDownload.Failed(msg)
         }
 
         try {
@@ -315,19 +334,20 @@ class SAFSyncManager(private val context: Context) {
             Logger.d(TAG, "Read ${encrypted.size} bytes from sync file")
 
             if (encrypted.isEmpty()) {
-                val msg = "Sync file is empty"
-                lastError = msg
-                Logger.w(TAG, msg)
-                return@withContext null
+                // A freshly created sync file really is empty — this is the one
+                // case where seeding it from local state is correct.
+                Logger.d(TAG, "Sync file is empty - treating as first sync")
+                return@withContext SyncDownload.Empty
             }
 
             // Decrypt
             val compressed = try {
                 encryptor.decrypt(encrypted, password)
             } catch (e: Exception) {
-                lastError = "Decryption failed - wrong password or corrupted data"
+                val msg = "Decryption failed - wrong password or corrupted data"
+                lastError = msg
                 Logger.e(TAG, "Decryption failed", e)
-                return@withContext null
+                return@withContext SyncDownload.Failed(msg)
             }
             Logger.d(TAG, "Decrypted to ${compressed.size} bytes")
 
@@ -342,13 +362,26 @@ class SAFSyncManager(private val context: Context) {
             // Update last sync time
             prefs.edit().putLong("sync_last_time", System.currentTimeMillis()).apply()
 
-            payload
+            SyncDownload.Data(payload)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            lastError = "Download failed: ${e.message}"
+            // Distinguish "the file is not there at all" (nothing can be lost
+            // by seeding it) from "it is there and we could not read it".
+            val absent = try {
+                DocumentFile.fromSingleUri(context, uri)?.exists() != true
+            } catch (probe: Exception) {
+                Logger.w(TAG, "Could not probe sync file existence", probe)
+                false
+            }
+            if (absent) {
+                Logger.d(TAG, "Sync file does not exist yet - treating as first sync")
+                return@withContext SyncDownload.Empty
+            }
+            val msg = "Download failed: ${e.message}"
+            lastError = msg
             Logger.e(TAG, "Download failed", e)
-            null
+            SyncDownload.Failed(msg)
         }
     }
 
@@ -452,6 +485,19 @@ class SAFSyncManager(private val context: Context) {
     private fun decompress(data: ByteArray): ByteArray {
         return GZIPInputStream(data.inputStream()).use { it.readBytes() }
     }
+}
+
+/**
+ * Outcome of reading the remote sync file.
+ *
+ * [Empty] means the remote genuinely holds nothing yet, so seeding it from
+ * local state is safe. [Failed] means the remote may hold a peer's data that
+ * simply could not be read — the sync must abort without uploading.
+ */
+sealed class SyncDownload {
+    data class Data(val payload: SyncDataPackage) : SyncDownload()
+    object Empty : SyncDownload()
+    data class Failed(val message: String) : SyncDownload()
 }
 
 /**

@@ -111,6 +111,8 @@ object HostContextActions {
                             // clearPassword is suspend + IO-dispatched (KeyStore HAL round-trip).
                             try { app.securePasswordManager.clearPassword(connection.id) } catch (_: Exception) {}
                         }
+                        // Home-screen widgets pinned to this connection otherwise keep the stale label and dead tap target.
+                        io.github.tabssh.widget.ConnectionWidgetProvider.updateAllWidgets(app)
                         Logger.d(TAG_SSH, "Connection deleted: ${connection.name}")
                     } catch (e: Exception) {
                         Logger.e(TAG_SSH, "Failed to delete connection", e)

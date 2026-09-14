@@ -39,6 +39,57 @@ class SyncDataApplier {
 
     companion object {
         private const val TAG = "SyncDataApplier"
+
+        /**
+         * Secret alias families whose suffix is a hypervisor-account id.
+         */
+        private val ACCOUNT_SECRET_PREFIXES = listOf(
+            "hypervisor_account_",
+            "oci_private_key_account_",
+            "oci_passphrase_account_"
+        )
+
+        /**
+         * Rewrites `*_account_{remoteId}` secret aliases onto the local ids the
+         * accounts actually landed on.
+         *
+         * Hypervisor accounts use a device-local autoincrement primary key, so
+         * an incoming account is matched by natural key and may keep a different
+         * id here than it had on the sender. Its password alias embeds the
+         * sender's id, so without this rewrite the credential would be stored
+         * against a nonexistent account and the connection would prompt for a
+         * password the user had already synced.
+         *
+         * Aliases with no remap entry (account filtered out by a toggle, or
+         * skipped as stale) pass through unchanged.
+         */
+        internal fun remapAccountSecretAliases(
+            secrets: Map<String, String>,
+            idRemap: Map<Long, Long>
+        ): Map<String, String> {
+            if (idRemap.isEmpty()) return secrets
+            return secrets.mapKeys { (alias, _) ->
+                val prefix = ACCOUNT_SECRET_PREFIXES.firstOrNull { alias.startsWith(it) }
+                    ?: return@mapKeys alias
+                val remoteId = alias.removePrefix(prefix).toLongOrNull() ?: return@mapKeys alias
+                val localId = idRemap[remoteId] ?: return@mapKeys alias
+                if (localId == remoteId) alias else "$prefix$localId"
+            }
+        }
+
+        /**
+         * True when the incoming remote revision is older than what this device
+         * already holds, so applying it would revert a local edit.
+         *
+         * Every table outside the four merge-tracked types was previously
+         * remote-always-wins: a peer that had not yet seen the user's latest
+         * edit shipped its stale row and the REPLACE silently rolled the edit
+         * back on every sync. A strictly-older remote row is dropped; equal
+         * timestamps still apply so a genuine re-push is not skipped, and a
+         * row absent locally (null) is never stale.
+         */
+        internal fun remoteIsStale(localModifiedAt: Long?, remoteModifiedAt: Long): Boolean =
+            localModifiedAt != null && localModifiedAt > remoteModifiedAt
     }
 
     private val context: Context
@@ -91,6 +142,13 @@ class SyncDataApplier {
             // connections so their group_id points at the surviving local
             // group UUID, not the remote one.
             val groupIdRemap = mutableMapOf<String, String>()
+
+            // Remote hypervisor-account id -> surviving local id. Account
+            // passwords travel as `hypervisor_account_{id}` aliases keyed on the
+            // *sender's* autoincrement id, so whenever an incoming account lands
+            // on a different local id the alias has to be rewritten with it or
+            // the password would be filed under an account that does not exist.
+            val hypervisorAccountIdRemap = mutableMapOf<Long, Long>()
 
             // H6 reverse half — a local tombstone suppresses re-adding an
             // incoming row that an out-of-date peer still carries (3-device /
@@ -167,7 +225,11 @@ class SyncDataApplier {
                 data.keys.forEach { key ->
                     try {
                         if (suppressed(TombstoneRecorder.KEY, key.keyId, key.modifiedAt)) return@forEach
-                        database.keyDao().insertKey(key)
+                        // upsert, not insert: KeyDao.insertKey aborts on an
+                        // existing keyId, so a remote *edit* to an already-known
+                        // key threw and was swallowed by the catch below.
+                        if (remoteIsStale(database.keyDao().getKeyById(key.keyId)?.modifiedAt, key.modifiedAt)) return@forEach
+                        database.keyDao().upsertKey(key)
                         appliedCount++
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply key: ${key.name}", e)
@@ -211,6 +273,7 @@ class SyncDataApplier {
                 data.workspaces.forEach { ws ->
                     try {
                         if (suppressed(TombstoneRecorder.WORKSPACE, ws.id, ws.modifiedAt)) return@forEach
+                        if (remoteIsStale(database.workspaceDao().getById(ws.id)?.modifiedAt, ws.modifiedAt)) return@forEach
                         database.workspaceDao().upsert(ws)
                         appliedCount++
                     } catch (e: Exception) {
@@ -226,8 +289,9 @@ class SyncDataApplier {
                         if (suppressed(TombstoneRecorder.SNIPPET, s.id, s.modifiedAt)) return@forEach
                         // usageCount is local-only — never synced. Preserve the
                         // existing local value across this whole-row REPLACE.
-                        val localUsageCount = database.snippetDao().getSnippetById(s.id)?.usageCount ?: 0
-                        database.snippetDao().insertSnippet(s.copy(usageCount = localUsageCount))
+                        val existing = database.snippetDao().getSnippetById(s.id)
+                        if (remoteIsStale(existing?.modifiedAt, s.modifiedAt)) return@forEach
+                        database.snippetDao().insertSnippet(s.copy(usageCount = existing?.usageCount ?: 0))
                         appliedCount++
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply snippet: ${s.name}", e)
@@ -238,6 +302,7 @@ class SyncDataApplier {
                 data.identities.forEach { id ->
                     try {
                         if (suppressed(TombstoneRecorder.IDENTITY, id.id, id.modifiedAt)) return@forEach
+                        if (remoteIsStale(database.identityDao().getIdentityById(id.id)?.modifiedAt, id.modifiedAt)) return@forEach
                         database.identityDao().insert(id)
                         appliedCount++
                     } catch (e: Exception) {
@@ -255,8 +320,9 @@ class SyncDataApplier {
                         if (suppressed(TombstoneRecorder.HYPERVISOR, TombstoneRecorder.naturalKey(h), h.modifiedAt)) return@forEach
                         // connectionCount is local-only — never synced. Preserve
                         // the existing local value across this whole-row REPLACE.
-                        val localConnectionCount = database.hypervisorDao().getById(h.id)?.connectionCount ?: 0
-                        database.hypervisorDao().upsertForSync(h.copy(connectionCount = localConnectionCount))
+                        val existing = database.hypervisorDao().getById(h.id)
+                        if (remoteIsStale(existing?.modifiedAt, h.modifiedAt)) return@forEach
+                        database.hypervisorDao().upsertForSync(h.copy(connectionCount = existing?.connectionCount ?: 0))
                         appliedCount++
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply hypervisor: ${h.name}", e)
@@ -267,6 +333,7 @@ class SyncDataApplier {
                 data.certificates.forEach { c ->
                     try {
                         if (suppressed(TombstoneRecorder.CERTIFICATE, c.id, c.modifiedAt)) return@forEach
+                        if (remoteIsStale(database.certificateDao().getCertificate(c.id)?.modifiedAt, c.modifiedAt)) return@forEach
                         database.certificateDao().insertCertificate(c)
                         appliedCount++
                     } catch (e: Exception) {
@@ -282,8 +349,9 @@ class SyncDataApplier {
                         if (suppressed(TombstoneRecorder.MACRO, m.id, m.modifiedAt)) return@forEach
                         // usageCount is local-only — never synced. Preserve the
                         // existing local value across this whole-row REPLACE.
-                        val localUsageCount = database.macroDao().getMacroById(m.id)?.usageCount ?: 0
-                        database.macroDao().insertMacro(m.copy(usageCount = localUsageCount))
+                        val existing = database.macroDao().getMacroById(m.id)
+                        if (remoteIsStale(existing?.modifiedAt, m.modifiedAt)) return@forEach
+                        database.macroDao().insertMacro(m.copy(usageCount = existing?.usageCount ?: 0))
                         appliedCount++
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply macro: ${m.id}", e)
@@ -294,6 +362,7 @@ class SyncDataApplier {
                 data.monitorSlots.forEach { slot ->
                     try {
                         if (suppressed(TombstoneRecorder.MONITOR_SLOT, slot.id, slot.modifiedAt)) return@forEach
+                        if (remoteIsStale(database.monitorSlotDao().getById(slot.id)?.modifiedAt, slot.modifiedAt)) return@forEach
                         database.monitorSlotDao().insertOrReplace(slot)
                         appliedCount++
                     } catch (e: Exception) {
@@ -302,19 +371,29 @@ class SyncDataApplier {
                 }
             }
 
-            // Audit 2026-05-16 — hypervisor account metadata. Password
-            // remains Keystore-bound on each device, not transferred.
-            // Cross-device Long-PK collision risk is the same as
-            // HypervisorProfile; documented in AI.md §9.4.
+            // Hypervisor account metadata. Password remains Keystore-bound on
+            // each device, not transferred.
+            //
+            // `id` is a device-local autoincrement value, so matching on it
+            // across devices is meaningless: the same account carries different
+            // ids on two devices (duplicating the row) while unrelated accounts
+            // can share one (overwriting each other). Match on the same natural
+            // key the tombstone recorder uses, and carry the surviving local id.
             if (preferenceManager.isSyncHypervisorAccountsEnabled()) {
+                val localAccountsByKey = database.hypervisorAccountDao().getAllAccountsList()
+                    .associateBy { TombstoneRecorder.naturalKey(it) }
                 data.hypervisorAccounts.forEach { a ->
                     try {
-                        if (suppressed(TombstoneRecorder.HYPERVISOR_ACCOUNT, TombstoneRecorder.naturalKey(a), a.modifiedAt)) return@forEach
-                        val existing = database.hypervisorAccountDao().getById(a.id)
+                        val key = TombstoneRecorder.naturalKey(a)
+                        if (suppressed(TombstoneRecorder.HYPERVISOR_ACCOUNT, key, a.modifiedAt)) return@forEach
+                        val existing = localAccountsByKey[key]
                         if (existing == null) {
-                            database.hypervisorAccountDao().insert(a)
+                            val newId = database.hypervisorAccountDao().insert(a.copy(id = 0L))
+                            hypervisorAccountIdRemap[a.id] = newId
                         } else {
-                            database.hypervisorAccountDao().update(a)
+                            if (remoteIsStale(existing.modifiedAt, a.modifiedAt)) return@forEach
+                            database.hypervisorAccountDao().update(a.copy(id = existing.id))
+                            hypervisorAccountIdRemap[a.id] = existing.id
                         }
                         appliedCount++
                     } catch (e: Exception) {
@@ -330,8 +409,9 @@ class SyncDataApplier {
                         if (suppressed(TombstoneRecorder.VNC_HOST, h.id, h.modifiedAt)) return@forEach
                         // connectionCount is local-only — never synced. Preserve
                         // the existing local value across this whole-row REPLACE.
-                        val localConnectionCount = database.vncHostDao().getById(h.id)?.connectionCount ?: 0
-                        database.vncHostDao().insert(h.copy(connectionCount = localConnectionCount))
+                        val existing = database.vncHostDao().getById(h.id)
+                        if (remoteIsStale(existing?.modifiedAt, h.modifiedAt)) return@forEach
+                        database.vncHostDao().insert(h.copy(connectionCount = existing?.connectionCount ?: 0))
                         appliedCount++
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply VNC host: ${h.name}", e)
@@ -343,6 +423,7 @@ class SyncDataApplier {
                 data.vncIdentities.forEach { vi ->
                     try {
                         if (suppressed(TombstoneRecorder.VNC_IDENTITY, vi.id, vi.modifiedAt)) return@forEach
+                        if (remoteIsStale(database.vncIdentityDao().getById(vi.id)?.modifiedAt, vi.modifiedAt)) return@forEach
                         database.vncIdentityDao().insert(vi)
                         appliedCount++
                     } catch (e: Exception) {
@@ -361,6 +442,7 @@ class SyncDataApplier {
                         // synced. Preserve the existing local values across
                         // this whole-row REPLACE.
                         val localCa = database.cloudAccountDao().getById(ca.id)
+                        if (remoteIsStale(localCa?.modifiedAt, ca.modifiedAt)) return@forEach
                         database.cloudAccountDao().upsert(
                             ca.copy(
                                 connectionCount = localCa?.connectionCount ?: 0,
@@ -379,6 +461,7 @@ class SyncDataApplier {
                 data.portForwards.forEach { pf ->
                     try {
                         if (suppressed(TombstoneRecorder.PORT_FORWARD, pf.id, pf.modifiedAt)) return@forEach
+                        if (remoteIsStale(database.portForwardDao().getById(pf.id)?.modifiedAt, pf.modifiedAt)) return@forEach
                         database.portForwardDao().insert(pf)
                         appliedCount++
                     } catch (e: Exception) {
@@ -393,6 +476,7 @@ class SyncDataApplier {
                 data.telnetHosts.forEach { th ->
                     try {
                         if (suppressed(TombstoneRecorder.TELNET_HOST, th.id, th.modifiedAt)) return@forEach
+                        if (remoteIsStale(database.telnetHostDao().getById(th.id)?.modifiedAt, th.modifiedAt)) return@forEach
                         database.telnetHostDao().insert(th)
                         appliedCount++
                     } catch (e: Exception) {
@@ -406,6 +490,7 @@ class SyncDataApplier {
                 data.networkRoutes.forEach { nr ->
                     try {
                         if (suppressed(TombstoneRecorder.NETWORK_ROUTE, nr.id, nr.modifiedAt)) return@forEach
+                        if (remoteIsStale(database.networkRouteDao().getById(nr.id)?.modifiedAt, nr.modifiedAt)) return@forEach
                         database.networkRouteDao().insert(nr)
                         appliedCount++
                     } catch (e: Exception) {
@@ -419,6 +504,7 @@ class SyncDataApplier {
                 data.paneGroups.forEach { pg ->
                     try {
                         if (suppressed(TombstoneRecorder.PANE_GROUP, pg.id, pg.modifiedAt)) return@forEach
+                        if (remoteIsStale(database.paneGroupDao().getById(pg.id)?.modifiedAt, pg.modifiedAt)) return@forEach
                         database.paneGroupDao().insert(pg)
                         appliedCount++
                     } catch (e: Exception) {
@@ -436,6 +522,7 @@ class SyncDataApplier {
                         // connectionCount is local-only — never synced. Preserve
                         // the existing local value across this whole-row apply.
                         val existing = database.containerHostDao().getById(h.id)
+                        if (remoteIsStale(existing?.modifiedAt, h.modifiedAt)) return@forEach
                         val incoming = h.copy(connectionCount = existing?.connectionCount ?: 0)
                         if (existing == null) database.containerHostDao().insert(incoming)
                         else database.containerHostDao().update(incoming)
@@ -448,6 +535,7 @@ class SyncDataApplier {
                     try {
                         if (suppressed(TombstoneRecorder.REGISTRY_CREDENTIAL, TombstoneRecorder.naturalKey(c), c.modifiedAt)) return@forEach
                         val existing = database.registryCredentialDao().getById(c.id)
+                        if (remoteIsStale(existing?.modifiedAt, c.modifiedAt)) return@forEach
                         if (existing == null) database.registryCredentialDao().insert(c)
                         else database.registryCredentialDao().update(c)
                         appliedCount++
@@ -459,6 +547,7 @@ class SyncDataApplier {
                     try {
                         if (suppressed(TombstoneRecorder.COMPOSE_STACK, TombstoneRecorder.naturalKey(s), s.modifiedAt)) return@forEach
                         val existing = database.composeStackDao().getById(s.id)
+                        if (remoteIsStale(existing?.modifiedAt, s.modifiedAt)) return@forEach
                         if (existing == null) database.composeStackDao().insert(s)
                         else database.composeStackDao().update(s)
                         appliedCount++
@@ -470,6 +559,7 @@ class SyncDataApplier {
                     try {
                         if (suppressed(TombstoneRecorder.SINGLE_CONTAINER_CONFIG, TombstoneRecorder.naturalKey(c), c.modifiedAt)) return@forEach
                         val existing = database.singleContainerConfigDao().getById(c.id)
+                        if (remoteIsStale(existing?.modifiedAt, c.modifiedAt)) return@forEach
                         if (existing == null) database.singleContainerConfigDao().insert(c)
                         else database.singleContainerConfigDao().update(c)
                         appliedCount++
@@ -481,6 +571,7 @@ class SyncDataApplier {
                     try {
                         if (suppressed(TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY, TombstoneRecorder.naturalKey(p), p.modifiedAt)) return@forEach
                         val existing = database.containerAutoUpdatePolicyDao().getById(p.id)
+                        if (remoteIsStale(existing?.modifiedAt, p.modifiedAt)) return@forEach
                         if (existing == null) database.containerAutoUpdatePolicyDao().insert(p)
                         else database.containerAutoUpdatePolicyDao().update(p)
                         appliedCount++
@@ -502,7 +593,7 @@ class SyncDataApplier {
             // Apply credentials outside the Room transaction — Keystore
             // AES-GCM encrypt/decrypt is I/O and must not run inside a DB tx.
             if (data.secrets.isNotEmpty()) {
-                applySecrets(data.secrets)
+                applySecrets(remapAccountSecretAliases(data.secrets, hypervisorAccountIdRemap))
             } else {
                 Logger.d(TAG, "No secrets in sync payload (empty device)")
             }
@@ -741,16 +832,20 @@ class SyncDataApplier {
                             if (row != null) database.containerAutoUpdatePolicyDao().delete(row)
                             false
                         }
-                        // ComposeStack/SingleContainerConfig have updatedAt, so
-                        // last-write-wins applies the same way as HYPERVISOR_ACCOUNT.
+                        // ComposeStack/SingleContainerConfig carry a user-edit
+                        // timestamp in modifiedAt, so last-write-wins applies the
+                        // same way as HYPERVISOR_ACCOUNT. updatedAt is the
+                        // last-fetched *status cache* stamp — it moves on every
+                        // poll, so comparing it would let a background refresh
+                        // outvote a peer's genuine delete forever.
                         TombstoneRecorder.COMPOSE_STACK -> {
                             val row = composeStacksByKey[t.entityKey]
-                            if (row != null && row.updatedAt > t.deletedAt) true
+                            if (row != null && row.modifiedAt > t.deletedAt) true
                             else { if (row != null) database.composeStackDao().delete(row); false }
                         }
                         TombstoneRecorder.SINGLE_CONTAINER_CONFIG -> {
                             val row = singleContainerConfigsByKey[t.entityKey]
-                            if (row != null && row.updatedAt > t.deletedAt) true
+                            if (row != null && row.modifiedAt > t.deletedAt) true
                             else { if (row != null) database.singleContainerConfigDao().delete(row); false }
                         }
                         else -> false
@@ -1427,7 +1522,6 @@ class SyncDataApplier {
             try {
                 when (key) {
                     "autoBackup" -> preferenceManager.setAutoBackupEnabled(value as Boolean)
-                    "backupFrequency" -> preferenceManager.setBackupFrequency(value as String)
                     "startupBehavior" -> preferenceManager.setStartupBehavior(value as String)
                     "language" -> preferenceManager.setLanguage(value as String)
                 }

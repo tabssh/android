@@ -1992,39 +1992,37 @@ class SSHConnection(
         // channel limit was reachable.
         var channel: ChannelExec? = null
         try {
-            channel = currentSession.openChannel("exec") as ChannelExec
-            channel.setCommand(command)
+            // Local val alias: the lambda passed to the reader below needs a
+            // stable reference — a captured `var` cannot be smart-cast.
+            val exec = currentSession.openChannel("exec") as ChannelExec
+            channel = exec
+            exec.setCommand(command)
 
-            val inputStream = channel.inputStream
-            val errorStream = channel.errStream
+            val inputStream = exec.inputStream
+            val errorStream = exec.errStream
 
-            channel.connect(timeoutMs.toInt())
+            exec.connect(timeoutMs.toInt())
 
             val output = StringBuilder()
-            val buffer = ByteArray(4096)
 
-            // Blocking read loop: blocks until the server sends data or closes
-            // the channel (read returns -1). This replaces the prior
-            // inputStream.available() + delay(100) poll which woke every 100 ms
-            // even when idle and introduced up to 100 ms of latency per chunk.
-            // withTimeoutOrNull bounds the total read phase so a hung server or
-            // a command that never terminates cannot stall the caller indefinitely.
-            withTimeoutOrNull(timeoutMs) {
-                while (true) {
-                    val n = inputStream.read(buffer)
-                    if (n == -1) break
-                    if (n > 0) output.append(String(buffer, 0, n, Charsets.UTF_8))
-                }
-            } ?: Logger.w("SSHConnection", "executeCommand timed out after ${timeoutMs}ms: ${Logger.commandForLogging(command)}")
+            // ExecOutputReader polls available() and suspends while idle so
+            // the timeout stays cancellable — a plain blocking read() has no
+            // suspension point, so withTimeoutOrNull could never interrupt a
+            // dead socket that stops delivering data mid-read.
+            val finished = ExecOutputReader.readUntilClosed(inputStream, { exec.isClosed }, output, timeoutMs)
+            if (!finished) {
+                Logger.w("SSHConnection", "executeCommand timed out after ${timeoutMs}ms: ${Logger.commandForLogging(command)}")
+            }
 
             // Drain stderr after stdout EOF (channel is closed by remote at this point)
             val errorOutput = StringBuilder()
+            val buffer = ByteArray(4096)
             while (errorStream.available() > 0) {
                 val n = errorStream.read(buffer)
                 if (n > 0) errorOutput.append(String(buffer, 0, n, Charsets.UTF_8))
             }
 
-            val exitStatus = channel.exitStatus
+            val exitStatus = exec.exitStatus
             if (exitStatus != 0 && errorOutput.isNotEmpty()) {
                 Logger.w("SSHConnection", "Command '${Logger.commandForLogging(command)}' exit $exitStatus — stderr: $errorOutput")
             }

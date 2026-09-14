@@ -14,7 +14,8 @@ import io.github.tabssh.utils.logging.Logger
 /**
  * Main Room database for TabSSH.
  *
- * Current version: 25.
+ * The current schema version is the `version` value in the @Database annotation
+ * below — it is deliberately not repeated here, where it would go stale.
  * Versions 1 and 2 never shipped to real users, so v3 is the effective schema
  * baseline and no fallback path exists for them. Every version bump from v3
  * onward MUST register a real Migration object via addMigrations(); destructive

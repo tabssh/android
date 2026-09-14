@@ -48,6 +48,11 @@ class RemoteFileEditorActivity : TabSSHActivity() {
 
         private const val TAG = "RemoteFileEditor"
 
+        // Instance-state keys for the in-progress edit; see onSaveInstanceState.
+        private const val STATE_BUFFER = "editor_buffer"
+        private const val STATE_ORIGINAL = "editor_original"
+        private const val STATE_DIRTY = "editor_dirty"
+
         fun createIntent(context: Context, connectionId: String, remotePath: String, fileName: String): Intent =
             Intent(context, RemoteFileEditorActivity::class.java).apply {
                 putExtra(EXTRA_CONNECTION_ID, connectionId)
@@ -67,6 +72,8 @@ class RemoteFileEditorActivity : TabSSHActivity() {
     // upload completes would race two concurrent SFTP writes against the same
     // path and overwrite the second with whatever finished last.
     private var isSaving: Boolean = false
+    // Staging copy of the remote file for this editing session; deleted in onDestroy.
+    private var editorCacheFile: File? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -157,8 +164,36 @@ class RemoteFileEditorActivity : TabSSHActivity() {
         setContentView(root)
         setSupportActionBar(toolbar)
 
+        // Restore an in-progress edit across a configuration change rather than
+        // re-downloading. The EditText is built programmatically and has no id,
+        // so it is excluded from automatic view-state saving: rotating the
+        // device used to silently replace ten minutes of unsaved edits with the
+        // server's copy.
+        val savedBuffer = savedInstanceState?.getString(STATE_BUFFER)
+        if (savedBuffer != null) {
+            originalText = savedInstanceState.getString(STATE_ORIGINAL).orEmpty()
+            editor.setText(savedBuffer)
+            dirty = savedInstanceState.getBoolean(STATE_DIRTY, false)
+            toolbar.title = if (dirty) {
+                getString(R.string.remote_editor_title_dirty_fmt, fileName)
+            } else {
+                fileName
+            }
+            progress.visibility = android.view.View.GONE
+            invalidateOptionsMenu()
+            return
+        }
+
         // Connect SFTP and download.
         lifecycleScope.launch { downloadFile(connectionId) }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        if (!::editor.isInitialized) return
+        outState.putString(STATE_BUFFER, editor.text?.toString().orEmpty())
+        outState.putString(STATE_ORIGINAL, originalText)
+        outState.putBoolean(STATE_DIRTY, dirty)
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -212,6 +247,10 @@ class RemoteFileEditorActivity : TabSSHActivity() {
         sftp = mgr
 
         val cacheFile = File(cacheDir, "edit_${System.currentTimeMillis()}_${File(remotePath).name}")
+        // Remembered so onDestroy can delete it. Each editor open created a new
+        // timestamped file that nothing ever removed, so the cache grew without
+        // bound — and held remote file contents on disk indefinitely.
+        editorCacheFile = cacheFile
         try {
             val task = mgr.downloadFile(remotePath, cacheFile, null)
             // Poll until done (PENDING/ACTIVE → COMPLETED/ERROR/CANCELLED).
@@ -331,5 +370,17 @@ class RemoteFileEditorActivity : TabSSHActivity() {
     override fun onDestroy() {
         super.onDestroy()
         sftp?.disconnect()
+        // Drop the downloaded copy — it is only a staging buffer for this
+        // editing session and must not outlive it in the cache directory.
+        editorCacheFile?.let { file ->
+            try {
+                if (file.exists() && !file.delete()) {
+                    Logger.w(TAG, "Could not delete editor cache file ${file.name}")
+                }
+            } catch (e: Exception) {
+                Logger.w(TAG, "Failed to delete editor cache file", e)
+            }
+        }
+        editorCacheFile = null
     }
 }

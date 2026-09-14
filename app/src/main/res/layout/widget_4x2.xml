@@ -17,6 +17,29 @@
         android:paddingBottom="@dimen/space_sm" />
 
     <TextView
+        android:id="@+id/widget_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/app_name"
+        android:textSize="@dimen/text_size_body"
+        android:textStyle="bold"
+        android:textColor="?attr/colorOnSurface"
+        android:gravity="center"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/widget_info"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/widget_tap_to_configure"
+        android:textSize="@dimen/text_size_caption"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:gravity="center"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <TextView
         android:id="@+id/widget_open_app"
         android:layout_width="match_parent"
         android:layout_height="0dp"

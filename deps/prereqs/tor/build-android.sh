@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-##@Version 202609100000-git
+##@Version 202609130000-git
 # deps/prereqs/tor/build-android.sh — Cross-compile the tor client for one Android ABI.
 #
 # Runs INSIDE the Docker image built from deps/prereqs/tor/Dockerfile.
@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-VERSION="202609100000-git"
+VERSION="202609130000-git"
 
 ABI="${1:-arm64-v8a}"
 # TabSSH has minSdk 24; tor cross-compiles cleanly against API 24 and the
@@ -44,10 +44,13 @@ NDK_NM="$TOOLCHAIN/bin/llvm-nm"
 NDK_CC="$TOOLCHAIN/bin/${TRIPLE}${API_LEVEL}-clang"
 NDK_CXX="$TOOLCHAIN/bin/${TRIPLE}${API_LEVEL}-clang++"
 
+# 16 KB page-size compat: Android 15+ can boot with 16 KB pages; the ELF loader needs every LOAD segment aligned to 16384, so 4 KB-only binaries fail to load there.
+PAGE_ALIGN_LDFLAGS="-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384"
+
 __use_ndk_toolchain() {
     export AR="$NDK_AR" RANLIB="$NDK_RANLIB" STRIP="$NDK_STRIP" NM="$NDK_NM"
     export CC="$NDK_CC" CXX="$NDK_CXX"
-    export CFLAGS="-fPIC -O2" CXXFLAGS="-fPIC -O2" LDFLAGS="-static-libstdc++"
+    export CFLAGS="-fPIC -O2" CXXFLAGS="-fPIC -O2" LDFLAGS="-static-libstdc++ $PAGE_ALIGN_LDFLAGS"
 }
 
 # for the final strip step at the end
@@ -138,7 +141,7 @@ cd tor-0.4.9.11
 # dlopen/dlsym/dlclose/dlerror even in a no-shared static build. On Android
 # these live in libc, but the static link still needs -ldl to resolve them
 # or ld.lld fails with "undefined symbol: dlopen".
-LDFLAGS="-static-libstdc++ -L$PREFIX/lib -ldl" \
+LDFLAGS="-static-libstdc++ $PAGE_ALIGN_LDFLAGS -L$PREFIX/lib -ldl" \
 CPPFLAGS="-I$PREFIX/include" \
 ./configure \
     --host="$BIN_PREFIX" \

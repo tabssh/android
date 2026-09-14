@@ -98,6 +98,79 @@ class LibvirtApiClient(
          * exceed 255 octets).
          */
         private const val MAX_SPICE_HOST_LEN = 255
+
+        /**
+         * Extract the password from the userinfo of a `vnc://` line emitted by
+         * `virsh domdisplay --include-password`, or null when the display has none.
+         *
+         * libvirt writes the password verbatim (`virBufferAsprintf(&buf, ":%s@", passwd)`
+         * in virsh-domain.c, unchanged v5.0.0→master) — it is NOT percent-encoded.
+         * Passing it through URLDecoder turned a literal `+` into a space and
+         * reinterpreted any accidental `%hh` sequence, so a correct password such as
+         * `a+b2cd42` failed the VNC-Auth challenge.
+         */
+        internal fun extractVncUserinfoPassword(line: String): String? {
+            // userinfo lives between "vnc://" and the last '@' before the host part.
+            val rest = line.removePrefix("vnc://")
+            val at = rest.lastIndexOf('@')
+            if (at <= 0) return null
+            val userinfo = rest.substring(0, at)
+            // libvirt emits an empty user with the password after ':'.
+            val raw = userinfo.substringAfter(':', "")
+            return raw.ifEmpty { null }
+        }
+
+        /** Parsed pieces of a `virsh domdisplay` `spice://` URI. */
+        internal data class ParsedSpiceUri(
+            val password: String,
+            val host: String,
+            val port: Int,
+            val tlsPort: Int
+        )
+
+        /**
+         * Parse `spice://host[:port][?tls-port=N&password=TICKET&...]` as produced
+         * by `virsh domdisplay --include-password` (see libvirt's cmdDomDisplay).
+         * Returns null when the URI does not match that shape or carries neither
+         * a plain port nor a tls-port. IPv6 listen addresses arrive bracketed
+         * (`spice://[::1]:5900`) and are unwrapped for the forward target.
+         *
+         * libvirt puts the display password in URI userinfo only for `vnc://`;
+         * for `spice://` it emits a raw `password=` query parameter
+         * (virsh-domain.c, virshGetOneDisplay — identical v5.0.0→master).
+         * Reading only userinfo left the password always empty, so every
+         * password-protected SPICE display failed main-channel auth. Userinfo
+         * is still tolerated as a fallback; the value is kept raw because
+         * libvirt does not percent-encode it.
+         */
+        internal fun parseSpiceUri(uri: String): ParsedSpiceUri? {
+            val match = Regex("^spice://(?:([^@/?]*)@)?(\\[[^\\]]*\\]|[^:/?]*)(?::(\\d+))?(?:\\?(.*))?$")
+                .find(uri) ?: return null
+            // Userinfo is ":ticket" (empty user part); tolerate a bare value too.
+            val userinfo = match.groupValues[1]
+            var password = userinfo.substringAfter(':', missingDelimiterValue = userinfo)
+            val rawHost = match.groupValues[2].removeSurrounding("[", "]")
+            // An empty listen address means the display binds localhost on the hypervisor.
+            val host = rawHost.ifBlank { "127.0.0.1" }
+            val port = match.groupValues[3].toIntOrNull() ?: 0
+            var tlsPort = 0
+            for (param in match.groupValues[4].split('&')) {
+                val kv = param.split('=', limit = 2)
+                if (kv.size != 2) continue
+                if (kv[0] == "tls-port") tlsPort = kv[1].toIntOrNull() ?: 0
+                // This is where libvirt actually puts the SPICE ticket; it wins
+                // over any userinfo value.
+                if (kv[0] == "password") password = kv[1]
+            }
+            if (port == 0 && tlsPort == 0) return null
+            // The URI comes from the remote hypervisor, so the ports are untrusted:
+            // an out-of-range value would reach setPortForwardingL and, via
+            // SpiceConnectionParams' require(), throw out of the fallback path
+            // instead of quietly declining SPICE.
+            if (port !in 0..65535 || tlsPort !in 0..65535) return null
+            if (host.length > MAX_SPICE_HOST_LEN) return null
+            return ParsedSpiceUri(password, host, port, tlsPort)
+        }
     }
 
     // Assigned by connect() on an IO thread, then read (and cleared) from other
@@ -414,21 +487,7 @@ class LibvirtApiClient(
         val line = runCommand("virsh domdisplay --include-password ${shQuote(domain)} 2>/dev/null")
             .lines().firstOrNull { it.trim().startsWith("vnc://") }?.trim()
             ?: return@withContext null
-        // userinfo lives between "vnc://" and the last '@' before the host part.
-        val rest = line.removePrefix("vnc://")
-        val at = rest.lastIndexOf('@')
-        if (at <= 0) return@withContext null
-        val userinfo = rest.substring(0, at)
-        // libvirt emits an empty user with the password after ':'.
-        val raw = userinfo.substringAfter(':', "")
-        if (raw.isEmpty()) return@withContext null
-        try {
-            java.net.URLDecoder.decode(raw, "UTF-8")
-        } catch (e: IllegalArgumentException) {
-            // Not percent-encoded (older libvirt) — take the literal bytes.
-            Logger.d(TAG, "domdisplay VNC userinfo is not percent-encoded: ${e.message}")
-            raw
-        }
+        extractVncUserinfoPassword(line)
     }
 
     /**
@@ -520,9 +579,10 @@ class LibvirtApiClient(
             Logger.i(TAG, "getSpiceDisplay($domain): native SPICE library not present — VNC fallback")
             return@withContext null
         }
-        // --include-password embeds the SPICE ticket as URI userinfo
-        // (spice://:ticket@host:port); without it a password-protected
-        // display would pass the transport handshake and then fail auth.
+        // --include-password embeds the SPICE ticket as a `password=` query
+        // parameter (spice://host:port?password=ticket); without it a
+        // password-protected display would pass the transport handshake and
+        // then fail auth.
         val output = runCommand("virsh domdisplay --include-password ${shQuote(domain)} 2>/dev/null")
             .lines().firstOrNull { it.isNotBlank() }?.trim() ?: ""
         if (!output.startsWith("spice://")) {
@@ -590,46 +650,6 @@ class LibvirtApiClient(
         } catch (e: Exception) {
             Logger.d(TAG, "stopSpiceForward($localPort): ${e.message}")
         }
-    }
-
-    /** Parsed pieces of a `virsh domdisplay` `spice://` URI. */
-    private data class ParsedSpiceUri(
-        val password: String,
-        val host: String,
-        val port: Int,
-        val tlsPort: Int
-    )
-
-    /**
-     * Parse `spice://[:password@]host[:port][?tls-port=N&...]` as produced by
-     * `virsh domdisplay --include-password` (see libvirt's cmdDomDisplay).
-     * Returns null when the URI does not match that shape or carries neither
-     * a plain port nor a tls-port. IPv6 listen addresses arrive bracketed
-     * (`spice://[::1]:5900`) and are unwrapped for the forward target.
-     */
-    private fun parseSpiceUri(uri: String): ParsedSpiceUri? {
-        val match = Regex("^spice://(?:([^@/?]*)@)?(\\[[^\\]]*\\]|[^:/?]*)(?::(\\d+))?(?:\\?(.*))?$")
-            .find(uri) ?: return null
-        // Userinfo is ":ticket" (empty user part); tolerate a bare value too.
-        val userinfo = match.groupValues[1]
-        val password = userinfo.substringAfter(':', missingDelimiterValue = userinfo)
-        val rawHost = match.groupValues[2].removeSurrounding("[", "]")
-        // An empty listen address means the display binds localhost on the hypervisor.
-        val host = rawHost.ifBlank { "127.0.0.1" }
-        val port = match.groupValues[3].toIntOrNull() ?: 0
-        var tlsPort = 0
-        for (param in match.groupValues[4].split('&')) {
-            val kv = param.split('=', limit = 2)
-            if (kv.size == 2 && kv[0] == "tls-port") tlsPort = kv[1].toIntOrNull() ?: 0
-        }
-        if (port == 0 && tlsPort == 0) return null
-        // The URI comes from the remote hypervisor, so the ports are untrusted:
-        // an out-of-range value would reach setPortForwardingL and, via
-        // SpiceConnectionParams' require(), throw out of the fallback path
-        // instead of quietly declining SPICE.
-        if (port !in 0..65535 || tlsPort !in 0..65535) return null
-        if (host.length > MAX_SPICE_HOST_LEN) return null
-        return ParsedSpiceUri(password, host, port, tlsPort)
     }
 
     // ── Snapshots ────────────────────────────────────────────────────────────

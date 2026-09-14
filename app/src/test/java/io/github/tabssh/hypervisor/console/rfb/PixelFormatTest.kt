@@ -85,4 +85,37 @@ class PixelFormatTest {
         val wire = byteArrayOf(0x11, 0x22, 0x33)
         assertEquals(0xFF112233.toInt(), fmt.cpixelToArgb(wire))
     }
+
+    @Test
+    fun `3-byte TPixel is fixed red-green-blue on a little-endian format`() {
+        val fmt = trueColor(bpp = 32, depth = 24, bigEndian = 0, redShift = 16, greenShift = 8, blueShift = 0)
+        assertEquals(3, fmt.tpixelBytes)
+        // Tight's TPIXEL is spec-fixed R,G,B regardless of endianness. Decoding
+        // it with ZRLE's CPixel rules read byte 0 as blue under this format,
+        // producing 0xFF332211 — red and blue swapped on every Tight rect.
+        val wire = byteArrayOf(0x11, 0x22, 0x33)
+        assertEquals(0xFF112233.toInt(), fmt.tpixelToArgb(wire))
+    }
+
+    @Test
+    fun `3-byte TPixel is fixed red-green-blue on a big-endian format too`() {
+        val fmt = trueColor(bpp = 32, depth = 24, bigEndian = 1, redShift = 16, greenShift = 8, blueShift = 0)
+        assertEquals(3, fmt.tpixelBytes)
+        val wire = byteArrayOf(0x11, 0x22, 0x33)
+        assertEquals(0xFF112233.toInt(), fmt.tpixelToArgb(wire))
+    }
+
+    @Test
+    fun `TPixel falls back to the full pixel outside the 32bpp depth-24 888 shape`() {
+        // RGB-565 does not qualify for the 3-byte TPIXEL, so Tight sends the
+        // full 2-byte pixel and decoding must match the generic conversion.
+        val fmt = PixelFormat(
+            bitsPerPixel = 16, depth = 16, bigEndianFlag = 0, trueColorFlag = 1,
+            redMax = 31, greenMax = 63, blueMax = 31,
+            redShift = 11, greenShift = 5, blueShift = 0
+        )
+        assertEquals(2, fmt.tpixelBytes)
+        val wire = byteArrayOf(0xFF.toByte(), 0xFF.toByte())
+        assertEquals(fmt.toArgb(wire), fmt.tpixelToArgb(wire))
+    }
 }

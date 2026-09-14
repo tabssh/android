@@ -389,13 +389,25 @@ class RfbClient(
         if (!running.get()) return
         if (!paused.compareAndSet(true, false)) return
         Logger.d(TAG, "RFB resumed — requesting full framebuffer refresh")
-        try {
-            if (fbWidth > 0 && fbHeight > 0) {
-                sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
-                lastUpdateTimeMs.set(System.currentTimeMillis())
+        // resume() is called on the main thread (TabManager.reclaimOne from
+        // onResume). For a direct-TCP transport the synchronous socket write
+        // raised NetworkOnMainThreadException before any bytes went out and the
+        // catch swallowed it, so the view kept the stale parked framebuffer
+        // until the server happened to push an update. Send from a worker
+        // thread instead; sendUpdateRequest serializes on outLock.
+        Thread {
+            try {
+                if (fbWidth > 0 && fbHeight > 0) {
+                    sendUpdateRequest(0, 0, fbWidth, fbHeight, incremental = false)
+                    lastUpdateTimeMs.set(System.currentTimeMillis())
+                }
+            } catch (e: Exception) {
+                if (running.get()) Logger.w(TAG, "RFB resume refresh failed: ${e.message}")
             }
-        } catch (e: Exception) {
-            if (running.get()) Logger.w(TAG, "RFB resume refresh failed: ${e.message}")
+        }.apply {
+            name = "RfbClient-resume"
+            isDaemon = true
+            start()
         }
     }
 
@@ -714,6 +726,25 @@ class RfbClient(
     private fun authenticateRfb33() {
         val secType = din.readInt()
         Logger.d(TAG, "RFB 3.3 security type: $secType")
+        // In 3.3 the server dictates the type, but the user's non-auto pin must
+        // still be honoured: accepting whatever arrived let a 3.3 server (or a
+        // MITM downgrading to 3.3) demand VNC Auth from a host pinned to None
+        // and silently receive the password-derived response. secType 0 is the
+        // server's own rejection and falls through so its reason is reported.
+        if (secType != 0 && securityType != SECURITY_PREF_AUTO) {
+            val pinnedType = when (securityType) {
+                SECURITY_PREF_NONE -> RfbConstants.SECURITY_NONE
+                SECURITY_PREF_VNC_AUTH -> RfbConstants.SECURITY_VNC_AUTH
+                // VeNCrypt pins can never be satisfied by a 3.3 server.
+                else -> -1
+            }
+            if (secType != pinnedType) {
+                throw Exception(
+                    "This host is pinned to '$securityType' security, but the RFB 3.3 server " +
+                        "dictates type $secType — refusing to downgrade"
+                )
+            }
+        }
         when (secType) {
             0 -> {
                 // Connection failed — server reason follows

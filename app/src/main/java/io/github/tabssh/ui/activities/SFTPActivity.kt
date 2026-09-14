@@ -18,6 +18,7 @@ import io.github.tabssh.sftp.RemoteFileInfo
 import io.github.tabssh.sftp.SFTPManager
 import io.github.tabssh.sftp.TransferTask
 import io.github.tabssh.sftp.TransferListener
+import io.github.tabssh.sftp.TransferResult
 import io.github.tabssh.ui.adapters.FileAdapter
 import io.github.tabssh.ui.adapters.typeLabel
 import io.github.tabssh.ui.dialogs.DialogFields
@@ -146,6 +147,22 @@ class SFTPActivity : TabSSHActivity() {
 
     private val sftpTabs = mutableListOf<SftpTab>()
     private var activeSftpTabIndex: Int = -1
+
+    /**
+     * Connection id of the tab currently being browsed.
+     *
+     * Paths that write to the server must resolve the connection from here,
+     * never from the launch intent: the intent carries the connection the
+     * activity was opened with, but tabs reseat [sftpManager] and
+     * [currentRemotePath] per tab. Using the intent meant that, with a second
+     * tab active, Open/Edit and SCP upload sent the active tab's paths to the
+     * ORIGINAL server — a cross-server overwrite.
+     *
+     * Falls back to the launch intent only before any tab has been seated.
+     */
+    private val activeConnectionId: String?
+        get() = sftpTabs.getOrNull(activeSftpTabIndex)?.connectionId
+            ?: intent.getStringExtra(EXTRA_CONNECTION_ID)
     
     // File lists
     private val localFiles = mutableListOf<LocalFileSource>()
@@ -870,10 +887,34 @@ class SFTPActivity : TabSSHActivity() {
     private fun handleRemoteFileClick(file: RemoteFileInfo) {
         if (file.isDirectory) {
             loadRemoteDirectory(file.path)
-        } else {
-            // Select file for download
-            selectRemoteFile(file)
+            return
         }
+
+        if (file.isSymlink) {
+            // Listing entries come from lstat, so a symlink to a directory
+            // arrives with isDirectory = false and size ~0. Tapping one used to
+            // do nothing (or treat it as a downloadable file), which makes the
+            // common `current -> releases/42` deploy layout unbrowsable.
+            // getRemoteFileAttributes uses stat, which follows the link.
+            lifecycleScope.launch {
+                val target = try {
+                    sftpManager.getRemoteFileAttributes(file.path)
+                } catch (e: Exception) {
+                    Logger.w("SFTPActivity", "Failed to resolve symlink ${file.path}", e)
+                    null
+                }
+                if (isFinishing || isDestroyed) return@launch
+                if (target?.isDirectory == true) {
+                    loadRemoteDirectory(file.path)
+                } else {
+                    selectRemoteFile(file)
+                }
+            }
+            return
+        }
+
+        // Select file for download
+        selectRemoteFile(file)
     }
     
     private fun selectLocalFile(file: LocalFileSource) {
@@ -953,15 +994,22 @@ class SFTPActivity : TabSSHActivity() {
                         val remotePath = currentRemotePath + "/" + entry.name
                         val materialized = materializeForUpload(entry)
                         try {
-                            if (entry.isDirectory) {
+                            // uploadFile/uploadDirectory launch into transferScope
+                            // and return immediately. Await the terminal result
+                            // before cleanupMaterialized deletes the temp out from
+                            // under the running transfer, and count only the
+                            // transfers that actually succeeded — this used to
+                            // report "N uploaded" for N transfers that had merely
+                            // started, over files it had just deleted.
+                            val task = if (entry.isDirectory) {
                                 sftpManager.uploadDirectory(localDir = materialized, remoteDir = remotePath)
                             } else {
                                 sftpManager.uploadFile(localFile = materialized, remotePath = remotePath)
                             }
+                            if (task.await() is TransferResult.Success) count++
                         } finally {
                             cleanupMaterialized(entry, materialized)
                         }
-                        count++
                     }
                     count
                 }
@@ -1002,7 +1050,7 @@ class SFTPActivity : TabSSHActivity() {
     }
 
     private fun uploadSelectedFilesViaScp() {
-        val connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID) ?: return
+        val connectionId = activeConnectionId ?: return
         val ssh = app.sshSessionManager.getConnection(connectionId) ?: run {
             showError(getString(R.string.sftp_error_connection_inactive))
             return
@@ -1059,23 +1107,37 @@ class SFTPActivity : TabSSHActivity() {
                         if (saf != null) {
                             val temp = File(cacheDir, "saf-download/${UUID.randomUUID()}/${file.name}")
                             temp.parentFile?.mkdirs()
-                            if (file.isDirectory) {
-                                sftpManager.downloadDirectory(remotePath = file.path, localDir = temp)
-                                copyLocalDirectoryIntoSaf(temp, saf, file.name)
-                            } else {
-                                sftpManager.downloadFile(remotePath = file.path, localFile = temp)
-                                copyLocalFileIntoSaf(temp, saf, file.name)
+                            try {
+                                // Downloads are asynchronous. Copying into the
+                                // user's SAF folder before the transfer finished
+                                // published a 0-byte or truncated file as a
+                                // success, and deleting the temp pulled the
+                                // destination out from under the live transfer.
+                                val task = if (file.isDirectory) {
+                                    sftpManager.downloadDirectory(remotePath = file.path, localDir = temp)
+                                } else {
+                                    sftpManager.downloadFile(remotePath = file.path, localFile = temp)
+                                }
+                                if (task.await() is TransferResult.Success) {
+                                    if (file.isDirectory) {
+                                        copyLocalDirectoryIntoSaf(temp, saf, file.name)
+                                    } else {
+                                        copyLocalFileIntoSaf(temp, saf, file.name)
+                                    }
+                                    count++
+                                }
+                            } finally {
+                                temp.parentFile?.deleteRecursively()
                             }
-                            temp.parentFile?.deleteRecursively()
                         } else {
                             val localFile = File(currentLocalPath, file.name)
-                            if (file.isDirectory) {
+                            val task = if (file.isDirectory) {
                                 sftpManager.downloadDirectory(remotePath = file.path, localDir = localFile)
                             } else {
                                 sftpManager.downloadFile(remotePath = file.path, localFile = localFile)
                             }
+                            if (task.await() is TransferResult.Success) count++
                         }
-                        count++
                     }
                     count
                 }
@@ -1409,7 +1471,7 @@ class SFTPActivity : TabSSHActivity() {
             ).show()
             return
         }
-        val connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID) ?: return
+        val connectionId = activeConnectionId ?: return
         val editorIntent = android.content.Intent(this, RemoteFileEditorActivity::class.java).apply {
             putExtra(RemoteFileEditorActivity.EXTRA_CONNECTION_ID, connectionId)
             putExtra(RemoteFileEditorActivity.EXTRA_REMOTE_PATH, file.path)
@@ -1649,7 +1711,14 @@ class SFTPActivity : TabSSHActivity() {
     
     private fun cancelTransfer(transfer: TransferTask) {
         transfer.cancel()
-        sftpManager.cancelTransfer(transfer.id)
+        // The transfers sheet lists tasks from every tab, so the task being
+        // cancelled does not necessarily belong to the active tab's manager.
+        // Asking only the active manager made cancelling another tab's
+        // transfer a silent no-op.
+        sftpTabs.forEach { it.sftpManager.cancelTransfer(transfer.id) }
+        if (sftpTabs.none { it.sftpManager === sftpManager }) {
+            sftpManager.cancelTransfer(transfer.id)
+        }
     }
     
     private fun pauseTransfer(transfer: TransferTask) {

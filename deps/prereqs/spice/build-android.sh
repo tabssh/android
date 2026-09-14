@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-##@Version 202608310000-git
+##@Version 202609130000-git
 # deps/prereqs/spice/build-android.sh — Cross-compile the SPICE client stack and link
 # the TabSSH JNI bridge into libtabssh_native.so for one Android ABI.
 #
@@ -22,7 +22,7 @@
 
 set -euo pipefail
 
-VERSION="202608310000-git"
+VERSION="202609130000-git"
 
 ABI="${1:-arm64-v8a}"
 API_LEVEL="${API_LEVEL:-26}"
@@ -53,6 +53,9 @@ AR="$TOOLCHAIN/bin/llvm-ar"
 RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
 STRIP="$TOOLCHAIN/bin/llvm-strip"
 NM="$TOOLCHAIN/bin/llvm-nm"
+
+# 16 KB page-size compat: Android 15+ can boot with 16 KB pages; the ELF loader needs every LOAD segment aligned to 16384, so 4 KB-only libraries fail to load there.
+PAGE_ALIGN_LDFLAGS="-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384"
 
 PREFIX="/tmp/build-${ABI}/prefix"
 SRC_CACHE="/opt/sources"
@@ -351,7 +354,9 @@ STATIC_LIBS="$(pkg-config --static --libs spice-client-glib-2.0)"
 # unquoted expansion is intentional and correct here.
 # shellcheck disable=SC2086
 # No -D__ANDROID_API__ here either — see the cross-file comment above.
+# $PAGE_ALIGN_LDFLAGS matters only at this final link — the static deps carry no LOAD segments of their own.
 "$CC" -fPIC -O2 -shared \
+    $PAGE_ALIGN_LDFLAGS \
     -DTABSSH_SPICE_AVAILABLE=1 \
     $GLIB_CFLAGS \
     /work/cpp/spice_client.c /work/cpp/spice_client_glib.c \

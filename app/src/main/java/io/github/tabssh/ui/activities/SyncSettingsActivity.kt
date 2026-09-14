@@ -20,6 +20,7 @@ import io.github.tabssh.R
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.PendingSyncConflictCodec
 import io.github.tabssh.sync.SAFSyncManager
+import io.github.tabssh.sync.SyncDownload
 import io.github.tabssh.sync.SyncFileStatus
 import io.github.tabssh.sync.data.SyncDataCollector
 import io.github.tabssh.sync.merge.ConflictResolver
@@ -34,6 +35,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import kotlin.coroutines.resume
 
 class SyncSettingsActivity : TabSSHActivity() {
@@ -548,20 +550,30 @@ class SyncSettingsActivity : TabSSHActivity() {
                     // re-uploading so remote changes are ingested and remote
                     // deletes are not resurrected by the union upload.
                     val collector = SyncDataCollector(this@SyncSettingsActivity)
-                    val remote = syncManager.download()
-                    if (remote != null) {
-                        // §9.6 three-way merge. Foreground: hand conflicts to the
-                        // resolution dialog on the main thread.
-                        SyncMergeCoordinator(this@SyncSettingsActivity).merge(
-                            remote,
-                            syncManager.getEncryptionPassword(),
-                            resolveConflicts = { conflicts -> resolveConflictsInteractively(conflicts) }
-                        )
+                    when (val remote = syncManager.download()) {
+                        // The remote file exists but is unreadable. Uploading
+                        // now would destroy a peer's data we merely failed to
+                        // read, so fail the sync instead of overwriting it.
+                        is SyncDownload.Failed -> throw IOException(remote.message)
+                        is SyncDownload.Empty -> Unit
+                        is SyncDownload.Data -> {
+                            // §9.6 three-way merge. Foreground: hand conflicts to the
+                            // resolution dialog on the main thread.
+                            SyncMergeCoordinator(this@SyncSettingsActivity).merge(
+                                remote.payload,
+                                syncManager.getEncryptionPassword(),
+                                resolveConflicts = { conflicts -> resolveConflictsInteractively(conflicts) }
+                            )
+                        }
                     }
                     val p = collector.collectAll()
                     val uploaded = syncManager.upload(p)
                     // Refresh the shadow baseline only on a successful upload.
-                    if (uploaded) collector.snapshotState()
+                    if (uploaded) {
+                        collector.snapshotState()
+                        // Purge only after a successful merge+upload — the payload just uploaded still carried every tombstone.
+                        collector.purgeExpiredTombstones()
+                    }
                     p to uploaded
                 }
                 withContext(Dispatchers.Main) {
@@ -586,29 +598,33 @@ class SyncSettingsActivity : TabSSHActivity() {
         progressSync.visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
-                val payload = withContext(Dispatchers.IO) { syncManager.download() }
-                if (payload != null) {
-                    withContext(Dispatchers.IO) {
-                        // §9.6 three-way merge with interactive resolution.
-                        SyncMergeCoordinator(this@SyncSettingsActivity).merge(
-                            payload,
-                            syncManager.getEncryptionPassword(),
-                            resolveConflicts = { conflicts -> resolveConflictsInteractively(conflicts) }
-                        )
-                        // Refresh the shadow baseline so the deletes just
-                        // applied are not re-detected as local deletions by the
-                        // next collect's tombstone backstop.
-                        SyncDataCollector(this@SyncSettingsActivity).snapshotState()
-                    }
-                    withContext(Dispatchers.Main) {
-                        progressSync.visibility = View.GONE
-                        refresh()
-                        toast(getString(R.string.sync_settings_toast_download_complete))
-                    }
-                } else {
-                    withContext(Dispatchers.Main) {
+                when (val remote = withContext(Dispatchers.IO) { syncManager.download() }) {
+                    // Unreadable remote (IO error, wrong password, corrupt
+                    // payload) is a real failure, not an empty store — reporting
+                    // "nothing to download" would hide data the user still has.
+                    is SyncDownload.Failed -> throw IOException(remote.message)
+                    is SyncDownload.Empty -> withContext(Dispatchers.Main) {
                         progressSync.visibility = View.GONE
                         toast(getString(R.string.sync_settings_toast_nothing_to_download))
+                    }
+                    is SyncDownload.Data -> {
+                        withContext(Dispatchers.IO) {
+                            // §9.6 three-way merge with interactive resolution.
+                            SyncMergeCoordinator(this@SyncSettingsActivity).merge(
+                                remote.payload,
+                                syncManager.getEncryptionPassword(),
+                                resolveConflicts = { conflicts -> resolveConflictsInteractively(conflicts) }
+                            )
+                            // Refresh the shadow baseline so the deletes just
+                            // applied are not re-detected as local deletions by the
+                            // next collect's tombstone backstop.
+                            SyncDataCollector(this@SyncSettingsActivity).snapshotState()
+                        }
+                        withContext(Dispatchers.Main) {
+                            progressSync.visibility = View.GONE
+                            refresh()
+                            toast(getString(R.string.sync_settings_toast_download_complete))
+                        }
                     }
                 }
             } catch (e: Exception) {

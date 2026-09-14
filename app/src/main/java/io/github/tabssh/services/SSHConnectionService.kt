@@ -160,10 +160,36 @@ class SSHConnectionService : Service() {
             val intent = Intent(context, SSHConnectionService::class.java).apply {
                 action = ACTION_START_SERVICE
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            when {
+                // API 31+ forbids FGS starts from the background (e.g. the boot-time
+                // PortForwardStartupWorker) — guard the call so a denial degrades
+                // instead of crashing or silently killing the caller's connect path.
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+                    startForegroundServiceGuarded(context, intent)
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ->
+                    context.startForegroundService(intent)
+                else ->
+                    context.startService(intent)
+            }
+        }
+
+        /**
+         * API 31+ path: [Context.startForegroundService] throws
+         * [android.app.ForegroundServiceStartNotAllowedException] synchronously
+         * when the app is background-restricted (boot-time WorkManager path
+         * without a battery-optimization exemption). The session/tunnel itself
+         * is already up and keeps working while the process lives — so degrade:
+         * log, post a tappable notification asking the user to open the app
+         * (which legally promotes to FGS from the foreground), and return
+         * instead of letting the throw be swallowed as a connect failure.
+         */
+        @androidx.annotation.RequiresApi(Build.VERSION_CODES.S)
+        private fun startForegroundServiceGuarded(context: Context, intent: Intent) {
+            try {
                 context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
+                Logger.w(TAG, "FGS start blocked from background — running degraded until the app is opened", e)
+                io.github.tabssh.utils.NotificationHelper.postFgsBlockedNotification(context)
             }
         }
         

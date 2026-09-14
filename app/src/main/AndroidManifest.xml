@@ -12,8 +12,10 @@
     
     <!-- File access -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <!-- maxSdkVersion 29 (not 28): on API 29 requestLegacyExternalStorage restores
+         the legacy model, where write access still flows through this permission -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
+        android:maxSdkVersion="29" />
 
     <!-- File-manager-class exception (AI.md PART 2/5) — the local SFTP
          browser is a core declared feature requiring unrestricted
@@ -40,12 +42,10 @@
 
     <!-- Foreground service permissions (Android 14+) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- specialUse (not dataSync): dataSync FGS gets a hard 6-hour cap when
+         targeting API 35+, which would kill persistent SSH/VNC sessions -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
-
-    <!-- Override Termux library minSdk requirement (24) to maintain our minSdk (21) -->
-    <!-- Termux terminal-emulator may use some API 24 features, test on older devices -->
-    <uses-sdk tools:overrideLibrary="com.termux.terminal,com.termux.view" />
 
 <!-- Wave 9.1 — Termux integration for real Mosh.
          User must grant via Settings > Apps > TabSSH > Permissions, AND
@@ -123,6 +123,7 @@
         android:largeHeap="true"
         android:enableOnBackInvokedCallback="true"
         android:networkSecurityConfig="@xml/network_security_config"
+        android:requestLegacyExternalStorage="true"
         tools:targetApi="31">
 
         <!-- Main activity - Connection list -->
@@ -545,20 +546,31 @@
             android:taskAffinity=""
             android:launchMode="singleInstance" />
 
-        <!-- Background service for persistent connections -->
+        <!-- Background service for persistent connections. specialUse (not
+             dataSync): dataSync is hard-capped at 6 hours when targeting
+             API 35+, which would silently kill long-lived SSH sessions -->
         <service
             android:name=".services.SSHConnectionService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps interactive SSH terminal sessions and their port forwards connected while the app is backgrounded" />
+        </service>
 
         <!-- Keeps the process alive while VNC sessions opted into
-             "keep alive in background" are parked in VncBackgroundSessionStore -->
+             "keep alive in background" are parked in VncBackgroundSessionStore.
+             specialUse for the same 6-hour-cap reason as SSHConnectionService -->
         <service
             android:name=".services.VncKeepAliveService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps live VNC remote-desktop sessions connected while the app is backgrounded" />
+        </service>
 
         <!-- Captures the on-screen tab region to mp4 via MediaProjection while a
              session video recording is active (TODO.AI.md item 53) -->

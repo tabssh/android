@@ -115,6 +115,39 @@ data class PixelFormat(
         return toArgb(tmp, 0)
     }
 
+    /**
+     * Number of bytes in a TPixel (the Tight encoding's compact pixel).
+     *
+     * Tight defines its own compact form: when the client's format is exactly
+     * 32bpp, depth 24 with all channel maxima 255, a TPixel is 3 bytes in a
+     * FIXED red, green, blue order (rfbproto "Tight Encoding": "the first
+     * byte is the red component, the second byte is the green component, and
+     * the third byte is the blue component") — unlike ZRLE's CPixel, whose
+     * byte order follows the negotiated endianness. Otherwise TPixel is the
+     * full pixel.
+     */
+    val tpixelBytes: Int
+        get() = if (bitsPerPixel == 32 && depth == 24 &&
+            redMax == 255 && greenMax == 255 && blueMax == 255
+        ) 3 else bytesPerPixel
+
+    /**
+     * Read a TPixel from [buf] at [offset] and return an ARGB_8888 int.
+     *
+     * The 3-byte TPixel's byte order is fixed by the Tight spec and does NOT
+     * depend on [bigEndianFlag]. Decoding Tight rects through [cpixelToArgb]
+     * applied ZRLE's endian-dependent CPixel rules, which read byte 0 as blue
+     * under our little-endian preferred format — swapping red and blue on
+     * every Tight Fill/Copy/Palette/Gradient rect.
+     */
+    fun tpixelToArgb(buf: ByteArray, offset: Int = 0): Int {
+        if (tpixelBytes != 3) return toArgb(buf, offset)
+        return (0xFF shl 24) or
+            ((buf[offset].toInt() and 0xFF) shl 16) or
+            ((buf[offset + 1].toInt() and 0xFF) shl 8) or
+            (buf[offset + 2].toInt() and 0xFF)
+    }
+
     companion object {
         /**
          * Our preferred wire format: 32bpp, depth 24, little-endian,

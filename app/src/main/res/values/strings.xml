@@ -1040,6 +1040,8 @@
     <string name="import_export_encrypted_backup_message">This backup is encrypted. Enter the password to decrypt it.</string>
     <string name="import_export_import_success_header">Import successful!\n\nImported:\n</string>
     <string name="import_export_item_count_line">"  • %1$d %2$s\n"</string>
+    <string name="import_export_import_partial_header">\n⚠️ %1$d item(s) could not be restored:\n</string>
+    <string name="import_export_import_error_line">"  • %1$s\n"</string>
     <string name="import_export_backup_imported_title">Backup Imported</string>
     <string name="import_export_exported_connections">Exported %1$d connections</string>
     <string name="import_export_could_not_open_output">Could not open output stream</string>
@@ -1076,26 +1078,22 @@
     <string name="import_export_need_key_snackbar">Some connections need an SSH key — go import it now</string>
     <string name="import_export_identities_action">Identities</string>
     <string name="import_export_save_connections_failed">Failed to save connections: %1$s</string>
-    <string name="import_export_option_unencrypted">Export without encryption</string>
+    <string name="import_export_option_unencrypted">Export without encryption (no credentials)</string>
     <string name="import_export_option_encrypted">Export with password protection</string>
     <string name="import_export_options_title">Export Options</string>
-    <string name="import_export_unencrypted_warning_title">⚠️ Unencrypted Backup</string>
-    <string name="import_export_unencrypted_warning_message">This backup will be saved as plain, unencrypted JSON.\n\nA backup always contains everything, so this file will expose in readable form:\n\n• SSH private keys and their passphrases\n• Connection passwords\n• Container host and registry credentials\n• VNC passwords\n• Cloud and hypervisor API tokens\n\nAnyone who obtains this file can read every one of them. There is no password on it and no way to revoke it after it leaves your device.\n\nFor protection at rest, cancel and use an encrypted backup instead.\n\nTo continue, type CONFIRM below.</string>
-    <string name="import_export_unencrypted_confirm_word">CONFIRM</string>
-    <string name="import_export_unencrypted_confirm_hint">Type CONFIRM to continue</string>
-    <string name="import_export_unencrypted_confirm_required">Type CONFIRM exactly to export an unencrypted backup</string>
-    <string name="import_export_export_without_encryption">Export Without Encryption</string>
+    <string name="import_export_unencrypted_warning_title">Unencrypted Backup</string>
+    <string name="import_export_unencrypted_warning_message">An unencrypted backup contains no credentials: no SSH private keys or passphrases, no connection or VNC passwords, and no API tokens.\n\nTo include credentials, cancel and choose a password-protected export — credentials are always encrypted with your backup password.</string>
     <string name="import_export_password_hint">Enter password</string>
     <string name="import_export_confirm_password_hint">Confirm password</string>
     <string name="import_export_encrypt_backup_title">Encrypt Backup</string>
-    <string name="import_export_encrypt_backup_message">Enter a password to encrypt your backup. The backup always includes everything; the password protects the file at rest.</string>
+    <string name="import_export_encrypt_backup_message">Enter a password to encrypt your backup. Credentials are included only in password-protected backups, encrypted with this password.</string>
     <string name="import_export_password_too_short">Password too short (minimum 4 characters)</string>
     <string name="import_export_backup_exported_toast">Backup exported successfully%1$s</string>
     <string name="import_export_label_encrypted">" (encrypted)"</string>
     <string name="import_export_label_unencrypted">" (unencrypted)"</string>
     <string name="import_export_export_verified">Backup exported and verified successfully!</string>
     <string name="import_export_encrypted_with_password">\n\n🔐 Encrypted with password</string>
-    <string name="import_export_unencrypted_no_protection">\n\n⚠️ Unencrypted — no password protection</string>
+    <string name="import_export_unencrypted_no_protection">\n\n⚠️ Unencrypted — no credentials included</string>
     <string name="import_export_exported_header">\n\nExported:\n</string>
     <string name="import_export_export_complete_title">Export Complete</string>
     <string name="import_export_backup_export_failed">Backup export failed: %1$s</string>
@@ -2963,6 +2961,7 @@
     <string name="widget_tap_to_configure">Tap to configure</string>
     <string name="widget_header_tabssh">📱 TabSSH</string>
     <string name="widget_tap_to_open_app">Tap to open app</string>
+    <string name="widget_tap_to_connect">Tap to connect</string>
 
     <!-- LocaleEditActivity -->
     <string name="locale_action_disconnect">Disconnect</string>

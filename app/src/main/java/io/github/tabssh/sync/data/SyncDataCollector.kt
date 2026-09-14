@@ -42,6 +42,18 @@ class SyncDataCollector {
          * Must stay in step with the equivalent list in BackupExporter.
          */
         val NAMED_PREF_FILES = listOf("TabSSH", "cluster_commands", "snippet_var_recall")
+
+        /**
+         * Tombstone retention: 180 days. The window must comfortably exceed the longest
+         * realistic device-offline gap — a peer offline for less than this still receives
+         * the tombstone (it rides every payload until purged), so a purged delete cannot
+         * be resurrected by that peer. 90 days covers a season of disuse; doubling it also
+         * covers a spare device left in a drawer for half a year.
+         */
+        internal const val TOMBSTONE_RETENTION_MS: Long = 180L * 24 * 60 * 60 * 1000
+
+        /** Cutoff for SyncTombstoneDao.purgeOlderThan — tombstones deleted before this instant are dropped. */
+        internal fun tombstonePurgeCutoff(nowMs: Long): Long = nowMs - TOMBSTONE_RETENTION_MS
     }
 
     private val context: Context
@@ -223,8 +235,7 @@ class SyncDataCollector {
         return try {
             database.hypervisorAccountDao().getAllAccountsList()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect hypervisor accounts", e)
-            emptyList()
+            throw SyncCollectException("hypervisor accounts", e)
         }
     }
 
@@ -233,8 +244,7 @@ class SyncDataCollector {
         return try {
             database.vncHostDao().getAllHostsList()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect VNC hosts", e)
-            emptyList()
+            throw SyncCollectException("VNC hosts", e)
         }
     }
 
@@ -244,8 +254,7 @@ class SyncDataCollector {
         return try {
             database.vncIdentityDao().getAllIdentitiesList()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect VNC identities", e)
-            emptyList()
+            throw SyncCollectException("VNC identities", e)
         }
     }
 
@@ -253,8 +262,7 @@ class SyncDataCollector {
         return try {
             database.hypervisorDao().getAllList()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect hypervisors", e)
-            emptyList()
+            throw SyncCollectException("hypervisors", e)
         }
     }
 
@@ -262,8 +270,7 @@ class SyncDataCollector {
         return try {
             database.certificateDao().getAllCertificates().first()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect certificates", e)
-            emptyList()
+            throw SyncCollectException("certificates", e)
         }
     }
 
@@ -271,8 +278,7 @@ class SyncDataCollector {
         return try {
             database.snippetDao().getAllSnippets().first()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect snippets", e)
-            emptyList()
+            throw SyncCollectException("snippets", e)
         }
     }
 
@@ -280,8 +286,7 @@ class SyncDataCollector {
         return try {
             database.identityDao().getAllIdentitiesList()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect identities", e)
-            emptyList()
+            throw SyncCollectException("identities", e)
         }
     }
 
@@ -289,8 +294,7 @@ class SyncDataCollector {
         return try {
             database.connectionGroupDao().getAllGroups().first()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect groups", e)
-            emptyList()
+            throw SyncCollectException("groups", e)
         }
     }
 
@@ -302,8 +306,7 @@ class SyncDataCollector {
         return try {
             database.workspaceDao().getAll()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect workspaces", e)
-            emptyList()
+            throw SyncCollectException("workspaces", e)
         }
     }
 
@@ -312,8 +315,7 @@ class SyncDataCollector {
         return try {
             database.portForwardDao().getAllList()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect port forwards", e)
-            emptyList()
+            throw SyncCollectException("port forwards", e)
         }
     }
 
@@ -324,8 +326,7 @@ class SyncDataCollector {
         return try {
             database.telnetHostDao().getAllList()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect telnet hosts", e)
-            emptyList()
+            throw SyncCollectException("telnet hosts", e)
         }
     }
 
@@ -334,8 +335,7 @@ class SyncDataCollector {
         return try {
             database.networkRouteDao().getAllList()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect network routes", e)
-            emptyList()
+            throw SyncCollectException("network routes", e)
         }
     }
 
@@ -344,8 +344,7 @@ class SyncDataCollector {
         return try {
             database.paneGroupDao().getAllList()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect pane groups", e)
-            emptyList()
+            throw SyncCollectException("pane groups", e)
         }
     }
 
@@ -354,8 +353,7 @@ class SyncDataCollector {
         return try {
             database.containerHostDao().getAllList()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect container hosts", e)
-            emptyList()
+            throw SyncCollectException("container hosts", e)
         }
     }
 
@@ -364,8 +362,7 @@ class SyncDataCollector {
         return try {
             database.registryCredentialDao().getAllList()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect registry credentials", e)
-            emptyList()
+            throw SyncCollectException("registry credentials", e)
         }
     }
 
@@ -374,8 +371,7 @@ class SyncDataCollector {
         return try {
             database.composeStackDao().getAllList()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect compose stacks", e)
-            emptyList()
+            throw SyncCollectException("compose stacks", e)
         }
     }
 
@@ -384,8 +380,7 @@ class SyncDataCollector {
         return try {
             database.singleContainerConfigDao().getAllList()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect single-container configs", e)
-            emptyList()
+            throw SyncCollectException("single-container configs", e)
         }
     }
 
@@ -394,8 +389,7 @@ class SyncDataCollector {
         return try {
             database.containerAutoUpdatePolicyDao().getAllList()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect container auto-update policies", e)
-            emptyList()
+            throw SyncCollectException("container auto-update policies", e)
         }
     }
 
@@ -404,8 +398,7 @@ class SyncDataCollector {
         return try {
             database.macroDao().getAllMacrosList()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect macros", e)
-            emptyList()
+            throw SyncCollectException("macros", e)
         }
     }
 
@@ -415,8 +408,7 @@ class SyncDataCollector {
         return try {
             database.monitorSlotDao().getAllSlots().first()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect monitor slots", e)
-            emptyList()
+            throw SyncCollectException("monitor slots", e)
         }
     }
 
@@ -460,8 +452,7 @@ class SyncDataCollector {
         return try {
             database.cloudAccountDao().getAll()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect cloud accounts", e)
-            emptyList()
+            throw SyncCollectException("cloud accounts", e)
         }
     }
 
@@ -776,8 +767,22 @@ class SyncDataCollector {
             runBackstop(enabled)
             database.syncTombstoneDao().getAll().filter { it.entityType in enabled }
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect tombstones", e)
-            emptyList()
+            throw SyncCollectException("tombstones", e)
+        }
+    }
+
+    /**
+     * Drops tombstones older than [TOMBSTONE_RETENTION_MS]. Call only after a
+     * successful merge+upload: collect runs before purge, so the payload just
+     * uploaded still carries every tombstone and each purged row has been
+     * offered to the shared store for the full retention window first.
+     */
+    suspend fun purgeExpiredTombstones() = withContext(Dispatchers.IO) {
+        try {
+            database.syncTombstoneDao().purgeOlderThan(tombstonePurgeCutoff(System.currentTimeMillis()))
+        } catch (e: Exception) {
+            // Purge is maintenance — a failure must not turn an otherwise successful sync into an error.
+            Logger.w(TAG, "Tombstone purge failed: ${e.message}")
         }
     }
 
@@ -986,8 +991,7 @@ class SyncDataCollector {
             val connectionsFlow = database.connectionDao().getAllConnections()
             connectionsFlow.first()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect connections", e)
-            emptyList()
+            throw SyncCollectException("connections", e)
         }
     }
 
@@ -999,8 +1003,7 @@ class SyncDataCollector {
             val keysFlow = database.keyDao().getAllKeys()
             keysFlow.first()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect keys", e)
-            emptyList()
+            throw SyncCollectException("keys", e)
         }
     }
 
@@ -1012,8 +1015,7 @@ class SyncDataCollector {
             val themesFlow = database.themeDao().getAllThemes()
             themesFlow.first()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect themes", e)
-            emptyList()
+            throw SyncCollectException("themes", e)
         }
     }
 
@@ -1025,8 +1027,7 @@ class SyncDataCollector {
             val hostKeysFlow = database.hostKeyDao().getAllHostKeys()
             hostKeysFlow.first()
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to collect host keys", e)
-            emptyList()
+            throw SyncCollectException("host keys", e)
         }
     }
 
@@ -1084,7 +1085,6 @@ class SyncDataCollector {
     private fun collectGeneralPreferences(): Map<String, Any> {
         return mapOf(
             "autoBackup" to preferenceManager.isAutoBackupEnabled(),
-            "backupFrequency" to preferenceManager.getBackupFrequency(),
             "startupBehavior" to preferenceManager.getStartupBehavior(),
             "language" to preferenceManager.getLanguage()
         )
@@ -1381,3 +1381,12 @@ class SyncDataCollector {
         }
     }
 }
+
+/**
+ * A sync category could not be read from the database. Thrown instead of
+ * degrading to an empty list: a payload that falsely claims a category is
+ * empty makes every peer merge against "user deleted everything", while an
+ * aborted sync is safe — the caller reports the error and retries later.
+ */
+class SyncCollectException(category: String, cause: Throwable) :
+    Exception("Sync aborted: failed to collect $category (${cause.message})", cause)

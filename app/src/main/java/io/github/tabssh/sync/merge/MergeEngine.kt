@@ -15,6 +15,66 @@ class MergeEngine {
 
     companion object {
         private const val TAG = "MergeEngine"
+
+        /**
+         * Strips per-device state so two revisions can be compared for *user*
+         * edits only. Usage counters drift independently on every device and
+         * the sync bookkeeping columns change on every sync, so comparing raw
+         * entities would report "changed" for rows nobody touched.
+         */
+        internal fun syncedView(c: ConnectionProfile): ConnectionProfile = c.copy(
+            connectionCount = 0,
+            lastConnected = 0L,
+            lastSyncedAt = 0L,
+            syncVersion = 0L,
+            modifiedAt = 0L,
+            syncDeviceId = ""
+        )
+
+        internal fun syncedView(t: ThemeDefinition): ThemeDefinition = t.copy(
+            usageCount = 0,
+            lastModified = 0L,
+            lastSyncedAt = 0L,
+            syncVersion = 0L,
+            modifiedAt = 0L,
+            syncDeviceId = ""
+        )
+
+        internal fun syncedView(h: HostKeyEntry): HostKeyEntry = h.copy(
+            firstSeen = 0L,
+            lastVerified = 0L,
+            lastSyncedAt = 0L,
+            syncVersion = 0L,
+            modifiedAt = 0L,
+            syncDeviceId = ""
+        )
+
+        internal fun syncedView(k: StoredKey): StoredKey = k.copy(
+            lastSyncedAt = 0L,
+            syncVersion = 0L,
+            modifiedAt = 0L,
+            syncDeviceId = ""
+        )
+
+        /**
+         * The three-way outcome for one row, decided by which side actually
+         * diverged from the common ancestor rather than by timestamp alone.
+         */
+        internal enum class ThreeWay { TAKE_LOCAL, TAKE_REMOTE, CONFLICT }
+
+        /**
+         * Core 3-way decision. Previously the no-conflict branch returned
+         * `local.copy(...)`, which silently discarded every remote field edit
+         * (a remote-only rename looked like "no conflict" and was thrown away,
+         * with modifiedAt bumped so the loss was invisible). A side that did
+         * not change since the base has no edits to defend, so the other side
+         * must win wholesale.
+         */
+        internal fun decide(localChanged: Boolean, remoteChanged: Boolean): ThreeWay = when {
+            localChanged && remoteChanged -> ThreeWay.CONFLICT
+            remoteChanged -> ThreeWay.TAKE_REMOTE
+            else -> ThreeWay.TAKE_LOCAL
+        }
     }
 
     /**
@@ -95,10 +155,35 @@ class MergeEngine {
 
         if (local == remote) return local
 
+        val decision = decide(
+            localChanged = syncedView(local) != syncedView(base),
+            remoteChanged = syncedView(remote) != syncedView(base)
+        )
+        if (decision == ThreeWay.TAKE_LOCAL) return mergeConnectionFields(local, local, remote)
+        if (decision == ThreeWay.TAKE_REMOTE) return mergeConnectionFields(remote, local, remote)
+
         val fieldConflicts = detectConnectionConflicts(base, local, remote)
 
         if (fieldConflicts.isEmpty()) {
-            return mergeConnectionFields(local, remote)
+            // Both sides edited the row but none of the five inspected fields
+            // diverged. AI.md:1059 forbids resolving user-authored data by
+            // silent last-write-wins, so surface it for the resolution UI.
+            conflicts.add(
+                Conflict(
+                    entityType = "connection",
+                    entityId = local.id,
+                    conflictType = ConflictType.FIELD_MODIFIED_BOTH_SIDES,
+                    localValue = local,
+                    remoteValue = remote,
+                    baseValue = base,
+                    localEntity = local,
+                    remoteEntity = remote,
+                    localTimestamp = local.modifiedAt,
+                    remoteTimestamp = remote.modifiedAt,
+                    autoResolvable = local.modifiedAt != remote.modifiedAt,
+                    description = "Connection modified on both devices"
+                )
+            )
         }
 
         fieldConflicts.forEach { fieldConflict ->
@@ -121,7 +206,8 @@ class MergeEngine {
             )
         }
 
-        return if (local.modifiedAt >= remote.modifiedAt) local else remote
+        val winner = if (local.modifiedAt >= remote.modifiedAt) local else remote
+        return mergeConnectionFields(winner, local, remote)
     }
 
     /**
@@ -163,7 +249,8 @@ class MergeEngine {
     }
 
     /**
-     * Merge connection fields without conflicts.
+     * Carry the chosen revision's fields through, restoring the per-device
+     * state that must not travel between devices.
      *
      * connectionCount is local-only — it never syncs. It's a per-device usage
      * stat, not shared state, and previously took max(local, remote) which
@@ -172,10 +259,11 @@ class MergeEngine {
      * often instead of reflecting either device's true count.
      */
     private fun mergeConnectionFields(
+        winner: ConnectionProfile,
         local: ConnectionProfile,
         remote: ConnectionProfile
     ): ConnectionProfile {
-        return local.copy(
+        return winner.copy(
             connectionCount = local.connectionCount,
             lastConnected = maxOf(local.lastConnected, remote.lastConnected),
             modifiedAt = maxOf(local.modifiedAt, remote.modifiedAt),
@@ -273,9 +361,22 @@ class MergeEngine {
                     description = "Key fingerprint mismatch - different keys"
                 )
             )
+            // Two different keys under one id: keep local until the user
+            // decides rather than letting the remote key replace it.
+            return local
         }
 
-        return if (local.modifiedAt >= remote.modifiedAt) local else remote
+        // Same key, differing metadata — remote edits propagate only when the
+        // local side never diverged from the common ancestor.
+        return when (
+            decide(
+                localChanged = syncedView(local) != syncedView(base),
+                remoteChanged = syncedView(remote) != syncedView(base)
+            )
+        ) {
+            ThreeWay.TAKE_REMOTE -> remote
+            else -> local
+        }
     }
 
     /**
@@ -353,7 +454,37 @@ class MergeEngine {
 
         if (local == remote) return local
 
-        return local.copy(
+        val decision = decide(
+            localChanged = syncedView(local) != syncedView(base),
+            remoteChanged = syncedView(remote) != syncedView(base)
+        )
+        val winner = when (decision) {
+            ThreeWay.TAKE_LOCAL -> local
+            ThreeWay.TAKE_REMOTE -> remote
+            ThreeWay.CONFLICT -> {
+                // A theme edited on both devices is user-authored data, so it
+                // cannot be resolved by silent last-write-wins (AI.md:1059).
+                conflicts.add(
+                    Conflict(
+                        entityType = "theme",
+                        entityId = local.themeId,
+                        conflictType = ConflictType.FIELD_MODIFIED_BOTH_SIDES,
+                        localValue = local,
+                        remoteValue = remote,
+                        baseValue = base,
+                        localEntity = local,
+                        remoteEntity = remote,
+                        localTimestamp = local.modifiedAt,
+                        remoteTimestamp = remote.modifiedAt,
+                        autoResolvable = local.modifiedAt != remote.modifiedAt,
+                        description = "Theme modified on both devices"
+                    )
+                )
+                if (local.modifiedAt >= remote.modifiedAt) local else remote
+            }
+        }
+
+        return winner.copy(
             usageCount = local.usageCount,
             lastModified = maxOf(local.lastModified, remote.lastModified),
             modifiedAt = maxOf(local.modifiedAt, remote.modifiedAt)
@@ -444,9 +575,26 @@ class MergeEngine {
                     description = "Host key changed - potential MITM attack"
                 )
             )
+            // A fingerprint divergence is never auto-resolved: keep the local
+            // entry until the user decides, so a hostile remote entry cannot
+            // silently become the trusted one.
+            return local
         }
 
-        return local.copy(
+        // Fingerprints agree here, so the only divergence is metadata such as
+        // trustLevel. Remote wins only when local never changed; a both-sides
+        // change keeps the more conservative local trust state.
+        val winner = when (
+            decide(
+                localChanged = syncedView(local) != syncedView(base),
+                remoteChanged = syncedView(remote) != syncedView(base)
+            )
+        ) {
+            ThreeWay.TAKE_REMOTE -> remote
+            else -> local
+        }
+
+        return winner.copy(
             firstSeen = minOf(local.firstSeen, remote.firstSeen),
             lastVerified = maxOf(local.lastVerified, remote.lastVerified),
             modifiedAt = maxOf(local.modifiedAt, remote.modifiedAt)

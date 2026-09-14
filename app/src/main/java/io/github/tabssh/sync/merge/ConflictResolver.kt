@@ -10,6 +10,7 @@ import io.github.tabssh.sync.log.SyncLogManager
 import io.github.tabssh.sync.models.Conflict
 import io.github.tabssh.sync.models.ConflictResolution
 import io.github.tabssh.sync.models.ConflictResolutionOption
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -75,6 +76,22 @@ class ConflictResolver(
     }
 
     /**
+     * Writes the remote side of a conflict the user chose to keep.
+     *
+     * "Keep remote" used to run a Room `@Update`, which matches on the primary
+     * key and silently affects zero rows when the row is not present locally —
+     * exactly the case that produces a DELETED_ON_ONE_SIDE conflict. The user's
+     * choice then did nothing at all. [write] therefore has to be an upsert, and
+     * any tombstone this device still holds for the row has to go with it, or
+     * the next sync would re-delete what the user just asked to keep and
+     * re-propagate that delete to every peer.
+     */
+    private suspend fun adoptRemote(entityType: String, entityKey: String, write: suspend () -> Unit) {
+        write()
+        database.syncTombstoneDao().clear(entityType, entityKey)
+    }
+
+    /**
      * Apply connection resolution
      */
     private suspend fun applyConnectionResolution(
@@ -91,7 +108,9 @@ class ConflictResolver(
             ConflictResolutionOption.KEEP_REMOTE -> {
                 val remote = conflict.remoteEntity as? ConnectionProfile
                 if (remote != null) {
-                    database.connectionDao().updateConnection(remote)
+                    adoptRemote(TombstoneRecorder.CONNECTION, remote.id) {
+                        database.connectionDao().insertConnection(remote)
+                    }
                 }
             }
             ConflictResolutionOption.KEEP_BOTH -> {
@@ -128,7 +147,9 @@ class ConflictResolver(
             ConflictResolutionOption.KEEP_REMOTE -> {
                 val remote = conflict.remoteEntity as? StoredKey
                 if (remote != null) {
-                    database.keyDao().updateKey(remote)
+                    adoptRemote(TombstoneRecorder.KEY, remote.keyId) {
+                        database.keyDao().upsertKey(remote)
+                    }
                 }
             }
             ConflictResolutionOption.KEEP_BOTH -> {
@@ -165,7 +186,9 @@ class ConflictResolver(
             ConflictResolutionOption.KEEP_REMOTE -> {
                 val remote = conflict.remoteEntity as? ThemeDefinition
                 if (remote != null) {
-                    database.themeDao().updateTheme(remote)
+                    adoptRemote(TombstoneRecorder.THEME, remote.themeId) {
+                        database.themeDao().insertTheme(remote)
+                    }
                 }
             }
             ConflictResolutionOption.KEEP_BOTH -> {
@@ -202,7 +225,9 @@ class ConflictResolver(
             ConflictResolutionOption.KEEP_REMOTE -> {
                 val remote = conflict.remoteEntity as? HostKeyEntry
                 if (remote != null) {
-                    database.hostKeyDao().updateHostKey(remote)
+                    adoptRemote(TombstoneRecorder.HOST_KEY, remote.id) {
+                        database.hostKeyDao().insertHostKey(remote)
+                    }
                 }
             }
             ConflictResolutionOption.KEEP_BOTH -> {

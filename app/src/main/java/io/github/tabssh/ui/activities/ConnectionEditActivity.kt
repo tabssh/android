@@ -1552,6 +1552,8 @@ class ConnectionEditActivity : TabSSHActivity() {
             if (isEditMode && existingProfile != null && !forceInsert) {
                 app.database.connectionDao().updateConnection(profile)
                 Logger.i("ConnectionEditActivity", "Updated connection: ${profile.name}")
+                // Home-screen widgets pinned to this connection otherwise keep showing the old name/host.
+                io.github.tabssh.widget.ConnectionWidgetProvider.updateAllWidgets(this@ConnectionEditActivity)
                 showToast(getString(R.string.conn_edit_connection_updated))
             } else {
                 app.database.connectionDao().insertConnection(profile)

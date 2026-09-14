@@ -132,6 +132,27 @@ class TermuxBridge(
          */
         internal fun sanitizeOsc8Url(url: String): String? = TerminalLinkSanitizer.sanitize(url)
 
+        /**
+         * Matches one complete OSC 8 hyperlink: ESC ] 8 ; params ; url ST
+         * anchor ESC ] 8 ; ; ST. Groups: 1=params, 2=url, 3=anchor.
+         * DOT_MATCHES_ALL so the anchor may contain any byte, including LF.
+         *
+         * ST is either ESC \ (the 7-bit C1 string terminator) or BEL (0x07).
+         * Both are valid OSC terminators and BEL is what many tools actually
+         * emit, so matching only ESC \ silently dropped link tracking for
+         * them: the text still rendered, but the link was not tappable. The
+         * URL group excludes BEL as well as ESC, or it would swallow its own
+         * terminator.
+         *
+         * Companion-scoped so the terminator handling is unit-testable
+         * without an emulator, the same way escIncompleteTrailingBytes is.
+         */
+        internal val OSC8_PATTERN = Regex(
+            "\u001b]8;([^;]*);([^\u001b\u0007]*)(?:\u001b\\\\|\u0007)" +
+                "(.*?)\u001b]8;;(?:\u001b\\\\|\u0007)",
+            RegexOption.DOT_MATCHES_ALL
+        )
+
         private const val ESC: Byte = 0x1B
 
         // Characters produced by shift + the top-row digit keys, indexed by
@@ -516,21 +537,6 @@ class TermuxBridge(
     var bracketedPasteActive = false
         private set
 
-    // Matches: ESC ] 8 ; params ; url ST anchor ESC ] 8 ; ; ST
-    // Groups: 1=params, 2=url, 3=anchor
-    // DOT_MATCHES_ALL so anchor can contain any byte (including LF).
-    //
-    // ST is either ESC \ (the 7-bit C1 string terminator) or BEL (0x07). Both
-    // are valid OSC terminators and BEL is what many tools actually emit, so
-    // matching only ESC \ silently dropped link tracking for them: the text
-    // still rendered, but the link was not tappable. The URL group excludes
-    // BEL as well as ESC, or it would swallow its own terminator.
-    private val osc8Pattern = Regex(
-        "\u001b]8;([^;]*);([^\u001b\u0007]*)(?:\u001b\\\\|\u0007)" +
-            "(.*?)\u001b]8;;(?:\u001b\\\\|\u0007)",
-        RegexOption.DOT_MATCHES_ALL
-    )
-
     /**
      * Return the OSC 8 URL at the given screen position, or null if no link
      * covers that cell.  Safe to call from any thread.
@@ -668,7 +674,7 @@ class TermuxBridge(
             bracketedPasteActive = lastEnable > lastDisable
         }
 
-        val matches = osc8Pattern.findAll(text).toList()
+        val matches = OSC8_PATTERN.findAll(text).toList()
 
         // Track scroll by monitoring the transcript size before/after each
         // append.  Each additional transcript row = one screen row scrolled.

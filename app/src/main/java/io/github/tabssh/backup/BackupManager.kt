@@ -15,23 +15,31 @@ import io.github.tabssh.sync.encryption.SyncEncryptor
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
-import java.io.*
+import java.io.ByteArrayInputStream
+import java.io.InputStream
+import java.io.OutputStream
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 /**
  * Main backup and restore manager.
  *
- * Handles a full application backup — every entity, every preference and every
- * Keystore-backed credential. There is exactly one wire format
- * ([BACKUP_VERSION]); an archive that does not match it is rejected with an
- * "unsupported backup format" error rather than parsed best-effort.
+ * Current wire format ([BACKUP_VERSION]): a ZIP archive whose first entry is
+ * `manifest.json` (format version, app version, timestamp, content list),
+ * followed by one JSON entry per data domain. Credentials live in a separate
+ * `secrets.json` entry that only exists when the user supplies a backup
+ * password — its bytes are then encrypted with [SyncEncryptor] (Argon2id +
+ * AES-256-GCM). A backup created without a password contains no credentials
+ * at all.
  *
- * Two output modes, both containing the same data:
- *  - **Encrypted** (default): AES-256-GCM keyed from a user password.
- *  - **Plaintext**: readable by anyone holding the file. Requires
- *    `plaintextSecretsConfirmed` from a type-to-confirm dialog.
+ * The previous single-JSON format ([LEGACY_BACKUP_VERSION]), plain or
+ * whole-file encrypted, remains fully readable on restore.
  */
 class BackupManager(private val context: Context) {
 
@@ -70,11 +78,9 @@ class BackupManager(private val context: Context) {
             securePasswordManager, keyStorage)
     }
     private val validator = BackupValidator()
-    // P0 fix: real password-based encryption for backups. Reuses the
-    // sync subsystem's SyncEncryptor (AES-256-GCM + Argon2id key derivation,
-    // see SyncEncryptor.kt) instead of the previous Base64-only stub
-    // that silently failed to encrypt anything despite the
-    // `encryptBackup=true` UI promise.
+    // Credential encryption reuses the sync subsystem's SyncEncryptor
+    // (AES-256-GCM + Argon2id key derivation, see SyncEncryptor.kt) so the
+    // backup format never grows its own crypto.
     private val encryptor = SyncEncryptor()
 
     data class BackupMetadata(
@@ -100,103 +106,206 @@ class BackupManager(private val context: Context) {
         val errors: List<String> = emptyList()
     )
 
+    /** File-level container a backup archive was written in, detected by magic bytes. */
+    enum class BackupFileFormat { ZIP, LEGACY_ENCRYPTED, LEGACY_JSON, UNKNOWN }
+
     companion object {
         /**
-         * The one and only backup wire version. There is exactly one current
-         * format: a single-JSON `.tabssh` file whose entity files each carry
-         * `{"v":BACKUP_VERSION,"items":[...]}`. Archives written in any other
-         * version are rejected outright — no legacy read path exists.
+         * Current backup wire version: a ZIP archive whose first entry is
+         * [MANIFEST_ENTRY], followed by one JSON entry per data domain and an
+         * optional SyncEncryptor-encrypted secrets entry.
          */
-        const val BACKUP_VERSION = 3
+        const val BACKUP_VERSION = 4
 
-        /** Magic prefix written by [SyncEncryptor] on an encrypted archive. */
+        /**
+         * The previous single-JSON `.tabssh` format. Still fully readable on
+         * restore; never written anymore.
+         */
+        const val LEGACY_BACKUP_VERSION = 3
+
+        /** Manifest entry name inside the ZIP archive — always written first. */
+        const val MANIFEST_ENTRY = "manifest.json"
+
+        /** Magic prefix written by [SyncEncryptor] on encrypted bytes. */
         private const val ENCRYPTED_MAGIC = "TABSSH_SYNC_V3"
 
         private const val TAG = "BackupManager"
+
+        /** True when [data] starts with the [SyncEncryptor] magic header. */
+        internal fun isSyncEncrypted(data: ByteArray): Boolean =
+            data.size >= ENCRYPTED_MAGIC.length &&
+                String(data, 0, ENCRYPTED_MAGIC.length, Charsets.ISO_8859_1) == ENCRYPTED_MAGIC
+
+        /** Detect the container format of a backup file from its leading bytes. */
+        internal fun sniffFormat(head: ByteArray): BackupFileFormat = when {
+            // ZIP local-file-header magic "PK\x03\x04" — the current archive format.
+            head.size >= 4 && head[0] == 'P'.code.toByte() && head[1] == 'K'.code.toByte() &&
+                head[2].toInt() == 3 && head[3].toInt() == 4 -> BackupFileFormat.ZIP
+            isSyncEncrypted(head) -> BackupFileFormat.LEGACY_ENCRYPTED
+            // Legacy plaintext archives are a single JSON object.
+            head.isNotEmpty() && head[0] == '{'.code.toByte() -> BackupFileFormat.LEGACY_JSON
+            else -> BackupFileFormat.UNKNOWN
+        }
+
+        /** Serialise [metadata] plus the archive's entry list into the manifest JSON. */
+        internal fun buildManifest(
+            metadata: BackupMetadata,
+            contents: List<String>,
+            secretsIncluded: Boolean
+        ): String = JSONObject().apply {
+            put("version", metadata.version)
+            put("createdAt", metadata.createdAt)
+            put("appVersion", metadata.appVersion)
+            put("deviceModel", metadata.deviceModel)
+            put("androidVersion", metadata.androidVersion)
+            put("itemCounts", JSONObject(metadata.itemCounts))
+            put("contents", JSONArray(contents))
+            put("secretsIncluded", secretsIncluded)
+        }.toString()
+
+        /** Parse a manifest written by [buildManifest]. Throws on a malformed manifest. */
+        internal fun parseManifest(manifestJson: String): BackupMetadata {
+            val obj = JSONObject(manifestJson)
+            val itemCounts = mutableMapOf<String, Int>()
+            obj.optJSONObject("itemCounts")?.let { counts ->
+                counts.keys().forEach { key -> itemCounts[key] = counts.getInt(key) }
+            }
+            return BackupMetadata(
+                version = obj.getInt("version"),
+                createdAt = obj.getLong("createdAt"),
+                appVersion = obj.getString("appVersion"),
+                deviceModel = obj.getString("deviceModel"),
+                androidVersion = obj.getInt("androidVersion"),
+                itemCounts = itemCounts
+            )
+        }
+
+        /** Write the archive: manifest first, then every entry in [entries] order. */
+        internal fun writeBackupZip(
+            out: OutputStream,
+            manifestJson: String,
+            entries: Map<String, ByteArray>
+        ) {
+            val zip = ZipOutputStream(out)
+            zip.putNextEntry(ZipEntry(MANIFEST_ENTRY))
+            zip.write(manifestJson.toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+            for ((name, bytes) in entries) {
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(bytes)
+                zip.closeEntry()
+            }
+            // finish() writes the central directory; flush() pushes it to the
+            // underlying stream so the caller's close() has nothing left to lose.
+            zip.finish()
+            zip.flush()
+        }
+
+        /** Read every entry of the archive. Returns manifest JSON (or null) and the rest. */
+        internal fun readBackupZip(input: InputStream): Pair<String?, Map<String, ByteArray>> {
+            var manifest: String? = null
+            val entries = linkedMapOf<String, ByteArray>()
+            val zip = ZipInputStream(input)
+            var entry: ZipEntry? = zip.nextEntry
+            while (entry != null) {
+                if (!entry.isDirectory) {
+                    val bytes = zip.readBytes()
+                    if (entry.name == MANIFEST_ENTRY) manifest = String(bytes, Charsets.UTF_8)
+                    else entries[entry.name] = bytes
+                }
+                zip.closeEntry()
+                entry = zip.nextEntry
+            }
+            return manifest to entries
+        }
+
+        /** Read only the manifest entry, stopping as soon as it has been seen. */
+        internal fun readManifestOnly(input: InputStream): String? {
+            val zip = ZipInputStream(input)
+            var entry: ZipEntry? = zip.nextEntry
+            while (entry != null) {
+                if (entry.name == MANIFEST_ENTRY) return String(zip.readBytes(), Charsets.UTF_8)
+                zip.closeEntry()
+                entry = zip.nextEntry
+            }
+            return null
+        }
     }
 
     /**
-     * Create a full backup.
+     * Create a full backup as a [BACKUP_VERSION] ZIP archive.
      *
-     * A backup always contains absolutely everything, credentials included —
-     * encryption is a file-level option that never changes the contents.
-     *
-     * @param encryptBackup true writes an AES-256-GCM archive keyed from
-     *   [password]; [password] is then mandatory.
-     * @param plaintextSecretsConfirmed required when [encryptBackup] is false.
-     *   An unencrypted archive contains every SSH key passphrase and every
-     *   connection/container-host/registry/VNC password in readable form, so the caller
-     *   must have obtained an explicit type-to-confirm acknowledgement from the
-     *   user first. Without it the backup is refused before any bytes are
-     *   written to [outputUri].
+     * @param password when non-null, credentials are included as a separate
+     *   secrets entry encrypted with this password ([SyncEncryptor], Argon2id +
+     *   AES-256-GCM). When null, the archive contains **no credentials at
+     *   all** — an unencrypted backup never carries a secret in any form.
      */
     suspend fun createBackup(
         outputUri: Uri,
-        encryptBackup: Boolean = true,
-        password: String? = null,
-        plaintextSecretsConfirmed: Boolean = false
+        password: String? = null
     ): BackupResult = withContext(Dispatchers.IO) {
         try {
-            Logger.i("BackupManager", "Creating backup...")
+            Logger.i(TAG, "Creating backup...")
 
-            // Encryption requested but no usable password: fail loudly. The old
-            // code fell through to the plaintext branch, writing an unencrypted
-            // backup of every credential while the encryptBackup=true UI promised
-            // otherwise — a silent downgrade that must never happen.
-            if (encryptBackup && password.isNullOrBlank()) {
-                Logger.e("BackupManager", "Encrypted backup requested without a password")
+            // A blank password would silently derive a trivially guessable key,
+            // so refuse it outright before any bytes are collected or written.
+            if (password != null && password.isBlank()) {
                 return@withContext BackupResult(
                     success = false,
-                    message = "Encrypted backup requires a password"
+                    message = "Backup password must not be blank"
                 )
             }
 
-            // Refuse before opening the output stream so an unconfirmed
-            // plaintext export cannot even create a partial file on disk.
-            if (!encryptBackup && !plaintextSecretsConfirmed) {
-                Logger.e("BackupManager", "Unencrypted backup requested without explicit confirmation")
+            // Secrets are gathered only when they can be encrypted (AI.md PART 6:
+            // exported secrets are always password-protected, never plaintext).
+            val includeSecrets = password != null
+            val backupData = exporter.collectBackupData(includeSecrets)
+            val secretsJson = backupData[BackupExporter.FILE_SECRETS]
+            val domainData = backupData - BackupExporter.FILE_SECRETS
+
+            val metadata = createBackupMetadata(domainData)
+
+            val entries = linkedMapOf<String, ByteArray>()
+            domainData.forEach { (name, json) -> entries[name] = json.toByteArray(Charsets.UTF_8) }
+            // Binding the password here rather than asserting it non-null keeps
+            // the "secrets are only ever written encrypted" invariant visible in
+            // the code instead of resting on includeSecrets' data flow.
+            if (password != null && secretsJson != null) {
+                entries[BackupExporter.FILE_SECRETS] =
+                    encryptor.encrypt(secretsJson.toByteArray(Charsets.UTF_8), password)
+            }
+            val manifestJson = buildManifest(metadata, entries.keys.toList(), includeSecrets)
+
+            // "wt" guarantees truncation of an existing document — plain "w" does
+            // not on all providers — and a null stream is a hard failure, not a
+            // silent zero-byte "success".
+            val output = context.contentResolver.openOutputStream(outputUri, "wt")
+                ?: return@withContext BackupResult(
+                    success = false,
+                    message = "Unable to open the backup destination for writing"
+                )
+            output.use { writeBackupZip(it, manifestJson, entries) }
+
+            // Read the head back so a provider that dropped the write cannot be
+            // reported as a successful backup.
+            val verified = context.contentResolver.openInputStream(outputUri)?.use { input ->
+                val head = ByteArray(4)
+                var read = 0
+                while (read < head.size) {
+                    val n = input.read(head, read, head.size - read)
+                    if (n < 0) break
+                    read += n
+                }
+                read == head.size && sniffFormat(head) == BackupFileFormat.ZIP
+            } ?: false
+            if (!verified) {
                 return@withContext BackupResult(
                     success = false,
-                    message = "Unencrypted backup requires explicit confirmation " +
-                        "because it exposes every stored credential in readable form"
+                    message = "Backup write could not be verified — the file may be incomplete"
                 )
             }
 
-            // A backup always contains absolutely everything, including all
-            // credentials. Encryption is a file-level option the user controls;
-            // it never changes what the backup contains. This guarantees a
-            // restore reproduces the exact app state at capture time.
-            val backupData = exporter.collectBackupData()
-
-            // Create metadata
-            val metadata = createBackupMetadata(backupData)
-
-            // Build single-JSON v3 backup
-            val root = JSONObject().apply {
-                put("v", BACKUP_VERSION)
-                put("metadata", JSONObject().apply {
-                    put("version", metadata.version)
-                    put("createdAt", metadata.createdAt)
-                    put("appVersion", metadata.appVersion)
-                    put("deviceModel", metadata.deviceModel)
-                    put("androidVersion", metadata.androidVersion)
-                    put("itemCounts", JSONObject(metadata.itemCounts))
-                })
-                val dataObj = JSONObject()
-                backupData.forEach { (k, v) -> dataObj.put(k, v) }
-                put("data", dataObj)
-            }
-            val plainJson = root.toString()
-
-            val bytes: ByteArray = if (encryptBackup && password != null) {
-                encryptor.encrypt(plainJson.toByteArray(Charsets.UTF_8), password)
-            } else {
-                plainJson.toByteArray(Charsets.UTF_8)
-            }
-
-            context.contentResolver.openOutputStream(outputUri)?.use { it.write(bytes) }
-
-            Logger.i("BackupManager", "Backup created successfully")
+            Logger.i(TAG, "Backup created successfully")
             return@withContext BackupResult(
                 success = true,
                 message = "Backup created successfully",
@@ -204,11 +313,49 @@ class BackupManager(private val context: Context) {
                 filePath = outputUri.path
             )
         } catch (e: Exception) {
-            Logger.e("BackupManager", "Failed to create backup", e)
+            Logger.e(TAG, "Failed to create backup", e)
             return@withContext BackupResult(
                 success = false,
                 message = "Failed to create backup: ${e.message}"
             )
+        }
+    }
+
+    /**
+     * Validate a backup file by reading only its manifest — no data entry is
+     * parsed and no password is needed. Legacy single-JSON archives have no
+     * separate manifest, so their embedded metadata is read instead.
+     */
+    suspend fun validateBackup(inputUri: Uri): BackupResult = withContext(Dispatchers.IO) {
+        try {
+            val allBytes = context.contentResolver.openInputStream(inputUri)?.use { it.readBytes() }
+                ?: return@withContext BackupResult(false, "Unable to open the backup file")
+            when (sniffFormat(allBytes)) {
+                BackupFileFormat.ZIP -> {
+                    val manifestJson = readManifestOnly(ByteArrayInputStream(allBytes))
+                        ?: return@withContext BackupResult(false, "Invalid backup: missing $MANIFEST_ENTRY")
+                    val metadata = parseManifest(manifestJson)
+                    unsupportedVersionMessage(metadata.version)?.let {
+                        return@withContext BackupResult(false, it)
+                    }
+                    BackupResult(true, "Backup is valid", metadata)
+                }
+                BackupFileFormat.LEGACY_ENCRYPTED ->
+                    // Whole-file encryption hides even the metadata; the archive is
+                    // plausible but cannot be inspected without the password.
+                    BackupResult(true, "Encrypted legacy backup — password required to inspect")
+                BackupFileFormat.LEGACY_JSON -> {
+                    val metadata = parseLegacyRoot(allBytes).first
+                    unsupportedVersionMessage(metadata.version)?.let {
+                        return@withContext BackupResult(false, it)
+                    }
+                    BackupResult(true, "Backup is valid", metadata)
+                }
+                BackupFileFormat.UNKNOWN ->
+                    BackupResult(false, "Not a TabSSH backup file")
+            }
+        } catch (e: Exception) {
+            BackupResult(false, "Invalid backup: ${e.message}")
         }
     }
 
@@ -231,26 +378,63 @@ class BackupManager(private val context: Context) {
         replaceMode: Boolean = false
     ): RestoreResult = withContext(Dispatchers.IO) {
         try {
-            Logger.i("BackupManager", "Starting restore...")
+            Logger.i(TAG, "Starting restore...")
+
+            val allBytes = context.contentResolver.openInputStream(inputUri)?.use { it.readBytes() }
+                ?: return@withContext RestoreResult(
+                    success = false,
+                    message = "Unable to open the backup file"
+                )
 
             val backupData = mutableMapOf<String, String>()
-            var metadata: BackupMetadata? = null
+            val metadata: BackupMetadata
 
-            context.contentResolver.openInputStream(inputUri)?.use { inputStream ->
-                val allBytes = inputStream.readBytes()
-                // Single-JSON format, optionally AES-GCM encrypted. Detect the
-                // SyncEncryptor magic header so we can surface a clear
-                // "need password" error instead of a raw JSONException.
-                val isEncrypted = allBytes.size >= ENCRYPTED_MAGIC.length &&
-                    String(allBytes, 0, ENCRYPTED_MAGIC.length, Charsets.ISO_8859_1) == ENCRYPTED_MAGIC
-                if (isEncrypted && password == null) {
-                    return@withContext RestoreResult(
-                        success = false,
-                        message = "This backup is encrypted — enter your backup password to restore"
-                    )
+            when (sniffFormat(allBytes)) {
+                BackupFileFormat.ZIP -> {
+                    val (manifestJson, entries) = readBackupZip(ByteArrayInputStream(allBytes))
+                    if (manifestJson == null) {
+                        return@withContext RestoreResult(
+                            success = false,
+                            message = "Invalid backup: missing $MANIFEST_ENTRY"
+                        )
+                    }
+                    // Manifest-first: the format version is checked before any
+                    // data entry is even looked at.
+                    metadata = parseManifest(manifestJson)
+                    unsupportedVersionMessage(metadata.version)?.let {
+                        return@withContext RestoreResult(success = false, message = it)
+                    }
+                    for ((name, bytes) in entries) {
+                        if (name == BackupExporter.FILE_SECRETS && isSyncEncrypted(bytes)) {
+                            if (password == null) {
+                                return@withContext RestoreResult(
+                                    success = false,
+                                    message = "This backup is encrypted — enter your backup password to restore"
+                                )
+                            }
+                            val plain = try {
+                                encryptor.decrypt(bytes, password)
+                            } catch (e: Exception) {
+                                return@withContext RestoreResult(
+                                    success = false,
+                                    message = "Incorrect backup password",
+                                    errors = listOf(e.message ?: "Decryption failed")
+                                )
+                            }
+                            backupData[name] = String(plain, Charsets.UTF_8)
+                        } else {
+                            backupData[name] = String(bytes, Charsets.UTF_8)
+                        }
+                    }
                 }
-                val plainBytes: ByteArray = if (isEncrypted && password != null) {
-                    try {
+                BackupFileFormat.LEGACY_ENCRYPTED -> {
+                    if (password == null) {
+                        return@withContext RestoreResult(
+                            success = false,
+                            message = "This backup is encrypted — enter your backup password to restore"
+                        )
+                    }
+                    val plainBytes = try {
                         encryptor.decrypt(allBytes, password)
                     } catch (e: Exception) {
                         return@withContext RestoreResult(
@@ -259,24 +443,21 @@ class BackupManager(private val context: Context) {
                             errors = listOf(e.message ?: "Decryption failed")
                         )
                     }
-                } else {
-                    allBytes
+                    val (meta, data) = parseLegacyRoot(plainBytes)
+                    metadata = meta
+                    backupData.putAll(data)
                 }
-                val root = JSONObject(String(plainBytes, Charsets.UTF_8))
-                val metaObj = root.getJSONObject("metadata")
-                val itemCountsObj = metaObj.getJSONObject("itemCounts")
-                val itemCounts = mutableMapOf<String, Int>()
-                itemCountsObj.keys().forEach { key -> itemCounts[key] = itemCountsObj.getInt(key) }
-                metadata = BackupMetadata(
-                    version = metaObj.getInt("version"),
-                    createdAt = metaObj.getLong("createdAt"),
-                    appVersion = metaObj.getString("appVersion"),
-                    deviceModel = metaObj.getString("deviceModel"),
-                    androidVersion = metaObj.getInt("androidVersion"),
-                    itemCounts = itemCounts
-                )
-                val dataObj = root.getJSONObject("data")
-                dataObj.keys().forEach { key -> backupData[key] = dataObj.getString(key) }
+                BackupFileFormat.LEGACY_JSON -> {
+                    val (meta, data) = parseLegacyRoot(allBytes)
+                    metadata = meta
+                    backupData.putAll(data)
+                }
+                BackupFileFormat.UNKNOWN -> {
+                    return@withContext RestoreResult(
+                        success = false,
+                        message = "Not a TabSSH backup file"
+                    )
+                }
             }
 
             // Validate backup
@@ -290,16 +471,23 @@ class BackupManager(private val context: Context) {
             }
 
             // Restore data
-            val restoredItems = importer.restoreBackupData(backupData, overwriteExisting, replaceMode)
+            val outcome = importer.restoreBackupData(backupData, overwriteExisting, replaceMode)
 
-            Logger.i("BackupManager", "Restore completed successfully")
+            // Per-item failures must never be reported as an unqualified success.
+            val message = if (outcome.errors.isEmpty()) {
+                "Restore completed successfully"
+            } else {
+                "Restore completed with ${outcome.errors.size} failed item(s)"
+            }
+            Logger.i(TAG, message)
             return@withContext RestoreResult(
                 success = true,
-                message = "Restore completed successfully",
-                restoredItems = restoredItems
+                message = message,
+                restoredItems = outcome.restoredItems,
+                errors = outcome.errors
             )
         } catch (e: Exception) {
-            Logger.e("BackupManager", "Failed to restore backup", e)
+            Logger.e(TAG, "Failed to restore backup", e)
             return@withContext RestoreResult(
                 success = false,
                 message = "Failed to restore backup: ${e.message}",
@@ -308,10 +496,40 @@ class BackupManager(private val context: Context) {
         }
     }
 
+    /** Error message for a version this build cannot read, or null when supported. */
+    private fun unsupportedVersionMessage(version: Int): String? =
+        if (version != BACKUP_VERSION && version != LEGACY_BACKUP_VERSION) {
+            "Unsupported backup format: version $version " +
+                "(this build reads versions $LEGACY_BACKUP_VERSION and $BACKUP_VERSION)"
+        } else {
+            null
+        }
+
+    /** Parse the legacy single-JSON root into its metadata and name→JSON data map. */
+    private fun parseLegacyRoot(plainBytes: ByteArray): Pair<BackupMetadata, Map<String, String>> {
+        val root = JSONObject(String(plainBytes, Charsets.UTF_8))
+        val metaObj = root.getJSONObject("metadata")
+        val itemCountsObj = metaObj.getJSONObject("itemCounts")
+        val itemCounts = mutableMapOf<String, Int>()
+        itemCountsObj.keys().forEach { key -> itemCounts[key] = itemCountsObj.getInt(key) }
+        val metadata = BackupMetadata(
+            version = metaObj.getInt("version"),
+            createdAt = metaObj.getLong("createdAt"),
+            appVersion = metaObj.getString("appVersion"),
+            deviceModel = metaObj.getString("deviceModel"),
+            androidVersion = metaObj.getInt("androidVersion"),
+            itemCounts = itemCounts
+        )
+        val data = mutableMapOf<String, String>()
+        val dataObj = root.getJSONObject("data")
+        dataObj.keys().forEach { key -> data[key] = dataObj.getString(key) }
+        return metadata to data
+    }
+
     /**
      * Create backup metadata
      */
-    private suspend fun createBackupMetadata(backupData: Map<String, String>): BackupMetadata {
+    private fun createBackupMetadata(backupData: Map<String, String>): BackupMetadata {
         val itemCounts = mutableMapOf<String, Int>()
 
         // Generic counter: every entity file the exporter writes uses the
@@ -353,20 +571,5 @@ class BackupManager(private val context: Context) {
         val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
         val timestamp = dateFormat.format(Date())
         return "tabssh_backup_$timestamp.tabssh"
-    }
-
-    /**
-     * Schedule automatic backup
-     */
-    fun scheduleAutomaticBackup(frequency: BackupFrequency) {
-        // Would use WorkManager to schedule periodic backups
-        Logger.d("BackupManager", "Scheduling automatic backup: $frequency")
-    }
-
-    enum class BackupFrequency {
-        DAILY,
-        WEEKLY,
-        MONTHLY,
-        NEVER
     }
 }

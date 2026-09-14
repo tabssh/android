@@ -8,10 +8,11 @@ import kotlin.test.assertTrue
 /**
  * Format-gate tests for [BackupValidator].
  *
- * There is exactly one backup wire version. These lock in the rejection path:
- * an archive written in any other version — older or newer — must fail
- * validation with an "unsupported backup format" error rather than be parsed
- * best-effort against a legacy shape that no longer exists.
+ * Two wire versions are readable: the current ZIP format and the legacy
+ * single-JSON format. These lock in the rejection path: an archive written in
+ * any other version — older or newer — must fail validation with an
+ * "unsupported backup format" error rather than be parsed best-effort against
+ * a shape that no longer exists.
  */
 class BackupValidatorTest {
 
@@ -43,10 +44,19 @@ class BackupValidatorTest {
     }
 
     @Test
-    fun `an older version is rejected as an unsupported format`() {
+    fun `the legacy single-JSON version still validates`() {
         val result = validator.validateBackup(
             mapOf("connections.json" to validConnections),
-            metadata(BackupManager.BACKUP_VERSION - 1)
+            metadata(BackupManager.LEGACY_BACKUP_VERSION)
+        )
+        assertTrue(result.isValid, "errors: ${result.errors}")
+    }
+
+    @Test
+    fun `a version older than the legacy one is rejected as an unsupported format`() {
+        val result = validator.validateBackup(
+            mapOf("connections.json" to validConnections),
+            metadata(BackupManager.LEGACY_BACKUP_VERSION - 1)
         )
         assertFalse(result.isValid)
         assertTrue(result.errors.any { it.contains("Unsupported backup format") })

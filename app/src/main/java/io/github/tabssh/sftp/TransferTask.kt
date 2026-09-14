@@ -7,6 +7,8 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -21,7 +23,19 @@ class TransferTask(
     val localPath: String,
     val remotePath: String,
     val totalBytes: Long,
-    val listener: TransferListener? = null
+    val listener: TransferListener? = null,
+    /**
+     * Whether this transfer may continue a previously interrupted one by
+     * skipping bytes that already exist at the destination.
+     *
+     * Defaults to false, and must stay that way: resume used to be inferred
+     * from "destination is smaller than source", which silently corrupted
+     * every overwrite of an existing path with larger new content (an editor
+     * save-back appended its tail to the stale remote prefix). Only a caller
+     * that knows the destination holds the leading bytes of *this* source may
+     * pass true.
+     */
+    val allowResume: Boolean = false
 ) {
     
     private val _state = MutableStateFlow(TransferState.PENDING)
@@ -40,6 +54,9 @@ class TransferTask(
     
     private val cancelled = AtomicBoolean(false)
     private val paused = AtomicBoolean(false)
+
+    // Guards complete() so the first terminal result wins; see complete().
+    private val completed = AtomicBoolean(false)
     
     private var startTime = System.currentTimeMillis()
     private var lastProgressTime = startTime
@@ -207,28 +224,53 @@ class TransferTask(
      * Cancel the transfer
      */
     fun cancel() {
-        cancelled.set(true)
+        // Only raise the flag and report the cancellation. The transfer loop
+        // notices the flag, unwinds, and calls complete(Cancelled), which is
+        // what sets the terminal result. Setting the result here too made every
+        // cancellation notify listeners twice and double-count in the UI.
+        if (!cancelled.compareAndSet(false, true)) return
         updateState(TransferState.CANCELLED)
-        _result.value = TransferResult.Cancelled
         Logger.d("TransferTask", "Transfer cancelled: $id")
         listener?.onCancelled(this)
     }
-    
+
     /**
-     * Complete the transfer with result
+     * Complete the transfer with result.
+     *
+     * Idempotent: the first terminal result wins. Several unwind paths can
+     * reach here for one transfer (a cancelled copy loop plus its enclosing
+     * CancellationException handler), and firing onCompleted for each of them
+     * double-counted finished transfers.
      */
     fun complete(result: TransferResult) {
+        if (!completed.compareAndSet(false, true)) {
+            Logger.d("TransferTask", "Ignoring duplicate completion for $id: $result")
+            return
+        }
         _result.value = result
         updateState(when (result) {
             is TransferResult.Success -> TransferState.COMPLETED
             is TransferResult.Error -> TransferState.ERROR
             is TransferResult.Cancelled -> TransferState.CANCELLED
         })
-        
+
         Logger.d("TransferTask", "Transfer completed: $id with result $result")
         listener?.onCompleted(this, result)
     }
-    
+
+    /**
+     * Suspend until this transfer reaches a terminal state and return its
+     * result.
+     *
+     * Every transfer path in SFTPManager completes the task exactly once —
+     * on success, on error, and on cancellation — so this always resolves.
+     * Callers that fire a transfer and then touch its source or destination
+     * (deleting a materialized temp, copying a download into SAF, counting a
+     * success) MUST await it first: the transfer functions launch into
+     * `transferScope` and return immediately.
+     */
+    suspend fun await(): TransferResult = result.filterNotNull().first()
+
     // State checks
     fun isCancelled(): Boolean = cancelled.get()
     fun isPaused(): Boolean = paused.get()

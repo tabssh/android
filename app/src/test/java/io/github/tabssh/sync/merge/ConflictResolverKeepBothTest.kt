@@ -3,8 +3,10 @@ package io.github.tabssh.sync.merge
 import android.content.Context
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.dao.ConnectionDao
+import io.github.tabssh.storage.database.dao.SyncTombstoneDao
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.sync.log.SyncLogManager
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
 import io.github.tabssh.sync.models.Conflict
 import io.github.tabssh.sync.models.ConflictResolution
 import io.github.tabssh.sync.models.ConflictResolutionOption
@@ -36,6 +38,7 @@ class ConflictResolverKeepBothTest {
     private lateinit var context: Context
     private lateinit var database: TabSSHDatabase
     private lateinit var connectionDao: ConnectionDao
+    private lateinit var tombstoneDao: SyncTombstoneDao
     private lateinit var syncLogManager: SyncLogManager
     private lateinit var resolver: ConflictResolver
 
@@ -49,8 +52,10 @@ class ConflictResolverKeepBothTest {
         context = mock()
         database = mock()
         connectionDao = mock()
+        tombstoneDao = mock()
         syncLogManager = mock()
         whenever(database.connectionDao()).thenReturn(connectionDao)
+        whenever(database.syncTombstoneDao()).thenReturn(tombstoneDao)
         resolver = ConflictResolver(context, database, syncLogManager)
 
         base = ConnectionProfile(id = "c1", name = "server", host = "base.example.com", username = "root", modifiedAt = 1_000L)
@@ -74,14 +79,25 @@ class ConflictResolverKeepBothTest {
         verify(syncLogManager).recordResolution(conflict, ConflictResolutionOption.KEEP_LOCAL)
     }
 
+    /**
+     * Keep-remote must be an upsert, not an update. A plain `@Update` matches
+     * on the primary key and affects zero rows when the row is absent locally
+     * — exactly the deleted-on-this-device case that produces the prompt most
+     * often — so the user's choice silently did nothing. The device's own
+     * tombstone for the row has to be cleared with it, or the next sync
+     * re-deletes what the user just asked to keep and pushes that delete out
+     * to every peer.
+     */
     @Test
-    fun `keep remote writes the remote entity and records a kept-remote log entry`() = runTest {
+    fun `keep remote upserts the remote entity, clears its tombstone, and logs kept-remote`() = runTest {
         resolver.applyResolutions(listOf(ConflictResolution(conflict, ConflictResolutionOption.KEEP_REMOTE)))
 
         val captor = argumentCaptor<ConnectionProfile>()
-        verify(connectionDao).updateConnection(captor.capture())
+        verify(connectionDao).insertConnection(captor.capture())
         assertEquals("remote.example.com", captor.firstValue.host)
-        verify(connectionDao, never()).insertConnection(any())
+        assertEquals("c1", captor.firstValue.id, "keep-remote must write the conflicted row, not a duplicate")
+        verify(connectionDao, never()).updateConnection(any())
+        verify(tombstoneDao).clear(TombstoneRecorder.CONNECTION, "c1")
         verify(syncLogManager).recordResolution(conflict, ConflictResolutionOption.KEEP_REMOTE)
     }
 

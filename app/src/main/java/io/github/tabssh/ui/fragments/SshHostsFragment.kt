@@ -491,6 +491,8 @@ class SshHostsFragment : Fragment() {
                             Logger.e("SshHostsFragment", "Bulk delete failed for ${c.name}", e)
                         }
                     }
+                    // Home-screen widgets pinned to a deleted connection otherwise keep the stale label and dead tap target.
+                    io.github.tabssh.widget.ConnectionWidgetProvider.updateAllWidgets(requireContext())
                     android.widget.Toast.makeText(
                         requireContext(),
                         resources.getQuantityString(

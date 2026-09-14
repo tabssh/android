@@ -513,7 +513,7 @@ class RfbDecoder(private val fmt: PixelFormat) {
     //                stream index = compType & 3
     //     0x4..0x7 — BasicCompression WITH ExplicitFilter (bit 2 of compType set)
     //                stream index = compType & 3; a FilterID byte follows:
-    //                  0x00 (Copy)     — raw cpixels
+    //                  0x00 (Copy)     — raw TPIXELs (spec-fixed R,G,B when 3-byte)
     //                  0x01 (Palette)  — TigerVNC new-style: nColors byte + palette
     //                  0x02 (Gradient) — delta-prediction per channel
     //                  0x80..0xFF      — old-style palette: nColors = (id & 0x7F) + 1
@@ -539,14 +539,17 @@ class RfbDecoder(private val fmt: PixelFormat) {
         }
 
         val compType = cc ushr 4
-        val cp = fmt.cpixelBytes
+        // Tight uses TPIXEL, not ZRLE's CPIXEL: the 3-byte form is spec-fixed
+        // R,G,B regardless of endianness — cpixelBytes/cpixelToArgb here swapped
+        // red and blue on every Tight rect with our little-endian format.
+        val cp = fmt.tpixelBytes
 
         when (compType) {
             RfbConstants.TIGHT_FILL -> {
                 // Single pixel, fill the whole rect
                 val pixBuf = ByteArray(cp)
                 din.readFully(pixBuf)
-                fillRect(fb, fbW, x, y, w, h, fmt.cpixelToArgb(pixBuf))
+                fillRect(fb, fbW, x, y, w, h, fmt.tpixelToArgb(pixBuf))
             }
 
             RfbConstants.TIGHT_JPEG, RfbConstants.TIGHT_PNG -> {
@@ -604,7 +607,7 @@ class RfbDecoder(private val fmt: PixelFormat) {
                     for (row in 0 until h) {
                         val base = (y + row) * fbW + x
                         for (col in 0 until w) {
-                            fb[base + col] = fmt.cpixelToArgb(data, idx)
+                            fb[base + col] = fmt.tpixelToArgb(data, idx)
                             idx += cp
                         }
                     }
@@ -620,7 +623,7 @@ class RfbDecoder(private val fmt: PixelFormat) {
                             for (row in 0 until h) {
                                 val base = (y + row) * fbW + x
                                 for (col in 0 until w) {
-                                    fb[base + col] = fmt.cpixelToArgb(data, idx)
+                                    fb[base + col] = fmt.tpixelToArgb(data, idx)
                                     idx += cp
                                 }
                             }
@@ -632,7 +635,7 @@ class RfbDecoder(private val fmt: PixelFormat) {
                             val pbBuf = ByteArray(cp)
                             for (i in 0 until numColors) {
                                 din.readFully(pbBuf)
-                                palette[i] = fmt.cpixelToArgb(pbBuf)
+                                palette[i] = fmt.tpixelToArgb(pbBuf)
                             }
                             // 2 colours → 1 bpp packed; >2 colours → 8 bpp indices
                             val dataSize = if (numColors == 2) safeRectBytes((w + 7) / 8, h, 1)
@@ -698,7 +701,7 @@ class RfbDecoder(private val fmt: PixelFormat) {
                                         }
                                         currRow[col * cp + c] = ((raw + est) and 0xFF).toByte()
                                     }
-                                    fb[dstBase + col] = fmt.cpixelToArgb(currRow, col * cp)
+                                    fb[dstBase + col] = fmt.tpixelToArgb(currRow, col * cp)
                                 }
                                 currRow.copyInto(prevRow)
                             }
@@ -717,7 +720,7 @@ class RfbDecoder(private val fmt: PixelFormat) {
                             val pbBuf = ByteArray(cp)
                             for (i in 0 until numColors) {
                                 din.readFully(pbBuf)
-                                palette[i] = fmt.cpixelToArgb(pbBuf)
+                                palette[i] = fmt.tpixelToArgb(pbBuf)
                             }
                             val dataSize = if (numColors == 2) safeRectBytes((w + 7) / 8, h, 1)
                                            else safeRectBytes(w, h, 1)

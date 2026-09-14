@@ -64,6 +64,28 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
         return if (isRemote) selectedRemoteFiles.toList() else emptyList()
     }
     
+    companion object {
+        /**
+         * Remove selected entries whose key is absent from [presentKeys].
+         *
+         * Nothing is notified here — the caller dispatches its own DiffUtil
+         * result for the list change, and the rows that lost their selection
+         * are exactly the rows that left the list.
+         *
+         * Keys, not object identity: a row that is still present but whose
+         * size or mtime changed must keep its selection, while a row that
+         * left the directory must lose it.
+         */
+        internal fun <T> pruneSelection(
+            selection: MutableSet<T>,
+            presentKeys: Set<Any>,
+            keyOf: (T) -> Any
+        ) {
+            if (selection.isEmpty()) return
+            selection.retainAll { keyOf(it) in presentKeys }
+        }
+    }
+
     /**
      * Clear all selections
      */
@@ -137,6 +159,13 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
         this.isRemote = false
         this.onFileClick = onFileClick
         this.onFileLongClick = onFileLongClick
+        // Drop selections for rows that are no longer in the list. Selection is
+        // held as whole objects, so a refresh after a delete/rename (or after
+        // navigating into another directory) otherwise leaves entries pointing
+        // at files that are gone, and the next bulk action runs against them.
+        // An identical row that came back keeps its selection, matched on id
+        // rather than object identity so a changed size/mtime does not clear it.
+        pruneSelection(selectedLocalFiles, files.mapTo(mutableSetOf()) { it.id }) { it.id }
         if (wasRemote) {
             // Switching between local and remote modes changes the row type
             // entirely — a full rebind is correct here, DiffUtil would compare
@@ -174,6 +203,10 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
         this.isRemote = true
         this.onRemoteFileClick = onRemoteFileClick
         this.onRemoteFileLongClick = onRemoteFileLongClick
+        // Same reasoning as setLocalFiles: a refresh must not leave selections
+        // for rows that no longer exist. Remote rows are identified by name,
+        // matching this list's DiffUtil callback below.
+        pruneSelection(selectedRemoteFiles, files.mapTo(mutableSetOf()) { it.name }) { it.name }
         if (!wasRemote) {
             // Switching from local→remote changes the row payload type; a full
             // rebind is correct.

@@ -1,6 +1,7 @@
 package io.github.tabssh.backup.import
 
 import android.content.Context
+import androidx.room.withTransaction
 import io.github.tabssh.backup.export.BackupExporter
 import io.github.tabssh.crypto.keys.KeyStorage
 import io.github.tabssh.crypto.storage.SecurePasswordManager
@@ -51,9 +52,10 @@ import org.json.JSONObject
 /**
  * Handles importing data from backup.
  *
- * Reads the entity-serialised format emitted by [BackupExporter] — the one and
- * only backup format. Archives that are not that format are rejected upstream
- * by [io.github.tabssh.backup.BackupManager]; there is no legacy read path.
+ * Reads the entity-serialised name→JSON map emitted by [BackupExporter]. The
+ * archive container (current ZIP or legacy single-JSON) is unpacked upstream
+ * by [io.github.tabssh.backup.BackupManager]; unsupported formats never reach
+ * this class.
  */
 class BackupImporter(
     private val context: Context,
@@ -80,10 +82,24 @@ class BackupImporter(
         isLenient = true
     }
 
+    /** Per-table restored counts plus every per-item failure encountered on the way. */
+    data class RestoreOutcome(
+        val restoredItems: Map<String, Int>,
+        val errors: List<String>
+    )
+
+    // Per-item failures collected during a restore run so the caller can report
+    // a qualified result instead of an unconditional success.
+    private val restoreErrors = mutableListOf<String>()
+
     /**
      * Restore everything present in [backupData]. Returns a per-table count of
      * rows inserted (skipping rows that already exist when [overwriteExisting]
-     * is false).
+     * is false) together with any per-item failures.
+     *
+     * All database work — including the table clearing [replaceMode] performs —
+     * runs inside a single Room transaction, so a failure mid-restore rolls the
+     * database back instead of leaving it wiped or half-populated.
      *
      * @param replaceMode true snapshot restore: every entity table present in
      *   [backupData] is cleared first (see [clearTablesForReplace]), so the
@@ -96,11 +112,63 @@ class BackupImporter(
         backupData: Map<String, String>,
         overwriteExisting: Boolean,
         replaceMode: Boolean = false
-    ): Map<String, Int> = withContext(Dispatchers.IO) {
+    ): RestoreOutcome = withContext(Dispatchers.IO) {
         val out = mutableMapOf<String, Int>()
+        restoreErrors.clear()
         val effectiveOverwrite = overwriteExisting || replaceMode
-        if (replaceMode) clearTablesForReplace(backupData)
 
+        // One transaction around the wipe and every row insert: a failure
+        // mid-restore rolls the database back instead of leaving it wiped or
+        // half-populated by replace mode's delete-then-insert sequence.
+        database.withTransaction {
+            if (replaceMode) clearTablesForReplace(backupData)
+            restoreDatabaseTables(backupData, effectiveOverwrite, out)
+        }
+
+        // Preference files and Keystore secrets live outside the database, so
+        // they are applied only after the transaction has committed — secrets
+        // last so every row they reference already exists.
+        backupData[BackupExporter.FILE_PREFERENCES]?.let {
+            restorePreferences(it); out["preferences"] = 1
+            Logger.d(TAG, "Restored preferences")
+        } ?: Logger.d(TAG, "Skipping preferences — not in backup")
+        backupData[BackupExporter.FILE_DASHBOARD]?.let {
+            val n = restoreDashboardConfig(it, effectiveOverwrite)
+            out["dashboard_config"] = n
+            Logger.d(TAG, "Restored $n dashboard config keys")
+        } ?: Logger.d(TAG, "Skipping dashboard config — not in backup (pre-v4)")
+        backupData[BackupExporter.FILE_PREFS_TABSSH]?.let {
+            val n = restoreSharedPrefs("TabSSH", it, effectiveOverwrite)
+            out["prefs_tabssh"] = n
+            Logger.d(TAG, "Restored $n TabSSH prefs keys")
+        } ?: Logger.d(TAG, "Skipping TabSSH prefs — not in backup")
+        backupData[BackupExporter.FILE_PREFS_CLUSTER_COMMANDS]?.let {
+            val n = restoreSharedPrefs("cluster_commands", it, effectiveOverwrite)
+            out["prefs_cluster_commands"] = n
+            Logger.d(TAG, "Restored $n cluster_commands prefs keys")
+        } ?: Logger.d(TAG, "Skipping cluster_commands prefs — not in backup")
+        backupData[BackupExporter.FILE_PREFS_SNIPPET_VAR_RECALL]?.let {
+            val n = restoreSharedPrefs("snippet_var_recall", it, effectiveOverwrite)
+            out["prefs_snippet_var_recall"] = n
+            Logger.d(TAG, "Restored $n snippet_var_recall prefs keys")
+        } ?: Logger.d(TAG, "Skipping snippet_var_recall prefs — not in backup")
+
+        // Secrets must be restored AFTER entity rows so all IDs are present.
+        backupData[BackupExporter.FILE_SECRETS]?.let {
+            restoreSecrets(it)
+            out["secrets"] = 1
+            Logger.d(TAG, "Restored credentials from secrets file")
+        } ?: Logger.d(TAG, "Skipping secrets — not in backup (pre-v3 or unencrypted backup)")
+
+        RestoreOutcome(out.toMap(), restoreErrors.toList())
+    }
+
+    /** Every Room-table restore, in dependency order. Runs inside the restore transaction. */
+    private suspend fun restoreDatabaseTables(
+        backupData: Map<String, String>,
+        effectiveOverwrite: Boolean,
+        out: MutableMap<String, Int>
+    ) {
         suspend fun <R> table(
             key: String,
             label: String,
@@ -120,10 +188,6 @@ class BackupImporter(
             { restoreConnections(it, effectiveOverwrite) }) { out["connections"] = it; Logger.d(TAG, "Restored $it connections") }
         table(BackupExporter.FILE_KEYS, "keys",
             { restoreKeys(it, effectiveOverwrite) }) { out["keys"] = it; Logger.d(TAG, "Restored $it keys") }
-        backupData[BackupExporter.FILE_PREFERENCES]?.let {
-            restorePreferences(it); out["preferences"] = 1
-            Logger.d(TAG, "Restored preferences")
-        } ?: Logger.d(TAG, "Skipping preferences — not in backup")
         table(BackupExporter.FILE_THEMES, "themes",
             { restoreThemes(it, effectiveOverwrite) }) { out["themes"] = it; Logger.d(TAG, "Restored $it themes") }
         table(BackupExporter.FILE_CERTIFICATES, "certificates",
@@ -179,41 +243,10 @@ class BackupImporter(
             { restoreSingleContainerConfigs(it, effectiveOverwrite) }) { out["single_container_configs"] = it; Logger.d(TAG, "Restored $it single-container configs") }
         table(BackupExporter.FILE_CONTAINER_AUTO_UPDATE_POLICIES, "container_auto_update_policies",
             { restoreContainerAutoUpdatePolicies(it, effectiveOverwrite) }) { out["container_auto_update_policies"] = it; Logger.d(TAG, "Restored $it container auto-update policies") }
-        backupData[BackupExporter.FILE_DASHBOARD]?.let {
-            val n = restoreDashboardConfig(it, effectiveOverwrite)
-            out["dashboard_config"] = n
-            Logger.d(TAG, "Restored $n dashboard config keys")
-        } ?: Logger.d(TAG, "Skipping dashboard config — not in backup (pre-v4)")
-
-        backupData[BackupExporter.FILE_PREFS_TABSSH]?.let {
-            val n = restoreSharedPrefs("TabSSH", it, effectiveOverwrite)
-            out["prefs_tabssh"] = n
-            Logger.d(TAG, "Restored $n TabSSH prefs keys")
-        } ?: Logger.d(TAG, "Skipping TabSSH prefs — not in backup")
-        backupData[BackupExporter.FILE_PREFS_CLUSTER_COMMANDS]?.let {
-            val n = restoreSharedPrefs("cluster_commands", it, effectiveOverwrite)
-            out["prefs_cluster_commands"] = n
-            Logger.d(TAG, "Restored $n cluster_commands prefs keys")
-        } ?: Logger.d(TAG, "Skipping cluster_commands prefs — not in backup")
-        backupData[BackupExporter.FILE_PREFS_SNIPPET_VAR_RECALL]?.let {
-            val n = restoreSharedPrefs("snippet_var_recall", it, effectiveOverwrite)
-            out["prefs_snippet_var_recall"] = n
-            Logger.d(TAG, "Restored $n snippet_var_recall prefs keys")
-        } ?: Logger.d(TAG, "Skipping snippet_var_recall prefs — not in backup")
-
         table(BackupExporter.FILE_TAB_SESSIONS, "tab_sessions",
             { restoreTabSessions(it, effectiveOverwrite) }) { out["tab_sessions"] = it; Logger.d(TAG, "Restored $it tab sessions") }
         table(BackupExporter.FILE_AUDIT_LOG, "audit_log",
             { restoreAuditLog(it, effectiveOverwrite) }) { out["audit_log"] = it; Logger.d(TAG, "Restored $it audit log entries") }
-
-        // Secrets must be restored AFTER entity rows so all IDs are present.
-        backupData[BackupExporter.FILE_SECRETS]?.let {
-            restoreSecrets(it)
-            out["secrets"] = 1
-            Logger.d(TAG, "Restored credentials from secrets file")
-        } ?: Logger.d(TAG, "Skipping secrets — not in backup (pre-v3 or unencrypted backup)")
-
-        out
     }
 
     /**
@@ -659,7 +692,11 @@ class BackupImporter(
             try {
                 if (applyOne(item)) count++
             } catch (e: Exception) {
+                // Collected, not swallowed: the failure reaches the caller's
+                // RestoreOutcome so the restore is never reported as an
+                // unqualified success. The item itself is never logged.
                 Logger.w(TAG, "Failed to restore item from entity list: ${e.message}")
+                restoreErrors.add("Failed to restore an item: ${e.message ?: "unknown error"}")
             }
         }
         return count
@@ -745,7 +782,6 @@ class BackupImporter(
         val root = JSONObject(data)
         root.optJSONObject("general")?.let { g ->
             preferenceManager.setAutoBackupEnabled(g.optBoolean("autoBackup", true))
-            preferenceManager.setBackupFrequency(g.optString("backupFrequency", "weekly"))
             preferenceManager.setStartupBehavior(g.optString("startupBehavior", "last_session"))
             preferenceManager.setLanguage(g.optString("language", "system"))
         }

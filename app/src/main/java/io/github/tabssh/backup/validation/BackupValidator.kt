@@ -7,9 +7,10 @@ import org.json.JSONObject
 /**
  * Validates backup data integrity and format.
  *
- * There is exactly one wire format ([BackupManager.BACKUP_VERSION]). Any other
- * version is an unsupported archive and is rejected — this validator has no
- * legacy read path and never attempts a best-effort parse of an older shape.
+ * Two readable wire versions exist: the current ZIP format
+ * ([BackupManager.BACKUP_VERSION]) and the previous single-JSON format
+ * ([BackupManager.LEGACY_BACKUP_VERSION]). Any other version is an unsupported
+ * archive and is rejected rather than best-effort parsed.
  */
 class BackupValidator {
 
@@ -40,12 +41,15 @@ class BackupValidator {
         if (metadata == null) {
             errors.add("Missing backup metadata")
         } else {
-            // One writer, one reader, one version. Anything else — older or
-            // newer — is not a format this build can read.
-            if (metadata.version != BackupManager.BACKUP_VERSION) {
+            // One writer version, one supported legacy read version. Anything
+            // else — older or newer — is not a format this build can read.
+            if (metadata.version != BackupManager.BACKUP_VERSION &&
+                metadata.version != BackupManager.LEGACY_BACKUP_VERSION
+            ) {
                 errors.add(
                     "Unsupported backup format: version ${metadata.version} " +
-                        "(this build reads version ${BackupManager.BACKUP_VERSION} only)"
+                        "(this build reads versions ${BackupManager.LEGACY_BACKUP_VERSION} " +
+                        "and ${BackupManager.BACKUP_VERSION})"
                 )
             }
         }

@@ -13,7 +13,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -21,6 +23,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.Vector
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Manages SFTP operations for file transfer and browsing
@@ -30,6 +33,14 @@ class SFTPManager(private val sshConnection: SSHConnection) {
     
     private var sftpChannel: ChannelSftp? = null
     private val transferScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    // Channel teardown must outlive transferScope: cleanup() calls disconnect()
+    // and then cancels transferScope, so a teardown launched into transferScope
+    // was cancelled before it ran and leaked the channel until the SSH session
+    // itself died — exhausting the server's MaxSessions after enough tab closes.
+    // Its own scope is never cancelled; every job it runs is a short, bounded
+    // close.
+    private val teardownScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     // Serializes access to the shared [sftpChannel] used by metadata operations
     // (list/stat/mkdir/rm/rename/chmod/cd/pwd/exists). JSch's ChannelSftp is not
@@ -45,16 +56,62 @@ class SFTPManager(private val sshConnection: SSHConnection) {
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
     
-    // Settings
+    // Transfer settings. Fixed for now — there is no UI or preference that
+    // varies them, so they are not mutable state.
     // 32KB
-    private var bufferSize = 32768
-    private var maxConcurrentTransfers = 3
-    private var preservePermissions = true
-    private var preserveTimestamps = true
-    private var resumeSupport = true
-    
-    private val listeners = mutableListOf<SFTPListener>()
-    
+    private val bufferSize = 32768
+    private val preservePermissions = true
+    private val preserveTimestamps = true
+    private val resumeSupport = true
+
+    // Caps how many transfers run at once. Each transfer opens its own
+    // dedicated SFTP channel (see channelMutex above), so queueing a folder of
+    // files previously launched one channel per file with nothing holding them
+    // back — enough of them and the server's MaxSessions is exhausted and the
+    // remaining transfers fail. Permits are taken inside the coroutine, so
+    // callers still return immediately with a queued TransferTask.
+    private val transferSlots = Semaphore(MAX_CONCURRENT_TRANSFERS)
+
+    // Registered from the main thread but notified from transfer coroutines on
+    // Dispatchers.IO — a plain MutableList throws ConcurrentModificationException
+    // when a transfer finishes while an activity is (un)registering.
+    private val listeners = CopyOnWriteArrayList<SFTPListener>()
+
+    companion object {
+        /** How often a paused transfer re-checks for resume or cancellation. */
+        private const val PAUSE_POLL_INTERVAL_MS = 200L
+
+        /** Transfers allowed to hold a dedicated SFTP channel simultaneously. */
+        private const val MAX_CONCURRENT_TRANSFERS = 3
+
+        /**
+         * Decide how many bytes of [sourceSize] already exist at the destination
+         * and may therefore be skipped.
+         *
+         * Returns 0 — a full overwrite — unless resume is enabled globally AND
+         * opted into by this specific transfer. Inferring resume from
+         * "destination is smaller than source" alone corrupted every overwrite
+         * that grew a file: the new content's tail was appended after the old
+         * content's prefix and reported as success.
+         *
+         * A non-zero offset is only ever returned when the destination is a
+         * strict prefix-length of the source; an equal or larger destination
+         * means there is nothing to resume and the transfer starts over.
+         */
+        internal fun resumeOffset(
+            resumeSupport: Boolean,
+            allowResume: Boolean,
+            destinationExists: Boolean,
+            destinationSize: Long,
+            sourceSize: Long
+        ): Long {
+            if (!resumeSupport || !allowResume || !destinationExists) return 0L
+            if (destinationSize <= 0L) return 0L
+            if (destinationSize >= sourceSize) return 0L
+            return destinationSize
+        }
+    }
+
     init {
         Logger.d("SFTPManager", "Created SFTP manager for connection ${sshConnection.id}")
     }
@@ -131,7 +188,7 @@ class SFTPManager(private val sshConnection: SSHConnection) {
         sftpChannel = null
         _isConnected.value = false
         if (closing != null) {
-            transferScope.launch {
+            teardownScope.launch {
                 channelMutex.withLock {
                     try {
                         closing.disconnect()
@@ -224,9 +281,10 @@ class SFTPManager(private val sshConnection: SSHConnection) {
     suspend fun uploadFile(
         localFile: File,
         remotePath: String,
-        listener: TransferListener? = null
+        listener: TransferListener? = null,
+        allowResume: Boolean = false
     ): TransferTask {
-        
+
         val transferId = generateTransferId()
         val task = TransferTask(
             id = transferId,
@@ -234,13 +292,16 @@ class SFTPManager(private val sshConnection: SSHConnection) {
             localPath = localFile.absolutePath,
             remotePath = remotePath,
             totalBytes = localFile.length(),
-            listener = listener
+            listener = listener,
+            allowResume = allowResume
         )
         
         activeTransfers[transferId] = task
         
         transferScope.launch {
-            performUpload(task)
+            transferSlots.withPermit {
+                performUpload(task)
+            }
         }
         
         Logger.d("SFTPManager", "Started upload: ${localFile.name} -> $remotePath")
@@ -275,7 +336,9 @@ class SFTPManager(private val sshConnection: SSHConnection) {
         activeTransfers[transferId] = task
 
         transferScope.launch {
-            performDirectoryUpload(task, localDir, remoteDir)
+            transferSlots.withPermit {
+                performDirectoryUpload(task, localDir, remoteDir)
+            }
         }
 
         Logger.d("SFTPManager", "Started directory upload: ${localDir.name} -> $remoteDir")
@@ -414,28 +477,32 @@ class SFTPManager(private val sshConnection: SSHConnection) {
     suspend fun downloadFile(
         remotePath: String,
         localFile: File,
-        listener: TransferListener? = null
+        listener: TransferListener? = null,
+        allowResume: Boolean = false
     ): TransferTask {
-        
+
         val transferId = generateTransferId()
-        
+
         // Get remote file size
         val remoteFileInfo = getRemoteFileAttributes(remotePath)
         val totalBytes = remoteFileInfo?.size ?: 0L
-        
+
         val task = TransferTask(
             id = transferId,
             type = TransferType.DOWNLOAD,
             localPath = localFile.absolutePath,
             remotePath = remotePath,
             totalBytes = totalBytes,
-            listener = listener
+            listener = listener,
+            allowResume = allowResume
         )
         
         activeTransfers[transferId] = task
         
         transferScope.launch {
-            performDownload(task)
+            transferSlots.withPermit {
+                performDownload(task)
+            }
         }
         
         Logger.d("SFTPManager", "Started download: $remotePath -> ${localFile.name}")
@@ -473,7 +540,9 @@ class SFTPManager(private val sshConnection: SSHConnection) {
         activeTransfers[transferId] = task
 
         transferScope.launch {
-            performDirectoryDownload(task, remotePath, localDir)
+            transferSlots.withPermit {
+                performDirectoryDownload(task, remotePath, localDir)
+            }
         }
 
         Logger.d("SFTPManager", "Started directory download: $remotePath -> ${localDir.name}")
@@ -648,17 +717,24 @@ class SFTPManager(private val sshConnection: SSHConnection) {
                 false
             }
             
-            val startOffset = if (resumeSupport && remoteExists) {
+            val remoteSize = if (remoteExists) {
                 try {
-                    val remoteAttrs = channel.stat(task.remotePath)
-                    if (remoteAttrs.size < localFile.length()) {
-                        Logger.d("SFTPManager", "Resuming upload from byte ${remoteAttrs.size}")
-                        remoteAttrs.size
-                    } else 0L
+                    channel.stat(task.remotePath).size
                 } catch (e: Exception) {
                     0L
                 }
             } else 0L
+
+            val startOffset = resumeOffset(
+                resumeSupport = resumeSupport,
+                allowResume = task.allowResume,
+                destinationExists = remoteExists,
+                destinationSize = remoteSize,
+                sourceSize = localFile.length()
+            )
+            if (startOffset > 0) {
+                Logger.d("SFTPManager", "Resuming upload from byte $startOffset")
+            }
 
             task.setBytesTransferred(startOffset)
 
@@ -756,13 +832,16 @@ class SFTPManager(private val sshConnection: SSHConnection) {
             val localFile = File(task.localPath)
             
             // Check if we should resume
-            val startOffset = if (resumeSupport && localFile.exists()) {
-                val localSize = localFile.length()
-                if (localSize < task.totalBytes) {
-                    Logger.d("SFTPManager", "Resuming download from byte $localSize")
-                    localSize
-                } else 0L
-            } else 0L
+            val startOffset = resumeOffset(
+                resumeSupport = resumeSupport,
+                allowResume = task.allowResume,
+                destinationExists = localFile.exists(),
+                destinationSize = if (localFile.exists()) localFile.length() else 0L,
+                sourceSize = task.totalBytes
+            )
+            if (startOffset > 0) {
+                Logger.d("SFTPManager", "Resuming download from byte $startOffset")
+            }
 
             task.setBytesTransferred(startOffset)
 
@@ -867,6 +946,15 @@ class SFTPManager(private val sshConnection: SSHConnection) {
         
         try {
             while (!task.isCancelled()) {
+                // Honour a pause request. Nothing used to read isPaused(), so
+                // the UI showed PAUSED while the copy ran to completion — a
+                // user pausing a 1 GB download on metered data still paid for
+                // the whole gigabyte.
+                while (task.isPaused() && !task.isCancelled()) {
+                    delay(PAUSE_POLL_INTERVAL_MS)
+                }
+                if (task.isCancelled()) break
+
                 val bytesRead = input.read(buffer)
                 if (bytesRead <= 0) break
                 
@@ -1128,34 +1216,6 @@ class SFTPManager(private val sshConnection: SSHConnection) {
         } catch (e: Exception) {
             Logger.w("SFTPManager", "Failed to set local file permissions", e)
         }
-    }
-    
-    // Configuration
-    
-    fun setBufferSize(size: Int) {
-        // 1KB to 1MB
-        bufferSize = size.coerceIn(1024, 1024 * 1024)
-        Logger.d("SFTPManager", "Set buffer size to $bufferSize bytes")
-    }
-    
-    fun setMaxConcurrentTransfers(max: Int) {
-        maxConcurrentTransfers = max.coerceIn(1, 10)
-        Logger.d("SFTPManager", "Set max concurrent transfers to $maxConcurrentTransfers")
-    }
-    
-    fun setPreservePermissions(preserve: Boolean) {
-        preservePermissions = preserve
-        Logger.d("SFTPManager", "Set preserve permissions to $preserve")
-    }
-    
-    fun setPreserveTimestamps(preserve: Boolean) {
-        preserveTimestamps = preserve
-        Logger.d("SFTPManager", "Set preserve timestamps to $preserve")
-    }
-    
-    fun setResumeSupport(resume: Boolean) {
-        resumeSupport = resume
-        Logger.d("SFTPManager", "Set resume support to $resume")
     }
     
     // Listener management

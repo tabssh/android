@@ -108,10 +108,14 @@ open class ConnectionWidgetProvider : AppWidgetProvider() {
                     val icon = if (connection.keyId != null) "🔑" else "🖥️"
                     views.setTextViewText(R.id.widget_icon, icon)
                     views.setTextViewText(R.id.widget_name, connection.name)
-                    views.setTextViewText(R.id.widget_info, "${connection.username}@${connection.host}")
+                    views.setTextViewText(R.id.widget_info, connectionInfoLabel(connection.username, connection.host))
                     views.setOnClickPendingIntent(R.id.widget_connect, getConnectIntent(context, widgetId, connection))
                 }
                 R.layout.widget_4x2, R.layout.widget_4x4 -> {
+                    views.setTextViewText(R.id.widget_name, connection.name)
+                    views.setTextViewText(R.id.widget_info, connectionInfoLabel(connection.username, connection.host))
+                    // The layout's default label says "open app", but for a configured widget the tap connects.
+                    views.setTextViewText(R.id.widget_open_app, context.getString(R.string.widget_tap_to_connect))
                     views.setOnClickPendingIntent(R.id.widget_open_app, getConnectIntent(context, widgetId, connection))
                 }
             }
@@ -139,6 +143,10 @@ open class ConnectionWidgetProvider : AppWidgetProvider() {
                     views.setOnClickPendingIntent(R.id.widget_connect, getMainIntent(context))
                 }
                 R.layout.widget_4x2, R.layout.widget_4x4 -> {
+                    // Reset the labels so a widget whose connection was deleted stops showing the stale name.
+                    views.setTextViewText(R.id.widget_name, context.getString(R.string.app_name))
+                    views.setTextViewText(R.id.widget_info, context.getString(R.string.widget_tap_to_configure))
+                    views.setTextViewText(R.id.widget_open_app, context.getString(R.string.widget_tap_to_open_app))
                     views.setOnClickPendingIntent(R.id.widget_open_app, getMainIntent(context))
                 }
             }
@@ -176,10 +184,25 @@ open class ConnectionWidgetProvider : AppWidgetProvider() {
             prefs.edit().putString("connection_id_$widgetId", connectionId).apply()
         }
 
+        // Each size variant registers as its own receiver, so widget ids must be queried per component —
+        // the base component alone misses every widget placed as Widget2x1/Widget4x2/Widget4x4.
+        internal val PROVIDER_CLASSES: List<Class<out ConnectionWidgetProvider>> = listOf(
+            ConnectionWidgetProvider::class.java,
+            Widget2x1::class.java,
+            Widget4x2::class.java,
+            Widget4x4::class.java
+        )
+
+        // The "user@host" line shown under the connection name; extracted so it is JVM-testable.
+        internal fun connectionInfoLabel(username: String, host: String): String = "$username@$host"
+
         fun updateAllWidgets(context: Context) {
             val mgr = AppWidgetManager.getInstance(context)
-            val ids = mgr.getAppWidgetIds(ComponentName(context, ConnectionWidgetProvider::class.java))
-            ids.forEach { updateWidget(context, mgr, it) }
+            PROVIDER_CLASSES.forEach { providerClass ->
+                mgr.getAppWidgetIds(ComponentName(context, providerClass)).forEach { widgetId ->
+                    updateWidget(context, mgr, widgetId)
+                }
+            }
         }
     }
 
