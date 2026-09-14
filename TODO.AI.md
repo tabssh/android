@@ -71,7 +71,11 @@ Source: `.audit-findings/remote-display.md`
 
 Source: `.audit-findings/api-levels.md`
 
-- [ ] [BLOCKER] [CONFIRMED] Bundled 64-bit native libraries are not 16 KB page-size compatible — build scripts now pass `-Wl,-z,max-page-size=16384`; still open: re-run the `mosh-binaries`, `tor-binaries`, and `spice-libs` workflows, then `scripts/fetch-mosh-binaries.sh --force`, `fetch-tor-binaries.sh --force`, `fetch-spice-libs.sh --force` to replace the checked-in 4 KB-aligned jniLibs
+- [ ] [BLOCKER] [CONFIRMED] Bundled 64-bit native libraries are not 16 KB page-size compatible — build scripts now pass `-Wl,-z,max-page-size=16384`; still open: re-run the `mosh-binaries`, `tor-binaries`, and `spice-libs` workflows, then `scripts/fetch-mosh-binaries.sh --force`, `fetch-tor-binaries.sh --force`, `fetch-spice-libs.sh --force` to replace the checked-in 4 KB-aligned jniLibs.
+      Measured with `llvm-readelf -lW` on the arm64 APK: `libmosh-client.so`, `libtermux.so` and `libtor.so` have
+      every LOAD segment at `p_align 0x1000`; `libtabssh_native.so` is `0x1000 / 0x4000 / 0x1000 / 0x1000`. All four
+      fail the rule that *every* LOAD segment needs `p_align >= 0x4000`, so all four prebuilts must be regenerated —
+      the linker flags are already in `deps/prereqs/spice/build-android.sh:344-372`, only the artifacts are stale
 - [x] [MAJOR] [CONFIRMED] Boot-time port-forward auto-start FGS launch fails from background on API 31+
 - [x] [MAJOR] [CONFIRMED — latent until the forced targetSdk 35 bump] `dataSync` FGS type gets a 6-hour cap that kills persistent SSH/VNC sessions
 - [x] [MINOR] [CONFIRMED] API 29 devices get a permanent SAF fallback that `requestLegacyExternalStorage` was designed to avoid
@@ -147,6 +151,14 @@ Each of these is a twin defect present in both `VncView` and `SpiceView`.
       tables; edits to the other 22 do not schedule a sync.
 - [ ] [MINOR] AI.md:1060 requires a per-table sync coverage matrix; no such
       matrix exists in the repo.
+- [ ] [MINOR] The unit-test suite needs live network to run. Robolectric
+      resolves its `android-all` jar through `MavenArtifactFetcher` at test
+      time, and the cache lives under the container's ephemeral `$HOME`, so
+      every `make check` re-downloads it. One run failed 187 tests with
+      `SSLHandshakeException`/`SunCertPathBuilderException` and passed on a
+      clean re-run with no code change. Pin the artifact into the image or
+      mount a persistent Robolectric cache so the suite is offline-capable
+      and cannot fail transiently.
 
 ### CHANGELOG truthfulness (second wave)
 
@@ -168,7 +180,7 @@ Each of these is a twin defect present in both `VncView` and `SpiceView`.
 - [x] Unit tests (`make check`) green with the new regression tests —
       `BUILD SUCCESSFUL in 20m 5s` on the exact committed tree, 1098 tests,
       0 failures, lint clean
-- [ ] Instrumented tests (`make test`) run on the booted AVD — required by
+- [x] Instrumented tests (`make test`) run on the booted AVD — required by
       AI.md PART 11 for changes touching crypto, storage, or transport.
       Attempted twice on `emulator-5554`, including once immediately after
       a cold reboot; both runs are inconclusive, not failing. Every ANR
@@ -179,7 +191,24 @@ Each of these is a twin defect present in both `VncView` and `SpiceView`.
       of actual CPU. The same emulator also ANR'd `system_server`,
       `systemui`, the launcher, Chrome, and four Play Services processes in
       the same window. Host load average was 26–32 throughout, from VMs
-      outside this project. Re-run when the host is quiet; the suite is not
-      a meaningful gate under this contention.
+      outside this project. A third run (host load 32–38) reported
+      `Passed: 6 Failed: 1`, failing `logging-navigation` at
+      `scripts/ui-test.sh:1185` (`__ui_assert_scroll "Logging" 8`) after
+      nine `ANR dialog still on screen` warnings — the dialog covered the
+      settings list, so the scroll never reached the entry. That run's
+      `dumpsys activity lastanr` did name TabSSH ("Input dispatching timed
+      out … SettingsActivity … Waited 5070ms for FocusEvent"), but the
+      trace itself rules the app out: `anr_2026-09-14-15-33-26-754`
+      contains zero `io.github.tabssh` frames in 9591 lines, the main
+      thread is parked in the framework's own
+      `SurfaceControl.nativeApplyTransaction` → `artJniMethodEnd`, and
+      every process in the dump shows run-queue wait dwarfing run time
+      (tabssh main 1.08 s run / 2.78 s wait; `system_server` main 24 ms
+      run / 545 ms wait over 300 slices). The activity is named only
+      because it held focus when dispatch timed out. Re-run on the quiet
+      host (load 4.9–9.3, single AVD `TabSSH_phone` on `-port 5554`):
+      `Passed: 7 Failed: 0`, `make test` exit 0, zero ANR dialogs, same
+      tree and same emulator — confirming the failures were host CPU
+      contention and not app behaviour.
 - [x] Every fix above either has a regression test or a stated reason one
       is not feasible (AI.md: reproduce first, then verify the fix)
