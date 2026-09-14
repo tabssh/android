@@ -386,9 +386,9 @@ class SSHConfigParser {
         if (host.serverAliveInterval > 0) settings["serverAliveInterval"] = host.serverAliveInterval
         if (host.connectTimeout != 15) settings["connectTimeout"] = host.connectTimeout
         if (host.strictHostKeyChecking != "ask") settings["strictHostKeyChecking"] = host.strictHostKeyChecking
-        if (host.proxyJump != null) settings["proxyJump"] = host.proxyJump!!
-        if (host.proxyCommand != null) settings["proxyCommand"] = host.proxyCommand!!
-        if (host.identityFileStr != null) settings["identityFileStr"] = host.identityFileStr!!
+        host.proxyJump?.let { settings["proxyJump"] = it }
+        host.proxyCommand?.let { settings["proxyCommand"] = it }
+        host.identityFileStr?.let { settings["identityFileStr"] = it }
 
         // Port forwarding
         if (host.localForwards.isNotEmpty()) settings["localForwards"] = host.localForwards
@@ -398,7 +398,7 @@ class SSHConfigParser {
         // X11 and agent forwarding
         if (host.forwardAgent) settings["forwardAgent"] = true
         if (host.forwardX11) settings["forwardX11"] = true
-        if (host.requestTTY != null) settings["requestTTY"] = host.requestTTY!!
+        host.requestTTY?.let { settings["requestTTY"] = it }
 
         // Add any additional custom options
         host.additionalOptions.forEach { (key, value) ->

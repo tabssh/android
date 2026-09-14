@@ -206,8 +206,12 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
      * manual endpoints key on host/port/username/identity.
      */
     private fun endpointKey(pf: PortForward): String {
-        return if (pf.usesSavedConnection) {
-            pf.connectionId!!
+        // usesSavedConnection is defined as !connectionId.isNullOrBlank(), so
+        // branching on connectionId itself gives the compiler the same
+        // information without a force-unwrap.
+        val savedId = pf.connectionId
+        return if (!savedId.isNullOrBlank()) {
+            savedId
         } else {
             "pf-ephemeral:${pf.sshHost}:${pf.sshPort}:${pf.sshUsername}:${pf.identityId}"
         }
@@ -225,8 +229,8 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
      * reuse it) and whose auth is taken from the selected Identity.
      */
     private suspend fun resolveProfile(pf: PortForward): ConnectionProfile? {
-        if (pf.usesSavedConnection) {
-            val connectionId = pf.connectionId!!
+        val connectionId = pf.connectionId
+        if (!connectionId.isNullOrBlank()) {
             app.database.connectionDao().getConnectionById(connectionId)?.let { return it }
             val registryRow = app.database.connectableHostDao().getById(connectionId) ?: return null
             return io.github.tabssh.storage.registry.ConnectableHostResolver.resolveProfile(app, registryRow)

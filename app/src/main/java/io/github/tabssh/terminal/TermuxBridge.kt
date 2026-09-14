@@ -123,36 +123,14 @@ class TermuxBridge(
         // unbounded; once we hit this number we drop the oldest span on insert.
         private const val OSC8_LINK_CAP = 200
 
-        // Upper bound on a tracked OSC 8 target. A hostile server can emit an
-        // arbitrarily long URI; anything past this is not a usable link, only
-        // memory pressure and an unreadable confirmation dialog.
-        private const val OSC8_MAX_URL_LENGTH = 2048
-
-        // Schemes a remote is allowed to hand us through OSC 8. The tap handler
-        // ultimately routes an unrecognised scheme to an ACTION_VIEW intent, so
-        // without this a hostile server could aim the user at intent:// or
-        // javascript:/file:// targets from what looks like ordinary output.
-        private val OSC8_ALLOWED_SCHEMES = setOf(
-            "http", "https", "ftp", "ftps", "ssh", "sftp", "telnet", "mailto"
-        )
-
         /**
          * Validate an OSC 8 target, returning null when it must not be tracked.
+         *
+         * Delegates to [TerminalLinkSanitizer], which is the single allowlist
+         * shared with the `ANSIParser` link path. Retained as a named entry
+         * point because it is what the OSC 8 unit tests exercise.
          */
-        internal fun sanitizeOsc8Url(url: String): String? {
-            val trimmed = url.trim()
-            if (trimmed.isEmpty() || trimmed.length > OSC8_MAX_URL_LENGTH) return null
-            // Control characters and DEL cannot appear in a usable URI and are
-            // the classic vector for smuggling terminal escapes back through a
-            // link. Hoisted out of the `if` because Android lint's
-            // SuspiciousIndentation check reports a false positive on the inline
-            // form and `abortOnError` fails the build on it.
-            val hasControlChars = trimmed.any { it.code < 0x20 || it.code == 0x7F }
-            if (hasControlChars) return null
-            val scheme = trimmed.substringBefore(':', "").lowercase()
-            if (scheme.isEmpty() || scheme !in OSC8_ALLOWED_SCHEMES) return null
-            return trimmed
-        }
+        internal fun sanitizeOsc8Url(url: String): String? = TerminalLinkSanitizer.sanitize(url)
 
         private const val ESC: Byte = 0x1B
 
@@ -331,7 +309,13 @@ class TermuxBridge(
     /** Edge-detect state for the "TerminalView.AltScreen" diagnostic log
      *  below — null until the first onTextChanged fires, then holds the
      *  last logged (altScreen, appCursorKeys) pair so we only log on
-     *  actual transitions, not on every screen redraw. */
+     *  actual transitions, not on every screen redraw.
+     *
+     *  Volatile because it is written from both the Termux onTextChanged
+     *  callback and the SSH read loop on sessionScope: without it a stale
+     *  cached value makes the edge detector miss or duplicate a transition
+     *  line. Diagnostics only — nothing behavioural reads this. */
+    @Volatile
     private var lastLoggedAltScreenState: Pair<Boolean, Boolean>? = null
 
     /**
@@ -381,6 +365,21 @@ class TermuxBridge(
     // interleaving clearTranscript() can null rows that are still on screen or
     // hand Arrays.fill() an out-of-range bound, so every writer must take this.
     private val emulatorLock = Any()
+
+    /**
+     * Run [block] holding the emulator/buffer lock.
+     *
+     * The renderer is a writer too, not just a reader: `TerminalBuffer` exposes
+     * no read-only row accessor (`mLines` is package-private to
+     * `com.termux.terminal`), so the draw path has to call
+     * `allocateFullLineIfNecessary()`, which allocates the row when it is still
+     * null. Rows start null, so every blank region of the screen makes the UI
+     * thread mutate the buffer while the SSH read loop is appending on
+     * `sessionScope`. This lets the renderer take the same lock every other
+     * writer takes. Callers must keep the block short — snapshot what they need
+     * and do the drawing outside it.
+     */
+    fun <T> withEmulatorLock(block: () -> T): T = synchronized(emulatorLock) { block() }
 
     // Coroutine scope for write operations. Deliberately limited to a single
     // thread (Issue: intermittent single-character drop/reorder near the
@@ -517,11 +516,18 @@ class TermuxBridge(
     var bracketedPasteActive = false
         private set
 
-    // Matches: ESC ] 8 ; params ; url ESC \ anchor ESC ] 8 ; ; ESC \
+    // Matches: ESC ] 8 ; params ; url ST anchor ESC ] 8 ; ; ST
     // Groups: 1=params, 2=url, 3=anchor
     // DOT_MATCHES_ALL so anchor can contain any byte (including LF).
+    //
+    // ST is either ESC \ (the 7-bit C1 string terminator) or BEL (0x07). Both
+    // are valid OSC terminators and BEL is what many tools actually emit, so
+    // matching only ESC \ silently dropped link tracking for them: the text
+    // still rendered, but the link was not tappable. The URL group excludes
+    // BEL as well as ESC, or it would swallow its own terminator.
     private val osc8Pattern = Regex(
-        "\u001b]8;([^;]*);([^\u001b]*)\u001b\\\\(.*?)\u001b]8;;\u001b\\\\",
+        "\u001b]8;([^;]*);([^\u001b\u0007]*)(?:\u001b\\\\|\u0007)" +
+            "(.*?)\u001b]8;;(?:\u001b\\\\|\u0007)",
         RegexOption.DOT_MATCHES_ALL
     )
 
@@ -1222,12 +1228,17 @@ class TermuxBridge(
      * do NOT get a spurious '\n' at their visual break point, matching what
      * the user sees on screen. A row-by-row loop with per-row '\n' injection
      * would produce broken output for any line wider than the terminal width.
+     *
+     * Reads under [emulatorLock] for the same reason [getScrollbackContent]
+     * does: callers run on arbitrary threads (the mosh watchdog on sessionScope,
+     * the scrollback search, the Tasker worker, the UI) while the read loop
+     * appends, and the library serializes nothing.
      */
-    fun getScreenContent(): String {
+    fun getScreenContent(): String = synchronized(emulatorLock) {
         val screen = emulator?.screen ?: return ""
         val rows = currentRows
         val cols = currentColumns
-        return try {
+        try {
             screen.getSelectedText(0, 0, cols, rows - 1) ?: ""
         } catch (e: Exception) {
             Logger.w(TAG, "Error getting screen content", e)
@@ -1278,11 +1289,15 @@ class TermuxBridge(
      * the library allocates `TerminalRow` objects lazily as they are needed, so
      * a tab that has never scrolled holds nothing here regardless of the
      * configured scrollback length.
+     *
+     * Reads under [emulatorLock]: this runs from the memory-pressure path while
+     * the SSH read loop is appending, and `activeTranscriptRows` is updated by
+     * that append.
      */
-    fun estimateTranscriptBytes(): Long {
+    fun estimateTranscriptBytes(): Long = synchronized(emulatorLock) {
         val screen = emulator?.screen ?: return 0L
         val rows = screen.activeTranscriptRows.coerceAtLeast(0)
-        return rows.toLong() * currentColumns.toLong() * BYTES_PER_CELL_ESTIMATE
+        rows.toLong() * currentColumns.toLong() * BYTES_PER_CELL_ESTIMATE
     }
 
     /**
@@ -1510,6 +1525,12 @@ class TermuxBridge(
         osc8Links = CopyOnWriteArrayList()
         bracketedPasteActive = false
         pendingEscTail = EMPTY_BYTES
+        // Same reasoning as pendingEscTail: a session that drops mid-multibyte
+        // character leaves a partial UTF-8 sequence held back here, and the
+        // bridge is reused across reconnects. Left set, those orphaned bytes are
+        // prepended to the first chunk of the NEXT session and decode as
+        // mojibake or swallow its leading byte.
+        pendingUtf8 = EMPTY_BYTES
 
         if (wasConnected) {
             runOnMain {

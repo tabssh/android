@@ -80,8 +80,9 @@ class DomainEditActivity : TabSSHActivity() {
         btnCancel = findViewById(R.id.btn_cancel)
         btnDelete = findViewById(R.id.btn_delete)
 
-        editingDomainId = intent.getStringExtra(EXTRA_DOMAIN_ID)
-        val isEditing = editingDomainId != null
+        val domainIdToEdit = intent.getStringExtra(EXTRA_DOMAIN_ID)
+        editingDomainId = domainIdToEdit
+        val isEditing = domainIdToEdit != null
 
         setSupportActionBar(toolbar)
         supportActionBar?.setTitle(
@@ -91,9 +92,9 @@ class DomainEditActivity : TabSSHActivity() {
         editExpiration.setText(getString(R.string.domain_edit_expiration_unset))
         editExpiration.setOnClickListener { showExpirationPicker() }
 
-        if (isEditing) {
+        if (domainIdToEdit != null) {
             btnDelete.visibility = View.VISIBLE
-            populateFromDb(editingDomainId!!)
+            populateFromDb(domainIdToEdit)
         }
 
         btnSave.setOnClickListener { saveDomain() }

@@ -454,21 +454,6 @@ class TabSSHApplication : Application() {
     }
 
     /**
-     * One-time rename migration for the non-Keystore Docker-only identifiers
-     * the engine-agnostic container feature replaced:
-     *
-     *  - the `docker_update_check_enabled` preference, whose value is copied to
-     *    `container_update_check_enabled` before the old key is removed, so a
-     *    user who turned the update checker off keeps it off;
-     *  - the `sync_docker` preference, copied to `sync_containers` the same way
-     *    so a user who excluded container data from sync keeps it excluded;
-     *  - persisted `sync_tombstones` rows still typed `docker_host`, re-recorded
-     *    under `container_host` with their original deletedAt/deviceId so the
-     *    deletion keeps winning last-write-wins against a stale peer copy.
-     *
-     * Every part is idempotent; the done-flag is set only when all of them complete.
-     */
-    /**
      * One-time seed of a starter set of common command snippets, spread
      * across a handful of categories, so the Snippets manager isn't a blank
      * empty state on first launch. Runs only once (guarded by
@@ -523,6 +508,21 @@ class TabSSHApplication : Application() {
         )
     }
 
+    /**
+     * One-time rename migration for the non-Keystore Docker-only identifiers
+     * the engine-agnostic container feature replaced:
+     *
+     *  - the `docker_update_check_enabled` preference, whose value is copied to
+     *    `container_update_check_enabled` before the old key is removed, so a
+     *    user who turned the update checker off keeps it off;
+     *  - the `sync_docker` preference, copied to `sync_containers` the same way
+     *    so a user who excluded container data from sync keeps it excluded;
+     *  - persisted `sync_tombstones` rows still typed `docker_host`, re-recorded
+     *    under `container_host` with their original deletedAt/deviceId so the
+     *    deletion keeps winning last-write-wins against a stale peer copy.
+     *
+     * Every part is idempotent; the done-flag is set only when all of them complete.
+     */
     private suspend fun migrateDockerNamingToContainer() {
         val prefs = getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE)
         if (prefs.getBoolean(KEY_CONTAINER_NAMING_MIGRATED, false)) return

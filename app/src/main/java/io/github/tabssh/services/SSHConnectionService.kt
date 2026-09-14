@@ -144,6 +144,15 @@ class SSHConnectionService : Service() {
         private const val MONITORING_INTERVAL_FOREGROUND_MS = 30_000L
         private const val MONITORING_INTERVAL_BACKGROUND_MS = 90_000L
 
+        // Database maintenance (30-day inactive-session purge + VACUUM) is far
+        // too expensive for the monitoring loop's own 30-90 s cadence, and the
+        // rows it reclaims accumulate over days, not minutes. The last-run
+        // timestamp is persisted rather than held in memory so a service that is
+        // killed and restarted repeatedly does not VACUUM on every start.
+        private const val DB_MAINTENANCE_INTERVAL_MS = 24L * 60 * 60 * 1000
+        private const val MAINTENANCE_PREFS = "tabssh_maintenance"
+        private const val KEY_LAST_DB_MAINTENANCE = "last_db_maintenance_ms"
+
         const val ACTION_START_SERVICE = "io.github.tabssh.START_SERVICE"
         const val ACTION_STOP_SERVICE  = "io.github.tabssh.STOP_SERVICE"
         
@@ -886,6 +895,12 @@ class SSHConnectionService : Service() {
                 // Perform connection maintenance
                 app.sshSessionManager.performMaintenance()
 
+                // Database maintenance, at most once a day (see the interval
+                // constant). Without this the purge and VACUUM never ran at all,
+                // and tab_sessions rows — each carrying persisted scrollback
+                // text — were retained forever for tabs that were closed.
+                performDatabaseMaintenanceIfDue()
+
                 // Update connection count
                 updateConnectionCount()
 
@@ -910,6 +925,33 @@ class SSHConnectionService : Service() {
                 Logger.e("SSHConnectionService", "Error in connection monitoring", e)
                 delay(60_000L)
             }
+        }
+    }
+
+    /**
+     * Run the database purge + VACUUM if a day has passed since the last run.
+     *
+     * Failures are logged and swallowed deliberately: maintenance is
+     * housekeeping, and a VACUUM that fails (locked database, no free space)
+     * must not take down the connection-monitoring loop that calls it. The
+     * timestamp is only advanced on success, so a failed run is retried on the
+     * next pass rather than being skipped for a day.
+     */
+    private suspend fun performDatabaseMaintenanceIfDue() {
+        val prefs = getSharedPreferences(MAINTENANCE_PREFS, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val last = prefs.getLong(KEY_LAST_DB_MAINTENANCE, 0L)
+        // A last-run timestamp in the future means the clock moved backwards;
+        // treat it as due rather than blocking maintenance until it catches up.
+        if (last in 1..now && now - last < DB_MAINTENANCE_INTERVAL_MS) return
+
+        try {
+            withContext(Dispatchers.IO) { app.database.performMaintenance() }
+            prefs.edit().putLong(KEY_LAST_DB_MAINTENANCE, now).apply()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Logger.w(TAG, "Database maintenance failed; will retry next pass", e)
         }
     }
 

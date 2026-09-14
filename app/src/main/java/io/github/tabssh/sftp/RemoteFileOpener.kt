@@ -129,6 +129,11 @@ class RemoteFileOpener(
                 }
                 withContext(Dispatchers.IO) { evictCache(cacheSubDir) }
                 launchViewer(sftpManager, remotePath, localFile)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Cancellation is not a failure: leaving the screen mid-transfer
+                // cancels this scope, and treating that as an error showed a
+                // failure toast for a transfer the user simply walked away from.
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Download failed for $remotePath", e)
                 Toast.makeText(
@@ -248,6 +253,11 @@ class RemoteFileOpener(
                     Toast.makeText(activity, R.string.fileopen_upload_failed_kept, Toast.LENGTH_LONG).show()
                     promptUploadBack(edit)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Cancellation is not a failure: leaving the screen mid-transfer
+                // cancels this scope, and treating that as an error showed a
+                // failure toast for a transfer the user simply walked away from.
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Upload back failed for ${edit.remotePath}", e)
                 Toast.makeText(

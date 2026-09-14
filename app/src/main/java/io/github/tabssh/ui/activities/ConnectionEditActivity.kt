@@ -1380,9 +1380,9 @@ class ConnectionEditActivity : TabSSHActivity() {
                 val now = System.currentTimeMillis()
                 val hostId = editingTelnetHostId ?: UUID.randomUUID().toString()
 
-                val existing = if (editingTelnetHostId != null) {
-                    app.database.telnetHostDao().getById(editingTelnetHostId!!)
-                } else null
+                val existing = editingTelnetHostId?.let {
+                    app.database.telnetHostDao().getById(it)
+                }
 
                 val telnetHost = existing?.copy(
                     name = name,
@@ -1454,9 +1454,9 @@ class ConnectionEditActivity : TabSSHActivity() {
                 val now = System.currentTimeMillis()
                 val hostId = editingVncHostId ?: UUID.randomUUID().toString()
 
-                val existing = if (editingVncHostId != null) {
-                    app.database.vncHostDao().getById(editingVncHostId!!)
-                } else null
+                val existing = editingVncHostId?.let {
+                    app.database.vncHostDao().getById(it)
+                }
 
                 val vncHost = existing?.copy(
                     name = name,

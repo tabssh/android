@@ -1,5 +1,6 @@
 package io.github.tabssh.storage.registry
 
+import androidx.room.withTransaction
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.cloud.CloudProvider
 import io.github.tabssh.cloud.CloudProviderType
@@ -44,8 +45,14 @@ object ConnectableHostRegistry {
                 protocol = profile.protocol
             )
         }
-        db.connectableHostDao().deleteBySourceType(ConnectableHost.SOURCE_CONNECTION_PROFILE)
-        db.connectableHostDao().insertAll(hosts)
+        // Delete + insert in one transaction: as two separate calls a reader
+        // racing this refresh (the host picker opening while refreshAll runs)
+        // could observe the table after the delete and before the insert, and
+        // render an empty list.
+        db.withTransaction {
+            db.connectableHostDao().deleteBySourceType(ConnectableHost.SOURCE_CONNECTION_PROFILE)
+            db.connectableHostDao().insertAll(hosts)
+        }
         Logger.d(TAG, "Refreshed ${hosts.size} connection-profile-backed connectable hosts")
     }
 
@@ -67,8 +74,14 @@ object ConnectableHostRegistry {
                 protocol = "telnet"
             )
         }
-        db.connectableHostDao().deleteBySourceType(ConnectableHost.SOURCE_TELNET_HOST)
-        db.connectableHostDao().insertAll(hosts)
+        // Delete + insert in one transaction: as two separate calls a reader
+        // racing this refresh (the host picker opening while refreshAll runs)
+        // could observe the table after the delete and before the insert, and
+        // render an empty list.
+        db.withTransaction {
+            db.connectableHostDao().deleteBySourceType(ConnectableHost.SOURCE_TELNET_HOST)
+            db.connectableHostDao().insertAll(hosts)
+        }
         Logger.d(TAG, "Refreshed ${hosts.size} telnet-host-backed connectable hosts")
     }
 
@@ -114,8 +127,14 @@ object ConnectableHostRegistry {
                 protocol = "ssh"
             )
         }
-        db.connectableHostDao().deleteBySourceType(ConnectableHost.SOURCE_CONTAINER_HOST)
-        db.connectableHostDao().insertAll(hosts)
+        // Delete + insert in one transaction: as two separate calls a reader
+        // racing this refresh (the host picker opening while refreshAll runs)
+        // could observe the table after the delete and before the insert, and
+        // render an empty list.
+        db.withTransaction {
+            db.connectableHostDao().deleteBySourceType(ConnectableHost.SOURCE_CONTAINER_HOST)
+            db.connectableHostDao().insertAll(hosts)
+        }
         Logger.d(TAG, "Refreshed ${hosts.size} container-host-backed connectable hosts")
     }
 
@@ -164,8 +183,14 @@ object ConnectableHostRegistry {
                     protocol = "ssh"
                 )
             }
-            db.connectableHostDao().deleteByCloudAccount(account.id)
-            db.connectableHostDao().insertAll(hosts)
+            // Delete + insert in one transaction: as two separate calls a reader
+            // racing this refresh (the host picker opening while refreshAll runs)
+            // could observe the table after the delete and before the insert, and
+            // render an empty list.
+            db.withTransaction {
+                db.connectableHostDao().deleteByCloudAccount(account.id)
+                db.connectableHostDao().insertAll(hosts)
+            }
             Logger.d(TAG, "Refreshed ${hosts.size} cloud-instance-backed connectable hosts for account=${account.name}")
         } catch (e: Exception) {
             Logger.e(TAG, "refreshCloudInstances failed for account=${account.name}", e)

@@ -34,17 +34,23 @@ class SessionPersistenceManager(
     // deactivateAllSessions() + insertSession() pairs and produce duplicate active rows.
     private val saveMutex = Mutex()
 
-    // App lifecycle state
-    private var isAppInForeground = true
+    // App lifecycle state. This starts false so that the first onActivityStarted
+    // counts as a real 0→1 foreground transition and reaches onAppForegrounded().
+    // Initialised to true, a cold start began already "in the foreground", the
+    // !isAppInForeground guard below never passed, and restoreSessionState() was
+    // therefore unreachable on a fresh process — saved sessions were only ever
+    // replayed for a process that had been backgrounded and was still alive.
+    private var isAppInForeground = false
     private var activeActivityCount = 0
     private var lastBackgroundTime = 0L
     
-    // Session preservation settings
-    private var preserveSessionsOnBackground = true
+    // Session preservation settings. These are fixed: no preference screen
+    // exposes them, so there is nothing that can change them at runtime.
+    private val preserveSessionsOnBackground = true
     // 24 hours
-    private var maxBackgroundTime = 24 * 60 * 60 * 1000L
+    private val maxBackgroundTime = 24 * 60 * 60 * 1000L
     // 30 seconds
-    private var autoSaveInterval = 30000L
+    private val autoSaveInterval = 30000L
     
     // Background monitoring
     private var backgroundMonitoringJob: Job? = null
@@ -113,15 +119,19 @@ class SessionPersistenceManager(
     
     private fun onAppForegrounded() {
         isAppInForeground = true
-        val backgroundDuration = if (lastBackgroundTime > 0) {
-            System.currentTimeMillis() - lastBackgroundTime
-        } else 0
-        
-        Logger.i("SessionPersistenceManager", "App foregrounded after ${backgroundDuration}ms")
-        
+        // lastBackgroundTime is only 0 before this process has ever been
+        // backgrounded, which makes it an exact test for a cold start. The
+        // in-memory duration means nothing then — the process did not exist for
+        // whatever gap preceded it — so the age check falls back to the saved
+        // rows' own timestamps.
+        val isColdStart = lastBackgroundTime == 0L
+        val backgroundDuration = if (isColdStart) 0L else System.currentTimeMillis() - lastBackgroundTime
+
+        Logger.i("SessionPersistenceManager", "App foregrounded after ${backgroundDuration}ms (coldStart=$isColdStart)")
+
         // Restore sessions if they were preserved
         persistenceScope.launch {
-            restoreSessionsIfNeeded(backgroundDuration)
+            restoreSessionsIfNeeded(backgroundDuration, isColdStart)
         }
         
         // Resume connection monitoring
@@ -417,20 +427,48 @@ class SessionPersistenceManager(
         }
     }
     
-    private suspend fun restoreSessionsIfNeeded(backgroundDuration: Long) {
-        // Only restore if app wasn't backgrounded too long
-        if (backgroundDuration < maxBackgroundTime) {
+    private suspend fun restoreSessionsIfNeeded(backgroundDuration: Long, isColdStart: Boolean) {
+        val age = if (isColdStart) coldStartSessionAge() else backgroundDuration
+        // Only restore if the saved state isn't older than the cutoff
+        if (age < maxBackgroundTime) {
             restoreSessionState()
         } else {
-            Logger.i("SessionPersistenceManager", "App backgrounded too long (${backgroundDuration}ms), not restoring sessions")
+            Logger.i("SessionPersistenceManager", "Saved sessions too old (${age}ms), not restoring sessions")
             clearOldSessions()
+        }
+    }
+
+    /**
+     * Age of the freshest saved session, used in place of the elapsed background
+     * time on a cold start.
+     *
+     * A process that has just started has no record of when it was last
+     * backgrounded, so without this the age would always evaluate to 0 and a
+     * months-old set of sessions would be restored in full — precisely what
+     * [maxBackgroundTime] exists to prevent.
+     *
+     * @return the age in milliseconds, or 0 when there is nothing saved (in
+     *     which case the restore is a no-op anyway).
+     */
+    private suspend fun coldStartSessionAge(): Long {
+        return try {
+            val newest = database.tabSessionDao().getActiveSessionsList()
+                .maxOfOrNull { it.lastActivity } ?: return 0L
+            if (newest > 0L) (System.currentTimeMillis() - newest).coerceAtLeast(0L) else 0L
+        } catch (e: Exception) {
+            Logger.e("SessionPersistenceManager", "Failed to read saved session age", e)
+            0L
         }
     }
     
     private suspend fun restoreTabTerminalState(tab: SSHTab, session: TabSession) {
         try {
-            // Restore terminal.size
-            tab.termuxBridge.resize(session.terminalRows, session.terminalCols)
+            // Restore the terminal size BEFORE the scrollback is replayed, so the
+            // transcript reflows at the width it was captured at. The signature is
+            // resize(newColumns, newRows) — passing rows first sized the emulator
+            // transposed (e.g. 40x120 for a 120x40 session) and wrapped every
+            // restored line at the wrong column.
+            tab.termuxBridge.resize(session.terminalCols, session.terminalRows)
 
             // Replay the saved scrollback into the fresh emulator. Line endings
             // are normalised to CRLF first: the saved text is plain screen text
@@ -444,6 +482,11 @@ class SessionPersistenceManager(
                     tab.termuxBridge.injectLocally(normalized.toByteArray(Charsets.UTF_8))
                 }
             }
+
+            // A restored tab is never connected — the restore path deliberately
+            // does not call connect() — so show the disconnected indicator
+            // rather than a bare title that reads as a live session.
+            tab.refreshTitleStatus()
 
             Logger.d("SessionPersistenceManager", "Restored terminal state for tab: ${session.title}")
             
@@ -505,21 +548,6 @@ class SessionPersistenceManager(
             // Return as-is if decompression fails
             compressedContent
         }
-    }
-    
-    /**
-     * Configure session persistence settings
-     */
-    fun configureSettings(
-        preserveSessions: Boolean = true,
-        maxBackgroundTimeHours: Int = 24,
-        autoSaveIntervalSeconds: Int = 30
-    ) {
-        preserveSessionsOnBackground = preserveSessions
-        maxBackgroundTime = maxBackgroundTimeHours * 60 * 60 * 1000L
-        autoSaveInterval = autoSaveIntervalSeconds * 1000L
-        
-        Logger.d("SessionPersistenceManager", "Session persistence configured: preserve=$preserveSessions, maxBg=${maxBackgroundTimeHours}h, autoSave=${autoSaveIntervalSeconds}s")
     }
     
     /**

@@ -283,11 +283,12 @@ class TabTerminalActivity : TabSSHActivity() {
             val tab = pendingRecordingTab
             val includeCast = pendingRecordingIncludeCast
             pendingRecordingTab = null
-            if (result.resultCode != Activity.RESULT_OK || result.data == null || tab == null) {
+            val projectionData = result.data
+            if (result.resultCode != Activity.RESULT_OK || projectionData == null || tab == null) {
                 Toast.makeText(this, getString(R.string.video_recording_permission_denied), Toast.LENGTH_SHORT).show()
                 return@registerForActivityResult
             }
-            beginVideoRecording(tab, result.resultCode, result.data!!, includeCast)
+            beginVideoRecording(tab, result.resultCode, projectionData, includeCast)
         }
     private var pendingRecordingTab: Tab? = null
     private var pendingRecordingIncludeCast: Boolean = false
@@ -546,7 +547,7 @@ class TabTerminalActivity : TabSSHActivity() {
         // tabManager.removeListener(it). Anonymous listeners hold an
         // implicit `this@TabTerminalActivity` reference and prevented the
         // activity from being collected across reconnect cycles.
-        tabManagerListener = object : TabManagerListener {
+        val listener = object : TabManagerListener {
             override fun onTabCreated(tab: SSHTab) {
                 Handler(Looper.getMainLooper()).post {
                     addTabToUI(tab)
@@ -666,7 +667,8 @@ class TabTerminalActivity : TabSSHActivity() {
                 }
             }
         }
-        tabManager.addListener(tabManagerListener!!)
+        tabManagerListener = listener
+        tabManager.addListener(listener)
 
         // VNC/SPICE tabs have no TabManagerListener coverage (it is SSH-typed
         // by design) — wire their close-policy observers separately.
@@ -1619,8 +1621,10 @@ class TabTerminalActivity : TabSSHActivity() {
             .setItems(items) { _, which ->
                 if (which < 0 || which >= items.size) return@setItems
                 when (items[which]) {
-                    openLabel -> openRemoteFileExternally(activeTab!!, action.path)
-                    openSftpLabel -> openSftpAtPath(activeTab!!, action.path)
+                    // The Open entries are only in `items` when canBrowse is
+                    // true, which already requires a non-null connected tab.
+                    openLabel -> activeTab?.let { openRemoteFileExternally(it, action.path) }
+                    openSftpLabel -> activeTab?.let { openSftpAtPath(it, action.path) }
                     copyPathLabel -> copyToClipboard(getString(R.string.terminal_clip_label_path), action.path)
                 }
             }

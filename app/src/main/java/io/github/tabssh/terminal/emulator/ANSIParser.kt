@@ -1,5 +1,6 @@
 package io.github.tabssh.terminal.emulator
 
+import io.github.tabssh.terminal.TerminalLinkSanitizer
 import io.github.tabssh.utils.logging.Logger
 import java.nio.ByteBuffer
 import java.nio.CharBuffer
@@ -36,16 +37,7 @@ class ANSIParser(private val buffer: TerminalBuffer) {
         private const val MAX_STRING_LENGTH = 8192
         private const val MAX_PARAMETERS = 32
         private const val MAX_PARAM_VALUE = 65535
-        private const val MAX_LINK_URL_LENGTH = 2048
         private const val MAX_TITLE_LENGTH = 256
-
-        // Schemes an OSC 8 hyperlink is allowed to carry. Anything else
-        // (javascript:, intent:, content:, data:, file:) is dropped: the URL is
-        // server-controlled and is handed to an "open link" dialog, so it must
-        // never be allowed to reach an Intent with an arbitrary scheme.
-        private val ALLOWED_LINK_SCHEMES = setOf(
-            "http", "https", "ftp", "ftps", "ssh", "sftp", "telnet", "mailto"
-        )
         private const val OSC = ']'
         private const val DCS = 'P'
         private const val ST = '\\'
@@ -825,15 +817,11 @@ class ANSIParser(private val buffer: TerminalBuffer) {
      * @return the URL if it is safe to surface to the user, or null to drop it.
      */
     private fun sanitizeLinkUrl(uri: String): String? {
-        if (uri.isBlank() || uri.length > MAX_LINK_URL_LENGTH) return null
-        // Control characters would let a server spoof the "open this link" dialog.
-        if (uri.any { it.code < 0x20 || it.code == 0x7F }) return null
-        val scheme = uri.substringBefore(':', "").lowercase()
-        if (scheme.isEmpty() || scheme !in ALLOWED_LINK_SCHEMES) {
-            Logger.w("ANSIParser", "Dropping OSC 8 link with disallowed scheme")
-            return null
+        val safe = TerminalLinkSanitizer.sanitize(uri)
+        if (safe == null) {
+            Logger.w("ANSIParser", "Dropping unsafe OSC 8 link")
         }
-        return uri
+        return safe
     }
 
     private fun resetParser() {

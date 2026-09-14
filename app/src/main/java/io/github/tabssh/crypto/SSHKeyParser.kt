@@ -327,13 +327,15 @@ object SSHKeyParser {
         // fully supported.
         val keyType: String
         val puttyVersion: Int
+        val v2Type = headers["PuTTY-User-Key-File-2"]
+        val v3Type = headers["PuTTY-User-Key-File-3"]
         when {
-            headers.containsKey("PuTTY-User-Key-File-2") -> {
-                keyType = headers["PuTTY-User-Key-File-2"]!!
+            v2Type != null -> {
+                keyType = v2Type
                 puttyVersion = 2
             }
-            headers.containsKey("PuTTY-User-Key-File-3") -> {
-                keyType = headers["PuTTY-User-Key-File-3"]!!
+            v3Type != null -> {
+                keyType = v3Type
                 puttyVersion = 3
             }
             else -> throw IllegalArgumentException("Invalid PuTTY key format — missing PuTTY-User-Key-File-{2,3} header")

@@ -91,9 +91,10 @@ object DomainCsvImportExport {
 
     // Single accessor for the per-thread SimpleDateFormat idiom used by
     // every ThreadLocal field above — ThreadLocal.withInitial() guarantees
-    // get() is never null, so the force-unwrap is safe here (mirrors the
-    // same pattern in VpsMarkdownImportExport).
-    private fun ThreadLocal<SimpleDateFormat>.format(): SimpleDateFormat = get()!!
+    // get() is never null; checkNotNull states that invariant without a
+    // force-unwrap (mirrors the same pattern in VpsMarkdownImportExport).
+    private fun ThreadLocal<SimpleDateFormat>.format(): SimpleDateFormat =
+        checkNotNull(get()) { "ThreadLocal SimpleDateFormat initializer returned null" }
 
     data class ParseResult(val domains: List<Domain>, val warnings: List<String>)
 

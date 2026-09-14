@@ -144,8 +144,8 @@ class AwsEc2Client : CloudProvider {
         val host = "ec2.$region.amazonaws.com"
         val service = "ec2"
         val now = Date()
-        val amzDate = AMZ_DATE_FMT.get()!!.format(now)
-        val dateStamp = DATE_FMT.get()!!.format(now)
+        val amzDate = AMZ_DATE_FMT.formatter().format(now)
+        val dateStamp = DATE_FMT.formatter().format(now)
         val canonicalQuery = canonicalQueryString(query)
         val payloadHash = sha256Hex("")
         val canonicalHeaders = "host:$host\nx-amz-content-sha256:$payloadHash\nx-amz-date:$amzDate\n"
@@ -184,8 +184,8 @@ class AwsEc2Client : CloudProvider {
         val host = "ec2.$region.amazonaws.com"
         val service = "ec2"
         val now = Date()
-        val amzDate = AMZ_DATE_FMT.get()!!.format(now)
-        val dateStamp = DATE_FMT.get()!!.format(now)
+        val amzDate = AMZ_DATE_FMT.formatter().format(now)
+        val dateStamp = DATE_FMT.formatter().format(now)
         val canonicalQuery = canonicalQueryString(query)
         val payloadHash = sha256Hex("")
         val canonicalHeaders = "host:$host\nx-amz-content-sha256:$payloadHash\nx-amz-date:$amzDate\n"
@@ -406,4 +406,10 @@ class AwsEc2Client : CloudProvider {
         override fun initialValue(): SimpleDateFormat =
             SimpleDateFormat("yyyyMMdd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
     }
+
+    // initialValue() above never returns null, so get() cannot be null either.
+    // checkNotNull states that invariant without a force-unwrap, which AI.md
+    // PART 0 bans outside test code.
+    private fun ThreadLocal<SimpleDateFormat>.formatter(): SimpleDateFormat =
+        checkNotNull(get()) { "ThreadLocal SimpleDateFormat initialValue() returned null" }
 }

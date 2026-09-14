@@ -67,7 +67,7 @@ class NetworkDetector(private val context: Context) {
                 .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                 .build()
 
-            networkCallback = object : ConnectivityManager.NetworkCallback() {
+            val callback = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
                     Logger.d("NetworkDetector", "Network available")
                     checkCurrentNetworkState()
@@ -87,7 +87,8 @@ class NetworkDetector(private val context: Context) {
                 }
             }
 
-            connectivityManager.registerNetworkCallback(request, networkCallback!!)
+            networkCallback = callback
+            connectivityManager.registerNetworkCallback(request, callback)
         }
     }
 

@@ -1,6 +1,5 @@
 package io.github.tabssh.ui.tabs
 
-import android.view.KeyEvent
 import io.github.tabssh.hypervisor.console.rfb.RfbClient
 import io.github.tabssh.hypervisor.vnc.VncBackgroundSessionStore
 import io.github.tabssh.storage.database.TabSSHDatabase
@@ -91,7 +90,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     /**
      * Get active tab index
      */
-    fun getActiveTabIndex(): Int = activeTabIndex
+    fun getActiveTabIndex(): Int = synchronized(tabsLock) { activeTabIndex }
     // CopyOnWriteArrayList: add/remove happens on UI thread; the four
     // notify* helpers may be called from whichever thread published a
     // state change — matching the pattern used by SSHSessionManager,
@@ -669,50 +668,6 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     }
 
     /**
-     * Handle keyboard shortcuts (Tmux-style)
-     */
-    fun handleKeyboardShortcut(keyCode: Int, event: KeyEvent): Boolean = synchronized(tabsLock) {
-        val isCtrlPressed = event.isCtrlPressed
-
-        when {
-            isCtrlPressed && keyCode == KeyEvent.KEYCODE_T -> {
-                // Ctrl+T - New tab (would need connection profile)
-                true
-            }
-            isCtrlPressed && keyCode == KeyEvent.KEYCODE_W -> {
-                // Ctrl+W - Close current tab
-                closeTab(activeTabIndex)
-                true
-            }
-            isCtrlPressed && keyCode == KeyEvent.KEYCODE_TAB -> {
-                // Ctrl+Tab - Next tab. Guard against empty tab list (modulo would
-                // throw ArithmeticException if a shortcut fires after the last
-                // tab closes but the consumer hasn't been removed yet).
-                if (tabs.isNotEmpty()) {
-                    val nextIndex = (activeTabIndex + 1) % tabs.size
-                    switchToTab(nextIndex)
-                }
-                true
-            }
-            isCtrlPressed && event.isShiftPressed && keyCode == KeyEvent.KEYCODE_TAB -> {
-                // Ctrl+Shift+Tab - Previous tab. Same empty-list guard.
-                if (tabs.isNotEmpty()) {
-                    val prevIndex = if (activeTabIndex == 0) tabs.size - 1 else activeTabIndex - 1
-                    switchToTab(prevIndex)
-                }
-                true
-            }
-            isCtrlPressed && keyCode >= KeyEvent.KEYCODE_1 && keyCode <= KeyEvent.KEYCODE_9 -> {
-                // Ctrl+1-9 - Switch to tab number
-                val tabIndex = keyCode - KeyEvent.KEYCODE_1
-                switchToTab(tabIndex)
-                true
-            }
-            else -> false
-        }
-    }
-
-    /**
      * Add tab listener
      */
     fun addListener(listener: TabManagerListener) {
@@ -877,8 +832,12 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
                 terminalRows = tabStats.terminalRows,
                 terminalCols = tabStats.terminalCols,
                 terminalContent = tab.getTerminalContent(),
-                cursorRow = tabStats.terminalRows / 2,
-                cursorCol = 0,
+                // The real cursor position from the emulator. This used to
+                // persist `terminalRows / 2` and a hardcoded column 0 — an
+                // invented mid-screen position that had nothing to do with
+                // where the cursor actually was.
+                cursorRow = tab.termuxBridge.getCursorRow(),
+                cursorCol = tab.termuxBridge.getCursorCol(),
                 title = tab.getDisplayTitle(),
                 lastActivity = tabStats.lastActivity,
                 createdAt = now,

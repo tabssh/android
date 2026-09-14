@@ -626,10 +626,11 @@ class TerminalBuffer(
         if (use && !alternateScreen) {
             // Switch to alternate screen
             mainScreen = screen
-            alternateScreenBuffer = alternateScreenBuffer ?: Array(rows) {
+            val altBuffer = alternateScreenBuffer ?: Array(rows) {
                 Array(cols) { TerminalChar(' ', 7, 0, false, false, false) }
             }
-            screen = alternateScreenBuffer!!
+            alternateScreenBuffer = altBuffer
+            screen = altBuffer
             alternateScreen = true
             clear()
         } else if (!use && alternateScreen) {

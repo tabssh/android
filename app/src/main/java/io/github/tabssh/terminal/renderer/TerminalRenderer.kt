@@ -26,11 +26,12 @@ class TerminalRenderer(
     private var boldTypeface: Typeface? = null
 
     private fun boldFor(base: Typeface?): Typeface {
-        if (base !== boldBaseTypeface || boldTypeface == null) {
-            boldBaseTypeface = base
-            boldTypeface = Typeface.create(base ?: Typeface.MONOSPACE, Typeface.BOLD)
-        }
-        return boldTypeface!!
+        val cached = boldTypeface
+        if (base === boldBaseTypeface && cached != null) return cached
+        val bold = Typeface.create(base ?: Typeface.MONOSPACE, Typeface.BOLD)
+        boldBaseTypeface = base
+        boldTypeface = bold
+        return bold
     }
 
     private val defaultColors = intArrayOf(

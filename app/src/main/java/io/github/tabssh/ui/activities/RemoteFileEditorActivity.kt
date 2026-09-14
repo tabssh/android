@@ -244,6 +244,11 @@ class RemoteFileEditorActivity : TabSSHActivity() {
                 dirty = false
                 invalidateOptionsMenu()
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Cancellation is not a failure: leaving the screen mid-transfer
+            // cancels this scope, and treating that as an error showed a
+            // failure toast for a transfer the user simply walked away from.
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Download failed", e)
             runOnUiThread {
@@ -298,6 +303,11 @@ class RemoteFileEditorActivity : TabSSHActivity() {
                         Toast.makeText(this@RemoteFileEditorActivity, R.string.remote_editor_upload_failed, Toast.LENGTH_LONG).show()
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Cancellation is not a failure: leaving the screen mid-transfer
+                // cancels this scope, and treating that as an error showed a
+                // failure toast for a transfer the user simply walked away from.
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Save failed", e)
                 runOnUiThread {

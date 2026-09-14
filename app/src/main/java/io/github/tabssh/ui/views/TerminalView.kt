@@ -168,6 +168,12 @@ class TerminalView @JvmOverloads constructor(
     private val runBuf = StringBuilder(256)
     private val wideCharBuf = CharArray(2)
 
+    // Per-row snapshot taken under the bridge's emulator lock, then drawn from
+    // outside it. Grown on demand and reused across rows and frames so the
+    // added copy costs no allocations in steady state.
+    private var rowChars = CharArray(256)
+    private var rowStyles = LongArray(256)
+
     // Pinch-to-zoom state
     private var isScaling = false
     private var minFontSize = 8f
@@ -575,8 +581,9 @@ class TerminalView @JvmOverloads constructor(
         }
         terminalListener = null
 
-        terminalBuffer = TerminalBuffer(terminalRows, terminalCols)
-        terminalEmulator = TerminalEmulator(terminalBuffer!!)
+        val buffer = TerminalBuffer(terminalRows, terminalCols)
+        terminalBuffer = buffer
+        terminalEmulator = TerminalEmulator(buffer)
         terminalRenderer = TerminalRenderer(textPaint, backgroundPaint, cursorPaint)
 
         // Set up listener to redraw when terminal receives data
@@ -1592,16 +1599,33 @@ class TerminalView @JvmOverloads constructor(
                 continue
             }
 
-            val terminalRow = try {
-                buffer.allocateFullLineIfNecessary(internalRow)
-            } catch (e: Exception) {
-                Logger.w("TerminalView", "Error getting row $row: ${e.message}")
-                continue
+            // allocateFullLineIfNecessary() is a WRITE — rows are null until
+            // something is drawn into them, so rendering a blank screen region
+            // mutates the buffer from the UI thread while the SSH read loop
+            // appends on Dispatchers.IO. The Termux library locks nothing, so
+            // take the bridge's emulator lock for the allocate plus a copy of
+            // the row's text and styles, then draw from the snapshot with the
+            // lock released — canvas work must never run inside it.
+            var charsUsed = 0
+            val rowSnapshotted = bridge.withEmulatorLock {
+                val terminalRow = try {
+                    buffer.allocateFullLineIfNecessary(internalRow)
+                } catch (e: Exception) {
+                    Logger.w("TerminalView", "Error getting row $row: ${e.message}")
+                    return@withEmulatorLock false
+                }
+                charsUsed = minOf(terminalRow.spaceUsed, terminalRow.mText.size)
+                if (rowChars.size < charsUsed) rowChars = CharArray(charsUsed)
+                System.arraycopy(terminalRow.mText, 0, rowChars, 0, charsUsed)
+                if (rowStyles.size < cols) rowStyles = LongArray(cols)
+                for (styleCol in 0 until cols) {
+                    rowStyles[styleCol] = try { terminalRow.getStyle(styleCol) } catch (_: Exception) { 0L }
+                }
+                true
             }
+            if (!rowSnapshotted) continue
 
-            // Access the character array directly
-            val lineChars = terminalRow.mText
-            val charsUsed = terminalRow.spaceUsed
+            val lineChars = rowChars
 
             // ── Pass 1: non-default cell backgrounds ────────────────────────
             // Backgrounds are per-cell; text is batched below. Separating the
@@ -1609,7 +1633,7 @@ class TerminalView @JvmOverloads constructor(
             var bgCharIdx = 0
             var bgCol = 0
             while (bgCol < cols && bgCharIdx < charsUsed) {
-                val style = try { terminalRow.getStyle(bgCol) } catch (_: Exception) { 0L }
+                val style = rowStyles[bgCol]
                 // INVERSE (SGR 7) swaps fg/bg: the cell's background becomes
                 // the foreground colour, and it must be drawn even when the
                 // cell uses the default colours.
@@ -1622,8 +1646,11 @@ class TerminalView @JvmOverloads constructor(
                     backgroundPaint.color = termuxColorToAndroid(bg)
                     canvas.drawRect(bx, rowTop, bx + cellWidth, rowBottom, backgroundPaint)
                 }
-                val ch = if (bgCharIdx < lineChars.size) lineChars[bgCharIdx] else ' '
-                val cp = if (Character.isHighSurrogate(ch) && bgCharIdx + 1 < lineChars.size)
+                // Bounds are charsUsed, not lineChars.size: the snapshot array is
+                // reused across rows and anything past charsUsed is stale text
+                // from a previous, longer row.
+                val ch = if (bgCharIdx < charsUsed) lineChars[bgCharIdx] else ' '
+                val cp = if (Character.isHighSurrogate(ch) && bgCharIdx + 1 < charsUsed)
                     Character.toCodePoint(ch, lineChars[bgCharIdx + 1]) else ch.code
                 val cw = com.termux.terminal.WcWidth.width(cp)
                 // Zero-width chars (combining marks, VS16, ZWJ) share their
@@ -1662,10 +1689,10 @@ class TerminalView @JvmOverloads constructor(
             // zero-width mark arriving while no run is open composes there.
             var lastWideCol = -1
             while (col < cols && charIndex < charsUsed) {
-                val char = if (charIndex < lineChars.size) lineChars[charIndex] else ' '
+                val char = if (charIndex < charsUsed) lineChars[charIndex] else ' '
                 val codePoint: Int
                 val charsConsumed: Int
-                if (Character.isHighSurrogate(char) && charIndex + 1 < lineChars.size) {
+                if (Character.isHighSurrogate(char) && charIndex + 1 < charsUsed) {
                     codePoint   = Character.toCodePoint(char, lineChars[charIndex + 1])
                     charsConsumed = 2
                 } else {
@@ -1673,7 +1700,7 @@ class TerminalView @JvmOverloads constructor(
                     charsConsumed = 1
                 }
 
-                val style     = try { terminalRow.getStyle(col) } catch (_: Exception) { 0L }
+                val style     = rowStyles[col]
                 val charWidth = com.termux.terminal.WcWidth.width(codePoint)
                 val isVisible = codePoint != 0 && codePoint != ' '.code
 

@@ -1044,8 +1044,9 @@ class SshHostsFragment : Fragment() {
             recyclerView.adapter = groupedAdapter
         } else {
             // Update existing adapter
-            groupedAdapter!!.replaceAllWithDiff(
-                items = groupedAdapter!!.items,
+            val adapter = groupedAdapter ?: return
+            adapter.replaceAllWithDiff(
+                items = adapter.items,
                 newItems = items,
                 areItemsTheSame = { a, b ->
                     when {

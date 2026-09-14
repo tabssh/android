@@ -757,18 +757,18 @@ class HypervisorEditActivity : TabSSHActivity() {
 
                 // Resolve credentials: account row takes precedence over inline fields.
                 val accountId = selectedAccountId
-                val account = if (accountId != null) {
+                val account = accountId?.let { id ->
                     withContext(Dispatchers.IO) {
-                        try { app.database.hypervisorAccountDao().getById(accountId) }
+                        try { app.database.hypervisorAccountDao().getById(id) }
                         catch (e: CancellationException) { throw e }
                         catch (_: Exception) { null }
                     }
-                } else null
+                }
                 val username = account?.username ?: editUsername.text.toString()
                 val password = if (account != null) {
                     withContext(Dispatchers.IO) {
                         HypervisorPasswordStore.retrieveAccountPassword(
-                            this@HypervisorEditActivity, accountId!!
+                            this@HypervisorEditActivity, account.id
                         )
                     } ?: ""
                 } else {
@@ -907,10 +907,11 @@ class HypervisorEditActivity : TabSSHActivity() {
                     modifiedAt = System.currentTimeMillis()
                 )
 
-                val savedId = if (hypervisorId != null) {
+                val existingId = hypervisorId
+                val savedId = if (existingId != null) {
                     app.database.hypervisorDao().update(hypervisor)
                     Toast.makeText(this@HypervisorEditActivity, getString(R.string.hypervisor_edit_updated_toast, hypervisor.name), Toast.LENGTH_SHORT).show()
-                    hypervisorId!!
+                    existingId
                 } else {
                     val newId = app.database.hypervisorDao().insert(hypervisor)
                     Toast.makeText(this@HypervisorEditActivity, getString(R.string.hypervisor_edit_added_toast, hypervisor.name), Toast.LENGTH_SHORT).show()

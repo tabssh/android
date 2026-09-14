@@ -956,7 +956,10 @@ class SSHConnection(
                 val proxy = X11Proxy(onNoServer = {
                     // Non-fatal: session stays alive; user just won't see X windows.
                     // Emit to warnings flow so TabTerminalActivity can show a Snackbar.
-                    _warnings.tryEmit(X11NoServerException().message!!)
+                    // message is a compile-time constant passed to the
+                    // Exception constructor, but the platform type is nullable;
+                    // orEmpty() keeps the warning flow fed either way.
+                    _warnings.tryEmit(X11NoServerException().message.orEmpty())
                 })
                 proxy.start()
                 x11Proxy = proxy

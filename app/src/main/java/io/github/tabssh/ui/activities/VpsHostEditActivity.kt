@@ -89,17 +89,18 @@ class VpsHostEditActivity : TabSSHActivity() {
         btnCancel = findViewById(R.id.btn_cancel)
         btnDelete = findViewById(R.id.btn_delete)
 
-        editingHostId = intent.getStringExtra(EXTRA_VPS_HOST_ID)
-        val isEditing = editingHostId != null
+        val hostIdToEdit = intent.getStringExtra(EXTRA_VPS_HOST_ID)
+        editingHostId = hostIdToEdit
+        val isEditing = hostIdToEdit != null
 
         setSupportActionBar(toolbar)
         supportActionBar?.setTitle(
             if (isEditing) R.string.vps_host_edit_title_edit else R.string.vps_host_edit_title_new
         )
 
-        if (isEditing) {
+        if (hostIdToEdit != null) {
             btnDelete.visibility = View.VISIBLE
-            populateFromDb(editingHostId!!)
+            populateFromDb(hostIdToEdit)
         }
 
         btnSave.setOnClickListener { saveHost() }

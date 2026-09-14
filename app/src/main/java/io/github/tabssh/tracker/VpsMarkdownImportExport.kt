@@ -65,8 +65,10 @@ object VpsMarkdownImportExport {
 
     // Single accessor for the per-thread SimpleDateFormat idiom used by all
     // three ThreadLocal fields above — ThreadLocal.withInitial() guarantees
-    // get() is never null, so the force-unwrap is safe here.
-    private fun ThreadLocal<SimpleDateFormat>.format(): SimpleDateFormat = get()!!
+    // get() is never null; checkNotNull states that invariant without
+    // a force-unwrap (AI.md PART 0 bans `!!` outside tests).
+    private fun ThreadLocal<SimpleDateFormat>.format(): SimpleDateFormat =
+        checkNotNull(get()) { "ThreadLocal SimpleDateFormat initializer returned null" }
 
     data class ParseResult(val hosts: List<VpsHost>, val warnings: List<String>)
 

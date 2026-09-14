@@ -1428,6 +1428,20 @@ class SSHTab(
     }
 
     /**
+     * Re-apply the connection-status indicator for the state the tab is
+     * currently in.
+     *
+     * Session restore builds a tab through `TabManager.createTab()`, which
+     * never connects, so a restored tab is genuinely DISCONNECTED — but its
+     * title was left bare, making it look identical to a live tab while
+     * silently accepting no input. This surfaces the state it is actually in,
+     * reusing the same indicator the connect and disconnect paths apply.
+     */
+    fun refreshTitleStatus() {
+        updateTitleWithStatus(_connectionState.value)
+    }
+
+    /**
      * Update title with connection status prefix
      */
     private fun updateTitleWithStatus(state: ConnectionState) {
