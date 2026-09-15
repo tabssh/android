@@ -133,20 +133,22 @@ class LinkHandlerActivity : AppCompatActivity() {
             return
         }
 
+        if (data != null && intent?.type == MIME_VIRT_VIEWER) {
+            handleVirtViewerFile(data)
+            return
+        }
+
         if (data != null && (scheme == "content" || scheme == "file")) {
-            // A generic MIME type gives no signal, so the filename's own
-            // extension decides which parser this file goes to — same
-            // fallback the manifest's pathPattern-based routing implies.
+            // Neither typed check above matched, so the MIME type is generic
+            // (or absent) and gives no signal — the filename's own extension
+            // decides which parser this file goes to. Both explicit types are
+            // tested first: an extension must never override a sender that
+            // told us outright what the file is.
             if (fileNameOf(data).endsWith(".jnlp", ignoreCase = true)) {
                 handleJnlpFile(data)
             } else {
                 handleVirtViewerFile(data)
             }
-            return
-        }
-
-        if (data != null && intent?.type == MIME_VIRT_VIEWER) {
-            handleVirtViewerFile(data)
             return
         }
 
