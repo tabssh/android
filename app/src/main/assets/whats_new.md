@@ -1,5 +1,67 @@
 # What's New
 
+## Wave 70 — Session lifecycle fixes, console paste, tracker polish
+
+### Tabs and panes now let go of their sessions properly
+
+- **A pane that exited, rebooted, or dropped stayed "connected."**
+  Pane windows were never registered with the tab manager, so the
+  watcher that releases a host's SSH session when its last tab goes
+  away never ran for them. The session stayed open, the active-session
+  count stayed wrong, and re-opening the pane reattached to a dead
+  shell. Each pane window is now watched the same way a normal tab is.
+- **Closing one tab could kill another tab on the same host.** SSH
+  connections are shared per host, and closing a tab or a split pane
+  released the shared connection without checking whether anything
+  else was still using it — so a second tab, or a pane in a Panes
+  group, on the same host went down with it. Every release now checks
+  every open tab *and* every pane window first.
+- **Closing a Panes tab could freeze the app ("app isn't
+  responding").** Tearing a session down does blocking network work
+  (closing the SSH socket and the terminal's streams), and that was
+  happening on the UI thread — on a dropped or half-closed connection
+  it could sit there until the OS TCP timeout expired. Teardown now
+  runs in the background; the tab disappears from the strip
+  immediately as before.
+- **A closed tab could come back as a dead tab after a restart.** The
+  saved-session row for a tab was only cleaned up on the next
+  save/pause cycle, so if the app was killed between closing a tab and
+  that cycle, the tab was restored on the next cold start as a zombie.
+  The row is now deleted as part of closing the tab.
+
+### Consoles
+
+- **Pasting into a VNC, SPICE, or RFB console dropped characters and
+  felt stuttery.** Two causes, both fixed: the console sockets left
+  Nagle's algorithm on, so small key events sat waiting to be
+  coalesced (the SSH and Telnet transports already disabled it); and a
+  paste was fired out as a tight, unpaced loop of key events that
+  overran the far end. Pasted text now goes out at a steady rate, off
+  the UI thread, in order, even if a second paste starts before the
+  first finishes. Single keystrokes are unaffected.
+- **A `.vv` or `.jnlp` console file can now be shared to TabSSH** from
+  a file manager or browser to open it as a console session. Note that
+  "download, then Open with TabSSH" still does not work — downloaded
+  files are handed over with an opaque path that carries no file name
+  or extension, so there is nothing to match on. Use Share instead.
+
+### Trackers
+
+- **Domain Tracker and VPS Hosting Tracker rows are now cards** with a
+  leading color stripe tinted by how close the renewal is (overdue,
+  under two weeks, under four weeks, fine, unknown), so urgency reads
+  at a glance. The old alternating row shading and dividers are gone.
+- **Both trackers gained Sort and Filter toolbar actions.** Sort by
+  name, renewal/expiry date, or (VPS) price; filter to All, Overdue,
+  Expiring soon, or Canceled. Both choices persist per tracker across
+  restarts, and filtering everything out gets its own empty state.
+
+### Fixed
+
+- **Opening a stack from the container dashboard crashed the app.**
+  The screen looked up its toolbar by the id of the bar that wraps it
+  rather than the toolbar's own, and threw before it ever drew.
+
 ## Wave 69 — Panes, Stats moves to Insights, connection stats overhaul
 
 ### Panes: tiled multi-terminal tabs

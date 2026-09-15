@@ -94,7 +94,7 @@ created, synced, or paired on any one of the three works unmodified on the other
 - ⏺️ **Macros** — Capture and replay raw byte sequences (escape codes, modifier-composed Ctrl/Alt)
 - 🎮 **Automation** — Tasker integration, intent-based actions, deep links
 - 📊 **Multi-Host Dashboard** — Side-by-side CPU/memory/disk metrics across hosts; dashboard groups independent from connection groups
-- 🗓️ **Domain & VPS Renewal Tracking** — Track domain/VPS renewal dates with CSV/Markdown import-export and reminder notifications as expiry approaches
+- 🗓️ **Domain & VPS Renewal Tracking** — Track domain/VPS renewal dates with CSV/Markdown import-export and reminder notifications as expiry approaches; card rows with a renewal-urgency color stripe, plus per-tracker sort (name, renewal date, price) and filter (all, overdue, expiring soon, canceled) that persist across restarts
 
 ### Hypervisor Management
 

@@ -367,6 +367,16 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:mimeType="application/x-virt-viewer" />
             </intent-filter>
+            <!-- Share → TabSSH from the Downloads app: the content:// URI
+                 the picker hands over there carries an opaque document-id
+                 path, not the original filename, so the pathPattern
+                 fallback below cannot match it — this typed-MIME
+                 ACTION_SEND filter is the alternate path. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/x-virt-viewer" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -387,6 +397,13 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <data android:mimeType="application/x-java-jnlp-file" />
+            </intent-filter>
+            <!-- Share → TabSSH alternate path — see the .vv ACTION_SEND
+                 filter above for the content:// rationale. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/x-java-jnlp-file" />
             </intent-filter>
             <intent-filter>

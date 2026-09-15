@@ -9,6 +9,12 @@
         app:showAsAction="ifRoom" />
 
     <item
+        android:id="@+id/action_filter"
+        android:title="@string/menu_filter"
+        android:icon="@drawable/ic_toolbar_filter"
+        app:showAsAction="ifRoom" />
+
+    <item
         android:id="@+id/action_import"
         android:title="@string/menu_import"
         android:icon="@drawable/ic_toolbar_import"

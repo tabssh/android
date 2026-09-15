@@ -52,6 +52,10 @@ object VncAuthProbe {
         try {
             socket.soTimeout = SO_TIMEOUT_MS
             socket.connect(InetSocketAddress(host, port), CONNECT_TIMEOUT_MS)
+            // Matches VncDirectConnector's real connection socket — keeps
+            // the probe's own handshake bytes from sitting behind Nagle's
+            // algorithm on a short-lived socket.
+            socket.tcpNoDelay = true
             requiresPassword(socket.inputStream, socket.outputStream)
         } catch (e: Exception) {
             Logger.d(TAG, "Auth probe failed for $host:$port (${e.javaClass.simpleName}); assuming no password")

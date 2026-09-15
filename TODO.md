@@ -1,14 +1,24 @@
-[ ] tab atate shpuld be cleared 9n close/exit/disconnect
-[ ] fix panes ssh exit/reboot/disconnect not actually disconnecting bug
-[ ] fix panes app not responding bug
-[ ] fix tabs dying on another tabs disconnect bug(not sure where this bug is).
-[ ] fix vv/jnlp download then open with tabssh not working bug. 
-[ ] fix custom keyboard not working for vnc/spice/ffb/etc, IE: control, pre, shift, etc.
-[ ] update README.md, whats_new.md.
-[ ] VPS/Domqin Tracker UI/UX enhancements such as adding color, etc.
-[ ] pasting into a vnc/spice/rfb loses characters/very stuttery.
+[x] tab state should be cleared on close/exit/disconnect
+[x] fix panes ssh exit/reboot/disconnect not actually disconnecting bug
+[x] fix panes app not responding bug
+[x] fix tabs dying on another tabs disconnect bug(not sure where this bug is).
+[~] fix vv/jnlp download then open with tabssh not working bug.
+    Share -> TabSSH now works for .vv/.jnlp. "Download then Open with"
+    cannot be fixed in the app: the Downloads provider hands over an
+    opaque content:// URI with no file name or extension, so there is
+    nothing for an intent filter to match without claiming every file
+    type on the device.
+[?] fix custom keyboard not working for vnc/spice/rfb/etc, IE: control, pre, shift, etc.
+    No defect found in the code: ConsoleKeyMapper -> consolePendingModifier
+    -> sendConsoleKeyPress brackets each console key with its modifier for
+    both RFB (keysyms) and SPICE (PS/2 scancodes), and the keyboard bar is
+    activity-level, never gated on tab type. Needs on-device confirmation
+    (no adb/device access here) - reopen with a repro if it still happens.
+[x] update README.md, whats_new.md.
+[x] VPS/Domain Tracker UI/UX enhancements such as adding color, etc.
+[x] pasting into a vnc/spice/rfb loses characters/very stuttery.
 
-[ ] fix all issues from this log and ensure there not any other issues:
+[x] fix all issues from this log and ensure there are not any other issues:
 === TabSSH Debug Log ===
 Exported: 2026-09-14 23:35:42.195
 App Version: 1.0.0 (11)
@@ -257,4 +267,3 @@ Caused by: java.lang.ClassCastException: com.google.android.material.appbar.AppB
 2026-09-14 23:35:38.499 D/TabSSH:SessionPersistenceManager: Restored terminal state for tab: ⏸ user1@server2
 2026-09-14 23:35:38.499 I/TabSSH:SessionPersistenceManager: Restored 1 of 1 sessions
 2026-09-14 23:35:38.594 I/TabSSH:PortForwardCoordinator: Auto-starting 0 port forward(s)
-

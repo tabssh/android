@@ -580,8 +580,17 @@ class TabTerminalActivity : TabSSHActivity() {
                     // AND onConnectionStateChanged(..., DISCONNECTED)
                     // (wireGlobalNotifications swaps the "Connected to
                     // X" toast for "Disconnected from X").
+                    // getAllTabs() used to back this check, but it is
+                    // SSH-only-filtered and blind to Panes-tab windows on
+                    // the same profile — closing this tab could release a
+                    // connection a Panes window elsewhere was still using.
+                    // isProfileInUse() walks every tab kind, including
+                    // Panes windows. Safe here without an `exclude`: this
+                    // tab was already removed from tabManager's live list
+                    // (closeTab() removes before firing onTabClosed) by
+                    // the time this callback runs.
                     val profileId = tab.profile.id
-                    val anyRemaining = tabManager.getAllTabs().any { it.profile.id == profileId }
+                    val anyRemaining = tabManager.isProfileInUse(profileId)
                     if (!anyRemaining) {
                         // closeConnection is now suspend — dispatch to IO so
                         // the Handler.post callback (Main thread) doesn't block
@@ -4338,7 +4347,13 @@ class TabTerminalActivity : TabSSHActivity() {
                 // sshSessionManager so the foreground-service session count stays
                 // accurate and the pane is not left visible with a stale bridge.
                 try { newTab.disconnect() } catch (_: Exception) {}
-                try { app.sshSessionManager.closeConnection(profile.id) } catch (_: Exception) {}
+                // splitTab is never registered with tabManager, so
+                // isProfileInUse() only sees the main tab strip / Panes tabs
+                // here — still strictly safer than the previous unconditional
+                // closeConnection, which ignored those too.
+                if (!tabManager.isProfileInUse(profile.id)) {
+                    try { app.sshSessionManager.closeConnection(profile.id) } catch (_: Exception) {}
+                }
                 runOnUiThread { pane.visibility = View.GONE }
                 throw e
             }
@@ -4359,7 +4374,15 @@ class TabTerminalActivity : TabSSHActivity() {
             try { tab.disconnect() } catch (e: Exception) {
                 Logger.w("TabTerminalActivity", "Split tab disconnect: ${e.message}")
             }
-            try { app.sshSessionManager.closeConnection(profileId) } catch (_: Exception) {}
+            // Was unconditional — closing the split pane released the
+            // shared connection even if the main tab strip (or a Panes
+            // window) still had a live tab on the same host, killing it
+            // out from under them. splitTab itself is never registered
+            // with tabManager, so it can't ever be the reason this check
+            // returns true.
+            if (!tabManager.isProfileInUse(profileId)) {
+                try { app.sshSessionManager.closeConnection(profileId) } catch (_: Exception) {}
+            }
         }
         splitTab = null
         bottomTerminalView = null
@@ -4425,10 +4448,22 @@ class TabTerminalActivity : TabSSHActivity() {
                     )
                 )
                 if (newTab.connect(ssh)) {
+                    // Nothing releases sshSessionManager's pooled connection
+                    // when a pane's own session dies on its own (remote exit,
+                    // network drop) rather than via the tile's close button —
+                    // pane windows are never registered in tabManager.tabs, so
+                    // createTab's per-tab collector never runs for them.
+                    observePaneDisconnect(newTab, profile.id)
                     newTab
                 } else {
                     try { newTab.disconnect() } catch (_: Exception) {}
-                    try { app.sshSessionManager.closeConnection(profile.id) } catch (_: Exception) {}
+                    // newTab was never registered anywhere, so it can't be
+                    // the reason isProfileInUse returns true; still guard
+                    // against a sibling tab/pane on the same host losing its
+                    // connection out from under it.
+                    if (!tabManager.isProfileInUse(profile.id)) {
+                        try { app.sshSessionManager.closeConnection(profile.id) } catch (_: Exception) {}
+                    }
                     null
                 }
             }
@@ -4437,6 +4472,57 @@ class TabTerminalActivity : TabSSHActivity() {
         } catch (e: Exception) {
             Logger.w("TabTerminalActivity", "connectPaneMember: connect failed for ${profile.getDisplayName()}", e)
             null
+        }
+    }
+
+    /**
+     * Mirrors [TabManager.createTab]'s connection-state collector — the
+     * tab strip's [SSHTab]s get that collector automatically, but a pane
+     * window's [SSHTab] never does, since pane windows are never registered
+     * in `tabManager.tabs`. Without this, nothing releases the shared pooled
+     * connection when a pane's session dies on its own.
+     *
+     * Self-cancelling: subscribing to the StateFlow replays its current
+     * value, so a tab that already reached CONNECTED before this call sets
+     * `hasBeenConnected` on the very first emission. The first DISCONNECTED
+     * seen afterward is the teardown transition either way — remote exit or
+     * a user closing the tile, which routes through `PanesTab.closeWindow`
+     * -> `sshTab.cleanup()` -> `disconnect()` -> the same DISCONNECTED state
+     * — so handling it once and cancelling covers both without any extra
+     * wiring in PanesTab or TerminalPagerAdapter.
+     *
+     * [tabManager.isProfileInUse] is called with `exclude = paneTab` so this
+     * window's own now-dead session is never counted as still using the
+     * profile it just lost — see that function's doc comment.
+     *
+     * Scoped to `app.applicationScope`, not `lifecycleScope`: a Panes tab
+     * can be parked ("Keep Running in Background") and outlive this
+     * Activity, so a lifecycle-scoped collector would be cancelled while
+     * the pane it watches is still running and the pooled connection would
+     * then leak until process death.
+     */
+    private fun observePaneDisconnect(paneTab: SSHTab, profileId: String) {
+        app.applicationScope.launch(Dispatchers.Main) {
+            var hasBeenConnected = false
+            paneTab.connectionState.collect { state ->
+                when (state) {
+                    ConnectionState.CONNECTED -> hasBeenConnected = true
+                    ConnectionState.DISCONNECTED -> {
+                        if (hasBeenConnected) {
+                            if (!tabManager.isProfileInUse(profileId, exclude = paneTab)) {
+                                app.applicationScope.launch(Dispatchers.IO) {
+                                    try { app.sshSessionManager.closeConnection(profileId) } catch (_: Exception) {}
+                                }
+                            }
+                            // Cancels this collector's own coroutine — the
+                            // one-shot teardown has fired, and the StateFlow
+                            // never completes on its own.
+                            cancel()
+                        }
+                    }
+                    else -> {}
+                }
+            }
         }
     }
 
@@ -5940,6 +6026,12 @@ class TabTerminalActivity : TabSSHActivity() {
             .setMessage(R.string.panes_close_dialog_message)
             .setNegativeButton(R.string.terminal_menu_disconnect_all) { _, _ ->
                 Logger.i("TabTerminalActivity", "User chose Disconnect All for panes tab ${tab.tabId}")
+                // Stays a direct call: closeTab() now hands the blocking
+                // JSch/stream teardown to TabManager's own IO scope, so
+                // nothing here blocks Main, and the list mutation still
+                // happens before this handler returns. Wrapping it in a
+                // lifecycleScope coroutine would instead make it skippable
+                // if the Activity finished before the coroutine started.
                 tabManager.closeTabByIdSealed(tab.tabId)
             }
             .setPositiveButton(R.string.panes_keep_running_background) { _, _ ->
@@ -5964,6 +6056,10 @@ class TabTerminalActivity : TabSSHActivity() {
             .setTitle(R.string.terminal_disconnect_all_confirm_title)
             .setMessage(getString(R.string.terminal_disconnect_all_confirm_message_fmt, tabCount))
             .setNegativeButton(R.string.terminal_menu_disconnect_all) { _, _ ->
+                // Left on Main: closeAllTabs() only mutates the tab list and
+                // fires listener callbacks (which post to Main themselves);
+                // the blocking per-tab teardown it used to run inline now
+                // goes to TabManager's own IO scope.
                 lifecycleScope.launch {
                     tabManager.closeAllTabs()
                 }

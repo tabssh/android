@@ -86,7 +86,7 @@ class StackDetailActivity : TabSSHActivity() {
         configFile = intent.getStringExtra(EXTRA_CONFIG_FILE)
         externalName = intent.getStringExtra(EXTRA_EXTERNAL_NAME)
 
-        toolbar = findViewById(R.id.app_bar)
+        toolbar = findViewById(R.id.toolbar)
         recyclerView = findViewById(R.id.recycler_list)
         emptyState = findViewById(R.id.empty_state)
         progressBar = findViewById(R.id.progress_bar)

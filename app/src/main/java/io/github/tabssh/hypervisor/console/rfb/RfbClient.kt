@@ -942,6 +942,11 @@ class RfbClient(
         val sf = ctx.socketFactory
         val sslSocket = sf.createSocket(socket, tlsHost ?: socket.inetAddress.hostAddress, tlsPort, true) as SSLSocket
         sslSocket.useClientMode = true
+        // Same rationale as the plaintext RFB socket in VncDirectConnector —
+        // key/pointer events are small and latency-sensitive, so Nagle's
+        // algorithm on the TLS-wrapped socket would reintroduce the same
+        // stutter/dropped-keystroke behavior the plaintext fix addresses.
+        sslSocket.tcpNoDelay = true
         if (tlsHost != null) {
             val params = sslSocket.sslParameters
             params.serverNames = listOf(javax.net.ssl.SNIHostName(tlsHost))

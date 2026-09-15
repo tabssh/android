@@ -87,6 +87,16 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     private val tabObserverScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val tabObservers = mutableMapOf<String, Job>()
 
+    // Background scope for work closeTab() defers off the caller's thread:
+    // per-tab cleanup() (blocking JSch/stream teardown) and the matching
+    // persisted-session-row delete. Separate from tabObserverScope (Main)
+    // so a blocking call here never runs on the Main dispatcher. Owned by
+    // TabManager (an Application-scoped singleton), so a pending cleanup
+    // outlives the Activity that triggered it — same lifetime guarantee
+    // TabTerminalActivity.closeSplitPane() already relies on via
+    // app.applicationScope.
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     /**
      * Get active tab index
      */
@@ -462,17 +472,6 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     fun closeTab(index: Int) = synchronized(tabsLock) {
         if (index in 0 until tabs.size) {
             val entry = tabs[index]
-            // cleanup() = disconnect() + termuxBridge.cleanup() + connectionScope.cancel()
-            // (SSHTab) or rfbClient.stop() + VncBackgroundSessionStore.discard() (VncTab).
-            // Previously only disconnect() was called, leaking the tab's
-            // SupervisorJob scope and TermuxBridge resources for the remainder
-            // of the process lifetime.
-            when (entry) {
-                is Tab.Ssh -> entry.sshTab.cleanup()
-                is Tab.Vnc -> entry.vncTab.cleanup()
-                is Tab.Console -> entry.consoleTab.cleanup()
-                is Tab.Panes -> entry.panesTab.cleanup()
-            }
             tabs.removeAt(index)
             tabObservers.remove(entry.tabId)?.cancel()
 
@@ -492,6 +491,39 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
                 // notification — regardless of which component initiated the
                 // close (toolbar, palette, or the notification-shade action).
                 notifyGraphicalTabClosed(entry, index)
+            }
+
+            // cleanup() = disconnect() + termuxBridge.cleanup() + connectionScope.cancel()
+            // (SSHTab) or rfbClient.stop() + VncBackgroundSessionStore.discard() (VncTab).
+            // Blocking (JSch socket teardown / stream close) — dispatched to
+            // ioScope so closeTab (called from Main-thread click handlers and
+            // AlertDialog button listeners, e.g. the Panes tile close button
+            // and "Disconnect All") never blocks the UI thread. The list
+            // mutation and every notify* callback above still run
+            // synchronously under tabsLock, unchanged — only the actual
+            // session teardown moves off-thread.
+            //
+            // Also deletes this tab's persisted TabSession row (if any) so a
+            // closed tab is not restored as a stale/zombie tab on the next
+            // cold start — previously that row lingered until the next
+            // saveTabState()/onPause() cycle, which a process death between
+            // close and that cycle could skip entirely. Only Tab.Ssh has a
+            // persisted row (SessionPersistenceManager/saveTabState are
+            // SSH-only for now).
+            ioScope.launch {
+                when (entry) {
+                    is Tab.Ssh -> entry.sshTab.cleanup()
+                    is Tab.Vnc -> entry.vncTab.cleanup()
+                    is Tab.Console -> entry.consoleTab.cleanup()
+                    is Tab.Panes -> entry.panesTab.cleanup()
+                }
+                if (entry is Tab.Ssh) {
+                    try {
+                        database.tabSessionDao().deleteSessionByTabId(entry.tabId)
+                    } catch (e: Exception) {
+                        Logger.w("TabManager", "Failed to delete persisted session for ${entry.tabId}", e)
+                    }
+                }
             }
         }
     }
@@ -597,6 +629,35 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
                 is Tab.Panes -> tab.panesTab.currentEntries()
                     .mapNotNull { window -> window.sshTab?.let { tab.tabId to it.termuxBridge } }
                 is Tab.Vnc, is Tab.Console -> emptyList()
+            }
+        }
+
+    /**
+     * Whether any live tab or pane window still holds a session on
+     * [profileId]. [SSHSessionManager]'s connection pool is keyed by
+     * profile id with no reference count, so every caller about to
+     * release a pooled connection must check this first, or closing one
+     * tab/pane tears down a connection a sibling tab/pane on the same
+     * host is still using. Modeled on [terminalSessions] so the sealed
+     * hierarchy stays exhaustive: a Panes tab is checked window-by-window
+     * since each window owns its own [SSHTab], and Vnc/Console tabs never
+     * reference an SSH connection profile.
+     *
+     * [exclude], when given, is a specific [SSHTab] to ignore even if it
+     * is still present in the live list — needed by a tab's own
+     * disconnect observer, where the tab itself remains in its parent's
+     * entry list (a Panes window is only removed by an explicit
+     * [PanesTab.closeWindow], not by disconnecting) but must not count as
+     * "still using" the profile it just lost.
+     */
+    fun isProfileInUse(profileId: String, exclude: SSHTab? = null): Boolean =
+        getAllTabsSealed().any { tab ->
+            when (tab) {
+                is Tab.Ssh -> tab.sshTab !== exclude && tab.sshTab.profile.id == profileId
+                is Tab.Panes -> tab.panesTab.currentEntries().any { window ->
+                    window.sshTab != null && window.sshTab !== exclude && window.sshTab?.profile?.id == profileId
+                }
+                is Tab.Vnc, is Tab.Console -> false
             }
         }
 

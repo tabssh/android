@@ -2,6 +2,7 @@ package io.github.tabssh.ui.activities
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -100,7 +101,21 @@ class LinkHandlerActivity : AppCompatActivity() {
             return
         }
 
-        val data = intent?.data
+        // "Share -> TabSSH" from the Downloads app sends ACTION_SEND with the
+        // file URI in EXTRA_STREAM, not ACTION_VIEW's intent.data — a
+        // content:// URI reached this way still carries the real MIME type
+        // in intent.type, so every check below keyed off MIME_JNLP /
+        // MIME_VIRT_VIEWER works unchanged once data resolves correctly.
+        val data = if (intent?.action == Intent.ACTION_SEND) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(Intent.EXTRA_STREAM)
+            }
+        } else {
+            intent?.data
+        }
         val scheme = data?.scheme?.lowercase()
 
         if (scheme == SpiceUri.SCHEME_PLAIN || scheme == SpiceUri.SCHEME_TLS) {
@@ -395,8 +410,7 @@ class LinkHandlerActivity : AppCompatActivity() {
             addView(saveSwitch)
         }
 
-        val display = connection.title?.takeIf { it.isNotBlank() }
-            ?: "${connection.host}:${connection.port}"
+        val display = connection.title?.takeIf { it.isNotBlank() } ?: "${connection.host}:${connection.port}"
 
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.jnlp_dialog_title)

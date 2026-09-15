@@ -50,13 +50,36 @@ class VpsTrackerActivity : TabSSHActivity() {
         private const val TAG = "VpsTrackerActivity"
         private const val PREFS_NAME = "TabSSH"
         private const val PREF_SORT_OPTION = "vps_tracker_sort"
+        private const val PREF_FILTER_OPTION = "vps_tracker_filter"
+
+        // "Expiring soon" spans both urgency tiers short of overdue — the
+        // 0-13 day CRITICAL band and the 14-27 day WARNING band.
+        private val EXPIRING_SOON_TIERS = setOf(RenewalUrgency.CRITICAL, RenewalUrgency.WARNING)
+
+        // `price` is free text ("$5.00/mo", "5 EUR", "Free") — pull the first
+        // numeric run out of it so cost sorting has something to compare.
+        private val PRICE_AMOUNT_REGEX = Regex("""\d+(?:\.\d+)?""")
     }
 
     private enum class SortOption(@StringRes val displayNameRes: Int) {
         NAME_ASC(R.string.vps_tracker_sort_name_asc),
         NAME_DESC(R.string.vps_tracker_sort_name_desc),
         RENEWAL_ASC(R.string.vps_tracker_sort_renewal_asc),
-        RENEWAL_DESC(R.string.vps_tracker_sort_renewal_desc)
+        RENEWAL_DESC(R.string.vps_tracker_sort_renewal_desc),
+        PRICE_ASC(R.string.vps_tracker_sort_price_asc),
+        PRICE_DESC(R.string.vps_tracker_sort_price_desc)
+    }
+
+    /**
+     * Row subsets offered by the toolbar's filter action. Urgency tiers come
+     * from [RenewalUrgency] so the filter and the row accent stripe always
+     * agree on what "overdue" and "expiring soon" mean.
+     */
+    private enum class FilterOption(@StringRes val displayNameRes: Int) {
+        ALL(R.string.tracker_filter_all),
+        OVERDUE(R.string.tracker_filter_overdue),
+        EXPIRING_SOON(R.string.tracker_filter_expiring_soon),
+        CANCELED(R.string.tracker_filter_canceled)
     }
 
     private lateinit var binding: ActivityVpsTrackerBinding
@@ -64,6 +87,7 @@ class VpsTrackerActivity : TabSSHActivity() {
     private lateinit var adapter: VpsHostAdapter
     private var allHosts: List<VpsHost> = emptyList()
     private var currentSortOption: SortOption = SortOption.NAME_ASC
+    private var currentFilterOption: FilterOption = FilterOption.ALL
 
     private val isAlive: Boolean
         get() = !isFinishing && !isDestroyed
@@ -91,6 +115,7 @@ class VpsTrackerActivity : TabSSHActivity() {
         binding.sectionHeader.textHeaderSubtitle.text = getString(R.string.vps_tracker_header_subtitle)
 
         currentSortOption = loadSortPreference()
+        currentFilterOption = loadFilterPreference()
 
         adapter = VpsHostAdapter(onLongPress = { host -> showHostMenu(host) })
         binding.recyclerVpsHosts.layoutManager = LinearLayoutManager(this)
@@ -112,14 +137,7 @@ class VpsTrackerActivity : TabSSHActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 app.database.vpsHostDao().getAll().collect { hosts ->
                     allHosts = hosts
-                    applySort()
-                    if (hosts.isEmpty()) {
-                        binding.recyclerVpsHosts.visibility = View.GONE
-                        binding.emptyState.visibility = View.VISIBLE
-                    } else {
-                        binding.emptyState.visibility = View.GONE
-                        binding.recyclerVpsHosts.visibility = View.VISIBLE
-                    }
+                    applyFilterAndSort()
                 }
             }
         }
@@ -134,6 +152,10 @@ class VpsTrackerActivity : TabSSHActivity() {
         return when (item.itemId) {
             R.id.action_sort -> {
                 showSortDialog()
+                true
+            }
+            R.id.action_filter -> {
+                showFilterDialog()
                 true
             }
             R.id.action_import -> {
@@ -160,20 +182,100 @@ class VpsTrackerActivity : TabSSHActivity() {
         }
     }
 
-    // ── Sorting ──────────────────────────────────────────────────────────────
+    // ── Filtering and sorting ────────────────────────────────────────────────
 
-    private fun applySort() {
+    /**
+     * Narrow [allHosts] to the current filter, sort the survivors, and pick the
+     * matching empty state: "no hosts at all" and "no hosts match this filter"
+     * are different situations and get different copy.
+     */
+    private fun applyFilterAndSort() {
+        val filtered = allHosts.filter { matchesFilter(it) }
         val sorted = when (currentSortOption) {
-            SortOption.NAME_ASC -> allHosts.sortedBy { it.hostname.lowercase() }
-            SortOption.NAME_DESC -> allHosts.sortedByDescending { it.hostname.lowercase() }
-            SortOption.RENEWAL_ASC -> allHosts.sortedBy {
+            SortOption.NAME_ASC -> filtered.sortedBy { it.hostname.lowercase() }
+            SortOption.NAME_DESC -> filtered.sortedByDescending { it.hostname.lowercase() }
+            SortOption.RENEWAL_ASC -> filtered.sortedBy {
                 RenewalUrgency.effectiveDate(it.renewalDate, it.billingCycle) ?: Long.MAX_VALUE
             }
-            SortOption.RENEWAL_DESC -> allHosts.sortedByDescending {
+            SortOption.RENEWAL_DESC -> filtered.sortedByDescending {
                 RenewalUrgency.effectiveDate(it.renewalDate, it.billingCycle) ?: Long.MIN_VALUE
             }
+            // Hosts with no parsable price sort last in both directions —
+            // an unpriced row is missing data, not the cheapest one.
+            SortOption.PRICE_ASC -> filtered.sortedWith(
+                compareBy(nullsLast<Double>()) { priceAmount(it.price) }
+            )
+            SortOption.PRICE_DESC -> filtered.sortedWith(
+                compareBy(nullsLast(reverseOrder<Double>())) { priceAmount(it.price) }
+            )
         }
         adapter.submitList(sorted)
+        updateEmptyState(sorted.isEmpty())
+    }
+
+    private fun priceAmount(price: String?): Double? {
+        val raw = price ?: return null
+        return PRICE_AMOUNT_REGEX.find(raw)?.value?.toDoubleOrNull()
+    }
+
+    private fun matchesFilter(host: VpsHost): Boolean {
+        val canceled = host.canceledAt != null
+        val urgency = RenewalUrgency.of(RenewalUrgency.effectiveDate(host.renewalDate, host.billingCycle))
+        return when (currentFilterOption) {
+            FilterOption.ALL -> true
+            FilterOption.CANCELED -> canceled
+            FilterOption.OVERDUE -> !canceled && urgency == RenewalUrgency.OVERDUE
+            FilterOption.EXPIRING_SOON -> !canceled && urgency in EXPIRING_SOON_TIERS
+        }
+    }
+
+    private fun updateEmptyState(listIsEmpty: Boolean) {
+        if (!listIsEmpty) {
+            binding.emptyState.visibility = View.GONE
+            binding.recyclerVpsHosts.visibility = View.VISIBLE
+            return
+        }
+        val filterHidEverything = allHosts.isNotEmpty()
+        binding.textEmptyTitle.setText(
+            if (filterHidEverything) R.string.tracker_filter_empty_title else R.string.vps_tracker_empty_title
+        )
+        binding.textEmptySubtitle.setText(
+            if (filterHidEverything) R.string.tracker_filter_empty_subtitle else R.string.vps_tracker_empty_subtitle
+        )
+        binding.recyclerVpsHosts.visibility = View.GONE
+        binding.emptyState.visibility = View.VISIBLE
+    }
+
+    private fun showFilterDialog() {
+        val options = FilterOption.values()
+        val labels = options.map { getString(it.displayNameRes) }.toTypedArray()
+        val checkedIndex = options.indexOf(currentFilterOption)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.tracker_filter_dialog_title)
+            .setSingleChoiceItems(labels, checkedIndex) { dialog, which ->
+                currentFilterOption = options[which]
+                saveFilterPreference(currentFilterOption)
+                applyFilterAndSort()
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun saveFilterPreference(option: FilterOption) {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+            .putString(PREF_FILTER_OPTION, option.name)
+            .apply()
+    }
+
+    private fun loadFilterPreference(): FilterOption {
+        val stored = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(PREF_FILTER_OPTION, null)
+            ?: return FilterOption.ALL
+        return try {
+            FilterOption.valueOf(stored)
+        } catch (e: IllegalArgumentException) {
+            FilterOption.ALL
+        }
     }
 
     private fun showSortDialog() {
@@ -185,7 +287,7 @@ class VpsTrackerActivity : TabSSHActivity() {
             .setSingleChoiceItems(labels, checkedIndex) { dialog, which ->
                 currentSortOption = options[which]
                 saveSortPreference(currentSortOption)
-                applySort()
+                applyFilterAndSort()
                 dialog.dismiss()
             }
             .setNegativeButton(R.string.cancel, null)
@@ -430,6 +532,7 @@ class VpsTrackerActivity : TabSSHActivity() {
             val renewalPill: TextView = view.findViewById(R.id.text_vps_renewal_pill)
             val detail: TextView = view.findViewById(R.id.text_vps_detail)
             val detailScroll: View = view.findViewById(R.id.scroll_vps_detail)
+            val statusAccent: View = view.findViewById(R.id.view_vps_status_accent)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -465,6 +568,10 @@ class VpsTrackerActivity : TabSSHActivity() {
             // click-to-edit so the two actions don't collide.
             holder.renewalPill.setOnClickListener { onRenewalPillClick?.invoke(host) }
 
+            // Leading accent stripe, tinted from the same urgency tier as the
+            // pill so renewal status is readable without parsing the label.
+            holder.statusAccent.setBackgroundColor(pillTextColor)
+
             holder.detail.text = listOf(
                 getString(R.string.vps_tracker_col_ipv4) + ": " + (host.ipv4 ?: "—"),
                 getString(R.string.vps_tracker_col_ipv6) + ": " + (host.ipv6 ?: "—"),
@@ -475,19 +582,11 @@ class VpsTrackerActivity : TabSSHActivity() {
                 getString(R.string.vps_tracker_col_price) + ": " + (host.price ?: "—")
             ).joinToString("  ·  ")
 
-            // Zebra-striped rows: the HorizontalScrollView wrapping the detail
-            // text intercepts the touch stream for any tap that lands on it, so
-            // the same click/long-click listeners must be attached there too —
-            // relying solely on itemView's listener silently swallows taps in
-            // that region (see the `VpsTrackerActivity` class doc for context).
-            val zebraColorAttr = if (position % 2 == 0) {
-                com.google.android.material.R.attr.colorSurface
-            } else {
-                com.google.android.material.R.attr.colorSurfaceVariant
-            }
-            val zebraColor = com.google.android.material.color.MaterialColors.getColor(holder.itemView, zebraColorAttr)
-            holder.itemView.setBackgroundColor(zebraColor)
-
+            // The HorizontalScrollView wrapping the detail text intercepts the
+            // touch stream for any tap that lands on it, so the same click/
+            // long-click listeners must be attached there too — relying solely
+            // on itemView's listener silently swallows taps in that region
+            // (see the `VpsTrackerActivity` class doc for context).
             val clickListener = View.OnClickListener { onClick?.invoke(host) }
             val longClickListener = View.OnLongClickListener {
                 onLongPress(host)

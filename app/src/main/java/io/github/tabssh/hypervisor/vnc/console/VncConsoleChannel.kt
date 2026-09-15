@@ -367,6 +367,10 @@ class VncConsoleChannel internal constructor(
     fun sendText(text: String) = io {
         val mods = consumeArmedMods()
         for (m in mods) rfbClient.sendKeyEvent(m, true)
+        // Only a real multi-character paste is paced; this same function is
+        // also the target for single-character IME commits during normal
+        // typing, which must stay unpaced.
+        val paced = text.length > 1
         var i = 0
         while (i < text.length) {
             val ch = text[i]
@@ -377,6 +381,11 @@ class VncConsoleChannel internal constructor(
                 sendCharDirect(ch)
                 i++
             }
+            // Some servers emulate the keyboard through a PS/2-style
+            // controller that drops keystrokes when key events arrive
+            // back-to-back faster than it polls; a short gap between
+            // characters during a paste keeps every keystroke intact.
+            if (paced && i < text.length) Thread.sleep(PASTE_CHAR_DELAY_MS)
         }
         for (m in mods.reversed()) rfbClient.sendKeyEvent(m, false)
     }
@@ -629,6 +638,9 @@ class VncConsoleChannel internal constructor(
     }
 
     companion object {
+        // Gap between characters of a multi-character paste — see sendText().
+        private const val PASTE_CHAR_DELAY_MS = 5L
+
         private val MODIFIER_KEYS = setOf(
             KeyEvent.KEYCODE_SHIFT_LEFT,  KeyEvent.KEYCODE_SHIFT_RIGHT,
             KeyEvent.KEYCODE_CTRL_LEFT,   KeyEvent.KEYCODE_CTRL_RIGHT,

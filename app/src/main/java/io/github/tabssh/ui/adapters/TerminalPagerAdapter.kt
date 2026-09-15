@@ -458,6 +458,21 @@ class TerminalPagerAdapter(
         // calls unbind() first) always has a live scope to launch modeJob on.
         private var holderScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+        // A paste's characters must land in order with nothing else
+        // interleaved into the same PS/2 stream — mirrors
+        // VncConsoleChannel's single-thread writeExecutor guarantee, since
+        // Dispatchers.IO itself is a multi-threaded pool and would let two
+        // overlapping pastes (or a paste racing an IME commit) interleave.
+        // var, not val: rebuilt alongside holderScope in unbind() so a
+        // recycled page can't inherit a stale dispatcher.
+        private var spicePasteDispatcher = Dispatchers.IO.limitedParallelism(1)
+
+        private companion object {
+            // Gap between characters of a multi-character SPICE paste — see
+            // sendSpiceText(). Mirrors VncConsoleChannel.PASTE_CHAR_DELAY_MS.
+            private const val SPICE_PASTE_CHAR_DELAY_MS = 5L
+        }
+
         /** True once this page is showing a graphical (RFB or SPICE) side. */
         var isGraphicalMode: Boolean = false
             private set
@@ -591,18 +606,18 @@ class TerminalPagerAdapter(
             // the clipboard branch instead of pressing Enter, collapsing a
             // multi-line paste onto one line. Route line breaks through
             // SC_ENTER explicitly; a "\r\n" pair is treated as one Enter.
+            // onTextInput also fires for a single-character IME commit during
+            // normal typing (see SpiceView.onCreateInputConnection) — only a
+            // real multi-character paste is worth pacing, and pacing must not
+            // block the caller's thread, which for a plain clipboard paste
+            // (TabTerminalActivity.pasteFromClipboard) is the main thread.
+            // Route the paced case onto holderScope's IO dispatcher; leave the
+            // single-character case exactly as before.
             spiceView.onTextInput = { text ->
-                var i = 0
-                while (i < text.length) {
-                    val ch = text[i]
-                    if (ch == '\r' || ch == '\n') {
-                        client.sendKeyEvent(SpiceConstants.SC_ENTER, true)
-                        client.sendKeyEvent(SpiceConstants.SC_ENTER, false)
-                        i += if (ch == '\r' && i + 1 < text.length && text[i + 1] == '\n') 2 else 1
-                    } else {
-                        if (!spiceView.sendChar(ch)) client.sendClipboardText(ch.toString())
-                        i++
-                    }
+                if (text.length > 1) {
+                    holderScope.launch(spicePasteDispatcher) { sendSpiceText(client, spiceView, text, paced = true) }
+                } else {
+                    sendSpiceText(client, spiceView, text, paced = false)
                 }
             }
             spiceView.onBackspace = {
@@ -623,6 +638,30 @@ class TerminalPagerAdapter(
             Logger.d("TerminalPagerAdapter", "Bound console tab (SPICE mode): ${consoleTab.getDisplayTitle()}")
         }
 
+        /**
+         * Shared body for [SpiceView.onTextInput]: send each character as a
+         * PS/2 make/break pair (falling back to the vdagent clipboard for
+         * chars the scancode table can't reach), routing line breaks through
+         * SC_ENTER. When [paced], a short gap follows each character — see
+         * [SPICE_PASTE_CHAR_DELAY_MS] — to stop an emulated PS/2 controller
+         * from dropping keystrokes during a fast paste.
+         */
+        private fun sendSpiceText(client: SpiceClient, spiceView: SpiceView, text: String, paced: Boolean) {
+            var i = 0
+            while (i < text.length) {
+                val ch = text[i]
+                if (ch == '\r' || ch == '\n') {
+                    client.sendKeyEvent(SpiceConstants.SC_ENTER, true)
+                    client.sendKeyEvent(SpiceConstants.SC_ENTER, false)
+                    i += if (ch == '\r' && i + 1 < text.length && text[i + 1] == '\n') 2 else 1
+                } else {
+                    if (!spiceView.sendChar(ch)) client.sendClipboardText(ch.toString())
+                    i++
+                }
+                if (paced && i < text.length) Thread.sleep(SPICE_PASTE_CHAR_DELAY_MS)
+            }
+        }
+
         /** Called from [onViewRecycled] — drop the mode collector and VNC/SPICE callbacks so a recycled page can't drive a stale session. */
         fun unbind() {
             modeJob?.cancel()
@@ -631,6 +670,7 @@ class TerminalPagerAdapter(
             unwireSpice()
             holderScope.cancel()
             holderScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+            spicePasteDispatcher = Dispatchers.IO.limitedParallelism(1)
         }
 
         private fun unwireSpice() {

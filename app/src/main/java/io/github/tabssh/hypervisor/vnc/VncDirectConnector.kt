@@ -49,6 +49,10 @@ object VncDirectConnector {
         try {
             socket.soTimeout = SO_TIMEOUT_MS
             socket.connect(InetSocketAddress(host.host, effectivePort), CONNECT_TIMEOUT_MS)
+            // Key/pointer events are latency-sensitive and small; Nagle's
+            // algorithm interacting with delayed ACKs is a known cause of
+            // stuttery input and dropped keystrokes during a fast paste.
+            socket.tcpNoDelay = true
 
             val rfbClient = RfbClient(
                 inputStream = socket.inputStream,

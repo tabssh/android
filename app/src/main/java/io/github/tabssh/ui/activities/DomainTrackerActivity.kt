@@ -51,6 +51,11 @@ class DomainTrackerActivity : TabSSHActivity() {
         private const val TAG = "DomainTrackerActivity"
         private const val PREFS_NAME = "TabSSH"
         private const val PREF_SORT_OPTION = "domain_tracker_sort"
+        private const val PREF_FILTER_OPTION = "domain_tracker_filter"
+
+        // "Expiring soon" spans both urgency tiers short of overdue — the
+        // 0-13 day CRITICAL band and the 14-27 day WARNING band.
+        private val EXPIRING_SOON_TIERS = setOf(RenewalUrgency.CRITICAL, RenewalUrgency.WARNING)
     }
 
     private enum class SortOption(@StringRes val displayNameRes: Int) {
@@ -60,11 +65,24 @@ class DomainTrackerActivity : TabSSHActivity() {
         EXPIRATION_DESC(R.string.domain_tracker_sort_expiration_desc)
     }
 
+    /**
+     * Row subsets offered by the toolbar's filter action. Urgency tiers come
+     * from [RenewalUrgency] so the filter and the row accent stripe always
+     * agree on what "overdue" and "expiring soon" mean.
+     */
+    private enum class FilterOption(@StringRes val displayNameRes: Int) {
+        ALL(R.string.tracker_filter_all),
+        OVERDUE(R.string.tracker_filter_overdue),
+        EXPIRING_SOON(R.string.tracker_filter_expiring_soon),
+        CANCELED(R.string.tracker_filter_canceled)
+    }
+
     private lateinit var binding: ActivityDomainTrackerBinding
     private lateinit var app: TabSSHApplication
     private lateinit var adapter: DomainAdapter
     private var allDomains: List<Domain> = emptyList()
     private var currentSortOption: SortOption = SortOption.NAME_ASC
+    private var currentFilterOption: FilterOption = FilterOption.ALL
 
     private val isAlive: Boolean
         get() = !isFinishing && !isDestroyed
@@ -92,6 +110,7 @@ class DomainTrackerActivity : TabSSHActivity() {
         binding.sectionHeader.textHeaderSubtitle.text = getString(R.string.domain_tracker_header_subtitle)
 
         currentSortOption = loadSortPreference()
+        currentFilterOption = loadFilterPreference()
 
         adapter = DomainAdapter(onLongPress = { domain -> showDomainMenu(domain) })
         binding.recyclerDomains.layoutManager = LinearLayoutManager(this)
@@ -110,14 +129,7 @@ class DomainTrackerActivity : TabSSHActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 app.database.domainDao().getAll().collect { domains ->
                     allDomains = domains
-                    applySort()
-                    if (domains.isEmpty()) {
-                        binding.recyclerDomains.visibility = View.GONE
-                        binding.emptyState.visibility = View.VISIBLE
-                    } else {
-                        binding.emptyState.visibility = View.GONE
-                        binding.recyclerDomains.visibility = View.VISIBLE
-                    }
+                    applyFilterAndSort()
                 }
             }
         }
@@ -132,6 +144,10 @@ class DomainTrackerActivity : TabSSHActivity() {
         return when (item.itemId) {
             R.id.action_sort -> {
                 showSortDialog()
+                true
+            }
+            R.id.action_filter -> {
+                showFilterDialog()
                 true
             }
             R.id.action_import -> {
@@ -158,16 +174,82 @@ class DomainTrackerActivity : TabSSHActivity() {
         }
     }
 
-    // ── Sorting ──────────────────────────────────────────────────────────────
+    // ── Filtering and sorting ────────────────────────────────────────────────
 
-    private fun applySort() {
+    /**
+     * Narrow [allDomains] to the current filter, sort the survivors, and pick
+     * the matching empty state: "no domains at all" and "no domains match this
+     * filter" are different situations and get different copy.
+     */
+    private fun applyFilterAndSort() {
+        val filtered = allDomains.filter { matchesFilter(it) }
         val sorted = when (currentSortOption) {
-            SortOption.NAME_ASC -> allDomains.sortedBy { it.domainName.lowercase() }
-            SortOption.NAME_DESC -> allDomains.sortedByDescending { it.domainName.lowercase() }
-            SortOption.EXPIRATION_ASC -> allDomains.sortedBy { it.expirationDate ?: Long.MAX_VALUE }
-            SortOption.EXPIRATION_DESC -> allDomains.sortedByDescending { it.expirationDate ?: Long.MIN_VALUE }
+            SortOption.NAME_ASC -> filtered.sortedBy { it.domainName.lowercase() }
+            SortOption.NAME_DESC -> filtered.sortedByDescending { it.domainName.lowercase() }
+            SortOption.EXPIRATION_ASC -> filtered.sortedBy { it.expirationDate ?: Long.MAX_VALUE }
+            SortOption.EXPIRATION_DESC -> filtered.sortedByDescending { it.expirationDate ?: Long.MIN_VALUE }
         }
         adapter.submitList(sorted)
+        updateEmptyState(sorted.isEmpty())
+    }
+
+    private fun matchesFilter(domain: Domain): Boolean {
+        val canceled = domain.canceledAt != null
+        return when (currentFilterOption) {
+            FilterOption.ALL -> true
+            FilterOption.CANCELED -> canceled
+            FilterOption.OVERDUE -> !canceled && RenewalUrgency.of(domain.expirationDate) == RenewalUrgency.OVERDUE
+            FilterOption.EXPIRING_SOON -> !canceled && RenewalUrgency.of(domain.expirationDate) in EXPIRING_SOON_TIERS
+        }
+    }
+
+    private fun updateEmptyState(listIsEmpty: Boolean) {
+        if (!listIsEmpty) {
+            binding.emptyState.visibility = View.GONE
+            binding.recyclerDomains.visibility = View.VISIBLE
+            return
+        }
+        val filterHidEverything = allDomains.isNotEmpty()
+        binding.textEmptyTitle.setText(
+            if (filterHidEverything) R.string.tracker_filter_empty_title else R.string.domain_tracker_empty_title
+        )
+        binding.textEmptySubtitle.setText(
+            if (filterHidEverything) R.string.tracker_filter_empty_subtitle else R.string.domain_tracker_empty_subtitle
+        )
+        binding.recyclerDomains.visibility = View.GONE
+        binding.emptyState.visibility = View.VISIBLE
+    }
+
+    private fun showFilterDialog() {
+        val options = FilterOption.values()
+        val labels = options.map { getString(it.displayNameRes) }.toTypedArray()
+        val checkedIndex = options.indexOf(currentFilterOption)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.tracker_filter_dialog_title)
+            .setSingleChoiceItems(labels, checkedIndex) { dialog, which ->
+                currentFilterOption = options[which]
+                saveFilterPreference(currentFilterOption)
+                applyFilterAndSort()
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun saveFilterPreference(option: FilterOption) {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+            .putString(PREF_FILTER_OPTION, option.name)
+            .apply()
+    }
+
+    private fun loadFilterPreference(): FilterOption {
+        val stored = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(PREF_FILTER_OPTION, null)
+            ?: return FilterOption.ALL
+        return try {
+            FilterOption.valueOf(stored)
+        } catch (e: IllegalArgumentException) {
+            FilterOption.ALL
+        }
     }
 
     private fun showSortDialog() {
@@ -179,7 +261,7 @@ class DomainTrackerActivity : TabSSHActivity() {
             .setSingleChoiceItems(labels, checkedIndex) { dialog, which ->
                 currentSortOption = options[which]
                 saveSortPreference(currentSortOption)
-                applySort()
+                applyFilterAndSort()
                 dialog.dismiss()
             }
             .setNegativeButton(R.string.cancel, null)
@@ -421,6 +503,7 @@ class DomainTrackerActivity : TabSSHActivity() {
             val renewalPill: TextView = view.findViewById(R.id.text_domain_renewal_pill)
             val detail: TextView = view.findViewById(R.id.text_domain_detail)
             val detailScroll: View = view.findViewById(R.id.scroll_domain_detail)
+            val statusAccent: View = view.findViewById(R.id.view_domain_status_accent)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -450,6 +533,10 @@ class DomainTrackerActivity : TabSSHActivity() {
             holder.renewalPill.setTextColor(pillTextColor)
             holder.renewalPill.setOnClickListener { onRenewalPillClick?.invoke(domain) }
 
+            // Leading accent stripe, tinted from the same urgency tier as the
+            // pill so renewal status is readable without parsing the label.
+            holder.statusAccent.setBackgroundColor(pillTextColor)
+
             holder.detail.text = listOf(
                 getString(R.string.domain_tracker_col_privacy) + ": " + domain.privacyProtection,
                 getString(R.string.domain_tracker_col_status) + ": " + domain.statusAtRegistrar,
@@ -457,19 +544,11 @@ class DomainTrackerActivity : TabSSHActivity() {
                 getString(R.string.domain_tracker_col_expires) + ": " + expiration
             ).joinToString("  ·  ")
 
-            // Zebra-striped rows: the HorizontalScrollView wrapping the detail
-            // text intercepts the touch stream for any tap that lands on it, so
-            // the same click/long-click listeners must be attached there too —
-            // relying solely on itemView's listener silently swallows taps in
-            // that region (matches the pattern established in VpsTrackerActivity).
-            val zebraColorAttr = if (position % 2 == 0) {
-                com.google.android.material.R.attr.colorSurface
-            } else {
-                com.google.android.material.R.attr.colorSurfaceVariant
-            }
-            val zebraColor = com.google.android.material.color.MaterialColors.getColor(holder.itemView, zebraColorAttr)
-            holder.itemView.setBackgroundColor(zebraColor)
-
+            // The HorizontalScrollView wrapping the detail text intercepts the
+            // touch stream for any tap that lands on it, so the same click/
+            // long-click listeners must be attached there too — relying solely
+            // on itemView's listener silently swallows taps in that region
+            // (matches the pattern established in VpsTrackerActivity).
             val clickListener = View.OnClickListener { onClick?.invoke(domain) }
             val longClickListener = View.OnLongClickListener {
                 onLongPress(domain)

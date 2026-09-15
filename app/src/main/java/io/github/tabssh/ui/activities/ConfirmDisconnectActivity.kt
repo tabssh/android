@@ -111,8 +111,10 @@ class ConfirmDisconnectActivity : AppCompatActivity() {
                             val profileId = sshTab.profile.id
                             // Tear the shared SSH session down only when no other
                             // tab still uses this profile (Issue #163 siblings).
-                            val stillShared = app.tabManager.getAllTabs()
-                                .any { it.profile.id == profileId }
+                            // isProfileInUse, not getAllTabs: the latter is
+                            // SSH-tab-only and cannot see a Panes tab's windows,
+                            // so this released connections a pane was still using.
+                            val stillShared = app.tabManager.isProfileInUse(profileId)
                             if (!stillShared) {
                                 try {
                                     app.sshSessionManager.closeConnectionIntentionally(profileId)

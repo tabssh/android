@@ -2389,6 +2389,17 @@
     <string name="vps_tracker_sort_name_desc">Hostname (Z-A)</string>
     <string name="vps_tracker_sort_renewal_asc">Renewal (soonest first)</string>
     <string name="vps_tracker_sort_renewal_desc">Renewal (latest first)</string>
+    <string name="vps_tracker_sort_price_asc">Price (lowest first)</string>
+    <string name="vps_tracker_sort_price_desc">Price (highest first)</string>
+
+    <!-- ── Tracker filtering (shared: VPS Tracker + Domain Tracker toolbars) ── -->
+    <string name="tracker_filter_dialog_title">Filter</string>
+    <string name="tracker_filter_all">All</string>
+    <string name="tracker_filter_overdue">Overdue</string>
+    <string name="tracker_filter_expiring_soon">Expiring soon</string>
+    <string name="tracker_filter_canceled">Canceled</string>
+    <string name="tracker_filter_empty_title">Nothing Matches This Filter</string>
+    <string name="tracker_filter_empty_subtitle">Choose a different filter from the toolbar to see more entries</string>
 
     <!-- ── Renewal urgency pill (shared: VPS Tracker + Domain Tracker rows) ── -->
     <string name="renewal_pill_unknown">—</string>
@@ -3953,6 +3964,7 @@
     <!-- Menu titles: main overflow menu -->
     <string name="menu_search">Search</string>
     <string name="menu_sort">Sort</string>
+    <string name="menu_filter">Filter</string>
     <string name="main_menu_view_logs">View Logs</string>
     <string name="main_menu_manage_ssh_keys">Manage SSH Keys</string>
     <string name="main_menu_import_connections">Import Connections</string>

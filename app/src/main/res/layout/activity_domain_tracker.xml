@@ -52,6 +52,7 @@
                 android:paddingBottom="@dimen/space_md" />
 
             <TextView
+                android:id="@+id/text_empty_title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/domain_tracker_empty_title"
@@ -62,6 +63,7 @@
                 android:paddingBottom="@dimen/space_sm" />
 
             <TextView
+                android:id="@+id/text_empty_subtitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/domain_tracker_empty_subtitle"
