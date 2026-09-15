@@ -1,3 +1,4 @@
+[ ] tab atate shpuld be cleared 9n close/exit/disconnect
 [ ] fix panes ssh exit/reboot/disconnect not actually disconnecting bug
 [ ] fix panes app not responding bug
 [ ] fix tabs dying on another tabs disconnect bug(not sure where this bug is).
