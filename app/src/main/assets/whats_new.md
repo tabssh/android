@@ -55,6 +55,13 @@
   name, renewal/expiry date, or (VPS) price; filter to All, Overdue,
   Expiring soon, or Canceled. Both choices persist per tracker across
   restarts, and filtering everything out gets its own empty state.
+- **Both trackers now sync across devices.** Domains and VPS hosts were
+  the only saved data a backup kept but a sync left behind, so renewal
+  dates, reminder settings and notes had to be re-entered per device.
+  They now sync like everything else, each behind its own toggle in
+  Sync Settings (both on). Deletions travel too — including the
+  automatic 30-day sweep of canceled entries — so a deleted entry no
+  longer comes back from another device.
 
 ### Fixed
 

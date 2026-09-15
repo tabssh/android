@@ -109,6 +109,27 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 - Backup and restore as a portable archive covering everything the app stores — encrypted when the user sets a password, plaintext when they do not; backups made by older app versions must always import into newer versions
 - A plaintext backup includes the stored secrets (SSH key passphrases, connection, container host, registry and VNC passwords) in the clear and is reachable only behind an explicit type-to-confirm warning naming that exposure
 
+#### Sync coverage matrix
+
+Every user-authored entity syncs, each behind its own toggle in Sync
+Settings (all default on). What deliberately does not sync:
+
+| Entity | Syncs | Backed up | Why |
+|---|---|---|---|
+| Connections, keys, identities, groups, workspaces, themes, snippets, macros | yes | yes | user-authored |
+| Host keys, trusted certificates | yes | yes | trust state is per-user, not per-device |
+| Hypervisors, hypervisor accounts, cloud accounts, container hosts, registry credentials, compose stacks, single-container configs, auto-update policies | yes | yes | user-authored |
+| VNC hosts/identities, telnet hosts, port forwards, network routes, pane groups, monitor slots, dashboard config | yes | yes | user-authored |
+| Domains, VPS hosts (trackers) | yes | yes | user-authored renewal data |
+| Secrets (passwords, passphrases) | yes, separately | only in a plaintext backup | Keystore-bound; travels in its own encrypted section |
+| Tab sessions | no | yes | restoring another device's open tabs is wrong |
+| Audit log | no | yes | a local-device record of what happened on *this* device |
+| Sync state, shadows, tombstones, pending conflicts, sync log | no | no | sync machinery, not user data |
+| Connectable hosts | no | no | derived lookup table, rebuilt from its source rows |
+
+New entity checklist: decide sync inclusion, then update
+`SyncDataCollector`, `SyncDataApplier` and this matrix in the same commit.
+
 ### Hypervisor management
 - Proxmox, XCP-ng (and Xen Orchestra), VMware, QEMU/libvirt (KVM) — list VMs/instances, start, stop, shutdown, reboot, snapshot
 - QEMU/libvirt is managed over an SSH transport to the remote host — no libvirt TCP daemon needs to be exposed

@@ -45,6 +45,11 @@ interface VpsHostDao {
     @Query("DELETE FROM vps_hosts WHERE canceled_at IS NOT NULL AND canceled_at < :cutoff")
     suspend fun deleteStaleCanceled(cutoff: Long)
 
+    // Ids about to be swept by deleteStaleCanceled, so the caller can record a
+    // tombstone for each one before the bulk delete removes them.
+    @Query("SELECT id FROM vps_hosts WHERE canceled_at IS NOT NULL AND canceled_at < :cutoff")
+    suspend fun getStaleCanceledIds(cutoff: Long): List<String>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(host: VpsHost)
 

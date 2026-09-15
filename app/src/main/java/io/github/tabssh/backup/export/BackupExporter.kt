@@ -85,6 +85,11 @@ import org.json.JSONObject
  * Tables intentionally excluded from backup:
  *   - sync_state — per-device sync bookkeeping; meaningless on another device
  *     and rebuilt from scratch by the next sync pass.
+ *   - sync_shadows, sync_tombstones, pending_sync_conflicts, sync_log — the
+ *     rest of the sync machinery, excluded for the same reason: they describe
+ *     one device's sync history, not the user's data.
+ *   - connectable_hosts — a derived lookup table, rebuilt from the connection,
+ *     telnet and VNC rows it indexes.
  *
  * `tab_sessions` and `audit_log` ARE backed up (a backup restores one device
  * to its exact prior state) but are deliberately NOT synced — see the

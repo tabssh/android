@@ -130,7 +130,11 @@ class VpsTrackerActivity : TabSSHActivity() {
         // or ignoring the prompt (canceled_at stays null) both keep it.
         lifecycleScope.launch(Dispatchers.IO) {
             val cutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
+            // Record a tombstone for every row this sweep is about to remove,
+            // otherwise a peer's stale copy would resurrect it on the next sync.
+            val staleIds = app.database.vpsHostDao().getStaleCanceledIds(cutoff)
             app.database.vpsHostDao().deleteStaleCanceled(cutoff)
+            staleIds.forEach { id -> TombstoneRecorder.record(app, TombstoneRecorder.VPS_HOST, id) }
         }
 
         lifecycleScope.launch {

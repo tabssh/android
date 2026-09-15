@@ -65,13 +65,18 @@ data class SyncItemCounts(
     /** Saved Panes groups (up to 6 terminal connections tiled together). */
     val paneGroups: Int = 0,
     /** Wave 15 — direct Telnet hosts, split out of `connections` (protocol == "telnet"). */
-    val telnetHosts: Int = 0
+    val telnetHosts: Int = 0,
+    /** Tracker: domain registrations imported/edited from Domain_List.csv. */
+    val domains: Int = 0,
+    /** Tracker: VPS/hosting instances imported/edited from VPS.md. */
+    val vpsHosts: Int = 0
 ) {
     fun total(): Int = connections + keys + themes + preferences + hostKeys +
         workspaces + snippets + identities + groups + hypervisors + certificates +
         macros + monitorSlots + hypervisorAccounts + vncHosts + vncIdentities +
         cloudAccounts + dashboard + portForwards + networkRoutes + containerHosts + registryCredentials +
-        composeStacks + singleContainerConfigs + containerAutoUpdatePolicies + paneGroups + telnetHosts
+        composeStacks + singleContainerConfigs + containerAutoUpdatePolicies + paneGroups + telnetHosts +
+        domains + vpsHosts
 }
 
 /**
@@ -179,7 +184,13 @@ data class SyncDataPackage(
     val paneGroups: List<io.github.tabssh.storage.database.entities.PaneGroup> = emptyList(),
     /** Wave 15 — direct Telnet hosts (metadata only; Keystore password not transferred),
      *  last-write-wins REPLACE on UUID PK. Gated by the sync_telnet_hosts toggle. */
-    val telnetHosts: List<io.github.tabssh.storage.database.entities.TelnetHost> = emptyList()
+    val telnetHosts: List<io.github.tabssh.storage.database.entities.TelnetHost> = emptyList(),
+    /** Tracker: domain registrations (Domain_List.csv round-trip), last-write-wins
+     *  REPLACE on UUID PK. Gated by the sync_domains toggle. */
+    val domains: List<io.github.tabssh.storage.database.entities.Domain> = emptyList(),
+    /** Tracker: VPS/hosting instances (VPS.md round-trip), last-write-wins
+     *  REPLACE on UUID PK. Gated by the sync_vps_hosts toggle. */
+    val vpsHosts: List<io.github.tabssh.storage.database.entities.VpsHost> = emptyList()
 )
 
 /**

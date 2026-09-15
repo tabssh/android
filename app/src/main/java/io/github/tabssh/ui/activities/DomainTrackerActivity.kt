@@ -122,7 +122,11 @@ class DomainTrackerActivity : TabSSHActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             val cutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
+            // Record a tombstone for every row this sweep is about to remove,
+            // otherwise a peer's stale copy would resurrect it on the next sync.
+            val staleIds = app.database.domainDao().getStaleCanceledIds(cutoff)
             app.database.domainDao().deleteStaleCanceled(cutoff)
+            staleIds.forEach { id -> TombstoneRecorder.record(app, TombstoneRecorder.DOMAIN, id) }
         }
 
         lifecycleScope.launch {

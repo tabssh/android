@@ -709,6 +709,12 @@ class PreferenceManager(private val context: Context) {
     fun isSyncTelnetHostsEnabled(): Boolean = getBoolean("sync_telnet_hosts", true)
     fun setSyncTelnetHostsEnabled(enabled: Boolean) = setBoolean("sync_telnet_hosts", enabled)
 
+    fun isSyncDomainsEnabled(): Boolean = getBoolean("sync_domains", true)
+    fun setSyncDomainsEnabled(enabled: Boolean) = setBoolean("sync_domains", enabled)
+
+    fun isSyncVpsHostsEnabled(): Boolean = getBoolean("sync_vps_hosts", true)
+    fun setSyncVpsHostsEnabled(enabled: Boolean) = setBoolean("sync_vps_hosts", enabled)
+
     fun isSyncContainersEnabled(): Boolean = getBoolean("sync_containers", true)
     fun setSyncContainersEnabled(enabled: Boolean) = setBoolean("sync_containers", enabled)
 

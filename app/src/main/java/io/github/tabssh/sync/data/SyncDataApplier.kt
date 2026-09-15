@@ -485,6 +485,34 @@ class SyncDataApplier {
                 }
             }
 
+            // Tracker: domain registrations (last-write-wins REPLACE on UUID PK).
+            if (preferenceManager.isSyncDomainsEnabled()) {
+                data.domains.forEach { d ->
+                    try {
+                        if (suppressed(TombstoneRecorder.DOMAIN, d.id, d.modifiedAt)) return@forEach
+                        if (remoteIsStale(database.domainDao().getById(d.id)?.modifiedAt, d.modifiedAt)) return@forEach
+                        database.domainDao().insert(d)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply domain: ${d.domainName}", e)
+                    }
+                }
+            }
+
+            // Tracker: VPS/hosting instances (last-write-wins REPLACE on UUID PK).
+            if (preferenceManager.isSyncVpsHostsEnabled()) {
+                data.vpsHosts.forEach { v ->
+                    try {
+                        if (suppressed(TombstoneRecorder.VPS_HOST, v.id, v.modifiedAt)) return@forEach
+                        if (remoteIsStale(database.vpsHostDao().getById(v.id)?.modifiedAt, v.modifiedAt)) return@forEach
+                        database.vpsHostDao().insert(v)
+                        appliedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to apply VPS host: ${v.hostname}", e)
+                    }
+                }
+            }
+
             // Reusable network routes (last-write-wins REPLACE on UUID PK).
             if (preferenceManager.isSyncNetworkRoutesEnabled()) {
                 data.networkRoutes.forEach { nr ->
@@ -777,6 +805,16 @@ class SyncDataApplier {
                             val row = database.networkRouteDao().getById(t.entityKey)
                             if (row != null && row.modifiedAt > t.deletedAt) true
                             else { if (row != null) database.networkRouteDao().deleteById(t.entityKey); false }
+                        }
+                        TombstoneRecorder.DOMAIN -> {
+                            val row = database.domainDao().getById(t.entityKey)
+                            if (row != null && row.modifiedAt > t.deletedAt) true
+                            else { if (row != null) database.domainDao().deleteById(t.entityKey); false }
+                        }
+                        TombstoneRecorder.VPS_HOST -> {
+                            val row = database.vpsHostDao().getById(t.entityKey)
+                            if (row != null && row.modifiedAt > t.deletedAt) true
+                            else { if (row != null) database.vpsHostDao().deleteById(t.entityKey); false }
                         }
                         TombstoneRecorder.TELNET_HOST -> {
                             val row = database.telnetHostDao().getById(t.entityKey)
@@ -1341,6 +1379,8 @@ class SyncDataApplier {
                     // Development-build read compatibility: payloads written before the container rename used `syncDocker`.
                     "syncDocker"            -> preferenceManager.setSyncContainersEnabled(value as Boolean)
                     "syncTelnetHosts"       -> preferenceManager.setSyncTelnetHostsEnabled(value as Boolean)
+                    "syncDomains"           -> preferenceManager.setSyncDomainsEnabled(value as Boolean)
+                    "syncVpsHosts"          -> preferenceManager.setSyncVpsHostsEnabled(value as Boolean)
                     "autoResolve"           -> preferenceManager.setAutoResolveConflicts(value as Boolean)
                 }
                 count++

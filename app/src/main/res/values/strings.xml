@@ -3311,6 +3311,8 @@
     <string name="sync_settings_title_hypervisor_accounts">Hypervisor Accounts</string>
     <string name="sync_settings_title_certificates">Certificates</string>
     <string name="sync_settings_title_telnet_hosts">Telnet Hosts</string>
+    <string name="sync_settings_title_domains">Domains</string>
+    <string name="sync_settings_title_vps_hosts">VPS Hosts</string>
     <string name="sync_settings_subtitle_hypervisor_accounts">Hypervisor accounts</string>
     <string name="sync_settings_subtitle_connections">SSH connection profiles</string>
     <string name="sync_settings_subtitle_identities">Reusable credentials</string>
@@ -3331,6 +3333,8 @@
     <string name="sync_settings_subtitle_containers">Container hosts, registries, stacks &amp; containers</string>
     <string name="sync_settings_subtitle_pane_groups">Saved pane groups (up to 6 terminal connections tiled together)</string>
     <string name="sync_settings_subtitle_telnet_hosts">Saved telnet host profiles</string>
+    <string name="sync_settings_subtitle_domains">Tracked domain registrations</string>
+    <string name="sync_settings_subtitle_vps_hosts">Tracked VPS/hosting instances</string>
     <string name="sync_settings_force_upload_title">Force Upload</string>
     <string name="sync_settings_force_upload_message">Upload local data to the sync file, overwriting remote.\n\nContinue?</string>
     <string name="sync_settings_force_download_title">⚠️ Force Download</string>

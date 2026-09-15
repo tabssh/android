@@ -125,6 +125,8 @@ class SyncDataCollector {
         val syncPaneGroups         = preferenceManager.isSyncPaneGroupsEnabled()
         val syncContainers         = preferenceManager.isSyncContainersEnabled()
         val syncTelnetHosts        = preferenceManager.isSyncTelnetHostsEnabled()
+        val syncDomains            = preferenceManager.isSyncDomainsEnabled()
+        val syncVpsHosts           = preferenceManager.isSyncVpsHostsEnabled()
 
         val connections        = if (syncConns)              collectConnections()        else emptyList()
         val keys               = if (syncKeys)               collectKeys()               else emptyList()
@@ -154,6 +156,8 @@ class SyncDataCollector {
         val singleContainerConfigs      = if (syncContainers) collectSingleContainerConfigs()      else emptyList()
         val containerAutoUpdatePolicies = if (syncContainers) collectContainerAutoUpdatePolicies() else emptyList()
         val telnetHosts         = if (syncTelnetHosts)        collectTelnetHosts()        else emptyList()
+        val domains             = if (syncDomains)            collectDomains()            else emptyList()
+        val vpsHosts            = if (syncVpsHosts)           collectVpsHosts()           else emptyList()
 
         val itemCounts = SyncItemCounts(
             connections        = connections.size,
@@ -182,7 +186,9 @@ class SyncDataCollector {
             composeStacks                   = composeStacks.size,
             singleContainerConfigs          = singleContainerConfigs.size,
             containerAutoUpdatePolicies     = containerAutoUpdatePolicies.size,
-            telnetHosts        = telnetHosts.size
+            telnetHosts        = telnetHosts.size,
+            domains            = domains.size,
+            vpsHosts           = vpsHosts.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -221,6 +227,8 @@ class SyncDataCollector {
             singleContainerConfigs      = singleContainerConfigs,
             containerAutoUpdatePolicies = containerAutoUpdatePolicies,
             telnetHosts        = telnetHosts,
+            domains            = domains,
+            vpsHosts           = vpsHosts,
             secrets            = secrets,
             tombstones         = tombstones
         )
@@ -345,6 +353,24 @@ class SyncDataCollector {
             database.paneGroupDao().getAllList()
         } catch (e: Exception) {
             throw SyncCollectException("pane groups", e)
+        }
+    }
+
+    /** Tracker: domain registrations (Domain_List.csv round-trip). No secrets; all columns are safe to sync. */
+    private suspend fun collectDomains(): List<io.github.tabssh.storage.database.entities.Domain> {
+        return try {
+            database.domainDao().getAllList()
+        } catch (e: Exception) {
+            throw SyncCollectException("domains", e)
+        }
+    }
+
+    /** Tracker: VPS/hosting instances (VPS.md round-trip). No secrets; all columns are safe to sync. */
+    private suspend fun collectVpsHosts(): List<io.github.tabssh.storage.database.entities.VpsHost> {
+        return try {
+            database.vpsHostDao().getAllList()
+        } catch (e: Exception) {
+            throw SyncCollectException("VPS hosts", e)
         }
     }
 
@@ -485,6 +511,8 @@ class SyncDataCollector {
         val syncPaneGroups         = preferenceManager.isSyncPaneGroupsEnabled()
         val syncContainers         = preferenceManager.isSyncContainersEnabled()
         val syncTelnetHosts        = preferenceManager.isSyncTelnetHostsEnabled()
+        val syncDomains            = preferenceManager.isSyncDomainsEnabled()
+        val syncVpsHosts           = preferenceManager.isSyncVpsHostsEnabled()
 
         val connections = if (syncConns)      collectConnections().filter { it.modifiedAt > timestamp } else emptyList()
         val keys        = if (syncKeys)       collectKeys().filter { it.modifiedAt > timestamp }        else emptyList()
@@ -533,6 +561,11 @@ class SyncDataCollector {
         // TelnetHost has modifiedAt; delta-filter it like the other simple entities.
         val telnetHosts = if (syncTelnetHosts)
             collectTelnetHosts().filter { it.modifiedAt > timestamp } else emptyList()
+        // Domain/VpsHost have modifiedAt; delta-filter them like the other simple entities.
+        val domains = if (syncDomains)
+            collectDomains().filter { it.modifiedAt > timestamp } else emptyList()
+        val vpsHosts = if (syncVpsHosts)
+            collectVpsHosts().filter { it.modifiedAt > timestamp } else emptyList()
 
         val preferences = if (syncSettings && hasPreferencesChanged(timestamp)) {
             collectPreferences()
@@ -570,7 +603,9 @@ class SyncDataCollector {
             composeStacks                   = composeStacks.size,
             singleContainerConfigs          = singleContainerConfigs.size,
             containerAutoUpdatePolicies     = containerAutoUpdatePolicies.size,
-            telnetHosts        = telnetHosts.size
+            telnetHosts        = telnetHosts.size,
+            domains            = domains.size,
+            vpsHosts           = vpsHosts.size
         )
 
         val metadata = metadataManager.createSyncMetadata(itemCounts)
@@ -612,6 +647,8 @@ class SyncDataCollector {
             singleContainerConfigs      = singleContainerConfigs,
             containerAutoUpdatePolicies = containerAutoUpdatePolicies,
             telnetHosts        = telnetHosts,
+            domains            = domains,
+            vpsHosts           = vpsHosts,
             secrets            = secrets,
             tombstones         = tombstones
         )
@@ -665,6 +702,8 @@ class SyncDataCollector {
             out += TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY
         }
         if (preferenceManager.isSyncTelnetHostsEnabled())        out += TombstoneRecorder.TELNET_HOST
+        if (preferenceManager.isSyncDomainsEnabled())            out += TombstoneRecorder.DOMAIN
+        if (preferenceManager.isSyncVpsHostsEnabled())           out += TombstoneRecorder.VPS_HOST
         return out
     }
 
@@ -697,6 +736,8 @@ class SyncDataCollector {
         TombstoneRecorder.SINGLE_CONTAINER_CONFIG -> collectSingleContainerConfigs().map { TombstoneRecorder.naturalKey(it) }
         TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY -> collectContainerAutoUpdatePolicies().map { TombstoneRecorder.naturalKey(it) }
         TombstoneRecorder.TELNET_HOST       -> collectTelnetHosts().map { it.id }
+        TombstoneRecorder.DOMAIN            -> collectDomains().map { it.id }
+        TombstoneRecorder.VPS_HOST          -> collectVpsHosts().map { it.id }
         TombstoneRecorder.SECRET            -> liveSecretAliases()
         else -> emptyList()
     }
@@ -805,6 +846,7 @@ class SyncDataCollector {
             TombstoneRecorder.REGISTRY_CREDENTIAL, TombstoneRecorder.COMPOSE_STACK,
             TombstoneRecorder.SINGLE_CONTAINER_CONFIG, TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY,
             TombstoneRecorder.TELNET_HOST,
+            TombstoneRecorder.DOMAIN, TombstoneRecorder.VPS_HOST,
             TombstoneRecorder.SECRET
         )
         for (type in allTypes) {
@@ -1175,6 +1217,8 @@ class SyncDataCollector {
             "syncPaneGroups"        to preferenceManager.isSyncPaneGroupsEnabled(),
             "syncContainers"        to preferenceManager.isSyncContainersEnabled(),
             "syncTelnetHosts"       to preferenceManager.isSyncTelnetHostsEnabled(),
+            "syncDomains"           to preferenceManager.isSyncDomainsEnabled(),
+            "syncVpsHosts"          to preferenceManager.isSyncVpsHostsEnabled(),
             "autoResolve"           to preferenceManager.isAutoResolveConflictsEnabled()
         )
     }
@@ -1341,7 +1385,9 @@ class SyncDataCollector {
             composeStacks     = try { database.composeStackDao().getAllList().size } catch (_: Exception) { 0 },
             singleContainerConfigs = try { database.singleContainerConfigDao().getAllList().size } catch (_: Exception) { 0 },
             containerAutoUpdatePolicies = try { database.containerAutoUpdatePolicyDao().getAllList().size } catch (_: Exception) { 0 },
-            telnetHosts       = try { database.telnetHostDao().getAllList().size } catch (_: Exception) { 0 }
+            telnetHosts       = try { database.telnetHostDao().getAllList().size } catch (_: Exception) { 0 },
+            domains           = try { database.domainDao().getAllList().size } catch (_: Exception) { 0 },
+            vpsHosts          = try { database.vpsHostDao().getAllList().size } catch (_: Exception) { 0 }
         )
     }
 
