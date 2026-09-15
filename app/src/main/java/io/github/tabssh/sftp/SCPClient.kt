@@ -133,7 +133,7 @@ class SCPClient(private val sshConnection: SSHConnection) {
                 return@withContext false
             }
             val header = "C$mode ${localFile.length()} $name\n"
-            out.write(header.toByteArray(Charsets.US_ASCII))
+            out.write(header.toByteArray(Charsets.UTF_8))
             out.flush()
             if (!checkAck(inStream)) {
                 Logger.e(TAG, "SCP server rejected header")
@@ -145,6 +145,7 @@ class SCPClient(private val sshConnection: SSHConnection) {
             localFile.inputStream().use { fin ->
                 val buf = ByteArray(BUFFER_SIZE)
                 while (true) {
+                    if (task.isCancelled()) break
                     val read = fin.read(buf)
                     if (read <= 0) break
                     out.write(buf, 0, read)
@@ -152,6 +153,14 @@ class SCPClient(private val sshConnection: SSHConnection) {
                     task.notifyProgress()
                 }
                 out.flush()
+            }
+
+            // A cancelled transfer never sends the terminator: closing the
+            // channel mid-payload lets the server discard the partial file.
+            if (task.isCancelled()) {
+                task.complete(TransferResult.Cancelled)
+                Logger.i(TAG, "SCP upload cancelled: ${localFile.name}")
+                return@withContext false
             }
 
             // SCP transfer terminator (single null byte).
@@ -244,7 +253,7 @@ class SCPClient(private val sshConnection: SSHConnection) {
             }
 
             // Push the uploaded directory itself, then its contents, then pop.
-            out.write("D0755 0 $remoteName\n".toByteArray(Charsets.US_ASCII))
+            out.write("D0755 0 $remoteName\n".toByteArray(Charsets.UTF_8))
             out.flush()
             if (!checkAck(inStream)) {
                 Logger.e(TAG, "SCP server rejected top-level directory header for $remoteName")
@@ -255,7 +264,7 @@ class SCPClient(private val sshConnection: SSHConnection) {
             uploadDirectoryContents(localDir, out, inStream, task)
 
             if (!task.isCancelled()) {
-                out.write("E\n".toByteArray(Charsets.US_ASCII))
+                out.write("E\n".toByteArray(Charsets.UTF_8))
                 out.flush()
                 if (!checkAck(inStream)) {
                     throw java.io.IOException("SCP server rejected top-level directory pop for $remoteName")
@@ -309,7 +318,7 @@ class SCPClient(private val sshConnection: SSHConnection) {
 
             if (child.isDirectory) {
                 val header = "D0755 0 ${child.name}\n"
-                out.write(header.toByteArray(Charsets.US_ASCII))
+                out.write(header.toByteArray(Charsets.UTF_8))
                 out.flush()
                 if (!checkAck(inStream)) {
                     throw java.io.IOException("SCP server rejected directory header for ${child.name}")
@@ -317,7 +326,7 @@ class SCPClient(private val sshConnection: SSHConnection) {
 
                 uploadDirectoryContents(child, out, inStream, task)
 
-                out.write("E\n".toByteArray(Charsets.US_ASCII))
+                out.write("E\n".toByteArray(Charsets.UTF_8))
                 out.flush()
                 if (!checkAck(inStream)) {
                     throw java.io.IOException("SCP server rejected directory pop for ${child.name}")
@@ -326,7 +335,7 @@ class SCPClient(private val sshConnection: SSHConnection) {
             }
 
             val header = "C0644 ${child.length()} ${child.name}\n"
-            out.write(header.toByteArray(Charsets.US_ASCII))
+            out.write(header.toByteArray(Charsets.UTF_8))
             out.flush()
             if (!checkAck(inStream)) {
                 throw java.io.IOException("SCP server rejected file header for ${child.name}")

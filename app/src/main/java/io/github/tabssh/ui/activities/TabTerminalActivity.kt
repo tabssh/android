@@ -1652,7 +1652,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 Toast.makeText(this@TabTerminalActivity, getString(R.string.remote_editor_sftp_failed), Toast.LENGTH_LONG).show()
                 return@launch
             }
-            remoteFileOpener.open(sftp, path, path.substringAfterLast('/'))
+            remoteFileOpener.open(sftp, path, path.substringAfterLast('/'), ownsManager = true)
         }
     }
 
@@ -4600,6 +4600,8 @@ class TabTerminalActivity : TabSSHActivity() {
                             )
                         }
                         Toast.makeText(this@TabTerminalActivity, getString(R.string.main_quick_connect_saved, name), Toast.LENGTH_SHORT).show()
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.e("TabTerminalActivity", "Failed to save macro", e)
                         showError(getString(R.string.terminal_error_failed_save_macro_fmt, e.message), getString(R.string.terminal_macro_error_title))
@@ -5625,6 +5627,8 @@ class TabTerminalActivity : TabSSHActivity() {
                         .setNegativeButton(R.string.cancel, null)
                         .show()
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Failed to load snippets", e)
                 showError(getString(R.string.snippet_mgr_error_load_failed), getString(R.string.status_error))
@@ -5652,6 +5656,8 @@ class TabTerminalActivity : TabSSHActivity() {
 
                     Logger.d("TabTerminalActivity", "Inserted snippet: ${snippet.name}")
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Failed to insert snippet", e)
                 showError(getString(R.string.terminal_error_failed_insert_snippet), getString(R.string.status_error))

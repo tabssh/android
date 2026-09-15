@@ -719,6 +719,9 @@ class ContainerHostEditActivity : TabSSHActivity() {
         password: String
     ): ContainerResult<TransportCapabilityDetector.DetectedTransport> {
         var storedTemporaryPassword = false
+        // A connection this probe dialed itself (not reused from the pool) must
+        // be torn down when the probe finishes, or it leaks past the test.
+        var dialedConnection: io.github.tabssh.ssh.connection.SSHConnection? = null
         try {
             val profile = if (host.usesCustomEndpoint()) {
                 // The probe needs the typed password in the Keystore (the
@@ -741,9 +744,10 @@ class ContainerHostEditActivity : TabSSHActivity() {
             }
             // connectForMonitoring: a connection test is plumbing, not a user
             // session — it must not show up as an active SSH session.
-            val ssh = app.sshSessionManager.getConnection(profile.id)
+            val pooled = app.sshSessionManager.getConnection(profile.id)
                 ?.takeIf { it.isConnected() }
-                ?: app.sshSessionManager.connectForMonitoring(profile)
+            val ssh = pooled ?: app.sshSessionManager.connectForMonitoring(profile)
+                ?.also { dialedConnection = it }
             if (ssh == null) {
                 return ContainerResult.TransportUnavailable(
                     getString(R.string.container_msg_ssh_unavailable),
@@ -761,6 +765,17 @@ class ContainerHostEditActivity : TabSSHActivity() {
             // password in the Keystore under an unsaved host's id.
             if (storedTemporaryPassword) {
                 ContainerHostPasswordStore.clear(this@ContainerHostEditActivity, host.id)
+            }
+            // Fire-and-forget on the application scope so a cancelled probe
+            // coroutine still gets its self-dialed session torn down.
+            dialedConnection?.let { conn ->
+                TabSSHApplication.get().applicationScope.launch(Dispatchers.IO) {
+                    try {
+                        conn.disconnect()
+                    } catch (e: Exception) {
+                        Logger.w("ContainerHostEditActivity", "Probe SSH disconnect failed: ${e.message}")
+                    }
+                }
             }
         }
     }

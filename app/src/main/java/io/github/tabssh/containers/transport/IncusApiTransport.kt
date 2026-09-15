@@ -71,6 +71,13 @@ class IncusApiTransport(
         /** Interval between polls of an image-pull operation's progress. */
         private const val PULL_POLL_INTERVAL_MS = 1_000L
 
+        /**
+         * Ceiling on one image pull. Image downloads legitimately outlast
+         * OPERATION_TIMEOUT_MS on slow links; giving up early while the
+         * daemon-side pull continues would force a full re-download on retry.
+         */
+        private const val PULL_TIMEOUT_MS = 30 * 60 * 1000L
+
         /** Volume type these engines use for user-created storage volumes. */
         private const val VOLUME_TYPE_CUSTOM = "custom"
 
@@ -496,7 +503,7 @@ class IncusApiTransport(
             emit(PullProgressEvent(status = ref))
             return@flow
         }
-        val deadline = System.currentTimeMillis() + OPERATION_TIMEOUT_MS
+        val deadline = System.currentTimeMillis() + PULL_TIMEOUT_MS
         var lastProgress: String? = null
         while (System.currentTimeMillis() < deadline) {
             val polled = get("Failed to pull image", operation) { it }

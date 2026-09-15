@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
+import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.entities.Identity
 
 /**
@@ -43,8 +44,17 @@ class IdentityAdapter(
         
         fun bind(identity: Identity) {
             textName.text = identity.name
-            textUsername.text = "Username: ${identity.username}"
-            textAuthType.text = identity.getAuthTypeDisplay()
+            textUsername.text = itemView.context.getString(
+                R.string.hypervisor_account_username_fmt, identity.username
+            )
+            textAuthType.text = when (identity.authType) {
+                AuthType.PASSWORD ->
+                    itemView.context.getString(R.string.auth_type_password)
+                AuthType.PUBLIC_KEY ->
+                    itemView.context.getString(R.string.identity_auth_type_ssh_key)
+                AuthType.KEYBOARD_INTERACTIVE ->
+                    itemView.context.getString(R.string.identity_auth_type_keyboard_interactive)
+            }
             
             if (identity.description.isNullOrBlank()) {
                 textDescription.visibility = View.GONE

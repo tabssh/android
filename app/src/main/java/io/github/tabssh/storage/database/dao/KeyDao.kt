@@ -67,9 +67,6 @@ interface KeyDao {
     
     @Query("SELECT DISTINCT key_type FROM stored_keys")
     suspend fun getAllKeyTypes(): List<String>
-    
-    @Query("SELECT * FROM stored_keys WHERE name LIKE :query OR comment LIKE :query ORDER BY name")
-    suspend fun searchKeys(query: String): List<StoredKey>
 
     /**
      * Look up a key by its SSH-convention alias (e.g. `id_ed25519`, `id_rsa_001`).

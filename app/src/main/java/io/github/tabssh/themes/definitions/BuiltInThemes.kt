@@ -5,7 +5,15 @@ package io.github.tabssh.themes.definitions
  * Includes popular terminal themes with proper color accessibility
  */
 object BuiltInThemes {
-    
+
+    // Stable id for the follow-the-system theme (matches the
+    // terminal_theme_values entry in res/values/arrays.xml). Persisting this
+    // id keeps the selection dynamic — colors are re-resolved from the
+    // current uiMode every time the theme is looked up, not frozen to
+    // whichever of dark/light was active when the user picked it.
+    const val SYSTEM_DEFAULT_ID = "system_default"
+
+
     /**
      * Get all built-in themes
      */
@@ -64,10 +72,17 @@ object BuiltInThemes {
     // System-aware themes
     
     fun systemDefault(): Theme {
-        val isDark = android.content.res.Resources.getSystem().configuration.uiMode and 
-                     android.content.res.Configuration.UI_MODE_NIGHT_MASK == 
+        val isDark = android.content.res.Resources.getSystem().configuration.uiMode and
+                     android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
                      android.content.res.Configuration.UI_MODE_NIGHT_YES
-        return if (isDark) systemDark() else systemLight()
+        // Own id/name so the 23-theme list stays unique and the persisted
+        // selection keeps following the system instead of pinning the
+        // dark/light variant that happened to be active at pick time.
+        val base = if (isDark) systemDark() else systemLight()
+        return base.copy(
+            id = SYSTEM_DEFAULT_ID,
+            name = "System Default"
+        )
     }
     
     fun systemDark(): Theme {
@@ -851,15 +866,15 @@ object BuiltInThemes {
                 0xFF26233A.toInt(),
                 // Red
                 0xFFEB6F92.toInt(),
-                // Green
-                0xFF9CCFD8.toInt(),
+                // Green (pine)
+                0xFF31748F.toInt(),
                 // Yellow
                 0xFFF6C177.toInt(),
-                // Blue
-                0xFF31748F.toInt(),
+                // Blue (foam)
+                0xFF9CCFD8.toInt(),
                 // Magenta
                 0xFFC4A7E7.toInt(),
-                // Cyan
+                // Cyan (rose)
                 0xFFEBBCBA.toInt(),
                 // White
                 0xFFE0DEF4.toInt(),
@@ -867,12 +882,12 @@ object BuiltInThemes {
                 0xFF6E6A86.toInt(),
                 // Bright Red
                 0xFFEB6F92.toInt(),
-                // Bright Green
-                0xFF9CCFD8.toInt(),
+                // Bright Green (pine)
+                0xFF31748F.toInt(),
                 // Bright Yellow
                 0xFFF6C177.toInt(),
-                // Bright Blue
-                0xFF31748F.toInt(),
+                // Bright Blue (foam)
+                0xFF9CCFD8.toInt(),
                 // Bright Magenta
                 0xFFC4A7E7.toInt(),
                 // Bright Cyan

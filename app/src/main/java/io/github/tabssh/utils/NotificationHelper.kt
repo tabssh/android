@@ -719,11 +719,14 @@ object NotificationHelper {
         if (!soundOn) builder.setSound(null)
         if (!vibOn) builder.setVibrate(longArrayOf(0))
 
-        // Use a derived id so the alert doesn't collide with the silent
-        // per-tab status notification ids. Alerts stay host-scoped (one
-        // audible ping per host event), so the id derives from profile.id
-        // using the same range formula, shifted out of 10_000–99_999.
-        val alertId = (10_000 + ((profile.id.hashCode().toLong() and 0x7FFFFFFFL) % 90_000).toInt()) xor 0x40000
+        // Use a dedicated 500_000–589_999 range so the alert never collides
+        // with any other id family: per-tab (10_000–99_999), host monitoring
+        // (200_000–289_999), container updates (300_000–389_999), renewal
+        // reminders (400_000–489_999), the group summaries (199_999/299_999/
+        // 399_999), or the fixed service ids (1000–4001). Alerts stay
+        // host-scoped (one audible ping per host event), so the id derives
+        // from profile.id with the same range formula.
+        val alertId = 500_000 + ((profile.id.hashCode().toLong() and 0x7FFFFFFFL) % 90_000).toInt()
         nm.notify(alertId, builder.build())
     }
     

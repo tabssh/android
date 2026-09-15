@@ -42,6 +42,14 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
     private data class Running(val endpointKey: String, val tunnelId: String)
     private val running = ConcurrentHashMap<String, Running>()
 
+    /**
+     * Endpoint keys whose SSH session THIS coordinator dialed (as opposed to
+     * reusing a session a terminal tab already had open). Only owned sessions
+     * may be closed in [stop] — closing a reused one would disconnect a live
+     * terminal tab on the same profile.
+     */
+    private val ownedEndpoints: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
     private val _runningIds = MutableStateFlow<Set<String>>(emptySet())
 
     /**
@@ -166,12 +174,16 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
         } catch (e: Exception) {
             Logger.w("PortForwardCoordinator", "Error stopping tunnel: ${e.message}")
         }
-        // If no other running forward uses this endpoint, tear the session down.
+        // If no other running forward uses this endpoint, tear the session down —
+        // but only when the coordinator dialed it itself. A session reused from a
+        // live terminal tab is left connected; only the forwarding is removed.
         val stillUsed = running.values.any { it.endpointKey == handle.endpointKey }
         if (!stillUsed) {
             managers.remove(handle.endpointKey)?.cleanup()
-            app.sshSessionManager.getConnection(handle.endpointKey)?.let {
-                app.sshSessionManager.closeConnection(handle.endpointKey)
+            if (ownedEndpoints.remove(handle.endpointKey)) {
+                app.sshSessionManager.getConnection(handle.endpointKey)?.let {
+                    app.sshSessionManager.closeConnection(handle.endpointKey)
+                }
             }
         }
     }
@@ -196,6 +208,7 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
         updateRunningIds()
         managers.values.forEach { it.cleanup() }
         managers.clear()
+        ownedEndpoints.clear()
     }
 
     // --- internals ---
@@ -258,6 +271,10 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
         app.sshSessionManager.getConnection(key)?.let { existing ->
             if (existing.isConnected()) return existing
         }
-        return app.sshSessionManager.connectToServer(profile)
+        // No live session existed — the coordinator dials one itself and
+        // therefore owns it: stop() may close it once no forward needs it.
+        return app.sshSessionManager.connectToServer(profile)?.also {
+            ownedEndpoints.add(key)
+        }
     }
 }

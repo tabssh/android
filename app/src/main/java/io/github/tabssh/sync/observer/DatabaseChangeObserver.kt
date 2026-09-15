@@ -1,6 +1,7 @@
 package io.github.tabssh.sync.observer
 
 import android.content.Context
+import androidx.room.InvalidationTracker
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import io.github.tabssh.storage.database.TabSSHDatabase
@@ -8,7 +9,6 @@ import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.sync.worker.SyncWorker
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.combine
 import java.util.concurrent.TimeUnit
 
 /**
@@ -20,6 +20,36 @@ class DatabaseChangeObserver(private val context: Context) {
         private const val TAG = "DatabaseChangeObserver"
         // 30 seconds
         private const val DEBOUNCE_DELAY = 30_000L
+
+        // Every table SyncDataCollector reads — the sync-on-change trigger must
+        // cover the full sync surface, not a subset (AI.md PART 10).
+        private val SYNCED_TABLES = arrayOf(
+            "connections",
+            "stored_keys",
+            "themes",
+            "host_keys",
+            "workspaces",
+            "snippets",
+            "identities",
+            "connection_groups",
+            "hypervisors",
+            "trusted_certificates",
+            "macros",
+            "monitor_slots",
+            "hypervisor_accounts",
+            "vnc_hosts",
+            "vnc_identities",
+            "cloud_accounts",
+            "port_forwards",
+            "network_routes",
+            "pane_groups",
+            "container_hosts",
+            "registry_credentials",
+            "compose_stacks",
+            "single_container_configs",
+            "container_auto_update_policies",
+            "telnet_hosts"
+        )
     }
 
     private val database = TabSSHDatabase.getDatabase(context)
@@ -56,39 +86,30 @@ class DatabaseChangeObserver(private val context: Context) {
     }
 
     /**
-     * Observe all database tables
+     * Observe all synced database tables via Room's InvalidationTracker,
+     * which fires per-write without holding row contents in memory.
      */
     private suspend fun observeAllChanges() {
-        val connectionsFlow  = database.connectionDao().getAllConnections()
-        val keysFlow         = database.keyDao().getAllKeys()
-        val themesFlow       = database.themeDao().getAllThemes()
-        val hostKeysFlow     = database.hostKeyDao().getAllHostKeys()
-        val vncHostsFlow     = database.vncHostDao().getAllHosts()
-        val vncIdentFlow     = database.vncIdentityDao().getAllIdentities()
-
-        // kotlinx combine supports ≤5 args; chain two groups.
-        val coreFlow = combine(connectionsFlow, keysFlow, themesFlow, hostKeysFlow) {
-                c, k, t, h -> (c.size + k.size + t.size + h.size).toLong()
+        val observer = object : InvalidationTracker.Observer(SYNCED_TABLES) {
+            override fun onInvalidated(tables: Set<String>) {
+                onDataChanged(tables)
+            }
         }
-        val vncFlow = combine(vncHostsFlow, vncIdentFlow) { vh, vi -> (vh.size + vi.size).toLong() }
-
-        combine(coreFlow, vncFlow) { core, vnc ->
-            DatabaseChangeEvent(
-                totalCount = core + vnc,
-                timestamp = System.currentTimeMillis()
-            )
-        }.collect { event ->
-            onDataChanged(event)
+        database.invalidationTracker.addObserver(observer)
+        try {
+            awaitCancellation()
+        } finally {
+            database.invalidationTracker.removeObserver(observer)
         }
     }
 
     /**
      * Handle data change event
      */
-    private fun onDataChanged(event: DatabaseChangeEvent) {
+    private fun onDataChanged(tables: Set<String>) {
         if (!preferenceManager.isSyncEnabled()) return
         if (!preferenceManager.isSyncOnChangeEnabled()) return
-        Logger.d(TAG, "Database changed: ${event.totalCount} total items")
+        Logger.d(TAG, "Database changed: ${tables.joinToString(", ")}")
         scheduleDelayedSync()
     }
 
@@ -130,11 +151,3 @@ class DatabaseChangeObserver(private val context: Context) {
         return observerJob?.isActive == true
     }
 }
-
-/**
- * Database change event
- */
-private data class DatabaseChangeEvent(
-    val totalCount: Long,
-    val timestamp: Long
-)

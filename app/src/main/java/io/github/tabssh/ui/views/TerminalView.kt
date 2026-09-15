@@ -1973,34 +1973,42 @@ class TerminalView @JvmOverloads constructor(
      * @return Line of text at the coordinates, or null if out of bounds
      */
     private fun getTextAtPosition(x: Float, y: Float): Pair<Int, String>? {
-        // Compute row the same way renderTermuxBuffer does: screen row + scrollback
-        // rows. The old formula ((y - paddingTop + scrollYInt) / cellHeight) mixes
-        // pixels and integer-divides once, which gives different results from the
-        // two-step version due to truncation and does not match the render path.
+        // Compute the visual row and scrollback offset in two integer steps.
+        // A single mixed-pixel division ((y - paddingTop + scrollYInt) / cellHeight)
+        // truncates differently and does not match the render path.
         val scrollRows = if (cellHeight > 0f) (scrollYInt / cellHeight).toInt() else 0
         val screenRow  = if (cellHeight > 0f) ((y - gridTop) / cellHeight).toInt() else 0
-        val row = screenRow + scrollRows
+        // Text lives at the EXTERNAL row (screenRow - scrollRows), matching
+        // renderTermuxBuffer's `externalRow = row - scrollRows`; negative rows
+        // index the scrollback transcript. The RETURNED row stays VISUAL —
+        // callers store it as selection anchor/focus rows, which
+        // drawSelectionOverlay and getSelectedText treat as viewport rows.
+        val extRow = screenRow - scrollRows
         val col = ((x - paddingLeft) / cellWidth).toInt()
 
-        if (row < 0 || col < 0 || row >= terminalRows || col >= terminalCols) {
+        if (screenRow < 0 || col < 0 || screenRow >= terminalRows || col >= terminalCols) {
             return null
         }
 
-        // Try Termux buffer first - use getSelectedText for row text
+        // Try Termux buffer first - use getSelectedText for row text.
+        // The try/catch guards rows scrolled past the transcript bounds.
         termuxBuffer?.let { buffer ->
             val lineText = try {
-                buffer.getSelectedText(0, row, terminalCols, row) ?: ""
+                buffer.getSelectedText(0, extRow, terminalCols, extRow) ?: ""
             } catch (e: Exception) {
                 ""
             }
-            return Pair(row, lineText)
+            return Pair(screenRow, lineText)
         }
+
+        // The local buffer's getLine() only covers the live screen.
+        if (extRow < 0 || extRow >= terminalRows) return null
 
         // Fall back to old buffer
         terminalBuffer?.let { buffer ->
-            val lineChars = buffer.getLine(row)
+            val lineChars = buffer.getLine(extRow)
             val lineText = lineChars?.map { it.char }?.joinToString("") ?: ""
-            return Pair(row, lineText)
+            return Pair(screenRow, lineText)
         }
 
         return null
@@ -2058,7 +2066,10 @@ class TerminalView @JvmOverloads constructor(
      * Used by detectUrlAtPosition to read adjacent rows for word-wrap URL joining.
      */
     private fun getRowText(row: Int): String {
-        if (row < 0 || row >= terminalRows) return ""
+        if (row >= terminalRows) return ""
+        // Termux external rows may be negative (scrollback transcript); the
+        // try/catch guards rows outside the transcript. The local buffer's
+        // getLine() only covers the live screen, so negatives stop here.
         termuxBuffer?.let { buffer ->
             return try {
                 buffer.getSelectedText(0, row, terminalCols, row) ?: ""
@@ -2066,6 +2077,7 @@ class TerminalView @JvmOverloads constructor(
                 ""
             }
         }
+        if (row < 0) return ""
         terminalBuffer?.let { buffer ->
             val lineChars = buffer.getLine(row)
             return lineChars?.map { it.char }?.joinToString("") ?: ""
@@ -2151,12 +2163,21 @@ class TerminalView @JvmOverloads constructor(
     private fun detectUrlAtPosition(x: Float, y: Float): String? {
         val scrollRows = if (cellHeight > 0f) (scrollYInt / cellHeight).toInt() else 0
         val screenRow  = if (cellHeight > 0f) ((y - gridTop) / cellHeight).toInt() else 0
-        val row = (screenRow + scrollRows).coerceIn(0, terminalRows - 1)
+        // Visual→external mapping is (screenRow - scrollRows), matching
+        // renderTermuxBuffer's `externalRow = row - scrollRows`. Negative rows
+        // index the Termux scrollback transcript, bounded by its size.
+        val minRow = if (termuxBuffer != null) {
+            -(termuxBuffer?.activeTranscriptRows ?: 0)
+        } else {
+            0
+        }
+        val row = (screenRow - scrollRows).coerceIn(minRow, terminalRows - 1)
         val col = ((x - paddingLeft) / cellWidth).toInt().coerceIn(0, terminalCols - 1)
 
         // OSC 8 hyperlinks take priority: they carry the exact URL the program intended.
         termuxBridge?.getOsc8UrlAt(row, col)?.let { return it }
-        terminalBuffer?.getUrlAt(row, col)?.let { return it }
+        // The local buffer's getUrlAt only covers the live screen (row >= 0).
+        if (row >= 0) terminalBuffer?.getUrlAt(row, col)?.let { return it }
 
         // Fast path: URL starts and ends on the tapped row. Skipped when the
         // match runs to the end of a soft-wrapped row — the URL path segment
@@ -2176,7 +2197,7 @@ class TerminalView @JvmOverloads constructor(
         // Walk backward to find the first row of the soft-wrap segment containing `row`.
         // A row r is part of this segment when row r-1 soft-wraps into r.
         var segStart = row
-        while (segStart > 0 && isRowSoftWrapped(segStart - 1)) {
+        while (segStart > minRow && isRowSoftWrapped(segStart - 1)) {
             segStart--
         }
 
@@ -2187,7 +2208,7 @@ class TerminalView @JvmOverloads constructor(
         }
 
         // Use the full wrap segment. segStart/segEnd are already bounded by the
-        // first non-wrapped row on each side (and hard-bounded by 0/terminalRows-1,
+        // first non-wrapped row on each side (and hard-bounded by minRow/terminalRows-1,
         // i.e. at most one screen height), so no further clamping is needed here.
         // A previous ±4-row clamp around the tap point cut off the window before
         // it reached the URL's scheme prefix whenever a tap landed more than 4 rows
@@ -2667,7 +2688,7 @@ class TerminalView @JvmOverloads constructor(
             ) {
                 super.onInitializeAccessibilityNodeInfo(host, info)
                 info.className = "Terminal"
-                info.contentDescription = "SSH Terminal"
+                info.contentDescription = context.getString(R.string.accessibility_terminal)
 
                 // Prefer the live Termux screen when a remote session is
                 // attached — `terminalBuffer` only holds content on the

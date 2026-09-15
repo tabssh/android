@@ -118,8 +118,8 @@ data class HypervisorProfile(
      * `oci_private_key_${id}` (and optional `oci_passphrase_${id}`).
      *
      * Kept as a free-form TEXT so future auth styles (token, mTLS, …) can
-     * land without a schema change. Defaulted to "password" so the
-     * v28→v29 migration is invisible to existing rows.
+     * land without a schema change. Defaults to "password" so rows created
+     * before OCI support behave unchanged.
      */
     @ColumnInfo(name = "auth_type")
     val authType: String = "password",

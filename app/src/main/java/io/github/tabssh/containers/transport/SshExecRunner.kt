@@ -132,12 +132,16 @@ class SshExecRunner(
 
             val buf = ByteArray(8192)
             val pending = StringBuilder()
+            // Chunk boundaries fall anywhere, including inside a multibyte
+            // UTF-8 sequence — a persistent decoder carries the partial
+            // sequence into the next chunk instead of emitting U+FFFD.
+            val decoder = Utf8ChunkDecoder()
             while (true) {
                 val available = stdout.available()
                 if (available > 0) {
                     val n = stdout.read(buf, 0, minOf(available, buf.size))
                     if (n > 0) {
-                        pending.append(String(buf, 0, n, Charsets.UTF_8))
+                        pending.append(decoder.decode(buf, n))
                         emitCompleteLines(pending) { emit(it) }
                     }
                 } else if (channel.isClosed) {
@@ -149,10 +153,11 @@ class SshExecRunner(
             // Final drain plus trailing partial line.
             var n = stdout.read(buf)
             while (n > 0) {
-                pending.append(String(buf, 0, n, Charsets.UTF_8))
+                pending.append(decoder.decode(buf, n))
                 emitCompleteLines(pending) { emit(it) }
                 n = stdout.read(buf)
             }
+            pending.append(decoder.finish())
             emitCompleteLines(pending) { emit(it) }
             if (pending.isNotEmpty()) emit(pending.toString())
         } finally {
@@ -203,6 +208,43 @@ class SshExecRunner(
         while (n > 0) {
             appendCapped(sink, buf, n)
             n = input.read(buf)
+        }
+    }
+
+    /**
+     * Incremental UTF-8 decoder for a byte stream read in arbitrary chunks.
+     * Bytes forming an incomplete trailing sequence are carried into the next
+     * [decode] call; genuinely malformed bytes become U+FFFD.
+     */
+    private class Utf8ChunkDecoder {
+        private val decoder = Charsets.UTF_8.newDecoder()
+            .onMalformedInput(java.nio.charset.CodingErrorAction.REPLACE)
+            .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPLACE)
+        private var carry = ByteArray(0)
+
+        /** Decode [count] bytes of [buf] plus any carried-over partial sequence. */
+        fun decode(buf: ByteArray, count: Int): String {
+            val input = java.nio.ByteBuffer.allocate(carry.size + count)
+            input.put(carry)
+            input.put(buf, 0, count)
+            input.flip()
+            val chars = java.nio.CharBuffer.allocate(input.remaining())
+            decoder.decode(input, chars, false)
+            carry = ByteArray(input.remaining()).also { input.get(it) }
+            chars.flip()
+            return chars.toString()
+        }
+
+        /** Flush a dangling partial sequence at end of stream as replacement output. */
+        fun finish(): String {
+            if (carry.isEmpty()) return ""
+            val input = java.nio.ByteBuffer.wrap(carry)
+            val chars = java.nio.CharBuffer.allocate(carry.size)
+            decoder.decode(input, chars, true)
+            decoder.flush(chars)
+            carry = ByteArray(0)
+            chars.flip()
+            return chars.toString()
         }
     }
 

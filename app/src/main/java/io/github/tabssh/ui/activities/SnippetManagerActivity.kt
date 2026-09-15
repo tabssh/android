@@ -77,7 +77,8 @@ class SnippetManagerActivity : TabSSHActivity() {
             snippets = snippets,
             onSnippetClick = { snippet -> editSnippet(snippet) },
             onSnippetDelete = { snippet -> deleteSnippet(snippet) },
-            onSnippetUse = { snippet -> useSnippet(snippet) }
+            onSnippetUse = { snippet -> useSnippet(snippet) },
+            onToggleFavorite = { snippet -> toggleFavorite(snippet) }
         )
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
@@ -372,6 +373,22 @@ class SnippetManagerActivity : TabSSHActivity() {
         io.github.tabssh.utils.ClipboardHelper.copy(this, label = "Snippet", text = snippet.command, sensitive = false)
     }
 
+    private fun toggleFavorite(snippet: Snippet) {
+        // The getAllSnippets() Flow collected in loadSnippets re-emits after the
+        // update, refreshing the row's star automatically.
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    app.database.snippetDao().toggleFavorite(snippet.id)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.e("SnippetManagerActivity", "Failed to toggle favorite", e)
+            }
+        }
+    }
+
     /**
      * RecyclerView adapter for snippets
      */
@@ -379,7 +396,8 @@ class SnippetManagerActivity : TabSSHActivity() {
         private val snippets: List<Snippet>,
         private val onSnippetClick: (Snippet) -> Unit,
         private val onSnippetDelete: (Snippet) -> Unit,
-        private val onSnippetUse: (Snippet) -> Unit
+        private val onSnippetUse: (Snippet) -> Unit,
+        private val onToggleFavorite: (Snippet) -> Unit
     ) : RecyclerView.Adapter<SnippetAdapter.SnippetViewHolder>() {
 
         class SnippetViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -424,8 +442,7 @@ class SnippetManagerActivity : TabSSHActivity() {
             }
 
             holder.favoriteIcon.setOnClickListener {
-                // Toggle favorite (implement in activity)
-                onSnippetClick(snippet)
+                onToggleFavorite(snippet)
             }
         }
 

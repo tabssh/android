@@ -91,8 +91,17 @@ class SSHConfigParser {
         val hosts = parseHosts(configContent)
 
         hosts.forEach { host ->
-            if (host.hostPattern != "*" && !host.hostPattern.contains("*")) {
-                connections.add(convertToConnectionProfile(host))
+            // OpenSSH allows several patterns on one Host line ("Host a b c") —
+            // emit one profile per concrete pattern instead of a single bogus
+            // profile whose host is the whole "a b c" string. Wildcard and
+            // negated patterns are never importable hosts and are skipped.
+            host.hostPattern.split("\\s+".toRegex()).forEach { pattern ->
+                // '?' is a single-char wildcard in ssh_config, same class as '*'.
+                if (pattern.isNotBlank() && !pattern.contains("*") &&
+                    !pattern.contains("?") && !pattern.startsWith("!")
+                ) {
+                    connections.add(convertToConnectionProfile(host, pattern))
+                }
             }
         }
 
@@ -254,10 +263,10 @@ class SSHConfigParser {
     /**
      * Convert SSHHost to ConnectionProfile
      */
-    private fun convertToConnectionProfile(host: SSHHost): ConnectionProfile {
+    private fun convertToConnectionProfile(host: SSHHost, pattern: String = host.hostPattern): ConnectionProfile {
         val id = generateConnectionId(host)
-        val name = host.hostPattern
-        val hostname = host.hostname ?: host.hostPattern
+        val name = pattern
+        val hostname = host.hostname ?: pattern
         val username = host.user ?: System.getProperty("user.name") ?: DEFAULT_USERNAME
 
         // Determine auth type based on configuration; store as AuthType enum name.

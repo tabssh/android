@@ -6,7 +6,9 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -58,13 +60,15 @@ class FrequentConnectionsFragment : Fragment() {
         // (not on state transitions), so without this the active dot
         // never flipped to green or back to grey.
         viewLifecycleOwner.lifecycleScope.launch {
-            app.sshSessionManager.connectionStates.collect {
-                // Skip-DiffUtil rationale: the backing list of connections has
-                // not changed — only the external `isConnectionActive(id)`
-                // signal that each row reads at bind time. A range-change is
-                // the minimal correct way to ask the RecyclerView to rebind
-                // visible rows.
-                adapter.notifyItemRangeChanged(0, adapter.itemCount)
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                app.sshSessionManager.connectionStates.collect {
+                    // Skip-DiffUtil rationale: the backing list of connections has
+                    // not changed — only the external `isConnectionActive(id)`
+                    // signal that each row reads at bind time. A range-change is
+                    // the minimal correct way to ask the RecyclerView to rebind
+                    // visible rows.
+                    adapter.notifyItemRangeChanged(0, adapter.itemCount)
+                }
             }
         }
 
@@ -156,6 +160,8 @@ class FrequentConnectionsFragment : Fragment() {
                 
                 Logger.d("FrequentConnectionsFragment", "Loaded ${connections.size} frequent connections")
                 
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("FrequentConnectionsFragment", "Failed to load frequent connections", e)
             }

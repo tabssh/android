@@ -958,8 +958,12 @@ class MultiHostDashboardActivity : TabSSHActivity() {
         // do not start SSHConnectionService or post "Connected to …" notifications.
         // If a real terminal session is already open for this profile it will be
         // reused (its existing notification is unaffected).
+        // A session that is already live in the pool (e.g. backing an open
+        // terminal tab) is reused by connectForMonitoring — the dashboard must
+        // never own (and later disconnect) it. Only track sessions we dialed.
+        val reused = app.sshSessionManager.getConnection(profile.id)?.isConnected() == true
         return app.sshSessionManager.connectForMonitoring(profile)?.also {
-            ownedSessions[profile.id] = it
+            if (!reused) ownedSessions[profile.id] = it
         }
     }
 

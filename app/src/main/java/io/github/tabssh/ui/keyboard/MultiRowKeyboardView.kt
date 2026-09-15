@@ -417,7 +417,12 @@ class MultiRowKeyboardView @JvmOverloads constructor(
 
         // Use the FN key itself as the back button so a second tap exits via
         // the existing modifier handler (no extra plumbing needed).
-        val backKey = KeyboardKey("FN", "← Back", "", KeyboardKey.KeyCategory.MODIFIER)
+        val backKey = KeyboardKey(
+            "FN",
+            context.getString(io.github.tabssh.R.string.keyboard_fn_back),
+            "",
+            KeyboardKey.KeyCategory.MODIFIER
+        )
         val fnRow1 = listOf(
             backKey,
             KeyboardKey("F1", "F1", "\u001bOP", KeyboardKey.KeyCategory.FUNCTION),

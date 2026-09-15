@@ -241,7 +241,7 @@ class PerformanceFragment : Fragment() {
     }
 
     private fun updateConnectionSpinner() {
-        val items = mutableListOf("Select connection...")
+        val items = mutableListOf(getString(R.string.select_connection))
         items.addAll(allConnections.map { "${it.name} (${it.username}@${it.host})" })
 
         // Read the saved ID BEFORE setting the adapter. Setting the adapter
@@ -331,7 +331,10 @@ class PerformanceFragment : Fragment() {
 
                 if (!connected) {
                     progressLoading.visibility = View.GONE
-                    showError("Connection failed: ssh ${connection.username}@${connection.host}:${connection.port}")
+                    showError(getString(
+                        R.string.terminal_ssh_connection_failed_fmt,
+                        connection.username, connection.host, connection.port
+                    ))
                     return@launch
                 }
 
@@ -378,10 +381,12 @@ class PerformanceFragment : Fragment() {
                     }
                 }
 
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 progressLoading.visibility = View.GONE
                 Logger.e("PerformanceFragment", "Failed to connect to ${connection.name}", e)
-                showError("Failed to connect: ${e.message}")
+                showError(getString(R.string.perf_connect_failed_fmt, e.message))
             }
         }
     }
@@ -401,7 +406,7 @@ class PerformanceFragment : Fragment() {
 
     private fun startMonitoring() {
         if (sshConnection == null || metricsCollector == null) {
-            showError("No active connection")
+            showError(getString(R.string.terminal_no_active_connection))
             return
         }
         
@@ -445,6 +450,8 @@ class PerformanceFragment : Fragment() {
                     }
                 }
                 
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("PerformanceFragment", "Error during metrics collection", e)
             }
@@ -512,10 +519,14 @@ class PerformanceFragment : Fragment() {
         )
         
         // Load with color coding
-        textLoad1min.text = String.format("1m: %.2f", metrics.loadAverage.load1min)
-        textLoad5min.text = String.format("5m: %.2f", metrics.loadAverage.load5min)
-        textLoad15min.text = String.format("15m: %.2f", metrics.loadAverage.load15min)
-        textLoadProcesses.text = "${metrics.loadAverage.runningProcesses}/${metrics.loadAverage.totalProcesses} processes"
+        textLoad1min.text = getString(R.string.perf_load_1m_fmt, metrics.loadAverage.load1min)
+        textLoad5min.text = getString(R.string.perf_load_5m_fmt, metrics.loadAverage.load5min)
+        textLoad15min.text = getString(R.string.perf_load_15m_fmt, metrics.loadAverage.load15min)
+        textLoadProcesses.text = getString(
+            R.string.perf_load_processes_fmt,
+            metrics.loadAverage.runningProcesses,
+            metrics.loadAverage.totalProcesses
+        )
         
         // Color code load1 (warning if > 1.0, critical if > 2.0)
         textLoad1min.setTextColor(when {
@@ -611,13 +622,18 @@ class PerformanceFragment : Fragment() {
         connectionStateObserverJob?.cancel()
         connectionStateObserverJob = null
 
-        lifecycleScope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    sshConnection?.disconnect()
+        // Teardown must run on the process-lifetime applicationScope — the
+        // fragment's own lifecycleScope is cancelled right after onDestroyView
+        // when the fragment is destroyed, which skipped the disconnect and
+        // left the SSHConnection alive for the rest of the process.
+        val doomedConnection = sshConnection
+        if (doomedConnection != null) {
+            app.applicationScope.launch(Dispatchers.IO) {
+                try {
+                    doomedConnection.disconnect()
+                } catch (e: Exception) {
+                    Logger.e("PerformanceFragment", "Error disconnecting SSH", e)
                 }
-            } catch (e: Exception) {
-                Logger.e("PerformanceFragment", "Error disconnecting SSH", e)
             }
         }
 

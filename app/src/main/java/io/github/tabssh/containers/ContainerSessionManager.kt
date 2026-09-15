@@ -153,8 +153,9 @@ object ContainerSessionManager {
             // start the foreground service, or fire session alerts. A live user
             // terminal session to the same profile is still reused as-is above.
             Logger.d(TAG, "opening SSH connection for docker host $hostId")
-            val connection = app.sshSessionManager.getConnection(profile.id)
+            val reusedConnection = app.sshSessionManager.getConnection(profile.id)
                 ?.takeIf { it.isConnected() }
+            val connection = reusedConnection
                 ?: app.sshSessionManager.connectForMonitoring(profile)
                 ?: run {
                     Logger.w(TAG, "acquire failed: SSH connection could not be opened for host $hostId")
@@ -167,7 +168,7 @@ object ContainerSessionManager {
             val runner = SshExecRunner { connection.jschSession() }
             val detector = TransportCapabilityDetector(dao)
             Logger.d(TAG, "detecting docker transport for host $hostId (force=$force)")
-            when (val detected = detector.detect(host, runner, force)) {
+            val outcome = when (val detected = detector.detect(host, runner, force)) {
                 is ContainerResult.Success -> {
                     val session = ContainerSession(
                         host = host,
@@ -208,6 +209,28 @@ object ContainerSessionManager {
                     detected
                 }
             }
+            // A monitoring-only connection opened by this acquire never made it
+            // into the session pool on a failed detect — close it here or it
+            // stays open until process death. Reused connections (a user
+            // terminal or another session's monitoring link) are kept.
+            if (outcome !is ContainerResult.Success && reusedConnection == null &&
+                connection.isMonitoringOnly
+            ) {
+                val shared = synchronized(lock) {
+                    sessions.values.any { it.profile.id == profile.id }
+                }
+                if (!shared) {
+                    Logger.d(TAG, "closing monitoring SSH connection for host $hostId (detect failed)")
+                    try {
+                        app.sshSessionManager.closeConnection(profile.id)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "monitoring connection close failed for host $hostId: ${e.message}")
+                    }
+                }
+            }
+            outcome
         }
     }
 

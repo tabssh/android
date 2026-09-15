@@ -34,8 +34,10 @@ class AuditLogAdapter(private var logs: List<AuditLogSummary>) :
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val log = logs[position]
         
-        // Format timestamp
-        val dateFormat = java.text.SimpleDateFormat("MMM dd, HH:mm:ss", java.util.Locale.US)
+        // Format timestamp in the user's locale
+        val dateFormat = java.text.DateFormat.getDateTimeInstance(
+            java.text.DateFormat.MEDIUM, java.text.DateFormat.MEDIUM
+        )
         holder.textTimestamp.text = dateFormat.format(java.util.Date(log.timestamp))
         
         // Action with emoji
@@ -49,7 +51,8 @@ class AuditLogAdapter(private var logs: List<AuditLogSummary>) :
         }
         
         // Details
-        holder.textDetails.text = log.command ?: "No additional details"
+        holder.textDetails.text = log.command
+            ?: holder.itemView.context.getString(R.string.audit_log_no_details)
         holder.textDetails.visibility = if (log.command.isNullOrEmpty()) View.GONE else View.VISIBLE
         
         // Status with color (use command/eventType as status indicator)

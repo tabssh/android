@@ -144,8 +144,15 @@ class SyncLogActivity : TabSSHActivity() {
             .setMessage(R.string.sync_log_clear_message)
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 lifecycleScope.launch {
-                    app.database.syncLogDao().deleteAll()
-                    loadSyncLog()
+                    try {
+                        app.database.syncLogDao().deleteAll()
+                        loadSyncLog()
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        io.github.tabssh.utils.logging.Logger.e("SyncLogActivity", "Failed to clear sync log", e)
+                        toast(getString(R.string.sync_log_clear_failed))
+                    }
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)

@@ -20,6 +20,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.room.withTransaction
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
@@ -543,6 +544,8 @@ class CloudAccountsFragment : Fragment() {
                     getString(R.string.cloud_accounts_toast_saved, name)
                 }
                 Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(requireContext(), TAG, e, "OCI account save failed")
                 if (!isAdded) return@launch
@@ -563,14 +566,24 @@ class CloudAccountsFragment : Fragment() {
             try {
                 withContext(Dispatchers.IO) {
                     app.database.cloudAccountDao().upsert(account)
-                    app.securePasswordManager.storePassword(
+                    val stored = app.securePasswordManager.storePassword(
                         "cloud_token_${account.id}", token,
                         SecurePasswordManager.StorageLevel.ENCRYPTED
                     )
+                    if (!stored) {
+                        // Roll back the orphaned row — an account without its
+                        // token can never authenticate.
+                        app.database.cloudAccountDao().delete(account)
+                        io.github.tabssh.storage.registry.ConnectableHostRegistry
+                            .removeCloudAccount(app.database, account.id)
+                        throw Exception(getString(R.string.cloud_credential_storage_failed))
+                    }
                 }
                 if (!isAdded) return@launch
                 Toast.makeText(requireContext(),
                     getString(R.string.cloud_accounts_toast_saved, account.name), Toast.LENGTH_SHORT).show()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(requireContext(), TAG, e, "Save cloud account failed")
                 if (!isAdded) return@launch
@@ -612,6 +625,8 @@ class CloudAccountsFragment : Fragment() {
                     },
                     Toast.LENGTH_SHORT
                 ).show()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(requireContext(), TAG, e, "Toggle enabled failed for ${account.name}")
                 if (!isAdded) return@launch
@@ -708,6 +723,8 @@ class CloudAccountsFragment : Fragment() {
                     onRetry = { refreshAccount(account) }
                 )
                 return@launch
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(requireContext(), TAG, e, "Inventory fetch failed")
                 if (!isAdded) return@launch
@@ -727,6 +744,8 @@ class CloudAccountsFragment : Fragment() {
                         )
                     )
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {}
             if (!isAdded) return@launch
             Toast.makeText(
@@ -743,17 +762,22 @@ class CloudAccountsFragment : Fragment() {
             .setTitle(getString(R.string.cloud_delete_title, account.name))
             .setMessage(R.string.cloud_delete_message)
             .setPositiveButton(R.string.delete) { _, _ ->
-                viewLifecycleOwner.lifecycleScope.launch {
+                // App-lifetime scope + transaction so the cascade completes
+                // atomically even if the fragment is destroyed mid-delete.
+                app.applicationScope.launch(Dispatchers.IO) {
                     try {
-                        withContext(Dispatchers.IO) {
+                        app.database.withTransaction {
                             app.database.cloudAccountDao().delete(account)
                             // H6 — record the deletion so it propagates and is not resurrected.
                             TombstoneRecorder.record(app, TombstoneRecorder.CLOUD_ACCOUNT, account.id)
-                            app.securePasswordManager.clearPassword("cloud_token_${account.id}")
                             // Keep the Panes registry and any saved pane-group membership accurate.
                             io.github.tabssh.storage.registry.ConnectableHostRegistry
                                 .removeCloudAccount(app.database, account.id)
                         }
+                        // Keystore work stays outside the Room transaction.
+                        app.securePasswordManager.clearPassword("cloud_token_${account.id}")
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.e(TAG, "Delete failed", e)
                     }
@@ -820,15 +844,23 @@ class CloudAccountsFragment : Fragment() {
                                 account.copy(name = newName, modifiedAt = System.currentTimeMillis())
                             )
                             if (newToken.isNotBlank()) {
-                                app.securePasswordManager.storePassword(
+                                val stored = app.securePasswordManager.storePassword(
                                     "cloud_token_${account.id}", newToken,
                                     SecurePasswordManager.StorageLevel.ENCRYPTED
                                 )
+                                if (!stored) {
+                                    // Roll the rename back so the row still
+                                    // matches the token that remains stored.
+                                    app.database.cloudAccountDao().update(account)
+                                    throw Exception(getString(R.string.cloud_credential_storage_failed))
+                                }
                             }
                         }
                         if (!isAdded) return@launch
                         Toast.makeText(requireContext(),
                             getString(R.string.cloud_updated, newName), Toast.LENGTH_SHORT).show()
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         val mapped = ThrowableMapper.map(requireContext(), TAG, e, "Edit account failed")
                         if (!isAdded) return@launch

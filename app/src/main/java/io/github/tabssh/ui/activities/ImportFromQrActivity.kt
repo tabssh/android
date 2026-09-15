@@ -60,6 +60,8 @@ class ImportFromQrActivity : TabSSHActivity() {
     companion object {
         private const val TAG = "ImportFromQrActivity"
         private const val MAX_CODE_ATTEMPTS = 3
+        private const val STATE_SCANNED_TEXT = "scanned_text"
+        private const val STATE_ATTEMPTS = "code_attempts_remaining"
     }
 
     private lateinit var statusText: TextView
@@ -83,7 +85,20 @@ class ImportFromQrActivity : TabSSHActivity() {
 
         if (savedInstanceState == null) {
             ensureCameraPermissionThenScan()
+        } else {
+            // Rotation/recreation dismisses the modal dialogs and would leave
+            // the activity idle. Restore the scanned envelope and resume at the
+            // code prompt; without a scan yet, restart the scanner flow.
+            scannedText = savedInstanceState.getString(STATE_SCANNED_TEXT)
+            codeAttemptsRemaining = savedInstanceState.getInt(STATE_ATTEMPTS, MAX_CODE_ATTEMPTS)
+            if (scannedText != null) promptForCode() else ensureCameraPermissionThenScan()
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_SCANNED_TEXT, scannedText)
+        outState.putInt(STATE_ATTEMPTS, codeAttemptsRemaining)
     }
 
     private fun ensureCameraPermissionThenScan() {
@@ -258,6 +273,9 @@ class ImportFromQrActivity : TabSSHActivity() {
 
     private fun runImport(payload: PairingPayload) {
         statusText.setText(R.string.import_qr_status_importing)
+        // Rotation would recreate the activity and cancel this lifecycleScope
+        // coroutine mid-insert; lock the current orientation until we finish().
+        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
         // Block any other interaction while DB inserts run.
         lifecycleScope.launch(Dispatchers.IO) {
             val summary = try {

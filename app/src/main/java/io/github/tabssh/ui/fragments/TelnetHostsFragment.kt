@@ -15,8 +15,10 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.TelnetHost
 import io.github.tabssh.ui.activities.ConnectionEditActivity
+import io.github.tabssh.ui.utils.ConnectionLauncher
 import io.github.tabssh.ui.utils.HostContextActions
 import kotlinx.coroutines.launch
 import io.github.tabssh.utils.tabSSHApp
@@ -25,9 +27,12 @@ import io.github.tabssh.utils.tabSSHApp
  * Hosts tab's Telnet sub-tab — list/CRUD for [TelnetHost] rows backed by
  * `TelnetHostDao`. Editing goes through [ConnectionEditActivity], which
  * already has full Telnet load/save support behind its protocol spinner;
- * there is no separate Telnet edit Activity to build. There is no live
- * Telnet connector in the app yet, so rows only support tap-to-edit — no
- * connect action is offered here.
+ * there is no separate Telnet edit Activity to build. Tapping a row
+ * connects (mirroring the SSH sub-tab): an ephemeral telnet
+ * [io.github.tabssh.storage.database.entities.ConnectionProfile] sharing
+ * the TelnetHost's id is handed to [ConnectionLauncher], and
+ * TabTerminalActivity's telnet branch takes it from there. Edit and
+ * Delete live in the long-press context menu.
  */
 class TelnetHostsFragment : Fragment() {
 
@@ -51,7 +56,7 @@ class TelnetHostsFragment : Fragment() {
         emptyState = view.findViewById(R.id.empty_state)
 
         adapter = TelnetHostAdapter(
-            onTap = { host -> launchEditHost(host) },
+            onTap = { host -> connectToHost(host) },
             onLongPress = { host -> showHostMenu(host) }
         )
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
@@ -79,8 +84,20 @@ class TelnetHostsFragment : Fragment() {
         startActivity(ConnectionEditActivity.createTelnetIntent(requireContext()))
     }
 
-    private fun launchEditHost(host: TelnetHost) {
-        HostContextActions.editTelnetHost(this, host)
+    private fun connectToHost(host: TelnetHost) {
+        // Ephemeral, unsaved ConnectionProfile — same id as the TelnetHost row
+        // so a saved password (Keystore alias = bare id) is picked up
+        // transparently, matching ConnectableHostResolver.resolveProfile.
+        val profile = ConnectionProfile(
+            id = host.id,
+            name = host.name,
+            host = host.host,
+            port = host.port,
+            username = host.username,
+            protocol = "telnet",
+            savePassword = host.savePassword
+        )
+        ConnectionLauncher.launch(requireContext(), profile)
     }
 
     private fun showHostMenu(host: TelnetHost) {

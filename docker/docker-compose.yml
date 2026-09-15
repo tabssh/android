@@ -67,6 +67,10 @@ services:
     working_dir: /workspace
     environment:
       - GRADLE_USER_HOME=/workspace/.gradle
+      # Debug signs with signingConfigs.release, so the taskGraph keystore
+      # guard needs these; defaults match the Makefile's dev-keystore ?= values
+      - KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD:-password}
+      - KEY_PASSWORD=${KEY_PASSWORD:-password}
     command: >
       bash -c "
         [ -d /workspace/.gradle/wrapper ] || cp -a /root/.gradle/wrapper /workspace/.gradle/;

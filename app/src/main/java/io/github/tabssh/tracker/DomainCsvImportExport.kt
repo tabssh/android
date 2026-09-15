@@ -127,10 +127,10 @@ object DomainCsvImportExport {
         val domains = mutableListOf<Domain>()
         val now = System.currentTimeMillis()
 
-        val lines = text.lineSequence().filter { it.isNotBlank() }.toList()
-        if (lines.isEmpty()) return ParseResult(emptyList(), warnings)
+        val records = scanCsvRecords(text)
+        if (records.isEmpty()) return ParseResult(emptyList(), warnings)
 
-        val headerFields = splitCsvLine(lines[0]).map { normalizeHeader(it) }
+        val headerFields = records[0].fields.map { normalizeHeader(it) }
         val columnIndex: Map<String, Int> = COLUMN_SYNONYMS.mapNotNull { (field, synonyms) ->
             val idx = headerFields.indexOfFirst { it in synonyms }
             if (idx >= 0) field to idx else null
@@ -144,9 +144,9 @@ object DomainCsvImportExport {
         val hasRecognizedHeader = columnIndex.containsKey("domainName")
         val startIndex = if (hasRecognizedHeader) 1 else 0
 
-        for ((idx, line) in lines.withIndex()) {
+        for ((idx, record) in records.withIndex()) {
             if (idx < startIndex) continue
-            val fields = splitCsvLine(line)
+            val fields = record.fields
 
             val domainName: String
             val privacy: String
@@ -162,7 +162,7 @@ object DomainCsvImportExport {
                 expirationText = field("expirationDate")
             } else {
                 if (fields.size < 5) {
-                    warnings.add("Line ${idx + 1}: expected 5 fields, found ${fields.size} — skipped")
+                    warnings.add("Line ${record.lineNumber}: expected 5 fields, found ${fields.size} — skipped")
                     continue
                 }
                 domainName = fields[0].trim()
@@ -173,12 +173,12 @@ object DomainCsvImportExport {
             }
 
             if (domainName.isEmpty()) {
-                warnings.add("Line ${idx + 1}: empty domain name — skipped")
+                warnings.add("Line ${record.lineNumber}: empty domain name — skipped")
                 continue
             }
             val expirationDate = expirationText.takeIf { it.isNotBlank() }?.let {
                 parseExpirationDate(it) ?: run {
-                    warnings.add("Line ${idx + 1}: could not parse expiration date '$it'")
+                    warnings.add("Line ${record.lineNumber}: could not parse expiration date '$it'")
                     null
                 }
             }
@@ -223,23 +223,69 @@ object DomainCsvImportExport {
         }
     }
 
-    /** Minimal CSV split honouring double-quoted fields with embedded commas/quotes. */
-    private fun splitCsvLine(line: String): List<String> {
-        val out = mutableListOf<String>()
+    // One CSV record with the 1-based line number of the original text it
+    // started on, so warnings point at the real file position even after
+    // multi-line quoted fields shift record vs. line counts apart.
+    private data class CsvRecord(val fields: List<String>, val lineNumber: Int)
+
+    /**
+     * Quote-aware record scanner over the whole text (RFC 4180 semantics):
+     * a double-quoted field may contain commas, escaped quotes (""), and
+     * embedded CR/LF — which export legitimately produces — so records are
+     * split on line breaks OUTSIDE quotes only, never per physical line.
+     * Blank lines between records are skipped without losing line numbering.
+     */
+    private fun scanCsvRecords(text: String): List<CsvRecord> {
+        val records = mutableListOf<CsvRecord>()
+        val fields = mutableListOf<String>()
         val sb = StringBuilder()
         var inQuotes = false
+        var line = 1
+        var recordStartLine = 1
         var i = 0
-        while (i < line.length) {
-            val c = line[i]
+
+        fun endField() {
+            fields.add(sb.toString())
+            sb.setLength(0)
+        }
+
+        fun endRecord() {
+            endField()
+            // A single empty field means the physical line was blank —
+            // skip it, matching the old blank-line filtering.
+            if (!(fields.size == 1 && fields[0].isBlank())) {
+                records.add(CsvRecord(fields.toList(), recordStartLine))
+            }
+            fields.clear()
+        }
+
+        while (i < text.length) {
+            val c = text[i]
             when {
-                c == '"' && inQuotes && i + 1 < line.length && line[i + 1] == '"' -> { sb.append('"'); i++ }
+                c == '"' && inQuotes && i + 1 < text.length && text[i + 1] == '"' -> {
+                    sb.append('"')
+                    i++
+                }
                 c == '"' -> inQuotes = !inQuotes
-                c == ',' && !inQuotes -> { out.add(sb.toString()); sb.setLength(0) }
-                else -> sb.append(c)
+                c == ',' && !inQuotes -> endField()
+                (c == '\r' || c == '\n') && !inQuotes -> {
+                    // Treat CRLF as a single record/line break.
+                    if (c == '\r' && i + 1 < text.length && text[i + 1] == '\n') i++
+                    endRecord()
+                    line++
+                    recordStartLine = line
+                }
+                else -> {
+                    // Embedded newline inside a quoted field: part of the
+                    // field's value, but still advances the line counter.
+                    if (c == '\n') line++
+                    sb.append(c)
+                }
             }
             i++
         }
-        out.add(sb.toString())
-        return out
+        // Final record when the text doesn't end with a newline.
+        if (sb.isNotEmpty() || fields.isNotEmpty()) endRecord()
+        return records
     }
 }

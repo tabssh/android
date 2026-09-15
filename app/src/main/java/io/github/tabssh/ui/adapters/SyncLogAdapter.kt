@@ -34,7 +34,10 @@ class SyncLogAdapter(private var entries: List<SyncLogEntry>) :
         val entry = entries[position]
         val context = holder.itemView.context
 
-        val dateFormat = java.text.SimpleDateFormat("MMM dd, HH:mm:ss", java.util.Locale.US)
+        // Format timestamp in the user's locale
+        val dateFormat = java.text.DateFormat.getDateTimeInstance(
+            java.text.DateFormat.MEDIUM, java.text.DateFormat.MEDIUM
+        )
         holder.textTimestamp.text = dateFormat.format(java.util.Date(entry.timestamp))
 
         holder.textResolution.text = resolutionLabel(context, entry.resolution)

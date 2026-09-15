@@ -8,6 +8,9 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.xmlpull.v1.XmlPullParser
+import org.xmlpull.v1.XmlPullParserFactory
+import java.io.StringReader
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -219,63 +222,49 @@ class AwsEc2Client : CloudProvider {
         }
     }
 
+    /** One instance's fields pulled from DescribeInstances XML. */
+    private data class Ec2Instance(
+        val instanceId: String,
+        val state: String,
+        val publicDns: String,
+        val publicIp: String,
+        val privateIp: String,
+        val nameTag: String
+    )
+
     /** Parse live-instance state from one page of DescribeInstances XML. */
     private fun parseLiveInstancesPage(xml: String, region: String): List<CloudInstanceState> {
-        val instanceBlocks = Regex(
-            """<instancesSet>([\s\S]*?)</instancesSet>"""
-        ).findAll(xml).flatMap { container ->
-            Regex("""<item>([\s\S]*?)</item>""").findAll(container.groupValues[1])
-        }.map { it.groupValues[1] }.toList()
-
         val out = mutableListOf<CloudInstanceState>()
-        for (block in instanceBlocks) {
-            val instanceId = tagValue(block, "instanceId").orEmpty()
-            val rawState = tagValue(block, "name").orEmpty()
-            val normStatus = when (rawState) {
+        for (inst in parseEc2Instances(xml)) {
+            val normStatus = when (inst.state) {
                 "running" -> "running"
                 "stopped", "terminated" -> "stopped"
                 "pending" -> "starting"
                 "stopping", "shutting-down" -> "stopping"
                 else -> "unknown"
             }
-            val publicIp = tagValue(block, "ipAddress")
-            val privateIp = tagValue(block, "privateIpAddress")
-            val nameTag = extractNameTag(block).orEmpty()
             out += CloudInstanceState(
-                id = instanceId,
-                name = nameTag.ifBlank { instanceId },
-                ip = publicIp,
-                privateIp = privateIp,
+                id = inst.instanceId,
+                name = inst.nameTag.ifBlank { inst.instanceId },
+                ip = inst.publicIp.takeIf { it.isNotBlank() },
+                privateIp = inst.privateIp.takeIf { it.isNotBlank() },
                 status = normStatus,
-                rawStatus = rawState,
+                rawStatus = inst.state,
                 region = region
             )
         }
         return out
     }
 
-    /** Lightweight tag-extract — Android SAX/DOM both work, but we only need
-     *  PublicDnsName / PublicIpAddress / instanceId / Tags > Name. Keep it
-     *  regex-based to skip XML parser ceremony. */
     private fun parseInstances(xml: String, region: String, accountName: String): List<ImportCandidate> {
-        // Each <instancesSet> > <item> is one instance. Find every <item> block
-        // inside <instancesSet>.
-        val instanceBlocks = Regex(
-            """<instancesSet>([\s\S]*?)</instancesSet>"""
-        ).findAll(xml).flatMap { container ->
-            Regex("""<item>([\s\S]*?)</item>""").findAll(container.groupValues[1])
-        }.map { it.groupValues[1] }.toList()
-
         val out = mutableListOf<ImportCandidate>()
-        for (block in instanceBlocks) {
-            // <instanceState><name>running</name></instanceState>
-            val state = tagValue(block, "name")
-            if (state != null && state != "running") continue
+        for (inst in parseEc2Instances(xml)) {
+            if (inst.state.isNotBlank() && inst.state != "running") continue
 
-            val instanceId = tagValue(block, "instanceId").orEmpty()
-            val publicDns = tagValue(block, "dnsName").orEmpty()
-            val publicIp = tagValue(block, "ipAddress").orEmpty()
-            val nameTag = extractNameTag(block).orEmpty()
+            val instanceId = inst.instanceId
+            val publicDns = inst.publicDns
+            val publicIp = inst.publicIp
+            val nameTag = inst.nameTag
 
             val host = publicDns.takeIf { it.isNotBlank() } ?: publicIp.takeIf { it.isNotBlank() }
             if (host.isNullOrBlank()) {
@@ -301,19 +290,102 @@ class AwsEc2Client : CloudProvider {
         return out
     }
 
+    // DescribeInstances nests <item> at several levels (reservationSet, instancesSet,
+    // tagSet, networkInterfaceSet, blockDeviceMapping); a non-greedy <item>…</item>
+    // regex stops at the first nested close tag, losing Name tags and inventing
+    // phantom instances. Walk the tree with XmlPullParser and take an instance's
+    // fields only from the direct children of its instancesSet <item>.
+    private fun parseEc2Instances(xml: String): List<Ec2Instance> {
+        val out = mutableListOf<Ec2Instance>()
+        val parser = XmlPullParserFactory.newInstance().newPullParser()
+        parser.setInput(StringReader(xml))
+        // Names of the currently open elements, root first.
+        val path = mutableListOf<String>()
+        // path.size at the instance <item>; -1 while outside any instance.
+        var instanceDepth = -1
+        var instanceId = ""
+        var state = ""
+        var publicDns = ""
+        var publicIp = ""
+        var privateIp = ""
+        var nameTag = ""
+        var tagKey = ""
+        var tagVal = ""
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            when (event) {
+                XmlPullParser.START_TAG -> {
+                    path.add(parser.name)
+                    if (instanceDepth < 0 && parser.name == "item" &&
+                        path.size >= 2 && path[path.size - 2] == "instancesSet"
+                    ) {
+                        instanceDepth = path.size
+                        instanceId = ""
+                        state = ""
+                        publicDns = ""
+                        publicIp = ""
+                        privateIp = ""
+                        nameTag = ""
+                    }
+                    if (instanceDepth > 0 && parser.name == "item" &&
+                        path.size == instanceDepth + 2 && path[instanceDepth] == "tagSet"
+                    ) {
+                        tagKey = ""
+                        tagVal = ""
+                    }
+                }
+                XmlPullParser.TEXT -> if (instanceDepth > 0) {
+                    val text = parser.text
+                    when {
+                        path.size == instanceDepth + 1 -> when (path.last()) {
+                            "instanceId" -> instanceId += text
+                            "dnsName" -> publicDns += text
+                            "ipAddress" -> publicIp += text
+                            "privateIpAddress" -> privateIp += text
+                        }
+                        path.size == instanceDepth + 2 &&
+                            path[instanceDepth] == "instanceState" && path.last() == "name" ->
+                            state += text
+                        path.size == instanceDepth + 3 &&
+                            path[instanceDepth] == "tagSet" && path[instanceDepth + 1] == "item" ->
+                            when (path.last()) {
+                                "key" -> tagKey += text
+                                "value" -> tagVal += text
+                            }
+                    }
+                }
+                XmlPullParser.END_TAG -> {
+                    if (instanceDepth > 0 && path.size == instanceDepth + 2 &&
+                        path[instanceDepth] == "tagSet" && path.last() == "item" && tagKey == "Name"
+                    ) {
+                        nameTag = tagVal
+                    }
+                    if (instanceDepth > 0 && path.size == instanceDepth) {
+                        if (instanceId.isNotBlank()) {
+                            out += Ec2Instance(
+                                instanceId = instanceId.trim(),
+                                state = state.trim(),
+                                publicDns = publicDns.trim(),
+                                publicIp = publicIp.trim(),
+                                privateIp = privateIp.trim(),
+                                nameTag = nameTag.trim()
+                            )
+                        }
+                        instanceDepth = -1
+                    }
+                    if (path.isNotEmpty()) path.removeAt(path.size - 1)
+                }
+            }
+            event = parser.next()
+        }
+        return out
+    }
+
+    // Only for flat, non-repeating top-level elements (nextToken); instance
+    // fields go through parseEc2Instances, which handles the nested <item>s.
     private fun tagValue(xmlBlock: String, tag: String): String? {
         val m = Regex("<$tag>([^<]*)</$tag>").find(xmlBlock) ?: return null
         return m.groupValues[1].takeIf { it.isNotBlank() }
-    }
-
-    /** Walk <tagSet><item><key>Name</key><value>foo</value></item></tagSet> */
-    private fun extractNameTag(block: String): String? {
-        val tagSet = Regex("""<tagSet>([\s\S]*?)</tagSet>""").find(block)?.groupValues?.get(1) ?: return null
-        for (m in Regex("""<item>([\s\S]*?)</item>""").findAll(tagSet)) {
-            val item = m.groupValues[1]
-            if (tagValue(item, "key") == "Name") return tagValue(item, "value")
-        }
-        return null
     }
 
     private fun extractAwsError(body: String): String? {

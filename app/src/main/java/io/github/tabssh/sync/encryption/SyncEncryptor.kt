@@ -269,6 +269,9 @@ class SyncEncryptor(
         params: Argon2Params = kdfParams
     ): SecretKey {
         val passwordBytes = password.toByteArray(Charsets.UTF_8)
+        // Hoisted so the finally block can wipe it; SecretKeySpec copies the
+        // array, so zeroing after construction never corrupts the returned key.
+        val keyBytes = ByteArray(KEY_SIZE_BYTES)
         try {
             val argon2Params = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
                 .withVersion(Argon2Parameters.ARGON2_VERSION_13)
@@ -281,7 +284,6 @@ class SyncEncryptor(
             val generator = Argon2BytesGenerator()
             generator.init(argon2Params)
 
-            val keyBytes = ByteArray(KEY_SIZE_BYTES)
             generator.generateBytes(passwordBytes, keyBytes)
 
             return SecretKeySpec(keyBytes, KEY_ALGORITHM)
@@ -299,6 +301,7 @@ class SyncEncryptor(
             throw SyncEncryptionException("Key derivation failed: ${e.message}", e)
         } finally {
             passwordBytes.fill(0)
+            keyBytes.fill(0)
         }
     }
 

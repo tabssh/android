@@ -197,17 +197,30 @@ class AuthVmsFragment : Fragment() {
                 .setTitle(getString(R.string.identity_vm_cred_delete_title))
                 .setMessage(message)
                 .setPositiveButton(getString(R.string.delete)) { _, _ ->
-                    if (linked > 0) return@setPositiveButton
+                    if (linked > 0) {
+                        // Still-linked credentials cannot be deleted — say so
+                        // instead of silently doing nothing on the Delete tap.
+                        Toast.makeText(
+                            requireContext(),
+                            resources.getQuantityString(R.plurals.identity_vm_cred_linked_hypervisors, linked, linked, account.name),
+                            Toast.LENGTH_LONG
+                        ).show()
+                        return@setPositiveButton
+                    }
+                    val ctx = requireContext().applicationContext
                     lifecycleScope.launch {
-                        app.database.hypervisorAccountDao().delete(account)
-                        // H6 — Long PK is device-local; tombstone by natural key.
-                        TombstoneRecorder.record(app, TombstoneRecorder.HYPERVISOR_ACCOUNT, TombstoneRecorder.naturalKey(account))
-                        HypervisorPasswordStore.clearAccountPassword(requireContext(), account.id)
-                        // OCI accounts additionally own an API private key PEM and
-                        // (optionally) its passphrase under their own aliases. Drop
-                        // those too, or a reused account id would expose the previous
-                        // owner's private key.
-                        HypervisorPasswordStore.clearOciAccountSecrets(requireContext(), account.id)
+                        // Keystore + tombstone work stays off the main dispatcher.
+                        withContext(Dispatchers.IO) {
+                            app.database.hypervisorAccountDao().delete(account)
+                            // H6 — Long PK is device-local; tombstone by natural key.
+                            TombstoneRecorder.record(app, TombstoneRecorder.HYPERVISOR_ACCOUNT, TombstoneRecorder.naturalKey(account))
+                            HypervisorPasswordStore.clearAccountPassword(ctx, account.id)
+                            // OCI accounts additionally own an API private key PEM and
+                            // (optionally) its passphrase under their own aliases. Drop
+                            // those too, or a reused account id would expose the previous
+                            // owner's private key.
+                            HypervisorPasswordStore.clearOciAccountSecrets(ctx, account.id)
+                        }
                         Logger.i(TAG, "Deleted VM credential id=${account.id} (${account.name})")
                     }
                 }

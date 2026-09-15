@@ -33,6 +33,12 @@ class PerformanceOverlayView @JvmOverloads constructor(
     private var lastY = 0f
     private var isDragging = false
 
+    // Previous sample of the cumulative session byte counters, used to turn
+    // the monotonically growing totals into a per-second rate. -1 marks
+    // "no sample yet" so the first update shows 0 instead of the whole total.
+    private var lastNetworkBytes = -1L
+    private var lastNetworkTimestamp = 0L
+
     init {
         // Inflate layout
         LayoutInflater.from(context).inflate(R.layout.layout_performance_overlay, this, true)
@@ -71,7 +77,17 @@ class PerformanceOverlayView @JvmOverloads constructor(
         val batteryIcon = if (metrics.isCharging) "⚡" else "🔋"
         textBattery.text = "$batteryIcon ${metrics.batteryLevel}%"
         
-        val networkKBs = ((metrics.networkBytesReceived + metrics.networkBytesSent) / 1024.0).roundToInt()
+        // The manager's counters are cumulative for the whole session; the
+        // rate is the delta since the previous sample over the elapsed time.
+        val totalBytes = metrics.networkBytesReceived + metrics.networkBytesSent
+        val elapsedMs = metrics.lastUpdated - lastNetworkTimestamp
+        val networkKBs = if (lastNetworkBytes >= 0 && elapsedMs > 0) {
+            ((totalBytes - lastNetworkBytes).coerceAtLeast(0) * 1000.0 / elapsedMs / 1024.0).roundToInt()
+        } else {
+            0
+        }
+        lastNetworkBytes = totalBytes
+        lastNetworkTimestamp = metrics.lastUpdated
         textNetwork.text = "NET: ${networkKBs}KB/s"
     }
 

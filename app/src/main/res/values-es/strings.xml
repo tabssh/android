@@ -197,4 +197,33 @@
     <string name="mdm_desc_syslog_host">Nombre de host o dirección IP de un receptor de syslog UDP (RFC 5424). Dejar en blanco para desactivar el reenvío.</string>
     <string name="mdm_desc_syslog_port">Puerto UDP del receptor de syslog.</string>
 
+    <string name="launcher_active_session_message">Ya hay una sesión activa para este host. ¿Volver a conectarla o iniciar una nueva conexión?</string>
+    <string name="launcher_background_session_message">Una sesión SSH en segundo plano sigue conectada a este host. ¿Volver a conectarla o iniciar una nueva conexión?</string>
+    <string name="launcher_reattach">Reconectar</string>
+    <string name="launcher_new_connection">Nueva conexión</string>
+    <string name="connection_group_badge_fmt">• %1$s</string>
+    <string name="connection_a11y_fmt">Conexión %1$s. %2$s en %3$s</string>
+    <string name="connection_a11y_port_fmt">Conexión %1$s. %2$s en %3$s puerto %4$d</string>
+    <string name="connection_a11y_auth_fmt">Autenticación: %1$s</string>
+    <string name="connection_a11y_last_connected_fmt">Última conexión %1$s</string>
+    <string name="auth_type_password">Contraseña</string>
+    <string name="auth_type_2fa">2FA</string>
+    <string name="audit_log_no_details">Sin detalles adicionales</string>
+    <string name="connections_ungrouped_header_fmt">Sin grupo (%1$d)</string>
+    <string name="keyboard_fn_back">← Atrás</string>
+    <string name="identity_auth_type_ssh_key">Clave SSH</string>
+    <string name="hypervisor_account_username_fmt">Usuario: %1$s</string>
+    <string name="group_header_fmt">%1$s (%2$d)</string>
+    <string name="identity_auth_type_keyboard_interactive">Interactivo por teclado</string>
+    <string name="identity_password_set_hint">Contraseña (dejar en blanco para mantener la actual)</string>
+    <string name="perf_connect_failed_fmt">Error al conectar: %1$s</string>
+    <string name="perf_load_1m_fmt">1 min: %1$.2f</string>
+    <string name="perf_load_5m_fmt">5 min: %1$.2f</string>
+    <string name="perf_load_15m_fmt">15 min: %1$.2f</string>
+    <string name="perf_load_processes_fmt">%1$d/%2$d procesos</string>
+    <string name="report_submit_failed_fmt">Error al enviar el informe: %1$s</string>
+    <string name="pin_lock_status_locked_out_fmt">Demasiados intentos fallidos — inténtalo de nuevo en %1$s</string>
+    <string name="cloud_manager_toast_credentials_clear_failed">No se pudieron borrar las credenciales: %1$s</string>
+    <string name="sync_log_clear_failed">No se pudo borrar el registro de sincronización</string>
+
 </resources>

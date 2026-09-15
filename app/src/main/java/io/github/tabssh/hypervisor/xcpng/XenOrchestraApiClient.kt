@@ -385,8 +385,10 @@ class XenOrchestraApiClient(
     suspend fun listVMs(): List<XoVM> = withContext(Dispatchers.IO) {
         try {
             Logger.d(TAG, "Fetching VM list from Xen Orchestra")
-            
-            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/vms")
+
+            // Without ?fields= the collection endpoint returns href strings, not objects.
+            val fields = "id,uuid,name_label,power_state,memory,CPUs,type,tags,mainIpAddress,\$pool,\$container,os_version"
+            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/vms?fields=$fields")
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
@@ -404,14 +406,14 @@ class XenOrchestraApiClient(
                             continue
                         }
                         
-                        // Parse VM object
+                        // Parse VM object. XO serves memory as {size,…} and vCPUs as CPUs {max,number}.
                         val vm = XoVM(
                             id = vmJson.getString("id"),
                             uuid = vmJson.getString("uuid"),
                             name_label = vmJson.getString("name_label"),
                             power_state = vmJson.getString("power_state"),
-                            memory = vmJson.getLong("memory"),
-                            vcpus = vmJson.getInt("VCPUs_max"),
+                            memory = vmJson.optJSONObject("memory")?.optLong("size") ?: 0L,
+                            vcpus = vmJson.optJSONObject("CPUs")?.optInt("max") ?: 0,
                             type = type,
                             tags = parseJsonArray(vmJson.optJSONArray("tags")),
                             mainIpAddress = vmJson.optString("mainIpAddress").takeIf { it.isNotEmpty() },
@@ -458,13 +460,14 @@ class XenOrchestraApiClient(
                 if (body != null) {
                     val vmJson = JSONObject(body)
                     
+                    // XO serves memory as {size,…} and vCPUs as CPUs {max,number}.
                     XoVM(
                         id = vmJson.getString("id"),
                         uuid = vmJson.getString("uuid"),
                         name_label = vmJson.getString("name_label"),
                         power_state = vmJson.getString("power_state"),
-                        memory = vmJson.getLong("memory"),
-                        vcpus = vmJson.getInt("VCPUs_max"),
+                        memory = vmJson.optJSONObject("memory")?.optLong("size") ?: 0L,
+                        vcpus = vmJson.optJSONObject("CPUs")?.optInt("max") ?: 0,
                         type = vmJson.optString("type", ""),
                         tags = parseJsonArray(vmJson.optJSONArray("tags")),
                         mainIpAddress = vmJson.optString("mainIpAddress").takeIf { it.isNotEmpty() },
@@ -489,15 +492,15 @@ class XenOrchestraApiClient(
     
     /**
      * Start a VM
-     * 
-     * POST /rest/v0/vms/:id/start
+     *
+     * POST /rest/v0/vms/:id/actions/start
      */
     suspend fun startVM(vmId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             Logger.d(TAG, "Starting VM: $vmId")
-            
+
             val request = buildAuthenticatedRequest(
-                "$baseUrl$apiPrefix/vms/$vmId/start",
+                "$baseUrl$apiPrefix/vms/$vmId/actions/start",
                 "POST"
             )
             val response = executeRequest(request)
@@ -520,16 +523,16 @@ class XenOrchestraApiClient(
     /**
      * Stop a VM (clean shutdown)
      * 
-     * POST /rest/v0/vms/:id/stop
-     * POST /rest/v0/vms/:id/force-stop (if force=true)
+     * POST /rest/v0/vms/:id/actions/clean_shutdown
+     * POST /rest/v0/vms/:id/actions/hard_shutdown (if force=true)
      */
     suspend fun stopVM(vmId: String, force: Boolean = false): Boolean = withContext(Dispatchers.IO) {
         try {
-            val action = if (force) "force-stop" else "stop"
+            val action = if (force) "hard_shutdown" else "clean_shutdown"
             Logger.d(TAG, "Stopping VM: $vmId (force=$force)")
-            
+
             val request = buildAuthenticatedRequest(
-                "$baseUrl$apiPrefix/vms/$vmId/$action",
+                "$baseUrl$apiPrefix/vms/$vmId/actions/$action",
                 "POST"
             )
             val response = executeRequest(request)
@@ -552,14 +555,14 @@ class XenOrchestraApiClient(
     /**
      * Reboot a VM (graceful restart)
      *
-     * POST /rest/v0/vms/:id/restart
+     * POST /rest/v0/vms/:id/actions/clean_reboot
      */
     suspend fun rebootVM(vmId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             Logger.d(TAG, "Rebooting VM: $vmId")
 
             val request = buildAuthenticatedRequest(
-                "$baseUrl$apiPrefix/vms/$vmId/restart",
+                "$baseUrl$apiPrefix/vms/$vmId/actions/clean_reboot",
                 "POST"
             )
             val response = executeRequest(request)
@@ -583,14 +586,14 @@ class XenOrchestraApiClient(
      * Hard reset a VM (immediate power cycle)
      * Unlike reboot, this does not wait for graceful shutdown.
      *
-     * POST /rest/v0/vms/:id/restart?force=true
+     * POST /rest/v0/vms/:id/actions/hard_reboot
      */
     suspend fun resetVM(vmId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             Logger.d(TAG, "Resetting VM (hard): $vmId")
 
             val request = buildAuthenticatedRequest(
-                "$baseUrl$apiPrefix/vms/$vmId/restart?force=true",
+                "$baseUrl$apiPrefix/vms/$vmId/actions/hard_reboot",
                 "POST"
             )
             val response = executeRequest(request)
@@ -613,14 +616,14 @@ class XenOrchestraApiClient(
     /**
      * Suspend a VM
      * 
-     * POST /rest/v0/vms/:id/suspend
+     * POST /rest/v0/vms/:id/actions/suspend
      */
     suspend fun suspendVM(vmId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             Logger.d(TAG, "Suspending VM: $vmId")
-            
+
             val request = buildAuthenticatedRequest(
-                "$baseUrl$apiPrefix/vms/$vmId/suspend",
+                "$baseUrl$apiPrefix/vms/$vmId/actions/suspend",
                 "POST"
             )
             val response = executeRequest(request)
@@ -643,14 +646,14 @@ class XenOrchestraApiClient(
     /**
      * Resume a suspended VM
      * 
-     * POST /rest/v0/vms/:id/resume
+     * POST /rest/v0/vms/:id/actions/resume
      */
     suspend fun resumeVM(vmId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             Logger.d(TAG, "Resuming VM: $vmId")
-            
+
             val request = buildAuthenticatedRequest(
-                "$baseUrl$apiPrefix/vms/$vmId/resume",
+                "$baseUrl$apiPrefix/vms/$vmId/actions/resume",
                 "POST"
             )
             val response = executeRequest(request)
@@ -721,8 +724,10 @@ class XenOrchestraApiClient(
     suspend fun listSnapshots(vmId: String): List<XoSnapshot> = withContext(Dispatchers.IO) {
         try {
             Logger.d(TAG, "Fetching snapshots for VM: $vmId")
-            
-            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/vms/$vmId/snapshots")
+
+            // Without ?fields= the collection endpoint returns href strings, not objects.
+            val fields = "id,uuid,name_label,snapshot_time,\$snapshot_of"
+            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/vms/$vmId/snapshots?fields=$fields")
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
@@ -879,8 +884,10 @@ class XenOrchestraApiClient(
     suspend fun listBackupJobs(): List<XoBackupJob> = withContext(Dispatchers.IO) {
         try {
             Logger.d(TAG, "Fetching backup jobs")
-            
-            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/backup/jobs")
+
+            // Without ?fields= the collection endpoint returns href strings, not objects.
+            val fields = "id,name,mode,enabled,schedule,vms"
+            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/backup/jobs?fields=$fields")
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
@@ -1000,8 +1007,10 @@ class XenOrchestraApiClient(
     suspend fun getBackupRuns(jobId: String): List<XoBackupRun> = withContext(Dispatchers.IO) {
         try {
             Logger.d(TAG, "Fetching backup run history for job: $jobId")
-            
-            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/backup/jobs/$jobId/runs")
+
+            // Without ?fields= the collection endpoint returns href strings, not objects.
+            val fields = "id,jobId,status,start,end,result"
+            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/backup/jobs/$jobId/runs?fields=$fields")
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
@@ -1055,8 +1064,10 @@ class XenOrchestraApiClient(
     suspend fun listPools(): List<XoPool> = withContext(Dispatchers.IO) {
         try {
             Logger.d(TAG, "Fetching resource pools")
-            
-            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/pools")
+
+            // Without ?fields= the collection endpoint returns href strings, not objects.
+            val fields = "id,uuid,name_label,name_description,master,default_SR"
+            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/pools?fields=$fields")
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
@@ -1068,11 +1079,12 @@ class XenOrchestraApiClient(
                     for (i in 0 until jsonArray.length()) {
                         val poolJson = jsonArray.getJSONObject(i)
                         
+                        // XO calls the pool description name_description.
                         val pool = XoPool(
                             id = poolJson.getString("id"),
                             uuid = poolJson.getString("uuid"),
                             name_label = poolJson.getString("name_label"),
-                            description = poolJson.optString("description").takeIf { it.isNotEmpty() },
+                            description = poolJson.optString("name_description").takeIf { it.isNotEmpty() },
                             master = poolJson.getString("master"),
                             default_SR = poolJson.optString("default_SR").takeIf { it.isNotEmpty() }
                         )
@@ -1115,11 +1127,12 @@ class XenOrchestraApiClient(
                 if (body != null) {
                     val poolJson = JSONObject(body)
                     
+                    // XO calls the pool description name_description.
                     XoPool(
                         id = poolJson.getString("id"),
                         uuid = poolJson.getString("uuid"),
                         name_label = poolJson.getString("name_label"),
-                        description = poolJson.optString("description").takeIf { it.isNotEmpty() },
+                        description = poolJson.optString("name_description").takeIf { it.isNotEmpty() },
                         master = poolJson.getString("master"),
                         default_SR = poolJson.optString("default_SR").takeIf { it.isNotEmpty() }
                     )
@@ -1146,8 +1159,10 @@ class XenOrchestraApiClient(
     suspend fun listHosts(poolId: String? = null): List<XoHost> = withContext(Dispatchers.IO) {
         try {
             Logger.d(TAG, "Fetching hosts" + (poolId?.let { " for pool $it" } ?: ""))
-            
-            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/hosts")
+
+            // Without ?fields= the collection endpoint returns href strings, not objects.
+            val fields = "id,uuid,name_label,hostname,memory,enabled,\$pool"
+            val request = buildAuthenticatedRequest("$baseUrl$apiPrefix/hosts?fields=$fields")
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
@@ -1167,13 +1182,15 @@ class XenOrchestraApiClient(
                             }
                         }
                         
+                        // XO serves host memory as {usage,size}; free = size - usage.
+                        val mem = hostJson.optJSONObject("memory")
                         val host = XoHost(
                             id = hostJson.getString("id"),
                             uuid = hostJson.getString("uuid"),
                             name_label = hostJson.getString("name_label"),
                             hostname = hostJson.getString("hostname"),
-                            memory_total = hostJson.getLong("memory_total"),
-                            memory_free = hostJson.getLong("memory_free"),
+                            memory_total = mem?.optLong("size") ?: 0L,
+                            memory_free = mem?.let { it.optLong("size") - it.optLong("usage") } ?: 0L,
                             enabled = hostJson.getBoolean("enabled"),
                             `$pool` = hostJson.optString("\$pool").takeIf { it.isNotEmpty() }
                         )
@@ -1216,13 +1233,15 @@ class XenOrchestraApiClient(
                 if (body != null) {
                     val hostJson = JSONObject(body)
                     
+                    // XO serves host memory as {usage,size}; free = size - usage.
+                    val mem = hostJson.optJSONObject("memory")
                     XoHost(
                         id = hostJson.getString("id"),
                         uuid = hostJson.getString("uuid"),
                         name_label = hostJson.getString("name_label"),
                         hostname = hostJson.getString("hostname"),
-                        memory_total = hostJson.getLong("memory_total"),
-                        memory_free = hostJson.getLong("memory_free"),
+                        memory_total = mem?.optLong("size") ?: 0L,
+                        memory_free = mem?.let { it.optLong("size") - it.optLong("usage") } ?: 0L,
                         enabled = hostJson.getBoolean("enabled"),
                         `$pool` = hostJson.optString("\$pool").takeIf { it.isNotEmpty() }
                     )
@@ -1286,222 +1305,6 @@ class XenOrchestraApiClient(
         }
     }
     
-    // ======================== WebSocket Real-Time Events ========================
-    
-    /**
-     * WebSocket event types
-     */
-    data class XoEvent(
-        // "vm.started", "vm.stopped", "vm.restarted", "snapshot.created", etc.
-        val type: String,
-        // VM UUID (if applicable)
-        val vmId: String?,
-        // Event timestamp
-        val timestamp: Long,
-        // Additional event data
-        val data: JSONObject?
-    )
-    
-    /**
-     * WebSocket event listener interface
-     */
-    interface EventListener {
-        fun onVMStateChanged(vmId: String, newState: String)
-        fun onVMCreated(vmId: String)
-        fun onVMDeleted(vmId: String)
-        fun onSnapshotCreated(vmId: String, snapshotId: String)
-        fun onSnapshotDeleted(vmId: String, snapshotId: String)
-        fun onBackupCompleted(jobId: String, success: Boolean)
-        fun onConnectionStateChanged(connected: Boolean)
-        fun onError(error: String)
-    }
-    
-    // Written from OkHttp dispatcher threads (onOpen/onClosed/onFailure) and read
-    // from the UI thread, same as every other cross-thread field in this class.
-    @Volatile
-    private var webSocket: WebSocket? = null
-    @Volatile
-    private var eventListener: EventListener? = null
-    @Volatile
-    private var isWebSocketConnected = false
-    
-    /**
-     * Connect to WebSocket for real-time events
-     * 
-     * WebSocket URL: wss://host:port/api/
-     * Sends auth token after connection
-     */
-    fun connectWebSocket(listener: EventListener) {
-        this.eventListener = listener
-        
-        if (authToken == null) {
-            Logger.e(TAG, "Cannot connect WebSocket: Not authenticated")
-            listener.onError("Not authenticated")
-            return
-        }
-        
-        val wsUrl = "wss://$host:$port/api/"
-        Logger.d(TAG, "Connecting WebSocket to ${Logger.urlForLogging(wsUrl)}")
-        
-        val request = Request.Builder()
-            .url(wsUrl)
-            .build()
-        
-        webSocket = client.newWebSocket(request, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                Logger.i(TAG, "WebSocket connected")
-                isWebSocketConnected = true
-                
-                // Send authentication
-                val authMessage = JSONObject().apply {
-                    put("type", "authenticate")
-                    put("token", authToken)
-                }
-                webSocket.send(authMessage.toString())
-                
-                listener.onConnectionStateChanged(true)
-            }
-            
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                // Log length only — the payload carries VM/pool state and
-                // possibly credential data, never the raw content.
-                Logger.d(TAG, "WebSocket message: ${text.length} bytes")
-                
-                try {
-                    val json = JSONObject(text)
-                    val event = parseEvent(json)
-                    
-                    // Route event to appropriate listener method
-                    when (event.type) {
-                        "vm.started", "vm.running" -> {
-                            event.vmId?.let { listener.onVMStateChanged(it, "Running") }
-                        }
-                        "vm.stopped", "vm.halted" -> {
-                            event.vmId?.let { listener.onVMStateChanged(it, "Halted") }
-                        }
-                        "vm.suspended" -> {
-                            event.vmId?.let { listener.onVMStateChanged(it, "Suspended") }
-                        }
-                        "vm.restarted" -> {
-                            event.vmId?.let { listener.onVMStateChanged(it, "Running") }
-                        }
-                        "vm.created" -> {
-                            event.vmId?.let { listener.onVMCreated(it) }
-                        }
-                        "vm.deleted" -> {
-                            event.vmId?.let { listener.onVMDeleted(it) }
-                        }
-                        "snapshot.created" -> {
-                            val vmId = event.data?.optString("vmId")
-                            val snapshotId = event.data?.optString("snapshotId")
-                            if (vmId != null && snapshotId != null) {
-                                listener.onSnapshotCreated(vmId, snapshotId)
-                            }
-                        }
-                        "snapshot.deleted" -> {
-                            val vmId = event.data?.optString("vmId")
-                            val snapshotId = event.data?.optString("snapshotId")
-                            if (vmId != null && snapshotId != null) {
-                                listener.onSnapshotDeleted(vmId, snapshotId)
-                            }
-                        }
-                        "backup.completed" -> {
-                            val jobId = event.data?.optString("jobId")
-                            val success = event.data?.optBoolean("success") ?: false
-                            if (jobId != null) {
-                                listener.onBackupCompleted(jobId, success)
-                            }
-                        }
-                        else -> {
-                            Logger.d(TAG, "Unhandled event type: ${event.type}")
-                        }
-                    }
-                    
-                } catch (e: Exception) {
-                    Logger.e(TAG, "Error parsing WebSocket message: ${e.message}", e)
-                    listener.onError("Failed to parse event: ${e.message}")
-                }
-            }
-            
-            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                Logger.i(TAG, "WebSocket closing: $code - $reason")
-                isWebSocketConnected = false
-                listener.onConnectionStateChanged(false)
-            }
-            
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Logger.e(TAG, "WebSocket failure: ${t.message}", t)
-                isWebSocketConnected = false
-                listener.onConnectionStateChanged(false)
-                listener.onError("WebSocket connection failed: ${t.message}")
-            }
-        })
-    }
-    
-    /**
-     * Parse event JSON to XoEvent object
-     */
-    private fun parseEvent(json: JSONObject): XoEvent {
-        return XoEvent(
-            type = json.optString("type", "unknown"),
-            vmId = json.optString("vmId").takeIf { it.isNotEmpty() },
-            timestamp = json.optLong("timestamp", System.currentTimeMillis()),
-            data = json.optJSONObject("data")
-        )
-    }
-    
-    /**
-     * Subscribe to specific VM events
-     */
-    fun subscribeToVM(vmId: String) {
-        if (webSocket == null || !isWebSocketConnected) {
-            Logger.w(TAG, "Cannot subscribe: WebSocket not connected")
-            return
-        }
-        
-        val message = JSONObject().apply {
-            put("type", "subscribe")
-            put("channel", "vm.$vmId")
-        }
-        
-        webSocket?.send(message.toString())
-        Logger.d(TAG, "Subscribed to VM: $vmId")
-    }
-    
-    /**
-     * Subscribe to all VMs
-     */
-    fun subscribeToAllVMs() {
-        if (webSocket == null || !isWebSocketConnected) {
-            Logger.w(TAG, "Cannot subscribe: WebSocket not connected")
-            return
-        }
-        
-        val message = JSONObject().apply {
-            put("type", "subscribe")
-            put("channel", "vm.*")
-        }
-        
-        webSocket?.send(message.toString())
-        Logger.d(TAG, "Subscribed to all VMs")
-    }
-    
-    /**
-     * Disconnect WebSocket
-     */
-    fun disconnectWebSocket() {
-        webSocket?.close(1000, "Client disconnect")
-        webSocket = null
-        isWebSocketConnected = false
-        eventListener = null
-        Logger.i(TAG, "WebSocket disconnected")
-    }
-    
-    /**
-     * Check if WebSocket is connected
-     */
-    fun isWebSocketConnected(): Boolean = isWebSocketConnected
-
     /**
      * Get current auth token for external use (e.g., console connections)
      */
@@ -1518,7 +1321,7 @@ class XenOrchestraApiClient(
         try {
             Logger.d(TAG, "Getting console URL for VM: $vmId")
 
-            // XO console URL format: wss://host:port/api/console/{vmId}
+            // XO console URL format: wss://host:port/api/consoles/{vmId}
             // Or via REST API: GET /rest/v0/vms/{vmId}/console which returns console info
 
             // Try REST API first to get console details
@@ -1549,8 +1352,9 @@ class XenOrchestraApiClient(
                 Logger.d(TAG, "Console API endpoint not available: ${e.message}")
             }
 
-            // Fallback: construct WebSocket URL directly
-            val wsUrl = "wss://$host:$port/api/console/$vmId"
+            // Fallback: construct WebSocket URL directly.
+            // xo-server registers the console proxy at /api/consoles/ (plural).
+            val wsUrl = "wss://$host:$port/api/consoles/$vmId"
             Logger.i(TAG, "Using constructed console URL: ${Logger.urlForLogging(wsUrl)}")
             wsUrl
         } catch (e: CancellationException) {
@@ -1558,7 +1362,7 @@ class XenOrchestraApiClient(
         } catch (e: Exception) {
             // API endpoint might not exist, use fallback
             Logger.d(TAG, "Console API not available, using fallback URL")
-            val wsUrl = "wss://$host:$port/api/console/$vmId"
+            val wsUrl = "wss://$host:$port/api/consoles/$vmId"
             Logger.i(TAG, "Fallback console URL: ${Logger.urlForLogging(wsUrl)}")
             wsUrl
         }

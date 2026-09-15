@@ -185,9 +185,23 @@ class AuthSshFragment : Fragment() {
         applyAuthVisibility(initAuthIndex)
         authTypeSpinner.setOnItemClickListener { _, _, pos, _ -> applyAuthVisibility(pos) }
 
-        if (existing != null && !existing.password.isNullOrEmpty()) {
-            passwordInput.setText(PASSWORD_MASK)
-            passwordInput.hint = getString(R.string.identity_password_set_hint)
+        if (existing != null) {
+            // Identities persist password=null with the secret in the Keystore
+            // (alias identity_${id}) — check there asynchronously, keeping the
+            // DB column as a fallback for legacy rows that predate the move.
+            lifecycleScope.launch(Dispatchers.IO) {
+                val hasPassword = !existing.password.isNullOrEmpty() || try {
+                    app.securePasswordManager.retrievePassword("identity_${existing.id}")?.isNotBlank() == true
+                } catch (_: Exception) {
+                    false
+                }
+                withContext(Dispatchers.Main) {
+                    if (hasPassword) {
+                        passwordInput.setText(PASSWORD_MASK)
+                        passwordInput.hint = getString(R.string.identity_password_set_hint)
+                    }
+                }
+            }
         }
 
         MaterialAlertDialogBuilder(requireContext())

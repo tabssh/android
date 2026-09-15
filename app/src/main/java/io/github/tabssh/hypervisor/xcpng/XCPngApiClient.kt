@@ -8,7 +8,10 @@ import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import org.xmlpull.v1.XmlPullParser
+import org.xmlpull.v1.XmlPullParserFactory
 import java.io.IOException
+import java.io.StringReader
 import java.security.cert.X509Certificate
 import javax.net.ssl.*
 
@@ -138,26 +141,15 @@ class XCPngApiClient(
                 throw IllegalStateException("Cannot connect to XCP-ng API - server returned HTML (Xen Orchestra web interface). Please either:\n1. Enable 'Is this Xen Orchestra?' toggle in hypervisor settings\n2. Connect directly to XCP-ng host (not Xen Orchestra) on default port")
             }
 
-            // Parse XML response for session ID
-            if (response.contains("<value>") && response.contains("OpaqueRef:")) {
-                val start = response.indexOf("<value>") + 7
-                val end = response.indexOf("</value>", start)
-                sessionId = response.substring(start, end)
+            // XAPI wraps every result in a {Status, Value|ErrorDescription} struct;
+            // xapiValue unwraps it and throws on Status=Failure or an XML-RPC fault.
+            val session = xapiValue(response)
+            if (session is String && session.startsWith("OpaqueRef:")) {
+                sessionId = session
                 // The session ref IS the credential for every later XAPI call —
                 // never log any part of it.
                 Logger.i("XCPngAPI", "Authentication successful, session: xxxxx")
                 true
-            } else if (response.contains("Fault") || response.contains("fault")) {
-                // Parse error message
-                val errorStart = response.indexOf("<string>")
-                val errorEnd = response.indexOf("</string>", errorStart)
-                val errorMsg = if (errorStart > 0 && errorEnd > errorStart) {
-                    response.substring(errorStart + 8, errorEnd)
-                } else {
-                    "Unknown XML-RPC fault"
-                }
-                Logger.e("XCPngAPI", "Authentication failed: $errorMsg")
-                false
             } else {
                 Logger.e("XCPngAPI", "Authentication failed - unexpected response format")
                 Logger.d("XCPngAPI", "Response: ${response.take(500)}")
@@ -213,7 +205,9 @@ class XCPngApiClient(
 
     suspend fun startVM(uuid: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            xmlRpcCall(buildXmlRequest("VM.start", listOf(uuid, "false", "false")))
+            // VM.start(start_paused, force) take XML-RPC booleans, not strings;
+            // xapiValue throws on Status=Failure so a rejected start returns false.
+            xapiValue(xmlRpcCall(buildXmlRequest("VM.start", listOf(uuid, false, false))))
             Logger.i("XCPngAPI", "Started VM $uuid")
             true
         } catch (e: CancellationException) {
@@ -226,7 +220,7 @@ class XCPngApiClient(
 
     suspend fun shutdownVM(uuid: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            xmlRpcCall(buildXmlRequest("VM.clean_shutdown", listOf(uuid)))
+            xapiValue(xmlRpcCall(buildXmlRequest("VM.clean_shutdown", listOf(uuid))))
             Logger.i("XCPngAPI", "Shutdown VM $uuid")
             true
         } catch (e: CancellationException) {
@@ -239,7 +233,7 @@ class XCPngApiClient(
 
     suspend fun rebootVM(uuid: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            xmlRpcCall(buildXmlRequest("VM.clean_reboot", listOf(uuid)))
+            xapiValue(xmlRpcCall(buildXmlRequest("VM.clean_reboot", listOf(uuid))))
             Logger.i("XCPngAPI", "Rebooted VM $uuid")
             true
         } catch (e: CancellationException) {
@@ -252,7 +246,7 @@ class XCPngApiClient(
 
     suspend fun hardShutdownVM(uuid: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            xmlRpcCall(buildXmlRequest("VM.hard_shutdown", listOf(uuid)))
+            xapiValue(xmlRpcCall(buildXmlRequest("VM.hard_shutdown", listOf(uuid))))
             Logger.i("XCPngAPI", "Hard shutdown VM $uuid")
             true
         } catch (e: CancellationException) {
@@ -269,7 +263,7 @@ class XCPngApiClient(
      */
     suspend fun hardRebootVM(uuid: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            xmlRpcCall(buildXmlRequest("VM.hard_reboot", listOf(uuid)))
+            xapiValue(xmlRpcCall(buildXmlRequest("VM.hard_reboot", listOf(uuid))))
             Logger.i("XCPngAPI", "Hard reboot VM $uuid")
             true
         } catch (e: CancellationException) {
@@ -280,9 +274,14 @@ class XCPngApiClient(
         }
     }
 
-    private fun buildXmlRequest(method: String, params: List<String>): String {
+    private fun buildXmlRequest(method: String, params: List<Any>): String {
         val paramsXml = params.joinToString("") { param ->
-            "<param><value>${xmlEscape(param)}</value></param>"
+            // XML-RPC booleans are typed elements encoding 1/0 — a bare "false"
+            // string is truthy to the server-side boolean coercion.
+            when (param) {
+                is Boolean -> "<param><value><boolean>${if (param) "1" else "0"}</boolean></value></param>"
+                else       -> "<param><value>${xmlEscape(param.toString())}</value></param>"
+            }
         }
 
         return """
@@ -355,22 +354,169 @@ class XCPngApiClient(
         }
     }
 
-    private fun parseStringResponse(xml: String): String {
-        val start = xml.indexOf("<value>") + 7
-        val end = xml.indexOf("</value>", start)
-        return if (start > 6 && end > start) xmlUnescape(xml.substring(start, end)) else ""
+    /**
+     * Parse an XML-RPC methodResponse and unwrap the XAPI result envelope.
+     *
+     * XAPI wraps every response in `<value><struct>` with members `Status`
+     * ("Success"/"Failure"), `Value` (present on success) and
+     * `ErrorDescription` (array of strings on failure). Throws [IOException]
+     * on an XML-RPC `<fault>`, on Status=Failure (message carries the joined
+     * ErrorDescription), or on malformed/truncated XML. Returns the `Value`
+     * member as String / Boolean / List / Map, or "" for void results.
+     */
+    private fun xapiValue(xml: String): Any {
+        val root = parseMethodResponse(xml)
+        if (root !is Map<*, *>) {
+            throw IOException("Unexpected XML-RPC response shape: ${root.javaClass.simpleName}")
+        }
+        val status = root["Status"]
+        if (status != "Success") {
+            val error = (root["ErrorDescription"] as? List<*>)
+                ?.joinToString(" ") { it.toString() }
+                ?: "unknown error"
+            throw IOException("XAPI failure: $error")
+        }
+        return root["Value"] ?: ""
     }
 
-    // Inverse of xmlEscape — convert XML entity references back to their literal
-    // characters. Required because XAPI returns string values with the same
-    // entity encoding that we send (e.g. a VM named "A & B" arrives as "A &amp; B").
-    private fun xmlUnescape(s: String): String {
-        if (s.indexOf('&') < 0) return s
-        return s.replace("&apos;", "'")
-            .replace("&quot;", "\"")
-            .replace("&gt;", ">")
-            .replace("&lt;", "<")
-            .replace("&amp;", "&")
+    // Returns the value of the first <param> in a methodResponse, throwing on
+    // a <fault> element (transport-level XML-RPC error, distinct from the
+    // XAPI Status=Failure envelope handled by xapiValue).
+    private fun parseMethodResponse(xml: String): Any {
+        val parser = XmlPullParserFactory.newInstance().newPullParser()
+        parser.setInput(StringReader(xml))
+        var event = parser.eventType
+        var inFault = false
+        while (event != XmlPullParser.END_DOCUMENT) {
+            if (event == XmlPullParser.START_TAG) {
+                when (parser.name) {
+                    "fault" -> inFault = true
+                    "value" -> {
+                        val value = parseXmlRpcValue(parser)
+                        if (inFault) {
+                            val fault = value as? Map<*, *>
+                            throw IOException("XML-RPC fault: ${fault?.get("faultString") ?: value}")
+                        }
+                        return value
+                    }
+                }
+            }
+            event = parser.next()
+        }
+        throw IOException("XML-RPC response contains no value")
+    }
+
+    // Parses the content of a <value> element the parser is currently on.
+    // Handles bare text, <string>, <boolean>, numeric scalars (returned as
+    // String — callers convert), <array><data> and <struct>.
+    private fun parseXmlRpcValue(parser: XmlPullParser): Any {
+        val text = StringBuilder()
+        while (true) {
+            when (parser.next()) {
+                XmlPullParser.TEXT -> text.append(parser.text)
+                XmlPullParser.START_TAG -> {
+                    when (parser.name) {
+                        "string", "int", "i4", "i8", "double", "dateTime.iso8601", "base64" -> {
+                            val scalar = readElementText(parser)
+                            skipToValueEnd(parser)
+                            return scalar
+                        }
+                        "boolean" -> {
+                            val raw = readElementText(parser).trim()
+                            skipToValueEnd(parser)
+                            return raw == "1" || raw.equals("true", ignoreCase = true)
+                        }
+                        "array" -> {
+                            val items = parseXmlRpcArray(parser)
+                            skipToValueEnd(parser)
+                            return items
+                        }
+                        "struct" -> {
+                            val members = parseXmlRpcStruct(parser)
+                            skipToValueEnd(parser)
+                            return members
+                        }
+                        else -> throw IOException("Unsupported XML-RPC type: ${parser.name}")
+                    }
+                }
+                XmlPullParser.END_TAG -> {
+                    if (parser.name == "value") return text.toString()
+                }
+                XmlPullParser.END_DOCUMENT -> throw IOException("Truncated XML-RPC value")
+            }
+        }
+    }
+
+    // Consumes events until the enclosing </value> so parseXmlRpcValue always
+    // leaves the parser positioned right after the value it returned.
+    private fun skipToValueEnd(parser: XmlPullParser) {
+        var depth = 0
+        while (true) {
+            when (parser.next()) {
+                XmlPullParser.START_TAG -> depth++
+                XmlPullParser.END_TAG -> {
+                    if (depth == 0 && parser.name == "value") return
+                    depth--
+                }
+                XmlPullParser.END_DOCUMENT -> throw IOException("Truncated XML-RPC value")
+            }
+        }
+    }
+
+    private fun parseXmlRpcArray(parser: XmlPullParser): List<Any> {
+        val items = mutableListOf<Any>()
+        while (true) {
+            when (parser.next()) {
+                XmlPullParser.START_TAG -> {
+                    if (parser.name == "value") items.add(parseXmlRpcValue(parser))
+                }
+                XmlPullParser.END_TAG -> {
+                    if (parser.name == "array") return items
+                }
+                XmlPullParser.END_DOCUMENT -> throw IOException("Truncated XML-RPC array")
+            }
+        }
+    }
+
+    private fun parseXmlRpcStruct(parser: XmlPullParser): Map<String, Any> {
+        val members = mutableMapOf<String, Any>()
+        var name: String? = null
+        while (true) {
+            when (parser.next()) {
+                XmlPullParser.START_TAG -> when (parser.name) {
+                    "name" -> name = readElementText(parser)
+                    "value" -> {
+                        val value = parseXmlRpcValue(parser)
+                        if (name != null) {
+                            members[name] = value
+                            name = null
+                        }
+                    }
+                }
+                XmlPullParser.END_TAG -> {
+                    if (parser.name == "struct") return members
+                }
+                XmlPullParser.END_DOCUMENT -> throw IOException("Truncated XML-RPC struct")
+            }
+        }
+    }
+
+    // Reads the text content of the element the parser just opened and
+    // consumes its END_TAG. The pull parser decodes XML entities itself.
+    private fun readElementText(parser: XmlPullParser): String {
+        val text = StringBuilder()
+        while (true) {
+            when (parser.next()) {
+                XmlPullParser.TEXT -> text.append(parser.text)
+                XmlPullParser.END_TAG -> return text.toString()
+                XmlPullParser.START_TAG -> throw IOException("Unexpected element in scalar: ${parser.name}")
+                XmlPullParser.END_DOCUMENT -> throw IOException("Truncated XML-RPC element")
+            }
+        }
+    }
+
+    private fun parseStringResponse(xml: String): String {
+        return xapiValue(xml).toString()
     }
 
     private fun parseIntResponse(xml: String): Long {
@@ -378,25 +524,14 @@ class XCPngApiClient(
     }
 
     private fun parseBooleanResponse(xml: String): Boolean {
-        return parseStringResponse(xml) == "true" || parseStringResponse(xml) == "1"
+        return when (val value = xapiValue(xml)) {
+            is Boolean -> value
+            else -> value.toString() == "true" || value.toString() == "1"
+        }
     }
 
     private fun parseArrayResponse(xml: String): List<String> {
-        val values = mutableListOf<String>()
-        var index = 0
-
-        while (true) {
-            val start = xml.indexOf("<value>", index)
-            if (start == -1) break
-
-            val end = xml.indexOf("</value>", start)
-            if (end == -1) break
-
-            values.add(xml.substring(start + 7, end))
-            index = end + 8
-        }
-
-        return values
+        return (xapiValue(xml) as? List<*>)?.map { it.toString() } ?: emptyList()
     }
 
     /**

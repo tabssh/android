@@ -29,6 +29,7 @@ import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.BuildConfig
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.paste.PasteProviderFactory
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -270,9 +271,11 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
                     setUploading(false)
                     showResult(url)
                     onSuccess(url)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     setUploading(false)
-                    Toast.makeText(ctx, ctx.getString(io.github.tabssh.R.string.sftp_upload_failed_fmt, e.message), Toast.LENGTH_LONG).show()
+                    Toast.makeText(ctx, ctx.getString(io.github.tabssh.R.string.report_submit_failed_fmt, e.message), Toast.LENGTH_LONG).show()
                 }
             }
         }

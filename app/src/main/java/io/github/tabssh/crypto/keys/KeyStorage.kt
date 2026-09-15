@@ -841,12 +841,23 @@ class KeyStorage(private val context: Context) {
     
     private fun calculateFingerprint(publicKey: PublicKey): String {
         return try {
+            // ssh-keygen hashes the OpenSSH wire blob, not the X.509/SPKI DER
+            // encoding — reuse the wire-format encoders and decode their base64.
+            val wireBase64 = when (publicKey) {
+                is RSAPublicKey -> encodeRSAPublicKey(publicKey)
+                is DSAPublicKey -> encodeDSAPublicKey(publicKey)
+                is ECPublicKey -> encodeECDSAPublicKey(publicKey)
+                else -> encodeEd25519PublicKey(publicKey)
+            }
+            val wireBlob = android.util.Base64.decode(wireBase64, android.util.Base64.NO_WRAP)
             val digest = MessageDigest.getInstance("SHA-256")
-            val hash = digest.digest(publicKey.encoded)
-            
-            // Format as SHA256:base64 (OpenSSH format)
-            "SHA256:" + android.util.Base64.encodeToString(hash, android.util.Base64.NO_WRAP)
-            
+            val hash = digest.digest(wireBlob)
+
+            // Format as SHA256:base64 (OpenSSH format, unpadded like ssh-keygen)
+            "SHA256:" + android.util.Base64.encodeToString(
+                hash, android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING
+            )
+
         } catch (e: Exception) {
             Logger.e("KeyStorage", "Failed to calculate fingerprint", e)
             "Unknown"
@@ -1162,9 +1173,21 @@ class KeyStorage(private val context: Context) {
     
     private fun formatPublicKey(publicKey: PublicKey, keyType: String, comment: String?): String {
         return try {
-            // Format public key in OpenSSH format
-            val keyTypeStr = KeyType.valueOf(keyType).getOpenSSHIdentifier()
-            
+            // Format public key in OpenSSH format. KeyType.getOpenSSHIdentifier()
+            // uses the constant defaultKeySize, so for EC keys derive the
+            // identifier from the ACTUAL curve — this also covers the API<33
+            // Ed25519→ECDSA fallback where the stored type says ED25519.
+            val keyTypeStr = if (publicKey is ECPublicKey) {
+                when (val bits = publicKey.params.order.bitLength()) {
+                    256 -> "ecdsa-sha2-nistp256"
+                    384 -> "ecdsa-sha2-nistp384"
+                    521 -> "ecdsa-sha2-nistp521"
+                    else -> throw IllegalArgumentException("Unsupported EC curve: $bits bits")
+                }
+            } else {
+                KeyType.valueOf(keyType).getOpenSSHIdentifier()
+            }
+
             // For proper OpenSSH format, we need to encode the key properly
             // This requires algorithm-specific encoding
             val keyData = when (keyTypeStr) {

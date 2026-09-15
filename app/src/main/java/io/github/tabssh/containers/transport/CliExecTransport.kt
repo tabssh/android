@@ -164,9 +164,11 @@ class CliExecTransport(
 
     override fun pullImage(ref: String): Flow<PullProgressEvent> =
         // CLI pull has no NDJSON progress; each output line becomes a
-        // status-only event.
-        runner.stream("$docker pull ${q(ref)} 2>&1")
-            .map { line -> PullProgressEvent(status = line) }
+        // status-only event. The endpoint env prefix keeps the pull on the
+        // same daemon every other command targets.
+        flow {
+            emitAll(runner.stream("${cliContext.envPrefix()}$docker pull ${q(ref)} 2>&1"))
+        }.map { line -> PullProgressEvent(status = line) }
 
     override suspend fun removeImage(ref: String, force: Boolean): ContainerResult<Unit> =
         cli("Failed to remove image", "rmi${if (force) " -f" else ""} ${q(ref)}", ACTION_TIMEOUT_MS) { }

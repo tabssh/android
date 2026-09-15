@@ -52,6 +52,10 @@ class RemoteExecOps(
     val dockerBin: String
         get() = host.cliBinary()
 
+    /** The standalone compose binary — podman-compose on Podman, docker-compose elsewhere. */
+    private val standaloneComposeBin: String
+        get() = if (engine == ContainerEngine.PODMAN) "podman-compose" else "docker-compose"
+
     // ── Path expansion ──────────────────────────────────────────────────────
 
     /**
@@ -197,7 +201,7 @@ class RemoteExecOps(
                 composeInvocation = ComposeInvocation.PLUGIN
                 return ContainerResult.Success(ComposeInvocation.PLUGIN)
             }
-            val standalone = runner.run("${env}docker-compose version 2>/dev/null", FILE_TIMEOUT_MS)
+            val standalone = runner.run("$env$standaloneComposeBin version 2>/dev/null", FILE_TIMEOUT_MS)
             if (standalone.isSuccess) {
                 composeInvocation = ComposeInvocation.STANDALONE
                 return ContainerResult.Success(ComposeInvocation.STANDALONE)
@@ -382,7 +386,7 @@ class RemoteExecOps(
         val env = cliContext.envPrefix()
         return when (invocation) {
             ComposeInvocation.PLUGIN -> "$env$dockerBin compose"
-            ComposeInvocation.STANDALONE -> "${env}docker-compose"
+            ComposeInvocation.STANDALONE -> "$env$standaloneComposeBin"
         }
     }
 

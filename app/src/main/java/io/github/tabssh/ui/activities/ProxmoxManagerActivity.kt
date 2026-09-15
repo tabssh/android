@@ -666,7 +666,8 @@ class ProxmoxManagerActivity : TabSSHActivity() {
                     holder.btnStart.visibility = View.GONE
                     holder.btnStop.visibility = View.VISIBLE
                     holder.btnReboot.visibility = View.VISIBLE
-                    holder.btnReset.visibility = View.VISIBLE
+                    // PVE has no reset endpoint for LXC containers — hide the button for them
+                    holder.btnReset.visibility = if (vm.type == "lxc") View.GONE else View.VISIBLE
                 }
                 "stopped" -> {
                     holder.btnConsole.visibility = View.GONE

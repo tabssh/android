@@ -289,8 +289,11 @@ class SFTPActivity : TabSSHActivity() {
                     finish()
                 }
                 
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Error setting up SFTP", e)
+                if (isFinishing || isDestroyed) return@launch
                 showError(getString(R.string.sftp_error_setup_fmt, e.message.orEmpty()))
                 finish()
             }
@@ -768,8 +771,11 @@ class SFTPActivity : TabSSHActivity() {
 
                     Logger.d("SFTPActivity", "Loaded local directory: $path (${sorted.size} items)")
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Failed to load local directory: $path", e)
+                if (isFinishing || isDestroyed) return@launch
                 showError(getString(R.string.sftp_error_load_local))
             }
         }
@@ -818,8 +824,11 @@ class SFTPActivity : TabSSHActivity() {
                 }
 
                 Logger.d("SFTPActivity", "Loaded SAF local directory: ${dir.uri} (${sorted.size} items)")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Failed to load SAF local directory: ${dir.uri}", e)
+                if (isFinishing || isDestroyed) return@launch
                 showError(getString(R.string.sftp_error_load_local))
             }
         }
@@ -1022,8 +1031,11 @@ class SFTPActivity : TabSSHActivity() {
                 )
                 localFileAdapter.clearSelection()
                 loadRemoteDirectory(currentRemotePath)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Upload failed", e)
+                if (isFinishing || isDestroyed) return@launch
                 showError(getString(R.string.sftp_toast_upload_failed_fmt, e.message.orEmpty()))
             }
         }
@@ -1150,8 +1162,11 @@ class SFTPActivity : TabSSHActivity() {
                 )
                 remoteFileAdapter.clearSelection()
                 loadLocalFiles()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Download failed", e)
+                if (isFinishing || isDestroyed) return@launch
                 showError(getString(R.string.sftp_toast_download_failed_fmt, e.message.orEmpty()))
             }
         }
@@ -1220,8 +1235,11 @@ class SFTPActivity : TabSSHActivity() {
                     showError(getString(R.string.sftp_error_create_folder))
                 }
                 
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Error creating folder", e)
+                if (isFinishing || isDestroyed) return@launch
                 showError(getString(R.string.sftp_error_create_folder_fmt, e.message.orEmpty()))
             }
         }
@@ -1564,8 +1582,11 @@ class SFTPActivity : TabSSHActivity() {
 
                 Logger.i("SFTPActivity", "Started upload: $entryName")
 
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Failed to start upload", e)
+                if (isFinishing || isDestroyed) return@launch
                 showError(getString(R.string.sftp_upload_failed_fmt, e.message.orEmpty()))
             }
         }
@@ -1665,8 +1686,11 @@ class SFTPActivity : TabSSHActivity() {
 
                 Logger.i("SFTPActivity", "Started download: ${remoteFile.name}")
                 
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Failed to start download", e)
+                if (isFinishing || isDestroyed) return@launch
                 showError(getString(R.string.sftp_download_failed_fmt, e.message.orEmpty()))
             }
         }
@@ -1763,8 +1787,11 @@ class SFTPActivity : TabSSHActivity() {
                     showError(getString(R.string.sftp_error_rename))
                 }
                 
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Error renaming file", e)
+                if (isFinishing || isDestroyed) return@launch
                 showError(getString(R.string.sftp_error_rename_fmt, e.message.orEmpty()))
             }
         }
@@ -1794,8 +1821,11 @@ class SFTPActivity : TabSSHActivity() {
                     showError(getString(R.string.sftp_error_delete_fmt, file.name))
                 }
 
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("SFTPActivity", "Error deleting file", e)
+                if (isFinishing || isDestroyed) return@launch
                 showError(getString(R.string.sftp_error_delete_generic_fmt, e.message.orEmpty()))
             }
         }

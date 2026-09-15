@@ -11,6 +11,7 @@ import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.room.withTransaction
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -269,19 +270,24 @@ class ContainerHostsFragment : Fragment() {
                 // Captured at click time — the IO block below must not call
                 // requireContext() after a potential detach.
                 val appContext = requireContext().applicationContext
-                // viewLifecycleOwner: scope ends at onDestroyView so the toast
-                // below cannot fire against a dead view tree.
-                viewLifecycleOwner.lifecycleScope.launch {
+                // Application scope + one Room transaction: the multi-table
+                // cascade commits atomically and survives the view being
+                // destroyed mid-delete (a view-scope cancel used to leave
+                // half-deleted docker_* child rows behind).
+                app.applicationScope.launch(Dispatchers.IO) {
                     try {
-                        withContext(Dispatchers.IO) {
-                            // Convention cascade — the docker_* child tables have
-                            // no real FKs, so clean them up alongside the host.
-                            ContainerSessionManager.release(app, host.id)
-                            // Custom-endpoint password lives only in the
-                            // Keystore — clear it so a future row id reuse
-                            // can't inherit this host's secret.
-                            io.github.tabssh.crypto.storage.ContainerHostPasswordStore
-                                .clear(appContext, host.id)
+                        // Non-DB teardown stays outside the transaction —
+                        // session release and Keystore clears must not hold
+                        // the DB transaction open.
+                        ContainerSessionManager.release(app, host.id)
+                        // Custom-endpoint password lives only in the
+                        // Keystore — clear it so a future row id reuse
+                        // can't inherit this host's secret.
+                        io.github.tabssh.crypto.storage.ContainerHostPasswordStore
+                            .clear(appContext, host.id)
+                        // Convention cascade — the docker_* child tables have
+                        // no real FKs, so clean them up alongside the host.
+                        app.database.withTransaction {
                             // Tombstone every cascaded child before the bulk
                             // delete removes it — deleteForHost() gives back
                             // no rows, so the natural keys must be captured first.
@@ -310,25 +316,29 @@ class ContainerHostsFragment : Fragment() {
                                 appContext, io.github.tabssh.sync.tombstone.TombstoneRecorder.CONTAINER_HOST,
                                 io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(host))
                         }
-                        if (!isAdded) return@launch
-                        Toast.makeText(
-                            requireContext(),
-                            getString(R.string.container_host_deleted),
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        withContext(Dispatchers.Main) {
+                            if (!isAdded) return@withContext
+                            Toast.makeText(
+                                requireContext(),
+                                getString(R.string.container_host_deleted),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        if (!isAdded) return@launch
-                        // A Keystore/cipher failure message can echo the value
-                        // it was handed — sanitize and cap before display.
-                        Toast.makeText(
-                            requireContext(),
-                            getString(
-                                R.string.container_error_detail_fmt, ContainerText.display(e.message)
-                            ),
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        withContext(Dispatchers.Main) {
+                            if (!isAdded) return@withContext
+                            // A Keystore/cipher failure message can echo the value
+                            // it was handed — sanitize and cap before display.
+                            Toast.makeText(
+                                requireContext(),
+                                getString(
+                                    R.string.container_error_detail_fmt, ContainerText.display(e.message)
+                                ),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     }
                 }
             }

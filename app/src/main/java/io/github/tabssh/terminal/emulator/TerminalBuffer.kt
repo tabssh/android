@@ -93,6 +93,11 @@ class TerminalBuffer(
     fun getRows(): Int = rows
     fun getCols(): Int = cols
 
+    // The parser needs the DECSTBM margins to decide whether IND/RI/NEL scroll
+    // the region or just move the cursor; the fields themselves stay private.
+    fun getScrollTop(): Int = scrollTop
+    fun getScrollBottom(): Int = scrollBottom
+
     fun setChar(row: Int, col: Int, char: Char, fgColor: Int, bgColor: Int, 
                bold: Boolean, underline: Boolean, reverse: Boolean) {
         if (row in 0 until rows && col in 0 until cols) {

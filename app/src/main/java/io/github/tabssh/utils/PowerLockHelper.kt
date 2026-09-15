@@ -52,6 +52,10 @@ class PowerLockHelper(
      * Replaces any existing held lock so the timeout is always [timeoutMs] from now.
      */
     fun acquireTimedWakeLock(timeoutMs: Long) {
+        // Release any still-held prior lock (timed or indefinite) before
+        // overwriting the reference — otherwise the old lock stays held with
+        // no owner and drains the battery until process death.
+        releaseWakeLock()
         try {
             val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
             val wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, timedWakeLockTag)

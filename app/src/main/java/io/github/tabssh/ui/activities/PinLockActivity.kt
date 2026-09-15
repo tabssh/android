@@ -47,7 +47,9 @@ import io.github.tabssh.utils.tabSSHApp
  * unsalted SHA-256 of a 4–8 digit PIN would be. The ~1s derivation also
  * rate-limits on-device brute force, complementing the 5-attempt lockout.
  * PINs set under the old unsalted-SHA-256 scheme are upgraded transparently
- * on the next successful unlock. No PIN history / strength meter / backoff.
+ * on the next successful unlock. Every five consecutive fails arms a
+ * persisted, escalating lockout window (30s doubling, capped) enforced
+ * across relaunches. No PIN history / strength meter.
  */
 class PinLockActivity : AppCompatActivity() {
 
@@ -62,6 +64,13 @@ class PinLockActivity : AppCompatActivity() {
         // simply rotate the activity (rotate device / kill task) to reset it.
         private const val PREF_PIN_FAIL_COUNT = "app_lock_pin_fail_count"
         private const val MAX_ATTEMPTS = 5
+        // Escalating brute-force lockout: every MAX_ATTEMPTS consecutive fails
+        // arms a lockout window (30s, doubling per window, capped at 32min).
+        // The until-timestamp persists in the same prefs as the fail counter so
+        // relaunching the activity cannot bypass it.
+        private const val PREF_PIN_LOCKOUT_UNTIL = "app_lock_pin_lockout_until"
+        private const val LOCKOUT_BASE_MS = 30_000L
+        private const val LOCKOUT_MAX_MS = 32 * 60_000L
 
         /**
          * Constant-time comparison of two SHA-256 hex strings — short-circuit
@@ -215,10 +224,43 @@ class PinLockActivity : AppCompatActivity() {
 
         setContentView(root)
         pinInput.requestFocus()
+
+        if (mode == MODE_VERIFY) enforceLockout()
+    }
+
+    private fun lockoutRemainingMs(): Long {
+        val until = app.preferencesManager.getString(PREF_PIN_LOCKOUT_UNTIL, "0").toLongOrNull() ?: 0L
+        return until - System.currentTimeMillis()
+    }
+
+    // While a persisted lockout window is active, keep input disabled and show
+    // a live countdown; re-enable input when the window expires.
+    private fun enforceLockout() {
+        if (lockoutRemainingMs() <= 0) return
+        setBusy(true)
+        lifecycleScope.launch {
+            while (true) {
+                val remaining = lockoutRemainingMs()
+                if (remaining <= 0) break
+                status.text = getString(
+                    R.string.pin_lock_status_locked_out_fmt,
+                    io.github.tabssh.utils.Format.duration(this@PinLockActivity, remaining)
+                )
+                kotlinx.coroutines.delay(1_000)
+            }
+            status.text = ""
+            setBusy(false)
+        }
     }
 
     private fun onSubmit() {
         if (busy) return
+        // Re-check the persisted window on every submit — setBusy(false) could
+        // race a clock change, and the timestamp in prefs is the ground truth.
+        if (mode == MODE_VERIFY && lockoutRemainingMs() > 0) {
+            enforceLockout()
+            return
+        }
         val pin = pinInput.text.toString().trim()
         if (pin.length !in 4..8) {
             status.text = getString(R.string.pin_lock_status_pin_length)
@@ -259,6 +301,7 @@ class PinLockActivity : AppCompatActivity() {
             app.preferencesManager.setString(PREF_PIN_HASH, stored)
             app.preferencesManager.setBoolean(PREF_PIN_ENABLED, true)
             app.preferencesManager.setInt(PREF_PIN_FAIL_COUNT, 0)
+            app.preferencesManager.setString(PREF_PIN_LOCKOUT_UNTIL, "0")
             setBusy(false)
             Toast.makeText(this@PinLockActivity, getString(R.string.pin_lock_toast_pin_set), Toast.LENGTH_SHORT).show()
             Logger.i(TAG, "PIN configured")
@@ -292,9 +335,10 @@ class PinLockActivity : AppCompatActivity() {
             val ok = withContext(Dispatchers.Default) { verifyPin(pin, expected) }
             setBusy(false)
             if (ok) {
-                // Successful unlock clears the persisted fail counter so a future
-                // session starts fresh.
+                // Successful unlock clears the persisted fail counter and any
+                // armed lockout window so a future session starts fresh.
                 app.preferencesManager.setInt(PREF_PIN_FAIL_COUNT, 0)
+                app.preferencesManager.setString(PREF_PIN_LOCKOUT_UNTIL, "0")
                 attempts = 0
                 app.markAppUnlocked()
                 setResult(Activity.RESULT_OK)
@@ -308,13 +352,23 @@ class PinLockActivity : AppCompatActivity() {
             app.preferencesManager.setInt(PREF_PIN_FAIL_COUNT, persisted)
             attempts = persisted
             pinInput.setText("")
-            if (attempts >= MAX_ATTEMPTS) {
+            if (attempts % MAX_ATTEMPTS == 0) {
+                // Arm the escalating lockout window: 30s after the first five
+                // fails, doubling per window (capped), persisted so a relaunch
+                // lands straight back in the countdown.
+                val step = attempts / MAX_ATTEMPTS
+                val duration = (LOCKOUT_BASE_MS shl (step - 1).coerceAtMost(6))
+                    .coerceAtMost(LOCKOUT_MAX_MS)
+                app.preferencesManager.setString(
+                    PREF_PIN_LOCKOUT_UNTIL,
+                    (System.currentTimeMillis() + duration).toString()
+                )
                 status.text = getString(R.string.pin_lock_status_too_many_attempts)
                 Toast.makeText(this@PinLockActivity, getString(R.string.pin_lock_toast_too_many_attempts_closing), Toast.LENGTH_LONG).show()
                 finishAffinity()
                 return@launch
             }
-            status.text = getString(R.string.pin_lock_status_incorrect, MAX_ATTEMPTS - attempts)
+            status.text = getString(R.string.pin_lock_status_incorrect, MAX_ATTEMPTS - (attempts % MAX_ATTEMPTS))
         }
     }
 

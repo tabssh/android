@@ -7,8 +7,10 @@ import org.bouncycastle.crypto.generators.RSAKeyPairGenerator
 import org.bouncycastle.crypto.params.RSAKeyGenerationParameters
 import org.bouncycastle.jce.ECNamedCurveTable
 import org.bouncycastle.jce.provider.BouncyCastleProvider
+import org.bouncycastle.openssl.PKCS8Generator
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter
-import org.bouncycastle.openssl.jcajce.JcePEMEncryptorBuilder
+import org.bouncycastle.openssl.jcajce.JcaPKCS8Generator
+import org.bouncycastle.openssl.jcajce.JceOpenSSLPKCS8EncryptorBuilder
 import java.io.StringWriter
 import java.math.BigInteger
 import java.nio.ByteBuffer
@@ -142,11 +144,16 @@ object SSHKeyGenerator {
 
         try {
             if (passphrase != null && passphrase.isNotEmpty()) {
-                // Encrypted PEM
-                val encryptor = JcePEMEncryptorBuilder("AES-256-CBC")
+                // Standard PKCS#8 EncryptedPrivateKeyInfo ("BEGIN ENCRYPTED
+                // PRIVATE KEY") — OpenSSL, ssh-keygen, and PuTTY all read it.
+                // The legacy JcePEMEncryptorBuilder DEK-Info path has no valid
+                // form for Ed25519 PKCS#8 keys: it emitted a "BEGIN PRIVATE
+                // KEY" header over an encrypted body no parser could read.
+                val encryptor = JceOpenSSLPKCS8EncryptorBuilder(PKCS8Generator.AES_256_CBC)
                     .setProvider("BC")
-                    .build(passphrase.toCharArray())
-                pemWriter.writeObject(privateKey, encryptor)
+                    .setPassword(passphrase.toCharArray())
+                    .build()
+                pemWriter.writeObject(JcaPKCS8Generator(privateKey, encryptor))
             } else {
                 // Unencrypted PEM
                 pemWriter.writeObject(privateKey)
@@ -236,11 +243,11 @@ object SSHKeyGenerator {
      * `bcrypt_pbkdf` key derivation. Import (SSHKeyParser) delegates that to
      * JSch's bundled implementation, but rather than also hand-assembling the
      * encrypted v1 container here, an encrypted export is routed through the
-     * standard PKCS#8 PEM path (handled by BouncyCastle's
-     * `JcePEMEncryptorBuilder`, which produces an OpenSSL-compatible
-     * `-----BEGIN ENCRYPTED PRIVATE KEY-----` PEM that OpenSSH, PuTTY,
-     * and ssh-keygen all read natively). Unencrypted export stays on the
-     * native OpenSSH v1 binary path.
+     * standard PKCS#8 path (BouncyCastle's `JcaPKCS8Generator` +
+     * `JceOpenSSLPKCS8EncryptorBuilder`, which produce a standard
+     * `-----BEGIN ENCRYPTED PRIVATE KEY-----` PEM that OpenSSL, PuTTY,
+     * ssh-keygen, and SSHKeyParser all read). Unencrypted export stays on
+     * the native OpenSSH v1 binary path.
      */
     fun exportOpenSSHPrivateKey(
         privateKey: PrivateKey,
@@ -249,8 +256,7 @@ object SSHKeyGenerator {
         passphrase: String? = null
     ): String {
         if (!passphrase.isNullOrEmpty()) {
-            // PEM-encrypted PKCS#8 — BouncyCastle's JcePEMEncryptorBuilder
-            // produces output OpenSSH reads natively.
+            // PKCS#8 EncryptedPrivateKeyInfo PEM — standard, tool-readable
             return exportPrivateKeyPEM(privateKey, passphrase)
         }
         val buffer = java.io.ByteArrayOutputStream()
@@ -463,7 +469,8 @@ object SSHKeyGenerator {
 
     private fun generateFingerprint(publicKey: PublicKey): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        val hash = digest.digest(publicKey.encoded)
+        // ssh-keygen hashes the OpenSSH wire blob, not the X.509/SPKI DER encoding
+        val hash = digest.digest(encodePublicKeyForOpenSSH(publicKey))
         return "SHA256:" + Base64.encodeToString(hash, Base64.NO_WRAP or Base64.NO_PADDING)
     }
 

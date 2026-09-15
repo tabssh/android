@@ -75,6 +75,7 @@ class ThemeEditorActivity : TabSSHActivity() {
     private var nameInput: EditText? = null
 
     private val swatches = mutableMapOf<String, View>()
+    private val hexEdits = mutableMapOf<String, EditText>()
     private val previewText: TextView by lazy { TextView(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -228,6 +229,7 @@ class ThemeEditorActivity : TabSSHActivity() {
             layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 3f)
         }
         row.addView(hexEdit)
+        hexEdits[key] = hexEdit
 
         val swatch = View(this).apply {
             val lp = LinearLayout.LayoutParams(dp(36), dp(36))
@@ -337,6 +339,12 @@ class ThemeEditorActivity : TabSSHActivity() {
 
     private fun refreshAllSwatches() {
         for ((key, view) in swatches) view.background = makeSwatch(getColor(key))
+        // Keep the hex fields in sync with the working state — after a base
+        // theme pick they would otherwise keep showing the old theme's values.
+        for ((key, edit) in hexEdits) {
+            val hex = toHex(getColor(key))
+            if (edit.text.toString() != hex) edit.setText(hex)
+        }
     }
 
     private fun refreshPreview() {

@@ -187,7 +187,10 @@ class ImportExportActivity : TabSSHActivity() {
                     throw Exception(result.message)
                 }
 
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
+                if (isFinishing || isDestroyed) return@launch
                 if (e.message?.contains("encrypted", ignoreCase = true) == true ||
                     e.message?.contains("password", ignoreCase = true) == true ||
                     e.message?.contains("decrypt", ignoreCase = true) == true) {
@@ -254,7 +257,10 @@ class ImportExportActivity : TabSSHActivity() {
                     throw Exception(result.message)
                 }
 
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
+                if (isFinishing || isDestroyed) return@launch
                 val mapped = ThrowableMapper.map(this@ImportExportActivity, "ImportExportActivity", e, "Failed to import backup with password")
                 io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
                     this@ImportExportActivity, getString(R.string.identity_import_failed_title),
@@ -322,6 +328,8 @@ class ImportExportActivity : TabSSHActivity() {
                     getString(R.string.import_export_exported_connections, connections.size),
                     Toast.LENGTH_SHORT
                 ).show()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(this@ImportExportActivity, "ImportExportActivity", e, "SSH config export failed")
                 Toast.makeText(
@@ -351,6 +359,8 @@ class ImportExportActivity : TabSSHActivity() {
                 io.github.tabssh.ui.dialogs.TextExportDialog.show(
                     this@ImportExportActivity, getString(R.string.import_export_export_ssh_config_title), text
                 )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(this@ImportExportActivity, "ImportExportActivity", e, "SSH config export (text) failed")
                 Toast.makeText(
@@ -410,6 +420,8 @@ class ImportExportActivity : TabSSHActivity() {
                     return@launch
                 }
                 showBulkImportPreviewDialog(result)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(this@ImportExportActivity, "ImportExportActivity", e, "Bulk import failed")
                 Toast.makeText(
@@ -522,6 +534,8 @@ class ImportExportActivity : TabSSHActivity() {
 
                 showSSHConfigImportDialog(profiles)
 
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(this@ImportExportActivity, "ImportExportActivity", e, "Failed to import SSH config")
                 Toast.makeText(
@@ -746,6 +760,8 @@ class ImportExportActivity : TabSSHActivity() {
                     }.show()
                 }
 
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(this@ImportExportActivity, "ImportExportActivity", e, "Failed to save imported connections")
                 Toast.makeText(
@@ -909,7 +925,10 @@ class ImportExportActivity : TabSSHActivity() {
                     throw Exception(getString(R.string.identity_export_failed_fmt, result.message))
                 }
 
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
+                if (isFinishing || isDestroyed) return@launch
                 val mapped = ThrowableMapper.map(this@ImportExportActivity, "ImportExportActivity", e, "Failed to export backup")
                 Toast.makeText(
                     this@ImportExportActivity,

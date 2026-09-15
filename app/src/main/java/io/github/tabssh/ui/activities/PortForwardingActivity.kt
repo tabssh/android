@@ -140,18 +140,26 @@ class PortForwardingActivity : TabSSHActivity() {
     }
 
     private fun chooseDefaultRoute() {
+        // Snapshot the routes shown in the dialog — the Flow in observeRoutes
+        // can replace currentRoutes while the dialog is open, so the click must
+        // resolve against the exact list the labels were built from.
+        val shownRoutes = currentRoutes.toList()
         // Index 0 is the "direct / no default" choice; the rest map to routes.
         val labels = mutableListOf(getString(R.string.route_default_direct))
-        labels += currentRoutes.map { it.name }
+        labels += shownRoutes.map { it.name }
 
         val currentId = app.preferencesManager.getDefaultRouteId()
         val checked = if (currentId == null) 0
-        else currentRoutes.indexOfFirst { it.id == currentId }.let { if (it >= 0) it + 1 else 0 }
+        else shownRoutes.indexOfFirst { it.id == currentId }.let { if (it >= 0) it + 1 else 0 }
 
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.route_default_choose_title)
             .setSingleChoiceItems(labels.toTypedArray(), checked) { dialog, which ->
-                val newId = if (which == 0) null else currentRoutes[which - 1].id
+                val newId = if (which == 0) null else shownRoutes.getOrNull(which - 1)?.id
+                if (which != 0 && newId == null) {
+                    dialog.dismiss()
+                    return@setSingleChoiceItems
+                }
                 app.preferencesManager.setDefaultRouteId(newId)
                 renderDefaultRoute()
                 dialog.dismiss()

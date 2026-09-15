@@ -184,8 +184,10 @@ class AzureVmClient : CloudProvider {
                     }
                 }
 
+                // Key by "resourceGroup/name" — a bare VM name is not unique across
+                // resource groups, so a name-only id could act on the wrong VM.
                 out += CloudInstanceState(
-                    id = name,
+                    id = "$resourceGroup/$name",
                     name = name,
                     ip = pubIp?.ifBlank { null },
                     privateIp = null,
@@ -208,9 +210,9 @@ class AzureVmClient : CloudProvider {
     override suspend fun restartInstance(bearerToken: String, instanceId: String): Boolean =
         azureVmAction(bearerToken, instanceId, "restart")
 
-    /** Azure restart with skipShutdown=true skips the guest OS shutdown sequence. */
+    /** Azure Restart takes no parameters — skipShutdown exists only on Power Off. */
     override suspend fun forceRestartInstance(bearerToken: String, instanceId: String): Boolean =
-        azureVmAction(bearerToken, instanceId, "restart?skipShutdown=true")
+        azureVmAction(bearerToken, instanceId, "restart")
 
     private suspend fun azureVmAction(
         bearerToken: String,
@@ -221,8 +223,12 @@ class AzureVmClient : CloudProvider {
         if (parts.size != 4) return@withContext false
         val (tenant, clientId, clientSecret, subscriptionId) = parts
 
+        // instanceId is "resourceGroup/name" (see fetchLiveInstances); the URL
+        // needs the bare VM name, the cache lookup the composite id.
         val rg = cachedInstances.firstOrNull { it.id == instanceId }?.metadata?.get("resourceGroup")
+            ?: instanceId.substringBefore('/', "").takeIf { it.isNotEmpty() && instanceId.contains('/') }
             ?: return@withContext false
+        val vmName = instanceId.substringAfterLast('/')
 
         // exchangeForAccessToken throws CloudAuthException on 401/403 — let it
         // propagate so the UI can show the "Token invalid — re-add account"
@@ -234,7 +240,7 @@ class AzureVmClient : CloudProvider {
             throw e
         } catch (_: Exception) { return@withContext false }
 
-        val url = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Compute/virtualMachines/$instanceId/$action?api-version=2023-03-01"
+        val url = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Compute/virtualMachines/$vmName/$action?api-version=2023-03-01"
         val body = "{}".toRequestBody("application/json".toMediaTypeOrNull())
         val req = Request.Builder()
             .url(url)

@@ -5,8 +5,6 @@ import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -19,9 +17,6 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
     
     // Active tunnels mapped by tunnel ID
     private val activeTunnels = ConcurrentHashMap<String, Tunnel>()
-    
-    private val _tunnelStates = MutableStateFlow<Map<String, TunnelState>>(emptyMap())
-    val tunnelStates: StateFlow<Map<String, TunnelState>> = _tunnelStates.asStateFlow()
     
     // CopyOnWriteArrayList: UI thread registers/unregisters; tunnel state
     // notifications fire from IO coroutines (forward setup/teardown).
@@ -55,7 +50,6 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
         )
         
         activeTunnels[tunnelId] = tunnel
-        updateTunnelStates()
         
         if (autoStart) {
             startTunnel(tunnelId)
@@ -95,7 +89,6 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
         )
         
         activeTunnels[tunnelId] = tunnel
-        updateTunnelStates()
         
         if (autoStart) {
             startTunnel(tunnelId)
@@ -131,7 +124,6 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
         )
         
         activeTunnels[tunnelId] = tunnel
-        updateTunnelStates()
         
         if (autoStart) {
             startTunnel(tunnelId)
@@ -310,7 +302,6 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
         }
         
         activeTunnels.remove(tunnelId)
-        updateTunnelStates()
         
         Logger.i("PortForwardingManager", "Removed tunnel: $tunnelId")
         notifyListeners { onTunnelRemoved(tunnel) }
@@ -375,11 +366,6 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
     private fun getSSHSession(): Session? = sshConnection.jschSession()
     
     private fun generateTunnelId(): String = java.util.UUID.randomUUID().toString()
-    
-    private fun updateTunnelStates() {
-        val states = activeTunnels.mapValues { (_, tunnel) -> tunnel.state }
-        _tunnelStates.value = states
-    }
     
     // Listener management
     

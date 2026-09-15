@@ -13,6 +13,7 @@ import org.bouncycastle.openssl.PEMParser
 import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter
 import org.bouncycastle.openssl.jcajce.JcePEMDecryptorProviderBuilder
 import org.bouncycastle.openssl.jcajce.JcePEMEncryptorBuilder
+import org.bouncycastle.openssl.jcajce.JceOpenSSLPKCS8DecryptorProviderBuilder
 import org.bouncycastle.util.io.pem.PemObject
 import org.bouncycastle.util.io.pem.PemWriter
 import java.io.StringReader
@@ -182,7 +183,7 @@ object SSHKeyParser {
             var obj = pemParser.readObject()
             val converter = JcaPEMKeyConverter().setProvider("BC")
 
-            // Handle encrypted PEM
+            // Handle legacy encrypted PEM (DEK-Info header)
             if (obj is org.bouncycastle.openssl.PEMEncryptedKeyPair) {
                 if (passphrase == null) {
                     throw IllegalArgumentException("Passphrase required for encrypted key")
@@ -190,6 +191,19 @@ object SSHKeyParser {
                 val decryptor = JcePEMDecryptorProviderBuilder().build(passphrase.toCharArray())
                 val decryptedKeyPair = obj.decryptKeyPair(decryptor)
                 obj = decryptedKeyPair
+            }
+
+            // Handle PKCS#8 EncryptedPrivateKeyInfo ("BEGIN ENCRYPTED
+            // PRIVATE KEY") — the format SSHKeyGenerator's encrypted export
+            // produces, and what modern OpenSSL emits by default
+            if (obj is org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo) {
+                if (passphrase == null) {
+                    throw IllegalArgumentException("Passphrase required for encrypted key")
+                }
+                val decryptor = JceOpenSSLPKCS8DecryptorProviderBuilder()
+                    .setProvider("BC")
+                    .build(passphrase.toCharArray())
+                obj = obj.decryptPrivateKeyInfo(decryptor)
             }
 
             val keyPair = when (obj) {
@@ -854,15 +868,13 @@ object SSHKeyParser {
 
     private fun generateFingerprint(publicKey: PublicKey): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        val hash = digest.digest(publicKey.encoded)
+        // ssh-keygen hashes the OpenSSH wire blob, not the X.509/SPKI DER encoding
+        val hash = digest.digest(encodePublicKeyBlob(publicKey))
         return "SHA256:" + Base64.encodeToString(hash, Base64.NO_WRAP or Base64.NO_PADDING)
     }
 
-    /**
-     * Export public key in OpenSSH format
-     */
-    fun exportPublicKey(publicKey: PublicKey, comment: String = ""): String {
-        val keyType = when (publicKey) {
+    private fun openSSHKeyType(publicKey: PublicKey): String {
+        return when (publicKey) {
             is RSAPublicKey -> "ssh-rsa"
             is DSAPublicKey -> "ssh-dss"
             is ECPublicKey -> {
@@ -878,15 +890,17 @@ object SSHKeyParser {
                 else throw IllegalArgumentException("Unsupported key type")
             }
         }
+    }
 
-        // Encode public key to OpenSSH format
+    /**
+     * Encode a public key as the RFC 4253 OpenSSH wire blob
+     * (the bytes that get base64-encoded in an authorized_keys line).
+     */
+    private fun encodePublicKeyBlob(publicKey: PublicKey): ByteArray {
+        val keyType = openSSHKeyType(publicKey)
         val buffer = java.io.ByteArrayOutputStream()
-        // Write key type
-        val keyTypeBytes = keyType.toByteArray(StandardCharsets.UTF_8)
-        buffer.write(ByteBuffer.allocate(4).putInt(keyTypeBytes.size).array())
-        buffer.write(keyTypeBytes)
+        writeString(buffer, keyType.toByteArray(StandardCharsets.UTF_8))
 
-        // Write key-specific data
         when (publicKey) {
             is RSAPublicKey -> {
                 writeMPInt(buffer, publicKey.publicExponent)
@@ -898,11 +912,63 @@ object SSHKeyParser {
                 writeMPInt(buffer, publicKey.params.g)
                 writeMPInt(buffer, publicKey.y)
             }
-            // Add other key types as needed
+            is ECPublicKey -> {
+                // Wire payload: curve name string + uncompressed point string
+                val curveNameSSH = keyType.removePrefix("ecdsa-sha2-")
+                writeString(buffer, curveNameSSH.toByteArray(StandardCharsets.UTF_8))
+                writeString(buffer, encodeECPoint(publicKey.w, publicKey.params.order.bitLength()))
+            }
+            else -> {
+                // Ed25519: raw 32-byte public key is the tail of the X.509 encoding
+                writeString(buffer, publicKey.encoded.takeLast(32).toByteArray())
+            }
         }
 
-        val encoded = Base64.encodeToString(buffer.toByteArray(), Base64.NO_WRAP)
+        return buffer.toByteArray()
+    }
+
+    /**
+     * Export public key in OpenSSH format
+     */
+    fun exportPublicKey(publicKey: PublicKey, comment: String = ""): String {
+        val keyType = openSSHKeyType(publicKey)
+        val encoded = Base64.encodeToString(encodePublicKeyBlob(publicKey), Base64.NO_WRAP)
         return "$keyType $encoded${if (comment.isNotEmpty()) " $comment" else ""}"
+    }
+
+    private fun encodeECPoint(point: java.security.spec.ECPoint, bitLength: Int): ByteArray {
+        val coordLength = (bitLength + 7) / 8
+        val x = point.affineX.toByteArray()
+        val y = point.affineY.toByteArray()
+
+        val result = ByteArray(1 + 2 * coordLength)
+        // Uncompressed point
+        result[0] = 0x04
+
+        // Copy X coordinate, left-padded to the curve's coordinate length
+        System.arraycopy(
+            x,
+            Math.max(0, x.size - coordLength),
+            result,
+            1 + Math.max(0, coordLength - x.size),
+            Math.min(x.size, coordLength)
+        )
+
+        // Copy Y coordinate, left-padded to the curve's coordinate length
+        System.arraycopy(
+            y,
+            Math.max(0, y.size - coordLength),
+            result,
+            1 + coordLength + Math.max(0, coordLength - y.size),
+            Math.min(y.size, coordLength)
+        )
+
+        return result
+    }
+
+    private fun writeString(output: java.io.OutputStream, data: ByteArray) {
+        output.write(ByteBuffer.allocate(4).putInt(data.size).array())
+        output.write(data)
     }
 
     private fun writeMPInt(output: java.io.OutputStream, value: java.math.BigInteger) {

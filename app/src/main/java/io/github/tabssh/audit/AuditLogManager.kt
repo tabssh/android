@@ -73,7 +73,16 @@ class AuditLogManager(
         private const val SYSLOG_PRI_WARN = 84
         // 80 + 3
         private const val SYSLOG_PRI_ERR  = 83
+
+        // Cleanup throttle for the generic insert path: run the size/retention
+        // purge at most once per window or once per N inserts, whichever fires first.
+        private const val CLEANUP_EVERY_N_INSERTS = 50
+        private const val CLEANUP_MIN_INTERVAL_MS = 6 * 60 * 60 * 1000L
     }
+
+    // Throttle state for insert-path cleanup (see checkAndCleanup)
+    @Volatile private var lastCleanupMs = 0L
+    private val insertsSinceCleanup = java.util.concurrent.atomic.AtomicInteger(0)
 
     // ── MDM ──────────────────────────────────────────────────────────────────
 
@@ -273,7 +282,6 @@ class AuditLogManager(
             port         = connection.port,
             sizeBytes    = (command.length + 200).toLong()
         ))
-        checkAndCleanup()
     }
 
     suspend fun logOutput(connection: ConnectionProfile, sessionId: String, output: String) {
@@ -432,6 +440,16 @@ class AuditLogManager(
             } catch (e: Exception) {
                 Logger.e("AuditLogManager", "Failed to insert audit entry", e)
             }
+        }
+        // Retention purge must not depend on command logging being enabled, so
+        // every insert path funnels through this throttled cleanup check.
+        val now = System.currentTimeMillis()
+        if (insertsSinceCleanup.incrementAndGet() >= CLEANUP_EVERY_N_INSERTS ||
+            now - lastCleanupMs >= CLEANUP_MIN_INTERVAL_MS
+        ) {
+            insertsSinceCleanup.set(0)
+            lastCleanupMs = now
+            checkAndCleanup()
         }
     }
 

@@ -3,6 +3,7 @@ package io.github.tabssh.themes.definitions
 import io.github.tabssh.sync.tombstone.TombstoneRecorder
 
 import android.content.Context
+import io.github.tabssh.BuildConfig
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.ThemeDefinition
 import io.github.tabssh.storage.preferences.PreferenceManager
@@ -21,7 +22,15 @@ import kotlinx.serialization.json.Json
  * Handles built-in themes, custom themes, validation, and application
  */
 class ThemeManager(private val context: Context) {
-    
+
+    companion object {
+        // App versionCode whose built-in theme definitions were last written
+        // to the DB — bumping the app re-upserts them so shipped color fixes
+        // reach existing installs (U3).
+        private const val PREF_BUILT_IN_THEMES_VERSION = "built_in_themes_version"
+    }
+
+
     private val database = TabSSHDatabase.getDatabase(context)
     private val preferenceManager = PreferenceManager(context)
     private val themeValidator = ThemeValidator()
@@ -74,13 +83,25 @@ class ThemeManager(private val context: Context) {
         
         val builtInThemes = BuiltInThemes.getAllThemes()
         val existingThemes = database.themeDao().getBuiltInThemes()
-        
-        val themesToInstall = builtInThemes.filter { theme ->
-            existingThemes.none { it.themeId == theme.id }
+        val existingById = existingThemes.associateBy { it.themeId }
+
+        // Insert-only-if-missing froze built-in colors at first install, so
+        // shipped fixes never reached existing installs — re-upsert all
+        // built-ins whenever the app version changes (U3). User-created
+        // themes are never touched (built-in ids only).
+        val installedVersion = preferenceManager.getInt(PREF_BUILT_IN_THEMES_VERSION, -1)
+        val versionChanged = installedVersion != BuildConfig.VERSION_CODE
+        val themesToInstall = if (versionChanged) {
+            builtInThemes
+        } else {
+            builtInThemes.filter { theme -> !existingById.containsKey(theme.id) }
         }
-        
+
         if (themesToInstall.isNotEmpty()) {
             val themeDefinitions = themesToInstall.map { theme ->
+                // REPLACE would reset stats and sync metadata — carry them
+                // over from the existing row so only the colors change.
+                val existing = existingById[theme.id]
                 ThemeDefinition(
                     themeId = theme.id,
                     name = theme.name,
@@ -93,12 +114,20 @@ class ThemeManager(private val context: Context) {
                     cursorColor = theme.cursor,
                     selectionColor = theme.selection,
                     ansiColors = Json.encodeToString(kotlinx.serialization.serializer(), theme.ansiColors.toList()),
-                    uiColors = encodeUIColors(theme)
+                    uiColors = encodeUIColors(theme),
+                    createdAt = existing?.createdAt ?: System.currentTimeMillis(),
+                    usageCount = existing?.usageCount ?: 0,
+                    lastSyncedAt = existing?.lastSyncedAt ?: 0,
+                    syncVersion = existing?.syncVersion ?: 0,
+                    syncDeviceId = existing?.syncDeviceId ?: ""
                 )
             }
-            
+
             database.themeDao().insertThemes(themeDefinitions)
             Logger.i("ThemeManager", "Installed ${themesToInstall.size} built-in themes")
+        }
+        if (versionChanged) {
+            preferenceManager.setInt(PREF_BUILT_IN_THEMES_VERSION, BuildConfig.VERSION_CODE)
         }
     }
     
@@ -194,9 +223,13 @@ class ThemeManager(private val context: Context) {
      * Get theme by ID
      */
     fun getThemeById(themeId: String): Theme? {
+        // "System Default" follows the current uiMode — resolve it fresh on
+        // every lookup instead of serving a cached dark/light snapshot (U4).
+        if (themeId == BuiltInThemes.SYSTEM_DEFAULT_ID) return BuiltInThemes.systemDefault()
+
         // Check cache first
         themeCache[themeId]?.let { return it }
-        
+
         // Check built-in themes
         return BuiltInThemes.getThemeById(themeId)
     }
@@ -387,6 +420,11 @@ class ThemeManager(private val context: Context) {
     }
     
     private fun convertThemeDefinitionToTheme(definition: ThemeDefinition): Theme {
+        // The DB row for "System Default" holds whichever dark/light snapshot
+        // was current at install time — resolve against the live uiMode so
+        // the picker and cache always show the right variant (U4).
+        if (definition.themeId == BuiltInThemes.SYSTEM_DEFAULT_ID) return BuiltInThemes.systemDefault()
+
         val ansiColors = Json.decodeFromString<List<Int>>(
             kotlinx.serialization.serializer(),
             definition.ansiColors

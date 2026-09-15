@@ -64,6 +64,10 @@ jobs:
       attestations: write
     container:
       image: ${{ needs.ensure-build-image.outputs.image }}
+      # Numeric 0:0 needs no /etc/passwd lookup — the runner and
+      # actions/checkout post-job cleanup exec into the container as a
+      # user the image may not define, which flakes the job otherwise.
+      options: "--user 0:0"
     # Actions can't detect bash inside a container image and falls back to
     # `sh -e` for every `run:` step unless told otherwise.
     defaults:
@@ -222,6 +226,14 @@ jobs:
         ./gradlew assembleFdroidRelease --no-daemon
         echo "✅ F-Droid build succeeded — proguard-fdroid.pro is healthy"
         ls -lh app/build/outputs/apk/fdroidRelease/*.apk
+      env:
+        # Without -PfdroidBuild=true (which only the real F-Droid builder
+        # sets), fdroidRelease keeps signingConfigs.release, so the
+        # taskGraph keystore guard in app/build.gradle requires
+        # KEYSTORE_PASSWORD exactly like the release step above.
+        # KEY_PASSWORD falls back to the store password when absent.
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
     - name: Generate SBOM
       run: ./gradlew :app:cyclonedxBom --no-daemon

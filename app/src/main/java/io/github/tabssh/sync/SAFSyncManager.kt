@@ -39,6 +39,12 @@ class SAFSyncManager(private val context: Context) {
         private const val SYNC_FILE_NAME = "tabssh_sync.dat"
         private const val SYNC_FILE_MIME = "application/octet-stream"
         private const val SYNC_PASSWORD_KEY = "sync_encryption_password"
+        // Local journal of the encrypted payload currently being written to the
+        // SAF document. A single-document SAF grant has no parent access, so a
+        // sibling temp-then-rename is impossible; instead the payload is kept
+        // here until the remote write completes, and a truncated remote file is
+        // rewritten from it on the next download.
+        private const val PENDING_UPLOAD_FILE = "sync_upload_pending.dat"
     }
 
     private val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -273,12 +279,24 @@ class SAFSyncManager(private val context: Context) {
             val encrypted = encryptor.encrypt(compressed, password)
             Logger.d(TAG, "upload: encrypted to ${encrypted.size} bytes")
 
+            // Journal the payload locally first: "wt" truncates the remote file
+            // before writing, so process death mid-write would otherwise leave
+            // truncated ciphertext with no way back (see PENDING_UPLOAD_FILE).
+            try {
+                writePendingUpload(encrypted)
+            } catch (pe: Exception) {
+                Logger.w(TAG, "Could not journal pending upload — continuing without safety net", pe)
+            }
+
             // Write to URI
             Logger.d(TAG, "upload: opening output stream for $uri")
             context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
                 output.write(encrypted)
                 output.flush()
             } ?: throw Exception("Could not open output stream")
+
+            // Remote write completed — the journal is no longer needed
+            pendingUploadFile().delete()
 
             Logger.i(TAG, "Successfully uploaded ${encrypted.size} bytes to sync file")
 
@@ -333,21 +351,26 @@ class SAFSyncManager(private val context: Context) {
 
             Logger.d(TAG, "Read ${encrypted.size} bytes from sync file")
 
-            if (encrypted.isEmpty()) {
-                // A freshly created sync file really is empty — this is the one
-                // case where seeding it from local state is correct.
-                Logger.d(TAG, "Sync file is empty - treating as first sync")
-                return@withContext SyncDownload.Empty
-            }
-
-            // Decrypt
-            val compressed = try {
-                encryptor.decrypt(encrypted, password)
-            } catch (e: Exception) {
-                val msg = "Decryption failed - wrong password or corrupted data"
-                lastError = msg
-                Logger.e(TAG, "Decryption failed", e)
-                return@withContext SyncDownload.Failed(msg)
+            // Decrypt, recovering from the local pending journal when the remote
+            // file was left truncated (or zeroed) by an interrupted upload.
+            val compressed = if (encrypted.isEmpty()) {
+                recoverFromPendingUpload(uri, password) ?: run {
+                    // A freshly created sync file really is empty — this is the
+                    // one case where seeding it from local state is correct.
+                    Logger.d(TAG, "Sync file is empty - treating as first sync")
+                    return@withContext SyncDownload.Empty
+                }
+            } else {
+                try {
+                    encryptor.decrypt(encrypted, password)
+                } catch (e: Exception) {
+                    recoverFromPendingUpload(uri, password) ?: run {
+                        val msg = "Decryption failed - wrong password or corrupted data"
+                        lastError = msg
+                        Logger.e(TAG, "Decryption failed", e)
+                        return@withContext SyncDownload.Failed(msg)
+                    }
+                }
             }
             Logger.d(TAG, "Decrypted to ${compressed.size} bytes")
 
@@ -382,6 +405,54 @@ class SAFSyncManager(private val context: Context) {
             lastError = msg
             Logger.e(TAG, "Download failed", e)
             SyncDownload.Failed(msg)
+        }
+    }
+
+    private fun pendingUploadFile(): java.io.File {
+        return java.io.File(context.filesDir, PENDING_UPLOAD_FILE)
+    }
+
+    /**
+     * Atomically journal the encrypted payload about to be written to SAF.
+     * filesDir is same-filesystem, so temp-then-rename is atomic here even
+     * though it cannot be done on the SAF document itself.
+     */
+    private fun writePendingUpload(encrypted: ByteArray) {
+        val tmp = java.io.File(context.filesDir, "$PENDING_UPLOAD_FILE.tmp")
+        tmp.writeBytes(encrypted)
+        val pending = pendingUploadFile()
+        if (!tmp.renameTo(pending)) {
+            pending.delete()
+            if (!tmp.renameTo(pending)) {
+                throw java.io.IOException("Could not move pending journal into place")
+            }
+        }
+    }
+
+    /**
+     * Recovery for an upload that died mid-write: if the journaled payload
+     * decrypts with the current password, rewrite the remote file from it and
+     * return the decrypted (still compressed) bytes. Returns null when there
+     * is no journal or it cannot be decrypted/rewritten — the journal is only
+     * ever our own ciphertext, so a wrong password fails here too and a peer's
+     * healthy file is never clobbered (this runs only after its decrypt failed).
+     */
+    private fun recoverFromPendingUpload(uri: Uri, password: String): ByteArray? {
+        val pending = pendingUploadFile()
+        if (!pending.exists()) return null
+        return try {
+            val bytes = pending.readBytes()
+            val compressed = encryptor.decrypt(bytes, password)
+            context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                output.write(bytes)
+                output.flush()
+            } ?: return null
+            Logger.i(TAG, "Recovered truncated sync file from local pending journal")
+            pending.delete()
+            compressed
+        } catch (e: Exception) {
+            Logger.w(TAG, "Pending-journal recovery failed", e)
+            null
         }
     }
 

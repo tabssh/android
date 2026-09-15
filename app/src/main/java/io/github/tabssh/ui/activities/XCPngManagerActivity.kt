@@ -238,11 +238,6 @@ class XCPngManagerActivity : TabSSHActivity() {
                     }
 
                     refreshVMs()
-
-                    // Connect WebSocket for Xen Orchestra (real-time updates)
-                    if (detectedXO) {
-                        setupWebSocket()
-                    }
                 } else {
                     statusText.text = getString(R.string.xcpng_auth_failed)
                     showError(getString(R.string.xcpng_auth_failed_details_fmt, profile.host, profile.port, profile.verifySsl.toString()), getString(R.string.terminal_connection_error_title))
@@ -1558,123 +1553,6 @@ class XCPngManagerActivity : TabSSHActivity() {
         override fun getItemCount() = runs.size
     }
     
-    // ======================== WebSocket Real-Time Updates ========================
-    
-    /**
-     * Setup WebSocket connection for real-time VM updates
-     */
-    private fun setupWebSocket() {
-        val xoClient = currentXoClient ?: return
-        
-        Logger.d(TAG, "Setting up WebSocket for real-time updates")
-
-        // The socket delivers events on its own thread and can outlive this screen,
-        // so every callback hops to the main thread and bails out once the activity
-        // is finishing or destroyed before touching a view.
-        xoClient.connectWebSocket(object : XenOrchestraApiClient.EventListener {
-            override fun onVMStateChanged(vmId: String, newState: String) {
-                runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    val state = safeText(newState, 32)
-                    Logger.d(TAG, "VM state changed to $state")
-
-                    // Update VM in list
-                    val vmIndex = vms.indexOfFirst { it.uuid == vmId }
-                    if (vmIndex >= 0) {
-                        vms[vmIndex] = vms[vmIndex].copy(powerState = newState)
-                        vmAdapter.notifyItemChanged(vmIndex)
-                    }
-
-                    Toast.makeText(this@XCPngManagerActivity,
-                        getString(R.string.xcpng_vm_state_changed_fmt, state),
-                        Toast.LENGTH_SHORT).show()
-                }
-            }
-
-            override fun onVMCreated(vmId: String) {
-                runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    Logger.d(TAG, "VM created")
-                    Toast.makeText(this@XCPngManagerActivity,
-                        getString(R.string.xcpng_vm_created),
-                        Toast.LENGTH_SHORT).show()
-                    refreshVMs()
-                }
-            }
-
-            override fun onVMDeleted(vmId: String) {
-                runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    Logger.d(TAG, "VM deleted")
-
-                    // Remove VM from list
-                    val vmIndex = vms.indexOfFirst { it.uuid == vmId }
-                    if (vmIndex >= 0) {
-                        vms.removeAt(vmIndex)
-                        vmAdapter.notifyItemRemoved(vmIndex)
-                    }
-
-                    Toast.makeText(this@XCPngManagerActivity,
-                        getString(R.string.xcpng_vm_deleted),
-                        Toast.LENGTH_SHORT).show()
-                }
-            }
-
-            override fun onSnapshotCreated(vmId: String, snapshotId: String) {
-                runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    Logger.d(TAG, "Snapshot created")
-                    Toast.makeText(this@XCPngManagerActivity,
-                        getString(R.string.hypervisor_snapshot_created),
-                        Toast.LENGTH_SHORT).show()
-                }
-            }
-
-            override fun onSnapshotDeleted(vmId: String, snapshotId: String) {
-                runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    Logger.d(TAG, "Snapshot deleted")
-                    Toast.makeText(this@XCPngManagerActivity,
-                        getString(R.string.hypervisor_snapshot_deleted),
-                        Toast.LENGTH_SHORT).show()
-                }
-            }
-
-            override fun onBackupCompleted(jobId: String, success: Boolean) {
-                runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    Logger.d(TAG, "Backup completed: success=$success")
-                    val message = if (success) getString(R.string.xcpng_backup_completed_success) else getString(R.string.xcpng_backup_failed)
-                    Toast.makeText(this@XCPngManagerActivity, message, Toast.LENGTH_LONG).show()
-                }
-            }
-
-            override fun onConnectionStateChanged(connected: Boolean) {
-                runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    Logger.d(TAG, "WebSocket connection state: $connected")
-
-                    // Show/hide live indicator
-                    if (connected) {
-                        liveIndicator.visibility = View.VISIBLE
-                        liveText.visibility = View.VISIBLE
-                        
-                        // Subscribe to all VMs for updates
-                        xoClient.subscribeToAllVMs()
-                    } else {
-                        liveIndicator.visibility = View.GONE
-                        liveText.visibility = View.GONE
-                    }
-                }
-            }
-            
-            override fun onError(error: String) {
-                // Errors are logged only, so no activity-alive check or UI hop is needed.
-                Logger.e(TAG, "WebSocket error: ${safeText(error)}")
-            }
-        })
-    }
-    
     private fun showInfrastructureDialog() {
         lifecycleScope.launch {
             try {
@@ -1732,12 +1610,10 @@ class XCPngManagerActivity : TabSSHActivity() {
     }
 
     override fun onDestroy() {
-        // Cancel any in-flight HTTP calls before tearing down the WebSocket so
-        // OkHttp does not retain Activity references through callbacks past onDestroy.
+        // Cancel any in-flight HTTP calls so OkHttp does not retain Activity
+        // references through callbacks past onDestroy.
         try { currentXoClient?.cancelAll() } catch (e: Exception) { Logger.w(TAG, "xo cancelAll: ${safeText(e.message)}") }
         try { currentClient?.cancelAll() } catch (e: Exception) { Logger.w(TAG, "xcp cancelAll: ${safeText(e.message)}") }
-        // Disconnect WebSocket when activity is destroyed
-        currentXoClient?.disconnectWebSocket()
         // Drop the client references so a queued callback cannot resurrect a
         // connection through this destroyed activity.
         currentXoClient = null

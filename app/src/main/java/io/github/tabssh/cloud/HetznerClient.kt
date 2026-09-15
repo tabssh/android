@@ -111,10 +111,10 @@ class HetznerClient : CloudProvider {
         }
 
     override suspend fun startInstance(bearerToken: String, instanceId: String): Boolean =
-        postServerAction(bearerToken, instanceId, "power_on")
+        postServerAction(bearerToken, instanceId, "poweron")
 
     override suspend fun stopInstance(bearerToken: String, instanceId: String): Boolean =
-        postServerAction(bearerToken, instanceId, "power_off")
+        postServerAction(bearerToken, instanceId, "poweroff")
 
     override suspend fun restartInstance(bearerToken: String, instanceId: String): Boolean =
         postServerAction(bearerToken, instanceId, "reboot")

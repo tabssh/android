@@ -26,9 +26,21 @@ class ConnectionAdapter(
 
     private var onItemLongClickListener: ((ConnectionProfile) -> Boolean)? = null
 
+    // Multi-select rendering state — the owning fragment tracks WHICH ids are
+    // selected; the adapter only needs it to draw the checked overlay per row.
+    private var selectionMode = false
+    private var selectedIds: Set<String> = emptySet()
+
     /** Update the group-name map and refresh visible items. */
     fun updateGroupNames(names: Map<String, String>) {
         groupNames = names
+        notifyItemRangeChanged(0, itemCount)
+    }
+
+    /** Enable/disable selection mode and set the currently selected ids. */
+    fun setSelection(active: Boolean, ids: Set<String>) {
+        selectionMode = active
+        selectedIds = ids.toSet()
         notifyItemRangeChanged(0, itemCount)
     }
     
@@ -70,6 +82,13 @@ class ConnectionAdapter(
         
         fun bind(connection: ConnectionProfile) {
             binding.apply {
+                // Selection mode — MaterialCardView's checkable state draws the
+                // stock checked overlay, making the selection visible per row.
+                (root as? com.google.android.material.card.MaterialCardView)?.let { card ->
+                    card.isCheckable = selectionMode
+                    card.isChecked = selectionMode && connection.id in selectedIds
+                }
+
                 // Connection name and details
                 textConnectionName.text = connection.name.takeIf { it.isNotBlank() } 
                     ?: connection.getDisplayName()
@@ -116,7 +135,9 @@ class ConnectionAdapter(
                 val groupName = connection.groupId?.let { groupNames[it] }
                 if (groupName != null) {
                     textGroupBadge.visibility = android.view.View.VISIBLE
-                    textGroupBadge.text = "• $groupName"
+                    textGroupBadge.text = binding.root.context.getString(
+                        io.github.tabssh.R.string.connection_group_badge_fmt, groupName
+                    )
                 } else {
                     textGroupBadge.visibility = android.view.View.GONE
                 }
@@ -124,18 +145,33 @@ class ConnectionAdapter(
                 // Status indicator
                 updateStatusIndicator(connection)
 
-                // Accessibility
-                root.contentDescription = buildString {
-                    append("Connection ${connection.getDisplayName()}")
-                    append(". ${connection.username} at ${connection.host}")
-                    if (connection.port != 22) {
-                        append(" port ${connection.port}")
-                    }
-                    append(". Authentication: ${getAuthTypeDisplay(connection.getAuthTypeEnum())}")
-                    if (connection.lastConnected > 0) {
-                        append(". Last connected ${Format.pastTimestamp(binding.root.context, connection.lastConnected)}")
-                    }
+                // Accessibility — each sentence is its own translated string so
+                // no locale ever sees stitched-together English fragments.
+                val ctx = binding.root.context
+                val sentences = mutableListOf<String>()
+                sentences += if (connection.port != 22) {
+                    ctx.getString(
+                        io.github.tabssh.R.string.connection_a11y_port_fmt,
+                        connection.getDisplayName(), connection.username,
+                        connection.host, connection.port
+                    )
+                } else {
+                    ctx.getString(
+                        io.github.tabssh.R.string.connection_a11y_fmt,
+                        connection.getDisplayName(), connection.username, connection.host
+                    )
                 }
+                sentences += ctx.getString(
+                    io.github.tabssh.R.string.connection_a11y_auth_fmt,
+                    getAuthTypeDisplay(connection.getAuthTypeEnum())
+                )
+                if (connection.lastConnected > 0) {
+                    sentences += ctx.getString(
+                        io.github.tabssh.R.string.connection_a11y_last_connected_fmt,
+                        Format.pastTimestamp(ctx, connection.lastConnected)
+                    )
+                }
+                root.contentDescription = sentences.joinToString(". ")
             }
         }
         
@@ -150,10 +186,14 @@ class ConnectionAdapter(
         }
         
         private fun getAuthTypeDisplay(authType: io.github.tabssh.ssh.auth.AuthType): String {
+            val ctx = binding.root.context
             return when (authType) {
-                io.github.tabssh.ssh.auth.AuthType.PASSWORD -> "Password"
-                io.github.tabssh.ssh.auth.AuthType.PUBLIC_KEY -> "SSH Key"
-                io.github.tabssh.ssh.auth.AuthType.KEYBOARD_INTERACTIVE -> "2FA"
+                io.github.tabssh.ssh.auth.AuthType.PASSWORD ->
+                    ctx.getString(io.github.tabssh.R.string.auth_type_password)
+                io.github.tabssh.ssh.auth.AuthType.PUBLIC_KEY ->
+                    ctx.getString(io.github.tabssh.R.string.identity_auth_type_ssh_key)
+                io.github.tabssh.ssh.auth.AuthType.KEYBOARD_INTERACTIVE ->
+                    ctx.getString(io.github.tabssh.R.string.auth_type_2fa)
             }
         }
         

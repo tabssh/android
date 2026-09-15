@@ -138,8 +138,8 @@ open class ConnectionWidgetProvider : AppWidgetProvider() {
                 }
                 R.layout.widget_2x1 -> {
                     views.setTextViewText(R.id.widget_icon, "📱")
-                    views.setTextViewText(R.id.widget_name, "TabSSH")
-                    views.setTextViewText(R.id.widget_info, "Tap to configure")
+                    views.setTextViewText(R.id.widget_name, context.getString(R.string.app_name))
+                    views.setTextViewText(R.id.widget_info, context.getString(R.string.widget_tap_to_configure))
                     views.setOnClickPendingIntent(R.id.widget_connect, getMainIntent(context))
                 }
                 R.layout.widget_4x2, R.layout.widget_4x4 -> {

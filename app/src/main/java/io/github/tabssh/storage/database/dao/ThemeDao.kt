@@ -64,10 +64,7 @@ interface ThemeDao {
     
     @Query("UPDATE themes SET usage_count = usage_count + 1, last_modified = :timestamp WHERE themeId = :themeId")
     suspend fun incrementUsageCount(themeId: String, timestamp: Long = System.currentTimeMillis())
-    
-    @Query("SELECT * FROM themes WHERE name LIKE :query OR author LIKE :query ORDER BY name")
-    suspend fun searchThemes(query: String): List<ThemeDefinition>
-    
+
     @Query("SELECT DISTINCT author FROM themes WHERE author IS NOT NULL ORDER BY author")
     suspend fun getAllAuthors(): List<String>
 }

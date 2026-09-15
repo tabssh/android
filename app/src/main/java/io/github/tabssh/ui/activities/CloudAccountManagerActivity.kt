@@ -157,6 +157,8 @@ class CloudAccountManagerActivity : TabSSHActivity() {
                 withContext(Dispatchers.IO) {
                     client.fetchLiveInstances(token)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: CloudAuthException) {
                 Logger.e(TAG, "fetchLiveInstances auth failed for ${acct.name}", e)
                 binding.progressLoading.visibility = View.GONE
@@ -514,10 +516,22 @@ class CloudAccountManagerActivity : TabSSHActivity() {
                     // Only show Clear if credentials have previously been saved.
                     if (credsJson != null) {
                         b.setNeutralButton(getString(R.string.action_clear)) { _, _ ->
-                            lifecycleScope.launch(Dispatchers.IO) {
-                                app.securePasswordManager.clearPassword(hostCredKey(acct.id, inst.id))
+                            // Confirm only after the delete actually completed —
+                            // toasting before the IO work finishes could report
+                            // success for a clear that then fails.
+                            lifecycleScope.launch {
+                                try {
+                                    withContext(Dispatchers.IO) {
+                                        app.securePasswordManager.clearPassword(hostCredKey(acct.id, inst.id))
+                                    }
+                                    Toast.makeText(ctx, getString(R.string.cloud_manager_toast_credentials_cleared, inst.name), Toast.LENGTH_SHORT).show()
+                                } catch (e: kotlinx.coroutines.CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Logger.e(TAG, "Failed to clear credentials for ${inst.id}", e)
+                                    Toast.makeText(ctx, getString(R.string.cloud_manager_toast_credentials_clear_failed, e.message), Toast.LENGTH_LONG).show()
+                                }
                             }
-                            Toast.makeText(ctx, getString(R.string.cloud_manager_toast_credentials_cleared, inst.name), Toast.LENGTH_SHORT).show()
                         }
                     }
                 }

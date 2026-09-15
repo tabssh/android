@@ -31,6 +31,18 @@ class GroupedConnectionAdapter(
         private const val VIEW_TYPE_UNGROUPED_HEADER = 2
     }
 
+    // Multi-select rendering state — the owning fragment tracks WHICH ids are
+    // selected; the adapter only needs it to draw the checked overlay per row.
+    private var selectionMode = false
+    private var selectedIds: Set<String> = emptySet()
+
+    /** Enable/disable selection mode and set the currently selected ids. */
+    fun setSelection(active: Boolean, ids: Set<String>) {
+        selectionMode = active
+        selectedIds = ids.toSet()
+        notifyItemRangeChanged(0, items.size)
+    }
+
     override fun getItemViewType(position: Int): Int {
         if (position < 0 || position >= items.size) return VIEW_TYPE_CONNECTION
         return when (items[position]) {
@@ -85,7 +97,9 @@ class GroupedConnectionAdapter(
         private val viewGroupColor: View? = itemView.findViewById(R.id.view_group_color)
 
         fun bind(item: ConnectionListItem.GroupHeader) {
-            textGroupName.text = item.getDisplayText()
+            textGroupName.text = itemView.context.getString(
+                R.string.group_header_fmt, item.group.getDisplayName(), item.connectionCount
+            )
 
             // Set expand/collapse icon
             iconExpand.setImageResource(
@@ -128,7 +142,9 @@ class GroupedConnectionAdapter(
         private val viewGroupColor: View? = itemView.findViewById(R.id.view_group_color)
 
         fun bind(item: ConnectionListItem.UngroupedHeader) {
-            textGroupName.text = item.getDisplayText()
+            textGroupName.text = itemView.context.getString(
+                R.string.connections_ungrouped_header_fmt, item.connectionCount
+            )
 
             // Set expand/collapse icon
             iconExpand.setImageResource(
@@ -158,6 +174,13 @@ class GroupedConnectionAdapter(
         private val indicatorStatus: View = itemView.findViewById(R.id.indicator_status)
 
         fun bind(profile: ConnectionProfile, indentLevel: Int) {
+            // Selection mode — MaterialCardView's checkable state draws the
+            // stock checked overlay, making the selection visible per row.
+            (itemView as? com.google.android.material.card.MaterialCardView)?.let { card ->
+                card.isCheckable = selectionMode
+                card.isChecked = selectionMode && profile.id in selectedIds
+            }
+
             textName.text = profile.name
             textDetails.text = "${profile.username}@${profile.host}:${profile.port}"
 
@@ -180,9 +203,10 @@ class GroupedConnectionAdapter(
             // Status dot — green when a live session exists, grey otherwise
             updateStatusIndicator(profile)
 
-            // Apply indent for grouped items
+            // Apply indent for grouped items on the start side so RTL layouts
+            // indent from the correct edge.
             val indentPx = (indentLevel * 32 * itemView.resources.displayMetrics.density).toInt()
-            itemView.setPadding(indentPx, itemView.paddingTop, itemView.paddingRight, itemView.paddingBottom)
+            itemView.setPaddingRelative(indentPx, itemView.paddingTop, itemView.paddingEnd, itemView.paddingBottom)
 
             // Click listeners
             itemView.setOnClickListener {

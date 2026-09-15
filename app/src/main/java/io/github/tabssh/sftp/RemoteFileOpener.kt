@@ -50,7 +50,11 @@ class RemoteFileOpener(
         val remotePath: String,
         val sftpManager: SFTPManager,
         val originalMtime: Long,
-        val originalSize: Long
+        val originalSize: Long,
+        // True when this opener dialed the SFTP channel itself and must
+        // disconnect it once the round trip ends (TabTerminalActivity's
+        // ad-hoc managers); false for a caller-owned long-lived manager.
+        val ownsManager: Boolean
     )
 
     private var pendingEdit: PendingEdit? = null
@@ -63,16 +67,44 @@ class RemoteFileOpener(
         checkPendingEditForChanges()
     }
 
+    override fun onDestroy(owner: LifecycleOwner) {
+        // Close any ad-hoc channel still waiting on an upload-back decision —
+        // leaked channels accumulate against the server's MaxSessions cap.
+        clearPending()
+    }
+
+    // Disconnects [sftpManager] off the UI thread when this opener owns it.
+    private fun releaseManager(sftpManager: SFTPManager, owns: Boolean) {
+        if (!owns) return
+        activity.lifecycleScope.launch(Dispatchers.IO) {
+            try { sftpManager.disconnect() } catch (e: Exception) {
+                Logger.w(TAG, "Ad-hoc SFTP disconnect failed: ${e.message}")
+            }
+        }
+    }
+
+    // Drops the tracked edit, releasing its channel if owned.
+    private fun clearPending() {
+        pendingEdit?.let { releaseManager(it.sftpManager, it.ownsManager) }
+        pendingEdit = null
+    }
+
     /**
      * Stats [remotePath] over [sftpManager], applies the size gate, downloads
      * it, then launches an external viewer with a writable URI grant. The
      * file is tracked for the upload-back prompt on resume.
+     *
+     * Pass [ownsManager] = true when the caller dialed [sftpManager] solely
+     * for this open — the opener then disconnects it when the round trip
+     * finishes (viewer launch failure, declined upload-back, completed
+     * upload-back, or activity destruction).
      */
-    fun open(sftpManager: SFTPManager, remotePath: String, displayName: String) {
+    fun open(sftpManager: SFTPManager, remotePath: String, displayName: String, ownsManager: Boolean = false) {
         activity.lifecycleScope.launch {
             val stat = withContext(Dispatchers.IO) { sftpManager.getRemoteFileAttributes(remotePath) }
             if (stat == null) {
                 Toast.makeText(activity, R.string.fileopen_stat_failed, Toast.LENGTH_LONG).show()
+                releaseManager(sftpManager, ownsManager)
                 return@launch
             }
             val limitMb = sizeLimitMbProvider()
@@ -87,16 +119,17 @@ class RemoteFileOpener(
                             limitMb
                         )
                     )
-                    .setPositiveButton(R.string.download_file) { _, _ -> downloadAndOpen(sftpManager, remotePath, displayName) }
-                    .setNegativeButton(R.string.cancel, null)
+                    .setPositiveButton(R.string.download_file) { _, _ -> downloadAndOpen(sftpManager, remotePath, displayName, ownsManager) }
+                    .setNegativeButton(R.string.cancel) { _, _ -> releaseManager(sftpManager, ownsManager) }
+                    .setOnCancelListener { releaseManager(sftpManager, ownsManager) }
                     .show()
             } else {
-                downloadAndOpen(sftpManager, remotePath, displayName)
+                downloadAndOpen(sftpManager, remotePath, displayName, ownsManager)
             }
         }
     }
 
-    private fun downloadAndOpen(sftpManager: SFTPManager, remotePath: String, displayName: String) {
+    private fun downloadAndOpen(sftpManager: SFTPManager, remotePath: String, displayName: String, ownsManager: Boolean) {
         val cacheSubDir = File(activity.cacheDir, CACHE_SUBDIR).apply { mkdirs() }
         val localFile = File(cacheSubDir, FileOpenPolicy.cacheFileName(remotePath))
 
@@ -125,10 +158,11 @@ class RemoteFileOpener(
                         activity.getString(R.string.sftp_download_failed_fmt, message),
                         Toast.LENGTH_LONG
                     ).show()
+                    releaseManager(sftpManager, ownsManager)
                     return@launch
                 }
                 withContext(Dispatchers.IO) { evictCache(cacheSubDir) }
-                launchViewer(sftpManager, remotePath, localFile)
+                launchViewer(sftpManager, remotePath, localFile, ownsManager)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // Cancellation is not a failure: leaving the screen mid-transfer
                 // cancels this scope, and treating that as an error showed a
@@ -141,6 +175,7 @@ class RemoteFileOpener(
                     activity.getString(R.string.sftp_download_failed_fmt, e.message.orEmpty()),
                     Toast.LENGTH_LONG
                 ).show()
+                releaseManager(sftpManager, ownsManager)
             }
         }
     }
@@ -165,12 +200,13 @@ class RemoteFileOpener(
         toEvict.forEach { File(dir, it.name).delete() }
     }
 
-    private fun launchViewer(sftpManager: SFTPManager, remotePath: String, localFile: File) {
+    private fun launchViewer(sftpManager: SFTPManager, remotePath: String, localFile: File, ownsManager: Boolean) {
         val uri: Uri = try {
             FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", localFile)
         } catch (e: IllegalArgumentException) {
             Logger.e(TAG, "FileProvider could not create a URI for ${localFile.name}", e)
             Toast.makeText(activity, R.string.fileopen_open_failed, Toast.LENGTH_LONG).show()
+            releaseManager(sftpManager, ownsManager)
             return
         }
         val extension = FileOpenPolicy.extensionOf(localFile.name)
@@ -193,16 +229,20 @@ class RemoteFileOpener(
                     )
                 )
             }
-            pendingEdit = PendingEdit(localFile, remotePath, sftpManager, localFile.lastModified(), localFile.length())
+            // Replacing an older tracked edit orphans its channel — close it
+            // now if it was ours, or it would leak until activity destruction.
+            clearPending()
+            pendingEdit = PendingEdit(localFile, remotePath, sftpManager, localFile.lastModified(), localFile.length(), ownsManager)
         } catch (e: ActivityNotFoundException) {
             Toast.makeText(activity, R.string.fileopen_no_app, Toast.LENGTH_LONG).show()
+            releaseManager(sftpManager, ownsManager)
         }
     }
 
     private fun checkPendingEditForChanges() {
         val edit = pendingEdit ?: return
         if (!edit.localFile.exists()) {
-            pendingEdit = null
+            clearPending()
             return
         }
         val changed = FileOpenPolicy.hasFileChanged(
@@ -219,7 +259,8 @@ class RemoteFileOpener(
             .setTitle(R.string.fileopen_changed_title)
             .setMessage(activity.getString(R.string.fileopen_upload_back_message_fmt, edit.remotePath))
             .setPositiveButton(R.string.upload_file) { _, _ -> uploadBack(edit) }
-            .setNegativeButton(R.string.fileopen_not_now, null)
+            .setNegativeButton(R.string.fileopen_not_now) { _, _ -> releaseManager(edit.sftpManager, edit.ownsManager) }
+            .setOnCancelListener { releaseManager(edit.sftpManager, edit.ownsManager) }
             .show()
     }
 
@@ -247,6 +288,7 @@ class RemoteFileOpener(
                         activity.getString(R.string.fileopen_uploaded_fmt, edit.remotePath),
                         Toast.LENGTH_SHORT
                     ).show()
+                    releaseManager(edit.sftpManager, edit.ownsManager)
                 } else {
                     // Keep the local copy on disk — it already is, untouched —
                     // and re-prompt immediately so the user can retry or decline.

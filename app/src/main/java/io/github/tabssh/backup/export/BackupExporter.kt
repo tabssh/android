@@ -567,6 +567,14 @@ class BackupExporter(
                         ?.takeIf { it.isNotEmpty() }
                         ?.let { passwords["conn_pw_${c.id}"] = it }
                 }
+
+            // Pastebin API key — alias: pastebin_api_key. Read through
+            // PreferenceManager so any legacy plaintext value migrates into
+            // the Keystore first; secret, so it travels in this encrypted
+            // file, never in preferences.json.
+            preferenceManager.getPastebinApiKey()
+                .takeIf { it.isNotEmpty() }
+                ?.let { passwords["pastebin_api_key"] = it }
         }
 
         // SSH private key JSch bytes
@@ -788,7 +796,8 @@ class BackupExporter(
             put("microbinUrl",   preferenceManager.getPasteMicrobinUrl())
             put("lenpasteUrl",   preferenceManager.getPasteLenpasteUrl())
             put("stikkedUrl",    preferenceManager.getPasteStikkedUrl())
-            put("pastebinApiKey", preferenceManager.getPastebinApiKey())
+            // pastebinApiKey is a secret — it travels in the encrypted
+            // secrets.json payload (alias pastebin_api_key), never here
         })
 
         // No "proxy" group: the global proxy preferences were superseded by

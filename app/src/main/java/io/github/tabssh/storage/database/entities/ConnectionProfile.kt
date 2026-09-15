@@ -11,11 +11,11 @@ import java.util.UUID
 /**
  * Database entity representing an SSH connection profile.
  *
- * Indexes are created by `MIGRATION_36_37` on existing installs and by Room's
- * CREATE TABLE on fresh installs. They cover FK-like columns the DAOs query
- * against (identity_id, key_id, proxy_key_id, oci_instance_id, group_id) plus
- * the columns used in ORDER BY / WHERE clauses by `ConnectionDao`. Never drop
- * one without checking `ConnectionDao` first.
+ * Indexes are part of the v3 baseline schema (Room's CREATE TABLE). They
+ * cover FK-like columns the DAOs query against (identity_id, key_id,
+ * proxy_key_id, oci_instance_id, group_id) plus the columns used in
+ * ORDER BY / WHERE clauses by `ConnectionDao`. Never drop one without
+ * checking `ConnectionDao` first.
  */
 @Serializable
 @Entity(
@@ -195,7 +195,7 @@ data class ConnectionProfile(
      * Wave 1.2 — per-host environment variables. Multi-line "KEY=value"
      * lines applied via JSch session.setEnv() before opening the shell
      * channel. Server must allow them in sshd_config (AcceptEnv) or they
-     * are silently ignored. DB v17 → v18.
+     * are silently ignored.
      */
     @ColumnInfo(name = "env_vars")
     val envVars: String? = null,
@@ -219,12 +219,12 @@ data class ConnectionProfile(
      * in `authorized_keys`, gateway/menu hosts, and SFTP-only accounts.
      *
      * Empty / null = open a normal login shell (default, what 99% of hosts
-     * want). DB v23 → v24.
+     * want).
      */
     @ColumnInfo(name = "remote_command")
     val remoteCommand: String? = null,
 
-    /** Issue #6 — "auto" / "ipv4" / "ipv6". DB v24 → v25. */
+    /** Issue #6 — "auto" / "ipv4" / "ipv6". */
     @ColumnInfo(name = "ip_mode")
     val ipMode: String = "auto",
 
@@ -274,7 +274,6 @@ data class ConnectionProfile(
      * `ssh_silent` channel; these only control whether the *additional*
      * one-shot alert (on `ssh_alerts` channel) fires on a state event.
      * Defaults to NEVER for both — no surprise sound out of the box.
-     * DB v29 → v30.
      */
     @ColumnInfo(name = "notif_sound_mode")
     val notifSoundMode: Int = 0,
@@ -296,7 +295,7 @@ data class ConnectionProfile(
     val syncDeviceId: String = "",
 
     /**
-     * DB v30 → v31 — OCI instance binding.
+     * OCI instance binding.
      *
      * When non-null this profile was created via the OCI Manager "SSH Connect"
      * flow and is linked to the OCI Compute instance with this OCID. Used to

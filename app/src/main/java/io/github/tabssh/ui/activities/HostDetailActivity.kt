@@ -15,6 +15,7 @@ import androidx.lifecycle.lifecycleScope
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.performance.MetricsCollector
+import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.performance.PerformanceMetrics
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.MonitorSlot
@@ -77,6 +78,10 @@ class HostDetailActivity : TabSSHActivity() {
 
     private val pumpScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var pumpJob: Job? = null
+
+    // Session this screen dialed itself (not reused from the pool) — it must be
+    // disconnected in onDestroy or the authenticated socket leaks until process death.
+    private var pumpOwnedSession: SSHConnection? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -267,7 +272,12 @@ class HostDetailActivity : TabSSHActivity() {
     private fun startPump(profile: ConnectionProfile) {
         pumpJob?.cancel()
         pumpJob = pumpScope.launch {
+            // A session already live in the pool (e.g. backing an open terminal
+            // tab) is reused by connectForMonitoring and must stay open after
+            // this screen closes — only own sessions we dialed ourselves.
+            val reused = app.sshSessionManager.getConnection(profile.id)?.isConnected() == true
             val ssh = app.sshSessionManager.connectForMonitoring(profile)
+            if (ssh != null && !reused) pumpOwnedSession = ssh
             if (ssh == null) {
                 runOnUiThread {
                     val blank = getString(R.string.host_detail_value_unavailable)
@@ -340,6 +350,17 @@ class HostDetailActivity : TabSSHActivity() {
     override fun onDestroy() {
         super.onDestroy()
         pumpScope.cancel()
+        // JSch teardown is blocking I/O — hop onto the application-wide scope
+        // (outlives this Activity) so onDestroy() returns immediately.
+        val owned = pumpOwnedSession
+        pumpOwnedSession = null
+        if (owned != null) {
+            TabSSHApplication.get().applicationScope.launch(Dispatchers.IO) {
+                try { owned.disconnect() } catch (e: Exception) {
+                    Logger.w(TAG, "onDestroy disconnect: ${e.message}")
+                }
+            }
+        }
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()

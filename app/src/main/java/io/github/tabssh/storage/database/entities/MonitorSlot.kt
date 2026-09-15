@@ -26,7 +26,7 @@ import kotlinx.serialization.Serializable
  * and the next alert is suppressed until [alertCooldownMinutes] have passed.
  * This prevents notification storms for flapping hosts.
  *
- * DB: added in v32 (migration from v31).
+ * DB: part of the v3 baseline schema.
  */
 @Serializable
 @Entity(

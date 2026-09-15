@@ -191,28 +191,39 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                 buffer.resetCharacterAttributes()
                 resetParser()
             }
+            // IND/NEL/RI honor the DECSTBM scrolling region: at the region's
+            // bottom (top for RI) margin the region scrolls; comparing against
+            // the screen edges instead scrolled rows a region must protect.
             'D' -> {
-                // Index (move cursor down, scroll if needed)
-                val newRow = buffer.getCursorRow() + 1
-                if (newRow >= buffer.getRows()) {
+                // Index (move cursor down, scroll region if at bottom margin)
+                val row = buffer.getCursorRow()
+                if (row == buffer.getScrollBottom()) {
                     buffer.scrollUp()
-                } else {
-                    buffer.setCursorPosition(buffer.getCursorCol(), newRow)
+                } else if (row < buffer.getRows() - 1) {
+                    buffer.setCursorPosition(buffer.getCursorCol(), row + 1)
                 }
                 resetParser()
             }
             'E' -> {
-                // Next line (CR + LF)
-                buffer.setCursorPosition(0, buffer.getCursorRow() + 1)
+                // Next line (CR + IND) — scrolls at the bottom margin like IND
+                val row = buffer.getCursorRow()
+                if (row == buffer.getScrollBottom()) {
+                    buffer.scrollUp()
+                    buffer.setCursorPosition(0, buffer.getCursorRow())
+                } else if (row < buffer.getRows() - 1) {
+                    buffer.setCursorPosition(0, row + 1)
+                } else {
+                    buffer.setCursorPosition(0, row)
+                }
                 resetParser()
             }
             'M' -> {
-                // Reverse index (move cursor up, scroll if needed)
-                val newRow = buffer.getCursorRow() - 1
-                if (newRow < 0) {
+                // Reverse index (move cursor up, scroll region if at top margin)
+                val row = buffer.getCursorRow()
+                if (row == buffer.getScrollTop()) {
                     buffer.scrollDown()
-                } else {
-                    buffer.setCursorPosition(buffer.getCursorCol(), newRow)
+                } else if (row > 0) {
+                    buffer.setCursorPosition(buffer.getCursorCol(), row - 1)
                 }
                 resetParser()
             }
@@ -231,7 +242,10 @@ class ANSIParser(private val buffer: TerminalBuffer) {
                 appendParamDigit(ch)
                 parserState = ParserState.CSI_PARAM
             }
-            ch == ';' -> {
+            // ':' is the colon sub-parameter separator (ITU T.416 SGR forms
+            // like 38:5:n and 38:2:r:g:b) — treated exactly like ';' so
+            // colon-form colors dispatch instead of aborting the sequence.
+            ch == ';' || ch == ':' -> {
                 addParameter()
                 parserState = ParserState.CSI_PARAM
             }
@@ -264,7 +278,8 @@ class ANSIParser(private val buffer: TerminalBuffer) {
             ch in '0'..'9' -> {
                 appendParamDigit(ch)
             }
-            ch == ';' -> {
+            // Colon sub-parameter separator — same rationale as in CSI_ENTRY.
+            ch == ';' || ch == ':' -> {
                 addParameter()
             }
             ch in ' '..'/' -> {
@@ -312,6 +327,22 @@ class ANSIParser(private val buffer: TerminalBuffer) {
         Logger.d("ANSIParser", "Executing CSI sequence: ${escapeSequence}$finalChar with params: $parameters")
         
         when (finalChar) {
+            // Insert Characters (ICH): shift the rest of the line right by n,
+            // fill the gap at the cursor with blanks; cursor does not move.
+            '@' -> {
+                val cols = buffer.getCols()
+                val n = parameters.getOrElse(0) { 1 }.coerceIn(1, cols)
+                val col = buffer.getCursorCol()
+                val line = buffer.getLine(buffer.getCursorRow())
+                if (line != null) {
+                    for (i in cols - 1 downTo col + n) {
+                        line[i] = line[i - n]
+                    }
+                    for (i in col until (col + n).coerceAtMost(cols)) {
+                        line[i] = TerminalChar.empty()
+                    }
+                }
+            }
             // moveCursor takes (deltaX, deltaY) — X is the column. These four
             // passed the count on the opposite axis, so Up/Down moved sideways
             // and Left/Right moved vertically in every full-screen program.
@@ -349,6 +380,12 @@ class ANSIParser(private val buffer: TerminalBuffer) {
             'G' -> {
                 val col = parameters.getOrElse(0) { 1 } - 1
                 buffer.setCursorPosition(col, buffer.getCursorRow())
+            }
+            // Line Position Absolute (VPA): absolute row, column unchanged;
+            // origin-mode aware via setCursorPositionAbsolute like CUP.
+            'd' -> {
+                val row = (parameters.getOrElse(0) { 1 } - 1).coerceAtLeast(0)
+                buffer.setCursorPositionAbsolute(buffer.getCursorCol(), row)
             }
             // Cursor Position
             'H', 'f' -> {
@@ -429,6 +466,19 @@ class ANSIParser(private val buffer: TerminalBuffer) {
             'T' -> {
                 val n = parameters.getOrElse(0) { 1 }.coerceIn(1, buffer.getRows())
                 buffer.scrollDown(n)
+            }
+            // Erase Characters (ECH): blank n cells at the cursor in place —
+            // unlike DCH nothing shifts and the cursor does not move.
+            'X' -> {
+                val cols = buffer.getCols()
+                val n = parameters.getOrElse(0) { 1 }.coerceIn(1, cols)
+                val col = buffer.getCursorCol()
+                val line = buffer.getLine(buffer.getCursorRow())
+                if (line != null) {
+                    for (i in col until (col + n).coerceAtMost(cols)) {
+                        line[i] = TerminalChar.empty()
+                    }
+                }
             }
             // Select Graphic Rendition (SGR)
             'm' -> {

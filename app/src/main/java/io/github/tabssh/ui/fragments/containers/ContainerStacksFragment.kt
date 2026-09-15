@@ -10,6 +10,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
+import androidx.room.withTransaction
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -27,8 +28,11 @@ import io.github.tabssh.ui.adapters.StackListItem
 import io.github.tabssh.ui.dialogs.ContainerActionSheet
 import io.github.tabssh.ui.dialogs.ContainerErrorPresenter
 import io.github.tabssh.ui.dialogs.ContainerInspectDialog
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Compose stacks destination: Room-backed stack list, merged with projects
@@ -356,14 +360,30 @@ class ContainerStacksFragment : ContainerPageFragment() {
     /** Best-effort compose down, then remove the Room row (remote files kept). */
     private fun deleteStack(stack: ComposeStack) {
         progressBar.visibility = View.VISIBLE
-        viewLifecycleOwner.lifecycleScope.launch {
-            session?.transport?.composeDown(stack.remotePath)
-            app.database.composeStackDao().delete(stack)
-            io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
-                app.applicationContext, io.github.tabssh.sync.tombstone.TombstoneRecorder.COMPOSE_STACK,
-                io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(stack))
-            if (!isAdded) return@launch
-            progressBar.visibility = View.GONE
+        // Captured before the app-scope launch — the fragment may detach
+        // while the delete is still running.
+        val currentSession = session
+        // Application scope + IO dispatcher: composeDown is a remote SSH
+        // round-trip and the DAO work is a DB write — neither belongs on
+        // Main, and the delete must survive the view being destroyed.
+        // The transaction keeps row delete + tombstone atomic (a partial
+        // commit could resurrect the stack on the next sync).
+        app.applicationScope.launch(Dispatchers.IO) {
+            try {
+                currentSession?.transport?.composeDown(stack.remotePath)
+                app.database.withTransaction {
+                    app.database.composeStackDao().delete(stack)
+                    io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
+                        app.applicationContext, io.github.tabssh.sync.tombstone.TombstoneRecorder.COMPOSE_STACK,
+                        io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(stack))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } finally {
+                withContext(Dispatchers.Main) {
+                    if (isAdded) progressBar.visibility = View.GONE
+                }
+            }
         }
     }
 }

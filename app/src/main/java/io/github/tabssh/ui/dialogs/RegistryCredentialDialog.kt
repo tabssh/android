@@ -167,9 +167,8 @@ object RegistryCredentialDialog {
                     return@setOnClickListener
                 }
                 tilHost.error = null
-                dialog.dismiss()
                 save(
-                    activity, app, existing, host,
+                    activity, app, dialog, existing, host,
                     editUsername.text?.toString()?.trim().orEmpty(),
                     editSecret.text?.toString().orEmpty(),
                     AUTH_TYPES[selectedIndex]
@@ -180,6 +179,7 @@ object RegistryCredentialDialog {
     private fun save(
         activity: AppCompatActivity,
         app: TabSSHApplication,
+        dialog: androidx.appcompat.app.AlertDialog,
         existing: RegistryCredential?,
         host: String,
         username: String,
@@ -216,9 +216,27 @@ object RegistryCredentialDialog {
                         RegistryCredentialStore.clear(appContext, id)
                     }
                 } else if (secret.isNotEmpty()) {
-                    RegistryCredentialStore.store(appContext, id, secret)
+                    val stored = withContext(Dispatchers.IO) {
+                        RegistryCredentialStore.store(appContext, id, secret)
+                    }
+                    if (!stored) {
+                        // Roll the row back so no credential exists whose
+                        // secret never reached the Keystore, then keep the
+                        // dialog open so the user can retry.
+                        if (existing == null) {
+                            dao.deleteById(id)
+                        } else {
+                            dao.update(existing)
+                        }
+                        if (activity.isFinishing || activity.isDestroyed) return@launch
+                        Toast.makeText(
+                            activity, R.string.container_registry_save_failed, Toast.LENGTH_SHORT
+                        ).show()
+                        return@launch
+                    }
                 }
                 if (activity.isFinishing || activity.isDestroyed) return@launch
+                dialog.dismiss()
                 Toast.makeText(activity, R.string.container_registry_saved, Toast.LENGTH_SHORT)
                     .show()
             } catch (e: CancellationException) {

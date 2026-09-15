@@ -39,15 +39,23 @@ class TaskerActionReceiver : BroadcastReceiver() {
         val keys = intent.getStringExtra(TaskerWorker.KEY_KEYS)?.take(1024)
         val name = intent.getStringExtra(TaskerWorker.KEY_CONNECTION_NAME)?.take(256)
 
-        val data = Data.Builder()
+        val dataBuilder = Data.Builder()
             .putString(TaskerWorker.KEY_ACTION, action)
             .putString(TaskerWorker.KEY_CONNECTION_ID, connectionIdExtra)
             .putString(TaskerWorker.KEY_CONNECTION_NAME, name)
             .putString(TaskerWorker.KEY_COMMAND, command)
             .putString(TaskerWorker.KEY_KEYS, keys)
             .putBoolean(TaskerWorker.KEY_WAIT_FOR_RESULT, intent.getBooleanExtra(TaskerWorker.KEY_WAIT_FOR_RESULT, false))
-            .putLong(TaskerWorker.KEY_TIMEOUT_MS, intent.getLongExtra(TaskerWorker.KEY_TIMEOUT_MS, TaskerWorker.DEFAULT_TIMEOUT_MS))
-            .build()
+        // Forward the timeout only when the caller supplied one — otherwise
+        // leave the key unset so the worker falls back to the user's
+        // tasker_command_timeout preference.
+        if (intent.hasExtra(TaskerWorker.KEY_TIMEOUT_MS)) {
+            dataBuilder.putLong(
+                TaskerWorker.KEY_TIMEOUT_MS,
+                intent.getLongExtra(TaskerWorker.KEY_TIMEOUT_MS, TaskerWorker.DEFAULT_TIMEOUT_MS)
+            )
+        }
+        val data = dataBuilder.build()
 
         val request = OneTimeWorkRequestBuilder<TaskerWorker>()
             .setInputData(data)

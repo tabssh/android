@@ -181,11 +181,17 @@ class RemoteFileEditorActivity : TabSSHActivity() {
             }
             progress.visibility = android.view.View.GONE
             invalidateOptionsMenu()
+            // The SFTPManager does not survive the configuration change — without
+            // reconnecting here, saveFile() finds sftp == null and silently drops
+            // every edit made after rotation.
+            lifecycleScope.launch { connectSftp(connectionId) }
             return
         }
 
         // Connect SFTP and download.
-        lifecycleScope.launch { downloadFile(connectionId) }
+        lifecycleScope.launch {
+            if (connectSftp(connectionId) != null) downloadFile()
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -227,14 +233,17 @@ class RemoteFileEditorActivity : TabSSHActivity() {
             .show()
     }
 
-    private suspend fun downloadFile(connectionId: String) {
+    // Establishes the SFTP session for [connectionId] and stores it in [sftp].
+    // Shared by the initial download and the rotation-restore path (which skips
+    // the download but still needs a live session for saveFile()).
+    private suspend fun connectSftp(connectionId: String): SFTPManager? {
         val ssh = app.sshSessionManager.getConnection(connectionId)
         if (ssh == null) {
             runOnUiThread {
                 Toast.makeText(this, R.string.remote_editor_no_connection, Toast.LENGTH_LONG).show()
                 finish()
             }
-            return
+            return null
         }
         val mgr = SFTPManager(ssh)
         if (!mgr.connect()) {
@@ -242,9 +251,14 @@ class RemoteFileEditorActivity : TabSSHActivity() {
                 Toast.makeText(this, R.string.remote_editor_sftp_failed, Toast.LENGTH_LONG).show()
                 finish()
             }
-            return
+            return null
         }
         sftp = mgr
+        return mgr
+    }
+
+    private suspend fun downloadFile() {
+        val mgr = sftp ?: return
 
         val cacheFile = File(cacheDir, "edit_${System.currentTimeMillis()}_${File(remotePath).name}")
         // Remembered so onDestroy can delete it. Each editor open created a new

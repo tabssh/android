@@ -2,10 +2,15 @@ package io.github.tabssh.storage.database
 
 import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.utils.logging.Logger
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 object SystemGroupHelper {
     private const val TAG = "SystemGroupHelper"
+
+    // Serializes the get-then-insert below so concurrent callers sharing a
+    // groupType cannot both miss the lookup and insert duplicate system groups.
+    private val mutex = Mutex()
 
     /**
      * Returns the ID of the system group with the given [groupType], creating it if it
@@ -21,9 +26,9 @@ object SystemGroupHelper {
         groupType: String,
         displayName: String,
         icon: String
-    ): String {
+    ): String = mutex.withLock {
         // Try to find existing system group of this type
-        val existing = db.connectionGroupDao().getAllGroups().first()
+        val existing = db.connectionGroupDao().getAllGroupsList()
             .firstOrNull { it.groupType == groupType }
         if (existing != null) {
             Logger.d(TAG, "Found existing system group '$groupType': ${existing.id}")

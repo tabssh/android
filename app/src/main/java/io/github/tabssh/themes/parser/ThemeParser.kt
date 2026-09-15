@@ -81,15 +81,24 @@ class ThemeParser {
             highlight = hexToColor(data.highlight ?: data.selection ?: "#404040"),
             ansiColors = ansiColors,
             primary = data.ui?.primary?.let { hexToColor(it) },
+            primaryVariant = data.ui?.primaryVariant?.let { hexToColor(it) },
             secondary = data.ui?.secondary?.let { hexToColor(it) },
             surface = data.ui?.surface?.let { hexToColor(it) },
             onPrimary = data.ui?.onPrimary?.let { hexToColor(it) },
+            onSecondary = data.ui?.onSecondary?.let { hexToColor(it) },
             onSurface = data.ui?.onSurface?.let { hexToColor(it) }
         )
     }
     
     private fun colorToHex(color: Int): String {
-        return "#${String.format("%06X", color and 0xFFFFFF)}"
+        // Translucent colors (e.g. 0x44-alpha selections) must round-trip:
+        // emit #AARRGGBB when alpha != 0xFF; opaque stays plain #RRGGBB.
+        val alpha = (color shr 24) and 0xFF
+        return if (alpha != 0xFF) {
+            "#${String.format("%08X", color)}"
+        } else {
+            "#${String.format("%06X", color and 0xFFFFFF)}"
+        }
     }
     
     private fun hexToColor(hex: String): Int {
@@ -153,4 +162,3 @@ data class UIColors(
     val onSecondary: String? = null,
     val onSurface: String? = null
 )
-

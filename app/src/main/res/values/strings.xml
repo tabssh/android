@@ -303,6 +303,7 @@
     <string name="sync_log_copied">Copied %1$d sync log entries to clipboard</string>
     <string name="sync_log_no_entries_to_copy">No sync log entries to copy</string>
     <string name="sync_log_copy_failed_fmt">Couldn\'t copy sync log: %1$s</string>
+    <string name="sync_log_clear_failed">Couldn\'t clear sync log</string>
     <string name="sync_log_resolution_auto_merged">Auto-merged</string>
     <string name="sync_log_resolution_kept_local">Kept Local</string>
     <string name="sync_log_resolution_kept_remote">Kept Remote</string>
@@ -3039,6 +3040,7 @@
     <string name="cloud_manager_hint_ssh_identity">SSH identity (optional)</string>
     <string name="cloud_manager_credentials_dialog_title">SSH credentials — %1$s</string>
     <string name="cloud_manager_toast_credentials_cleared">Credentials cleared for %1$s</string>
+    <string name="cloud_manager_toast_credentials_clear_failed">Couldn\'t clear credentials: %1$s</string>
     <string name="cloud_manager_no_identity">no identity</string>
     <string name="cloud_manager_toast_credentials_saved">Saved: %1$s:%2$d (%3$s)</string>
     <string name="cloud_manager_toast_save_failed">Save failed — check device security settings (screen lock required)</string>
@@ -3262,6 +3264,7 @@
     <string name="pin_lock_toast_pin_set">App lock PIN set</string>
     <string name="pin_lock_status_checking">Checking…</string>
     <string name="pin_lock_status_too_many_attempts">Too many wrong attempts.</string>
+    <string name="pin_lock_status_locked_out_fmt">Too many wrong attempts — try again in %1$s</string>
     <string name="pin_lock_toast_too_many_attempts_closing">Too many wrong attempts — closing app</string>
     <string name="pin_lock_status_incorrect">Incorrect — try again (%1$d left)</string>
 
@@ -4140,5 +4143,27 @@
     <string name="arr_api_type_auto_detect_recommended">Auto-detect (recommended)</string>
     <string name="arr_api_type_direct_host_connection">Direct host connection</string>
     <string name="arr_api_type_centralized_management">Centralized management</string>
+
+    <string name="launcher_active_session_message">There is already an active session for this host. Reattach to it, or start a new connection?</string>
+    <string name="launcher_background_session_message">A background SSH session is still connected to this host. Reattach, or start a new connection?</string>
+    <string name="launcher_reattach">Reattach</string>
+    <string name="launcher_new_connection">New connection</string>
+    <string name="connection_group_badge_fmt">• %1$s</string>
+    <string name="connection_a11y_fmt">Connection %1$s. %2$s at %3$s</string>
+    <string name="connection_a11y_port_fmt">Connection %1$s. %2$s at %3$s port %4$d</string>
+    <string name="connection_a11y_auth_fmt">Authentication: %1$s</string>
+    <string name="connection_a11y_last_connected_fmt">Last connected %1$s</string>
+    <string name="auth_type_password">Password</string>
+    <string name="auth_type_2fa">2FA</string>
+    <string name="audit_log_no_details">No additional details</string>
+    <string name="connections_ungrouped_header_fmt">Ungrouped (%1$d)</string>
+    <string name="keyboard_fn_back">← Back</string>
+    <string name="group_header_fmt">%1$s (%2$d)</string>
+    <string name="perf_connect_failed_fmt">Failed to connect: %1$s</string>
+    <string name="perf_load_1m_fmt">1m: %1$.2f</string>
+    <string name="perf_load_5m_fmt">5m: %1$.2f</string>
+    <string name="perf_load_15m_fmt">15m: %1$.2f</string>
+    <string name="perf_load_processes_fmt">%1$d/%2$d processes</string>
+    <string name="report_submit_failed_fmt">Failed to submit report: %1$s</string>
 
 </resources>

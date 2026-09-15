@@ -87,18 +87,61 @@ object DockerCliParsers {
             }
             .toList()
 
-    /** One `docker ps --format '{{json .}}'` line. */
+    /**
+     * One `ps --format '{{json .}}'` line. Docker templates over a struct
+     * with "ID", Names as a comma string, Labels as a `k=v` list and Ports as
+     * a rendered string; Podman marshals entities.ListContainer with "Id",
+     * Names as a JSON array, Labels as a JSON map and Ports as an array of
+     * port mappings — both shapes are accepted here.
+     */
     fun parseContainerLine(obj: JSONObject): ContainerSummary =
         ContainerSummary(
-            id = obj.optString("ID"),
-            names = obj.optString("Names").split(",").map { it.trim() }.filter { it.isNotEmpty() },
+            id = obj.optString("ID").ifEmpty { obj.optString("Id") },
+            names = parseNameField(obj.opt("Names")),
             image = obj.optString("Image"),
             state = obj.optString("State"),
             status = obj.optString("Status"),
             created = obj.optString("CreatedAt"),
-            ports = obj.optString("Ports"),
-            labels = parseLabelList(obj.optString("Labels"))
+            ports = parsePortsField(obj.opt("Ports")),
+            labels = parseLabelsField(obj.opt("Labels"))
         )
+
+    /** Names field — Docker comma string or Podman JSON array. */
+    fun parseNameField(value: Any?): List<String> = when (value) {
+        is org.json.JSONArray ->
+            (0 until value.length()).map { value.optString(it).trim() }.filter { it.isNotEmpty() }
+        is String -> value.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        else -> emptyList()
+    }
+
+    /** Labels field — Docker `k=v,k=v` string or Podman JSON map. */
+    fun parseLabelsField(value: Any?): Map<String, String> = when (value) {
+        is JSONObject -> value.keys().asSequence().associateWith { value.optString(it) }
+        is String -> parseLabelList(value)
+        else -> emptyMap()
+    }
+
+    /**
+     * Ports field — Docker's pre-rendered "ip:host->ctr/proto" string, or
+     * Podman's array of port mappings (snake_case keys per
+     * containers/common types.PortMapping), rendered into the same shape.
+     */
+    fun parsePortsField(value: Any?): String = when (value) {
+        is org.json.JSONArray ->
+            (0 until value.length())
+                .mapNotNull { i ->
+                    val mapping = value.optJSONObject(i) ?: return@mapNotNull null
+                    val hostIp = mapping.optString("host_ip").ifEmpty { "0.0.0.0" }
+                    val proto = mapping.optString("protocol").ifEmpty { "tcp" }
+                    val containerPort = mapping.optInt("container_port")
+                    val hostPort = mapping.optInt("host_port")
+                    if (hostPort > 0) "$hostIp:$hostPort->$containerPort/$proto"
+                    else "$containerPort/$proto"
+                }
+                .joinToString(", ")
+        is String -> value
+        else -> ""
+    }
 
     /**
      * Parse the `docker ps` `Labels` field — a comma-separated `key=value`
@@ -114,21 +157,36 @@ object DockerCliParsers {
             }
             .toMap()
 
-    /** One `docker images --format '{{json .}}'` line. */
+    /**
+     * One `images --format '{{json .}}'` line. Docker emits "Repository",
+     * "Tag", "ID", a human "Size" and a "CreatedAt" string; Podman's
+     * imageReporter emits lowercase "repository"/"tag" plus the embedded
+     * ImageSummary's "Id", raw byte "Size" and unix-seconds "Created".
+     */
     fun parseImageLine(obj: JSONObject): ContainerImageSummary {
-        val repo = obj.optString("Repository")
-        val tag = obj.optString("Tag")
+        val repo = obj.optString("Repository").ifEmpty { obj.optString("repository") }
+        val tag = obj.optString("Tag").ifEmpty { obj.optString("tag") }
         val repoTags = if (repo.isEmpty() || repo == "<none>") {
             emptyList()
         } else {
             listOf(if (tag.isEmpty() || tag == "<none>") repo else "$repo:$tag")
         }
         return ContainerImageSummary(
-            id = obj.optString("ID"),
+            id = obj.optString("ID").ifEmpty { obj.optString("Id") },
             repoTags = repoTags,
             sizeBytes = parseSizeToBytes(obj.optString("Size")),
-            created = obj.optString("CreatedAt")
+            created = imageCreated(obj)
         )
+    }
+
+    /** The image creation timestamp — Docker's "CreatedAt" string, or Podman's unix "Created" formatted. */
+    private fun imageCreated(obj: JSONObject): String {
+        val createdAt = obj.optString("CreatedAt")
+        if (createdAt.isNotEmpty()) return createdAt
+        val epochSeconds = obj.optLong("Created")
+        if (epochSeconds <= 0) return ""
+        val format = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", java.util.Locale.US)
+        return format.format(java.util.Date(epochSeconds * 1000))
     }
 
     /** One `docker volume ls --format '{{json .}}'` line. */
@@ -139,17 +197,27 @@ object DockerCliParsers {
             mountpoint = obj.optString("Mountpoint")
         )
 
-    /** One `docker network ls --format '{{json .}}'` line. */
+    /**
+     * One `network ls --format '{{json .}}'` line. Docker capitalizes the
+     * keys; Podman marshals containers/common types.Network with lowercase
+     * "id"/"name"/"driver" tags and has no scope concept.
+     */
     fun parseNetworkLine(obj: JSONObject): ContainerNetworkSummary =
         ContainerNetworkSummary(
-            id = obj.optString("ID"),
-            name = obj.optString("Name"),
-            driver = obj.optString("Driver"),
+            id = obj.optString("ID").ifEmpty { obj.optString("id") },
+            name = obj.optString("Name").ifEmpty { obj.optString("name") },
+            driver = obj.optString("Driver").ifEmpty { obj.optString("driver") },
             scope = obj.optString("Scope")
         )
 
-    /** One `docker stats --no-stream --format '{{json .}}'` line. */
+    /**
+     * One `stats --no-stream --format '{{json .}}'` line. Docker emits
+     * formatted strings ("CPUPerc": "1.2%", "MemUsage": "10MiB / 1GiB");
+     * Podman marshals define.ContainerStats with raw numbers ("CPU" percent,
+     * "MemUsage"/"MemLimit" bytes) — both shapes are accepted.
+     */
     fun parseStatsLine(obj: JSONObject): ContainerStats {
+        if (!obj.has("CPUPerc") && obj.has("CPU")) return parsePodmanStatsLine(obj)
         val memParts = splitPair(obj.optString("MemUsage"))
         val netParts = splitPair(obj.optString("NetIO"))
         val blockParts = splitPair(obj.optString("BlockIO"))
@@ -166,25 +234,67 @@ object DockerCliParsers {
         )
     }
 
-    /** One `docker system df --format '{{json .}}'` line. */
+    /** Podman's raw-number stats shape, mapped into the same [ContainerStats]. */
+    private fun parsePodmanStatsLine(obj: JSONObject): ContainerStats {
+        // Podman 5 nests per-interface counters under "Network"; Podman 4
+        // exposed flat "NetInput"/"NetOutput" totals instead.
+        var netInput = 0L
+        var netOutput = 0L
+        val network = obj.optJSONObject("Network")
+        if (network != null) {
+            for (key in network.keys()) {
+                val iface = network.optJSONObject(key) ?: continue
+                netInput += iface.optLong("RxBytes")
+                netOutput += iface.optLong("TxBytes")
+            }
+        } else {
+            netInput = obj.optLong("NetInput")
+            netOutput = obj.optLong("NetOutput")
+        }
+        return ContainerStats(
+            cpuPercent = obj.optDouble("CPU", 0.0),
+            memUsageBytes = obj.optLong("MemUsage"),
+            memLimitBytes = obj.optLong("MemLimit"),
+            memPercent = obj.optDouble("MemPerc", 0.0),
+            netInputBytes = netInput,
+            netOutputBytes = netOutput,
+            blockReadBytes = obj.optLong("BlockInput"),
+            blockWriteBytes = obj.optLong("BlockOutput"),
+            pids = obj.optInt("PIDs")
+        )
+    }
+
+    /**
+     * One `system df --format '{{json .}}'` line. Podman's marshaler emits
+     * the Docker-compat "TotalCount"/"Size"/"Reclaimable" keys plus exact
+     * "RawSize"/"RawReclaimable" byte counts, which win when present.
+     */
     fun parseSystemDfLine(obj: JSONObject): DiskUsageRow =
         DiskUsageRow(
             type = obj.optString("Type"),
-            totalCount = obj.optString("TotalCount").toIntOrNull() ?: 0,
+            totalCount = obj.optString("TotalCount").toIntOrNull()
+                ?: obj.optString("Total").toIntOrNull() ?: 0,
             active = obj.optString("Active").toIntOrNull() ?: 0,
-            sizeBytes = parseSizeToBytes(obj.optString("Size")),
-            reclaimableBytes = parseSizeToBytes(obj.optString("Reclaimable").substringBefore("(").trim())
+            sizeBytes = if (obj.has("RawSize")) obj.optLong("RawSize")
+            else parseSizeToBytes(obj.optString("Size")),
+            reclaimableBytes = if (obj.has("RawReclaimable")) obj.optLong("RawReclaimable")
+            else parseSizeToBytes(obj.optString("Reclaimable").substringBefore("(").trim())
         )
 
-    /** `docker version --format '{{json .}}'` — extracts the Server block. */
+    /**
+     * `version --format '{{json .}}'`. Docker always reports a Server block;
+     * a socketless local Podman reports only Client — the Client block is a
+     * valid answer for a working install, not a failure. Podman spells the
+     * API field "APIVersion" where Docker uses "ApiVersion".
+     */
     fun parseCliVersion(output: String): ContainerEngineVersion? {
         return try {
             val obj = JSONObject(output.trim())
-            val server = obj.optJSONObject("Server") ?: return null
+            val block = obj.optJSONObject("Server") ?: obj.optJSONObject("Client") ?: return null
             ContainerEngineVersion(
-                version = server.optString("Version"),
-                apiVersion = server.optString("ApiVersion"),
-                minApiVersion = server.optString("MinAPIVersion").ifEmpty { null }
+                version = block.optString("Version"),
+                apiVersion = block.optString("ApiVersion").ifEmpty { block.optString("APIVersion") },
+                minApiVersion = block.optString("MinAPIVersion").ifEmpty { null }
             )
         } catch (e: Exception) {
             Logger.w("DockerCliParsers", "parseCliVersion: unparsable output (${output.length} chars): ${e.message}")
@@ -192,10 +302,16 @@ object DockerCliParsers {
         }
     }
 
-    /** `docker info --format '{{json .}}'` — single JSON object. */
+    /**
+     * `info --format '{{json .}}'` — single JSON object. Docker emits a flat
+     * capitalized shape; Podman marshals define.Info as nested lowercase
+     * "host"/"store"/"version" blocks, detected by the "host" object.
+     */
     fun parseCliInfo(output: String): ContainerEngineInfo? {
         return try {
             val obj = JSONObject(output.trim())
+            val podmanHost = obj.optJSONObject("host")
+            if (podmanHost != null) return parsePodmanInfo(obj, podmanHost)
             ContainerEngineInfo(
                 name = obj.optString("Name"),
                 serverVersion = obj.optString("ServerVersion"),
@@ -213,6 +329,30 @@ object DockerCliParsers {
             Logger.w("DockerCliParsers", "parseCliInfo: unparsable output (${output.length} chars): ${e.message}")
             null
         }
+    }
+
+    /** Podman's nested `info` shape, mapped into the same [ContainerEngineInfo]. */
+    private fun parsePodmanInfo(obj: JSONObject, host: JSONObject): ContainerEngineInfo {
+        val store = obj.optJSONObject("store")
+        val containerStore = store?.optJSONObject("containerStore")
+        val distribution = host.optJSONObject("distribution")
+        val operatingSystem = listOfNotNull(
+            distribution?.optString("distribution")?.takeIf { it.isNotEmpty() },
+            distribution?.optString("version")?.takeIf { it.isNotEmpty() }
+        ).joinToString(" ").ifEmpty { host.optString("os") }
+        return ContainerEngineInfo(
+            name = host.optString("hostname"),
+            serverVersion = obj.optJSONObject("version")?.optString("Version").orEmpty(),
+            operatingSystem = operatingSystem,
+            architecture = host.optString("arch"),
+            containersTotal = containerStore?.optInt("number") ?: 0,
+            containersRunning = containerStore?.optInt("running") ?: 0,
+            containersPaused = containerStore?.optInt("paused") ?: 0,
+            containersStopped = containerStore?.optInt("stopped") ?: 0,
+            images = store?.optJSONObject("imageStore")?.optInt("number") ?: 0,
+            memTotalBytes = host.optLong("memTotal"),
+            ncpu = host.optInt("cpus")
+        )
     }
 
     /**

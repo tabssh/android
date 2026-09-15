@@ -1,6 +1,7 @@
 package io.github.tabssh.pairing
 
 import android.content.Context
+import androidx.room.withTransaction
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.storage.database.entities.ConnectionGroup
@@ -59,13 +60,16 @@ object PairingImporter {
         var identitiesCreated = 0
         val skipped = mutableListOf<String>()
 
-        // Insert any groups that don't already exist.
-        val groupsToInsert = payload.groups.filter { it.name !in groupsByName }
-        if (groupsToInsert.isNotEmpty()) {
-            val rows = groupsToInsert.map { exported ->
-                val id = UUID.randomUUID().toString()
-                groupsByName[exported.name] = id
-                groupsCreated++
+        // Collect groups that don't already exist. The name map is updated as
+        // each row is built, so a duplicate name WITHIN the payload is also
+        // deduplicated, not just names that already exist in the database.
+        val groupRows = mutableListOf<ConnectionGroup>()
+        payload.groups.forEach { exported ->
+            if (exported.name in groupsByName) return@forEach
+            val id = UUID.randomUUID().toString()
+            groupsByName[exported.name] = id
+            groupsCreated++
+            groupRows.add(
                 ConnectionGroup(
                     id = id,
                     name = exported.name,
@@ -75,17 +79,17 @@ object PairingImporter {
                     color = exported.color,
                     sortOrder = exported.sortOrder,
                 )
-            }
-            groupDao.insertGroups(rows)
+            )
         }
 
-        // Insert any identities that don't already exist.
-        val identitiesToInsert = payload.identities.filter { it.name !in identitiesByName }
-        if (identitiesToInsert.isNotEmpty()) {
-            val rows = identitiesToInsert.map { exported ->
-                val id = UUID.randomUUID().toString()
-                identitiesByName[exported.name] = id
-                identitiesCreated++
+        // Collect identities that don't already exist — same in-payload dedup.
+        val identityRows = mutableListOf<Identity>()
+        payload.identities.forEach { exported ->
+            if (exported.name in identitiesByName) return@forEach
+            val id = UUID.randomUUID().toString()
+            identitiesByName[exported.name] = id
+            identitiesCreated++
+            identityRows.add(
                 Identity(
                     id = id,
                     name = exported.name,
@@ -97,17 +101,15 @@ object PairingImporter {
                     password = null,
                     description = exported.description,
                 )
-            }
-            identityDao.insertAll(rows)
+            )
         }
 
-        // Insert the connections — always fresh UUIDs. Telnet entries are split
+        // Build the connections — always fresh UUIDs. Telnet entries are split
         // out to telnet_hosts by MIGRATION_24_25, so they build TelnetHost rows
         // instead of ConnectionProfile rows (no password import either way).
-        var connectionsImported = 0
+        val connectionRows = mutableListOf<ConnectionProfile>()
+        val telnetRows = mutableListOf<TelnetHost>()
         if (payload.connections.isNotEmpty()) {
-            val connectionRows = mutableListOf<ConnectionProfile>()
-            val telnetRows = mutableListOf<TelnetHost>()
             payload.connections.forEach { exported ->
                 try {
                     if (exported.protocol.equals("telnet", ignoreCase = true)) {
@@ -163,10 +165,17 @@ object PairingImporter {
                     skipped.add(exported.name)
                 }
             }
+        }
+
+        // All-or-nothing: a failure mid-import must not leave orphaned groups
+        // or identities behind. Flow pre-loads stay OUTSIDE the transaction.
+        db.withTransaction {
+            if (groupRows.isNotEmpty()) groupDao.insertGroups(groupRows)
+            if (identityRows.isNotEmpty()) identityDao.insertAll(identityRows)
             if (connectionRows.isNotEmpty()) connectionDao.insertConnections(connectionRows)
             telnetRows.forEach { telnetHostDao.insert(it) }
-            connectionsImported = connectionRows.size + telnetRows.size
         }
+        val connectionsImported = connectionRows.size + telnetRows.size
 
         Logger.i(
             "PairingImporter",

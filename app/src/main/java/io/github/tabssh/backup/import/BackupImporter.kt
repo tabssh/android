@@ -121,8 +121,42 @@ class BackupImporter(
         // mid-restore rolls the database back instead of leaving it wiped or
         // half-populated by replace mode's delete-then-insert sequence.
         database.withTransaction {
+            // Legacy archives carry connections but no audit_log/tab_sessions
+            // section, so those tables are never cleared directly — but
+            // deleteAllConnections CASCADEs their rows away anyway. Snapshot
+            // them first and re-insert (after restore) the rows whose parent
+            // connection/VNC host exists again, instead of silently losing them.
+            val preserveAuditLog = replaceMode &&
+                backupData.containsKey(BackupExporter.FILE_CONNECTIONS) &&
+                !backupData.containsKey(BackupExporter.FILE_AUDIT_LOG)
+            val preserveTabSessions = replaceMode &&
+                (backupData.containsKey(BackupExporter.FILE_CONNECTIONS) ||
+                    backupData.containsKey(BackupExporter.FILE_VNC_HOSTS)) &&
+                !backupData.containsKey(BackupExporter.FILE_TAB_SESSIONS)
+            val savedAuditLog =
+                if (preserveAuditLog) database.auditLogDao().getByTimeRange(0, Long.MAX_VALUE) else emptyList()
+            val savedTabSessions =
+                if (preserveTabSessions) database.tabSessionDao().getAllTabs() else emptyList()
+
             if (replaceMode) clearTablesForReplace(backupData)
             restoreDatabaseTables(backupData, effectiveOverwrite, out)
+
+            for (entry in savedAuditLog) {
+                if (database.auditLogDao().getById(entry.id) == null &&
+                    database.connectionDao().getConnectionById(entry.connectionId) != null
+                ) {
+                    database.auditLogDao().insert(entry)
+                }
+            }
+            for (session in savedTabSessions) {
+                val parentExists =
+                    (session.connectionId != null &&
+                        database.connectionDao().getConnectionById(session.connectionId) != null) ||
+                        (session.vncHostId != null && database.vncHostDao().getById(session.vncHostId) != null)
+                if (parentExists && database.tabSessionDao().getSessionByTabId(session.tabId) == null) {
+                    database.tabSessionDao().insertSession(session)
+                }
+            }
         }
 
         // Preference files and Keystore secrets live outside the database, so
@@ -357,7 +391,14 @@ class BackupImporter(
         for (c in items) {
             val existing = database.connectionDao().getConnectionById(c.id)
             if (existing != null && !overwriteExisting) continue
-            database.connectionDao().insertConnection(c)
+            if (existing != null) {
+                // Update in place — insertConnection's REPLACE deletes the
+                // old row first, and with foreign_keys=ON that CASCADEs away
+                // the connection's tab_sessions and audit_log children.
+                database.connectionDao().updateConnection(c)
+            } else {
+                database.connectionDao().insertConnection(c)
+            }
             count++
         }
         return count
@@ -378,7 +419,13 @@ class BackupImporter(
         for (k in items) {
             val existing = database.keyDao().getKey(k.keyId)
             if (existing != null && !overwriteExisting) continue
-            database.keyDao().insertKey(k)
+            if (existing != null) {
+                // insertKey is a plain @Insert (ABORT) — inserting over an
+                // existing id would roll back the whole restore transaction.
+                database.keyDao().updateKey(k)
+            } else {
+                database.keyDao().insertKey(k)
+            }
             count++
         }
         return count
@@ -501,7 +548,14 @@ class BackupImporter(
         restoreEntityList(data, ListSerializer(HypervisorAccount.serializer())) { a ->
             val existing = database.hypervisorAccountDao().getById(a.id)
             if (existing != null && !overwriteExisting) return@restoreEntityList false
-            database.hypervisorAccountDao().insert(a); true
+            // insert is a plain @Insert (ABORT) — update existing rows so
+            // overwrite mode actually overwrites instead of aborting the restore
+            if (existing != null) {
+                database.hypervisorAccountDao().update(a)
+            } else {
+                database.hypervisorAccountDao().insert(a)
+            }
+            true
         }
 
     private suspend fun restoreWorkspaces(data: String, overwriteExisting: Boolean): Int =
@@ -932,7 +986,13 @@ class BackupImporter(
             preferenceManager.setPasteMicrobinUrl(p.optString("microbinUrl", "https://mb.pste.us"))
             preferenceManager.setPasteLenpasteUrl(p.optString("lenpasteUrl", "https://lp.pste.us"))
             preferenceManager.setPasteStikkedUrl(p.optString("stikkedUrl", "https://pste.us"))
-            preferenceManager.setPastebinApiKey(p.optString("pastebinApiKey", ""))
+            // Legacy backups only — current exports carry the key in the
+            // encrypted secrets.json (alias pastebin_api_key). Never write
+            // the empty default: it would wipe a locally stored key when
+            // restoring a new-format backup.
+            p.optString("pastebinApiKey", "")
+                .takeIf { it.isNotEmpty() }
+                ?.let { preferenceManager.setPastebinApiKey(it) }
         }
         root.optJSONObject("audit")?.let { a ->
             preferenceManager.setAuditLogEnabled(a.optBoolean("enabled", false))

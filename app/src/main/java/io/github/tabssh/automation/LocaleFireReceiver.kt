@@ -41,7 +41,9 @@ class LocaleFireReceiver : BroadcastReceiver() {
                 TaskerWorker.KEY_WAIT_FOR_RESULT,
                 bundle.getBoolean(LocalePlugin.BUNDLE_KEY_WAIT_FOR_RESULT, false)
             )
-            .putLong(TaskerWorker.KEY_TIMEOUT_MS, TaskerWorker.DEFAULT_TIMEOUT_MS)
+            // The plugin bundle carries no timeout key — leave KEY_TIMEOUT_MS
+            // unset so the worker falls back to the user's
+            // tasker_command_timeout preference.
             .build()
 
         Logger.d("LocaleFireReceiver", "Enqueuing plugin action $action")

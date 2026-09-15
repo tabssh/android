@@ -32,6 +32,15 @@ class SyncWorkScheduler(private val context: Context) {
             return
         }
 
+        // Frequency 0 = "Manual only": the user opted out of background
+        // sync entirely, so no periodic work may be enqueued (WorkManager
+        // would clamp the interval up to 15 minutes otherwise).
+        if (syncConfig.syncFrequencyMinutes <= 0) {
+            Logger.d(TAG, "Sync frequency is manual-only, cancelling periodic sync")
+            cancelPeriodicSync()
+            return
+        }
+
         val constraints = buildConstraints(syncConfig)
 
         val interval = syncConfig.syncFrequencyMinutes.toLong()

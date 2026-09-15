@@ -146,11 +146,14 @@ class OciCloudClient : CloudProvider {
         val out = mutableListOf<CloudInstanceState>()
         for (inst in instances) {
             val rawStatus = inst.lifecycleState
+            // Terminated instances are gone for good — listing them as stopped
+            // invites doomed start attempts, so skip them entirely.
+            if (rawStatus == "TERMINATED" || rawStatus == "TERMINATING") continue
             val normStatus = when (rawStatus) {
                 "RUNNING"                       -> "running"
-                "STOPPED", "TERMINATED"         -> "stopped"
+                "STOPPED"                       -> "stopped"
                 "STARTING", "PROVISIONING"      -> "starting"
-                "STOPPING", "TERMINATING"       -> "stopping"
+                "STOPPING"                      -> "stopping"
                 else                            -> "unknown"
             }
             val (publicIp, privateIp) = apiClient.getInstancePublicIp(inst.id, compartment)

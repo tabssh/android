@@ -40,6 +40,10 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ${{ needs.ensure-build-image.outputs.image }}
+      # Numeric 0:0 needs no /etc/passwd lookup — the runner and
+      # actions/checkout post-job cleanup exec into the container as a
+      # user the image may not define, which flakes the job otherwise.
+      options: "--user 0:0"
     # Actions can't detect bash inside a container image and falls back to
     # `sh -e`, which breaks the bash-array syntax used below.
     defaults:
@@ -178,10 +182,17 @@ jobs:
       run: |
         echo "📚 Validating documentation..."
 
-        # Check documentation files
-        test -f "README.md" && echo "✅ README.md exists"
-        test -f "CHANGELOG.md" && echo "✅ CHANGELOG.md exists"
-        test -f "SPEC.md" && echo "✅ SPEC.md exists"
+        # Check documentation files. A plain `test -f x && echo` never
+        # fails the step (set -e ignores non-final commands in an AND-OR
+        # list), so fail explicitly. The spec lives in AI.md + IDEA.md —
+        # SPEC.md does not exist in this project.
+        for f in README.md CHANGELOG.md AI.md IDEA.md; do
+          if [ ! -f "$f" ]; then
+            echo "❌ $f missing"
+            exit 1
+          fi
+          echo "✅ $f exists"
+        done
 
         # Check README content
         if grep -q "TabSSH" README.md && \

@@ -197,4 +197,33 @@
     <string name="mdm_desc_syslog_host">Nom d\'hôte ou adresse IP d\'un récepteur syslog UDP (RFC 5424). Laisser vide pour désactiver le transfert.</string>
     <string name="mdm_desc_syslog_port">Port UDP du récepteur syslog.</string>
 
+    <string name="launcher_active_session_message">Une session active existe déjà pour cet hôte. La rejoindre ou démarrer une nouvelle connexion ?</string>
+    <string name="launcher_background_session_message">Une session SSH en arrière-plan est toujours connectée à cet hôte. La rejoindre ou démarrer une nouvelle connexion ?</string>
+    <string name="launcher_reattach">Rejoindre</string>
+    <string name="launcher_new_connection">Nouvelle connexion</string>
+    <string name="connection_group_badge_fmt">• %1$s</string>
+    <string name="connection_a11y_fmt">Connexion %1$s. %2$s sur %3$s</string>
+    <string name="connection_a11y_port_fmt">Connexion %1$s. %2$s sur %3$s port %4$d</string>
+    <string name="connection_a11y_auth_fmt">Authentification : %1$s</string>
+    <string name="connection_a11y_last_connected_fmt">Dernière connexion %1$s</string>
+    <string name="auth_type_password">Mot de passe</string>
+    <string name="auth_type_2fa">2FA</string>
+    <string name="audit_log_no_details">Aucun détail supplémentaire</string>
+    <string name="connections_ungrouped_header_fmt">Sans groupe (%1$d)</string>
+    <string name="keyboard_fn_back">← Retour</string>
+    <string name="identity_auth_type_ssh_key">Clé SSH</string>
+    <string name="hypervisor_account_username_fmt">Nom d\'utilisateur : %1$s</string>
+    <string name="group_header_fmt">%1$s (%2$d)</string>
+    <string name="identity_auth_type_keyboard_interactive">Interactif au clavier</string>
+    <string name="identity_password_set_hint">Mot de passe (laisser vide pour conserver l\'actuel)</string>
+    <string name="perf_connect_failed_fmt">Échec de la connexion : %1$s</string>
+    <string name="perf_load_1m_fmt">1 min : %1$.2f</string>
+    <string name="perf_load_5m_fmt">5 min : %1$.2f</string>
+    <string name="perf_load_15m_fmt">15 min : %1$.2f</string>
+    <string name="perf_load_processes_fmt">%1$d/%2$d processus</string>
+    <string name="report_submit_failed_fmt">Échec de l\'envoi du rapport : %1$s</string>
+    <string name="pin_lock_status_locked_out_fmt">Trop de tentatives échouées — réessayez dans %1$s</string>
+    <string name="cloud_manager_toast_credentials_clear_failed">Impossible d\'effacer les identifiants : %1$s</string>
+    <string name="sync_log_clear_failed">Impossible d\'effacer le journal de synchronisation</string>
+
 </resources>

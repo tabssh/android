@@ -3,7 +3,9 @@ package io.github.tabssh.storage.preferences
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.preference.PreferenceManager as AndroidPreferenceManager
+import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.runBlocking
 
 /**
  * Centralized preference management for TabSSH
@@ -48,7 +50,17 @@ class PreferenceManager(private val context: Context) {
         }
     }
 
+    // Keystore-backed store for the few secrets PreferenceManager fronts
+    // (see getPastebinApiKey) — persisted values are shared across instances
+    private val securePasswordManager by lazy {
+        SecurePasswordManager(context).also { it.initialize() }
+    }
+
     companion object {
+        // Keystore alias + retired plaintext pref key for the Pastebin API key
+        private const val ALIAS_PASTEBIN_API_KEY = "pastebin_api_key"
+        private const val LEGACY_KEY_PASTEBIN_API_KEY = "paste_pastebin_api_key"
+
         // General preferences
         private const val KEY_STARTUP_BEHAVIOR = "general_startup_behavior"
         private const val KEY_AUTO_BACKUP = "general_auto_backup"
@@ -746,8 +758,38 @@ class PreferenceManager(private val context: Context) {
     fun getPastebinUrl(): String = getString("paste_pastebin_url", "https://pastebin.com").trimEnd('/')
     fun setPastebinUrl(url: String) = setString("paste_pastebin_url", url)
 
-    fun getPastebinApiKey(): String = getString("paste_pastebin_api_key", "")
-    fun setPastebinApiKey(key: String) = setString("paste_pastebin_api_key", key)
+    // The Pastebin API key is a secret — it lives in the Keystore-backed
+    // SecurePasswordManager (alias pastebin_api_key), never plaintext prefs.
+    // Signatures stay synchronous for the existing sync/backup/paste callers;
+    // the underlying store/retrieve does no real suspension (Keystore AES +
+    // SharedPreferences), so runBlocking here is a cheap bridge, not a stall.
+    fun getPastebinApiKey(): String {
+        // One-shot migration of any legacy plaintext value into the Keystore
+        val legacy = getString(LEGACY_KEY_PASTEBIN_API_KEY, "")
+        if (legacy.isNotEmpty()) {
+            setPastebinApiKey(legacy)
+            return legacy
+        }
+        return runBlocking {
+            securePasswordManager.retrievePassword(ALIAS_PASTEBIN_API_KEY) ?: ""
+        }
+    }
+
+    fun setPastebinApiKey(key: String) {
+        runBlocking {
+            if (key.isBlank()) {
+                securePasswordManager.clearPassword(ALIAS_PASTEBIN_API_KEY)
+            } else {
+                securePasswordManager.storePassword(
+                    ALIAS_PASTEBIN_API_KEY,
+                    key,
+                    SecurePasswordManager.StorageLevel.ENCRYPTED
+                )
+            }
+            // Drop any legacy plaintext copy from the default prefs
+            preferences.edit().remove(LEGACY_KEY_PASTEBIN_API_KEY).apply()
+        }
+    }
 
     // --- Audit log ---
 

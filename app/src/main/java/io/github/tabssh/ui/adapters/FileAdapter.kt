@@ -10,7 +10,7 @@ import io.github.tabssh.databinding.ItemFileBinding
 import io.github.tabssh.sftp.RemoteFileInfo
 import io.github.tabssh.utils.Format
 import io.github.tabssh.utils.LocalFileSource
-import java.text.SimpleDateFormat
+import java.text.DateFormat
 import java.util.*
 
 /**
@@ -48,7 +48,7 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
     private val selectedRemoteFiles = mutableSetOf<RemoteFileInfo>()
 
     private var isRemote = false
-    private val dateFormat = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
+    private val dateFormat = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
     
     /**
      * Get selected local files
@@ -123,12 +123,15 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
      * Toggle file selection
      */
     fun toggleSelection(file: LocalFileSource) {
-        if (selectedLocalFiles.contains(file)) {
-            selectedLocalFiles.remove(file)
+        // Membership is keyed on id (same key pruneSelection uses) — the set
+        // may still hold the previous listing's instance for this row.
+        val existing = selectedLocalFiles.firstOrNull { it.id == file.id }
+        if (existing != null) {
+            selectedLocalFiles.remove(existing)
         } else {
             selectedLocalFiles.add(file)
         }
-        val idx = localFiles.indexOf(file)
+        val idx = localFiles.indexOfFirst { it.id == file.id }
         if (idx >= 0) notifyItemChanged(idx)
     }
     
@@ -136,12 +139,15 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
      * Toggle remote file selection
      */
     fun toggleRemoteSelection(file: RemoteFileInfo) {
-        if (selectedRemoteFiles.contains(file)) {
-            selectedRemoteFiles.remove(file)
+        // Membership is keyed on name (same key pruneSelection uses) — the set
+        // may still hold a stale snapshot whose size/mtime has since changed.
+        val existing = selectedRemoteFiles.firstOrNull { it.name == file.name }
+        if (existing != null) {
+            selectedRemoteFiles.remove(existing)
         } else {
             selectedRemoteFiles.add(file)
         }
-        val idx = remoteFiles.indexOf(file)
+        val idx = remoteFiles.indexOfFirst { it.name == file.name }
         if (idx >= 0) notifyItemChanged(idx)
     }
 
@@ -166,6 +172,12 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
         // An identical row that came back keeps its selection, matched on id
         // rather than object identity so a changed size/mtime does not clear it.
         pruneSelection(selectedLocalFiles, files.mapTo(mutableSetOf()) { it.id }) { it.id }
+        // Re-point retained selections at the freshly listed objects so
+        // getSelectedFiles() returns current metadata, not stale snapshots.
+        val currentLocalById = files.associateBy { it.id }
+        val refreshedLocal = selectedLocalFiles.mapNotNull { currentLocalById[it.id] }
+        selectedLocalFiles.clear()
+        selectedLocalFiles.addAll(refreshedLocal)
         if (wasRemote) {
             // Switching between local and remote modes changes the row type
             // entirely — a full rebind is correct here, DiffUtil would compare
@@ -207,6 +219,12 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
         // for rows that no longer exist. Remote rows are identified by name,
         // matching this list's DiffUtil callback below.
         pruneSelection(selectedRemoteFiles, files.mapTo(mutableSetOf()) { it.name }) { it.name }
+        // Re-point retained selections at the freshly listed objects so
+        // getSelectedRemoteFiles() returns current metadata, not stale snapshots.
+        val currentRemoteByName = files.associateBy { it.name }
+        val refreshedRemote = selectedRemoteFiles.mapNotNull { currentRemoteByName[it.name] }
+        selectedRemoteFiles.clear()
+        selectedRemoteFiles.addAll(refreshedRemote)
         if (!wasRemote) {
             // Switching from local→remote changes the row payload type; a full
             // rebind is correct.
@@ -249,7 +267,9 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
         
         fun bindLocalFile(file: LocalFileSource) {
             binding.apply {
-                val isSelected = selectedLocalFiles.contains(file)
+                // Keyed on id, matching pruneSelection — the set may hold the
+                // previous listing's instance for this row.
+                val isSelected = selectedLocalFiles.any { it.id == file.id }
 
                 // Visual selection indicator
                 root.alpha = if (isSelected) 0.7f else 1.0f
@@ -301,7 +321,9 @@ class FileAdapter() : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
         
         fun bindRemoteFile(file: RemoteFileInfo) {
             binding.apply {
-                val isSelected = selectedRemoteFiles.contains(file)
+                // Keyed on name, matching pruneSelection — a row whose size or
+                // mtime changed must still render as selected.
+                val isSelected = selectedRemoteFiles.any { it.name == file.name }
                 
                 // Visual selection indicator
                 root.alpha = if (isSelected) 0.7f else 1.0f

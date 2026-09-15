@@ -1017,6 +1017,8 @@ class ConnectionEditActivity : TabSSHActivity() {
                     showError(getString(R.string.conn_edit_load_connection_failed), getString(R.string.status_error))
                     finish()
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to load connection", e)
                 showError(getString(R.string.conn_edit_load_connection_failed), getString(R.string.status_error))
@@ -1272,6 +1274,8 @@ class ConnectionEditActivity : TabSSHActivity() {
                     showError(getString(R.string.conn_edit_vnc_host_not_found), getString(R.string.status_error))
                     finish()
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("ConnectionEditActivity", "Failed to load VNC host", e)
                 showError(getString(R.string.conn_edit_load_vnc_host_failed), getString(R.string.status_error))
@@ -1432,6 +1436,8 @@ class ConnectionEditActivity : TabSSHActivity() {
                 hasUnsavedChanges = false
                 setResult(RESULT_OK)
                 finish()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Failed to save telnet host")
                 showError(getString(R.string.conn_edit_save_connection_failed, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
@@ -1506,6 +1512,8 @@ class ConnectionEditActivity : TabSSHActivity() {
 
                 setResult(RESULT_OK)
                 finish()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Failed to save VNC host")
                 showError(getString(R.string.conn_edit_save_vnc_host_failed, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
@@ -1540,6 +1548,8 @@ class ConnectionEditActivity : TabSSHActivity() {
                     return@launch
                 }
                 doSave(profile)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Failed to save connection")
                 showError(getString(R.string.conn_edit_save_connection_failed, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
@@ -1589,6 +1599,8 @@ class ConnectionEditActivity : TabSSHActivity() {
             hasUnsavedChanges = false
             setResult(RESULT_OK)
             finish()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             val mapped = ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Failed to save connection")
             showError(getString(R.string.conn_edit_save_connection_failed, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
@@ -2014,6 +2026,8 @@ class ConnectionEditActivity : TabSSHActivity() {
                     val errorMsg = connection.errorMessage.value ?: getString(R.string.conn_edit_test_failed_generic)
                     showError(errorMsg, getString(R.string.conn_edit_test_failed_title))
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Connection test failed")
                 showError(mapped.message, getString(R.string.conn_edit_test_failed_title), copyText = mapped.technicalDetail)
@@ -2283,6 +2297,8 @@ class ConnectionEditActivity : TabSSHActivity() {
                     showKeyImportErrorDialog(result.errorType, result.technicalDetail)
                 }
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             val mapped = io.github.tabssh.utils.ThrowableMapper.map(this, "ConnectionEditActivity", e, "Key import failed")
             showError(getString(R.string.conn_edit_key_import_failed, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
@@ -2333,6 +2349,8 @@ class ConnectionEditActivity : TabSSHActivity() {
                         showKeyImportErrorDialog(result.errorType, result.technicalDetail)
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val mapped = io.github.tabssh.utils.ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Encrypted key import failed")
                 showError(getString(R.string.conn_edit_encrypted_key_import_failed, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)

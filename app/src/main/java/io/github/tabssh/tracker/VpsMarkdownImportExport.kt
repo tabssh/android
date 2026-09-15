@@ -101,7 +101,11 @@ object VpsMarkdownImportExport {
 
             val brackets = BRACKET_REGEX.findAll(line).map { it.groupValues[1].trim() }.toList()
             val preBracket = BRACKET_REGEX.replace(line, "").trim()
-            val idTokens = preBracket.split(Regex("""\s*-\s*""")).map { it.trim() }
+            // Column separator is "-" preceded by whitespace and followed by whitespace or
+            // end-of-segment (a blank trailing field leaves "-" last after trim); the
+            // whitespace requirement keeps hyphenated hostnames like "my-host" intact,
+            // and the lookahead preserves empty tokens so blank fields keep their column.
+            val idTokens = preBracket.split(Regex("""\s+-(?=\s|$)""")).map { it.trim() }
             val hostname = idTokens.getOrNull(0).orEmpty()
             if (hostname.isEmpty()) {
                 warnings.add("Line ${idx + 1}: no hostname found — skipped")

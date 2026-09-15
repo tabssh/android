@@ -84,6 +84,8 @@ class ConnectionHistoryActivity : TabSSHActivity() {
                         listContainer.addView(buildRow(c))
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val mapped = ThrowableMapper.map(this@ConnectionHistoryActivity, "ConnectionHistory", e, "Failed to load history")
                 Toast.makeText(this@ConnectionHistoryActivity, getString(R.string.conn_history_load_failed, mapped.message), Toast.LENGTH_LONG).show()

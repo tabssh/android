@@ -139,10 +139,32 @@ class ClusterCommandActivity : TabSSHActivity() {
     }
 
     private fun loadCommandHistory() {
-        val historySet = prefs.getStringSet("command_history", emptySet()) ?: emptySet()
         commandHistory.clear()
+        val json = prefs.getString("command_history_ordered", null)
+        if (json != null) {
+            try {
+                val arr = org.json.JSONArray(json)
+                for (i in 0 until arr.length()) commandHistory.add(arr.getString(i))
+            } catch (_: org.json.JSONException) {
+                // Corrupt entry — start over rather than crash.
+            }
+        } else {
+            // One-time migration from the old StringSet storage, which lost
+            // recency order. Order within the set is arbitrary but preserved
+            // from here on; the old key is removed after migrating.
+            val legacy = prefs.getStringSet("command_history", null)
+            if (legacy != null) {
+                commandHistory.addAll(legacy.take(10))
+                prefs.edit()
+                    .putString("command_history_ordered", org.json.JSONArray(commandHistory).toString())
+                    .remove("command_history")
+                    .apply()
+            }
+        }
         // Keep last 10 commands
-        commandHistory.addAll(historySet.take(10))
+        while (commandHistory.size > 10) {
+            commandHistory.removeLast()
+        }
         updateHistoryChips()
     }
 
@@ -158,8 +180,11 @@ class ClusterCommandActivity : TabSSHActivity() {
             commandHistory.removeLast()
         }
 
-        // Save to SharedPreferences
-        prefs.edit().putStringSet("command_history", commandHistory.toSet()).apply()
+        // Save as an ordered JSON array — a StringSet has no defined order and
+        // scrambled the most-recent-first history across restarts.
+        prefs.edit()
+            .putString("command_history_ordered", org.json.JSONArray(commandHistory).toString())
+            .apply()
         updateHistoryChips()
     }
 

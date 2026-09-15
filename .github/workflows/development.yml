@@ -62,6 +62,10 @@ jobs:
       attestations: write
     container:
       image: ${{ needs.ensure-build-image.outputs.image }}
+      # Numeric 0:0 needs no /etc/passwd lookup — the runner and
+      # actions/checkout post-job cleanup exec into the container as a
+      # user the image may not define, which flakes the job otherwise.
+      options: "--user 0:0"
     # Actions can't detect bash inside a container image and falls back to
     # `sh -e` for every `run:` step unless told otherwise.
     defaults:

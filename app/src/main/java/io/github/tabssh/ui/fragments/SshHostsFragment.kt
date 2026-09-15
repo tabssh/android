@@ -71,6 +71,8 @@ class SshHostsFragment : Fragment() {
 
     // Multi-select mode
     private var isSelectionMode = false
+    // True while selection mode was entered for bulk delete (vs bulk edit)
+    private var selectionDeleteMode = false
     // Connection IDs
     private val selectedConnections = mutableSetOf<String>()
 
@@ -213,7 +215,8 @@ class SshHostsFragment : Fragment() {
     private fun setupRecyclerView() {
         adapter = ConnectionAdapter(
             onConnectionClick = { connection: ConnectionProfile ->
-                openConnection(connection)
+                // In selection mode a tap toggles membership instead of connecting
+                if (isSelectionMode) toggleSelection(connection) else openConnection(connection)
             }
         )
 
@@ -419,7 +422,11 @@ class SshHostsFragment : Fragment() {
      */
     private fun enterSelectionMode(deleteMode: Boolean = false) {
         isSelectionMode = true
+        selectionDeleteMode = deleteMode
         selectedConnections.clear()
+        // Redraw both adapters so every row shows its (unchecked) selection state
+        adapter.setSelection(true, selectedConnections)
+        groupedAdapter?.setSelection(true, selectedConnections)
         toolbar.setTitle(
             if (deleteMode) R.string.connections_selection_title_delete
             else R.string.connections_selection_title_edit
@@ -440,17 +447,44 @@ class SshHostsFragment : Fragment() {
 
         // Update adapter click behavior — long-press triggers the chosen action.
         adapter.setOnItemLongClickListener { _ ->
-            if (selectedConnections.isEmpty()) {
-                android.widget.Toast.makeText(requireContext(), R.string.connections_selection_none, android.widget.Toast.LENGTH_SHORT).show()
-                return@setOnItemLongClickListener true
-            }
-            val selectedList = allConnections.filter { selectedConnections.contains(it.id) }
-            if (deleteMode) {
-                confirmAndBulkDelete(selectedList)
-            } else {
-                showBulkEditDialog(selectedList)
-            }
+            performSelectionAction()
             true
+        }
+    }
+
+    /** Tap-to-toggle while in selection mode — updates both adapters' checked state. */
+    private fun toggleSelection(connection: ConnectionProfile) {
+        if (!selectedConnections.add(connection.id)) {
+            selectedConnections.remove(connection.id)
+        }
+        adapter.setSelection(true, selectedConnections)
+        groupedAdapter?.setSelection(true, selectedConnections)
+        // Contextual title: live selection count once anything is selected,
+        // the mode's instruction title while nothing is.
+        toolbar.title = if (selectedConnections.isEmpty()) {
+            getString(
+                if (selectionDeleteMode) R.string.connections_selection_title_delete
+                else R.string.connections_selection_title_edit
+            )
+        } else {
+            resources.getQuantityString(
+                R.plurals.connections_bulk_selected_count,
+                selectedConnections.size, selectedConnections.size
+            )
+        }
+    }
+
+    /** Long-press in selection mode — run the bulk action chosen on entry. */
+    private fun performSelectionAction() {
+        if (selectedConnections.isEmpty()) {
+            android.widget.Toast.makeText(requireContext(), R.string.connections_selection_none, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val selectedList = allConnections.filter { selectedConnections.contains(it.id) }
+        if (selectionDeleteMode) {
+            confirmAndBulkDelete(selectedList)
+        } else {
+            showBulkEditDialog(selectedList)
         }
     }
 
@@ -467,12 +501,22 @@ class SshHostsFragment : Fragment() {
             )
             .setMessage(R.string.connections_bulk_delete_message)
             .setPositiveButton(R.string.delete) { _, _ ->
-                lifecycleScope.launch {
+                val app = requireActivity().application as io.github.tabssh.TabSSHApplication
+                val appContext = requireContext().applicationContext
+                // Resolved via the application context — the fragment may be
+                // detached by the time the toast fires from the app scope.
+                val quantityText = { n: Int ->
+                    appContext.resources.getQuantityString(R.plurals.connections_bulk_deleted, n, n)
+                }
+                // Application scope + one Room transaction: the multi-row
+                // cascade is atomic and survives the view being destroyed
+                // mid-delete (previously each row committed separately in the
+                // view's lifecycleScope, leaving half-deleted state on cancel).
+                app.applicationScope.launch(Dispatchers.IO) {
                     var deleted = 0
-                    val app = requireActivity().application as io.github.tabssh.TabSSHApplication
-                    for (c in selected) {
-                        try {
-                            withContext(Dispatchers.IO) {
+                    try {
+                        app.database.withTransaction {
+                            for (c in selected) {
                                 app.database.connectionDao().deleteConnection(c)
                                 // H6 — record the deletion so it propagates and is not resurrected.
                                 TombstoneRecorder.record(app, TombstoneRecorder.CONNECTION, c.id)
@@ -482,25 +526,33 @@ class SshHostsFragment : Fragment() {
                                 // Keep the Panes registry and any saved pane-group membership accurate.
                                 io.github.tabssh.storage.registry.ConnectableHostRegistry
                                     .removeConnectionProfile(app.database, c.id)
-                                // clearPassword is suspend + IO-dispatched (KeyStore HAL round-trip).
-                                // Without IO dispatch, N deletions in a loop = N KeyStore round-trips on Main → ANR.
-                                try { app.securePasswordManager.clearPassword(c.id) } catch (_: Exception) {}
+                                deleted++
                             }
-                            deleted++
-                        } catch (e: Exception) {
-                            Logger.e("SshHostsFragment", "Bulk delete failed for ${c.name}", e)
+                        }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        deleted = 0
+                        Logger.e("SshHostsFragment", "Bulk delete transaction failed", e)
+                    }
+                    // Keystore cleanup stays outside the DB transaction — it is a
+                    // KeyStore HAL round-trip, not a DB write, and must not hold
+                    // the transaction open.
+                    if (deleted > 0) {
+                        for (c in selected) {
+                            try { app.securePasswordManager.clearPassword(c.id) } catch (_: Exception) {}
                         }
                     }
                     // Home-screen widgets pinned to a deleted connection otherwise keep the stale label and dead tap target.
-                    io.github.tabssh.widget.ConnectionWidgetProvider.updateAllWidgets(requireContext())
-                    android.widget.Toast.makeText(
-                        requireContext(),
-                        resources.getQuantityString(
-                            R.plurals.connections_bulk_deleted, deleted, deleted
-                        ),
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
-                    exitSelectionMode()
+                    io.github.tabssh.widget.ConnectionWidgetProvider.updateAllWidgets(appContext)
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(
+                            appContext, quantityText(deleted), android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                        // The fragment view may be gone by now — the delete
+                        // itself already completed in the application scope.
+                        if (view != null) exitSelectionMode()
+                    }
                 }
             }
             .setNegativeButton(R.string.cancel, null)
@@ -512,6 +564,7 @@ class SshHostsFragment : Fragment() {
      */
     private fun exitSelectionMode() {
         isSelectionMode = false
+        selectionDeleteMode = false
         selectedConnections.clear()
         // Hosts tab has no toolbar title (the "Hosts" tab label above already
         // names the screen) — clear back to that, not the old "Connections" text.
@@ -523,8 +576,16 @@ class SshHostsFragment : Fragment() {
         toolbar.menu.findItem(R.id.action_bulk_edit)?.isVisible = true
         toolbar.menu.findItem(R.id.action_sort)?.isVisible = true
 
-        // Restore adapter click behavior
-        setupRecyclerView()
+        // Restore adapter click behavior in place — re-running
+        // setupRecyclerView() here launched a SECOND permanent
+        // connectionStates collector per selection round-trip, each forcing
+        // its own full rebind on every state tick.
+        adapter.setOnItemLongClickListener { connection ->
+            HostContextActions.showSshConnectionMenu(this, app, connection)
+            true
+        }
+        adapter.setSelection(false, emptySet())
+        groupedAdapter?.setSelection(false, emptySet())
         applySortAndFilter()
     }
 
@@ -1038,8 +1099,15 @@ class SshHostsFragment : Fragment() {
         if (groupedAdapter == null) {
             groupedAdapter = GroupedConnectionAdapter(
                 items = items.toMutableList(),
-                onConnectionClick = { connection -> openConnection(connection) },
-                onConnectionLongClick = { connection -> HostContextActions.showSshConnectionMenu(this, app, connection) },
+                onConnectionClick = { connection ->
+                    // In selection mode a tap toggles membership instead of connecting
+                    if (isSelectionMode) toggleSelection(connection) else openConnection(connection)
+                },
+                onConnectionLongClick = { connection ->
+                    // In selection mode long-press fires the chosen bulk action
+                    if (isSelectionMode) performSelectionAction()
+                    else HostContextActions.showSshConnectionMenu(this, app, connection)
+                },
                 onGroupClick = { groupHeader -> toggleGroupExpanded(groupHeader) },
                 onGroupLongClick = { groupHeader -> showGroupMenu(groupHeader) }
             )

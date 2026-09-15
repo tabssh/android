@@ -4,6 +4,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.utils.logging.Logger
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Phase-2 user prompt for the hypervisor TLS pinning flow. Two cases:
@@ -149,35 +151,55 @@ object HypervisorCertPromptDialog {
 
         var result: Action = Action.REJECT
         val latch = CountDownLatch(1)
+        // Settle-once guard: after the result is consumed (button, dismiss, timeout,
+        // or interrupt) no later callback may mutate it again.
+        val settled = AtomicBoolean(false)
+        val dialogRef = AtomicReference<androidx.appcompat.app.AlertDialog?>(null)
+
+        // Records the outcome exactly once; every later call is a no-op.
+        fun settle(action: Action) {
+            if (settled.compareAndSet(false, true)) {
+                result = action
+                latch.countDown()
+            }
+        }
 
         activity.runOnUiThread {
             try {
-                if (activity.isFinishing || activity.isDestroyed) {
-                    latch.countDown()
+                if (activity.isFinishing || activity.isDestroyed || settled.get()) {
+                    settle(Action.REJECT)
                     return@runOnUiThread
                 }
                 val builder = MaterialAlertDialogBuilder(activity)
                     .setTitle(title)
                     .setMessage(message)
                     .setPositiveButton(positiveLabel) { _, _ ->
-                        result = Action.ACCEPT_AND_PIN
-                        latch.countDown()
+                        settle(Action.ACCEPT_AND_PIN)
                     }
                     .setNeutralButton(neutralLabel) { _, _ ->
-                        result = Action.ACCEPT_ONCE
-                        latch.countDown()
+                        settle(Action.ACCEPT_ONCE)
                     }
                     .setNegativeButton(negativeLabel) { _, _ ->
-                        result = Action.REJECT
-                        latch.countDown()
+                        settle(Action.REJECT)
                     }
                     .setCancelable(false)
-                    .setOnDismissListener { latch.countDown() }
+                    .setOnDismissListener { settle(Action.REJECT) }
                 if (iconResId != null) builder.setIcon(iconResId)
-                builder.show()
+                val dialog = builder.show()
+                dialogRef.set(dialog)
+                // The waiting thread may have settled between the guard above and show()
+                if (settled.get()) dialog.dismiss()
             } catch (e: Exception) {
                 Logger.e(TAG, "Error showing cert prompt ($logTag)", e)
-                latch.countDown()
+                settle(Action.REJECT)
+            }
+        }
+
+        // Closes a dialog the waiting thread abandoned, so a later tap on a stale
+        // prompt cannot look like a pin that was actually never stored.
+        fun dismissAbandonedDialog() {
+            activity.runOnUiThread {
+                dialogRef.get()?.let { if (it.isShowing) it.dismiss() }
             }
         }
 
@@ -185,11 +207,13 @@ object HypervisorCertPromptDialog {
             val signaled = latch.await(DIALOG_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             if (!signaled) {
                 Logger.w(TAG, "Dialog timeout (${DIALOG_TIMEOUT_SECONDS}s) — defaulting to REJECT for $logTag")
-                result = Action.REJECT
+                settle(Action.REJECT)
+                dismissAbandonedDialog()
             }
         } catch (e: InterruptedException) {
             Logger.e(TAG, "Interrupted waiting for cert-prompt response ($logTag)", e)
-            result = Action.REJECT
+            settle(Action.REJECT)
+            dismissAbandonedDialog()
             Thread.currentThread().interrupt()
         }
         Logger.i(TAG, "Cert prompt ($logTag) → $result")

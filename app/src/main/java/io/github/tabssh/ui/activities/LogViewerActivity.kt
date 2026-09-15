@@ -26,6 +26,10 @@ class LogViewerActivity : TabSSHActivity() {
     private lateinit var emptyView: TextView
     private lateinit var adapter: LogEntryAdapter
     private val logEntries = mutableListOf<LogEntry>()
+
+    // Full unfiltered set from the last loadLogs() — file-based lines plus the
+    // in-memory ring. Filtering runs against this so file entries are kept.
+    private val allLogEntries = mutableListOf<LogEntry>()
     
     data class LogEntry(
         val timestamp: String,
@@ -135,6 +139,9 @@ class LogViewerActivity : TabSSHActivity() {
                     acc
                 }
 
+                allLogEntries.clear()
+                allLogEntries.addAll(collected)
+
                 adapter.replaceAllWithDiff(
                     items = logEntries,
                     newItems = collected,
@@ -233,13 +240,16 @@ class LogViewerActivity : TabSSHActivity() {
      * Apply filter to logs
      */
     private fun applyFilter(filterIndex: Int) {
+        // Filter the combined set from the last load (file lines + memory ring),
+        // not just Logger.getRecentLogs(), so file-based entries survive filtering.
+        val all: List<LogEntry> = allLogEntries.toList()
         val (filtered, filterName) = when (filterIndex) {
-            0 -> Pair(Logger.getRecentLogs(), "All")
-            1 -> Pair(Logger.getRecentLogs().filter { it.level == "ERROR" }, "ERROR")
-            2 -> Pair(Logger.getRecentLogs().filter { it.level == "WARN" }, "WARN")
-            3 -> Pair(Logger.getRecentLogs().filter { it.level == "INFO" }, "INFO")
-            4 -> Pair(Logger.getRecentLogs().filter { it.level == "DEBUG" }, "DEBUG")
-            else -> Pair(Logger.getRecentLogs(), "All")
+            0 -> Pair(all, "All")
+            1 -> Pair(all.filter { it.level == "ERROR" }, "ERROR")
+            2 -> Pair(all.filter { it.level == "WARN" }, "WARN")
+            3 -> Pair(all.filter { it.level == "INFO" }, "INFO")
+            4 -> Pair(all.filter { it.level == "DEBUG" }, "DEBUG")
+            else -> Pair(all, "All")
         }
 
         adapter.replaceAllWithDiff(

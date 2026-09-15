@@ -3,6 +3,7 @@ package io.github.tabssh.ui.utils
 import android.content.Context
 import android.content.Intent
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.ui.activities.TabTerminalActivity
@@ -62,15 +63,15 @@ object ConnectionLauncher {
         }
 
         val message = if (existingTab != null) {
-            "There is already an active session for this host. Reattach to it, or start a new connection?"
+            context.getString(R.string.launcher_active_session_message)
         } else {
-            "A background SSH session is still connected to this host. Reattach, or start a new connection?"
+            context.getString(R.string.launcher_background_session_message)
         }
 
         MaterialAlertDialogBuilder(context)
             .setTitle(profile.name)
             .setMessage(message)
-            .setPositiveButton("Reattach") { _, _ ->
+            .setPositiveButton(R.string.launcher_reattach) { _, _ ->
                 val intent = if (existingTab != null) {
                     Intent(context, TabTerminalActivity::class.java).apply {
                         putExtra(TabTerminalActivity.EXTRA_TAB_ID, existingTab.tabId)
@@ -85,7 +86,7 @@ object ConnectionLauncher {
                 }
                 context.startActivity(intent)
             }
-            .setNegativeButton("New connection") { _, _ ->
+            .setNegativeButton(R.string.launcher_new_connection) { _, _ ->
                 // forceNew=true bypasses the reattach short-circuit in connectToProfile
                 // so the user always gets a fresh tab, not a bounce back to the existing one.
                 context.startActivity(TabTerminalActivity.createIntent(context, profile, autoConnect, forceNew = true))

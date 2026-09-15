@@ -60,8 +60,16 @@ class MainActivity : TabSSHActivity() {
         // earliest reliable opportunity to clear leftover entries.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val nm = getSystemService(NotificationManager::class.java)
+            // Keep notifications whose tab is still alive — cancelling them
+            // here removed the shade Disconnect action for live sessions until
+            // the service's next heartbeat reposted them.
+            val liveIds: Set<Int> = try {
+                app.tabManager.getAllTabsSealed()
+                    .map { io.github.tabssh.utils.NotificationHelper.perTabNotificationId(it.tabId) }
+                    .toSet()
+            } catch (_: Exception) { emptySet() }
             nm.activeNotifications
-                .filter { it.id in 10_000..99_999 }
+                .filter { it.id in 10_000..99_999 && it.id !in liveIds }
                 .forEach { nm.cancel(it.id) }
         }
 
@@ -515,8 +523,11 @@ class MainActivity : TabSSHActivity() {
                                         putExtra(TabTerminalActivity.EXTRA_TAB_ID, tab.tabId)
                                     }
                                 )
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 Logger.e("MainActivity", "VNC connect failed", e)
+                                if (isFinishing || isDestroyed) return@launch
                                 val info = ConsoleErrorClassifier.classify(this@MainActivity, "VNC", e)
                                 showError(
                                     getString(R.string.main_quick_connect_vnc_connection_failed, raw, port, info.userMessage),

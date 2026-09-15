@@ -12,6 +12,7 @@ import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.room.withTransaction
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
@@ -258,42 +259,49 @@ class HypervisorsFragment : Fragment() {
             .setTitle(R.string.hypervisor_delete_title)
             .setMessage(getString(R.string.connections_delete_message_fmt, hypervisor.name))
             .setPositiveButton(R.string.delete) { _, _ ->
-                // viewLifecycleOwner: scope must end at onDestroyView so the
-                // toast/UI updates below can't fire against a dead view tree.
-                viewLifecycleOwner.lifecycleScope.launch {
+                // Captured at click time — the IO block below must not call
+                // requireContext() after a potential detach.
+                val appContext = requireContext().applicationContext
+                // Application scope + one Room transaction: delete + tombstone
+                // commit atomically and survive the view being destroyed
+                // mid-delete (a view-scope cancel could delete the row but
+                // skip the tombstone, resurrecting it on the next sync).
+                app.applicationScope.launch(Dispatchers.IO) {
                     try {
-                        val ctx = context ?: return@launch
-                        withContext(Dispatchers.IO) {
+                        app.database.withTransaction {
                             app.database.hypervisorDao().delete(hypervisor)
                             // H6 — Long PK is device-local; tombstone by natural key.
                             TombstoneRecorder.record(app, TombstoneRecorder.HYPERVISOR, TombstoneRecorder.naturalKey(hypervisor))
-                            // P1: also drop the Keystore-backed password so the
-                            // alias doesn't dangle if the row id ever gets reused.
-                            // clear() does Keystore operations — must be on IO.
-                            // ctx captured before IO switch — requireContext() is unsafe on IO thread.
-                            io.github.tabssh.crypto.storage.HypervisorPasswordStore
-                                .clear(ctx, hypervisor.id)
                         }
-                        if (!isAdded) return@launch
-                        Toast.makeText(
-                            requireContext(),
-                            getString(R.string.sftp_deleted_fmt, hypervisor.name),
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        // P1: also drop the Keystore-backed password so the
+                        // alias doesn't dangle if the row id ever gets reused.
+                        // Keystore work stays outside the DB transaction.
+                        io.github.tabssh.crypto.storage.HypervisorPasswordStore
+                            .clear(appContext, hypervisor.id)
+                        withContext(Dispatchers.Main) {
+                            if (!isAdded) return@withContext
+                            Toast.makeText(
+                                requireContext(),
+                                getString(R.string.sftp_deleted_fmt, hypervisor.name),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        if (!isAdded) return@launch
-                        // A Keystore/cipher failure message can echo the value
-                        // it was handed — sanitize and cap before display.
-                        Toast.makeText(
-                            requireContext(),
-                            getString(
-                                R.string.hypervisor_delete_failed_fmt,
-                                ContainerText.display(e.message)
-                            ),
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        withContext(Dispatchers.Main) {
+                            if (!isAdded) return@withContext
+                            // A Keystore/cipher failure message can echo the value
+                            // it was handed — sanitize and cap before display.
+                            Toast.makeText(
+                                requireContext(),
+                                getString(
+                                    R.string.hypervisor_delete_failed_fmt,
+                                    ContainerText.display(e.message)
+                                ),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     }
                 }
             }

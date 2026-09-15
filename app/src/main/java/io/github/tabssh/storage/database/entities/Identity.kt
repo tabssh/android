@@ -77,15 +77,4 @@ data class Identity(
     fun getDisplayName(): String {
         return "$name ($username)"
     }
-    
-    /**
-     * Get auth type display string
-     */
-    fun getAuthTypeDisplay(): String {
-        return when (authType) {
-            AuthType.PASSWORD -> "Password"
-            AuthType.PUBLIC_KEY -> "SSH Key"
-            AuthType.KEYBOARD_INTERACTIVE -> "Keyboard Interactive"
-        }
-    }
 }

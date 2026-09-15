@@ -380,15 +380,23 @@ class SSHConnection(
 
                 // Create main session - connect through jump host if configured
                 Logger.d("SSHConnection", "STEP 6: Creating SSH session")
+                // Resolved once here so the silent-retry path reuses the exact
+                // same literal — re-passing profile.host would lose forced
+                // ipv4/ipv6 resolution on the retry (K3).
+                val resolvedTargetHost = if (jumpHostPort == null) {
+                    resolveHostForIpMode(profile.host, profile.ipMode)
+                } else {
+                    null
+                }
                 val newSession = if (jumpHostPort != null) {
                     Logger.i("SSHConnection", "Connecting to target through jump host on localhost:$jumpHostPort as $effectiveUsername")
                     val tunnelSession = jsch.getSession(effectiveUsername, "localhost", jumpHostPort)
                     // Store the host key under the real target hostname (not localhost:ephemeralPort)
                     // so "Accept & save" persists across reconnects that use different tunnel ports.
-                    tunnelSession.setHostKeyAlias(profile.host)
+                    tunnelSession.setHostKeyAlias(targetHostKeyAlias())
                     tunnelSession
                 } else {
-                    val resolved = resolveHostForIpMode(profile.host, profile.ipMode)
+                    val resolved = resolvedTargetHost ?: profile.host
                     Logger.i("SSHConnection", "Direct connection to $resolved (host=${profile.host}, ipMode=${profile.ipMode}):${profile.port} as $effectiveUsername")
                     // Issue #12 — TimingSocketFactory logs DNS + per-address
                     // TCP connect timing and falls back across all resolved
@@ -449,7 +457,7 @@ class SSHConnection(
                 // (after a short back-off) and only surface the error if the
                 // second try also fails. Keeps the UX sane on first connect.
                 Logger.i("SSHConnection", "STEP 10: Calling session.connect()")
-                val activeSession = connectWithSilentRetry(jsch, newSession, jumpHostPort, effectiveUsername)
+                val activeSession = connectWithSilentRetry(jsch, newSession, jumpHostPort, effectiveUsername, resolvedTargetHost)
                 session = activeSession
                 stepDone("session.connect (TCP+kex+auth)")
 
@@ -525,7 +533,8 @@ class SSHConnection(
         jsch: JSch,
         firstSession: Session,
         jumpHostPort: Int?,
-        effectiveUsername: String
+        effectiveUsername: String,
+        resolvedTargetHost: String?
     ): Session {
         try {
             firstSession.connect()
@@ -546,12 +555,13 @@ class SSHConnection(
 
         val retrySession = if (jumpHostPort != null) {
             jsch.getSession(effectiveUsername, "localhost", jumpHostPort).also {
-                it.setHostKeyAlias(profile.host)
+                it.setHostKeyAlias(targetHostKeyAlias())
             }
         } else {
             // Issue #12 — same timing/fallback socket factory as the first
-            // attempt so the retry path behaves identically.
-            jsch.getSession(effectiveUsername, profile.host, profile.port).also {
+            // attempt so the retry path behaves identically. Reuse the host
+            // literal resolved for the first attempt (forced ipv4/ipv6).
+            jsch.getSession(effectiveUsername, resolvedTargetHost ?: profile.host, profile.port).also {
                 it.setSocketFactory(
                     TimingSocketFactory(profile.ipMode, profile.connectTimeout * 1000)
                 )
@@ -566,6 +576,17 @@ class SSHConnection(
         Logger.i("SSHConnection", "Silent retry succeeded for ${profile.host}")
         return retrySession
     }
+
+    /**
+     * Host-key alias for the real target when connecting through a jump-host
+     * tunnel. JSch appends "[host]:port" itself only when NO alias is set and
+     * port != 22 — an explicit alias is used verbatim. A direct connect to a
+     * non-22 target therefore stores under "[host]:port", so the tunnel path
+     * must use the same form or the key lands under the bare hostname and the
+     * user gets divergent known-hosts rows plus duplicate TOFU prompts (K2).
+     */
+    private fun targetHostKeyAlias(): String =
+        if (profile.port != 22) "[${profile.host}]:${profile.port}" else profile.host
 
     /**
      * Issue #6 — pre-resolve [host] to a single literal address matching
@@ -2235,24 +2256,6 @@ class SSHConnection(
         _detailedError.value = errorInfo
         notifyListeners { onError(id, error) }
 
-        // Audit logging — best-effort, fire-and-forget so a logging failure
-        // never interferes with error reporting or reconnect logic.
-        try {
-            val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
-            val audit = app?.auditLogManager
-            if (audit != null) {
-                scope.launch(Dispatchers.IO) {
-                    try {
-                        audit.logAuthFailure(profile, id, "unknown", error.message ?: "")
-                    } catch (e: Exception) {
-                        Logger.w("SSHConnection", "Audit log (authFailure) failed: ${e.message}")
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Logger.w("SSHConnection", "Audit log (authFailure) dispatch failed: ${e.message}")
-        }
-
         // Auth-fail markers JSch actually emits — substring matches on
         // "password" / "publickey" alone caught unrelated kex failures.
         val isAuthError = error.message?.let { msg ->
@@ -2261,6 +2264,29 @@ class SSHConnection(
             msg.contains("Permission denied", ignoreCase = true) ||
             msg.contains("Too many authentication failures", ignoreCase = true)
         } ?: false
+
+        // Audit logging — best-effort, fire-and-forget so a logging failure
+        // never interferes with error reporting or reconnect logic. Only real
+        // authentication rejections are recorded — timeouts, DNS failures and
+        // other transport errors used to flood the audit log as fake auth
+        // failures (K4).
+        if (isAuthError) {
+            try {
+                val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+                val audit = app?.auditLogManager
+                if (audit != null) {
+                    scope.launch(Dispatchers.IO) {
+                        try {
+                            audit.logAuthFailure(profile, id, "unknown", error.message ?: "")
+                        } catch (e: Exception) {
+                            Logger.w("SSHConnection", "Audit log (authFailure) failed: ${e.message}")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.w("SSHConnection", "Audit log (authFailure) dispatch failed: ${e.message}")
+            }
+        }
 
         if (isAuthError) {
             Logger.i("SSHConnection", "Auth error — not retrying")

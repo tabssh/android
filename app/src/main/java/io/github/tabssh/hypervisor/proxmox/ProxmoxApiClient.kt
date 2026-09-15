@@ -365,10 +365,14 @@ class ProxmoxApiClient(
      * Unlike reboot, this does not wait for graceful shutdown.
      */
     suspend fun resetVM(node: String, vmid: Int, type: String = "qemu"): Boolean = withContext(Dispatchers.IO) {
+        // PVE has no /nodes/{node}/lxc/{vmid}/status/reset endpoint — reset is qemu-only.
+        if (type == "lxc") {
+            Logger.e("ProxmoxAPI", "Reset is not supported for LXC container $vmid — use stop/start instead")
+            return@withContext false
+        }
         try {
             val n = encodePathSegment(node)
-            val endpoint = if (type == "lxc") "/nodes/$n/lxc/$vmid/status/reset" else "/nodes/$n/qemu/$vmid/status/reset"
-            apiPost(endpoint)
+            apiPost("/nodes/$n/qemu/$vmid/status/reset")
             Logger.i("ProxmoxAPI", "Reset VM $vmid (hard reset)")
             true
         } catch (e: CancellationException) {

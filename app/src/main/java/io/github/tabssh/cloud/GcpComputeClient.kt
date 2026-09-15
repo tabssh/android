@@ -147,6 +147,9 @@ class GcpComputeClient : CloudProvider {
                         val msg = try {
                             JSONObject(raw).optJSONObject("error")?.optString("message") ?: resp.message
                         } catch (_: Exception) { resp.message }
+                        if (resp.code == 401 || resp.code == 403) {
+                            throw CloudAuthException("GCP token rejected (HTTP ${resp.code}): $msg")
+                        }
                         throw IllegalStateException("GCP API HTTP ${resp.code}: $msg")
                     }
                     raw
@@ -165,15 +168,18 @@ class GcpComputeClient : CloudProvider {
                             val rawStatus = inst.optString("status", "unknown")
                             val normStatus = when (rawStatus) {
                                 "RUNNING" -> "running"
-                                "TERMINATED", "STOPPED" -> "stopped"
-                                "STOPPING" -> "stopping"
+                                "TERMINATED", "STOPPED", "SUSPENDED" -> "stopped"
+                                "STOPPING", "SUSPENDING" -> "stopping"
                                 "STAGING", "PROVISIONING" -> "starting"
                                 else -> "unknown"
                             }
                             val publicIp = pickPublicIp(inst)
                             val privateIp = pickPrivateIp(inst)
+                            val name = inst.optString("name", "gce-${inst.optString("id")}")
                             out += CloudInstanceState(
-                                id = inst.optString("name", "gce-${inst.optString("id")}"),
+                                // Key by "zone/name" — an instance name is only unique per
+                                // zone, so a name-only id could act on the wrong instance.
+                                id = "$zone/$name",
                                 name = inst.optString("name", "gce-instance"),
                                 ip = publicIp,
                                 privateIp = privateIp,
@@ -218,14 +224,17 @@ class GcpComputeClient : CloudProvider {
         val privateKeyPem = sa.optString("private_key").ifBlank { return@withContext false }
         val projectId = sa.optString("project_id").ifBlank { return@withContext false }
 
-        // Find the zone from the cached instance list
+        // instanceId is "zone/name" (see fetchLiveInstances); the URL needs both
+        // parts separately. Prefer the cache, fall back to splitting the id.
         val zone = cachedInstances.firstOrNull { it.id == instanceId }?.metadata?.get("zone")
+            ?: instanceId.substringBefore('/', "").takeIf { it.isNotEmpty() && instanceId.contains('/') }
             ?: return@withContext false
+        val instanceName = instanceId.substringAfterLast('/')
 
         val accessToken = exchangeJwtForAccessToken(clientEmail, privateKeyPem,
             "https://www.googleapis.com/auth/compute")
 
-        val url = "https://compute.googleapis.com/compute/v1/projects/$projectId/zones/$zone/instances/$instanceId/$action"
+        val url = "https://compute.googleapis.com/compute/v1/projects/$projectId/zones/$zone/instances/$instanceName/$action"
         val body = "{}".toRequestBody("application/json".toMediaTypeOrNull())
         val req = Request.Builder()
             .url(url)

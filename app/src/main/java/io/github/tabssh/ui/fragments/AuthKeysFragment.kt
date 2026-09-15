@@ -30,6 +30,7 @@ import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.StoredKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.SupervisorJob
 import io.github.tabssh.ui.adapters.StoredKeyAdapter
 import io.github.tabssh.utils.ThrowableMapper
@@ -46,9 +47,11 @@ class AuthKeysFragment : Fragment() {
     private lateinit var app: TabSSHApplication
     private lateinit var keyAdapter: StoredKeyAdapter
 
-    // Fragment-scoped, so an in-flight SSH connect from installKeyOnServer()
-    // doesn't outlive the fragment's view.
-    private val installKeyScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    // View-scoped, so an in-flight SSH connect from installKeyOnServer()
+    // doesn't outlive the fragment's view. Cancelled in onDestroyView and
+    // recreated in onViewCreated — a cancelled scope silently drops every
+    // coroutine SSHConnection launches into it, making connect() always fail.
+    private var installKeyScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     // ── SAF launchers — must be declared as field initializers (before onStart) ──
 
@@ -136,6 +139,12 @@ class AuthKeysFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         app = tabSSHApp
+
+        // A previous view's onDestroyView cancelled the scope — recreate it so
+        // "Install on server" still works after a tab switch recreates the view.
+        if (!installKeyScope.isActive) {
+            installKeyScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        }
 
         setupSshKeysSection(view)
         observeData()

@@ -17,6 +17,7 @@ import io.github.tabssh.R
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.security.KeyStore
+import java.util.concurrent.ConcurrentHashMap
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -64,8 +65,9 @@ class SecurePasswordManager(private val context: Context) {
     private val keyStore: KeyStore = KeyStore.getInstance(KEYSTORE_PROVIDER)
     private val sharedPrefs = context.getSharedPreferences(SHARED_PREFS_NAME, Context.MODE_PRIVATE)
 
-    // Session-only password storage (in memory)
-    private val sessionPasswords = mutableMapOf<String, String>()
+    // Session-only password storage (in memory). ConcurrentHashMap because it is
+    // touched from the main thread and IO coroutines concurrently.
+    private val sessionPasswords = ConcurrentHashMap<String, String>()
 
     // Lifecycle-independent scope for biometric callback continuations.
     // Lives as long as the SecurePasswordManager instance (i.e. the process).
@@ -321,8 +323,10 @@ class SecurePasswordManager(private val context: Context) {
                     
                     override fun onAuthenticationFailed() {
                         super.onAuthenticationFailed()
+                        // Fires once per unrecognized attempt while the prompt stays
+                        // open — must NOT resume here, or the eventual succeeded/error
+                        // callback double-resumes and crashes with IllegalStateException.
                         Logger.w("SecurePasswordManager", "Biometric authentication failed")
-                        continuation.resume(false)
                     }
                 })
             
@@ -373,8 +377,10 @@ class SecurePasswordManager(private val context: Context) {
                     
                     override fun onAuthenticationFailed() {
                         super.onAuthenticationFailed()
+                        // Fires once per unrecognized attempt while the prompt stays
+                        // open — must NOT resume here, or the eventual succeeded/error
+                        // callback double-resumes and crashes with IllegalStateException.
                         Logger.w("SecurePasswordManager", "Biometric authentication failed")
-                        continuation.resume(null)
                     }
                 })
             

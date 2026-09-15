@@ -296,7 +296,10 @@ class IncusCliTransport(
      * produces for `docker pull`.
      */
     override fun pullImage(ref: String): Flow<PullProgressEvent> {
-        val alias = ref.substringAfterLast(':').substringAfterLast('/')
+        // The whole ref keeps the alias unique — taking only the last path
+        // segment would collapse "ubuntu/22.04" and "ubuntu-minimal/22.04"
+        // into the same "22.04" local alias.
+        val alias = ref.replace(':', '-').replace('/', '-')
         return flow {
             val command = "${cliContext.envPrefix()}$cliBinary${projectFlag()} " +
                 "image copy ${q(ref)} local: --alias ${q(alias)} 2>&1"

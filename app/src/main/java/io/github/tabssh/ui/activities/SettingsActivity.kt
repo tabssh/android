@@ -851,14 +851,21 @@ class AuditSettingsFragment : PreferenceFragmentCompat() {
                     .format(java.util.Date())
                 val filename = "audit_logs_$timestamp.csv"
 
+                // RFC 4180: double embedded quotes and quote any field holding
+                // a comma, quote, or line break — commands/output routinely do.
+                fun csvField(value: String): String {
+                    return if (value.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) {
+                        "\"" + value.replace("\"", "\"\"") + "\""
+                    } else value
+                }
                 val file = java.io.File(requireContext().getExternalFilesDir(null), filename)
                 withContext(Dispatchers.IO) {
                     file.writeText(buildString {
                         append("Timestamp,Connection,Session,EventType,Command,Output\n")
                         logs.forEach { log ->
-                            append("${log.timestamp},${log.connectionId},${log.sessionId},")
-                            append("${log.eventType},\"${log.command ?: ""}\",")
-                            append("\"${log.output ?: ""}\"\n")
+                            append("${log.timestamp},${csvField(log.connectionId)},${csvField(log.sessionId)},")
+                            append("${csvField(log.eventType)},${csvField(log.command ?: "")},")
+                            append("${csvField(log.output ?: "")}\n")
                         }
                     })
                 }

@@ -10,6 +10,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.ProgressBar
 import android.widget.Toast
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
@@ -79,6 +80,25 @@ class ComposeEditorActivity : TabSSHActivity() {
     /** Guards the compose lifecycle menu — repeated taps must not stack up/down runs. */
     private var actionRunning = false
 
+    // Baselines of the loaded (or last-saved) content, compared against the
+    // fields to decide whether leaving the screen needs a discard confirmation.
+    private var loadedName = ""
+    private var loadedCompose = ""
+    private var loadedEnv = ""
+
+    private fun refreshDirtyState() {
+        hasUnsavedChanges = editName.text?.toString().orEmpty() != loadedName ||
+            editCompose.text?.toString().orEmpty() != loadedCompose ||
+            editEnv.text?.toString().orEmpty() != loadedEnv
+    }
+
+    private fun resetDirtyBaseline() {
+        loadedName = editName.text?.toString().orEmpty()
+        loadedCompose = editCompose.text?.toString().orEmpty()
+        loadedEnv = editEnv.text?.toString().orEmpty()
+        hasUnsavedChanges = false
+    }
+
     /** False once the activity can no longer host a dialog or touch its views. */
     private fun isAlive(): Boolean = !isFinishing && !isDestroyed
 
@@ -123,8 +143,16 @@ class ComposeEditorActivity : TabSSHActivity() {
         }
 
         buttonPaste.setOnClickListener { pasteFromClipboard() }
-        buttonCancel.setOnClickListener { finish() }
+        buttonCancel.setOnClickListener { confirmDiscardIfNeeded { finish() } }
         buttonSave.setOnClickListener { save() }
+
+        // Leaving with pasted/edited-but-unsaved YAML or .env content prompts
+        // for confirmation, same as the other edit screens.
+        resetDirtyBaseline()
+        listOf(editName, editCompose, editEnv).forEach { edit ->
+            edit.doAfterTextChanged { refreshDirtyState() }
+        }
+        enableUnsavedChangesGuard()
 
         acquireSession()
     }
@@ -180,6 +208,7 @@ class ComposeEditorActivity : TabSSHActivity() {
             val env = current.transport.readRemoteFile("${loaded.remotePath}/.env")
             if (!isAlive()) return@launch
             env.valueOrNull()?.let { editEnv.setText(it) }
+            resetDirtyBaseline()
             progressBar.visibility = View.GONE
             invalidateOptionsMenu()
         }
@@ -199,6 +228,7 @@ class ComposeEditorActivity : TabSSHActivity() {
                 return@launch
             }
             editCompose.setText(compose.value)
+            resetDirtyBaseline()
             progressBar.visibility = View.GONE
             invalidateOptionsMenu()
         }
@@ -299,6 +329,7 @@ class ComposeEditorActivity : TabSSHActivity() {
             ).show()
             supportActionBar?.setTitle(R.string.container_stack_edit_title)
             editName.isEnabled = false
+            resetDirtyBaseline()
             invalidateOptionsMenu()
         }
     }
@@ -325,6 +356,7 @@ class ComposeEditorActivity : TabSSHActivity() {
                 this@ComposeEditorActivity,
                 getString(R.string.container_stack_saved, path), Toast.LENGTH_SHORT
             ).show()
+            resetDirtyBaseline()
         }
     }
 

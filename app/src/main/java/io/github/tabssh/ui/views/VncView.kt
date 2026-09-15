@@ -411,6 +411,17 @@ class VncView @JvmOverloads constructor(
                 firePointer(bx, by, lastButtonMask)
                 armContextMenuTimer(event.x, event.y)
             }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                // A second finger starts a pinch. ACTION_DOWN already sent a
+                // button press, so release it at the original press position —
+                // otherwise every pinch leaks a click-drag into the VM.
+                if (lastButtonMask != 0) {
+                    val (bx, by) = screenToBitmap(pressX, pressY)
+                    firePointer(bx, by, 0)
+                    lastButtonMask = 0
+                }
+                cancelContextMenuTimer()
+            }
             MotionEvent.ACTION_MOVE -> {
                 if (event.pointerCount == 1 && !scaleDetector.isInProgress) {
                     val (bx, by) = screenToBitmap(event.x, event.y)

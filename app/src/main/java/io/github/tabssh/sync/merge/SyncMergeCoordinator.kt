@@ -147,7 +147,25 @@ class SyncMergeCoordinator(private val context: Context) {
         val willDefer = conflicts.isNotEmpty() &&
             resolveConflicts == null &&
             !preferenceManager.isAutoResolveConflictsEnabled()
-        val conflictedIds = if (willDefer) conflicts.map { it.entityId }.toSet() else emptySet()
+        // Auto-resolve can only decide conflicts that are auto-resolvable AND
+        // have a clear timestamp winner (autoResolveConflicts returns nothing
+        // for host-key mismatches, DELETED_MODIFIED, and exact ties). Those
+        // leftovers are deferred exactly like manual-mode conflicts, so they
+        // must also be excluded from the apply below — otherwise the merge
+        // engine's timestamp winner overwrites data the user never chose.
+        val autoMode = conflicts.isNotEmpty() &&
+            resolveConflicts == null &&
+            preferenceManager.isAutoResolveConflictsEnabled()
+        val autoUnresolvable = if (autoMode) {
+            conflicts.filter { !it.autoResolvable || it.localTimestamp == it.remoteTimestamp }
+        } else {
+            emptyList()
+        }
+        val conflictedIds = if (willDefer) {
+            conflicts.map { it.entityId }.toSet()
+        } else {
+            autoUnresolvable.map { it.entityId }.toSet()
+        }
 
         // 7. Apply the auto-merged (non-conflicting) results. Preferences were
         //    already applied by applyAll above, so pass an empty map here.
@@ -178,10 +196,21 @@ class SyncMergeCoordinator(private val context: Context) {
                     }
                 }
                 // Headless with auto-resolve on: timestamp-based auto resolution.
+                // Conflicts it cannot decide are persisted and deferred to the
+                // next foreground open instead of being silently dropped.
                 preferenceManager.isAutoResolveConflictsEnabled() -> {
                     val resolutions = resolver.autoResolveConflicts(conflicts)
                     if (resolutions.isNotEmpty()) {
                         resolver.applyResolutions(resolutions, auto = true)
+                    }
+                    if (autoUnresolvable.isNotEmpty()) {
+                        deferredConflicts = autoUnresolvable.size
+                        pendingSyncConflictDao.insertAll(
+                            autoUnresolvable.map { PendingSyncConflictCodec.fromConflict(it) }
+                        )
+                        for (conflict in autoUnresolvable) {
+                            syncLogManager.recordDeferred(conflict)
+                        }
                     }
                 }
                 // Headless with auto-resolve off: never force-resolve in the

@@ -100,7 +100,13 @@ object PairingDecryptor {
         // Stage 2: KDF + AES-GCM decrypt
         val plaintext = try {
             val key = deriveKey(code, envelope.salt)
-            decrypt(envelope, key)
+            try {
+                decrypt(envelope, key)
+            } finally {
+                // SecretKeySpec copies the array, so the derived bytes can be
+                // wiped as soon as the cipher has been built and run
+                key.fill(0)
+            }
         } catch (e: AEADBadTagException) {
             return PairingResult.Failure(FailureReason.WRONG_CODE, "wrong code")
         } catch (e: Exception) {

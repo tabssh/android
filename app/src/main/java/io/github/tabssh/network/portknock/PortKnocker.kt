@@ -8,7 +8,7 @@ import kotlinx.coroutines.withContext
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
-import java.net.Socket
+import java.nio.channels.SocketChannel
 
 /**
  * Port knocker for opening firewall ports via knock sequences
@@ -82,10 +82,15 @@ class PortKnocker {
     }
     
     private fun knockTCP(address: InetAddress, port: Int): Boolean {
-        var socket: Socket? = null
+        var channel: SocketChannel? = null
         try {
-            socket = Socket()
-            socket.connect(java.net.InetSocketAddress(address, port), KNOCK_TIMEOUT_MS)
+            // knockd only inspects the SYN — a blocking connect used to stall
+            // 2s per DROPped port, overrunning typical knockd seq_timeout on a
+            // 3-4 port sequence. A non-blocking connect emits the SYN in the
+            // connect() syscall itself; the handshake result is irrelevant.
+            channel = SocketChannel.open()
+            channel.configureBlocking(false)
+            channel.connect(java.net.InetSocketAddress(address, port))
             return true
         } catch (e: Exception) {
             Logger.d("PortKnocker", "TCP knock on port $port: ${e.message}")
@@ -93,7 +98,7 @@ class PortKnocker {
             return true
         } finally {
             try {
-                socket?.close()
+                channel?.close()
             } catch (e: Exception) {
                 // Ignore
             }

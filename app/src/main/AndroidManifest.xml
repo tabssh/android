@@ -640,10 +640,13 @@
             android:exported="false" />
 
         <!-- Widget Configuration Activity -->
+        <!-- exported=true is required: the launcher (a separate app) starts
+             this activity via APPWIDGET_CONFIGURE when the widget is added;
+             exported=false makes adding the widget throw SecurityException -->
         <activity
             android:name=".widget.WidgetConfigActivity"
             android:label="@string/activity_label_configure_widget"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
             </intent-filter>
