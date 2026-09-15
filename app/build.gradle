@@ -286,6 +286,18 @@ android {
         }
     }
 
+    // MigrationTest drives Room's MigrationTestHelper, which loads the
+    // exported schema JSON for each version out of the androidTest APK's
+    // assets. room.schemaLocation (see the ksp block) only writes those
+    // files to $projectDir/schemas — it does not package them — so without
+    // this the helper fails every test with FileNotFoundException on
+    // TabSSHDatabase/<version>.json.
+    sourceSets {
+        androidTest {
+            assets.srcDirs += files("$projectDir/schemas")
+        }
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17

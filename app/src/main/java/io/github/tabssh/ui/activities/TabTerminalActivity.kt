@@ -181,6 +181,12 @@ class TabTerminalActivity : TabSSHActivity() {
         const val EXTRA_FORCE_NEW = "force_new"
         // Preference key that persists whether the custom function-key bar is visible.
         const val PREF_KEY_BAR_VISIBLE = "key_bar_visible"
+        // Set when the user explicitly shows the bar while a hardware keyboard is
+        // attached. Auto-hiding on HW-keyboard attach is only a default guess, and
+        // it guesses wrong on tablets whose cover/Bluetooth keyboard is reported
+        // even when the user still wants the CTRL/ALT/ESC row. This flag records
+        // that the user overruled the guess, so the bar stays put.
+        const val PREF_KEY_BAR_SHOW_WITH_HW = "key_bar_show_with_hw"
         // Set by LinkHandlerActivity for a tapped sftp:// link: once the transient
         // quick-connect profile embedded in this intent finishes connecting, open
         // SFTPActivity at this remote path instead of just landing on the terminal.
@@ -5262,6 +5268,44 @@ class TabTerminalActivity : TabSSHActivity() {
      * not a [ConsoleTab] — this also serves standalone [Tab.Vnc] tabs,
      * which are always RFB and have no [ConsoleTab] of their own.
      */
+    /**
+     * Push the bar's latched modifier down into the active graphical view, so
+     * keys typed on the hardware keyboard and characters committed by the IME
+     * get bracketed as well.
+     *
+     * [sendConsoleKeyPress] only covers the bar's own keys, and the bar has no
+     * letter keys — a CTRL chord on an RFB/SPICE tab is always completed on
+     * another keyboard, which reaches the view directly. Without this the
+     * modifier was silently dropped and the server saw a bare keystroke.
+     * Passing null disarms the view.
+     */
+    private fun armConsoleViewModifier(modifier: String?) {
+        when (val view = getActiveInputView()) {
+            is VncView -> {
+                view.setPendingModifierKeysym(modifier?.let { ConsoleKeyMapper.RFB_MODIFIER_KEYSYM[it] })
+                view.onModifierConsumed = { onConsoleModifierConsumed() }
+            }
+            is SpiceView -> {
+                view.setPendingModifierScancode(modifier?.let { ConsoleKeyMapper.SPICE_MODIFIER_SCANCODE[it] })
+                view.onModifierConsumed = { onConsoleModifierConsumed() }
+            }
+        }
+    }
+
+    /**
+     * Shared consume callback for both graphical views: keep the modifier
+     * armed while the bar is LOCKED, otherwise drop the latch and clear the
+     * bar highlight — the same contract a TerminalView gets.
+     */
+    private fun onConsoleModifierConsumed() {
+        if (binding.multiRowKeyboard.isModifierLocked()) {
+            armConsoleViewModifier(binding.multiRowKeyboard.getCurrentModifier())
+        } else {
+            consolePendingModifier = null
+            binding.multiRowKeyboard.clearModifier()
+        }
+    }
+
     private fun sendConsoleKeyPress(mode: ConsoleDisplayMode, key: KeyboardKey) {
         val inputView = getActiveInputView()
         val modifier = consolePendingModifier
@@ -5269,7 +5313,14 @@ class TabTerminalActivity : TabSSHActivity() {
         // consume the one-shot modifier and clear its bar visual.
         if (!binding.multiRowKeyboard.isModifierLocked()) {
             consolePendingModifier = null
-            if (modifier != null) binding.multiRowKeyboard.clearModifier()
+            if (modifier != null) {
+                binding.multiRowKeyboard.clearModifier()
+                // The view holds its own copy of the same latch for the
+                // hardware-keyboard and IME paths — disarm it too, or a
+                // character typed right after a bar key would be bracketed
+                // with a modifier the user already spent.
+                armConsoleViewModifier(null)
+            }
         }
 
         when (mode) {
@@ -5521,13 +5572,18 @@ class TabTerminalActivity : TabSSHActivity() {
      */
     private fun applyHardwareKeyboardPolicy() {
         val hw = hasHardwareKeyboard()
-        if (hw) {
-            binding.multiRowKeyboard.visibility = View.GONE
-        } else {
-            binding.multiRowKeyboard.visibility =
-                if (customKeyboardVisible) View.VISIBLE else View.GONE
-        }
-        Logger.d("TabTerminalActivity", "HW keyboard policy: hw=$hw pref=$customKeyboardVisible")
+        val showWithHw = app.preferencesManager.getBoolean(PREF_KEY_BAR_SHOW_WITH_HW, false)
+        // The auto-hide is a default, not a veto: an explicit show while a HW
+        // keyboard is attached sticks. Without this a tablet that reports its
+        // cover keyboard can never display the bar at all, which reads as the
+        // custom keyboard being broken rather than hidden on purpose.
+        val visible = customKeyboardVisible && (!hw || showWithHw)
+        binding.multiRowKeyboard.visibility = if (visible) View.VISIBLE else View.GONE
+        Logger.d(
+            "TabTerminalActivity",
+            "HW keyboard policy: hw=$hw pref=$customKeyboardVisible " +
+                "showWithHw=$showWithHw visible=$visible"
+        )
     }
 
     private fun openFileManager() {
@@ -6350,6 +6406,7 @@ class TabTerminalActivity : TabSSHActivity() {
             // showing. Latch the modifier here; sendConsoleKeyPress consumes
             // and clears it (and the bar visual) on the next non-modifier key.
             consolePendingModifier = modifier
+            armConsoleViewModifier(modifier)
         }
 
         // Defer the expensive layout population (button creation) to after
@@ -6636,12 +6693,23 @@ class TabTerminalActivity : TabSSHActivity() {
         customKeyboardVisible = false
         binding.multiRowKeyboard.visibility = View.GONE
         app.preferencesManager.setBoolean(PREF_KEY_BAR_VISIBLE, false)
+        // Hiding while a HW keyboard is attached retires any previous override:
+        // the user is back to agreeing with the auto-hide default.
+        if (hasHardwareKeyboard()) {
+            app.preferencesManager.setBoolean(PREF_KEY_BAR_SHOW_WITH_HW, false)
+        }
     }
 
     private fun showCustomKeyboardBar() {
         customKeyboardVisible = true
         binding.multiRowKeyboard.visibility = View.VISIBLE
         app.preferencesManager.setBoolean(PREF_KEY_BAR_VISIBLE, true)
+        // Showing while a HW keyboard is attached is the explicit override that
+        // applyHardwareKeyboardPolicy() honours on every later resume and config
+        // change — otherwise the next policy pass would immediately re-hide it.
+        if (hasHardwareKeyboard()) {
+            app.preferencesManager.setBoolean(PREF_KEY_BAR_SHOW_WITH_HW, true)
+        }
     }
 
 }

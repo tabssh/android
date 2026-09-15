@@ -556,8 +556,44 @@ class VncView @JvmOverloads constructor(
 
     // ── Keyboard ──────────────────────────────────────────────────────────
 
+    /**
+     * One-shot modifier latched from the custom keyboard bar, as an X11
+     * keysym, or null when none is armed. The bar's own keys are bracketed by
+     * TabTerminalActivity.sendConsoleKeyPress, but the bar carries no letter
+     * keys — "CTL then a" is always finished on the hardware keyboard or the
+     * IME, and both of those reach this view directly. Without this latch the
+     * 'a' arrived at the server with no ControlMask at all.
+     */
+    private var pendingModifierKeysym: Long? = null
+
+    /** Modifier currently held down for an in-flight key, awaiting its release. */
+    private var heldModifierKeysym: Long? = null
+
+    /**
+     * Invoked when a latched modifier is actually applied to a key, so the bar
+     * can clear its highlight (or re-arm it while locked). Mirrors
+     * TerminalView's onModifierConsumed contract.
+     */
+    var onModifierConsumed: (() -> Unit)? = null
+
+    /** Set/clear the pending one-shot modifier keysym (CTL, ALT, or SFT from the bar). */
+    fun setPendingModifierKeysym(keysym: Long?) {
+        pendingModifierKeysym = keysym
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         val keysym = androidKeyToKeysym(keyCode, event) ?: return super.onKeyDown(keyCode, event)
+        // Press the latched modifier before the key and hold it until the
+        // matching key-up, so the server sees a real chord rather than two
+        // unrelated keystrokes. Clearing the latch before the callback runs
+        // lets a locked bar re-arm it from inside onModifierConsumed.
+        val mod = pendingModifierKeysym
+        if (mod != null && heldModifierKeysym == null) {
+            pendingModifierKeysym = null
+            heldModifierKeysym = mod
+            onKeyEvent?.invoke(mod, true)
+            onModifierConsumed?.invoke()
+        }
         onKeyEvent?.invoke(keysym, true)
         return true
     }
@@ -565,7 +601,31 @@ class VncView @JvmOverloads constructor(
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
         val keysym = androidKeyToKeysym(keyCode, event) ?: return super.onKeyUp(keyCode, event)
         onKeyEvent?.invoke(keysym, false)
+        // Release the bracket only after the key it modified is back up.
+        heldModifierKeysym?.let {
+            heldModifierKeysym = null
+            onKeyEvent?.invoke(it, false)
+        }
         return true
+    }
+
+    /**
+     * Deliver IME-committed text, bracketed with the latched modifier when one
+     * is armed. The bracket wraps the whole commit: an IME delivers a chorded
+     * key as a single-character commit, and a multi-character commit
+     * (autocomplete, paste) has no sensible per-character chord.
+     */
+    private fun sendTextWithPendingModifier(text: String) {
+        val mod = pendingModifierKeysym
+        if (mod == null) {
+            onTextInput?.invoke(text)
+            return
+        }
+        pendingModifierKeysym = null
+        onKeyEvent?.invoke(mod, true)
+        onTextInput?.invoke(text)
+        onKeyEvent?.invoke(mod, false)
+        onModifierConsumed?.invoke()
     }
 
     /**
@@ -717,7 +777,7 @@ class VncView @JvmOverloads constructor(
                               EditorInfo.IME_FLAG_NO_EXTRACT_UI
         return object : BaseInputConnection(this, false) {
             override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
-                if (text.isNotEmpty()) onTextInput?.invoke(text.toString())
+                if (text.isNotEmpty()) sendTextWithPendingModifier(text.toString())
                 return true
             }
             override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {

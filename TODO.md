@@ -8,12 +8,28 @@
     opaque content:// URI with no file name or extension, so there is
     nothing for an intent filter to match without claiming every file
     type on the device.
-[?] fix custom keyboard not working for vnc/spice/rfb/etc, IE: control, pre, shift, etc.
-    No defect found in the code: ConsoleKeyMapper -> consolePendingModifier
-    -> sendConsoleKeyPress brackets each console key with its modifier for
-    both RFB (keysyms) and SPICE (PS/2 scancodes), and the keyboard bar is
-    activity-level, never gated on tab type. Needs on-device confirmation
-    (no adb/device access here) - reopen with a repro if it still happens.
+[x] fix custom keyboard not working for vnc/spice/rfb/etc, IE: control, pre, shift, etc.
+    Two separate defects, both found on the emulator against a real x11vnc
+    server (vnc:// deep link -> live RFB session, xev reading the remote
+    root window).
+    1. The modifier latch only ever reached the bar's own keys.
+       consolePendingModifier was read in exactly one place,
+       sendConsoleKeyPress, which handles bar key presses. The bar has no
+       letter keys, so a CTRL chord is always finished on the hardware
+       keyboard or the IME - and those reach VncView/SpiceView directly
+       via onKeyDown and commitText, neither of which consulted the latch.
+       Measured: tap CTL, then 'a' -> xev reported state 0x0, no
+       ControlMask. Terminal tabs were never affected; TerminalView has
+       had setPendingModifier since the start. Fixed by mirroring that
+       contract in both graphical views (pending modifier + held-modifier
+       bracket + onModifierConsumed), driven from the same bar latch.
+    2. applyHardwareKeyboardPolicy() hid the whole bar whenever
+       Configuration reported a hardware keyboard, with no way to overrule
+       it. The reporting device is a Samsung SM-X230 tablet, which reports
+       one whenever a cover/Bluetooth keyboard is paired, so the bar
+       vanished entirely. Fixed as V27 in TODO.AI.md.
+    Not covered on hardware: SPICE scancodes (no SPICE server stood up) -
+    the SPICE path is the same code shape as the verified RFB one.
 [x] update README.md, whats_new.md.
 [x] VPS/Domain Tracker UI/UX enhancements such as adding color, etc.
 [x] pasting into a vnc/spice/rfb loses characters/very stuttery.

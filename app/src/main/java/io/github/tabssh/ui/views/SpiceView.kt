@@ -588,8 +588,43 @@ class SpiceView @JvmOverloads constructor(
     // Releasing exactly what was pressed keeps the bracket symmetric.
     private val syntheticShiftKeys = mutableSetOf<Int>()
 
+    /**
+     * One-shot modifier latched from the custom keyboard bar, as a PS/2
+     * scancode, or null when none is armed. The bar's own keys are bracketed
+     * by TabTerminalActivity.sendConsoleKeyPress, but the bar carries no
+     * letter keys — "CTL then a" is always finished on the hardware keyboard
+     * or the IME, and both of those reach this view directly.
+     */
+    private var pendingModifierScancode: Int? = null
+
+    /** Modifier currently held down for an in-flight key, awaiting its release. */
+    private var heldModifierScancode: Int? = null
+
+    /**
+     * Invoked when a latched modifier is actually applied to a key, so the bar
+     * can clear its highlight (or re-arm it while locked). Mirrors
+     * TerminalView's onModifierConsumed contract.
+     */
+    var onModifierConsumed: (() -> Unit)? = null
+
+    /** Set/clear the pending one-shot modifier scancode (CTL, ALT, or SFT from the bar). */
+    fun setPendingModifierScancode(scancode: Int?) {
+        pendingModifierScancode = scancode
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         val t = SpiceKeyMap.translate(keyCode, event) ?: return super.onKeyDown(keyCode, event)
+        // Make the latched modifier before the key and hold it until the
+        // matching break, so the guest sees a real chord. Clearing the latch
+        // before the callback runs lets a locked bar re-arm it from inside
+        // onModifierConsumed.
+        val mod = pendingModifierScancode
+        if (mod != null && heldModifierScancode == null) {
+            pendingModifierScancode = null
+            heldModifierScancode = mod
+            onKeyEvent?.invoke(mod, true)
+            onModifierConsumed?.invoke()
+        }
         // A physically held Shift is already down on the guest via its own
         // KEYCODE_SHIFT_* event; synthesising a second one would release the
         // real modifier early when this key comes back up.
@@ -611,7 +646,31 @@ class SpiceView @JvmOverloads constructor(
         if (syntheticShiftKeys.remove(keyCode)) {
             onKeyEvent?.invoke(SpiceConstants.SC_LEFT_SHIFT, false)
         }
+        // Release the bracket only after the key it modified is back up.
+        heldModifierScancode?.let {
+            heldModifierScancode = null
+            onKeyEvent?.invoke(it, false)
+        }
         return true
+    }
+
+    /**
+     * Deliver IME-committed text, bracketed with the latched modifier when one
+     * is armed. The bracket wraps the whole commit: an IME delivers a chorded
+     * key as a single-character commit, and a multi-character commit
+     * (autocomplete, paste) has no sensible per-character chord.
+     */
+    private fun sendTextWithPendingModifier(text: String) {
+        val mod = pendingModifierScancode
+        if (mod == null) {
+            onTextInput?.invoke(text)
+            return
+        }
+        pendingModifierScancode = null
+        onKeyEvent?.invoke(mod, true)
+        onTextInput?.invoke(text)
+        onKeyEvent?.invoke(mod, false)
+        onModifierConsumed?.invoke()
     }
 
     /**
@@ -665,7 +724,7 @@ class SpiceView @JvmOverloads constructor(
                               EditorInfo.IME_FLAG_NO_EXTRACT_UI
         return object : BaseInputConnection(this, false) {
             override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
-                if (text.isNotEmpty()) onTextInput?.invoke(text.toString())
+                if (text.isNotEmpty()) sendTextWithPendingModifier(text.toString())
                 return true
             }
             override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
