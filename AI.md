@@ -408,7 +408,8 @@ Getting code correct on the first try is much harder than iterating with feedbac
 | Compile + lint + JVM unit-test gate | `make check` |
 | Debug APKs → `./binaries/` | `make build` |
 | Release APKs → `./releases/` (local verification only) | `make release` |
-| Unit tests | `make test` |
+| Unit tests + instrumented + UI tests (device/emulator reachable) | `make test` |
+| Instrumented tests only (`app/src/androidTest/`) | `make instrumented` |
 | Install universal APK to device | `make install` |
 | Clean | `make clean` |
 
@@ -430,7 +431,7 @@ Getting code correct on the first try is much harder than iterating with feedbac
 ## Commit workflow (required on every commit)
 
 1. `git status --porcelain` + `git diff --stat` — see exactly what changed.
-2. **Run `make check`** — compile + `ktlint`/`detekt` lint (PART 0 → Kotlin Style & Idioms) + device-free JVM unit tests; the mandatory pre-commit gate (instrumented tests need a device/emulator the build host generally lacks — that is why the gate is `check`, not `test`). Run `make test` when an emulator/device is reachable and the change touches security-critical code (crypto, storage, transport, exported components) — and always before tagging a release.
+2. **Run `make check`** — compile + `ktlint`/`detekt` lint (PART 0 → Kotlin Style & Idioms) + device-free JVM unit tests; the mandatory pre-commit gate (instrumented tests need a device/emulator the build host generally lacks — that is why the gate is `check`, not `test`). Run `make test` when an emulator/device is reachable and the change touches security-critical code (crypto, storage, transport, exported components) — and always before tagging a release; `make test` runs `make instrumented` (`connectedDebugAndroidTest`) plus the UI-driver suite whenever a device is reachable, and `make instrumented` runs the instrumented suite on its own.
 3. **Changelog gate** — user-visible change ⇒ `CHANGELOG.md` (and the in-app what's-new asset if present) staged in the same commit.
 4. Write `.git/COMMIT_MESS` from the diff — every changed file described; never from memory.
 5. Re-read `COMMIT_MESS` against the diff; rewrite if anything is missing.
@@ -1074,7 +1075,7 @@ Include only if the IDEA.md `## Applicability` matrix declares `backup_sync: yes
 
 - New behavior ships with a test that fails before and passes after.
 - Room migrations are tested with `MigrationTestHelper` against the committed schema JSON.
-- Instrumented tests are **required** — not best-effort — before tagging a release and for changes touching crypto, storage, transport, or exported components whenever an emulator/device is reachable (PART 1 commit workflow).
+- Instrumented tests are **required** — not best-effort — before tagging a release and for changes touching crypto, storage, transport, or exported components whenever an emulator/device is reachable (PART 1 commit workflow). Run them with `make instrumented` (or `make test`, which includes it); start an emulator first with `scripts/android-emulator.sh start` — the target fails loudly when no device is reachable rather than silently reporting success on a suite it never ran.
 
 ## Emulator management
 

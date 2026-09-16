@@ -55,7 +55,7 @@ BLUE := \033[0;34m
 YELLOW := \033[1;33m
 NC := \033[0m
 
-.PHONY: help check build release test test-install install clean image fetch-mosh fetch-tor fetch-spice fetch-fonts adb-reconnect logs _ensure-image
+.PHONY: help check build release test instrumented test-install install clean image fetch-mosh fetch-tor fetch-spice fetch-fonts adb-reconnect logs _ensure-image
 
 .DEFAULT_GOAL := help
 
@@ -85,13 +85,33 @@ release: _ensure-image fetch-mosh fetch-tor fetch-spice fetch-fonts ## Build rel
 	@echo -e "$(GREEN)✅ Done$(NC)"
 	@ls -lh $(RELEASES)/*.apk 2>/dev/null
 
-test: check ## Everything in check, plus UI tests when a device is reachable
+test: check ## Everything in check, plus instrumented + UI tests when a device is reachable
 	@SERIAL=$$($(ADB) devices 2>/dev/null | awk '/\tdevice$$/{print $$1; exit}'); \
 	if [ -n "$$SERIAL" ]; then \
+		$(MAKE) --no-print-directory instrumented; \
 		scripts/ui-test.sh --serial "$$SERIAL" $(if $(TEST),$(TEST),all); \
 	else \
-		echo -e "$(YELLOW)No device/emulator reachable — instrumented tests skipped$(NC)"; \
+		echo -e "$(YELLOW)No device/emulator reachable — instrumented and UI tests skipped$(NC)"; \
 	fi
+
+# PART 11 calls instrumented tests required — not best-effort — before tagging
+# a release, so this target fails loudly when nothing is reachable rather than
+# reporting success on a suite it never ran. adb runs inside the container
+# (PART 4: never on the dev host) and reaches the host's adb server over
+# --network host; ANDROID_SERIAL overrides the auto-detected device.
+instrumented: _ensure-image ## Run instrumented tests (app/src/androidTest/) on a reachable emulator/device
+	@echo -e "$(BLUE)🧪 Instrumented tests...$(NC)"
+	@$(DOCKER_RUN) --network host -e ANDROID_SERIAL $(BUILD_IMAGE) sh -c '$(GRADLE_SEED); \
+		ADB="$$ANDROID_HOME/platform-tools/adb"; \
+		SERIAL="$${ANDROID_SERIAL:-$$("$$ADB" devices | sed -n "s/[[:space:]]*device$$//p" | head -1)}"; \
+		if [ -z "$$SERIAL" ]; then \
+			echo "No device/emulator reachable — start one with scripts/android-emulator.sh"; \
+			exit 1; \
+		fi; \
+		echo "Device: $$SERIAL"; \
+		ANDROID_SERIAL="$$SERIAL" ./gradlew connectedDebugAndroidTest --no-daemon --build-cache' \
+		&& echo -e "$(GREEN)✅ Instrumented tests passed$(NC)" \
+		|| { echo -e "$(YELLOW)❌ Instrumented tests failed$(NC)"; exit 1; }
 
 fetch-mosh: ## Fetch mosh-client binaries from latest GH release
 	@scripts/fetch-mosh-binaries.sh

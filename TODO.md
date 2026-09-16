@@ -39,8 +39,10 @@
        that tab, and sends; long-press changes it. Measured: tmux -> xev
        logs Control_L down, space with state 0x4, both releases; after
        switching to screen -> Control_L + x with state 0x4.
-    Not covered on hardware: SPICE scancodes (no SPICE server stood up) -
-    the SPICE path is the same code shape as the verified RFB one.
+    SPICE verified too, against a qemu SPICE server with input tracing:
+    CTL + '-' -> ctrl down, minus down/up, ctrl up; SFT + '-' -> the same
+    shape with shift; PRE -> picker, then ctrl + spc down/up for tmux, and
+    a repeat tap sends the chord with no dialog.
 [x] update README.md, whats_new.md.
 [x] VPS/Domain Tracker UI/UX enhancements such as adding color, etc.
 [x] pasting into a vnc/spice/rfb loses characters/very stuttery.
