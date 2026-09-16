@@ -138,9 +138,14 @@ class GroupManagementActivity : TabSSHActivity() {
         if (groups.isEmpty()) {
             emptyStateLayout.visibility = View.VISIBLE
             recyclerView.visibility = View.GONE
+            // The empty state carries its own "create group" button — leaving
+            // the FAB up too puts two add buttons on one screen for the same
+            // action.
+            fab.visibility = View.GONE
         } else {
             emptyStateLayout.visibility = View.GONE
             recyclerView.visibility = View.VISIBLE
+            fab.visibility = View.VISIBLE
         }
     }
 

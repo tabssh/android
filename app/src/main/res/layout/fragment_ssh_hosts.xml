@@ -75,4 +75,18 @@
 
     </LinearLayout>
 
+    <!-- Each Hosts sub-tab owns its own add action (VNC/Telnet do the same).
+         MainActivity no longer hosts a shared FAB — one that stayed visible
+         across every sub-tab created an SSH host from the VNC/Telnet/Active
+         lists and stacked a second + on top of theirs. -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fab_add_ssh_host"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="@dimen/space_lg"
+        android:contentDescription="@string/add_connection"
+        app:srcCompat="@drawable/ic_add"
+        style="@style/Widget.TabSSH.FloatingActionButton" />
+
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -189,8 +189,16 @@ class VpsHostEditActivity : TabSSHActivity() {
             return
         }
 
-        val renewalRaw = editRenewalRaw.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
-        val billingCycle = editBillingCycle.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
+        val renewalEntered = editRenewalRaw.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
+        val cycleEntered = editBillingCycle.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
+        // The renewal field is a date, the cycle is its own field. Typing
+        // "April 30, 2027, triennially" into the date lifts the cadence into
+        // the cycle field instead of storing it twice; an explicit entry in
+        // the cycle field still wins, and text with no recognizable cycle
+        // word is stored exactly as typed.
+        val renewalParts = VpsMarkdownImportExport.splitRenewal(renewalEntered)
+        val renewalRaw = renewalParts.dateText
+        val billingCycle = cycleEntered ?: renewalParts.billingCycle
         // Best-effort parse the free-text renewal field to a concrete date so
         // the renewal reminder worker has something to compare against, same
         // as VpsMarkdownImportExport.parse() does for imported rows — passing

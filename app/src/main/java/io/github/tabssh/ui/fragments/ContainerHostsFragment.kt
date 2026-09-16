@@ -176,9 +176,14 @@ class ContainerHostsFragment : Fragment() {
                     if (list.isEmpty()) {
                         swipeRefresh.visibility = View.GONE
                         emptyState.visibility = View.VISIBLE
+                        // The empty state carries its own "add your first host"
+                        // button — leaving the FAB up too puts two add buttons
+                        // on one screen for the same action.
+                        fabAdd.visibility = View.GONE
                     } else {
                         swipeRefresh.visibility = View.VISIBLE
                         emptyState.visibility = View.GONE
+                        fabAdd.visibility = View.VISIBLE
                         // This fragment is sub-tab 0 of a ViewPager2 nested
                         // inside the main-tab ViewPager2: it can be inflated
                         // while its page still has a stale/zero measured
@@ -211,6 +216,9 @@ class ContainerHostsFragment : Fragment() {
                 swipeRefresh.visibility = View.GONE
                 emptyState.visibility = View.GONE
                 errorState.visibility = View.VISIBLE
+                // The error state has no add button of its own, so the FAB
+                // stays available.
+                fabAdd.visibility = View.VISIBLE
                 textError.text = getString(
                     R.string.container_error_detail_fmt, ContainerText.display(e.message)
                 )

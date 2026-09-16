@@ -46,6 +46,7 @@ class TabSSHApplication : Application() {
         private const val KEY_OCI_ACCOUNT_SECRETS_MIGRATED = "oci_account_secrets_migrated"
         private const val KEY_CONTAINER_HOST_ALIASES_MIGRATED = "container_host_aliases_migrated"
         private const val KEY_CONTAINER_NAMING_MIGRATED = "container_naming_migrated"
+        private const val KEY_VPS_RENEWAL_CYCLE_MIGRATED = "vps_renewal_cycle_migrated"
         private const val KEY_LEGACY_CONTAINER_WORK_CANCELLED = "legacy_docker_update_work_cancelled"
         private const val LEGACY_KEY_PREFIX_KEY_ENABLED = "terminal_prefix_key_enabled"
         private const val KEY_DEFAULT_SNIPPETS_SEEDED = "default_snippets_seeded"
@@ -320,6 +321,7 @@ class TabSSHApplication : Application() {
             migrateProfileKeyedOciSecrets()
             migrateContainerHostAliases()
             migrateDockerNamingToContainer()
+            migrateVpsRenewalCycles()
             seedDefaultSnippets()
             // Re-register periodic sync work on every cold start. WorkManager's
             // DB survives process death but can be wiped by reinstall or system
@@ -382,6 +384,25 @@ class TabSSHApplication : Application() {
             return
         }
         prefs.edit().putBoolean(KEY_INLINE_PROXY_ROUTE_MIGRATED, true).apply()
+    }
+
+    /**
+     * One-time VPS tracker migration: split the billing cycle out of every
+     * stored renewal text so the tracker shows "April 30, 2027" instead of
+     * "April 30, 2027, triennially" (see VpsRenewalCycleMigration). Rows with
+     * no recognizable cycle word are left untouched, so this is a no-op for
+     * anyone whose renewal fields are plain dates.
+     */
+    private suspend fun migrateVpsRenewalCycles() {
+        val prefs = getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_VPS_RENEWAL_CYCLE_MIGRATED, false)) return
+        try {
+            io.github.tabssh.storage.database.VpsRenewalCycleMigration.run(database)
+        } catch (e: Exception) {
+            Logger.e("TabSSHApplication", "VPS renewal cycle migration failed", e)
+            return
+        }
+        prefs.edit().putBoolean(KEY_VPS_RENEWAL_CYCLE_MIGRATED, true).apply()
     }
 
     /**

@@ -11,7 +11,6 @@ import androidx.activity.OnBackPressedCallback
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import io.github.tabssh.R
@@ -42,7 +41,6 @@ class MainActivity : TabSSHActivity() {
     private lateinit var app: TabSSHApplication
     private lateinit var viewPager: ViewPager2
     private lateinit var tabLayout: TabLayout
-    private lateinit var fab: FloatingActionButton
     private lateinit var pagerAdapter: MainPagerAdapter
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -83,7 +81,6 @@ class MainActivity : TabSSHActivity() {
         // Setup ViewPager2 + TabLayout
         viewPager = findViewById(R.id.view_pager)
         tabLayout = findViewById(R.id.tab_layout)
-        fab = findViewById(R.id.fab_add)
 
         pagerAdapter = MainPagerAdapter(this)
         viewPager.adapter = pagerAdapter
@@ -127,40 +124,10 @@ class MainActivity : TabSSHActivity() {
             }
         })
 
-        // FAB — only active on the Hosts tab (tab 1); all other tabs manage
-        // their own in-content add actions or are read-only.
-        fab.setOnClickListener {
-            if (viewPager.currentItem == MainTab.HOSTS) {
-                startActivity(Intent(this, ConnectionEditActivity::class.java))
-            }
-        }
-
-        // Update FAB visibility based on current tab
-        viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
-            override fun onPageSelected(position: Int) {
-                super.onPageSelected(position)
-                // Show FAB only on Hosts tab — Auth's sub-tabs each have
-                // their own in-content add action, and Infra is read-only.
-                fab.visibility = if (position == MainTab.HOSTS) {
-                    android.view.View.VISIBLE
-                } else {
-                    android.view.View.GONE
-                }
-            }
-        })
-
-        // Set initial FAB visibility based on the CURRENT tab (the
-        // OnPageChangeCallback above only fires on subsequent changes;
-        // setCurrentItem during cold-start runs BEFORE the callback is
-        // registered, so without this the FAB stayed hidden until the
-        // user manually swiped away and back to the Hosts tab — even
-        // though the empty-state UI literally says "Tap the + button to
-        // add your first SSH server").
-        fab.visibility = if (viewPager.currentItem == MainTab.HOSTS) {
-            android.view.View.VISIBLE
-        } else {
-            android.view.View.GONE
-        }
+        // No activity-level FAB: every tab (and every Hosts sub-tab) owns its
+        // own add action in its own fragment. A shared FAB scoped to the outer
+        // tab could not tell SSH from VNC/Telnet/Active, so it stacked a second
+        // + over theirs and created an SSH host from lists that hold neither.
 
         // Optional exit-confirmation prompt controlled by the user-visible
         // `confirm_exit` preference. Closing an open drawer is handled by

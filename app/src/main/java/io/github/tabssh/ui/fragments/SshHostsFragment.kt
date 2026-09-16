@@ -30,6 +30,7 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.storage.database.entities.Identity
+import io.github.tabssh.ui.activities.ConnectionEditActivity
 import io.github.tabssh.ui.activities.TabTerminalActivity
 import io.github.tabssh.ui.adapters.ConnectionAdapter
 import io.github.tabssh.ui.adapters.GroupedConnectionAdapter
@@ -109,6 +110,10 @@ class SshHostsFragment : Fragment() {
         toolbar = view.findViewById(R.id.toolbar_connections)
         recyclerView = view.findViewById(R.id.recycler_connections)
         emptyLayout = view.findViewById(R.id.layout_empty_connections)
+
+        view.findViewById<View>(R.id.fab_add_ssh_host).setOnClickListener {
+            startActivity(android.content.Intent(requireContext(), ConnectionEditActivity::class.java))
+        }
 
         setupToolbar()
         setupRecyclerView()

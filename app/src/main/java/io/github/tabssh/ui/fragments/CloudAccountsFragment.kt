@@ -218,7 +218,8 @@ class CloudAccountsFragment : Fragment() {
         recycler.layoutManager = LinearLayoutManager(requireContext())
         recycler.adapter = adapter
 
-        view.findViewById<FloatingActionButton>(R.id.fab_add).setOnClickListener {
+        val fabAdd = view.findViewById<FloatingActionButton>(R.id.fab_add)
+        fabAdd.setOnClickListener {
             showAddAccountDialog()
         }
         view.findViewById<View>(R.id.button_add_first).setOnClickListener {
@@ -232,6 +233,10 @@ class CloudAccountsFragment : Fragment() {
                     adapter.submitList(accounts)
                     recycler.visibility    = if (accounts.isEmpty()) View.GONE  else View.VISIBLE
                     emptyState.visibility  = if (accounts.isEmpty()) View.VISIBLE else View.GONE
+                    // The empty state carries its own "add account" button —
+                    // leaving the FAB up too puts two add buttons on one
+                    // screen for the same action.
+                    fabAdd.visibility      = if (accounts.isEmpty()) View.GONE else View.VISIBLE
                 }
             }
         }

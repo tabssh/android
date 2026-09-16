@@ -165,9 +165,14 @@ class HypervisorsFragment : Fragment() {
                     if (hypervisors.isEmpty()) {
                         recyclerView.visibility = View.GONE
                         emptyState.visibility = View.VISIBLE
+                        // The empty state carries its own "add your first
+                        // hypervisor" button — leaving the FAB up too puts two
+                        // add buttons on one screen for the same action.
+                        fabAdd.visibility = View.GONE
                     } else {
                         recyclerView.visibility = View.VISIBLE
                         emptyState.visibility = View.GONE
+                        fabAdd.visibility = View.VISIBLE
                     }
 
                     progressBar.visibility = View.GONE
@@ -189,6 +194,9 @@ class HypervisorsFragment : Fragment() {
                 recyclerView.visibility = View.GONE
                 emptyState.visibility = View.GONE
                 errorState.visibility = View.VISIBLE
+                // The error state has no add button of its own, so the FAB
+                // stays available.
+                fabAdd.visibility = View.VISIBLE
                 textError.text = message
             }
         }

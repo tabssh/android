@@ -60,14 +60,4 @@
         android:layout_height="match_parent"
         app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fab_add"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="@dimen/space_md"
-        android:contentDescription="@string/add_connection"
-        app:srcCompat="@drawable/ic_add"
-        style="@style/Widget.TabSSH.FloatingActionButton" />
-
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
