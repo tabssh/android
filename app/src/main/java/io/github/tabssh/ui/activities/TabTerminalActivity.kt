@@ -627,6 +627,9 @@ class TabTerminalActivity : TabSSHActivity() {
                 // close — closeConsoleTab no longer does its own UI work.
                 Handler(Looper.getMainLooper()).post {
                     if (isFinishing || isDestroyed) return@post
+                    // The PRE key's remembered multiplexer is tab-scoped —
+                    // drop it with the tab so a recycled id can't inherit it.
+                    consoleMultiplexerType.remove(tab.tabId)
                     // Auto-stop an in-flight video recording if the closed
                     // tab is the one being recorded — see stopVideoRecording.
                     if (tab.tabId == recordingTabId) {
@@ -3148,7 +3151,13 @@ class TabTerminalActivity : TabSSHActivity() {
         // user is no longer looking at.
         dismissMultiplexerDialogs()
         if (tab == null) {
-            updatePrefixKeyVisual(null)
+            // A graphical tab has no SSHTab to observe, but it may still have a
+            // multiplexer the user picked for it — keep the PRE key green so
+            // the remembered choice stays visible after a tab switch.
+            val consoleType = tabManager.getActiveTabSealed()
+                ?.takeIf { activeGraphicalDisplayMode() != null }
+                ?.let { consoleMultiplexerType[it.tabId] }
+            updatePrefixKeyVisual(consoleType)
             return
         }
         multiplexerObserverJob = lifecycleScope.launch {
@@ -5306,6 +5315,126 @@ class TabTerminalActivity : TabSSHActivity() {
         }
     }
 
+    /**
+     * The multiplexer type the user picked for a graphical tab, keyed by
+     * [Tab.tabId].
+     *
+     * A framebuffer carries pixels, not a shell, so the detection loop that
+     * feeds [SSHTab.activeMultiplexerType] has nothing to probe on an RFB/
+     * SPICE tab. The user picks the type once per tab instead, and PRE reuses
+     * that choice for the rest of the tab's life. Tab-scoped rather than
+     * persisted per connection because the guest's multiplexer is a property
+     * of whatever is running inside the console session, not of the host.
+     */
+    private val consoleMultiplexerType = mutableMapOf<String, String>()
+
+    /**
+     * PRE on a graphical tab: send the configured prefix to the guest as a
+     * real modifier + key chord.
+     *
+     * The terminal path sends [PrefixParser.parse]'s byte encoding straight
+     * into the pty, which RFB/SPICE cannot carry — they carry keysyms and PS/2
+     * scancodes respectively, so "C-b" has to travel as Control_L + 'b'
+     * ([PrefixParser.parseChord]). There is also no latch here: a graphical
+     * prefix is a single self-contained chord, and the command key that
+     * follows it is typed on the guest's own keyboard focus, so nothing needs
+     * to stay armed between taps.
+     */
+    private fun handleConsolePrefixKey(mode: ConsoleDisplayMode) {
+        val tabId = tabManager.getActiveTabSealed()?.tabId
+        if (tabId == null) {
+            Logger.d("TabTerminalActivity", "PREFIX key: no active tab")
+            return
+        }
+        val type = consoleMultiplexerType[tabId]
+        if (type == null) {
+            // First tap on this tab — nothing to send yet; ask which
+            // multiplexer the guest is running, then send with that answer.
+            showConsoleMultiplexerPickerDialog(mode)
+            return
+        }
+        sendConsolePrefixChord(mode, type)
+    }
+
+    /**
+     * Ask which multiplexer the graphical tab's guest is running and remember
+     * the answer for that tab.
+     *
+     * [showMultiplexerPickerDialog] cannot serve this: it early-returns on
+     * `tabManager.getActiveTab()` (SSH-only, always null here) and persists
+     * through `tab.profile.id`, which a graphical tab has no equivalent of.
+     * "Auto (detect)" is likewise omitted — there is no shell to detect
+     * against. When [sendAfterPick] is set the picked prefix fires
+     * immediately, so the tap that opened the picker is not swallowed.
+     */
+    private fun showConsoleMultiplexerPickerDialog(sendAfterPick: ConsoleDisplayMode?) {
+        val tabId = tabManager.getActiveTabSealed()?.tabId ?: return
+        val prefs = app.preferencesManager
+        val labels = arrayOf(
+            getString(R.string.terminal_pre_key_picker_tmux, prefixToShortLabel(prefs.getMultiplexerPrefix("tmux"))),
+            getString(R.string.terminal_pre_key_picker_zellij, prefixToShortLabel(prefs.getMultiplexerPrefix("zellij"))),
+            getString(R.string.terminal_pre_key_picker_screen, prefixToShortLabel(prefs.getMultiplexerPrefix("screen")))
+        )
+        val keys = arrayOf("tmux", "zellij", "screen")
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.terminal_pre_key_multiplexer_title)
+            .setItems(labels) { _, which ->
+                val type = keys[which]
+                consoleMultiplexerType[tabId] = type
+                updatePrefixKeyVisual(type)
+                Logger.i("TabTerminalActivity", "PREFIX key: console multiplexer set to $type")
+                sendAfterPick?.let { sendConsolePrefixChord(it, type) }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /**
+     * Send [type]'s configured prefix as a modifier-down, key, modifier-up
+     * chord over the active graphical view. A literal prefix (no modifier,
+     * e.g. a backtick) is sent as a bare character.
+     */
+    private fun sendConsolePrefixChord(mode: ConsoleDisplayMode, type: String) {
+        val notation = resolvePrefixBinding(null, type)
+        val chord = PrefixParser.parseChord(notation)
+        if (chord == null) {
+            Logger.w("TabTerminalActivity", "PREFIX key: failed to parse prefix '$notation'")
+            return
+        }
+        val inputView = getActiveInputView()
+        when (mode) {
+            ConsoleDisplayMode.RFB -> {
+                val vncView = inputView as? VncView
+                if (vncView == null) {
+                    Logger.d("TabTerminalActivity", "PREFIX key: no active VncView")
+                    return
+                }
+                val modKeysym = chord.modifier?.let { ConsoleKeyMapper.RFB_MODIFIER_KEYSYM[it] }
+                if (modKeysym != null) vncView.sendKey(modKeysym, true)
+                vncView.sendChar(chord.key)
+                if (modKeysym != null) vncView.sendKey(modKeysym, false)
+            }
+            ConsoleDisplayMode.SPICE -> {
+                val spiceView = inputView as? SpiceView
+                if (spiceView == null) {
+                    Logger.d("TabTerminalActivity", "PREFIX key: no active SpiceView")
+                    return
+                }
+                val modScancode = chord.modifier?.let { ConsoleKeyMapper.SPICE_MODIFIER_SCANCODE[it] }
+                if (modScancode != null) spiceView.sendScancode(modScancode, true)
+                if (!spiceView.sendChar(chord.key)) {
+                    Logger.d("TabTerminalActivity", "PREFIX key: '${chord.key}' has no scancode — dropped")
+                }
+                if (modScancode != null) spiceView.sendScancode(modScancode, false)
+            }
+            ConsoleDisplayMode.TEXT -> {
+                // Unreachable — callers resolve the mode through
+                // activeGraphicalDisplayMode(), which never returns TEXT.
+            }
+        }
+        Logger.d("TabTerminalActivity", "PREFIX key: sent $type ($notation) as chord")
+    }
+
     private fun sendConsoleKeyPress(mode: ConsoleDisplayMode, key: KeyboardKey) {
         val inputView = getActiveInputView()
         val modifier = consolePendingModifier
@@ -6361,6 +6490,13 @@ class TabTerminalActivity : TabSSHActivity() {
                 // it is the only way to reach the Enable/Disable toggle inside
                 // showMultiplexerPickerDialog() and re-enable the key.
                 Logger.d("TabTerminalActivity", "PREFIX key long-press — opening multiplexer picker override")
+                // A graphical tab has no SSHTab, so the SSH picker below would
+                // early-return — long-press is how the user corrects the type
+                // they remembered for this tab. No latch exists here to cancel.
+                if (activeGraphicalDisplayMode() != null) {
+                    showConsoleMultiplexerPickerDialog(null)
+                    return@setOnKeyLongClickListener
+                }
                 // Cancel any armed latch first so a stale prefix doesn't
                 // fire after the user picks a (possibly different) type —
                 // mirrors the second-tap disarm path above.
@@ -6504,6 +6640,17 @@ class TabTerminalActivity : TabSSHActivity() {
                 toggleRecording()
             }
             "PREFIX" -> {
+                // Graphical tabs never reach the logic below: getActiveTab()
+                // only resolves Tab.Ssh, so `tab` is null, every branch that
+                // sends the prefix is guarded by getActiveTerminalView(), and
+                // showMultiplexerPickerDialog() early-returns on the same
+                // call — PRE was a silent no-op on RFB/SPICE while the key
+                // visual still updated.
+                val consoleMode = activeGraphicalDisplayMode()
+                if (consoleMode != null) {
+                    handleConsolePrefixKey(consoleMode)
+                    return
+                }
                 val tab = tabManager.getActiveTab()
                 val type = tab?.activeMultiplexerType
                 if (prefixArmed) {

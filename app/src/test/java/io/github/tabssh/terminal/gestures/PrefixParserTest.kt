@@ -59,4 +59,46 @@ class PrefixParserTest {
         assertNull(PrefixParser.parse("C-"))
         assertNull(PrefixParser.parse("nonsense"))
     }
+
+    @Test
+    fun `ctrl notations parse to a control chord`() {
+        listOf("C-a", "^a", "^A", "Ctrl-A", "Ctrl+a").forEach { notation ->
+            assertEquals(PrefixParser.Chord("CTL", 'a'), PrefixParser.parseChord(notation), notation)
+        }
+        assertEquals(PrefixParser.Chord("CTL", 'b'), PrefixParser.parseChord("C-b"))
+    }
+
+    @Test
+    fun `ctrl space parses to a control space chord`() {
+        assertEquals(PrefixParser.Chord("CTL", ' '), PrefixParser.parseChord("C-Space"))
+    }
+
+    @Test
+    fun `alt notations parse to an alt chord`() {
+        assertEquals(PrefixParser.Chord("ALT", 'b'), PrefixParser.parseChord("M-b"))
+        assertEquals(PrefixParser.Chord("ALT", 'b'), PrefixParser.parseChord("Alt+B"))
+    }
+
+    @Test
+    fun `literal prefixes parse to a modifierless chord`() {
+        assertEquals(PrefixParser.Chord(null, '`'), PrefixParser.parseChord("`"))
+    }
+
+    @Test
+    fun `hex notation round trips back to its chord`() {
+        // parse() encodes Ctrl+B as 0x02; parseChord has to recover the letter,
+        // because RFB/SPICE carry a Control_L + 'b' chord, never the raw byte.
+        assertEquals(PrefixParser.Chord("CTL", 'b'), PrefixParser.parseChord("0x02"))
+        assertEquals(PrefixParser.Chord("CTL", 'b'), PrefixParser.parseChord("\\x02"))
+        assertEquals(PrefixParser.Chord("CTL", ' '), PrefixParser.parseChord("0x00"))
+        assertEquals(PrefixParser.Chord(null, '`'), PrefixParser.parseChord("0x60"))
+    }
+
+    @Test
+    fun `invalid notation has no chord`() {
+        assertNull(PrefixParser.parseChord(""))
+        assertNull(PrefixParser.parseChord("C-"))
+        assertNull(PrefixParser.parseChord("nonsense"))
+        assertNull(PrefixParser.parseChord("0xFF"))
+    }
 }

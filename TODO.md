@@ -28,6 +28,17 @@
        it. The reporting device is a Samsung SM-X230 tablet, which reports
        one whenever a cover/Bluetooth keyboard is paired, so the bar
        vanished entirely. Fixed as V27 in TODO.AI.md.
+    3. PRE did nothing at all on a graphical tab. PREFIX is an action key,
+       so it never routed to the console; its sends are all guarded by
+       getActiveTerminalView() (null there); and the picker it falls back
+       to early-returns on getActiveTab(), which only resolves SSH tabs.
+       Fixed as V30: PRE now sends the prefix as a real modifier+key chord
+       (RFB carries keysyms, SPICE scancodes - neither can carry the
+       control byte a pty gets). A framebuffer cannot be probed, so the
+       first tap asks which multiplexer the guest runs, remembers it for
+       that tab, and sends; long-press changes it. Measured: tmux -> xev
+       logs Control_L down, space with state 0x4, both releases; after
+       switching to screen -> Control_L + x with state 0x4.
     Not covered on hardware: SPICE scancodes (no SPICE server stood up) -
     the SPICE path is the same code shape as the verified RFB one.
 [x] update README.md, whats_new.md.
