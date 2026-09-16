@@ -48,7 +48,9 @@ class DatabaseChangeObserver(private val context: Context) {
             "compose_stacks",
             "single_container_configs",
             "container_auto_update_policies",
-            "telnet_hosts"
+            "telnet_hosts",
+            "domains",
+            "vps_hosts"
         )
     }
 
