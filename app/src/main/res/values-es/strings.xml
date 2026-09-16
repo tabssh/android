@@ -33,8 +33,6 @@
     <string name="import_key">📥 Importar Clave</string>
     
     <!-- Terminal activity -->
-    <string name="new_tab">➕ Nueva Pestaña</string>
-    <string name="close_tab">❌ Cerrar Pestaña</string>
     <string name="tab_menu">📑 Menú de Pestañas</string>
     <string name="show_keyboard">⌨️ Mostrar Teclado</string>
     <string name="hide_keyboard">⌨️ Ocultar Teclado</string>

@@ -406,6 +406,19 @@ class MultiHostDashboardActivity : TabSSHActivity() {
         return true
     }
 
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        // The Ungrouped header and the empty state each carry their own
+        // "add hosts" button for exactly this action, so the overflow entry
+        // only earns its place when neither of them is on screen — which is
+        // what happens once every host sits in a named group.
+        // The menu can be prepared before onCreate() has built the adapter.
+        val inlineAddOnScreen = ::adapter.isInitialized && adapter.items.any {
+            it is DashboardItem.UngroupedHeader || it is DashboardItem.EmptyState
+        }
+        menu.findItem(R.id.menu_add_hosts)?.isVisible = !inlineAddOnScreen
+        return super.onPrepareOptionsMenu(menu)
+    }
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
         R.id.menu_add_hosts  -> { showHostPicker(targetGroupId = UNGROUPED_ID); true }
         else                 -> super.onOptionsItemSelected(item)
@@ -1033,6 +1046,9 @@ class MultiHostDashboardActivity : TabSSHActivity() {
         val diff = DiffUtil.calculateDiff(ItemDiffCallback(adapter.items, newItems))
         adapter.items = newItems
         diff.dispatchUpdatesTo(adapter)
+        // Whether the inline add buttons are on screen just changed, so the
+        // overflow entry has to be re-evaluated against the new list.
+        invalidateOptionsMenu()
     }
 
     // ── RecyclerView adapter ──────────────────────────────────────────────────

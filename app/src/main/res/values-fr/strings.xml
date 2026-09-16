@@ -33,8 +33,6 @@
     <string name="import_key">📥 Importer une Clé</string>
     
     <!-- Terminal activity -->
-    <string name="new_tab">➕ Nouvel Onglet</string>
-    <string name="close_tab">❌ Fermer l\'Onglet</string>
     <string name="tab_menu">📑 Menu des Onglets</string>
     <string name="show_keyboard">⌨️ Afficher le Clavier</string>
     <string name="hide_keyboard">⌨️ Masquer le Clavier</string>

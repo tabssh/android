@@ -486,14 +486,6 @@
             android:label="@string/activity_label_host_detail"
             android:parentActivityName=".ui.activities.MultiHostDashboardActivity" />
 
-        <!-- Wave 5.1 — Cloud accounts (DigitalOcean inventory etc.) -->
-        <activity
-            android:name=".ui.activities.CloudAccountsActivity"
-            android:exported="false"
-            android:label="@string/activity_label_cloud_accounts"
-            android:parentActivityName=".ui.activities.MainActivity"
-            android:windowSoftInputMode="adjustResize" />
-
         <!-- Cloud account per-instance manager (start/stop/connect) -->
         <activity
             android:name=".ui.activities.CloudAccountManagerActivity"

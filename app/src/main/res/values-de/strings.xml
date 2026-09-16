@@ -33,8 +33,6 @@
     <string name="import_key">📥 Schlüssel importieren</string>
     
     <!-- Terminal activity -->
-    <string name="new_tab">➕ Neuer Tab</string>
-    <string name="close_tab">❌ Tab schließen</string>
     <string name="tab_menu">📑 Tab-Menü</string>
     <string name="show_keyboard">⌨️ Tastatur anzeigen</string>
     <string name="hide_keyboard">⌨️ Tastatur ausblenden</string>

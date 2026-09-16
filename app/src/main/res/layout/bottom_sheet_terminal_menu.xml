@@ -195,6 +195,94 @@
             app:iconPadding="@dimen/space_12dp"
             app:iconSize="@dimen/icon_size_action" />
 
+        <!-- These six actions used to live only in terminal_menu.xml, which
+             nothing ever inflated (the app bar is gone:true in this screen),
+             so they were unreachable. This sheet is the terminal's only menu,
+             so they belong here. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_broadcast_targets"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/button_height"
+            android:paddingStart="@dimen/space_md"
+            android:gravity="start|center_vertical"
+            android:text="@string/terminal_menu_broadcast_choose_targets"
+            app:icon="@drawable/ic_select_all"
+            app:iconGravity="start"
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_split_horizontal"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/button_height"
+            android:paddingStart="@dimen/space_md"
+            android:gravity="start|center_vertical"
+            android:text="@string/terminal_menu_split_horizontal"
+            app:icon="@drawable/ic_arrow_down"
+            app:iconGravity="start"
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_save_workspace"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/button_height"
+            android:paddingStart="@dimen/space_md"
+            android:gravity="start|center_vertical"
+            android:text="@string/terminal_menu_save_workspace"
+            app:icon="@drawable/ic_save"
+            app:iconGravity="start"
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_open_workspace"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/button_height"
+            android:paddingStart="@dimen/space_md"
+            android:gravity="start|center_vertical"
+            android:text="@string/terminal_menu_open_workspace"
+            app:icon="@drawable/ic_folder"
+            app:iconGravity="start"
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_record_macro"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/button_height"
+            android:paddingStart="@dimen/space_md"
+            android:gravity="start|center_vertical"
+            android:text="@string/terminal_menu_record_macro"
+            app:icon="@drawable/ic_radio_checked"
+            app:iconGravity="start"
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_replay_macro"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/button_height"
+            android:paddingStart="@dimen/space_md"
+            android:gravity="start|center_vertical"
+            android:text="@string/terminal_menu_replay_macro"
+            app:icon="@drawable/ic_play"
+            app:iconGravity="start"
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_port_forwarding"
             style="@style/Widget.Material3.Button.TextButton"

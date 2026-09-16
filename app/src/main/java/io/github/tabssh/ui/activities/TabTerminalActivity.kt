@@ -1156,6 +1156,42 @@ class TabTerminalActivity : TabSSHActivity() {
             }
         }
 
+        view.findViewById<MaterialButton>(R.id.btn_broadcast_targets)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                showBroadcastTargetsDialog()
+            }
+
+        view.findViewById<MaterialButton>(R.id.btn_split_horizontal)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                showSplitConnectionPicker()
+            }
+
+        view.findViewById<MaterialButton>(R.id.btn_save_workspace)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                showSaveWorkspaceDialog()
+            }
+
+        view.findViewById<MaterialButton>(R.id.btn_open_workspace)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                showOpenWorkspaceDialog()
+            }
+
+        view.findViewById<MaterialButton>(R.id.btn_record_macro)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                toggleMacroRecording()
+            }
+
+        view.findViewById<MaterialButton>(R.id.btn_replay_macro)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                showMacroPicker()
+            }
+
         view.findViewById<MaterialButton>(R.id.btn_port_forwarding)
             ?.setOnClickListener {
                 bottomSheet.dismiss()
@@ -3928,51 +3964,10 @@ class TabTerminalActivity : TabSSHActivity() {
         }
     }
 
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            R.id.action_new_tab -> {
-                // Open connection selector for new tab
-                showConnectionSelector()
-                true
-            }
-            R.id.action_close_tab -> {
-                closeCurrentTab()
-                true
-            }
-            R.id.action_settings -> {
-                startActivity(Intent(this, SettingsActivity::class.java))
-                true
-            }
-            R.id.action_disconnect_all -> {
-                disconnectAllTabs()
-                true
-            }
-            R.id.action_toggle_recording -> {
-                toggleRecording(item)
-                true
-            }
-            R.id.action_port_forwarding -> {
-                openPortForwarding()
-                true
-            }
-            R.id.action_view_transcripts -> {
-                startActivity(Intent(this, RecordingsActivity::class.java))
-                true
-            }
-            R.id.action_command_palette -> { showCommandPalette(); true }
-            R.id.action_quick_switcher -> { showQuickSwitcher(); true }
-            R.id.action_broadcast_input -> { showBroadcastTargetsDialog(); true }
-            R.id.action_save_workspace -> { showSaveWorkspaceDialog(); true }
-            R.id.action_open_workspace -> { showOpenWorkspaceDialog(); true }
-            R.id.action_history_palette -> { showHistoryPalette(); true }
-            R.id.action_split_bottom -> { showSplitConnectionPicker(); true }
-            R.id.action_unsplit -> { closeSplitPane(); true }
-            R.id.action_mosh_handoff -> { showMoshHandoff(); true }
-            R.id.action_macro_record -> { toggleMacroRecording(); true }
-            R.id.action_macro_replay -> { showMacroPicker(); true }
-            else -> super.onOptionsItemSelected(item)
-        }
-    }
+    // No options menu: this screen's app bar is `visibility="gone"`, so the
+    // bottom sheet (`bottom_sheet_terminal_menu.xml`) is the terminal's only
+    // menu. The old `terminal_menu.xml` was never inflated — every action it
+    // declared is now either in the sheet or on a keyboard shortcut.
     
     /**
      * Wave 2.10 — Per-tab cache of remote shell history. Lazy-fetched on
