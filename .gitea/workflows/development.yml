@@ -1,0 +1,304 @@
+name: Development Build
+
+# ─────────────────────────────────────────────────────────────────────────
+# RELEASE CHANNEL: development (AI.md PART 12/13)
+#
+# Ported from .github/workflows/development.yml — see beta.yml's header
+# comment for the GitHub-only pieces that differ here (attest-build-
+# provenance skipped; `tea` used to publish/delete the rolling release
+# instead of gh).
+# ─────────────────────────────────────────────────────────────────────────
+
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+concurrency:
+  group: dev-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  ensure-build-image:
+    name: Ensure build image
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.pull.outputs.image }}
+    steps:
+    - id: pull
+      name: Pull build image (fail fast if missing)
+      run: |
+        IMAGE="casjaysdev/android:latest"
+        if ! docker pull "$IMAGE"; then
+          echo "::error::Build image $IMAGE could not be pulled from Docker Hub."
+          exit 1
+        fi
+        echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+  build-devel:
+    name: Build Development APKs
+    needs: ensure-build-image
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.ensure-build-image.outputs.image }}
+      options: "--user 0:0"
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      with:
+        fetch-depth: 0
+
+    - name: Trust the checked-out workspace inside the container
+      run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Gradle cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          gradle-${{ runner.os }}-
+
+    - name: Decode and setup keystore
+      env:
+        KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
+        KEYSTORE_PW: ${{ secrets.KEYSTORE_PASSWORD }}
+      run: |
+        # Every channel — development, beta, release — is a release: every
+        # APK it produces must chain to the one escrowed production key, so
+        # missing KEYSTORE_BASE64/KEYSTORE_PASSWORD hard-fail here exactly
+        # as they do in beta.yml/release.yml (AI.md PART 13). No
+        # ephemeral/generated fallback keystore.
+        if [ -z "$KEYSTORE_B64" ]; then
+          echo "::error::KEYSTORE_BASE64 secret is not set. Add it under repo Settings > Actions > Secrets." >&2
+          exit 1
+        fi
+        if [ -z "$KEYSTORE_PW" ]; then
+          echo "::error::KEYSTORE_BASE64 is set but KEYSTORE_PASSWORD is missing. Add it under repo Settings > Actions > Secrets." >&2
+          exit 1
+        fi
+        printf '%s' "$KEYSTORE_B64" | base64 -d > keystore.jks
+        echo "Keystore decoded and ready"
+
+    - name: Capture build identity
+      id: version
+      run: |
+        # Length pinned to 7 (--short=7) to match app/build.gradle's
+        # resolveGitCommit — plain --short grows past 7 chars once the
+        # repo needs more to stay unambiguous.
+        COMMIT_HASH=$(git rev-parse --short=7 HEAD)
+        BUILD_EPOCH=$(date -u +%s)
+        echo "COMMIT_HASH=${COMMIT_HASH}" >> "$GITHUB_OUTPUT"
+        echo "BUILD_EPOCH=${BUILD_EPOCH}" >> "$GITHUB_OUTPUT"
+        echo "RELEASE_TITLE=devel-${COMMIT_HASH}" >> "$GITHUB_OUTPUT"
+        echo "Building development release: devel-${COMMIT_HASH}"
+
+    - name: Fetch latest mosh-client binaries
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        chmod +x scripts/fetch-mosh-binaries.sh
+        TABSSH_REPO="tabssh/android" scripts/fetch-mosh-binaries.sh
+
+    - name: Fetch latest SPICE native libraries
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        chmod +x scripts/fetch-spice-libs.sh
+        TABSSH_REPO="tabssh/android" scripts/fetch-spice-libs.sh
+
+    - name: Fetch latest tor binaries
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        chmod +x scripts/fetch-tor-binaries.sh
+        TABSSH_REPO="tabssh/android" scripts/fetch-tor-binaries.sh
+
+    - name: Fetch Nerd Fonts
+      run: |
+        chmod +x scripts/fetch-fonts.sh
+        scripts/fetch-fonts.sh
+
+    - name: Verify bundled mosh/SPICE/Tor/fonts are present
+      run: |
+        for abi in arm64-v8a armeabi-v7a x86_64 x86; do
+          for lib in libmosh-client.so libtabssh_native.so libtor.so; do
+            if [ ! -f "app/src/main/jniLibs/$abi/$lib" ]; then
+              echo "::error::$lib missing for $abi — every published build must bundle mosh, SPICE and Tor for all ABIs" >&2
+              exit 1
+            fi
+          done
+        done
+        FONTS=$(ls app/src/main/assets/fonts/*.ttf 2>/dev/null | wc -l)
+        if [ "$FONTS" -lt 9 ]; then
+          echo "::error::Only $FONTS of 9 bundled Nerd Fonts present in assets/fonts" >&2
+          exit 1
+        fi
+
+    - name: Build devel-variant APKs
+      run: ./gradlew assembleDevel --no-daemon
+      env:
+        SOURCE_DATE_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+    - name: Generate SBOM
+      run: ./gradlew :app:cyclonedxBom --no-daemon
+
+    - name: Stage release assets
+      env:
+        COMMIT_HASH: ${{ steps.version.outputs.COMMIT_HASH }}
+        BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+      run: |
+        mkdir -p dist
+        cp app/build/outputs/apk/devel/tabssh-android-*.apk dist/
+        cp app/build/outputs/mapping/devel/mapping.txt dist/mapping.txt
+
+        printf 'version: %s\ncommit: %s\nbuild_epoch: %s\n' \
+          "${COMMIT_HASH}" "$(git rev-parse HEAD)" "${BUILD_EPOCH}" > dist/version.txt
+
+        git archive --format=tar.gz -o "dist/tabssh-${COMMIT_HASH}-source.tar.gz" HEAD
+
+        SBOM=$(find app/build \( -name '*.json' -a -path '*cyclonedx*' \) -o -name 'bom.json' | head -1)
+        if [ -z "$SBOM" ]; then
+          echo "::error::CycloneDX SBOM not found under app/build" >&2
+          exit 1
+        fi
+        cp "$SBOM" dist/tabssh-sbom.cdx.json
+
+        cd dist
+        sha256sum -- * > sha256.txt.tmp && mv sha256.txt.tmp sha256.txt
+        sha512sum -- * | grep -v -- ' sha256.txt$' > sha512.txt.tmp && mv sha512.txt.tmp sha512.txt
+        ls -lh
+
+    # No attest-build-provenance step — GitHub-only (AI.md PART 13).
+
+    - name: Generate release notes
+      env:
+        RELEASE_TITLE: ${{ steps.version.outputs.RELEASE_TITLE }}
+        COMMIT_HASH: ${{ steps.version.outputs.COMMIT_HASH }}
+      run: |
+        BUILD_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+        cat > RELEASE_NOTES_DEV.md << EOF
+        # TabSSH Development Build
+
+        **This is a development/testing build - Not for production use**
+
+        ## Build Information
+
+        - **Build:** ${RELEASE_TITLE}
+        - **Commit:** ${COMMIT_HASH}
+        - **Built:** ${BUILD_DATE}
+        - **Variant:** devel (release configuration + Debug Log enabled, not debuggable)
+
+        EOF
+
+        cat >> RELEASE_NOTES_DEV.md << 'EOF'
+        ## Downloads
+
+        - **tabssh-android-universal.apk** - Recommended (works on all devices)
+        - **tabssh-android-arm64.apk** - Modern ARM 64-bit devices
+        - **tabssh-android-arm.apk** - Older ARM 32-bit devices
+        - **tabssh-android-amd64.apk** - x86_64 (emulators, Chromebooks)
+        - **tabssh-android-x86.apk** - x86 32-bit (older emulators)
+
+        Checksums: see `sha256.txt` / `sha512.txt` release assets.
+
+        ## Recent Commits
+
+        EOF
+        git log --abbrev=7 --pretty=format:"- %s (%h)" -10 >> RELEASE_NOTES_DEV.md
+        cat >> RELEASE_NOTES_DEV.md << 'EOF'
+
+
+        ## Important Notes
+
+        - This is a **development build** for testing purposes
+        - May contain bugs or unfinished features
+        - Replaces the previous development build
+        - Use official releases for stable versions
+
+        ## Reporting Issues
+
+        Found a bug? Report it: https://github.com/tabssh/android/issues
+        EOF
+
+    - name: Delete existing development release
+      continue-on-error: true
+      env:
+        GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        GITEA_REPOSITORY: ${{ github.repository }}
+      run: |
+        # Rolling release: delete + recreate on every run (AI.md PART 13)
+        tea release delete --repo "$GITEA_REPOSITORY" --token "$GITEA_TOKEN" development || echo "No existing development release found"
+        git push origin :refs/tags/development || echo "No development tag to delete"
+
+    - name: Create development release
+      env:
+        GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        GITEA_REPOSITORY: ${{ github.repository }}
+        RELEASE_TITLE: ${{ steps.version.outputs.RELEASE_TITLE }}
+      run: |
+        for attempt in 1 2 3; do
+          git tag -d development >/dev/null 2>&1 || true
+          if tea release create \
+            --repo "$GITEA_REPOSITORY" \
+            --token "$GITEA_TOKEN" \
+            --tag development \
+            --commit "$(git rev-parse HEAD)" \
+            --title "$RELEASE_TITLE" \
+            --note "$(cat RELEASE_NOTES_DEV.md)" \
+            --prerelease \
+            dist/*; then
+            echo "Release created on attempt $attempt"
+            exit 0
+          fi
+          echo "Release attempt $attempt failed"
+          tea release delete --repo "$GITEA_REPOSITORY" --token "$GITEA_TOKEN" development || true
+          git push origin :refs/tags/development || true
+          sleep 15
+        done
+        echo "::error::Release creation failed after 3 attempts"
+        exit 1
+
+    - name: Build summary
+      env:
+        RELEASE_TITLE: ${{ steps.version.outputs.RELEASE_TITLE }}
+        COMMIT_HASH: ${{ steps.version.outputs.COMMIT_HASH }}
+      run: |
+        {
+          echo "## Development Build Complete!"
+          echo ""
+          echo "**Build:** ${RELEASE_TITLE}"
+          echo "**Commit:** ${COMMIT_HASH}"
+          echo ""
+          echo "### Release assets:"
+          echo ""
+          for f in dist/*; do
+            SIZE=$(du -h "$f" | cut -f1)
+            echo "- \`$(basename "$f")\` ($SIZE)"
+          done
+          echo ""
+          echo "### Download:"
+          echo ""
+          echo "https://${{ github.server_url }}/${{ github.repository }}/releases/tag/development"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Fix workspace permissions for host post-steps
+      if: always()
+      run: chmod -R a+rX "$GITHUB_WORKSPACE"

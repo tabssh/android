@@ -1,0 +1,249 @@
+name: Beta Release
+
+# ─────────────────────────────────────────────────────────────────────────
+# RELEASE CHANNEL: beta (AI.md PART 12/13)
+#
+# Ported from .github/workflows/beta.yml — Forgejo Actions uses the GitHub
+# Actions runner (act), so the syntax is identical except for two points
+# where GitHub-specific tooling has no Forgejo equivalent:
+#   - `actions/attest-build-provenance` is skipped (GitHub only, AI.md
+#     PART 13 "Release channels" table).
+#   - Release publishing uses the `tea` CLI (shipped in
+#     casjaysdev/android:latest) instead of `gh`/softprops/action-gh-release.
+#
+# The mosh/SPICE/Tor binaries fetched below are published as GitHub
+# releases regardless of which provider builds this repo (mosh-binaries.yml,
+# spice-libs.yml, tor-binaries.yml are GitHub-only workflows) — so the
+# fetch steps still reach out to github.com and need a `GH_TOKEN` secret
+# configured on this Forgejo instance for API rate limits, separate from the
+# `FORGEJO_TOKEN` used to publish this provider's own release below.
+# ─────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    tags:
+      - '*beta*'
+  workflow_dispatch: {}
+
+concurrency:
+  group: beta-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  ensure-build-image:
+    name: Ensure build image
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.pull.outputs.image }}
+    steps:
+    - id: pull
+      name: Pull build image (fail fast if missing)
+      run: |
+        IMAGE="casjaysdev/android:latest"
+        if ! docker pull "$IMAGE"; then
+          echo "::error::Build image $IMAGE could not be pulled from Docker Hub."
+          exit 1
+        fi
+        echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+  build-beta:
+    name: Build Beta Release
+    needs: ensure-build-image
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.ensure-build-image.outputs.image }}
+      # Numeric 0:0 needs no /etc/passwd lookup — the runner and
+      # actions/checkout post-job cleanup exec into the container as a
+      # user the image may not define, which flakes the job otherwise.
+      options: "--user 0:0"
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+    - name: Trust the checked-out workspace inside the container
+      run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Gradle cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          gradle-${{ runner.os }}-
+
+    - name: Decode and setup keystore
+      env:
+        KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
+        KEYSTORE_PW: ${{ secrets.KEYSTORE_PASSWORD }}
+      run: |
+        # Read secrets from the environment, never via expression
+        # interpolation inside the script body — interpolation splices the
+        # value into the generated shell text, where a newline or quote in
+        # the secret becomes executable script.
+        if [ -z "$KEYSTORE_B64" ]; then
+          echo "::error::KEYSTORE_BASE64 secret is not set. Add it under repo Settings > Actions > Secrets." >&2
+          exit 1
+        fi
+        if [ -z "$KEYSTORE_PW" ]; then
+          echo "::error::KEYSTORE_BASE64 is set but KEYSTORE_PASSWORD is missing. Add it under repo Settings > Actions > Secrets." >&2
+          exit 1
+        fi
+        printf '%s' "$KEYSTORE_B64" | base64 -d > keystore.jks
+        echo "Keystore decoded and ready"
+
+    - name: Capture build identity
+      id: version
+      run: |
+        TAG_NAME=${GITHUB_REF#refs/tags/}
+        BUILD_EPOCH=$(date -u +%s)
+        echo "TAG_NAME=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+        echo "BUILD_EPOCH=${BUILD_EPOCH}" >> "$GITHUB_OUTPUT"
+        echo "Building beta release: ${TAG_NAME}"
+
+    - name: Fetch latest mosh-client binaries
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        chmod +x scripts/fetch-mosh-binaries.sh
+        TABSSH_REPO="tabssh/android" scripts/fetch-mosh-binaries.sh
+
+    - name: Fetch latest SPICE native libraries
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        chmod +x scripts/fetch-spice-libs.sh
+        TABSSH_REPO="tabssh/android" scripts/fetch-spice-libs.sh
+
+    - name: Fetch latest tor binaries
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        chmod +x scripts/fetch-tor-binaries.sh
+        TABSSH_REPO="tabssh/android" scripts/fetch-tor-binaries.sh
+
+    - name: Fetch Nerd Fonts
+      run: |
+        chmod +x scripts/fetch-fonts.sh
+        scripts/fetch-fonts.sh
+
+    - name: Verify bundled mosh/SPICE/Tor/fonts are present
+      run: |
+        for abi in arm64-v8a armeabi-v7a x86_64 x86; do
+          for lib in libmosh-client.so libtabssh_native.so libtor.so; do
+            if [ ! -f "app/src/main/jniLibs/$abi/$lib" ]; then
+              echo "::error::$lib missing for $abi — every published build must bundle mosh, SPICE and Tor for all ABIs" >&2
+              exit 1
+            fi
+          done
+        done
+        FONTS=$(ls app/src/main/assets/fonts/*.ttf 2>/dev/null | wc -l)
+        if [ "$FONTS" -lt 9 ]; then
+          echo "::error::Only $FONTS of 9 bundled Nerd Fonts present in assets/fonts" >&2
+          exit 1
+        fi
+
+    - name: Build release-variant APKs
+      run: ./gradlew assembleRelease --no-daemon
+      env:
+        SOURCE_DATE_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+    - name: Generate SBOM
+      run: ./gradlew :app:cyclonedxBom --no-daemon
+
+    - name: Stage release assets
+      env:
+        TAG_NAME: ${{ steps.version.outputs.TAG_NAME }}
+        BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+      run: |
+        mkdir -p dist
+        cp app/build/outputs/apk/release/tabssh-android-*.apk dist/
+        cp app/build/outputs/mapping/release/mapping.txt dist/mapping.txt
+
+        printf 'version: %s\ncommit: %s\nbuild_epoch: %s\n' \
+          "${TAG_NAME}" "$(git rev-parse HEAD)" "${BUILD_EPOCH}" > dist/version.txt
+
+        git archive --format=tar.gz -o "dist/tabssh-${TAG_NAME}-source.tar.gz" HEAD
+
+        SBOM=$(find app/build \( -name '*.json' -a -path '*cyclonedx*' \) -o -name 'bom.json' | head -1)
+        if [ -z "$SBOM" ]; then
+          echo "::error::CycloneDX SBOM not found under app/build" >&2
+          exit 1
+        fi
+        cp "$SBOM" dist/tabssh-sbom.cdx.json
+
+        cd dist
+        sha256sum -- * > sha256.txt.tmp && mv sha256.txt.tmp sha256.txt
+        sha512sum -- * | grep -v -- ' sha256.txt$' > sha512.txt.tmp && mv sha512.txt.tmp sha512.txt
+        ls -lh
+
+    # No attest-build-provenance step here — that action is GitHub-only
+    # (AI.md PART 13 release-channel skeleton); Forgejo has no equivalent
+    # provenance-attestation service to publish to.
+
+    - name: Generate release notes
+      env:
+        TAG_NAME: ${{ steps.version.outputs.TAG_NAME }}
+      run: |
+        {
+          echo "# TabSSH ${TAG_NAME} — Beta Release"
+          echo ""
+          echo "**Beta build for testing — expect rough edges. Use stable releases for production.**"
+          echo ""
+          echo "## Downloads"
+          echo "- **tabssh-android-universal.apk** - Recommended (works on all devices)"
+          echo "- **tabssh-android-arm64.apk** - Modern ARM 64-bit devices"
+          echo "- **tabssh-android-arm.apk** - Older ARM 32-bit devices"
+          echo "- **tabssh-android-amd64.apk** - x86_64 (emulators, Chromebooks)"
+          echo "- **tabssh-android-x86.apk** - x86 32-bit (older emulators)"
+          echo ""
+          echo "Checksums: see \`sha256.txt\` / \`sha512.txt\` release assets."
+          echo ""
+        } > RELEASE_NOTES_BETA.md
+        cat CHANGELOG.md >> RELEASE_NOTES_BETA.md
+
+    - name: Create beta release
+      env:
+        FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+        FORGEJO_REPOSITORY: ${{ github.repository }}
+        TAG_NAME: ${{ steps.version.outputs.TAG_NAME }}
+      run: |
+        # `tea` (shipped in casjaysdev/android:latest) is the provider CLI
+        # for Forgejo, matching gh/glab on the other providers (AI.md
+        # PART 12 "Rules"). Auth is ephemeral per-invocation via --token so
+        # no persistent login state is written to the runner.
+        for attempt in 1 2 3; do
+          if tea release create \
+            --repo "$FORGEJO_REPOSITORY" \
+            --token "$FORGEJO_TOKEN" \
+            --tag "$TAG_NAME" \
+            --title "TabSSH $TAG_NAME (beta)" \
+            --note "$(cat RELEASE_NOTES_BETA.md)" \
+            --prerelease \
+            dist/*; then
+            echo "Release created on attempt $attempt"
+            exit 0
+          fi
+          echo "Release attempt $attempt failed"
+          tea release delete --repo "$FORGEJO_REPOSITORY" --token "$FORGEJO_TOKEN" "$TAG_NAME" || true
+          sleep 15
+        done
+        echo "::error::Release creation failed after 3 attempts"
+        exit 1
+
+    - name: Fix workspace permissions for host post-steps
+      if: always()
+      run: chmod -R a+rX "$GITHUB_WORKSPACE"

@@ -1,0 +1,274 @@
+name: Production Release
+
+# ─────────────────────────────────────────────────────────────────────────
+# RELEASE CHANNEL: stable (AI.md PART 12/13)
+#
+# Ported from .github/workflows/release.yml — see beta.yml's header comment
+# for the two GitHub-only pieces that differ here (attest-build-provenance
+# skipped; `tea` used to publish instead of gh/softprops/action-gh-release).
+# The community-notification step is also GitHub-issue-tracker-agnostic
+# (Matrix/Mastodon), so it ports unchanged.
+# ─────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  ensure-build-image:
+    name: Ensure build image
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.pull.outputs.image }}
+    steps:
+    - id: pull
+      name: Pull build image (fail fast if missing)
+      run: |
+        IMAGE="casjaysdev/android:latest"
+        if ! docker pull "$IMAGE"; then
+          echo "::error::Build image $IMAGE could not be pulled from Docker Hub."
+          exit 1
+        fi
+        echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: Build & Publish Release
+    needs: ensure-build-image
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.ensure-build-image.outputs.image }}
+      options: "--user 0:0"
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+    - name: Trust the checked-out workspace inside the container
+      run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Gradle cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          gradle-${{ runner.os }}-
+
+    - name: Decode and setup keystore
+      env:
+        KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
+        KEYSTORE_PW: ${{ secrets.KEYSTORE_PASSWORD }}
+      run: |
+        if [ -z "$KEYSTORE_B64" ]; then
+          echo "::error::KEYSTORE_BASE64 secret is not set. Add it under repo Settings > Actions > Secrets." >&2
+          exit 1
+        fi
+        if [ -z "$KEYSTORE_PW" ]; then
+          echo "::error::KEYSTORE_BASE64 is set but KEYSTORE_PASSWORD is missing. Add it under repo Settings > Actions > Secrets." >&2
+          exit 1
+        fi
+        printf '%s' "$KEYSTORE_B64" | base64 -d > keystore.jks
+        echo "Keystore decoded and ready"
+
+    - name: Run all tests
+      run: ./gradlew test --no-daemon
+
+    - name: Run security scan
+      env:
+        NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+      # Aggregate, not Analyze: the plugin is applied to the root project,
+      # which declares no dependencies of its own — dependencyCheckAnalyze
+      # therefore scanned an empty configuration set and failBuildOnCVSS
+      # could never fire. Aggregate walks :app as well. Suppressions are
+      # read from .github/dependency-check-suppressions.xml — the same
+      # path every provider's workflow references (AI.md PART 12 "Rules"),
+      # not duplicated per provider.
+      run: ./gradlew dependencyCheckAggregate --no-daemon
+
+    - name: Verify test coverage
+      run: ./gradlew jacocoTestReport jacocoTestCoverageVerification --no-daemon
+
+    - name: Capture build identity
+      id: version
+      run: |
+        TAG_NAME=${GITHUB_REF#refs/tags/}
+        VERSION=${TAG_NAME#v}
+        BUILD_EPOCH=$(date -u +%s)
+        echo "TAG_NAME=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+        echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
+        echo "BUILD_EPOCH=${BUILD_EPOCH}" >> "$GITHUB_OUTPUT"
+        echo "Building release for tag: ${TAG_NAME} (version ${VERSION})"
+
+    - name: Fetch latest mosh-client binaries
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        chmod +x scripts/fetch-mosh-binaries.sh
+        TABSSH_REPO="tabssh/android" scripts/fetch-mosh-binaries.sh
+
+    - name: Fetch latest SPICE native libraries
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        chmod +x scripts/fetch-spice-libs.sh
+        TABSSH_REPO="tabssh/android" scripts/fetch-spice-libs.sh
+
+    - name: Fetch latest tor binaries
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        chmod +x scripts/fetch-tor-binaries.sh
+        TABSSH_REPO="tabssh/android" scripts/fetch-tor-binaries.sh
+
+    - name: Fetch Nerd Fonts
+      run: |
+        chmod +x scripts/fetch-fonts.sh
+        scripts/fetch-fonts.sh
+
+    - name: Verify bundled mosh/SPICE/Tor/fonts are present
+      run: |
+        for abi in arm64-v8a armeabi-v7a x86_64 x86; do
+          for lib in libmosh-client.so libtabssh_native.so libtor.so; do
+            if [ ! -f "app/src/main/jniLibs/$abi/$lib" ]; then
+              echo "::error::$lib missing for $abi — every published build must bundle mosh, SPICE and Tor for all ABIs" >&2
+              exit 1
+            fi
+          done
+        done
+        FONTS=$(ls app/src/main/assets/fonts/*.ttf 2>/dev/null | wc -l)
+        if [ "$FONTS" -lt 9 ]; then
+          echo "::error::Only $FONTS of 9 bundled Nerd Fonts present in assets/fonts" >&2
+          exit 1
+        fi
+
+    - name: Build release APK
+      run: ./gradlew assembleRelease --no-daemon
+      env:
+        RELEASE_BUILD: true
+        SOURCE_DATE_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+    - name: Build F-Droid compatible APK (sanity check, not uploaded)
+      run: |
+        # Smoke test only — F-Droid distributes via their own build
+        # infrastructure and signs with their own keys.
+        ./gradlew assembleFdroidRelease --no-daemon
+        echo "F-Droid build succeeded — proguard-fdroid.pro is healthy"
+        ls -lh app/build/outputs/apk/fdroidRelease/*.apk
+      env:
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+    - name: Generate SBOM
+      run: ./gradlew :app:cyclonedxBom --no-daemon
+
+    - name: Stage release assets
+      env:
+        VERSION: ${{ steps.version.outputs.VERSION }}
+        BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+      run: |
+        mkdir -p dist
+        cp app/build/outputs/apk/release/tabssh-android-*.apk dist/
+        cp app/build/outputs/mapping/release/mapping.txt dist/mapping.txt
+
+        printf 'version: %s\ncommit: %s\nbuild_epoch: %s\n' \
+          "${VERSION}" "$(git rev-parse HEAD)" "${BUILD_EPOCH}" > dist/version.txt
+
+        git archive --format=tar.gz -o "dist/tabssh-${VERSION}-source.tar.gz" HEAD
+
+        SBOM=$(find app/build \( -name '*.json' -a -path '*cyclonedx*' \) -o -name 'bom.json' | head -1)
+        if [ -z "$SBOM" ]; then
+          echo "::error::CycloneDX SBOM not found under app/build" >&2
+          exit 1
+        fi
+        cp "$SBOM" dist/tabssh-sbom.cdx.json
+
+        cd dist
+        sha256sum -- * > sha256.txt.tmp && mv sha256.txt.tmp sha256.txt
+        sha512sum -- * | grep -v -- ' sha256.txt$' > sha512.txt.tmp && mv sha512.txt.tmp sha512.txt
+        ls -lh
+
+    # No attest-build-provenance step — GitHub-only (AI.md PART 13).
+
+    - name: Generate release notes
+      env:
+        VERSION: ${{ steps.version.outputs.VERSION }}
+      run: |
+        {
+          echo "# TabSSH ${VERSION} - Complete Mobile SSH Client"
+          echo ""
+          echo "## Downloads"
+          echo "- **tabssh-android-universal.apk** - Recommended (works on all devices)"
+          echo "- **tabssh-android-arm64.apk** - Modern ARM 64-bit devices"
+          echo "- **tabssh-android-arm.apk** - Older ARM 32-bit devices"
+          echo "- **tabssh-android-amd64.apk** - x86_64 (emulators, Chromebooks)"
+          echo "- **tabssh-android-x86.apk** - x86 32-bit (older emulators)"
+          echo ""
+          echo "Checksums: see \`sha256.txt\` / \`sha512.txt\` release assets."
+          echo ""
+        } > RELEASE_NOTES.md
+        cat CHANGELOG.md >> RELEASE_NOTES.md
+
+    - name: Delete existing release if exists
+      continue-on-error: true
+      env:
+        FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+        FORGEJO_REPOSITORY: ${{ github.repository }}
+        TAG_NAME: ${{ steps.version.outputs.TAG_NAME }}
+      run: |
+        # Re-pushing the same tag rebuilds and republishes it — delete the
+        # stale release object first so asset uploads can't collide.
+        tea release delete --repo "$FORGEJO_REPOSITORY" --token "$FORGEJO_TOKEN" "$TAG_NAME" || echo "Release $TAG_NAME not found"
+        echo "Cleanup complete, ready to create new release"
+
+    - name: Create release
+      env:
+        FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+        FORGEJO_REPOSITORY: ${{ github.repository }}
+        TAG_NAME: ${{ steps.version.outputs.TAG_NAME }}
+        VERSION: ${{ steps.version.outputs.VERSION }}
+      run: |
+        for attempt in 1 2 3; do
+          if tea release create \
+            --repo "$FORGEJO_REPOSITORY" \
+            --token "$FORGEJO_TOKEN" \
+            --tag "$TAG_NAME" \
+            --title "TabSSH $VERSION - Complete Mobile SSH Client" \
+            --note "$(cat RELEASE_NOTES.md)" \
+            dist/*; then
+            echo "Release created on attempt $attempt"
+            exit 0
+          fi
+          echo "Release attempt $attempt failed"
+          tea release delete --repo "$FORGEJO_REPOSITORY" --token "$FORGEJO_TOKEN" "$TAG_NAME" || true
+          sleep 15
+        done
+        echo "::error::Release creation failed after 3 attempts"
+        exit 1
+
+    - name: Notify community
+      env:
+        MATRIX_TOKEN: ${{ secrets.MATRIX_TOKEN }}
+        MASTODON_TOKEN: ${{ secrets.MASTODON_TOKEN }}
+      run: ./scripts/notify-release.sh "${{ github.ref_name }}"
+
+    - name: Fix workspace permissions for host post-steps
+      if: always()
+      run: chmod -R a+rX "$GITHUB_WORKSPACE"

@@ -1,0 +1,22 @@
+# TabSSH is a solo-maintainer project — casjay owns everything by default.
+# Extra weight is given below to the three categories AI.md PART 12 calls
+# out explicitly: CI/CD workflows, signing/release files, and
+# crypto/Keystore code — same owner today, but named so the intent is
+# explicit if a second maintainer is ever added.
+
+* @casjay
+
+# CI/CD workflows and pipelines — every provider.
+/.github/workflows/ @casjay
+/.gitea/workflows/ @casjay
+/.forgejo/workflows/ @casjay
+/.gitlab-ci.yml @casjay
+/Jenkinsfile @casjay
+
+# Signing and release files.
+/app/build.gradle @casjay
+/scripts/generate-keystore.sh @casjay
+/.github/dependency-check-suppressions.xml @casjay
+
+# Crypto / Keystore code.
+/app/src/main/java/io/github/tabssh/crypto/ @casjay

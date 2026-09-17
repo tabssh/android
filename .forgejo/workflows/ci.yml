@@ -1,0 +1,230 @@
+name: Validation Tests
+
+# Forgejo Actions uses the GitHub Actions runner (act) — same syntax as
+# .github/workflows/ci.yml, ported per AI.md PART 12's multi-provider gate.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ensure-build-image:
+    name: Ensure build image
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.pull.outputs.image }}
+    steps:
+    - id: pull
+      name: Pull build image (fail fast if missing)
+      run: |
+        IMAGE="casjaysdev/android:latest"
+        if ! docker pull "$IMAGE"; then
+          echo "::error::Build image $IMAGE could not be pulled from Docker Hub."
+          exit 1
+        fi
+        echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+  validate:
+    name: Code Validation & Tests
+    needs: ensure-build-image
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.ensure-build-image.outputs.image }}
+      # Numeric 0:0 needs no /etc/passwd lookup — the runner and
+      # actions/checkout post-job cleanup exec into the container as a
+      # user the image may not define, which flakes the job otherwise.
+      options: "--user 0:0"
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Gradle cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          gradle-${{ runner.os }}-
+
+    - name: Compile, lint, unit tests (mirrors make check)
+      run: |
+        echo "Compiling, linting, and unit-testing project..."
+        ./gradlew kspDebugKotlin compileDebugKotlin lintDebug testDebugUnitTest --no-daemon
+        echo "Compile + lint + unit tests succeeded"
+
+    - name: Validate project structure
+      run: |
+        echo "Validating TabSSH project structure..."
+
+        test -f "app/build.gradle" && echo "App build.gradle exists"
+        test -f "app/src/main/AndroidManifest.xml" && echo "AndroidManifest.xml exists"
+        test -f "app/src/main/java/io/github/tabssh/TabSSHApplication.kt" && echo "Application class exists"
+
+        test -f "app/src/main/java/io/github/tabssh/ssh/connection/SSHSessionManager.kt" && echo "SSH manager exists"
+        test -f "app/src/main/java/io/github/tabssh/terminal/emulator/TerminalEmulator.kt" && echo "Terminal emulator exists"
+        test -f "app/src/main/java/io/github/tabssh/ui/activities/MainActivity.kt" && echo "Main activity exists"
+
+        echo "Project structure validation passed"
+
+    - name: Validate F-Droid metadata
+      run: |
+        echo "Validating F-Droid metadata..."
+
+        if [ -f "metadata/io.github.tabssh.yml" ]; then
+          echo "F-Droid metadata exists"
+
+          if grep -q "Categories:" metadata/io.github.tabssh.yml && \
+             grep -q "License: MIT" metadata/io.github.tabssh.yml && \
+             grep -q "Summary:" metadata/io.github.tabssh.yml; then
+            echo "F-Droid metadata is valid"
+          else
+            echo "F-Droid metadata incomplete"
+            exit 1
+          fi
+        else
+          echo "F-Droid metadata missing"
+          exit 1
+        fi
+
+    - name: Security validation
+      run: |
+        echo "Running security validation..."
+
+        # Check for actual hardcoded secrets (more specific).
+        # Exclusions: '"xxxxx"' = the credential-masking convention used by
+        # redacting toString() overrides (SpiceConnectionParams,
+        # VirtViewerConnection, ProxmoxApiClient) — the mask literal, not a
+        # secret; '\["password"\]' = map-key lookups of parsed user input
+        # (.vv/URI parsers), not literals.
+        echo "Checking for hardcoded secrets..."
+        if grep -raE 'password.*=.*"[^"]{6,}"' app/src/main/java/ | grep -v "// " | grep -v "test-password" | grep -v "getString" | grep -v "optString" | grep -v "text.toString()" | grep -v "fun set.*Password" | grep -v "= setString" | grep -v '\.summary = "' | grep -v 'Password set' | grep -v 'passwordIcon' | grep -v 'hasPassword' | grep -v '\.hint = "' | grep -v "Logger.kt" | grep -v "Regex(" | grep -v "JsonObject\|JsonArray\|jsonObject\|jsonArray\|Map<String" | grep -v "encryptedLabel" | grep -v '\.error = "' | grep -v '"xxxxx"' | grep -v '\["password"\]'; then
+          echo "Actual hardcoded passwords found"
+          exit 1
+        else
+          echo "No hardcoded passwords found"
+        fi
+
+        if grep -q "StrictHostKeyChecking.*yes" app/src/main/java/io/github/tabssh/ssh/connection/SSHConnection.kt; then
+          echo "Secure SSH defaults found"
+        fi
+
+        echo "Security validation passed"
+
+    - name: Feature validation
+      run: |
+        echo "Validating feature implementation..."
+
+        KOTLIN_FILES=$(find app/src/main/java -name "*.kt" | wc -l)
+        TEST_FILES=$(find app/src/test -name "*.kt" | wc -l)
+        RESOURCE_FILES=$(find app/src/main/res -name "*.xml" | wc -l)
+
+        echo "Implementation stats:"
+        echo "   Kotlin files: $KOTLIN_FILES"
+        echo "   Test files: $TEST_FILES"
+        echo "   Resource files: $RESOURCE_FILES"
+
+        REQUIRED_FILES=(
+          "app/src/main/java/io/github/tabssh/TabSSHApplication.kt"
+          "app/src/main/java/io/github/tabssh/storage/database/TabSSHDatabase.kt"
+          "app/src/main/java/io/github/tabssh/ssh/connection/SSHSessionManager.kt"
+          "app/src/main/java/io/github/tabssh/terminal/emulator/TerminalEmulator.kt"
+          "app/src/main/java/io/github/tabssh/ui/tabs/TabManager.kt"
+          "app/src/main/java/io/github/tabssh/crypto/storage/SecurePasswordManager.kt"
+          "app/src/main/java/io/github/tabssh/themes/definitions/ThemeManager.kt"
+          "app/src/main/java/io/github/tabssh/sftp/SFTPManager.kt"
+        )
+
+        MISSING_COUNT=0
+        for file in "${REQUIRED_FILES[@]}"; do
+          if [ -f "$file" ]; then
+            echo "$(basename "$file")"
+          else
+            echo "Missing: $file"
+            MISSING_COUNT=$((MISSING_COUNT + 1))
+          fi
+        done
+
+        if [ $MISSING_COUNT -eq 0 ]; then
+          echo "All critical components implemented"
+        else
+          echo "$MISSING_COUNT critical files missing"
+          exit 1
+        fi
+
+    - name: Documentation validation
+      run: |
+        echo "Validating documentation..."
+
+        # A plain `test -f x && echo` never fails the step (set -e ignores
+        # non-final commands in an AND-OR list), so fail explicitly. The
+        # spec lives in AI.md + IDEA.md — SPEC.md does not exist here.
+        for f in README.md CHANGELOG.md AI.md IDEA.md; do
+          if [ ! -f "$f" ]; then
+            echo "$f missing"
+            exit 1
+          fi
+          echo "$f exists"
+        done
+
+        if grep -q "TabSSH" README.md && \
+           grep -q "Features" README.md && \
+           grep -q "Installation" README.md; then
+          echo "README.md is comprehensive"
+        else
+          echo "README.md incomplete"
+          exit 1
+        fi
+
+        echo "Documentation validation passed"
+
+    - name: Final validation summary
+      run: |
+        VERSION="$(tr -d '[:space:]' < release.txt)"
+        echo ""
+        echo "TabSSH ${VERSION} - Validation Complete!"
+        echo "====================================="
+        echo ""
+        echo "Project structure validated"
+        echo "F-Droid metadata validated"
+        echo "Security validation passed"
+        echo "Feature implementation verified"
+        echo "Documentation validated"
+        echo ""
+        echo "TabSSH ${VERSION} is ready for release!"
+        echo ""
+        echo "Release artifacts will include:"
+        echo "   - tabssh-android-{arm64,arm,amd64,x86,universal}.apk"
+        echo "   - mapping.txt, version.txt, tabssh-sbom.cdx.json"
+        echo "   - sha256.txt / sha512.txt"
+        echo "   - Complete F-Droid submission package"
+        echo ""
+        echo "Ready for production deployment!"
+
+    # Gradle creates .gradle/configuration-cache and daemon dirs mode 700.
+    # This job runs as root inside the toolchain container, so those dirs
+    # end up root-owned on the host runner — the host-side post-step
+    # hashFiles() walk for the Gradle cache key then fails with EACCES
+    # ("Fail to hash files") and marks the job failed even when every
+    # build step passed. Make the tree world-readable before post steps.
+    - name: Fix workspace permissions for host post-steps
+      if: always()
+      run: chmod -R a+rX "$GITHUB_WORKSPACE"
