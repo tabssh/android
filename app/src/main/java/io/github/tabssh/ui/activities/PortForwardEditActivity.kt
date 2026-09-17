@@ -261,7 +261,11 @@ class PortForwardEditActivity : TabSSHActivity() {
             // existing PortForward.connectionId values keep matching.
             val loadedConnections = withContext(Dispatchers.IO) {
                 io.github.tabssh.storage.registry.ConnectableHostRegistry.refreshAll(app.database, app)
-                app.database.connectableHostDao().getAllList()
+                val keepIds = setOfNotNull(
+                    editingId?.let { app.database.portForwardDao().getById(it)?.connectionId },
+                    intent.getStringExtra(EXTRA_PREFILL_CONNECTION_ID)
+                )
+                io.github.tabssh.storage.registry.ConnectableHostRegistry.pickerHosts(app.database, keepIds)
                     .filter { it.protocol.equals("ssh", ignoreCase = true) }
                     .sortedBy { it.name.lowercase() }
             }

@@ -468,8 +468,8 @@
     <string name="auth_tab_registries">Registries</string>
     <string name="main_tab_infra">Infra</string>
 
-    <!-- Infra tab (Docker Hosts / Hypervisors / Cloud sub-tabs) -->
-    <string name="infra_tab_container_hosts">Docker Hosts</string>
+    <!-- Infra tab (Containers / Hypervisors / Cloud sub-tabs) -->
+    <string name="infra_tab_container_hosts">Containers</string>
     <string name="infra_tab_hypervisors">Hypervisors</string>
     <string name="infra_tab_cloud">Cloud</string>
 

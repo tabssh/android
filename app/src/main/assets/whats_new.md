@@ -20,6 +20,15 @@
 - **Reconnecting a pane window on a Mosh host silently reconnected
   over plain SSH.** It now comes back as Mosh, like the same host
   opened in a normal tab.
+- **With sync input on, every pane window now shows the focus
+  border**, since your typing goes to all of them — not just the one
+  you tapped.
+- **Host pickers stopped listing the same machine twice.** A container
+  host linked to a saved SSH connection or Cloud instance no longer
+  appears next to that host in Open new tab, the pane group editor, or
+  the port forward editor.
+- **The Infra tab's container list is now called "Containers"**
+  instead of "Docker Hosts" — it covers Incus, Podman, and LXC/LXD too.
 
 ### Telnet
 
@@ -42,6 +51,44 @@
   means starting a brand-new one on the far end, with none of the old
   session's state, so that stays your call: use Reconnect on the tab or
   the pane window.
+
+### VNC and SPICE keyboard
+
+- **The PRE key did nothing on VNC and SPICE tabs.** The first tap now
+  asks whether the remote side runs tmux, zellij, or screen, and that
+  choice is remembered for the tab; later taps send the prefix. Long-press
+  the key to pick again.
+- **CTRL, ALT, and SHIFT on the custom keyboard now reach VNC and SPICE
+  sessions** when you type on a hardware keyboard or the on-screen
+  keyboard. The key bar also no longer vanishes when a hardware keyboard
+  is attached, and if you show it yourself it stays shown.
+
+### Terminal menu
+
+- **Six terminal actions were unreachable** and are back in the terminal
+  bottom sheet: choose broadcast targets, split horizontally, save
+  workspace, open workspace, record macro, and replay macro.
+
+### One add button per screen
+
+- **Screens showed two add buttons at once.** The SSH hosts sub-tab now
+  has its own add button and Active has none; Docker hosts, hypervisors,
+  cloud accounts, and groups hide the floating button while the empty
+  screen already shows one, and the dashboard hides its overflow "Add
+  hosts" item while an add button is on screen.
+
+### Trackers
+
+- **Domain and VPS tracker edits now sync right away** when sync-on-change
+  is on, instead of waiting for the hourly sync or Sync Now.
+- **A VPS renewal date no longer has the billing cycle glued to it.**
+  Existing entries are cleaned up once, automatically.
+
+### Consoles
+
+- **A shared virt-viewer console file whose name ends in `.jnlp`** is now
+  opened as the virt-viewer file it declares itself to be, not handed to
+  the JNLP parser.
 
 ## Wave 70 — Session lifecycle fixes, console paste, tracker polish
 

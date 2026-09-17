@@ -35,7 +35,7 @@ created, synced, or paired on any one of the three works unmodified on the other
 - 🖥️ **Full Terminal Emulation** — Termux TerminalEmulator (VT100/ANSI, 256 colors, vim/htop/tmux fully functional)
 - 📁 **Integrated SFTP** — File manager with upload/download progress, remote editor, chmod
 - 🧭 **Routing & Forwarding** — Reusable proxy / jump-host routes picked per-connection or set as a global default, plus local/remote/dynamic (SOCKS5) port forwards, all in one section
-- 🧅 **Tor** — Route SSH through Tor via an Orbot preset or a built-in bundled `tor` loopback SOCKS proxy (no separate app needed)
+- 🧅 **Tor** — Route SSH through Tor via a built-in bundled `tor` loopback SOCKS proxy (no separate app needed), or through any SOCKS5 route such as a separately installed Orbot
 - 🖼️ **X11 Forwarding** — Run graphical apps remotely via Termux:X11 or XServer XSDL
 - 🌐 **SSH Config Import** — `~/.ssh/config` with RemoteCommand, SendEnv, RequestTTY, ProxyJump
 - ❤️ **Always-on Keepalive** — 60s serverAliveInterval; idle sessions survive carrier NAT and Wi-Fi sleep
@@ -54,17 +54,17 @@ created, synced, or paired on any one of the three works unmodified on the other
 - 🔐 **No Plaintext Storage** — All credentials encrypted with AES-256-GCM
 - 🛡️ **Host Key Verification** — TOFU with SHA256 fingerprints and MITM detection
 - 🚫 **Screenshot Protection** — Prevents sensitive data from leaking to recents or screenshots
-- 🔐 **Auto-Lock** — Configurable timeout; session credentials zeroed on background
+- 🔐 **Auto-Lock** — Configurable timeout; session-only credentials zeroed on background
 - 📋 **Clipboard Auto-Clear** — Configurable TTL for pasted passwords
 
 ### UI/UX
 
 - 🎨 **Material Design 3** — Google's latest design system throughout
-- 🌈 **22 Built-in Themes** — Dracula, Solarized (Light/Dark), Nord, Monokai, One Dark, Tokyo Night, Gruvbox, and 15 more
-- 🎨 **Custom Theme Editor** — Full GUI in Settings → Appearance; import/export JSON with WCAG 2.1 contrast validation
+- 🌈 **23 Built-in Themes** — Dracula, Solarized (Light/Dark), Nord, Monokai, One Dark, Tokyo Night, Gruvbox (Light/Dark), and 14 more
+- 🎨 **Custom Theme Editor** — Full GUI in Settings → Terminal → Appearance; import/export JSON with WCAG 2.1 contrast validation
 - ⌨️ **Custom SSH Keyboard** — 1–5 row on-screen bar optimized for vim/tmux/coding; drag-to-reorder keys within rows
 - ⌨️ **Hardware Keyboard** — AltGr distinct from Alt; xterm modifier-encoded arrows (Ctrl-Right = `ESC[1;5C`), HOME/END/PG family
-- 🗂️ **Tabs at Top** — TabBar flush at top; no toolbar chrome; navigation drawer via left-edge swipe
+- 🗂️ **Tabs at Top** — TabBar flush at top; no toolbar chrome; navigation drawer from the menu button (edge swipes switch tabs on terminal screens)
 - 👆 **Edge-Swipe Tabs** — Single-finger fling within 24dp of left/right edge switches tabs
 - 🖱️ **Touchpad-Style Terminal Surface** — right-edge desktop scrollbar (xfce4/konsole-style drag-to-scrub), left-edge mouse-wheel zone (flick = one notch, drag = repeated notches, configurable lines per notch), everywhere else scrolls 1:1 like a trackpad
 - 🔁 **Active Sessions Strip** — Running tabs with live OSC 0/2 terminal title and connection-state dot
@@ -75,7 +75,7 @@ created, synced, or paired on any one of the three works unmodified on the other
 
 - ♿ **TalkBack** — Full screen reader support
 - 🔆 **High Contrast** — Enhanced visibility for low vision users
-- 📏 **Adjustable Fonts** — 8–32pt, 8 monospace families (Cascadia Code, Fira Code, JetBrains Mono, and more)
+- 📏 **Adjustable Fonts** — 8–32pt, system monospace plus 9 bundled Nerd Font families (Cascadia Code, Fira Code, JetBrains Mono, and more)
 - ⌨️ **Keyboard Navigation** — Fully keyboard-accessible
 - 🌐 **Translations** — English, Spanish, French, German
 
@@ -83,7 +83,7 @@ created, synced, or paired on any one of the three works unmodified on the other
 
 - 📡 **Background Monitoring** — Periodic TCP reachability probes; down/recovery notifications; CPU/memory/disk threshold alerts via SSH; configurable cooldown (15 min–12 h)
 - 📱 **Mosh Protocol** — Mobile shell for unstable connections with roaming support
-- 💾 **Backup & Restore** — Export/import all settings as encrypted ZIP
+- 💾 **Backup & Restore** — Export/import everything as a ZIP, encrypted when you set a password
 - ☁️ **Cloud Sync** — Storage Access Framework (Google Drive, Dropbox, OneDrive, Nextcloud, local — no Google services dependency); AES-256-GCM + Argon2id + 3-way merge with conflict UI
 - 🔗 **Cross-Platform Compatible** — sync blobs, encrypted backups, QR pairing payloads, and theme files are byte-compatible with [TabSSH Desktop](https://github.com/tabssh/desktop) and [TabSSH Web](https://github.com/tabssh/web); pair or restore on any of the three and pick up the exact same connections, keys, and settings
 - 🏠 **Home Screen Widgets** — Quick-connect from launcher
@@ -138,7 +138,7 @@ Portainer-class container management over the SSH connections you already have �
 
 Pixel-perfect graphical console access to VMs — no separate VNC viewer required.
 
-- RFB protocol client with Tight, ZRLE, CopyRect, Hextile, CoRRE, RRE encoding support
+- RFB protocol client with Tight, ZRLE, Zlib, CopyRect, Hextile, CoRRE, RRE encoding support
 - ServerFence / ClientFence handshake (required for Proxmox vncproxy)
 - ExtendedDesktopSize (SetDesktopSize) resize negotiation
 - VNC password authentication with correct DES challenge-response (RFC 6143 §7.2.2)
@@ -190,7 +190,7 @@ Connect        → Tap profile → accept host key → connected
 New tab        → Tap "+" in TabBar, or Ctrl+T
 SFTP           → Tap the folder icon in an active session
 VNC console    → Infra → Hypervisors → tap VM → tap VNC/Console
-Cloud          → Cloud Accounts → tap account → view live instances
+Cloud          → Infra → Cloud → tap account → view live instances
 ```
 
 ---
@@ -210,16 +210,16 @@ Cloud          → Cloud Accounts → tap account → view live instances
 - Android Keystore (hardware-backed when available)
 - Host key TOFU with SHA256 fingerprints
 - Zero telemetry, zero analytics, zero external network requests except SSH/cloud connections
-- Session credentials zeroed from memory when the app backgrounds
-- OWASP Dependency-Check in CI
+- Session-only credentials zeroed from memory when the app backgrounds
+- OWASP Dependency-Check on every release build
 
 ---
 
 ## 🎨 Themes
 
-23 built-in themes: **Dracula**, **Solarized Light/Dark**, **Nord**, **Monokai**, **One Dark**, **Tokyo Night**, **Gruvbox**, **Tomorrow Night**, **Catppuccin Mocha**, and 14 more.
+23 built-in themes: **Dracula**, **Solarized Light/Dark**, **Nord**, **Monokai**, **One Dark**, **Tokyo Night**, **Gruvbox Light/Dark**, **Tomorrow Night**, **Catppuccin Mocha**, and 12 more.
 
-**Custom themes:** Settings → General → Appearance → Theme Editor. Import/export JSON:
+**Custom themes:** Settings → Terminal → Appearance → Theme Editor. Import/export JSON:
 
 ```json
 {
@@ -238,8 +238,8 @@ Cloud          → Cloud Accounts → tap account → view live instances
 
 | Metric | Value |
 |---|---|
-| Kotlin files | 441 |
-| Lines of code | ~140,700 |
+| Kotlin files | 446 |
+| Lines of code | ~147,900 |
 | Activities | 51 |
 | Fragments | 30 |
 | Services | 3 (`SSHConnectionService`, `VncKeepAliveService`, `SessionRecordingService`) |
@@ -261,7 +261,7 @@ See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for guidelines.
 ```bash
 git checkout -b feature/my-feature
 # make changes
-make check          # must pass (runs compile + lint + unit tests in Docker)
+make check          # must pass (runs compile + lint + JVM unit tests in Docker)
 # open pull request
 ```
 
@@ -299,10 +299,11 @@ make check          # must pass (runs compile + lint + unit tests in Docker)
 
 ```bash
 make build      # Debug APKs → ./binaries/   (~5 min, Docker-cached)
-make check      # Compile-only check         (~2 min, Docker-cached)
+make check      # Compile + lint + JVM unit tests (Docker)
 make install    # Install to connected device
 make logs       # Tail logcat
-make test       # Run UI tests
+make test       # check + instrumented/UI tests when a device is reachable
+make instrumented  # androidTest suite on a connected device
 make clean      # Remove build artifacts
 ```
 
@@ -315,14 +316,15 @@ android/
 ├── app/src/main/java/io/github/tabssh/
 │   ├── cloud/          # Cloud provider clients + CloudInstanceState
 │   ├── crypto/         # AES-GCM, Keystore wrappers, key storage
-│   ├── hypervisor/     # Proxmox, XCP-ng, VMware, libvirt, OCI API clients
+│   ├── hypervisor/     # Proxmox, XCP-ng, VMware, libvirt, OCI API clients,
+│                       #   VNC RFB and SPICE console clients
 │   ├── ssh/            # SSHConnection, SSHSessionManager, port forwarding, X11
 │   ├── sftp/           # SFTP browser and file transfer
-│   ├── terminal/       # TermuxBridge, TerminalView, VNC RFB client
+│   ├── terminal/       # TermuxBridge, TerminalView
 │   ├── storage/        # Room DB (v27), DAOs, entities
-│   ├── sync/           # SAF-based 3-way merge sync (TABSSH_SYNC_V2, shared
+│   ├── sync/           # SAF-based 3-way merge sync (TABSSH_SYNC_V3, shared
 │                       #   with the Desktop and Web sibling apps)
-│   ├── backup/         # Encrypted ZIP backup/restore
+│   ├── backup/         # ZIP backup/restore (encrypted when a password is set)
 │   └── ui/             # Activities, Fragments, Adapters, ViewModels
 ├── app/src/main/res/   # Layouts, strings, themes, drawables
 ├── app/schemas/        # Room migration JSON schemas

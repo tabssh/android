@@ -57,15 +57,16 @@ object PaneGroupEditDialog {
             // refresh when the cache is empty (first-ever use, nothing to
             // show yet); otherwise refresh in the background so the next
             // open picks up fresh data without holding up this one.
+            val keepIds = existing?.resolvedWindows().orEmpty().mapTo(HashSet()) { it.hostId }
             var hosts = withContext(Dispatchers.IO) {
-                app.database.connectableHostDao().getAllList()
+                ConnectableHostRegistry.pickerHosts(app.database, keepIds)
             }
             if (hosts.isEmpty()) {
                 withContext(Dispatchers.IO) {
                     ConnectableHostRegistry.refreshAll(app.database, app)
                 }
                 hosts = withContext(Dispatchers.IO) {
-                    app.database.connectableHostDao().getAllList()
+                    ConnectableHostRegistry.pickerHosts(app.database, keepIds)
                 }
             } else {
                 scope.launch(Dispatchers.IO) {

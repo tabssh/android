@@ -10,6 +10,7 @@ import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.CloudAccount
 import io.github.tabssh.storage.database.entities.ConnectableHost
+import io.github.tabssh.storage.database.entities.ContainerHost
 import io.github.tabssh.utils.logging.Logger
 import org.json.JSONObject
 
@@ -250,6 +251,38 @@ object ConnectableHostRegistry {
             refreshCloudInstances(db, app, account.id)
         }
         refreshContainerHosts(db)
+    }
+
+    /**
+     * Registry rows for a host picker, minus container-host rows that merely
+     * duplicate the SSH host they link to. A container host linked to a saved
+     * connection or cloud instance SSHes to that same machine, so listing both
+     * shows one host twice; custom-endpoint container hosts stay. Ids in
+     * [keepIds] (a saved selection such as an existing pane window or port
+     * forward) are never dropped, so editing an older record keeps its value.
+     */
+    suspend fun pickerHosts(db: TabSSHDatabase, keepIds: Set<String> = emptySet()): List<ConnectableHost> =
+        withoutLinkedContainerDuplicates(
+            hosts = db.connectableHostDao().getAllList(),
+            containerHosts = db.containerHostDao().getAllList(),
+            keepIds = keepIds
+        )
+
+    /** Pure core of [pickerHosts]; see there for the rule. */
+    fun withoutLinkedContainerDuplicates(
+        hosts: List<ConnectableHost>,
+        containerHosts: List<ContainerHost>,
+        keepIds: Set<String> = emptySet()
+    ): List<ConnectableHost> {
+        val presentIds = hosts.mapTo(HashSet()) { it.id }
+        val duplicateIds = containerHosts
+            .filter { host -> host.linkedConnectionId?.let { it in presentIds } == true }
+            .mapTo(HashSet()) { it.ephemeralProfileId() }
+        return hosts.filter { host ->
+            host.sourceType != ConnectableHost.SOURCE_CONTAINER_HOST ||
+                host.id !in duplicateIds ||
+                host.id in keepIds
+        }
     }
 
     /**

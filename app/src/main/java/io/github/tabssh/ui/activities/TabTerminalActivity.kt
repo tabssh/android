@@ -5904,7 +5904,7 @@ class TabTerminalActivity : TabSSHActivity() {
             // APIs, so only block on it when the registry is empty (first-ever
             // use); otherwise show whatever's cached and refresh underneath.
             var hosts = try {
-                withContext(Dispatchers.IO) { app.database.connectableHostDao().getAllList() }
+                withContext(Dispatchers.IO) { ConnectableHostRegistry.pickerHosts(app.database) }
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Failed to load connectable hosts for picker", e)
                 emptyList()
@@ -5912,7 +5912,7 @@ class TabTerminalActivity : TabSSHActivity() {
             if (hosts.isEmpty()) {
                 try {
                     withContext(Dispatchers.IO) { ConnectableHostRegistry.refreshAll(app.database, app) }
-                    hosts = withContext(Dispatchers.IO) { app.database.connectableHostDao().getAllList() }
+                    hosts = withContext(Dispatchers.IO) { ConnectableHostRegistry.pickerHosts(app.database) }
                 } catch (e: Exception) {
                     Logger.e("TabTerminalActivity", "Failed to refresh connectable hosts for picker", e)
                 }

@@ -767,13 +767,18 @@ class TerminalPagerAdapter(
             boundPanesTab = panesTab
             rebuildTiles(panesTab)
             focusJob = holderScope.launch {
-                panesTab.focusedPaneIndex.collect { index ->
-                    gridView.setFocusedIndex(index)
-                    // The border alone is not what makes a pane active —
-                    // without this the IME keeps typing into the previously
-                    // focused tile until the keyboard is toggled.
-                    paneTerminalViews[index]?.focusForPaneInput()
-                }
+                var lastFocusedIndex: Int? = null
+                panesTab.focusedPaneIndex.combine(panesTab.syncInputEnabled) { index, sync -> index to sync }
+                    .collect { (index, sync) ->
+                        gridView.setFocusedIndex(index, highlightAll = sync)
+                        // A sync toggle alone must not re-grab input focus; only a real focus move does.
+                        if (index == lastFocusedIndex) return@collect
+                        lastFocusedIndex = index
+                        // The border alone is not what makes a pane active —
+                        // without this the IME keeps typing into the previously
+                        // focused tile until the keyboard is toggled.
+                        paneTerminalViews[index]?.focusForPaneInput()
+                    }
             }
             entriesJob = holderScope.launch {
                 panesTab.entries.collect { rebuildTiles(panesTab) }
@@ -863,7 +868,7 @@ class TerminalPagerAdapter(
                     boundPanesTab?.let { tab -> onPaneReconnect?.invoke(tab, index) }
                 }
             )
-            gridView.setFocusedIndex(panesTab.focusedPaneIndex.value)
+            gridView.setFocusedIndex(panesTab.focusedPaneIndex.value, highlightAll = panesTab.syncInputEnabled.value)
             // setContents built fresh tiles, so every overlay is back to
             // hidden — re-apply the tab's dead windows to the new tiles.
             applyDisconnectedOverlays(panesTab)

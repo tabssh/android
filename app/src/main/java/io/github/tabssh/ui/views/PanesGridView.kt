@@ -241,9 +241,13 @@ class PanesGridView @JvmOverloads constructor(
         }
     }
 
-    /** Update which tile shows the focus border, by grid index. */
-    fun setFocusedIndex(index: Int) {
-        tiles.forEachIndexed { i, tile -> tile.setFocused(i == index) }
+    /**
+     * Update which tile shows the focus border, by grid index. With
+     * [highlightAll] (sync input on) every tile gets the border, since typed
+     * input then reaches every window, not just the focused one.
+     */
+    fun setFocusedIndex(index: Int, highlightAll: Boolean = false) {
+        tiles.forEachIndexed { i, tile -> tile.setFocused(highlightAll || i == index) }
     }
 
     /**
