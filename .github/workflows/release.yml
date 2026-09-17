@@ -307,7 +307,7 @@ jobs:
         echo "✅ Cleanup complete, ready to create new release"
 
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+      uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         name: "TabSSH ${{ steps.version.outputs.VERSION }} - Complete Mobile SSH Client"
