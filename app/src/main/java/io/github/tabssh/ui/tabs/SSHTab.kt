@@ -672,11 +672,43 @@ class SSHTab(
                 _hasError.value = true
                 return false
             }
-            termuxBridge.connect(telnet.inputStream, telnet.outputStream)
+            wireTelnetStreams(telnet)
             setState(ConnectionState.CONNECTED)
             updateTitleWithStatus(ConnectionState.CONNECTED)
-            // Push initial NAWS using the bridge's current size.
-            telnet.setWindowSize(termuxBridge.getCols(), termuxBridge.getRows())
+
+            // Auto-recovery path, mirroring the SSH overload above.
+            // TelnetConnection's own NetworkAwareReconnector redials the
+            // socket after a drop, but each dial allocates a fresh pipe pair
+            // (a PipedInputStream cannot outlive its writer), so the bridge
+            // must be re-wired onto the new streams or the socket comes back
+            // to an inert terminal. Telnet is stateless on the wire: there is
+            // no channel to reopen and nothing to resume, so a recovered
+            // session is a brand-new one — same honesty as raw SSH getting a
+            // fresh prompt rather than its old shell back.
+            stateCollectorJob?.cancel()
+            stateCollectorJob = connectionScope.launch {
+                var previousState: ConnectionState? = null
+                telnet.connectionState.collect { state ->
+                    setState(state)
+                    updateTitleWithStatus(state)
+                    if (state == ConnectionState.ERROR) _hasError.value = true
+                    val wasDown = previousState != null &&
+                        previousState != ConnectionState.CONNECTED
+                    if (state == ConnectionState.CONNECTED && wasDown) {
+                        Logger.i("SSHTab",
+                            "Telnet reconnected — rewiring terminal for ${profile.getDisplayName()}")
+                        try {
+                            wireTelnetStreams(telnet)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Logger.w("SSHTab", "Telnet auto-recovery rewire failed: ${e.message}")
+                        }
+                    }
+                    previousState = state
+                }
+            }
+
             Logger.i("SSHTab", "=== TELNET TAB WIRED for ${profile.getDisplayName()} ===")
             true
         } catch (e: CancellationException) {
@@ -686,6 +718,35 @@ class SSHTab(
             _hasError.value = true
             setState(ConnectionState.ERROR)
             false
+        }
+    }
+
+    /**
+     * Wires TermuxBridge onto [telnet]'s current streams and pushes the
+     * window size the terminal already has. Used by both the initial connect
+     * and the post-reconnect rewire, because every dial installs a new pipe
+     * pair — holding the old `inputStream` reference across a reconnect gives
+     * a permanently closed stream.
+     */
+    private fun wireTelnetStreams(telnet: TelnetConnection) {
+        termuxBridge.connect(telnet.inputStream, telnet.outputStream)
+        // NAWS (RFC 1073) is per-session state the new peer does not have.
+        telnet.setWindowSize(termuxBridge.getCols(), termuxBridge.getRows())
+        termuxBridge.onResizeCallback = { cols, rows -> telnet.setWindowSize(cols, rows) }
+        // Telnet reached the post-connect script only through the pane
+        // working-dir path's claim of being transport agnostic — the script
+        // was never actually run here, so a telnet profile silently ignored
+        // it. Run it on the same delay the SSH path uses, so the remote side
+        // has printed its banner/prompt before anything is injected.
+        connectionScope.launch {
+            try {
+                delay(500)
+                runPostConnectCommands()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.w("SSHTab", "post-connect script failed on telnet: ${e.message}")
+            }
         }
     }
 
@@ -752,6 +813,16 @@ class SSHTab(
             // Null connection so getShellExitStatus() correctly falls back
             // to termuxBridge.moshLastExitCode when the reconnect-dialog
             // gate runs in TabTerminalActivity.
+            //
+            // Mosh deliberately gets no NetworkAwareReconnector, unlike SSH
+            // and telnet. Roaming and address changes are what mosh's own UDP
+            // transport already handles — redialing on a network transition
+            // would tear down a session that was never broken. And once
+            // mosh-client really is gone, there is nothing to reconnect to:
+            // recovery means a new SSH bootstrap and a new mosh-server, i.e.
+            // a new session with none of the old one's state. That is a
+            // decision for the user, which the reconnect dialog and the pane
+            // window's Reconnect button both offer.
             stateCollectorJob?.cancel()
             stateCollectorJob = null
             connection = null

@@ -1,7 +1,15 @@
 package io.github.tabssh.ssh.connection
 
+import io.github.tabssh.network.NetworkAwareReconnector
+import io.github.tabssh.network.detection.NetworkDetector
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.io.InputStream
@@ -36,7 +44,11 @@ import kotlin.concurrent.thread
  */
 class TelnetConnection(
     private val host: String,
-    private val port: Int = 23
+    private val port: Int = 23,
+    /** Supplies network up/down transitions to the auto-reconnector. When
+     *  null (tests, callers with no Application handle) the connection still
+     *  works, it simply never reconnects itself. */
+    private val networkDetector: NetworkDetector? = null
 ) {
     companion object {
         private const val TAG = "TelnetConnection"
@@ -83,9 +95,12 @@ class TelnetConnection(
     // concurrently; interleaved writes would corrupt the IAC framing.
     private val writeLock = Any()
 
-    // What we expose to TermuxBridge:
-    private val pipeOut = PipedOutputStream()
-    private val pipeIn = PipedInputStream(pipeOut, 64 * 1024)
+    // What we expose to TermuxBridge. A PipedInputStream is single-use — once
+    // its writer closes, every later read throws — so these are recreated on
+    // each connect() rather than allocated once, which is what lets a
+    // reconnected session hand the bridge a working pair of streams.
+    @Volatile private var pipeOut = PipedOutputStream()
+    @Volatile private var pipeIn = PipedInputStream(pipeOut, 64 * 1024)
     private val outFilter = EscapingOutputStream(writeLock) { socket?.getOutputStream() }
 
     val inputStream: InputStream get() = pipeIn
@@ -94,6 +109,22 @@ class TelnetConnection(
     private var pumpThread: Thread? = null
     @Volatile private var stopped = false
     @Volatile var connected: Boolean = false; private set
+
+    // Telnet has no auth or channel phases, so this only ever carries
+    // CONNECTING / CONNECTED / DISCONNECTED / ERROR. SSHTab collects it to
+    // rewire TermuxBridge onto the new streams after an auto-reconnect —
+    // without that the socket comes back and the terminal stays inert.
+    private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
+    val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
+
+    // Owns the reconnector's timers. IO rather than Main: nothing here
+    // touches views, and connect() is a blocking socket dial.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // Created only after the first successful connect, mirroring
+    // SSHConnection — a host that never answered is a user-input problem, and
+    // retrying it on a 5-second backoff forever would be worse than useless.
+    private var reconnector: NetworkAwareReconnector? = null
 
     /** NAWS — push window size. Safe to call any time after connect. */
     @Volatile private var lastCols = 80
@@ -104,6 +135,16 @@ class TelnetConnection(
         // A prior connect()/disconnect() cycle latches this permanently; reset
         // it here so the pump loop below actually runs on reconnect.
         stopped = false
+        // Option state is per-TCP-session: a reconnected peer re-negotiates
+        // from scratch, and stale entries here would suppress the replies it
+        // is waiting for (see the RFC 854 note on remoteOptionState).
+        remoteOptionState.clear()
+        localOptionState.clear()
+        // Fresh pipes for a fresh session — the previous pair was closed when
+        // the old pump thread ended.
+        pipeOut = PipedOutputStream()
+        pipeIn = PipedInputStream(pipeOut, 64 * 1024)
+        _connectionState.value = ConnectionState.CONNECTING
         val s = Socket()
         try {
             s.connect(InetSocketAddress(host, port), timeoutMs)
@@ -114,19 +155,61 @@ class TelnetConnection(
             connected = true
             startPump()
             Logger.i(TAG, "Telnet connected $host:$port")
+            armReconnector()
+            _connectionState.value = ConnectionState.CONNECTED
             true
         } catch (e: Exception) {
             Logger.e(TAG, "Telnet connect failed: $host:$port", e)
             // Ensure the freshly allocated socket is released even if it was
             // never assigned to the field (e.g. connect() threw before line
-            // `socket = s` ran). disconnect() only closes the field.
+            // `socket = s` ran). closeTransport() only closes the field.
             try { s.close() } catch (_: Exception) {}
-            disconnect()
+            closeTransport()
+            _connectionState.value = ConnectionState.ERROR
+            // A failed retry must schedule the next one; a failed first dial
+            // has no reconnector yet and so stops here, as intended.
+            reconnector?.onConnectionLost()
             false
         }
     }
 
+    /**
+     * Creates the reconnector on the first successful connect and resets its
+     * backoff on every later one. Mirrors `SSHConnection.connect()`, including
+     * the "only after a connect has actually worked" gate.
+     */
+    private fun armReconnector() {
+        val detector = networkDetector ?: return
+        val existing = reconnector
+        if (existing != null) {
+            existing.onConnectionRestored()
+            return
+        }
+        reconnector = NetworkAwareReconnector(
+            networkDetector = detector,
+            scope = scope,
+            tag = "TelnetConnection/$host:$port",
+            reconnect = { connect() },
+        ).also { it.start() }
+    }
+
+    /**
+     * Permanent teardown — the user disconnected or the tab is going away.
+     * Stops the reconnector too, so nothing dials the host again afterwards.
+     */
     fun disconnect() {
+        reconnector?.cancel()
+        reconnector = null
+        scope.cancel()
+        closeTransport()
+        _connectionState.value = ConnectionState.DISCONNECTED
+    }
+
+    /**
+     * Drops the socket and streams without touching the reconnector, so a
+     * retry can reuse this instance. [disconnect] is the permanent form.
+     */
+    private fun closeTransport() {
         stopped = true
         connected = false
         try { socket?.close() } catch (_: Exception) {}
@@ -148,6 +231,10 @@ class TelnetConnection(
     }
 
     private fun startPump() {
+        // Capture the pipe this session owns: connect() installs a new pair,
+        // so a lingering thread from a previous session must never write into
+        // the current one.
+        val sessionPipe = pipeOut
         pumpThread = thread(name = "telnet-pump-$host:$port", isDaemon = true) {
             val input = rawIn ?: return@thread
             try {
@@ -155,9 +242,9 @@ class TelnetConnection(
                     val b = input.read()
                     if (b < 0) break
                     if (b == IAC) {
-                        handleIac(input)
+                        handleIac(input, sessionPipe)
                     } else {
-                        pipeOut.write(b)
+                        sessionPipe.write(b)
                     }
                 }
             } catch (e: IOException) {
@@ -165,17 +252,27 @@ class TelnetConnection(
             } catch (e: Exception) {
                 Logger.e(TAG, "Telnet pump crashed", e)
             } finally {
+                val unexpected = !stopped
                 connected = false
-                try { pipeOut.close() } catch (_: Exception) {}
+                try { sessionPipe.close() } catch (_: Exception) {}
+                if (unexpected) {
+                    // Peer closed the socket or the link dropped — this is the
+                    // only place telnet learns it died, so it is where the
+                    // reconnector gets armed. A user-initiated disconnect sets
+                    // `stopped` first and is deliberately silent here.
+                    Logger.i(TAG, "Telnet session lost $host:$port")
+                    _connectionState.value = ConnectionState.DISCONNECTED
+                    reconnector?.onConnectionLost()
+                }
             }
         }
     }
 
-    private fun handleIac(input: InputStream) {
+    private fun handleIac(input: InputStream, sessionPipe: PipedOutputStream) {
         val cmd = input.read().also { if (it < 0) return }
         when (cmd) {
             // escaped literal 0xFF
-            IAC -> pipeOut.write(IAC)
+            IAC -> sessionPipe.write(IAC)
             WILL -> {
                 val opt = input.read().also { if (it < 0) return }
                 val desired = acceptWill(opt)

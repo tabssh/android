@@ -147,7 +147,21 @@ class PanesTab(
                 var hasBeenConnected = false
                 sshTab.connectionState.collect { state ->
                     when (state) {
-                        ConnectionState.CONNECTED -> hasBeenConnected = true
+                        ConnectionState.CONNECTED -> {
+                            hasBeenConnected = true
+                            // A transport that recovers on its own (SSH and
+                            // telnet both auto-reconnect) must take its dead
+                            // -window overlay back down; otherwise the tile
+                            // keeps offering Reconnect over a live session.
+                            if (sshTab.tabId in _disconnectedWindowIds.value) {
+                                _disconnectedWindowIds.value =
+                                    _disconnectedWindowIds.value - sshTab.tabId
+                                Logger.i(
+                                    "PanesTab",
+                                    "Pane session recovered in group $groupId"
+                                )
+                            }
+                        }
                         ConnectionState.DISCONNECTED, ConnectionState.ERROR -> {
                             if (hasBeenConnected) {
                                 _disconnectedWindowIds.value =

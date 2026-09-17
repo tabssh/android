@@ -2956,7 +2956,7 @@ class TabTerminalActivity : TabSSHActivity() {
      */
     private suspend fun connectTelnetProfile(profile: ConnectionProfile) {
         Logger.i("TabTerminalActivity", "Telnet connect to ${profile.getDisplayName()}")
-        val telnet = TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23)
+        val telnet = TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23, app.networkDetector)
 
         val cursorStyle = app.preferencesManager.getCursorStyleInt()
         val tab = tabManager.createTab(profile, cursorStyle, app.preferencesManager.getTranscriptRows())
@@ -4295,7 +4295,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 else app.sshSessionManager.connectToServer(profile)
             // Telnet branch (separate path)
             if (profile.protocol.equals("telnet", ignoreCase = true)) {
-                val telnet = TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23)
+                val telnet = TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23, app.networkDetector)
                 val newTab = SSHTab(
                     profile,
                     TermuxBridge(
@@ -4436,7 +4436,7 @@ class TabTerminalActivity : TabSSHActivity() {
 
         return try {
             if (profile.protocol.equals("telnet", ignoreCase = true)) {
-                val telnet = TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23)
+                val telnet = TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23, app.networkDetector)
                 val newTab = SSHTab(
                     profile,
                     TermuxBridge(

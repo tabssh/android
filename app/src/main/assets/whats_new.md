@@ -1,5 +1,48 @@
 # What's New
 
+## Wave 71 — Panes windows, and reconnect for every terminal protocol
+
+### Panes
+
+- **A pane window whose shell exited just hung there.** Type `exit`,
+  reboot the host, or run `poweroff`, and the window kept showing the
+  dead session as if it were live. Pane windows now notice, and the
+  one that ended is greyed out with **Reconnect** and **Close window**
+  over its last output — every other window in the group keeps
+  running, untouched. That matters when sync is on and one command
+  ends several sessions at once: you can bring back the ones you want
+  and close the rest, instead of losing the whole group.
+- **Tapping a pane made it active, but typing still went to the
+  previous one** until you toggled the keyboard off and on. The
+  keyboard now follows the pane you tapped, immediately.
+- **Closing the last pane window left an empty tab** instead of
+  leaving the terminal screen.
+- **Reconnecting a pane window on a Mosh host silently reconnected
+  over plain SSH.** It now comes back as Mosh, like the same host
+  opened in a normal tab.
+
+### Telnet
+
+- **A dropped Telnet session stayed dropped.** SSH sessions have
+  always come back on their own after a network change or a silent
+  drop; Telnet never did — it sat dead until you reconnected by hand.
+  Telnet now reconnects the same way, backing off between attempts and
+  waking the moment the network returns. A Telnet session that comes
+  back is a genuinely new one (the protocol has nothing to resume), so
+  you get a fresh screen rather than your old scrollback.
+- **A post-connect command configured on a Telnet host never ran.** It
+  does now, on connect and on reconnect, as it always has for SSH.
+
+### Mosh
+
+- **Mosh deliberately does not auto-reconnect**, and that is not an
+  oversight. Mosh already survives roaming, sleep, and IP changes on
+  its own — redialing on a network change would tear down a session
+  that was never broken. If a Mosh session really is gone, reconnecting
+  means starting a brand-new one on the far end, with none of the old
+  session's state, so that stays your call: use Reconnect on the tab or
+  the pane window.
+
 ## Wave 70 — Session lifecycle fixes, console paste, tracker polish
 
 ### Tabs and panes now let go of their sessions properly
