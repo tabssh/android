@@ -1203,6 +1203,25 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
+     * Take keyboard input over from whichever sibling view had it, without
+     * showing or hiding the IME.
+     *
+     * Moving Android focus alone is not enough inside a Panes grid: every
+     * tile is a TerminalView with its own [onCreateInputConnection], and an
+     * IME that is already up keeps typing into the connection it was handed
+     * when it came up. That is why switching panes appeared to do nothing
+     * until the keyboard was toggled — [toggleKeyboard]'s `showSoftInput`
+     * was what re-bound the connection. `restartInput` does exactly that
+     * re-bind on its own, leaving IME visibility alone so a pane switch
+     * never flickers the keyboard.
+     */
+    fun focusForPaneInput() {
+        if (!isFocused) requestFocus()
+        inputMethodManager.restartInput(this)
+        Logger.d("TerminalView", "Pane input focus taken")
+    }
+
+    /**
      * Toggle soft keyboard (mobile-first UX).
      *
      * `inputMethodManager.isActive(this)` checks "is the IME bound to

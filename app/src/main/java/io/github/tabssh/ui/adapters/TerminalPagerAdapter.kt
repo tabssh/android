@@ -59,6 +59,12 @@ class TerminalPagerAdapter(
      */
     private val onSelectionEnded: (() -> Unit)? = null,
     private val onContextMenuRequested: ((Float, Float) -> Unit)? = null,
+    /**
+     * Invoked when the user taps Reconnect on a Panes tile whose session
+     * ended. Receives the tab and the window's grid index; the host
+     * activity owns the actual re-dial (see `PanesViewHolder`).
+     */
+    private val onPaneReconnect: ((PanesTab, Int) -> Unit)? = null,
     private var reverseScrollDirection: Boolean = false,
     private var wheelLinesPerNotch: Int = 3,
     private var lineSpacingPercent: Int = 120
@@ -168,7 +174,8 @@ class TerminalPagerAdapter(
                     reverseScrollDirection,
                     wheelLinesPerNotch,
                     lineSpacingPercent,
-                    onContextMenuRequested
+                    onContextMenuRequested,
+                    onPaneReconnect
                 )
             }
             VIEW_TYPE_VNC -> {
@@ -731,7 +738,12 @@ class TerminalPagerAdapter(
         // here, so long-pressing a pane opened nothing — the bottom-sheet
         // terminal menu (tab list, Toggle System Keyboard, Close Current
         // Tab, etc.) was unreachable from inside a Panes tile.
-        private val onContextMenuRequested: ((Float, Float) -> Unit)? = null
+        private val onContextMenuRequested: ((Float, Float) -> Unit)? = null,
+        // Invoked by a dead tile's Reconnect button. Re-dialling needs the
+        // host row and the session manager, so the work itself belongs to
+        // TabTerminalActivity — this holder only reports which window of
+        // which tab the user asked to bring back.
+        private val onPaneReconnect: ((PanesTab, Int) -> Unit)? = null
     ) : RecyclerView.ViewHolder(gridView) {
 
         private var boundPanesTab: PanesTab? = null
@@ -743,6 +755,7 @@ class TerminalPagerAdapter(
         private var paneTerminalViews: MutableMap<Int, TerminalView> = mutableMapOf()
         private var focusJob: Job? = null
         private var entriesJob: Job? = null
+        private var disconnectedJob: Job? = null
 
         // var, not val: unbind() cancels and replaces it so bind() (which
         // calls unbind() first) always has a live scope to launch on.
@@ -754,11 +767,36 @@ class TerminalPagerAdapter(
             boundPanesTab = panesTab
             rebuildTiles(panesTab)
             focusJob = holderScope.launch {
-                panesTab.focusedPaneIndex.collect { index -> gridView.setFocusedIndex(index) }
+                panesTab.focusedPaneIndex.collect { index ->
+                    gridView.setFocusedIndex(index)
+                    // The border alone is not what makes a pane active —
+                    // without this the IME keeps typing into the previously
+                    // focused tile until the keyboard is toggled.
+                    paneTerminalViews[index]?.focusForPaneInput()
+                }
             }
             entriesJob = holderScope.launch {
                 panesTab.entries.collect { rebuildTiles(panesTab) }
             }
+            disconnectedJob = holderScope.launch {
+                panesTab.disconnectedWindowIds.collect { applyDisconnectedOverlays(panesTab) }
+            }
+        }
+
+        /**
+         * Translate the tab's set of dead session ids into grid indices for
+         * [PanesGridView.setDisconnectedIndices]. Resolved against the live
+         * entry list on every call, never cached, so closing one window
+         * cannot leave the overlay stranded on the wrong tile.
+         */
+        private fun applyDisconnectedOverlays(panesTab: PanesTab) {
+            val deadIds = panesTab.disconnectedWindowIds.value
+            val deadIndices = panesTab.currentEntries()
+                .mapIndexedNotNull { index, entry ->
+                    index.takeIf { entry.sshTab?.tabId in deadIds }
+                }
+                .toSet()
+            gridView.setDisconnectedIndices(deadIndices)
         }
 
         fun applyTheme(theme: Theme) {
@@ -820,9 +858,15 @@ class TerminalPagerAdapter(
                 contents,
                 splitDirection = panesTab.splitDirection,
                 onTileClicked = { index -> boundPanesTab?.setFocusedPane(index) },
-                onTileClosed = { index -> boundPanesTab?.closeWindow(index) }
+                onTileClosed = { index -> boundPanesTab?.closeWindow(index) },
+                onTileReconnect = { index ->
+                    boundPanesTab?.let { tab -> onPaneReconnect?.invoke(tab, index) }
+                }
             )
             gridView.setFocusedIndex(panesTab.focusedPaneIndex.value)
+            // setContents built fresh tiles, so every overlay is back to
+            // hidden — re-apply the tab's dead windows to the new tiles.
+            applyDisconnectedOverlays(panesTab)
         }
 
         /**
@@ -851,6 +895,8 @@ class TerminalPagerAdapter(
             focusJob = null
             entriesJob?.cancel()
             entriesJob = null
+            disconnectedJob?.cancel()
+            disconnectedJob = null
             boundPanesTab = null
             paneTerminalViews.clear()
             holderScope.cancel()

@@ -134,6 +134,9 @@
     <!-- Panes grid close button — floats over live terminal content, so it
          keeps a constant dark scrim with white glyph in both modes -->
     <color name="pane_close_scrim">#99000000</color>
+    <!-- Panes grid dead-session overlay — same constant dark scrim, kept
+         translucent so the exiting shell's last output stays readable -->
+    <color name="pane_disconnected_scrim">#CC000000</color>
 
     <!-- Keyboard customization key categories -->
     <color name="keyboard_key_modifier">@color/info</color>

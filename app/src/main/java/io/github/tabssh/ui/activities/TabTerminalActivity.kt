@@ -3052,6 +3052,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) },
                 onSelectionEnded = { selectionActionMode?.finish() },
                 onContextMenuRequested = { _, _ -> showTerminalMenu() },
+                onPaneReconnect = { panesTab, index -> reconnectPaneWindow(panesTab, index) },
                 reverseScrollDirection = app.preferencesManager.isReverseScrollDirection(),
                 wheelLinesPerNotch = app.preferencesManager.getWheelLinesPerNotch(),
                 lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120)
@@ -3118,6 +3119,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 onSelectionStarted = { tv -> startTerminalSelectionActionMode(tv) },
                 onSelectionEnded = { selectionActionMode?.finish() },
                 onContextMenuRequested = { _, _ -> showTerminalMenu() },
+                onPaneReconnect = { panesTab, index -> reconnectPaneWindow(panesTab, index) },
                 reverseScrollDirection = app.preferencesManager.isReverseScrollDirection(),
                 wheelLinesPerNotch = app.preferencesManager.getWheelLinesPerNotch(),
                 lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120)
@@ -4457,7 +4459,7 @@ class TabTerminalActivity : TabSSHActivity() {
                         cursorStyle = app.preferencesManager.getCursorStyleInt()
                     )
                 )
-                if (newTab.connect(ssh)) {
+                if (attachPaneSession(newTab, ssh, profile)) {
                     // Nothing releases sshSessionManager's pooled connection
                     // when a pane's own session dies on its own (remote exit,
                     // network drop) rather than via the tile's close button —
@@ -4483,6 +4485,56 @@ class TabTerminalActivity : TabSSHActivity() {
             Logger.w("TabTerminalActivity", "connectPaneMember: connect failed for ${profile.getDisplayName()}", e)
             null
         }
+    }
+
+    /**
+     * Attaches [newTab] to [ssh], preferring the Mosh handoff when the
+     * profile asks for it — the same decision `connectToProfile` makes for a
+     * tab-strip session. Mosh is not a `protocol` value (that field is only
+     * `"ssh"`/`"telnet"`); it is the separate `moshMode` field, so the
+     * telnet-vs-ssh branch in [connectPaneMember] can never see it, and
+     * without this a mosh profile opened in a pane would silently run over
+     * plain SSH. Deliberately toast-free: a pane group connects many members
+     * at once, and `reconnectPaneWindow` reports per-window progress itself.
+     */
+    private suspend fun attachPaneSession(
+        newTab: SSHTab,
+        ssh: SSHConnection,
+        profile: ConnectionProfile
+    ): Boolean {
+        // Mosh cannot carry a RemoteCommand — mosh-server always starts a
+        // login shell, so handing off would silently drop the command. Those
+        // profiles stay on the SSH channel, exactly as connectToProfile does.
+        val moshMode = if (!profile.remoteCommand.isNullOrBlank()) "off" else profile.moshMode
+        if (moshMode == "off" || MoshNativeClient.resolveBinary(this) == null) {
+            return newTab.connect(ssh)
+        }
+        newTab.initConnectionForMosh(ssh)
+        val moshCommand = profile.advancedSettings?.let { raw ->
+            try {
+                org.json.JSONObject(raw).optString("moshServerCommand").takeIf { it.isNotBlank() }
+            } catch (_: Exception) {
+                null
+            }
+        }
+        val handoff = MoshHandoff.bootstrap(
+            ssh, profile.username, profile.host, commandOverride = moshCommand
+        )
+        if (handoff !is MoshHandoff.Result.Success) {
+            val error = (handoff as? MoshHandoff.Result.Error)?.message
+            Logger.w("TabTerminalActivity", "Pane mosh bootstrap failed (${profile.getDisplayName()}): $error")
+            return newTab.connect(ssh)
+        }
+        if (newTab.connectMosh(this, handoff.info.host, handoff.info.port, handoff.info.keyBase64)) {
+            Logger.i("TabTerminalActivity", "Pane window attached over mosh: ${profile.getDisplayName()}")
+            return true
+        }
+        // mosh-client failed to start. The mosh-server just bootstrapped now
+        // has no client and would linger until its network timeout — reap it
+        // while the SSH session is still open, then fall back to SSH.
+        Logger.w("TabTerminalActivity", "Pane mosh attach failed (${profile.getDisplayName()}); falling back to SSH")
+        MoshHandoff.reapServer(ssh, handoff.info.serverPid, handoff.info.port)
+        return newTab.connect(ssh)
     }
 
     /**
@@ -4638,9 +4690,58 @@ class TabTerminalActivity : TabSSHActivity() {
             panesTab.entries.collect { entries ->
                 if (entries.isEmpty()) {
                     tabManager.closeTabByIdSealed(panesTab.tabId)
+                    // Closing the last window of the last tab used to leave
+                    // an empty pager behind — a blank terminal screen with
+                    // nothing on it. Every other close path finishes the
+                    // activity in that case, so this one does too.
+                    if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
+                        finish()
+                        return@collect
+                    }
                     updateViewPagerAdapter()
                 }
             }
+        }
+    }
+
+    /**
+     * Re-dial a Panes window whose session ended (the dead tile's Reconnect
+     * button). The window keeps its grid slot, host and working directory —
+     * only the [SSHTab] behind it is replaced — and no sibling pane is
+     * touched, so reconnecting one of six panes after a group-wide `reboot`
+     * is a per-tile decision the user makes as many times as they like.
+     */
+    private fun reconnectPaneWindow(panesTab: PanesTab, index: Int) {
+        val window = panesTab.currentEntries().getOrNull(index) ?: return
+        lifecycleScope.launch {
+            val host = withContext(Dispatchers.IO) {
+                app.database.connectableHostDao().getById(window.hostId)
+            }
+            if (host == null) {
+                Logger.w("TabTerminalActivity", "reconnectPaneWindow: host ${window.hostId} not found")
+                Toast.makeText(
+                    this@TabTerminalActivity,
+                    getString(R.string.terminal_connection_not_found),
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+            Toast.makeText(
+                this@TabTerminalActivity,
+                getString(R.string.pane_window_reconnecting_fmt, host.name),
+                Toast.LENGTH_SHORT
+            ).show()
+            val newTab = connectPaneMember(host, window.workingDir)
+            if (newTab == null) {
+                Toast.makeText(
+                    this@TabTerminalActivity,
+                    getString(R.string.pane_window_reconnect_failed_fmt, host.name),
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+            panesTab.replaceWindowSession(index, newTab)
+            panesTab.setFocusedPane(index)
         }
     }
 

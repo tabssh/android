@@ -2,9 +2,15 @@ package io.github.tabssh.ui.tabs
 
 import io.github.tabssh.ssh.connection.ConnectionState
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 /**
@@ -81,13 +87,112 @@ class PanesTab(
     private val _syncInputEnabled = MutableStateFlow(false)
     val syncInputEnabled: StateFlow<Boolean> = _syncInputEnabled.asStateFlow()
 
+    // Windows whose session ended on its own — remote `exit`, `reboot`,
+    // `poweroff`, or a dropped link — rather than by the user closing the
+    // tile. Keyed by SSHTab.tabId and NOT by grid index: indices shift every
+    // time another window closes, and a stale index would park the "session
+    // ended" overlay on top of a live pane.
+    //
+    // A dead window deliberately stays in the grid with its scrollback
+    // intact instead of being removed — the user needs to read whatever the
+    // shell printed on its way out, and the tile offers Reconnect / Close
+    // window from there. Sibling panes are never touched, and every window
+    // can legitimately be in this set at once (sync-input `reboot` typed
+    // into all of them), which is why nothing here closes the tab.
+    private val _disconnectedWindowIds = MutableStateFlow<Set<String>>(emptySet())
+    val disconnectedWindowIds: StateFlow<Set<String>> = _disconnectedWindowIds.asStateFlow()
+
+    // Scoped to the tab, not to TabTerminalActivity: a Panes tab can be
+    // parked ("Keep Running in Background") and outlive the Activity, and a
+    // pane whose session ends while parked must still read as dead when the
+    // user comes back. Cancelled in cleanup(), i.e. on real tab removal.
+    private val watchScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val windowWatchers = mutableMapOf<String, Job>()
+
+    init {
+        syncWindowWatchers()
+    }
+
     /** Current snapshot of this tab's windows. */
     fun currentEntries(): List<PaneWindow> = _entries.value
 
     /** Replace the full window list (e.g. after resolving/attaching a window's SSHTab). */
     fun updateEntries(newEntries: List<PaneWindow>) {
         _entries.value = newEntries
+        syncWindowWatchers()
         applySyncInputRouting()
+    }
+
+    /**
+     * Start a connection-state collector for every window that doesn't have
+     * one yet, and drop the collectors (and any "disconnected" marker) of
+     * sessions that are no longer in the grid.
+     *
+     * The `hasBeenConnected` latch mirrors [TabManager.createTab]'s per-tab
+     * collector: subscribing replays the StateFlow's current value, so the
+     * DISCONNECTED a window reports before it has ever connected is the
+     * initial state, not a session ending. Unlike that collector this one
+     * does NOT close anything — a pane dying is a per-window event here.
+     */
+    private fun syncWindowWatchers() {
+        val live = _entries.value.mapNotNull { it.sshTab?.tabId }.toSet()
+        windowWatchers.keys.toList()
+            .filterNot { it in live }
+            .forEach { windowWatchers.remove(it)?.cancel() }
+        _disconnectedWindowIds.value = _disconnectedWindowIds.value.intersect(live)
+        _entries.value.forEach { window ->
+            val sshTab = window.sshTab ?: return@forEach
+            if (windowWatchers.containsKey(sshTab.tabId)) return@forEach
+            windowWatchers[sshTab.tabId] = watchScope.launch {
+                var hasBeenConnected = false
+                sshTab.connectionState.collect { state ->
+                    when (state) {
+                        ConnectionState.CONNECTED -> hasBeenConnected = true
+                        ConnectionState.DISCONNECTED, ConnectionState.ERROR -> {
+                            if (hasBeenConnected) {
+                                _disconnectedWindowIds.value =
+                                    _disconnectedWindowIds.value + sshTab.tabId
+                                Logger.i(
+                                    "PanesTab",
+                                    "Pane session ended in group $groupId (state=$state)"
+                                )
+                            }
+                        }
+                        else -> {}
+                    }
+                }
+            }
+        }
+    }
+
+    /** True when the window at [index] has lost its session and is showing the dead-pane overlay. */
+    fun isWindowDisconnected(index: Int): Boolean {
+        val tabId = _entries.value.getOrNull(index)?.sshTab?.tabId ?: return false
+        return tabId in _disconnectedWindowIds.value
+    }
+
+    /**
+     * Swap a dead window's session for a freshly dialled one (the tile's
+     * Reconnect action), keeping its grid slot, host and working directory.
+     *
+     * A copy replaces the entry rather than mutating [PaneWindow.sshTab] in
+     * place: [entries] is a StateFlow of a list of these, so an in-place
+     * mutation compares equal to the previous value and never emits — the
+     * grid would keep rendering the dead session's terminal view.
+     */
+    fun replaceWindowSession(index: Int, newTab: SSHTab) {
+        val current = _entries.value
+        val window = current.getOrNull(index) ?: return
+        window.sshTab?.tabId?.let { oldId ->
+            windowWatchers.remove(oldId)?.cancel()
+            _disconnectedWindowIds.value = _disconnectedWindowIds.value - oldId
+        }
+        _entries.value = current.toMutableList().also {
+            it[index] = window.copy(sshTab = newTab)
+        }
+        syncWindowWatchers()
+        applySyncInputRouting()
+        Logger.i("PanesTab", "Reconnected window $index in group $groupId")
     }
 
     /**
@@ -152,6 +257,7 @@ class PanesTab(
         val remaining = current.filterIndexed { i, _ -> i != index }
             .mapIndexed { i, w -> w.also { it.gridPosition = i } }
         _entries.value = remaining
+        syncWindowWatchers()
         if (remaining.isNotEmpty()) {
             setFocusedPane(_focusedPaneIndex.value)
         } else {
@@ -217,6 +323,13 @@ class PanesTab(
                 Logger.d("PanesTab", "pane sshTab.cleanup() suppressed: ${e.message}")
             }
         }
+        windowWatchers.values.forEach { it.cancel() }
+        windowWatchers.clear()
+        _disconnectedWindowIds.value = emptySet()
+        // Real tab removal — nothing will ever watch this tab's windows
+        // again (parking goes through TabManager.parkPanesTab, which does
+        // not call cleanup(), so a parked tab keeps its collectors).
+        watchScope.cancel()
         _entries.value = emptyList()
         _isActive.value = false
     }

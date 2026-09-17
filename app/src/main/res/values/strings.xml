@@ -3546,6 +3546,10 @@
     <string name="pane_group_step2_title_fmt">%1$s — Windows</string>
     <string name="pane_window_close_content_description">Close this pane</string>
     <string name="pane_window_close_glyph" translatable="false">✕</string>
+    <string name="pane_window_disconnected_message">Session ended. Reconnect, or close this window.</string>
+    <string name="pane_window_close_button">Close window</string>
+    <string name="pane_window_reconnecting_fmt">Reconnecting %1$s…</string>
+    <string name="pane_window_reconnect_failed_fmt">Could not reconnect %1$s</string>
     <string name="connectable_host_label_fmt">%1$s — %2$s</string>
     <string name="connectable_host_label_badged_fmt">%1$s — %2$s · %3$s</string>
     <string name="connectable_host_badge_cloud">Cloud</string>

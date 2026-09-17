@@ -1,6 +1,7 @@
 package io.github.tabssh.ui.views
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.util.AttributeSet
 import android.view.Gravity
@@ -12,6 +13,8 @@ import android.widget.ScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.core.widget.TextViewCompat
+import com.google.android.material.button.MaterialButton
 import io.github.tabssh.R
 
 /** Split direction for a 2-window Panes group. Persisted on [io.github.tabssh.storage.database.entities.PaneGroup.splitDirection]. */
@@ -47,14 +50,29 @@ class PanesGridView @JvmOverloads constructor(
         private const val NARROW_WIDTH_DP = 600
     }
 
-    /** One tile: the border frame wrapping a caller-supplied content view, plus a per-window close button. */
+    /**
+     * One tile: the border frame wrapping a caller-supplied content view, a
+     * per-window close button, and the dead-session overlay shown when this
+     * window's shell exits (see [setDisconnected]).
+     */
     private class Tile(
         context: Context,
         val content: View,
-        onClose: () -> Unit
+        onClose: () -> Unit,
+        onReconnect: () -> Unit
     ) : FrameLayout(context) {
         // Day/night-aware focus border — resolved once per tile, not per focus change
         private val focusBorderColor = ContextCompat.getColor(context, R.color.pane_focus_border)
+
+        /**
+         * Covers just this tile when its session ends, leaving every sibling
+         * pane running. Clickable in its own right so taps land on Reconnect
+         * / Close window instead of falling through to the dead terminal
+         * underneath, and translucent so the shell's parting output (the
+         * `reboot` message, the last command's error) stays readable behind
+         * it.
+         */
+        private val disconnectedOverlay: LinearLayout
 
         init {
             addView(
@@ -76,13 +94,83 @@ class PanesGridView @JvmOverloads constructor(
                 closeButton,
                 LayoutParams(closeSizePx, closeSizePx, Gravity.TOP or Gravity.END)
             )
+            disconnectedOverlay = buildDisconnectedOverlay(onClose, onReconnect)
+            addView(
+                disconnectedOverlay,
+                LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+            )
             val borderPx = resources.getDimensionPixelSize(R.dimen.border_width)
             setPadding(borderPx, borderPx, borderPx, borderPx)
             setBackgroundColor(UNFOCUSED_BORDER_COLOR)
         }
 
+        private fun buildDisconnectedOverlay(
+            onClose: () -> Unit,
+            onReconnect: () -> Unit
+        ): LinearLayout {
+            val spacing = resources.getDimensionPixelSize(R.dimen.space_md)
+            val message = TextView(context).apply {
+                text = context.getString(R.string.pane_window_disconnected_message)
+                gravity = Gravity.CENTER
+                // Set the appearance first — it carries its own text color,
+                // which would otherwise overwrite the white set below.
+                TextViewCompat.setTextAppearance(
+                    this,
+                    com.google.android.material.R.style.TextAppearance_Material3_BodyMedium
+                )
+                setTextColor(ContextCompat.getColor(context, R.color.white))
+            }
+            val reconnect = overlayButton(R.string.terminal_reconnect, onReconnect)
+            val close = overlayButton(R.string.pane_window_close_button, onClose)
+            return LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(spacing, spacing, spacing, spacing)
+                setBackgroundColor(ContextCompat.getColor(context, R.color.pane_disconnected_scrim))
+                // Swallow taps aimed at the dead terminal behind the overlay
+                isClickable = true
+                isFocusable = true
+                visibility = GONE
+                addView(
+                    message,
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    )
+                )
+                addView(reconnect, buttonLayoutParams(spacing))
+                addView(close, buttonLayoutParams(spacing))
+            }
+        }
+
+        private fun overlayButton(textRes: Int, onClick: () -> Unit): MaterialButton =
+            MaterialButton(
+                context,
+                null,
+                com.google.android.material.R.attr.materialButtonOutlinedStyle
+            ).apply {
+                text = context.getString(textRes)
+                minHeight = resources.getDimensionPixelSize(R.dimen.min_touch_target)
+                setTextColor(ContextCompat.getColor(context, R.color.white))
+                strokeColor = ColorStateList.valueOf(
+                    ContextCompat.getColor(context, R.color.white)
+                )
+                setOnClickListener { onClick() }
+            }
+
+        private fun buttonLayoutParams(spacing: Int): LinearLayout.LayoutParams =
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = spacing }
+
         fun setFocused(focused: Boolean) {
             setBackgroundColor(if (focused) focusBorderColor else UNFOCUSED_BORDER_COLOR)
+        }
+
+        /** Show or hide this tile's dead-session overlay. */
+        fun setDisconnected(disconnected: Boolean) {
+            disconnectedOverlay.visibility = if (disconnected) VISIBLE else GONE
         }
     }
 
@@ -104,14 +192,15 @@ class PanesGridView @JvmOverloads constructor(
 
     /**
      * Set the pane content views (in grid order), the focus-tap callback,
-     * the per-window close callback, and (for exactly 2 windows) the split
-     * direction to use.
+     * the per-window close and reconnect callbacks, and (for exactly 2
+     * windows) the split direction to use.
      */
     fun setContents(
         contents: List<View>,
         splitDirection: String = PanesSplitDirection.HORIZONTAL,
         onTileClicked: (Int) -> Unit,
-        onTileClosed: (Int) -> Unit
+        onTileClosed: (Int) -> Unit,
+        onTileReconnect: (Int) -> Unit
     ) {
         this.onTileClicked = onTileClicked
         this.splitDirection = splitDirection
@@ -121,7 +210,12 @@ class PanesGridView @JvmOverloads constructor(
 
         tiles = contents.mapIndexed { index, content ->
             (content.parent as? ViewGroup)?.removeView(content)
-            Tile(context, content, onClose = { onTileClosed(index) }).also { tile ->
+            Tile(
+                context,
+                content,
+                onClose = { onTileClosed(index) },
+                onReconnect = { onTileReconnect(index) }
+            ).also { tile ->
                 tile.setOnClickListener {
                     // MotionEvent-based hit testing isn't needed — the whole
                     // tile is the tap target, matching the plan's "click to
@@ -150,6 +244,15 @@ class PanesGridView @JvmOverloads constructor(
     /** Update which tile shows the focus border, by grid index. */
     fun setFocusedIndex(index: Int) {
         tiles.forEachIndexed { i, tile -> tile.setFocused(i == index) }
+    }
+
+    /**
+     * Show the dead-session overlay on the tiles whose grid index is in
+     * [disconnectedIndices] and hide it everywhere else. Per-tile, never
+     * per-tab: one window's shell exiting leaves its siblings running.
+     */
+    fun setDisconnectedIndices(disconnectedIndices: Set<Int>) {
+        tiles.forEachIndexed { i, tile -> tile.setDisconnected(i in disconnectedIndices) }
     }
 
     private fun isNarrowScreen(): Boolean {
