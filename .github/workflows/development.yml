@@ -325,9 +325,15 @@ jobs:
         # share that failure mode, so it drives release creation directly,
         # deleting any partial release and retrying on failure.
         for attempt in 1 2 3; do
+          # A local "development" tag ref (left over from actions/checkout's
+          # tag fetch, or a prior failed attempt) makes gh refuse to create
+          # the release — it won't push a local tag it didn't just make.
+          # Drop it so gh creates a fresh tag straight at HEAD.
+          git tag -d development >/dev/null 2>&1 || true
           if gh release create development dist/* \
             --title "$RELEASE_TITLE" \
             --notes-file RELEASE_NOTES_DEV.md \
+            --target "$(git rev-parse HEAD)" \
             --prerelease; then
             echo "✅ Release created on attempt $attempt"
             exit 0
