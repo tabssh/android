@@ -315,15 +315,30 @@ jobs:
         git push origin :refs/tags/development || echo "No development tag to delete"
 
     - name: Create development release
-      uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        name: "${{ steps.version.outputs.RELEASE_TITLE }}"
-        tag_name: development
-        files: dist/*
-        body_path: RELEASE_NOTES_DEV.md
-        prerelease: true
-        draft: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        RELEASE_TITLE: ${{ steps.version.outputs.RELEASE_TITLE }}
+      run: |
+        # softprops/action-gh-release's Node HTTP client has stalled past
+        # its 5-minute headers timeout mid-upload on this self-hosted
+        # runner (large APK assets); the gh CLI's own upload path doesn't
+        # share that failure mode, so it drives release creation directly,
+        # deleting any partial release and retrying on failure.
+        for attempt in 1 2 3; do
+          if gh release create development dist/* \
+            --title "$RELEASE_TITLE" \
+            --notes-file RELEASE_NOTES_DEV.md \
+            --prerelease; then
+            echo "✅ Release created on attempt $attempt"
+            exit 0
+          fi
+          echo "⚠️ Release attempt $attempt failed"
+          gh release delete development --yes || true
+          git push origin :refs/tags/development || true
+          sleep 15
+        done
+        echo "##[error]Release creation failed after 3 attempts"
+        exit 1
 
     - name: Build summary
       env:
