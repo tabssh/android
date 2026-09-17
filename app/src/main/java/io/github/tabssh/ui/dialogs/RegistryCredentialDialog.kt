@@ -149,6 +149,9 @@ object RegistryCredentialDialog {
             .setNegativeButton(R.string.cancel, null)
             .create()
         dialog.show()
+        // Registry secret (token/password) field — always block screenshots,
+        // regardless of the global "prevent screenshots" setting.
+        dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
 
         // Validate on the button so a bad host keeps the dialog (and input) open.
         dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)

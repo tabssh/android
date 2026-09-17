@@ -235,9 +235,8 @@ class ConnectionsFragment : Fragment() {
 
     /**
      * Primary tap — matches whatever tapping the same host/tab does on its
-     * own sub-tab list: Connect for SSH/VNC, edit for Telnet (there is no
-     * live Telnet connector yet, same as [TelnetHostsFragment]), and
-     * switch-to-tab for an already-open session.
+     * own sub-tab list: Connect for SSH/VNC/Telnet, and switch-to-tab for an
+     * already-open session.
      */
     private fun handleSearchResultClick(result: SearchResult) {
         when (result) {
@@ -252,7 +251,7 @@ class ConnectionsFragment : Fragment() {
                     setConnecting = { vncConnecting = it }
                 )
             is SearchResult.TelnetResult ->
-                HostContextActions.editTelnetHost(this, result.host)
+                HostContextActions.connectToTelnetHost(this, result.host)
             is SearchResult.ActiveResult ->
                 HostContextActions.openActiveTab(this, app, result.tab)
         }

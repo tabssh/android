@@ -14,6 +14,7 @@ import io.github.tabssh.hypervisor.vnc.console.VncConsoleChannel
 import io.github.tabssh.themes.definitions.Theme
 import io.github.tabssh.ui.tabs.ConsoleDisplayMode
 import io.github.tabssh.ui.tabs.ConsoleTab
+import io.github.tabssh.ui.tabs.PaneWindow
 import io.github.tabssh.ui.tabs.PanesTab
 import io.github.tabssh.ui.tabs.Tab
 import io.github.tabssh.ui.tabs.VncTab
@@ -67,7 +68,14 @@ class TerminalPagerAdapter(
     private val onPaneReconnect: ((PanesTab, Int) -> Unit)? = null,
     private var reverseScrollDirection: Boolean = false,
     private var wheelLinesPerNotch: Int = 3,
-    private var lineSpacingPercent: Int = 120
+    private var lineSpacingPercent: Int = 120,
+    /**
+     * Resolves a [io.github.tabssh.storage.database.entities.ConnectionProfile.theme]
+     * value to a [Theme], for applying a per-connection theme override on top
+     * of the global [currentTheme]. Null (unresolvable id, or no resolver
+     * supplied) falls back to the global theme.
+     */
+    private val themeResolver: ((String) -> Theme?)? = null
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
@@ -175,7 +183,8 @@ class TerminalPagerAdapter(
                     wheelLinesPerNotch,
                     lineSpacingPercent,
                     onContextMenuRequested,
-                    onPaneReconnect
+                    onPaneReconnect,
+                    themeResolver
                 )
             }
             VIEW_TYPE_VNC -> {
@@ -247,7 +256,8 @@ class TerminalPagerAdapter(
             is Tab.Ssh -> {
                 if (holder !is TerminalViewHolder) return
                 holder.bind(tab.sshTab)
-                currentTheme?.let { theme -> holder.terminalView.applyTheme(theme) }
+                val theme = themeResolver?.invoke(tab.sshTab.profile.theme) ?: currentTheme
+                theme?.let { holder.terminalView.applyTheme(it) }
             }
             is Tab.Vnc -> {
                 if (holder !is VncViewHolder) return
@@ -297,8 +307,9 @@ class TerminalPagerAdapter(
             // Apply font
             terminalView.setFont(fontValue)
 
-            // Apply font size
-            terminalView.setFontSize(fontSize)
+            // Apply font size — a per-connection override wins over the
+            // global preference.
+            terminalView.setFontSize(tab.profile.fontSizeOverride ?: fontSize)
 
             // Set up URL detection callback
             if (onUrlDetected != null) {
@@ -319,8 +330,8 @@ class TerminalPagerAdapter(
                 terminalView.onSelectionEnded = cb
             }
 
-            // Terminal theme is already applied in TerminalView initialization
-            // based on connection profile settings
+            // Theme (global, or this profile's override) is applied by the
+            // caller right after bind() returns — see onBindViewHolder.
 
             Logger.d("TerminalPagerAdapter", "Bound terminal for tab: ${tab.profile.getDisplayName()}")
         }
@@ -743,7 +754,10 @@ class TerminalPagerAdapter(
         // host row and the session manager, so the work itself belongs to
         // TabTerminalActivity — this holder only reports which window of
         // which tab the user asked to bring back.
-        private val onPaneReconnect: ((PanesTab, Int) -> Unit)? = null
+        private val onPaneReconnect: ((PanesTab, Int) -> Unit)? = null,
+        // Resolves a pane's ConnectionProfile.theme to a Theme, for a
+        // per-connection override on top of the tab-wide currentTheme.
+        private val themeResolver: ((String) -> Theme?)? = null
     ) : RecyclerView.ViewHolder(gridView) {
 
         private var boundPanesTab: PanesTab? = null
@@ -806,8 +820,15 @@ class TerminalPagerAdapter(
 
         fun applyTheme(theme: Theme) {
             currentTheme = theme
-            paneTerminalViews.values.forEach { it.applyTheme(theme) }
+            val entries = boundPanesTab?.currentEntries().orEmpty()
+            paneTerminalViews.forEach { (index, view) ->
+                view.applyTheme(themeForIndex(index, entries) ?: theme)
+            }
         }
+
+        /** A pane's own connection-profile theme override, resolved via [themeResolver]. */
+        private fun themeForIndex(index: Int, entries: List<PaneWindow>): Theme? =
+            entries.getOrNull(index)?.sshTab?.let { sshTab -> themeResolver?.invoke(sshTab.profile.theme) }
 
         private fun terminalViewFor(index: Int): TerminalView =
             paneTerminalViews.getOrPut(index) {
@@ -855,8 +876,14 @@ class TerminalPagerAdapter(
 
             val contents = entries.mapIndexed { index, entry ->
                 val terminalView = terminalViewFor(index)
-                entry.sshTab?.let { sshTab -> terminalView.attachTerminalEmulator(sshTab.termuxBridge) }
-                currentTheme?.let { theme -> terminalView.applyTheme(theme) }
+                entry.sshTab?.let { sshTab ->
+                    terminalView.attachTerminalEmulator(sshTab.termuxBridge)
+                    // Per-connection overrides win over the tab-wide font size
+                    // and theme, same as a single (non-paned) SSH tab.
+                    sshTab.profile.fontSizeOverride?.let { terminalView.setFontSize(it) }
+                }
+                val theme = themeForIndex(index, entries) ?: currentTheme
+                theme?.let { terminalView.applyTheme(it) }
                 terminalView
             }
             gridView.setContents(

@@ -962,10 +962,10 @@ class BackupImporter(
             preferenceManager.setSyncPortForwardsEnabled(s.optBoolean("syncPortForwards", true))
             preferenceManager.setSyncNetworkRoutesEnabled(s.optBoolean("syncNetworkRoutes", true))
             preferenceManager.setSyncPaneGroupsEnabled(s.optBoolean("syncPaneGroups", true))
-            preferenceManager.setSyncRegistryCredentialsEnabled(s.optBoolean("syncRegistryCredentials", true))
-            preferenceManager.setSyncComposeStacksEnabled(s.optBoolean("syncComposeStacks", true))
-            preferenceManager.setSyncSingleContainerConfigsEnabled(s.optBoolean("syncSingleContainerConfigs", true))
-            preferenceManager.setSyncContainerAutoUpdatePoliciesEnabled(s.optBoolean("syncContainerAutoUpdatePolicies", true))
+            // syncRegistryCredentials/syncComposeStacks/syncSingleContainerConfigs/
+            // syncContainerAutoUpdatePolicies were removed: those entities always
+            // followed syncContainers and had no toggle of their own. A backup
+            // written by an older version may still carry these keys; ignore them.
             preferenceManager.setAutoResolveConflicts(s.optBoolean("autoResolve", true))
         }
         root.optJSONObject("multiplexer")?.let { m ->

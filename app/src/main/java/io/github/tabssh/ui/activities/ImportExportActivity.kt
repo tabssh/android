@@ -10,6 +10,7 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.backup.BackupManager
 import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.ui.utils.showSecurely
 import io.github.tabssh.utils.ThrowableMapper
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
@@ -235,7 +236,7 @@ class ImportExportActivity : TabSSHActivity() {
                 }
             }
             .setNegativeButton(R.string.cancel, null)
-            .show()
+            .showSecurely()
     }
 
     /**
@@ -867,7 +868,7 @@ class ImportExportActivity : TabSSHActivity() {
                 }
             }
             .setNegativeButton(R.string.cancel, null)
-            .show()
+            .showSecurely()
     }
 
     /**

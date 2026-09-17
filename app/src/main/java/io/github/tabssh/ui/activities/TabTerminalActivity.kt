@@ -1130,6 +1130,12 @@ class TabTerminalActivity : TabSSHActivity() {
                 }
             }
 
+        view.findViewById<MaterialButton>(R.id.btn_recordings)
+            ?.setOnClickListener {
+                bottomSheet.dismiss()
+                startActivity(Intent(this, RecordingsActivity::class.java))
+            }
+
         // Session section. When opened from inside a Panes tab, broadcasting
         // "to all tabs" is misleading — getAllTabs() only returns top-level
         // Tab.Ssh entries and silently excludes every window living inside a
@@ -3055,7 +3061,8 @@ class TabTerminalActivity : TabSSHActivity() {
                 onPaneReconnect = { panesTab, index -> reconnectPaneWindow(panesTab, index) },
                 reverseScrollDirection = app.preferencesManager.isReverseScrollDirection(),
                 wheelLinesPerNotch = app.preferencesManager.getWheelLinesPerNotch(),
-                lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120)
+                lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120),
+                themeResolver = { themeId -> app.themeManager.getThemeById(themeId) }
             )
             // Suppress onPageSelected / onTabSelected while the adapter is
             // being installed. viewPager.adapter resets the pager to page 0,
@@ -3122,7 +3129,8 @@ class TabTerminalActivity : TabSSHActivity() {
                 onPaneReconnect = { panesTab, index -> reconnectPaneWindow(panesTab, index) },
                 reverseScrollDirection = app.preferencesManager.isReverseScrollDirection(),
                 wheelLinesPerNotch = app.preferencesManager.getWheelLinesPerNotch(),
-                lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120)
+                lineSpacingPercent = app.preferencesManager.getStringAsInt("terminal_line_spacing", 120),
+                themeResolver = { themeId -> app.themeManager.getThemeById(themeId) }
             )
             viewPager?.adapter = pagerAdapter
 
@@ -3490,6 +3498,15 @@ class TabTerminalActivity : TabSSHActivity() {
                 // Connect terminal view to the tab's terminal emulator
                 val terminal = tab.termuxBridge
                 terminalView?.attachTerminalEmulator(terminal)
+
+                // Per-connection font size / theme override win over the
+                // global preference, same as a swipeable (pager) tab.
+                val fontSize = tab.profile.fontSizeOverride
+                    ?: app.preferencesManager.getInt("terminal_font_size", 14)
+                terminalView?.setFontSize(fontSize)
+                app.themeManager.getThemeById(tab.profile.theme)?.let { theme ->
+                    terminalView?.applyTheme(theme)
+                } ?: applyCurrentTheme()
 
                 // Deactivate previous tab
                 tabManager.getActiveTab()?.deactivate()

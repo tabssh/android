@@ -281,6 +281,24 @@ object HostContextActions {
         fragment.startActivity(ConnectionEditActivity.createTelnetIntent(fragment.requireContext(), host.id))
     }
 
+    /**
+     * Ephemeral, unsaved [ConnectionProfile] — same id as the [TelnetHost] row
+     * so a saved password (Keystore alias = bare id) is picked up
+     * transparently, matching ConnectableHostResolver.resolveProfile.
+     */
+    fun connectToTelnetHost(fragment: Fragment, host: TelnetHost) {
+        val profile = ConnectionProfile(
+            id = host.id,
+            name = host.name,
+            host = host.host,
+            port = host.port,
+            username = host.username,
+            protocol = "telnet",
+            savePassword = host.savePassword
+        )
+        ConnectionLauncher.launch(fragment.requireContext(), profile)
+    }
+
     private fun confirmDeleteTelnetHost(fragment: Fragment, app: TabSSHApplication, host: TelnetHost) {
         MaterialAlertDialogBuilder(fragment.requireContext())
             .setTitle(fragment.getString(R.string.domain_delete_title, host.name))

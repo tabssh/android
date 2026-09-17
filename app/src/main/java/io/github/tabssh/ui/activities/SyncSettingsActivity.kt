@@ -449,6 +449,8 @@ class SyncSettingsActivity : TabSSHActivity() {
             .create()
 
         dialog.show()
+        // Sync passphrase entry — always block screenshots.
+        dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val pw  = passwordInput?.text.toString()
             val cfm = confirmInput?.text.toString()
@@ -500,6 +502,8 @@ class SyncSettingsActivity : TabSSHActivity() {
             .create()
 
         dialog.show()
+        // Sync passphrase entry — always block screenshots.
+        dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val pw = passwordInput?.text?.toString() ?: ""
             passwordLayout?.error = null

@@ -24,6 +24,7 @@ import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.ui.adapters.IdentityAdapter
 import io.github.tabssh.ui.fragments.AuthConstants.PASSWORD_MASK
+import io.github.tabssh.ui.utils.showSecurely
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -251,7 +252,7 @@ class AuthSshFragment : Fragment() {
                 }
             }
             .setNegativeButton(getString(R.string.cancel), null)
-            .show()
+            .showSecurely()
     }
 
     private fun showApplyToConnectionsDialog(identity: Identity) {

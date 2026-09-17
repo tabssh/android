@@ -235,6 +235,35 @@ Compatibility notes:
 ### Permission justifications
 - Camera: QR pairing import only; declared optional (app fully works without it)
 - Notifications: per-session status entries and connection events
+- USE_BIOMETRIC / USE_FINGERPRINT: unlocking the app PIN lock and container
+  secrets with the device's fingerprint/face/biometric enrollment
+  (`SecurePasswordManager`, `SettingsActivity`), as an alternative to typing
+  the PIN
+- READ_EXTERNAL_STORAGE / WRITE_EXTERNAL_STORAGE (`maxSdkVersion=29`) /
+  MANAGE_EXTERNAL_STORAGE: the local SFTP file browser needs unrestricted
+  filesystem access to transfer files outside the app's sandbox; a
+  file-manager-class exception under AI.md PART 2/5. Requested lazily only
+  when SFTP browsing is opened, with an in-app rationale first
+- WAKE_LOCK / ACCESS_WIFI_STATE: keep the CPU/WiFi radio awake for the
+  duration of a persistent SSH/mosh/telnet session's foreground service so
+  the connection does not drop under Doze/WiFi-sleep
+- VIBRATE: haptic feedback on notification delivery
+- com.termux.permission.RUN_COMMAND: real Mosh support delegates the mosh
+  client binary invocation to the Termux:API app via `RUN_COMMAND`; the user
+  must separately grant it in Termux and enable
+  `allow-external-apps=true` in `~/.termux/termux.properties`
+- RECEIVE_BOOT_COMPLETED: `MonitoringBootReceiver` re-registers the
+  WorkManager periodic host-monitoring task after a reboot or app update,
+  since some OEM ROMs wipe the WorkManager DB
+- REQUEST_IGNORE_BATTERY_OPTIMIZATIONS: places the app in the
+  "unrestricted" App Standby bucket so Doze does not defer background host
+  monitoring beyond maintenance windows; the user is shown an in-app
+  rationale before the system prompt
+- io.github.tabssh.permission.TASKER (self-declared, `signature` protection
+  level): scopes the Tasker/Locale plugin's fire receiver
+  (`LocaleFireReceiver`) to same-signing-key callers only; third-party
+  automation apps use the separate `com.twofortyfouram` Locale plugin
+  protocol instead, which needs no permission of its own
 - Foreground service (special use): keeps SSH/mosh sessions, their port
   forwards, and opted-in VNC sessions alive while backgrounded; typed
   `specialUse` because these are indefinite interactive connections — the

@@ -32,6 +32,10 @@
   was off, which also undid it on the PIN screen and on the container
   log, config, and environment screens. Those screens now always block
   screenshots.
+- **Credential dialogs could be screenshotted.** The identity password,
+  registry credential, sync passphrase, and import/export password
+  prompts now always block screenshots and screen recording, regardless
+  of the "Prevent screenshots" setting.
 - **The Infra tab's container list is now called "Containers"**
   instead of "Docker Hosts" — it covers Incus, Podman, and LXC/LXD too.
 
@@ -87,6 +91,19 @@
 - **Six terminal actions were unreachable** and are back in the terminal
   bottom sheet: choose broadcast targets, split horizontally, save
   workspace, open workspace, record macro, and replay macro.
+- **Recordings were only reachable from Settings.** The terminal menu now
+  has a Recordings entry too, next to Record Video.
+
+### Connections
+
+- **A per-host font size or theme was saved but never used.** Set either
+  on a connection's edit screen and it now actually applies to that
+  connection's terminal tab — and to each pane individually inside a
+  Panes tab — instead of every tab using only the global font size and
+  theme.
+- **Tapping a Telnet host in Hosts search opened the editor** instead of
+  connecting, unlike tapping the same host on the Telnet sub-tab. It now
+  connects on tap either way.
 
 ### One add button per screen
 

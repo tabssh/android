@@ -2665,9 +2665,6 @@
     <string name="vnc_hosts_empty_title">No VNC Hosts</string>
     <string name="vnc_hosts_empty_message">Add a direct VNC connection to a remote desktop or KVM/IPMI console</string>
 
-    <!-- Authentication dialog (dialog_authentication.xml) -->
-    <string name="dialog_authentication_save_password">Save password for next time</string>
-
     <!-- Bulk edit dialog (dialog_bulk_edit.xml) -->
     <string name="dialog_bulk_edit_selected_count_default">0 connections selected</string>
     <string name="dialog_bulk_edit_section_connection">CONNECTION</string>
@@ -2857,6 +2854,7 @@
     <string name="terminal_menu_start_recording">Start Transcript</string>
     <string name="terminal_menu_record_video">Record Video…</string>
     <string name="terminal_menu_stop_video_recording">Stop Video Recording</string>
+    <string name="terminal_menu_recordings">Recordings…</string>
     <string name="terminal_menu_section_session">SESSION</string>
     <string name="terminal_menu_broadcast_to_all_tabs">Broadcast to All Tabs…</string>
     <string name="terminal_menu_close_current_tab">Close Current Tab</string>

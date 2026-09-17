@@ -736,10 +736,6 @@ class BackupExporter(
             put("syncPortForwards",       preferenceManager.isSyncPortForwardsEnabled())
             put("syncNetworkRoutes",      preferenceManager.isSyncNetworkRoutesEnabled())
             put("syncPaneGroups",         preferenceManager.isSyncPaneGroupsEnabled())
-            put("syncRegistryCredentials", preferenceManager.isSyncRegistryCredentialsEnabled())
-            put("syncComposeStacks",      preferenceManager.isSyncComposeStacksEnabled())
-            put("syncSingleContainerConfigs", preferenceManager.isSyncSingleContainerConfigsEnabled())
-            put("syncContainerAutoUpdatePolicies", preferenceManager.isSyncContainerAutoUpdatePoliciesEnabled())
             put("autoResolve",            preferenceManager.isAutoResolveConflictsEnabled())
         })
 
