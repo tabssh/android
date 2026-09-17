@@ -265,14 +265,17 @@ class PanesGridView @JvmOverloads constructor(
     }
 
     /**
-     * Near-square row/column split for [count] panes (1..6):
-     * 1→1x1, 2→1x2 (or 2x1 if [splitDirection] is vertical), 3→1x3,
-     * 4→2x2, 5→2x3(last row 2), 6→2x3.
+     * Master-row/stack-row split for [count] panes (1..6), tiling-window-
+     * manager style — each row's panes sit side by side (horizontal), and
+     * for 3+ panes the rows stack vertically with the larger row on top:
+     * 1→1x1, 2→1x2 (or 2x1 if [splitDirection] is vertical), 3→2x2
+     * (row-fill gives 2 top, 1 bottom), 4→2x2 (2 top, 2 bottom), 5→2x3
+     * (3 top, 2 bottom), 6→2x3 (3 top, 3 bottom).
      */
     private fun gridDimensions(count: Int): Pair<Int, Int> = when (count) {
         1 -> 1 to 1
         2 -> if (splitDirection == PanesSplitDirection.VERTICAL) 2 to 1 else 1 to 2
-        3 -> 1 to 3
+        3 -> 2 to 2
         4 -> 2 to 2
         5 -> 2 to 3
         else -> 2 to 3
