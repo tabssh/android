@@ -39,7 +39,7 @@ import io.github.tabssh.utils.tabSSHApp
  * translates the config to docker run argv and executes it over the
  * transport's exec runner. FLAG_SECURE because env values are secrets.
  */
-class SingleContainerConfigEditorActivity : TabSSHActivity() {
+class SingleContainerConfigEditorActivity : TabSSHActivity(), io.github.tabssh.ui.utils.AlwaysSecureScreen {
 
     companion object {
         const val EXTRA_HOST_ID = "container_host_id"

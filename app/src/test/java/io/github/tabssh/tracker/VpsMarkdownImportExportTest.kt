@@ -50,21 +50,21 @@ class VpsMarkdownImportExportTest {
     }
 
     @Test
-    fun `recognizes biennially and triennially billing cycles`() {
+    fun `stores biennially, triennially, annually and monthly as canonical cycles`() {
         val hosts = VpsMarkdownImportExport.parse(sample).hosts
         val dns = hosts.single { it.hostname == "dns" }
-        assertEquals("biennially", dns.billingCycle)
+        assertEquals("2 years", dns.billingCycle)
         assertEquals("$79.99", dns.price)
 
         val hosting = hosts.single { it.hostname == "hosting" }
-        assertEquals("triennially", hosting.billingCycle)
+        assertEquals("3 years", hosting.billingCycle)
         assertEquals("$252.00", hosting.price)
 
         val ns = hosts.single { it.hostname == "ns" }
-        assertEquals("yearly", ns.billingCycle)
+        assertEquals("1 year", ns.billingCycle)
 
         val apis = hosts.single { it.hostname == "apis" }
-        assertEquals("monthly", apis.billingCycle)
+        assertEquals("1 month", apis.billingCycle)
     }
 
     @Test
@@ -85,11 +85,12 @@ class VpsMarkdownImportExportTest {
     }
 
     @Test
-    fun `Free-Never renewal text yields no parsed date or billing cycle`() {
+    fun `Free-Never renewal renews yearly on the next January 1st`() {
         val ip = VpsMarkdownImportExport.parse(sample).hosts.single { it.hostname == "ip" }
-        assertEquals("Free/Never", ip.renewalRaw)
-        assertEquals(null, ip.renewalDate)
-        assertEquals(null, ip.billingCycle)
+        val expected = RenewalDateInput.nextJanuaryFirst()
+        assertEquals(RenewalDateInput.format(expected), ip.renewalRaw)
+        assertEquals(expected, ip.renewalDate)
+        assertEquals("1 year", ip.billingCycle)
         assertEquals(null, ip.price)
     }
 
@@ -128,8 +129,8 @@ class VpsMarkdownImportExportTest {
             svc  - 198.51.100.61 - [40Gx2G] [svc.example.com] [June 7th, 2027, triannually ${'$'}12.00] [note]
         """.trimIndent()
         val hosts = VpsMarkdownImportExport.parse(text).hosts
-        assertEquals("biennially", hosts.single { it.hostname == "dns" }.billingCycle)
-        assertEquals("triennially", hosts.single { it.hostname == "svc" }.billingCycle)
+        assertEquals("2 years", hosts.single { it.hostname == "dns" }.billingCycle)
+        assertEquals("3 years", hosts.single { it.hostname == "svc" }.billingCycle)
     }
 
     @Test
@@ -149,7 +150,7 @@ class VpsMarkdownImportExportTest {
         val original = VpsMarkdownImportExport.parse(sample).hosts
         val reparsed = VpsMarkdownImportExport.parse(VpsMarkdownImportExport.export(original)).hosts
         val dns = reparsed.single { it.hostname == "dns" }
-        assertEquals("biennially", dns.billingCycle)
+        assertEquals("2 years", dns.billingCycle)
         assertTrue(dns.price == "$79.99")
     }
 
@@ -158,9 +159,10 @@ class VpsMarkdownImportExportTest {
         val hosts = VpsMarkdownImportExport.parse(sample).hosts
         // The cycle is its own column; repeating it inside the date text is
         // what made the tracker render "June 7, 2027, biennially".
-        assertEquals("June 7th, 2027", hosts.single { it.hostname == "dns" }.renewalRaw)
-        assertEquals("June 04, 2028", hosts.single { it.hostname == "hosting" }.renewalRaw)
-        assertEquals("August 10", hosts.single { it.hostname == "apis" }.renewalRaw)
+        assertEquals("June 7, 2027", hosts.single { it.hostname == "dns" }.renewalRaw)
+        assertEquals("June 4, 2028", hosts.single { it.hostname == "hosting" }.renewalRaw)
+        val apis = hosts.single { it.hostname == "apis" }
+        assertEquals(RenewalDateInput.format(requireNotNull(apis.renewalDate)), apis.renewalRaw)
     }
 
     @Test
@@ -182,12 +184,12 @@ class VpsMarkdownImportExportTest {
     fun `splitRenewal strips the cycle and tidies what it leaves behind`() {
         val trailing = VpsMarkdownImportExport.splitRenewal("April 30, 2027, triennially")
         assertEquals("April 30, 2027", trailing.dateText)
-        assertEquals("triennially", trailing.billingCycle)
+        assertEquals("3 years", trailing.billingCycle)
 
         // "biannually" must not be read as the "annually" it ends with.
         val misspelled = VpsMarkdownImportExport.splitRenewal("June 7, 2027, biannually")
         assertEquals("June 7, 2027", misspelled.dateText)
-        assertEquals("biennially", misspelled.billingCycle)
+        assertEquals("2 years", misspelled.billingCycle)
 
         val everyN = VpsMarkdownImportExport.splitRenewal("June 7, 2030, every 5 years")
         assertEquals("June 7, 2030", everyN.dateText)
@@ -196,14 +198,39 @@ class VpsMarkdownImportExportTest {
         // A field that is nothing but a cycle leaves no date behind.
         val cycleOnly = VpsMarkdownImportExport.splitRenewal("monthly")
         assertEquals(null, cycleOnly.dateText)
-        assertEquals("monthly", cycleOnly.billingCycle)
+        assertEquals("1 month", cycleOnly.billingCycle)
+
+        val anually = VpsMarkdownImportExport.splitRenewal("May 15, 2027, anually")
+        assertEquals("May 15, 2027", anually.dateText)
+        assertEquals("1 year", anually.billingCycle)
+
+        val timesPer = VpsMarkdownImportExport.splitRenewal("May 15, 2027, 6 times a year")
+        assertEquals("May 15, 2027", timesPer.dateText)
+        assertEquals("6 times a year", timesPer.billingCycle)
+    }
+
+    @Test
+    fun `normalizeRenewal canonicalizes date text and keeps unreadable text dateless`() {
+        val now = 1_800_000_000_000L
+        val strict = VpsMarkdownImportExport.normalizeRenewal("2027, May 15", "yearly", now)
+        assertEquals("May 15, 2027", strict.renewalRaw)
+        assertEquals("1 year", strict.billingCycle)
+
+        val free = VpsMarkdownImportExport.normalizeRenewal("N/A", null, now)
+        assertEquals(RenewalDateInput.nextJanuaryFirst(now), free.renewalDate)
+        assertEquals("1 year", free.billingCycle)
+
+        val tbd = VpsMarkdownImportExport.normalizeRenewal("TBD", "10 years", now)
+        assertEquals("TBD", tbd.renewalRaw)
+        assertEquals(null, tbd.renewalDate)
+        assertEquals("10 years", tbd.billingCycle)
     }
 
     @Test
     fun `export re-attaches the billing cycle it stripped on import`() {
         val exported = VpsMarkdownImportExport.export(VpsMarkdownImportExport.parse(sample).hosts)
         assertTrue(
-            exported.contains("[June 7th, 2027, biennially \$79.99]"),
+            exported.contains("[June 7, 2027, Every 2 years \$79.99]"),
             "cycle missing from exported renewal field:\n$exported"
         )
     }

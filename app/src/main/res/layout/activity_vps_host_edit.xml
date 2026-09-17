@@ -125,31 +125,86 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_sm"
                 android:hint="@string/vps_host_edit_hint_renewal_raw"
+                app:helperText="@string/vps_host_edit_renewal_helper"
+                app:endIconMode="custom"
+                app:endIconDrawable="@drawable/ic_calendar"
+                app:endIconContentDescription="@string/vps_host_edit_pick_date"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/edit_renewal_raw"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:inputType="text" />
+                    android:inputType="text|textNoSuggestions" />
 
             </com.google.android.material.textfield.TextInputLayout>
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/layout_billing_cycle"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="@dimen/space_sm"
-                android:hint="@string/vps_host_edit_hint_billing_cycle"
-                style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+                android:orientation="horizontal">
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/edit_billing_cycle"
-                    android:layout_width="match_parent"
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:inputType="text" />
+                    android:layout_weight="1.3"
+                    android:layout_marginEnd="@dimen/space_xs"
+                    android:hint="@string/vps_host_edit_hint_billing_cycle"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
-            </com.google.android.material.textfield.TextInputLayout>
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/dropdown_cycle_mode"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/layout_cycle_count"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="@dimen/space_xs"
+                    android:hint="@string/vps_host_edit_hint_cycle_count"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
+
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/dropdown_cycle_count"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/layout_cycle_period"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1.2"
+                    android:hint="@string/vps_host_edit_hint_cycle_period"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
+
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/dropdown_cycle_period"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/text_cycle_summary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:layout_marginBottom="@dimen/space_sm"
+                android:paddingStart="@dimen/space_md"
+                android:paddingEnd="@dimen/space_md"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
 
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/layout_price"

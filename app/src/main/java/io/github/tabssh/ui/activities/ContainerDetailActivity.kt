@@ -34,7 +34,7 @@ import io.github.tabssh.utils.tabSSHApp
  * full lifecycle action menu and the docker-exec terminal entry point.
  * FLAG_SECURE keeps env values and logs out of screenshots and recents.
  */
-class ContainerDetailActivity : TabSSHActivity() {
+class ContainerDetailActivity : TabSSHActivity(), io.github.tabssh.ui.utils.AlwaysSecureScreen {
 
     companion object {
         const val EXTRA_HOST_ID = "container_host_id"

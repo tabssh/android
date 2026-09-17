@@ -25,10 +25,29 @@
   you tapped.
 - **Host pickers stopped listing the same machine twice.** A container
   host linked to a saved SSH connection or Cloud instance no longer
-  appears next to that host in Open new tab, the pane group editor, or
-  the port forward editor.
+  appears next to that host in Open new tab, the pane group editor,
+  the port forward editor, or the Dashboard's Add hosts dialog.
+- **The PIN screen blocks screenshots again.** Resuming any screen
+  cleared screenshot blocking whenever the "Prevent screenshots" setting
+  was off, which also undid it on the PIN screen and on the container
+  log, config, and environment screens. Those screens now always block
+  screenshots.
 - **The Infra tab's container list is now called "Containers"**
   instead of "Docker Hosts" — it covers Incus, Podman, and LXC/LXD too.
+
+### VPS Hosting Tracker
+
+- **The billing cycle is now three dropdowns instead of free text:**
+  Every / Times per, a number from 1 to 9, and Month / Year. "Every
+  1 Year" is Annually, "Every 3 Years" renews once every three years,
+  and "6 Times per Year" renews every two months. Existing entries
+  written as "annually", "anually", "yearly", "biennially" and so on
+  are read as the matching cycle and shown the same way everywhere.
+- **The renewal date must be a real date** — "May 15, 2027" or
+  "2027, May 15" — or pick one from the calendar button. Anything else
+  is flagged and not saved.
+- **Enter N/A for a free VPS.** It is set to renew yearly on the next
+  January 1st, so it still gets its reminder once a year.
 
 ### Telnet
 
@@ -296,7 +315,7 @@
   Infra, switching away and back (or force-stopping and relaunching)
   returns you to the same sub-tab instead of resetting to the first one.
 - **Deep links land on the right sub-tab** — "Configure OCI" now opens
-  straight to Auth → VMs, and the unresolved-keys prompt / Ctrl+K "SSH
+  straight to Auth → VMs, and the unresolved-keys prompt / Ctrl+Shift+K "SSH
   Keys" now open straight to Auth → Keys, instead of just the Auth tab.
 
 ### Frequent gets a long-press menu
@@ -1577,7 +1596,7 @@ global setting that was silently ignored has been replaced.
 - **Telnet (RFC 854)** alongside SSH — for network gear / console servers
 - In-app theme editor (clone a base, tweak colors, live preview)
 - Workspaces — save current open tabs as a named set, reopen later
-- Command palette (Ctrl+K) and Quick switcher (Ctrl+J)
+- Command palette (Ctrl+Shift+K) and Quick switcher (Ctrl+Shift+J)
 - Broadcast input — type once, mirror to selected tabs
 - Split view — vertical 2-pane per tab (tap to focus)
 - Remote shell history palette (Ctrl+R)

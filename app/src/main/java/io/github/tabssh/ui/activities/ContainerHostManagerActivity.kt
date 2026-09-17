@@ -49,7 +49,7 @@ import io.github.tabssh.utils.tabSSHApp
  * card naming the reason with a Retest action (IDEA.md § Container host
  * management).
  */
-class ContainerHostManagerActivity : TabSSHActivity() {
+class ContainerHostManagerActivity : TabSSHActivity(), io.github.tabssh.ui.utils.AlwaysSecureScreen {
 
     companion object {
         const val EXTRA_HOST_ID = "container_host_id"

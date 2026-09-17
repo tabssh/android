@@ -21,7 +21,7 @@ import io.github.tabssh.R
  * filtered RecyclerView below. Filter is fuzzy-ish: a query like "set" matches
  * "Settings" as long as the chars appear in order.
  *
- * One reusable component — Ctrl+K (commands) and Ctrl+J (tab switcher) both
+ * One reusable component — Ctrl+Shift+K (commands) and Ctrl+Shift+J (tab switcher) both
  * use it with different item lists. Keeps things tight.
  */
 object PaletteDialog {

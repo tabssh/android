@@ -32,7 +32,7 @@ import io.github.tabssh.utils.tabSSHApp
  * mirroring [ContainerDetailActivity]'s log tab.
  * FLAG_SECURE because log output routinely contains secrets.
  */
-class StackLogsActivity : TabSSHActivity() {
+class StackLogsActivity : TabSSHActivity(), io.github.tabssh.ui.utils.AlwaysSecureScreen {
 
     companion object {
         const val EXTRA_HOST_ID = "container_host_id"

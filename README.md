@@ -45,6 +45,8 @@ created, synced, or paired on any one of the three works unmodified on the other
 - 🔗 **ProxyJump** — Multi-hop connections through bastion hosts
 - ⏺️ **Session Recording** — Capture and replay raw terminal sessions (transcript)
 - 🎥 **Session Video Recorder** — Record any tab (SSH, VNC, Panes) to mp4 via screen capture; SSH tabs can also record an asciinema `.cast` alongside it; saved to `Movies/TabSSH` and shareable straight from the stop notification
+- 📟 **Telnet Hosts** — Plain-text legacy Telnet hosts kept in their own list, separate from SSH profiles; tap to connect in a terminal tab, long-press to edit or delete
+- 🗃️ **Workspaces** — Save the currently open tabs as a named workspace and reopen them all later (or delete saved ones) from the terminal menu
 - 🪟 **Panes** — Up to 6 SSH/Telnet/Mosh sessions tiled in a resizable grid inside one terminal tab; tap a pane to focus it, close individually or as a group (Disconnect All / Keep Running in Background), auto-stacks to a single column on narrow screens
 
 ### Security
@@ -67,6 +69,8 @@ created, synced, or paired on any one of the three works unmodified on the other
 - 🗂️ **Tabs at Top** — TabBar flush at top; no toolbar chrome; navigation drawer from the menu button (edge swipes switch tabs on terminal screens)
 - 👆 **Edge-Swipe Tabs** — Single-finger fling within 24dp of left/right edge switches tabs
 - 🖱️ **Touchpad-Style Terminal Surface** — right-edge desktop scrollbar (xfce4/konsole-style drag-to-scrub), left-edge mouse-wheel zone (flick = one notch, drag = repeated notches, configurable lines per notch), everywhere else scrolls 1:1 like a trackpad
+- 🗂️ **Hosts Sub-Tabs** — The Hosts tab splits into SSH, VNC, and Telnet lists, plus an Active list of open sessions shown only while a tab is open, with one search across all of them
+- 🧭 **Command Palette** — Ctrl+Shift+K on a hardware keyboard opens a filterable list of destinations and terminal actions (settings, snippets, port forwarding, font size, send to all tabs); Ctrl+Shift+J opens a quick switcher for open tabs and frequent connections
 - 🔁 **Active Sessions Strip** — Running tabs with live OSC 0/2 terminal title and connection-state dot
 - 📋 **Copyable Error Dialogs** — Every error dialog has a Copy button for clean bug reports
 - 🔍 **Find in Scrollback** — Floating search bar with prev/next, match counter, amber highlights, Ctrl+Shift+F shortcut
@@ -90,6 +94,8 @@ created, synced, or paired on any one of the three works unmodified on the other
 - 📂 **Connection Groups** — Folders with expand/collapse; group badges in search
 - 🔍 **Search & Sort** — Real-time search, 8 sort options
 - 📊 **Connection Statistics** — Visible "Connected N times • 2h ago" subtitle with relative last-connected time; connection counts are local-only per-device stats and never overwritten by sync; the Frequent list ranks hosts by a hybrid of usage count and recency decay; VNC hosts, Cloud Account instances, Hypervisor VMs, and Container hosts all track connection count and last-connected too, not just SSH/Telnet/Mosh hosts
+- 🕘 **Connection History** — Saved connections you have opened (up to the 500 most recent), newest first, with target, last-connected time, and connection count; tap a row to reconnect (drawer → Connection History)
+- 🛰️ **Cluster Commands** — Run one command (typed or picked from a snippet) over SSH on many selected saved connections in parallel (up to 10 at a time), with per-host success/failure, output, timing, cancel, and command history (drawer → Cluster Commands)
 - 📝 **Snippets** — Quick command library with `{?name:default|hint}` variable placeholders
 - ⏺️ **Macros** — Capture and replay raw byte sequences (escape codes, modifier-composed Ctrl/Alt)
 - 🎮 **Automation** — Tasker integration, intent-based actions, deep links
@@ -147,6 +153,13 @@ Pixel-perfect graphical console access to VMs — no separate VNC viewer require
 - Custom SSH keyboard bar and system keyboard both work inside VNC sessions
 - Tunnelled over SSH for QEMU/libvirt — no VNC port needs to be exposed to the network
 
+### SPICE Console 🖥️
+
+- Native SPICE client for VM consoles that opens as a swipeable tab, used when the APK ships the native SPICE library
+- **Proxmox VE** — QEMU VMs try `spiceproxy` after the serial console and before VNC
+- **QEMU/libvirt** — detects a SPICE display via `virsh domdisplay` and tunnels it over SSH
+- Falls back to VNC automatically when SPICE is unavailable
+
 ---
 
 ## 📦 Installation
@@ -187,7 +200,7 @@ Submission metadata lives in `metadata/`; run `./scripts/prepare-fdroid-submissi
 ```
 Add connection → Tap "+" → enter host/port/username → save
 Connect        → Tap profile → accept host key → connected
-New tab        → Tap "+" in TabBar, or Ctrl+T
+New tab        → Tap "+" in TabBar, or Ctrl+Shift+T
 SFTP           → Tap the folder icon in an active session
 VNC console    → Infra → Hypervisors → tap VM → tap VNC/Console
 Cloud          → Infra → Cloud → tap account → view live instances

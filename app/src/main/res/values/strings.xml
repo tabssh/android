@@ -2426,8 +2426,49 @@
     <string name="vps_host_edit_hint_ipv6">IPv6</string>
     <string name="vps_host_edit_hint_specs">Specs</string>
     <string name="vps_host_edit_hint_linked_domain">Linked domain</string>
-    <string name="vps_host_edit_hint_renewal_raw">Renewal (date, or free text e.g. \"Free/Never\", \"TBD\")</string>
+    <string name="vps_host_edit_hint_renewal_raw">Renewal date</string>
+    <string name="vps_host_edit_renewal_helper">May 15, 2027 or 2027, May 15. N/A if the host is free.</string>
+    <string name="vps_host_edit_error_renewal_invalid">Enter a date like May 15, 2027 or 2027, May 15, or N/A</string>
+    <string name="vps_host_edit_pick_date">Pick the renewal date</string>
     <string name="vps_host_edit_hint_billing_cycle">Billing cycle</string>
+    <string name="vps_host_edit_hint_cycle_count">Number</string>
+    <string name="vps_host_edit_hint_cycle_period">Period</string>
+    <string name="vps_host_edit_cycle_mode_every">Every</string>
+    <string name="vps_host_edit_cycle_mode_times_per">Times per</string>
+    <string name="vps_host_edit_cycle_mode_none">One-time</string>
+    <string name="vps_host_edit_cycle_period_month">Month</string>
+    <string name="vps_host_edit_cycle_period_year">Year</string>
+    <string name="vps_host_edit_cycle_summary_fmt">Renews: %1$s</string>
+    <string name="vps_host_edit_cycle_summary_none">One-time: does not renew automatically</string>
+    <string name="vps_host_edit_cycle_summary_legacy_fmt">Renews: %1$s. Kept as-is unless you change the billing cycle.</string>
+    <string name="billing_cycle_daily">Daily</string>
+    <string name="billing_cycle_weekly">Weekly</string>
+    <string name="billing_cycle_monthly">Monthly</string>
+    <string name="billing_cycle_annually">Annually</string>
+    <plurals name="billing_cycle_every_days">
+        <item quantity="one">Every %d day</item>
+        <item quantity="other">Every %d days</item>
+    </plurals>
+    <plurals name="billing_cycle_every_weeks">
+        <item quantity="one">Every %d week</item>
+        <item quantity="other">Every %d weeks</item>
+    </plurals>
+    <plurals name="billing_cycle_every_months">
+        <item quantity="one">Every %d month</item>
+        <item quantity="other">Every %d months</item>
+    </plurals>
+    <plurals name="billing_cycle_every_years">
+        <item quantity="one">Every %d year</item>
+        <item quantity="other">Every %d years</item>
+    </plurals>
+    <plurals name="billing_cycle_times_a_month">
+        <item quantity="one">%d time a month</item>
+        <item quantity="other">%d times a month</item>
+    </plurals>
+    <plurals name="billing_cycle_times_a_year">
+        <item quantity="one">%d time a year</item>
+        <item quantity="other">%d times a year</item>
+    </plurals>
     <string name="vps_host_edit_hint_price">Price</string>
     <string name="vps_host_edit_hint_description">Description</string>
     <string name="vps_host_edit_hint_reminder_days">Reminder days before renewal</string>

@@ -582,7 +582,8 @@ class VpsTrackerActivity : TabSSHActivity() {
                 getString(R.string.vps_tracker_col_specs) + ": " + (host.specs ?: "—"),
                 getString(R.string.vps_tracker_col_domain) + ": " + (host.linkedDomain ?: "—"),
                 getString(R.string.vps_tracker_col_renewal) + ": " + renewal,
-                getString(R.string.vps_tracker_col_cycle) + ": " + (host.billingCycle ?: "—"),
+                getString(R.string.vps_tracker_col_cycle) + ": " +
+                    (io.github.tabssh.tracker.BillingCycleText.label(this@VpsTrackerActivity, host.billingCycle) ?: "—"),
                 getString(R.string.vps_tracker_col_price) + ": " + (host.price ?: "—")
             ).joinToString("  ·  ")
 

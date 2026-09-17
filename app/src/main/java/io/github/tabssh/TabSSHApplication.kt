@@ -47,6 +47,7 @@ class TabSSHApplication : Application() {
         private const val KEY_CONTAINER_HOST_ALIASES_MIGRATED = "container_host_aliases_migrated"
         private const val KEY_CONTAINER_NAMING_MIGRATED = "container_naming_migrated"
         private const val KEY_VPS_RENEWAL_CYCLE_MIGRATED = "vps_renewal_cycle_migrated"
+        private const val KEY_VPS_RENEWAL_NORMALIZED = "vps_renewal_normalized"
         private const val KEY_LEGACY_CONTAINER_WORK_CANCELLED = "legacy_docker_update_work_cancelled"
         private const val LEGACY_KEY_PREFIX_KEY_ENABLED = "terminal_prefix_key_enabled"
         private const val KEY_DEFAULT_SNIPPETS_SEEDED = "default_snippets_seeded"
@@ -387,22 +388,26 @@ class TabSSHApplication : Application() {
     }
 
     /**
-     * One-time VPS tracker migration: split the billing cycle out of every
-     * stored renewal text so the tracker shows "April 30, 2027" instead of
-     * "April 30, 2027, triennially" (see VpsRenewalCycleMigration). Rows with
-     * no recognizable cycle word are left untouched, so this is a no-op for
-     * anyone whose renewal fields are plain dates.
+     * One-time VPS tracker migration (see VpsRenewalCycleMigration): split the
+     * billing cycle out of stored renewal text, store cycles in canonical form,
+     * store readable dates as "Month d, yyyy", and turn free hosts into a
+     * yearly January 1st renewal. It runs once under
+     * [KEY_VPS_RENEWAL_NORMALIZED]; [KEY_VPS_RENEWAL_CYCLE_MIGRATED] marked the
+     * older cycle-split-only pass and is kept so it is still written.
      */
     private suspend fun migrateVpsRenewalCycles() {
         val prefs = getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE)
-        if (prefs.getBoolean(KEY_VPS_RENEWAL_CYCLE_MIGRATED, false)) return
+        if (prefs.getBoolean(KEY_VPS_RENEWAL_NORMALIZED, false)) return
         try {
             io.github.tabssh.storage.database.VpsRenewalCycleMigration.run(database)
         } catch (e: Exception) {
-            Logger.e("TabSSHApplication", "VPS renewal cycle migration failed", e)
+            Logger.e("TabSSHApplication", "VPS renewal migration failed", e)
             return
         }
-        prefs.edit().putBoolean(KEY_VPS_RENEWAL_CYCLE_MIGRATED, true).apply()
+        prefs.edit()
+            .putBoolean(KEY_VPS_RENEWAL_CYCLE_MIGRATED, true)
+            .putBoolean(KEY_VPS_RENEWAL_NORMALIZED, true)
+            .apply()
     }
 
     /**
@@ -846,8 +851,10 @@ class TabSSHApplication : Application() {
             val prefs = androidx.preference.PreferenceManager
                 .getDefaultSharedPreferences(this)
             val window = activity.window ?: return
-            // Block screenshots / screen recording when the user opts in.
-            if (prefs.getBoolean("security_prevent_screenshots", false)) {
+            // Block screenshots / screen recording when the user opts in, and always on secret-bearing screens.
+            if (activity is io.github.tabssh.ui.utils.AlwaysSecureScreen ||
+                prefs.getBoolean("security_prevent_screenshots", false)
+            ) {
                 window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
             } else {
                 window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)

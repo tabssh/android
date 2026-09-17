@@ -4,22 +4,20 @@ import io.github.tabssh.tracker.VpsMarkdownImportExport
 import io.github.tabssh.utils.logging.Logger
 
 /**
- * One-time data migration for the VPS Hosting Tracker: split the billing cycle
- * out of every existing `vps_hosts.renewal_raw` value.
+ * One-time data migration for the VPS Hosting Tracker: bring every stored
+ * renewal field into the shape the edit screen now writes.
  *
- * Rows imported before [VpsMarkdownImportExport.splitRenewal] existed stored
- * the whole renewal field verbatim, so the tracker rendered "April 30, 2027,
- * triennially" where only the date belongs — the cadence is its own column and
- * its own edit field. This rewrites `renewal_raw` to the date text alone and
- * fills `billing_cycle` from what was stripped.
+ * - A billing cycle embedded in `renewal_raw` ("April 30, 2027, triennially")
+ *   moves to `billing_cycle`; an existing `billing_cycle` is never overwritten.
+ * - `billing_cycle` is rewritten to its canonical form ("yearly" → "1 year").
+ * - `renewal_raw` becomes "Month d, yyyy" whenever a date can be read from it,
+ *   and a free host ("Free/Never", "N/A") becomes January 1st of next year,
+ *   renewing yearly (see [VpsMarkdownImportExport.normalizeRenewal]).
+ * - Text with no readable date ("TBD") keeps its text; if the row already had
+ *   a parsed date, the text is replaced with that date.
  *
- * A row whose renewal text carries no recognizable cycle word is left exactly
- * as it is, and an existing `billing_cycle` is never overwritten — the stored
- * value wins over anything inferred from the text. No schema change is
- * involved, so this runs in app code rather than a raw-SQL Room migration.
- *
- * Idempotent: after a run no `renewal_raw` contains a cycle word, so a second
- * pass finds nothing to change.
+ * No schema change is involved, so this runs in app code rather than a raw-SQL
+ * Room migration. Idempotent: a second pass finds nothing to change.
  */
 object VpsRenewalCycleMigration {
 
@@ -28,31 +26,35 @@ object VpsRenewalCycleMigration {
     /**
      * Run the migration against [db]. Returns the number of rows rewritten.
      */
-    suspend fun run(db: TabSSHDatabase): Int {
+    suspend fun run(db: TabSSHDatabase, now: Long = System.currentTimeMillis()): Int {
         val dao = db.vpsHostDao()
         var migrated = 0
         for (host in dao.getAllList()) {
             val parts = VpsMarkdownImportExport.splitRenewal(host.renewalRaw)
-            if (parts.billingCycle == null) continue
-
             val cycle = host.billingCycle?.takeIf { it.isNotBlank() } ?: parts.billingCycle
-            if (parts.dateText == host.renewalRaw && cycle == host.billingCycle) continue
-
-            val renewalDate = parts.dateText?.let {
-                VpsMarkdownImportExport.parseBestEffortDate(it, cycle)
+            val fields = VpsMarkdownImportExport.normalizeRenewal(parts.dateText, cycle, now)
+            val existingDate = host.renewalDate
+            val renewalDate = fields.renewalDate ?: existingDate
+            val renewalRaw = if (fields.renewalDate == null && existingDate != null) {
+                VpsMarkdownImportExport.formatRenewalDate(existingDate)
+            } else {
+                fields.renewalRaw
             }
+            if (renewalRaw == host.renewalRaw && renewalDate == host.renewalDate && fields.billingCycle == host.billingCycle) continue
+
             dao.update(
                 host.copy(
-                    renewalRaw = parts.dateText,
+                    renewalRaw = renewalRaw,
                     renewalDate = renewalDate,
-                    billingCycle = cycle,
+                    billingCycle = fields.billingCycle,
+                    lastReminderSentAt = if (renewalDate == host.renewalDate) host.lastReminderSentAt else null,
                     modifiedAt = System.currentTimeMillis()
                 )
             )
             migrated++
         }
         if (migrated > 0) {
-            Logger.i(TAG, "Split the billing cycle out of $migrated VPS renewal field(s)")
+            Logger.i(TAG, "Normalized the renewal date and billing cycle of $migrated VPS host(s)")
         }
         return migrated
     }

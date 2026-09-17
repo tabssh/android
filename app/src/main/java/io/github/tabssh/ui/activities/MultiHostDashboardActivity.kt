@@ -759,7 +759,8 @@ class MultiHostDashboardActivity : TabSSHActivity() {
             val all = withContext(Dispatchers.IO) {
                 try {
                     io.github.tabssh.storage.registry.ConnectableHostRegistry.refreshAll(app.database, app)
-                    app.database.connectableHostDao().getAllList()
+                    val keepIds = groupHosts[targetGroupId].orEmpty()
+                    io.github.tabssh.storage.registry.ConnectableHostRegistry.pickerHosts(app.database, keepIds)
                         .filter { it.protocol.equals("ssh", ignoreCase = true) }
                         .sortedBy { it.name.lowercase() }
                 } catch (e: Exception) { Logger.e(TAG, "host registry load failed", e); emptyList() }

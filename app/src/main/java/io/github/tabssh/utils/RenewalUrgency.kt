@@ -2,8 +2,8 @@ package io.github.tabssh.utils
 
 import android.content.Context
 import io.github.tabssh.R
+import io.github.tabssh.tracker.BillingCycle
 import java.util.Calendar
-import java.util.Locale
 import java.util.TimeZone
 
 /**
@@ -47,13 +47,7 @@ enum class RenewalUrgency {
         private const val CRITICAL_MAX_DAYS = 13
         private const val WARNING_MAX_DAYS = 27
         private const val MILLIS_PER_DAY = 86_400_000L
-
-        // Generic "N years"/"N months"/"N weeks" cycle (also "yr(s)"/"mo(s)"/
-        // "wk(s)" abbreviations), for hosts on a cadence outside the fixed
-        // yearly/biennially/triennially set (e.g. a 5-year or 10-year
-        // prepaid plan) — see [VpsMarkdownImportExport]'s matching regex,
-        // which normalizes import text into this same "N <unit>" shape.
-        private val N_UNIT_REGEX = Regex("""^(\d+)\s*(years?|yrs?|months?|mos?|weeks?|wks?)$""")
+        private const val MAX_ROLL_STEPS = 10_000
 
         /** [renewalOrExpirationDate] is epoch millis, or null when no date is tracked. */
         fun of(renewalOrExpirationDate: Long?, now: Long = System.currentTimeMillis()): RenewalUrgency {
@@ -79,76 +73,29 @@ enum class RenewalUrgency {
         /**
          * A recurring "renews every X" service (tracked by [VpsHost.billingCycle])
          * often has a stored `renewalDate` that is simply the *last known*
-         * due date from an old import, not the next one — e.g. a monthly
-         * host imported months ago still shows "Jan 10" long after several
-         * automatic renewals have already happened. Rather than reporting
-         * that as wildly overdue, roll [date] forward by whole billing-cycle
-         * periods (using calendar month/year arithmetic, not fixed day
-         * counts, so month-length variance is handled correctly) until it
-         * lands on or after [now] — i.e. the *next* actual due date. A
-         * one-time/unknown cycle (null, or anything not in the recognized
-         * set) is returned unchanged, since there is no periodicity to
-         * project forward from.
+         * due date, not the next one — e.g. a monthly host imported months ago
+         * still shows "Jan 10" long after several renewals have happened.
+         * Rather than reporting that as wildly overdue, roll [date] forward by
+         * whole billing-cycle steps (calendar month/year arithmetic, see
+         * [BillingCycle.step]) until it lands on or after [now]. Each step is
+         * measured from the original date, so a month-end date does not drift
+         * ("Jan 31" monthly stays on Mar 31, not Mar 28). A null or
+         * unrecognized cycle returns the date unchanged.
          */
         fun effectiveDate(date: Long?, billingCycle: String?, now: Long = System.currentTimeMillis()): Long? {
-            if (date == null || billingCycle == null || date >= now) return date
-            // Hosts imported from VPS.md get a normalized cycle string, but
-            // ones entered by hand (VpsHostEditActivity's billing-cycle
-            // field is free text) may carry any case/synonym the user typed
-            // ("Monthly", "MONTHLY", "annual") — match case-insensitively
-            // against the same synonym set the importer recognizes so
-            // auto-detection doesn't silently no-op on those.
-            val normalizedCycle = billingCycle.trim().lowercase(Locale.US)
-            // "biannually"/"triannually" are the common misspellings for
-            // "every 2/3 years" (their strict dictionary meaning is "twice"/
-            // "three times a year" — a different cadence entirely) — accepted
-            // here as synonyms of biennially/triennially so free-typed entry
-            // still rolls forward correctly, while the importer normalizes
-            // to the correct term on the way in (see VpsMarkdownImportExport).
-            val nUnitMatch = N_UNIT_REGEX.find(normalizedCycle)
-            val (field, amount) = if (nUnitMatch != null) {
-                val n = nUnitMatch.groupValues[1].toIntOrNull() ?: return date
-                val unit = nUnitMatch.groupValues[2]
-                when {
-                    unit.startsWith("year") || unit.startsWith("yr") -> Calendar.YEAR to n
-                    unit.startsWith("month") || unit.startsWith("mo") -> Calendar.MONTH to n
-                    else -> Calendar.DAY_OF_YEAR to (n * 7)
-                }
-            } else {
-                val field = when (normalizedCycle) {
-                    "daily", "day" -> Calendar.DAY_OF_YEAR
-                    "weekly", "week" -> Calendar.DAY_OF_YEAR
-                    "monthly", "month" -> Calendar.MONTH
-                    "yearly", "annually", "annual", "year" -> Calendar.YEAR
-                    "biennially", "biennial", "biannually", "biannual" -> Calendar.YEAR
-                    "triennially", "triennial", "triannually", "triannual" -> Calendar.YEAR
-                    else -> return date
-                }
-                val amount = when (normalizedCycle) {
-                    "weekly", "week" -> 7
-                    "biennially", "biennial", "biannually", "biannual" -> 2
-                    "triennially", "triennial", "triannually", "triannual" -> 3
-                    else -> 1
-                }
-                field to amount
-            }
-            // renewalDate is always anchored in UTC by VpsMarkdownImportExport
-            // (both the exact-date and year-less best-effort parse paths use a
-            // UTC Calendar) — rolling forward in the default/local timezone
-            // here would read the wrong day-of-month whenever the device's
-            // offset crosses local midnight, silently shifting the "due on
-            // the Nth" day by one. Stay in UTC to match how the date was built.
+            if (date == null || date >= now) return date
+            val (field, amount) = BillingCycle.parse(billingCycle)?.step() ?: return date
+            // renewalDate is always UTC midnight; rolling in local time would
+            // shift the day-of-month whenever the device offset crosses midnight.
             val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
-            calendar.timeInMillis = date
-            // Safety cap: bounds the loop even for a pathological input
-            // (e.g. a decades-old date on a daily cycle) instead of
-            // spinning — 10,000 iterations covers ~27 years of daily
-            // rollover, far beyond any realistic renewal gap.
-            var iterations = 0
-            while (calendar.timeInMillis < now && iterations < 10_000) {
-                calendar.add(field, amount)
-                iterations++
-            }
+            // Safety cap bounds the loop for a pathological input (a decades-old
+            // date on a daily cycle); 10,000 steps is ~27 years of daily rollover.
+            var steps = 0
+            do {
+                steps++
+                calendar.timeInMillis = date
+                calendar.add(field, amount * steps)
+            } while (calendar.timeInMillis < now && steps < MAX_ROLL_STEPS)
             return calendar.timeInMillis
         }
 

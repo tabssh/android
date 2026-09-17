@@ -5611,7 +5611,7 @@ class TabTerminalActivity : TabSSHActivity() {
      * Adjust terminal font size by delta
      */
     /**
-     * Wave 2.6 — Command palette (Ctrl+K). Lists every navigable destination
+     * Wave 2.6 — Command palette (Ctrl+Shift+K). Lists every navigable destination
      * + tab/connection actions; fuzzy-filterable from the search box.
      */
     private fun showCommandPalette() {
@@ -5654,7 +5654,7 @@ class TabTerminalActivity : TabSSHActivity() {
     }
 
     /**
-     * Wave 2.6 — Quick switcher (Ctrl+J). Lists open tabs first, then recent
+     * Wave 2.6 — Quick switcher (Ctrl+Shift+J). Lists open tabs first, then recent
      * connections — pick one to switch / open.
      */
     private fun showQuickSwitcher() {

@@ -46,7 +46,7 @@ import io.github.tabssh.utils.tabSSHApp
  *
  * FLAG_SECURE because .env content is typically secrets.
  */
-class ComposeEditorActivity : TabSSHActivity() {
+class ComposeEditorActivity : TabSSHActivity(), io.github.tabssh.ui.utils.AlwaysSecureScreen {
 
     companion object {
         const val EXTRA_HOST_ID = "container_host_id"

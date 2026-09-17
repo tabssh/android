@@ -25,13 +25,19 @@ import java.util.UUID
  * hostname/ipv4/ipv6 tolerates being missing. A top-level title line, blank
  * lines, and an optional wrapping ` ```text ` / ` ``` ` fenced-code-block
  * (common when the source note is kept in a Markdown-aware editor) are all
- * skipped rather than misread as data rows. Recognized billing-cycle
- * keywords: yearly/annually, monthly, weekly, daily, biennially/biannually
- * (every 2 years), triennially/triannually (every 3 years), and an
- * arbitrary "N years"/"N months"/"N weeks" (or "yr(s)"/"mo(s)"/"wk(s)")
- * cycle such as "5 years" or "10 years" for longer prepaid terms. A fully
- * explicit one-time date with no recognized cycle word is kept as-is
- * (`billingCycle = null`) rather than treated as an error.
+ * skipped rather than misread as data rows. Recognized billing cycles are
+ * everything [BillingCycle.parse] reads: yearly/annually/anually, monthly,
+ * quarterly, semiannually, weekly, daily, biennially/biannually (every 2
+ * years), triennially/triannually (every 3 years), "N years"/"N months"/
+ * "N weeks"/"N days" (optionally prefixed with "every"), and "N times a
+ * year"/"N times a month". Imported cycles are stored in the canonical
+ * [BillingCycle.storageText] shape; a date with no recognized cycle word is a
+ * one-time date (`billingCycle = null`).
+ *
+ * Renewal text is normalized the same way the edit screen stores it (see
+ * [normalizeRenewal]): a recognizable date becomes "Month d, yyyy", and a free
+ * host ("Free/Never", "N/A") becomes January 1st of next year, renewing yearly.
+ * Text that is neither (e.g. "TBD") is kept as written with no date.
  */
 object VpsMarkdownImportExport {
 
@@ -58,12 +64,9 @@ object VpsMarkdownImportExport {
             isLenient = true
         }
     }
-    private val EXPORT_EXACT_DATE_FORMAT: ThreadLocal<SimpleDateFormat> = ThreadLocal.withInitial {
-        SimpleDateFormat("MMMM d, yyyy", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
-    }
 
     // Single accessor for the per-thread SimpleDateFormat idiom used by all
-    // three ThreadLocal fields above — ThreadLocal.withInitial() guarantees
+    // ThreadLocal fields above — ThreadLocal.withInitial() guarantees
     // get() is never null; checkNotNull states that invariant without
     // a force-unwrap (AI.md PART 0 bans `!!` outside tests).
     private fun ThreadLocal<SimpleDateFormat>.format(): SimpleDateFormat =
@@ -79,11 +82,14 @@ object VpsMarkdownImportExport {
     // guard "August 10 monthly" would read "10 month" as an N-unit cycle and
     // leave "August ly" behind as the date.
     private val CYCLE_REGEX = Regex(
-        """(?<![A-Za-z])(?:every\s+)?(?:(\d+)\s*(years?|yrs?|months?|mos?|weeks?|wks?)|""" +
-            """(biennially|biennial|biannually|biannual|triennially|triennial|""" +
-            """triannually|triannual|yearly|annually|annual|monthly|weekly|daily))(?![A-Za-z])""",
+        """(?<![A-Za-z])(?:every\s+)?(?:\d+\s*times\s*(?:a|per)\s*(?:years?|months?)|""" +
+            """\d+\s*(?:years?|yrs?|months?|mos?|weeks?|wks?|days?)|""" +
+            """semi-?annually|semi-?annual|twice\s+a\s+year|quarterly|""" +
+            """biennially|biennial|biannually|biannual|triennially|triennial|""" +
+            """triannually|triannual|yearly|annually|anually|annual|monthly|weekly|daily)(?![A-Za-z])""",
         RegexOption.IGNORE_CASE
     )
+    private val FREE_RENEWAL_REGEX = Regex("""^(?:free(?:\s*/\s*never)?|never|none|n\s*/?\s*a)$""", RegexOption.IGNORE_CASE)
 
     /**
      * A renewal field split into the part that is actually a date and the
@@ -99,44 +105,19 @@ object VpsMarkdownImportExport {
      *
      * No recognizable cycle word → the text is returned unchanged with a null
      * cycle; a field that is nothing but a cycle ("yearly") leaves a null
-     * [RenewalParts.dateText]. Both spellings of the 2-/3-year cadences are
-     * accepted on input and normalized to the correct term for storage
-     * ("biannually" is a common misspelling of "biennially"; the correct term
-     * means "twice a year", a different cadence).
+     * [RenewalParts.dateText]. The cycle comes back in the canonical
+     * [BillingCycle.storageText] shape ("yearly" → "1 year", "biannually" →
+     * "2 years": "biannually" is the common misspelling of "biennially").
      */
     fun splitRenewal(raw: String?): RenewalParts {
         val text = raw?.trim().orEmpty()
         if (text.isEmpty()) return RenewalParts(null, null)
 
         val match = CYCLE_REGEX.find(text) ?: return RenewalParts(text, null)
-        val cycle = normalizeCycle(match) ?: return RenewalParts(text, null)
+        val cycle = BillingCycle.parse(match.value)?.storageText() ?: return RenewalParts(text, null)
 
         val remainder = tidyRenewalText(text.removeRange(match.range))
         return RenewalParts(remainder.ifBlank { null }, cycle)
-    }
-
-    private fun normalizeCycle(match: MatchResult): String? {
-        val count = match.groupValues[1]
-        val unit = match.groupValues[2]
-        if (count.isNotEmpty() && unit.isNotEmpty()) {
-            val n = count.toIntOrNull() ?: return null
-            val lowerUnit = unit.lowercase(Locale.US)
-            val unitWord = when {
-                lowerUnit.startsWith("year") || lowerUnit.startsWith("yr") -> "year"
-                lowerUnit.startsWith("month") || lowerUnit.startsWith("mo") -> "month"
-                else -> "week"
-            }
-            return "$n $unitWord${if (n == 1) "" else "s"}"
-        }
-        return when (match.groupValues[3].lowercase(Locale.US)) {
-            "biennially", "biennial", "biannually", "biannual" -> "biennially"
-            "triennially", "triennial", "triannually", "triannual" -> "triennially"
-            "yearly", "annually", "annual" -> "yearly"
-            "monthly" -> "monthly"
-            "weekly" -> "weekly"
-            "daily" -> "daily"
-            else -> null
-        }
     }
 
     /** Collapse the whitespace and orphaned commas that removing a cycle span leaves behind. */
@@ -146,6 +127,31 @@ object VpsMarkdownImportExport {
             out = out.replace(Regex("""\s*,\s*,"""), ",")
         }
         return out.trim().trim(',', ' ').trim()
+    }
+
+    /** The three stored renewal columns after [normalizeRenewal]. */
+    data class RenewalFields(val renewalRaw: String?, val renewalDate: Long?, val billingCycle: String?)
+
+    /**
+     * Normalize renewal text and cycle the way the edit screen stores them.
+     *
+     * - The cycle is rewritten to [BillingCycle.storageText] when recognized, else kept as written.
+     * - A free host ("Free/Never", "Free", "Never", "None", "N/A") renews on the next January 1st, yearly.
+     * - A strict date ("May 15, 2027", "2027, May 15") or a best-effort one ("June 7th", rolled
+     *   forward by the cycle) is stored as "Month d, yyyy".
+     * - Anything else ("TBD") keeps its text and has no date.
+     */
+    fun normalizeRenewal(dateText: String?, billingCycle: String?, now: Long = System.currentTimeMillis()): RenewalFields {
+        val cycleText = billingCycle?.trim()?.takeIf { it.isNotEmpty() }
+        val cycle = BillingCycle.parse(cycleText)?.storageText() ?: cycleText
+        val text = dateText?.trim()?.takeIf { it.isNotEmpty() } ?: return RenewalFields(null, null, cycle)
+        if (FREE_RENEWAL_REGEX.matches(text)) {
+            val date = RenewalDateInput.nextJanuaryFirst(now)
+            return RenewalFields(RenewalDateInput.format(date), date, BillingCycle.ANNUALLY.storageText())
+        }
+        val date = RenewalDateInput.parseDate(text) ?: parseBestEffortDate(text, cycle)
+            ?: return RenewalFields(text, null, cycle)
+        return RenewalFields(RenewalDateInput.format(date), date, cycle)
     }
 
     data class ParseResult(val hosts: List<VpsHost>, val warnings: List<String>)
@@ -214,9 +220,8 @@ object VpsMarkdownImportExport {
             // The cycle is a separate field, not part of the date — strip it
             // from the stored text so the tracker shows "April 30, 2027"
             // rather than "April 30, 2027, triennially". Export re-attaches it.
-            val (renewalRaw, billingCycle) = splitRenewal(renewalField)
-
-            val renewalDate = renewalRaw?.let { parseBestEffortDate(it, billingCycle) }
+            val parts = splitRenewal(renewalField)
+            val (renewalRaw, renewalDate, billingCycle) = normalizeRenewal(parts.dateText, parts.billingCycle, now)
 
             hosts.add(
                 VpsHost(
@@ -290,7 +295,7 @@ object VpsMarkdownImportExport {
         val cycle = h.billingCycle
         if (!cycle.isNullOrBlank() && splitRenewal(h.renewalRaw).billingCycle == null) {
             if (isNotEmpty()) append(", ")
-            append(cycle)
+            append(BillingCycle.parse(cycle)?.englishLabel() ?: cycle)
         }
         if (!h.price.isNullOrBlank()) {
             if (isNotEmpty()) append(' ')
@@ -336,6 +341,6 @@ object VpsMarkdownImportExport {
         return sb.toString()
     }
 
-    /** Format an entity's [VpsHost.renewalDate] as "Month d, yyyy" for display, or null if unset. */
-    fun formatRenewalDate(epochMillis: Long): String = EXPORT_EXACT_DATE_FORMAT.format().format(epochMillis)
+    /** Format an entity's [VpsHost.renewalDate] as "Month d, yyyy" for display. */
+    fun formatRenewalDate(epochMillis: Long): String = RenewalDateInput.format(epochMillis)
 }

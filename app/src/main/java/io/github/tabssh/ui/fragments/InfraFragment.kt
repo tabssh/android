@@ -13,7 +13,7 @@ import androidx.viewpager2.widget.ViewPager2
 import io.github.tabssh.R
 
 /**
- * Combined "Infra" tab that hosts Docker Hosts, Hypervisors, and Cloud
+ * Combined "Infra" tab that hosts Containers, Hypervisors, and Cloud
  * Accounts as sub-tabs within a single main-tab slot. This replaces the
  * standalone "VMs" tab (HypervisorsFragment) and the Cloud Accounts drawer
  * entry; Docker was added in Phase 4 and leads the order as the most-used

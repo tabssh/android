@@ -51,7 +51,7 @@ import io.github.tabssh.utils.tabSSHApp
  * persisted, escalating lockout window (30s doubling, capped) enforced
  * across relaunches. No PIN history / strength meter.
  */
-class PinLockActivity : AppCompatActivity() {
+class PinLockActivity : AppCompatActivity(), io.github.tabssh.ui.utils.AlwaysSecureScreen {
 
     companion object {
         private const val TAG = "PinLockActivity"

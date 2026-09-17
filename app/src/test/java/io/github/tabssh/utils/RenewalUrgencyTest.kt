@@ -204,6 +204,31 @@ class RenewalUrgencyTest {
         assertEquals(true, weeksResult >= now)
     }
 
+    @Test
+    fun `effectiveDate rolls a times-per cycle by its step`() {
+        val utc = java.util.TimeZone.getTimeZone("UTC")
+        val staleDate = Calendar.getInstance(utc).apply { clear(); set(2025, Calendar.JANUARY, 10) }.timeInMillis
+        // Just past March 10: six times a year is every two months, so the next is May 10.
+        val referenceNow = Calendar.getInstance(utc).apply { clear(); set(2025, Calendar.MARCH, 11) }.timeInMillis
+
+        val result = requireNotNull(RenewalUrgency.effectiveDate(staleDate, "6 times a year", referenceNow))
+        val resultCal = Calendar.getInstance(utc).apply { timeInMillis = result }
+        assertEquals(Calendar.MAY, resultCal.get(Calendar.MONTH))
+        assertEquals(10, resultCal.get(Calendar.DAY_OF_MONTH))
+    }
+
+    @Test
+    fun `effectiveDate keeps a month-end anchor instead of drifting`() {
+        val utc = java.util.TimeZone.getTimeZone("UTC")
+        val jan31 = Calendar.getInstance(utc).apply { clear(); set(2025, Calendar.JANUARY, 31) }.timeInMillis
+        val referenceNow = Calendar.getInstance(utc).apply { clear(); set(2025, Calendar.MARCH, 2) }.timeInMillis
+
+        val result = requireNotNull(RenewalUrgency.effectiveDate(jan31, "1 month", referenceNow))
+        val resultCal = Calendar.getInstance(utc).apply { timeInMillis = result }
+        assertEquals(Calendar.MARCH, resultCal.get(Calendar.MONTH))
+        assertEquals(31, resultCal.get(Calendar.DAY_OF_MONTH))
+    }
+
     // ── pillText() — i18n label text ────────────────────────────────────────
 
     @Test

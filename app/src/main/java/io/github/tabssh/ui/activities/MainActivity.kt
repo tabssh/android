@@ -107,7 +107,7 @@ class MainActivity : TabSSHActivity() {
             else          -> MainTab.HOSTS
         }
         // Optional deep-link into Auth's sub-tabs (e.g. Configure OCI -> VMs,
-        // unresolved-keys Snackbar / Ctrl+K "SSH Keys" -> Keys). Written into
+        // unresolved-keys Snackbar / Ctrl+Shift+K "SSH Keys" -> Keys). Written into
         // AuthFragment's own persisted sub-tab index before the pager moves,
         // so AuthFragment.onViewCreated picks it up via the normal read path.
         intent.getIntExtra("start_sub_tab", -1).takeIf { it >= 0 }?.let { subTab ->
