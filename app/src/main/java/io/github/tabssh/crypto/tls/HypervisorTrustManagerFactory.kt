@@ -286,7 +286,34 @@ object HypervisorTrustManagerFactory {
                         }
                     }
                 } else {
-                    // Prior pin set but presented cert doesn't match → possible MITM or cert rotation.
+                    // Prior pin set but presented cert doesn't match. Before treating
+                    // this as a possible MITM, re-check the system CA: publicly-trusted
+                    // multi-tenant endpoints (e.g. OCI's load-balanced API hosts) can
+                    // legitimately rotate to a different — but still validly-issued —
+                    // leaf cert between connections. A cert that still chains to a
+                    // system CA is still trustworthy, so re-pin silently instead of
+                    // re-prompting the user for a cert that never stopped being valid.
+                    // Self-signed / private-CA hosts never hit this branch (systemTm
+                    // can't validate them), so they keep the strict confirm-on-change
+                    // prompt below unchanged.
+                    val stillSystemTrusted = if (systemTm != null) {
+                        try {
+                            systemTm.checkServerTrusted(chain, t)
+                            true
+                        } catch (_: CertificateException) {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                    if (stillSystemTrusted) {
+                        captured.sha256 = presented
+                        onPinCaptured?.invoke()
+                        systemTrustedLeaves.add(presented)
+                        Logger.i(TAG, "Publicly-trusted cert rotated — re-pinned silently: $pinnedSha256 → $presented (host=$host:$port)")
+                        return
+                    }
+
                     Logger.w(TAG, "Cert pin MISMATCH — pinned $pinnedSha256 vs presented $presented (host=$host:$port)")
                     val action = HypervisorCertPromptDialog.promptChangedCert(
                         host, port, pinnedSha256, presented
