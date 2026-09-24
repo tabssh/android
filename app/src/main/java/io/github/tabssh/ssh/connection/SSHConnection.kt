@@ -1315,9 +1315,15 @@ class SSHConnection(
                     .getInstance(context).ensureStarted()
                 Logger.i("SSHConnection", "Built-in Tor ready on loopback SOCKS port $resolvedTorPort")
             } catch (e: Exception) {
-                Logger.e("SSHConnection", "Failed to start built-in Tor; connecting direct", e)
+                // A built-in Tor route is an explicit user privacy choice. If tor
+                // fails to start we must NOT silently fall back to a direct
+                // connection — that would route the session outside Tor while
+                // the UI still shows a Tor route selected. Fail the connect and
+                // surface the reason instead.
+                Logger.e("SSHConnection", "Failed to start built-in Tor; aborting connect", e)
                 resolvedRoute = null
                 resolvedTorPort = 0
+                throw e
             }
         }
         Unit

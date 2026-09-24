@@ -16,8 +16,11 @@ import io.github.tabssh.themes.definitions.ThemeManager
 import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.performance.PerformanceManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 
 /**
  * Main application class for TabSSH
@@ -336,6 +339,45 @@ class TabSSHApplication : Application() {
                     .schedulePeriodicSync()
             }
             Logger.i("TabSSHApplication", "Application initialized successfully (background)")
+        }
+        autostartTorIfEnabled()
+    }
+
+    /**
+     * Keep the bundled tor process in sync with the saved route table.
+     *
+     * "Enabled" for a built-in tor route means the user has opted into Tor as a
+     * transport, so the process must already be up when a connect happens —
+     * otherwise every session through it pays a cold bootstrap. Enabling or
+     * disabling the route (or deleting it) starts/stops tor to match. Failures
+     * are logged and left to the connect path, which aborts rather than
+     * silently connecting direct.
+     */
+    private fun autostartTorIfEnabled() {
+        val torManager = io.github.tabssh.protocols.tor.TorManager.getInstance(this)
+        if (!torManager.isAvailable()) {
+            Logger.i("TabSSHApplication", "Built-in tor not bundled for this ABI; autostart disabled")
+            return
+        }
+        applicationScope.launch {
+            database.networkRouteDao().getAll().collectLatest { routes ->
+                val wanted = routes.any { it.builtInTor && it.enabled }
+                val busy = torManager.status.value.let {
+                    it is io.github.tabssh.protocols.tor.TorStatus.Starting ||
+                        it is io.github.tabssh.protocols.tor.TorStatus.Bootstrapping
+                }
+                if (wanted && !torManager.isRunning() && !busy) {
+                    try {
+                        withContext(Dispatchers.IO) { torManager.ensureStarted() }
+                        Logger.i("TabSSHApplication", "Built-in tor autostarted for enabled route")
+                    } catch (e: Exception) {
+                        Logger.e("TabSSHApplication", "Built-in tor autostart failed", e)
+                    }
+                } else if (!wanted && torManager.isRunning()) {
+                    torManager.stop()
+                    Logger.i("TabSSHApplication", "Built-in tor stopped: no enabled tor route")
+                }
+            }
         }
     }
 

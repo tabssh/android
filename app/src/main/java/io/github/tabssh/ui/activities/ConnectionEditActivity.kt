@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import io.github.tabssh.utils.showError
 import io.github.tabssh.utils.announceAccessibility
 import java.util.UUID
@@ -1993,6 +1994,31 @@ class ConnectionEditActivity : TabSSHActivity() {
             // on the exception path, leaking the JSch Session.
             var connection: io.github.tabssh.ssh.connection.SSHConnection? = null
 
+            // If testing a Tor route, observe bootstrap progress and update the
+            // button text in real time — PART 7: "Feedback for every action...
+            // no silent no-ops."
+            val testUsesTor = isTestingTorRoute()
+            var torStatusJob: kotlinx.coroutines.Job? = null
+            if (testUsesTor) {
+                torStatusJob = lifecycleScope.launch {
+                    io.github.tabssh.protocols.tor.TorManager.getInstance(this@ConnectionEditActivity)
+                        .status.collect { status ->
+                            binding.btnTest.text = when (status) {
+                                io.github.tabssh.protocols.tor.TorStatus.Stopped ->
+                                    getString(R.string.conn_edit_testing_ellipsis)
+                                io.github.tabssh.protocols.tor.TorStatus.Starting ->
+                                    getString(R.string.route_tor_status_starting)
+                                is io.github.tabssh.protocols.tor.TorStatus.Bootstrapping ->
+                                    getString(R.string.route_tor_status_bootstrapping, status.percent)
+                                io.github.tabssh.protocols.tor.TorStatus.Connected ->
+                                    getString(R.string.conn_edit_testing_ellipsis)
+                                is io.github.tabssh.protocols.tor.TorStatus.Failed ->
+                                    getString(R.string.route_tor_status_failed, status.reason)
+                            }
+                        }
+                }
+            }
+
             try {
                 val profile = createConnectionProfile()
                 val authType = getSelectedAuthType()
@@ -2032,6 +2058,7 @@ class ConnectionEditActivity : TabSSHActivity() {
                 val mapped = ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Connection test failed")
                 showError(mapped.message, getString(R.string.conn_edit_test_failed_title), copyText = mapped.technicalDetail)
             } finally {
+                torStatusJob?.cancel()
                 try { connection?.disconnect() } catch (e: Exception) {
                     Logger.w("ConnectionEditActivity", "Test-connect disconnect failed", e)
                 }
@@ -2040,6 +2067,17 @@ class ConnectionEditActivity : TabSSHActivity() {
                 binding.btnTest.text = getString(R.string.test_button)
             }
         }
+    }
+
+    private fun isTestingTorRoute(): Boolean {
+        val profile = try { createConnectionProfile() } catch (_: Exception) { return false }
+        val routeId = profile.routeId ?: app.preferencesManager.getDefaultRouteId() ?: return false
+        val route = try {
+            runBlocking {
+                app.database.networkRouteDao().getById(routeId)
+            }
+        } catch (_: Exception) { return false }
+        return route?.builtInTor == true && route.enabled
     }
 
     // -------------------------------------------------------------------------
