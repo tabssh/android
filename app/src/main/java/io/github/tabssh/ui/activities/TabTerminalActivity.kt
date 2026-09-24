@@ -60,6 +60,7 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import kotlin.math.abs
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flowOn
 import io.github.tabssh.network.ConnectionDiagnostic
@@ -4689,6 +4690,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 return@launch
             }
             observePanesEmptyAutoClose(created)
+            observePanesAllDisconnectedAutoClose(created)
             updateViewPagerAdapter()
         }
     }
@@ -4711,6 +4713,32 @@ class TabTerminalActivity : TabSSHActivity() {
                     // an empty pager behind — a blank terminal screen with
                     // nothing on it. Every other close path finishes the
                     // activity in that case, so this one does too.
+                    if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
+                        finish()
+                        return@collect
+                    }
+                    updateViewPagerAdapter()
+                }
+            }
+        }
+    }
+
+    /**
+     * Every pane in the grid has had its session end on its own (remote
+     * `exit`, `reboot`, dropped link) — the user never closed any of them,
+     * so the "dead tile" overlays are up but there is nothing left to
+     * reconnect individually. Close the whole tab instead of leaving a
+     * blank grid of disconnected tiles.
+     */
+    private fun observePanesAllDisconnectedAutoClose(panesTab: PanesTab) {
+        lifecycleScope.launch {
+            combine(panesTab.entries, panesTab.disconnectedWindowIds) { entries, disconnectedIds ->
+                entries.isNotEmpty() && entries.all { window ->
+                    window.sshTab?.tabId in disconnectedIds
+                }
+            }.collect { allDisconnected ->
+                if (allDisconnected) {
+                    tabManager.closeTabByIdSealed(panesTab.tabId)
                     if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
                         finish()
                         return@collect
