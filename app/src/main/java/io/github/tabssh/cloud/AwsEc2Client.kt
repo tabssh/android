@@ -4,10 +4,8 @@ import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import java.io.StringReader
@@ -172,16 +170,10 @@ class AwsEc2Client : CloudProvider {
             if (resp.code == 401 || resp.code == 403) {
                 throw CloudAuthException("AWS credentials rejected (HTTP ${resp.code})")
             }
-            if (!resp.isSuccessful) return@use false
-            // The Query API can carry a failure inside the body of a 200
-            // response (e.g. <RequestFailed> for a wrong instance id), so the
-            // status code alone is not a sufficient success check.
-            val body = resp.body?.string().orEmpty()
-            if (body.contains("<RequestFailed>") || body.contains("<Errors>")) {
-                Logger.d("AwsEc2Client", "AWS $action failed: ${extractAwsError(body) ?: "unknown"}")
-                return@use false
-            }
-            true
+            // EC2 reports errors with a non-2xx status (the AWS Query protocol
+            // allows only 400, 500, or a custom awsQueryError code), so the
+            // status code is a sufficient success check here.
+            resp.isSuccessful
         }
     }
 
@@ -440,7 +432,7 @@ class AwsEc2Client : CloudProvider {
                     rfc3986Encode(pair.substring(0, eq)) to rfc3986Encode(pair.substring(eq + 1))
                 }
             }
-            .sortedBy { it.first }
+            .sortedWith(compareBy({ it.first }, { it.second }))
             .joinToString("&") { "${it.first}=${it.second}" }
     }
 
