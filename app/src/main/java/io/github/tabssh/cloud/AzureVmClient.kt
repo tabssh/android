@@ -25,25 +25,22 @@ import java.util.concurrent.TimeUnit
  *      Microsoft.Compute/virtualMachines?api-version=2023-03-01 with
  *     `Authorization: Bearer …`.
  *
- * Quirk: the VM list endpoint returns VM metadata but NOT the public IP
- * directly. To get public IP we'd need to follow `properties.networkProfile
- * .networkInterfaces[].id` → Microsoft.Network NIC → `ipConfigurations[]
- * .properties.publicIPAddress.id` → Microsoft.Network publicIPAddress →
- * `properties.ipAddress`. That's THREE more API calls per VM and turns one
- * fetch into N round-trips.
+ * Quirk: the VM list endpoint returns VM metadata but NOT any IP address.
+ * `properties.networkProfile.networkInterfaces[]` holds only an ARM
+ * resource id, so the addresses live behind the Network API.
  *
- * For this first cut we use the simpler `expand=instanceView` and
- * `Microsoft.Resources resources?$filter=resourceType eq 'Microsoft.Network/publicIPAddresses'`
- * trick: fetch ALL public IPs in the subscription up front and join them
- * to VMs by NIC association. Two requests, no per-VM fan-out.
+ * Rather than a per-VM fan-out (NIC → publicIPAddress, times the VM count),
+ * we make two subscription-scoped list calls — every NIC, then every public
+ * IP — and join them in memory by `nicId → publicIPAddress.id →
+ * ipAddress`. Private addresses come from the same NIC walk for free.
  *
  * Token format: `TENANT_ID:CLIENT_ID:CLIENT_SECRET:SUBSCRIPTION_ID`
  * (4 colon-separated values).
  *
  * Limitations:
  *  - Single subscription per cloud-account row.
- *  - Reserved IPs that are NOT bound to a NIC are ignored (can't attach
- *    them to a VM without the NIC link, which we don't fetch in v1).
+ *  - Reserved IPs not bound to a NIC are ignored — there is no VM to
+ *    attach them to.
  */
 class AzureVmClient : CloudProvider {
 
@@ -85,7 +82,7 @@ class AzureVmClient : CloudProvider {
 
         // Fetch public IPs in one shot — Resource Graph would be cleanest, but
         // the simple list endpoint is enough for v1.
-        val publicIps = fetchPublicIpsByNicId(subscriptionId, accessToken)
+        val nicIps = fetchIpsByNicId(subscriptionId, accessToken)
 
         val out = mutableListOf<ImportCandidate>()
         for (vm in vms) {
@@ -94,12 +91,15 @@ class AzureVmClient : CloudProvider {
             val props = vm.optJSONObject("properties") ?: continue
             val nicArray = props.optJSONObject("networkProfile")?.optJSONArray("networkInterfaces") ?: continue
 
-            // First NIC's public IP wins.
+            // First NIC with a public IP wins.
             var pubIp: String? = null
             for (j in 0 until nicArray.length()) {
                 val nicId = nicArray.optJSONObject(j)?.optString("id") ?: continue
-                pubIp = publicIps[nicId]
-                if (!pubIp.isNullOrBlank()) break
+                val ip = nicIps[nicId]?.publicIp
+                if (!ip.isNullOrBlank()) {
+                    pubIp = ip
+                    break
+                }
             }
             if (pubIp.isNullOrBlank()) {
                 Logger.d("AzureVmClient", "$name has no public IP — skipping")
@@ -114,7 +114,10 @@ class AzureVmClient : CloudProvider {
                     // Azure CLI default; user can edit
                     username = "azureuser",
                     authType = "publickey",
-                    advancedSettings = """{"cloud_source":"azure:$accountName","cloud_region":"$location"}""",
+                    advancedSettings = cloudAdvancedSettings(
+                        "cloud_source" to "azure:$accountName",
+                        "cloud_region" to location
+                    ),
                     createdAt = System.currentTimeMillis()
                 ),
                 sourceLabel = "Azure / $location"
@@ -132,14 +135,16 @@ class AzureVmClient : CloudProvider {
 
             val accessToken = exchangeForAccessToken(tenant, clientId, clientSecret)
 
-            // Request instanceView expansion so power state is included in one call.
+            // `statusOnly=true` is the documented way to get runtime power state
+            // on a subscription-wide list. `$expand=instanceView` is rejected
+            // without a `$filter`, and `$filter` only applies to scale-set members.
             // Paginate via nextLink in case there are many VMs.
             val vms = jsonGetAll(
-                "https://management.azure.com/subscriptions/$subscriptionId/providers/Microsoft.Compute/virtualMachines?\$expand=instanceView&api-version=2023-03-01",
+                "https://management.azure.com/subscriptions/$subscriptionId/providers/Microsoft.Compute/virtualMachines?statusOnly=true&api-version=2023-03-01",
                 accessToken
             )
 
-            val publicIps = fetchPublicIpsByNicId(subscriptionId, accessToken)
+            val nicIps = fetchIpsByNicId(subscriptionId, accessToken)
 
             val out = mutableListOf<CloudInstanceState>()
             for (vm in vms) {
@@ -176,11 +181,14 @@ class AzureVmClient : CloudProvider {
 
                 val nicArray = props?.optJSONObject("networkProfile")?.optJSONArray("networkInterfaces")
                 var pubIp: String? = null
+                var privIp: String? = null
                 if (nicArray != null) {
                     for (j in 0 until nicArray.length()) {
                         val nicId = nicArray.optJSONObject(j)?.optString("id") ?: continue
-                        pubIp = publicIps[nicId]
-                        if (!pubIp.isNullOrBlank()) break
+                        val ips = nicIps[nicId] ?: continue
+                        if (pubIp.isNullOrBlank() && ips.publicIp.isNotBlank()) pubIp = ips.publicIp
+                        if (privIp.isNullOrBlank() && ips.privateIp.isNotBlank()) privIp = ips.privateIp
+                        if (!pubIp.isNullOrBlank() && !privIp.isNullOrBlank()) break
                     }
                 }
 
@@ -190,7 +198,7 @@ class AzureVmClient : CloudProvider {
                     id = "$resourceGroup/$name",
                     name = name,
                     ip = pubIp?.ifBlank { null },
-                    privateIp = null,
+                    privateIp = privIp,
                     status = normStatus,
                     rawStatus = rawStatus,
                     region = location.ifBlank { null },
@@ -204,13 +212,23 @@ class AzureVmClient : CloudProvider {
     override suspend fun startInstance(bearerToken: String, instanceId: String): Boolean =
         azureVmAction(bearerToken, instanceId, "start")
 
+    /**
+     * `powerOff` with the default `skipShutdown=false` is the graceful stop and
+     * keeps the VM's compute allocation. `deallocate` would also release those
+     * resources and change the billing state, so it is not a stop.
+     */
     override suspend fun stopInstance(bearerToken: String, instanceId: String): Boolean =
-        azureVmAction(bearerToken, instanceId, "deallocate")
+        azureVmAction(bearerToken, instanceId, "powerOff")
 
     override suspend fun restartInstance(bearerToken: String, instanceId: String): Boolean =
         azureVmAction(bearerToken, instanceId, "restart")
 
-    /** Azure Restart takes no parameters — skipShutdown exists only on Power Off. */
+    /**
+     * Azure has no hard power cycle for a VM — the only action paths are
+     * start, powerOff, restart and deallocate, and `restart` takes no force
+     * flag. This is therefore the same graceful restart as above; there is
+     * nothing to escalate to.
+     */
     override suspend fun forceRestartInstance(bearerToken: String, instanceId: String): Boolean =
         azureVmAction(bearerToken, instanceId, "restart")
 
@@ -226,14 +244,14 @@ class AzureVmClient : CloudProvider {
         // instanceId is "resourceGroup/name" (see fetchLiveInstances); the URL
         // needs the bare VM name, the cache lookup the composite id.
         val rg = cachedInstances.firstOrNull { it.id == instanceId }?.metadata?.get("resourceGroup")
-            ?: instanceId.substringBefore('/', "").takeIf { it.isNotEmpty() && instanceId.contains('/') }
+            ?: instanceId.substringBefore('/', "").takeIf { it.isNotEmpty() }
             ?: return@withContext false
         val vmName = instanceId.substringAfterLast('/')
 
         // exchangeForAccessToken throws CloudAuthException on 401/403 — let it
-        // propagate so the UI can show the "Token invalid — re-add account"
-        // hint. Any other exception (network, parse) falls back to a generic
-        // failed-action result.
+        // propagate so the UI can distinguish a bad credential from a
+        // transient failure. Any other exception (network, parse) falls back
+        // to a generic failed-action result.
         val accessToken = try {
             exchangeForAccessToken(tenant, clientId, clientSecret)
         } catch (e: CloudAuthException) {
@@ -251,7 +269,7 @@ class AzureVmClient : CloudProvider {
             if (resp.code == 401 || resp.code == 403) {
                 throw CloudAuthException("Azure power action rejected (HTTP ${resp.code})")
             }
-            resp.code == 200 || resp.code == 202 || resp.isSuccessful
+            resp.isSuccessful
         }
     }
 
@@ -281,12 +299,17 @@ class AzureVmClient : CloudProvider {
         return token
     }
 
-    /** NIC.id → publicIp string. Walks all NICs in the sub, follows their
-     *  `publicIPAddress.id` reference, fetches each public IP once. Two
-     *  paginated list calls, then map. */
-    private fun fetchPublicIpsByNicId(subscriptionId: String, token: String): Map<String, String> {
+    /**
+     * NIC.id → addresses for that NIC. Walks every NIC in the subscription,
+     * follows each `publicIPAddress.id` reference, and fetches every public IP
+     * once. Two paginated list calls, then an in-memory join — no per-VM
+     * fan-out. Private addresses come from the same NIC walk and cost nothing
+     * extra.
+     */
+    private fun fetchIpsByNicId(subscriptionId: String, token: String): Map<String, NicIps> {
         // nicId -> publicIpId
         val nicById = mutableMapOf<String, String>()
+        val privateByNicId = mutableMapOf<String, String>()
         val nics = jsonGetAll(
             "https://management.azure.com/subscriptions/$subscriptionId/providers/Microsoft.Network/networkInterfaces?api-version=2023-09-01",
             token
@@ -295,10 +318,14 @@ class AzureVmClient : CloudProvider {
             val nicId = nic.optString("id")
             val ipConfigs = nic.optJSONObject("properties")?.optJSONArray("ipConfigurations") ?: continue
             for (j in 0 until ipConfigs.length()) {
-                val pubRef = ipConfigs.optJSONObject(j)?.optJSONObject("properties")?.optJSONObject("publicIPAddress")?.optString("id")
-                if (!pubRef.isNullOrBlank()) {
+                val cfgProps = ipConfigs.optJSONObject(j)?.optJSONObject("properties") ?: continue
+                val pubRef = cfgProps.optJSONObject("publicIPAddress")?.optString("id")
+                if (!pubRef.isNullOrBlank() && !nicById.containsKey(nicId)) {
                     nicById[nicId] = pubRef
-                    break
+                }
+                val priv = cfgProps.optString("privateIPAddress")
+                if (priv.isNotBlank() && !privateByNicId.containsKey(nicId)) {
+                    privateByNicId[nicId] = priv
                 }
             }
         }
@@ -315,9 +342,17 @@ class AzureVmClient : CloudProvider {
             if (id.isNotBlank() && addr.isNotBlank()) ipById[id] = addr
         }
 
-        return nicById.mapValues { (_, pubId) -> ipById[pubId] ?: "" }
-            .filter { it.value.isNotBlank() }
+        val nicIds = (nicById.keys + privateByNicId.keys).distinct()
+        return nicIds.associateWith { nicId ->
+            NicIps(
+                publicIp = nicById[nicId]?.let { ipById[it] }.orEmpty(),
+                privateIp = privateByNicId[nicId].orEmpty()
+            )
+        }
     }
+
+    /** The addresses found on one NIC. Either field may be empty. */
+    private data class NicIps(val publicIp: String, val privateIp: String)
 
     /**
      * Paginate an Azure list endpoint that returns `{ "value": [...], "nextLink": "..." }`.

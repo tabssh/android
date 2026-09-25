@@ -65,7 +65,10 @@ class VultrClient : CloudProvider {
                         port = 22,
                         username = "root",
                         authType = "password",
-                        advancedSettings = """{"cloud_source":"vultr:$accountName","cloud_region":"$region"}""",
+                        advancedSettings = cloudAdvancedSettings(
+                            "cloud_source" to "vultr:$accountName",
+                            "cloud_region" to region
+                        ),
                         createdAt = System.currentTimeMillis()
                     ),
                     sourceLabel = "Vultr / ${region.ifBlank { "?" }}"

@@ -24,7 +24,8 @@ import javax.crypto.spec.SecretKeySpec
 /**
  * Wave 8.1 — AWS EC2 inventory via the Query API + SigV4 signing.
  *
- * Endpoint: https://ec2.{region}.amazonaws.com/
+ * Endpoint: https://ec2.{region}.amazonaws.com/ (`.amazonaws.com.cn` for
+ *           the China regions — see [ec2Host])
  * Action:   DescribeInstances&Version=2016-11-15
  * Auth:     SigV4 over Authorization header.
  *
@@ -44,9 +45,6 @@ import javax.crypto.spec.SecretKeySpec
  * Limitations:
  *  - Single region per account. To pull from multiple regions, add one
  *    cloud account per region.
- *  - DescribeInstances pagination (NextToken) is not yet handled; first
- *    page only (typical: 1000 instances per page). Bigger fleets need a
- *    follow-up patch.
  *  - We pick `PublicDnsName` if present, fall back to `PublicIpAddress`,
  *    skip instances with neither (likely private subnet only).
  */
@@ -144,7 +142,7 @@ class AwsEc2Client : CloudProvider {
         if (region.isBlank()) return@withContext false
 
         val query = "Action=$action&InstanceId.1=$instanceId&Version=2016-11-15"
-        val host = "ec2.$region.amazonaws.com"
+        val host = ec2Host(region)
         val service = "ec2"
         val now = Date()
         val amzDate = AMZ_DATE_FMT.formatter().format(now)
@@ -174,7 +172,16 @@ class AwsEc2Client : CloudProvider {
             if (resp.code == 401 || resp.code == 403) {
                 throw CloudAuthException("AWS credentials rejected (HTTP ${resp.code})")
             }
-            resp.isSuccessful
+            if (!resp.isSuccessful) return@use false
+            // The Query API can carry a failure inside the body of a 200
+            // response (e.g. <RequestFailed> for a wrong instance id), so the
+            // status code alone is not a sufficient success check.
+            val body = resp.body?.string().orEmpty()
+            if (body.contains("<RequestFailed>") || body.contains("<Errors>")) {
+                Logger.d("AwsEc2Client", "AWS $action failed: ${extractAwsError(body) ?: "unknown"}")
+                return@use false
+            }
+            true
         }
     }
 
@@ -184,7 +191,7 @@ class AwsEc2Client : CloudProvider {
         region: String,
         query: String
     ): String {
-        val host = "ec2.$region.amazonaws.com"
+        val host = ec2Host(region)
         val service = "ec2"
         val now = Date()
         val amzDate = AMZ_DATE_FMT.formatter().format(now)
@@ -281,7 +288,11 @@ class AwsEc2Client : CloudProvider {
                     // Amazon Linux default; user can edit
                     username = "ec2-user",
                     authType = "publickey",
-                    advancedSettings = """{"cloud_source":"aws:$accountName","cloud_region":"$region","cloud_id":"$instanceId"}""",
+                    advancedSettings = cloudAdvancedSettings(
+                        "cloud_source" to "aws:$accountName",
+                        "cloud_region" to region,
+                        "cloud_id" to instanceId
+                    ),
                     createdAt = System.currentTimeMillis()
                 ),
                 sourceLabel = "AWS EC2 / $region"
@@ -387,6 +398,16 @@ class AwsEc2Client : CloudProvider {
         val m = Regex("<$tag>([^<]*)</$tag>").find(xmlBlock) ?: return null
         return m.groupValues[1].takeIf { it.isNotBlank() }
     }
+
+    /**
+     * EC2 endpoint host for a region. Standard, GovCloud and ISO partitions
+     * all use `amazonaws.com`; only the China regions (`cn-*`) use the
+     * `amazonaws.com.cn` suffix, so a China account on the default suffix
+     * would fail to resolve.
+     */
+    private fun ec2Host(region: String): String =
+        if (region.startsWith("cn-")) "ec2.$region.amazonaws.com.cn"
+        else "ec2.$region.amazonaws.com"
 
     private fun extractAwsError(body: String): String? {
         val msg = Regex("<Message>([^<]+)</Message>").find(body)?.groupValues?.get(1)

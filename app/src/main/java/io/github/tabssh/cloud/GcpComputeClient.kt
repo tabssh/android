@@ -54,13 +54,19 @@ class GcpComputeClient : CloudProvider {
     @Volatile
     private var cachedInstances: List<CloudInstanceState> = emptyList()
 
+    private companion object {
+        /** Bounds the stop→start wait in [restartInstance] so a stuck instance cannot hang it. */
+        const val RESTART_POLL_ATTEMPTS = 30
+        const val RESTART_POLL_INTERVAL_MS = 2_000L
+    }
+
     override suspend fun fetchInventory(
         bearerToken: String,
         accountName: String
     ): List<ImportCandidate> = withContext(Dispatchers.IO) {
         val sa = try {
             JSONObject(bearerToken)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             throw IllegalStateException("GCP token must be the full service-account JSON")
         }
         val clientEmail = sa.optString("client_email").ifBlank {
@@ -80,7 +86,7 @@ class GcpComputeClient : CloudProvider {
         var pageToken: String? = null
         do {
             val url = buildString {
-                append("https://compute.googleapis.com/compute/v1/projects/$projectId/aggregated/instances?maxResults=500")
+                append("https://compute.googleapis.com/compute/v1/projects/$projectId/aggregated/instances?maxResults=500&returnPartialSuccess=true")
                 if (pageToken != null) append("&pageToken=").append(URLEncoder.encode(pageToken, "UTF-8"))
             }
             val req = Request.Builder()
@@ -102,7 +108,7 @@ class GcpComputeClient : CloudProvider {
                 }
                 raw
             }
-            out += parseInstances(body, projectId, accountName)
+            out += parseInstances(body, accountName)
             pageToken = JSONObject(body).optString("nextPageToken").takeIf { it.isNotBlank() }
         } while (pageToken != null)
 
@@ -112,7 +118,7 @@ class GcpComputeClient : CloudProvider {
 
     override suspend fun fetchLiveInstances(bearerToken: String): List<CloudInstanceState> =
         withContext(Dispatchers.IO) {
-            val sa = try { JSONObject(bearerToken) } catch (e: Exception) {
+            val sa = try { JSONObject(bearerToken) } catch (_: Exception) {
                 throw IllegalStateException("GCP token must be the full service-account JSON")
             }
             val clientEmail = sa.optString("client_email").ifBlank {
@@ -132,7 +138,7 @@ class GcpComputeClient : CloudProvider {
             var pageToken: String? = null
             do {
                 val url = buildString {
-                    append("https://compute.googleapis.com/compute/v1/projects/$projectId/aggregated/instances?maxResults=500")
+                    append("https://compute.googleapis.com/compute/v1/projects/$projectId/aggregated/instances?maxResults=500&returnPartialSuccess=true")
                     if (pageToken != null) append("&pageToken=").append(URLEncoder.encode(pageToken, "UTF-8"))
                 }
                 val req = Request.Builder()
@@ -168,9 +174,12 @@ class GcpComputeClient : CloudProvider {
                             val rawStatus = inst.optString("status", "unknown")
                             val normStatus = when (rawStatus) {
                                 "RUNNING" -> "running"
-                                "TERMINATED", "STOPPED", "SUSPENDED" -> "stopped"
-                                "STOPPING", "SUSPENDING" -> "stopping"
+                                "TERMINATED", "STOPPED" -> "stopped"
+                                "SUSPENDED" -> "suspended"
+                                "STOPPING", "SUSPENDING", "DEPROVISIONING" -> "stopping"
+                                "PENDING", "PENDING_STOP" -> "stopping"
                                 "STAGING", "PROVISIONING" -> "starting"
+                                "REPAIRING" -> "rebooting"
                                 else -> "unknown"
                             }
                             val publicIp = pickPublicIp(inst)
@@ -185,7 +194,7 @@ class GcpComputeClient : CloudProvider {
                                 privateIp = privateIp,
                                 status = normStatus,
                                 rawStatus = rawStatus,
-                                region = zone,
+                                region = zoneToRegion(zone),
                                 metadata = mapOf("zone" to zone, "project" to projectId)
                             )
                         }
@@ -197,38 +206,110 @@ class GcpComputeClient : CloudProvider {
             out
         }
 
-    override suspend fun startInstance(bearerToken: String, instanceId: String): Boolean =
-        gcpPowerAction(bearerToken, instanceId, "start")
+    override suspend fun startInstance(bearerToken: String, instanceId: String): Boolean {
+        // A SUSPENDED instance is not brought back by `start` — it needs `resume`.
+        val raw = cachedInstances.firstOrNull { it.id == instanceId }?.rawStatus
+        return gcpPowerAction(bearerToken, instanceId, if (raw == "SUSPENDED") "resume" else "start")
+    }
 
     override suspend fun stopInstance(bearerToken: String, instanceId: String): Boolean =
         gcpPowerAction(bearerToken, instanceId, "stop")
 
     /**
-     * GCP /reset = hard power cycle (pressing reset button). There is no separate
-     * graceful reboot endpoint in this API path; this is the closest equivalent.
+     * GCP has no `restart` method: `reset` is a hard power cycle. The graceful
+     * path is `stop` (documented as a clean shutdown) followed by `start` once
+     * the instance has actually reached STOPPED.
      */
-    override suspend fun restartInstance(bearerToken: String, instanceId: String): Boolean =
-        gcpPowerAction(bearerToken, instanceId, "reset")
+    override suspend fun restartInstance(bearerToken: String, instanceId: String): Boolean {
+        if (!gcpPowerAction(bearerToken, instanceId, "stop")) return false
+        if (!awaitStopped(bearerToken, instanceId)) return false
+        return gcpPowerAction(bearerToken, instanceId, "start")
+    }
 
-    /** GCP has no separate force restart — same reset endpoint as restartInstance. */
+    /** GCP `reset` is a hard power cycle — the force-restart equivalent. */
     override suspend fun forceRestartInstance(bearerToken: String, instanceId: String): Boolean =
         gcpPowerAction(bearerToken, instanceId, "reset")
+
+    /**
+     * Poll the instance until it leaves the transitional states, so a restart
+     * issues `start` only after the guest has finished shutting down. Bounded
+     * so a stuck instance cannot block the caller forever.
+     */
+    private suspend fun awaitStopped(bearerToken: String, instanceId: String): Boolean =
+        withContext(Dispatchers.IO) {
+            val sa = try {
+                JSONObject(bearerToken)
+            } catch (_: Exception) {
+                return@withContext false
+            }
+            val projectId = sa.optString("project_id").ifBlank { return@withContext false }
+            val privateKeyPem = sa.optString("private_key").ifBlank { return@withContext false }
+            val clientEmail = sa.optString("client_email").ifBlank { return@withContext false }
+            val zone = resolveZone(instanceId) ?: return@withContext false
+            val instanceName = instanceId.substringAfterLast('/')
+            val accessToken = exchangeJwtForAccessToken(
+                clientEmail, privateKeyPem, "https://www.googleapis.com/auth/compute"
+            )
+            val url = "https://compute.googleapis.com/compute/v1/projects/$projectId/zones/$zone/instances/$instanceName"
+            repeat(RESTART_POLL_ATTEMPTS) {
+                val req = Request.Builder()
+                    .url(url)
+                    .header("Authorization", "Bearer $accessToken")
+                    .header("Accept", "application/json")
+                    .get()
+                    .build()
+                val status = http.newCall(req).execute().use { resp ->
+                    if (resp.code == 401 || resp.code == 403) {
+                        throw CloudAuthException("GCP token rejected (HTTP ${resp.code})")
+                    }
+                    if (!resp.isSuccessful) {
+                        throw IllegalStateException("GCP API HTTP ${resp.code}: ${resp.message}")
+                    }
+                    JSONObject(resp.body?.string().orEmpty()).optString("status")
+                }
+                if (status == "STOPPED" || status == "TERMINATED") return@withContext true
+                if (status == "RUNNING") return@withContext false
+                Thread.sleep(RESTART_POLL_INTERVAL_MS)
+            }
+            false
+        }
+
+    private fun resolveZone(instanceId: String): String? =
+        cachedInstances.firstOrNull { it.id == instanceId }?.metadata?.get("zone")
+            ?: instanceId.substringBefore('/', "").takeIf { it.isNotEmpty() }
+
+    /**
+     * Zone names end in a `-<letter><digit>` shard suffix (`us-central1-a`),
+     * so the region is that suffix stripped. The UI labels `region` as a
+     * region, and a zone is misleading there.
+     */
+    private fun zoneToRegion(zone: String): String =
+        zone.replace(Regex("-[a-z]$"), "")
 
     private suspend fun gcpPowerAction(
         bearerToken: String,
         instanceId: String,
         action: String
     ): Boolean = withContext(Dispatchers.IO) {
-        val sa = try { JSONObject(bearerToken) } catch (_: Exception) { return@withContext false }
-        val clientEmail = sa.optString("client_email").ifBlank { return@withContext false }
-        val privateKeyPem = sa.optString("private_key").ifBlank { return@withContext false }
-        val projectId = sa.optString("project_id").ifBlank { return@withContext false }
+        val sa = try {
+            JSONObject(bearerToken)
+        } catch (_: Exception) {
+            throw IllegalStateException("GCP token must be the full service-account JSON")
+        }
+        val clientEmail = sa.optString("client_email").ifBlank {
+            throw IllegalStateException("Missing client_email in service-account JSON")
+        }
+        val privateKeyPem = sa.optString("private_key").ifBlank {
+            throw IllegalStateException("Missing private_key in service-account JSON")
+        }
+        val projectId = sa.optString("project_id").ifBlank {
+            throw IllegalStateException("Missing project_id in service-account JSON")
+        }
 
         // instanceId is "zone/name" (see fetchLiveInstances); the URL needs both
         // parts separately. Prefer the cache, fall back to splitting the id.
-        val zone = cachedInstances.firstOrNull { it.id == instanceId }?.metadata?.get("zone")
-            ?: instanceId.substringBefore('/', "").takeIf { it.isNotEmpty() && instanceId.contains('/') }
-            ?: return@withContext false
+        val zone = resolveZone(instanceId)
+            ?: throw IllegalStateException("GCP instance id must be \"zone/name\": $instanceId")
         val instanceName = instanceId.substringAfterLast('/')
 
         val accessToken = exchangeJwtForAccessToken(clientEmail, privateKeyPem,
@@ -285,14 +366,24 @@ class GcpComputeClient : CloudProvider {
                 if (resp.code == 401 || resp.code == 403) {
                     throw CloudAuthException("GCP OAuth2 rejected service-account credentials (HTTP ${resp.code})")
                 }
-                throw IllegalStateException("GCP OAuth2 exchange HTTP ${resp.code}: $r")
+                // Log only the OAuth error field, never the raw body: a token-endpoint
+                // response could carry credential material.
+                Logger.d("GcpComputeClient", "GCP OAuth2 exchange HTTP ${resp.code}: ${oauthError(r)}")
+                throw IllegalStateException("GCP OAuth2 exchange HTTP ${resp.code}: ${resp.message}")
             }
             r
         }
         val token = JSONObject(raw).optString("access_token")
-        if (token.isBlank()) throw IllegalStateException("GCP token exchange returned no access_token: $raw")
+        if (token.isBlank()) {
+            Logger.d("GcpComputeClient", "GCP token exchange returned no access_token: ${oauthError(raw)}")
+            throw IllegalStateException("GCP token exchange returned no access_token")
+        }
         return token
     }
+
+    /** The OAuth `error` code from a token-endpoint body, or `unknown` if unparseable. */
+    private fun oauthError(body: String): String =
+        runCatching { JSONObject(body).optString("error") }.getOrNull().orEmpty().ifBlank { "unknown" }
 
     private fun signRs256(data: String, privateKeyPem: String): String {
         val pkcs8Der = pemToDer(privateKeyPem)
@@ -329,7 +420,7 @@ class GcpComputeClient : CloudProvider {
             Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
         )
 
-    private fun parseInstances(json: String, projectId: String, accountName: String): List<ImportCandidate> {
+    private fun parseInstances(json: String, accountName: String): List<ImportCandidate> {
         val out = mutableListOf<ImportCandidate>()
         val root = JSONObject(json)
         val items = root.optJSONObject("items") ?: return out
@@ -340,6 +431,7 @@ class GcpComputeClient : CloudProvider {
             val zoneObj = items.optJSONObject(zoneKey) ?: continue
             val instances = zoneObj.optJSONArray("instances") ?: continue
             val zone = zoneKey.removePrefix("zones/")
+            val region = zoneToRegion(zone)
             for (i in 0 until instances.length()) {
                 val inst = instances.optJSONObject(i) ?: continue
                 if (inst.optString("status") != "RUNNING") continue
@@ -358,10 +450,16 @@ class GcpComputeClient : CloudProvider {
                         // GCP per-instance metadata; user fills
                         username = "",
                         authType = "publickey",
-                        advancedSettings = """{"cloud_source":"gcp:$accountName","cloud_region":"$zone","cloud_id":"${inst.optString("id")}"}""",
+                        advancedSettings = cloudAdvancedSettings(
+                            "cloud_source" to "gcp:$accountName",
+                            "cloud_region" to region,
+                            "cloud_zone" to zone,
+                            // Key cloud_id as "zone/name" to match fetchLiveInstances.
+                            "cloud_id" to "$zone/$name"
+                        ),
                         createdAt = System.currentTimeMillis()
                     ),
-                    sourceLabel = "GCP Compute / $zone"
+                    sourceLabel = "GCP Compute / $region"
                 )
             }
         }

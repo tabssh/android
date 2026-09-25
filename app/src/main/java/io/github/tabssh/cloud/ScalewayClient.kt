@@ -68,7 +68,10 @@ class ScalewayClient : CloudProvider {
                             port = 22,
                             username = "root",
                             authType = "password",
-                            advancedSettings = """{"cloud_source":"scaleway:$accountName","cloud_region":"$zone"}""",
+                            advancedSettings = cloudAdvancedSettings(
+                                "cloud_source" to "scaleway:$accountName",
+                                "cloud_region" to zone
+                            ),
                             createdAt = System.currentTimeMillis()
                         ),
                         sourceLabel = "Scaleway / $zone"

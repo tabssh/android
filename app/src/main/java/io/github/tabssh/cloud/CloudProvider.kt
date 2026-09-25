@@ -104,3 +104,17 @@ fun CloudProviderType.newClient(): CloudProvider = when (this) {
  * "Load failed: …" toast continues to surface the underlying message.
  */
 class CloudAuthException(message: String) : RuntimeException(message)
+
+/**
+ * Build the `advancedSettings` JSON stored on an imported profile.
+ *
+ * Every value here comes from a provider API or from the user-supplied account
+ * name, so it is built through [org.json.JSONObject] rather than string
+ * interpolation — an instance name or region containing a quote or backslash
+ * must not be able to break out of the JSON document.
+ */
+fun cloudAdvancedSettings(vararg pairs: Pair<String, String>): String {
+    val obj = org.json.JSONObject()
+    for ((k, v) in pairs) obj.put(k, v)
+    return obj.toString()
+}

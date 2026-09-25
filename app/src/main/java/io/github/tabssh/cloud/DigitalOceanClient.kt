@@ -18,9 +18,8 @@ import java.util.concurrent.TimeUnit
  * Endpoint: https://api.digitalocean.com/v2/droplets?per_page=200
  * Auth:    `Authorization: Bearer <token>` — a v2 personal access token.
  *
- * We pull at most one page (200 droplets). If a user has more than 200
- * we'll surface a warning and they can paginate later — that's not the
- * common case, and pagination adds complexity for marginal benefit.
+ * We paginate fully via the `links.pages.next` URI embedded in each
+ * response body, so accounts larger than one page of 200 stay complete.
  *
  * The token NEVER hits disk in plain form. The caller (CloudImportManager
  * activity flow) decrypts it from SecurePasswordManager just for the call,
@@ -42,7 +41,7 @@ class DigitalOceanClient : CloudProvider {
         accountName: String
     ): List<ImportCandidate> = withContext(Dispatchers.IO) {
         val out = mutableListOf<ImportCandidate>()
-        // Follow DO's cursor-based pagination via links.pages.next until exhausted.
+        // Follow the page-numbered pagination via links.pages.next until exhausted.
         var url: String? = "https://api.digitalocean.com/v2/droplets?per_page=200"
         while (url != null) {
             val root = doGet(url, bearerToken)
@@ -66,7 +65,10 @@ class DigitalOceanClient : CloudProvider {
                         username = "root",
                         authType = "password",
                         groupId = null,
-                        advancedSettings = """{"cloud_source":"digitalocean:$accountName","cloud_region":"$region"}""",
+                        advancedSettings = cloudAdvancedSettings(
+                            "cloud_source" to "digitalocean:$accountName",
+                            "cloud_region" to region
+                        ),
                         createdAt = System.currentTimeMillis()
                     ),
                     sourceLabel = "DigitalOcean / ${region.ifBlank { "?" }}"
@@ -115,16 +117,16 @@ class DigitalOceanClient : CloudProvider {
         }
 
     override suspend fun startInstance(bearerToken: String, instanceId: String): Boolean =
-        postDropletAction(bearerToken, instanceId, """{"type":"power_on"}""", 201)
+        postDropletAction(bearerToken, instanceId, """{"type":"power_on"}""")
 
     override suspend fun stopInstance(bearerToken: String, instanceId: String): Boolean =
-        postDropletAction(bearerToken, instanceId, """{"type":"shutdown"}""", 201)
+        postDropletAction(bearerToken, instanceId, """{"type":"shutdown"}""")
 
     override suspend fun restartInstance(bearerToken: String, instanceId: String): Boolean =
-        postDropletAction(bearerToken, instanceId, """{"type":"reboot"}""", 201)
+        postDropletAction(bearerToken, instanceId, """{"type":"reboot"}""")
 
     override suspend fun forceRestartInstance(bearerToken: String, instanceId: String): Boolean =
-        postDropletAction(bearerToken, instanceId, """{"type":"power_cycle"}""", 201)
+        postDropletAction(bearerToken, instanceId, """{"type":"power_cycle"}""")
 
     private fun doGet(url: String, bearerToken: String): JSONObject {
         val req = Request.Builder()
@@ -148,8 +150,7 @@ class DigitalOceanClient : CloudProvider {
     private suspend fun postDropletAction(
         bearerToken: String,
         instanceId: String,
-        jsonBody: String,
-        expectedCode: Int
+        jsonBody: String
     ): Boolean = withContext(Dispatchers.IO) {
         val body = jsonBody.toRequestBody("application/json".toMediaTypeOrNull())
         val req = Request.Builder()
@@ -162,7 +163,7 @@ class DigitalOceanClient : CloudProvider {
             if (resp.code == 401 || resp.code == 403) {
                 throw CloudAuthException("DigitalOcean token rejected (HTTP ${resp.code})")
             }
-            resp.code == expectedCode || resp.isSuccessful
+            resp.isSuccessful
         }
     }
 

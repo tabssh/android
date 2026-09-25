@@ -62,7 +62,10 @@ class LinodeClient : CloudProvider {
                         port = 22,
                         username = "root",
                         authType = "password",
-                        advancedSettings = """{"cloud_source":"linode:$accountName","cloud_region":"$region"}""",
+                        advancedSettings = cloudAdvancedSettings(
+                            "cloud_source" to "linode:$accountName",
+                            "cloud_region" to region
+                        ),
                         createdAt = System.currentTimeMillis()
                     ),
                     sourceLabel = "Linode / ${region.ifBlank { "?" }}"
@@ -89,6 +92,7 @@ class LinodeClient : CloudProvider {
                     val normStatus = when (rawStatus) {
                         "running" -> "running"
                         "offline" -> "stopped"
+                        "stopped" -> "stopped"
                         "booting" -> "starting"
                         "shutting_down" -> "stopping"
                         "rebooting" -> "rebooting"

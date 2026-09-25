@@ -174,9 +174,13 @@ class OciCloudClient : CloudProvider {
     override suspend fun startInstance(bearerToken: String, instanceId: String): Boolean =
         ociAction(bearerToken, instanceId, OciInstanceAction.START)
 
-    /** OCI STOP immediately cuts power to the instance — always reliable regardless of guest agent. */
+    /**
+     * OCI SOFTSTOP sends a shutdown command to the guest OS and powers the
+     * instance off after 15 minutes. `STOP` is the immediate power cut, which
+     * the graceful-stop contract rules out here.
+     */
     override suspend fun stopInstance(bearerToken: String, instanceId: String): Boolean =
-        ociAction(bearerToken, instanceId, OciInstanceAction.STOP)
+        ociAction(bearerToken, instanceId, OciInstanceAction.SOFTSTOP)
 
     /** OCI SOFTRESET sends a graceful reboot signal to the guest OS. */
     override suspend fun restartInstance(bearerToken: String, instanceId: String): Boolean =

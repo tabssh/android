@@ -63,7 +63,10 @@ class UpCloudClient : CloudProvider {
                     port = 22,
                     username = "root",
                     authType = "password",
-                    advancedSettings = """{"cloud_source":"upcloud:$accountName","cloud_region":"$zone"}""",
+                    advancedSettings = cloudAdvancedSettings(
+                        "cloud_source" to "upcloud:$accountName",
+                        "cloud_region" to zone
+                    ),
                     createdAt = System.currentTimeMillis()
                 ),
                 sourceLabel = "UpCloud / ${zone.ifBlank { "?" }}"

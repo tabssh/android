@@ -46,8 +46,9 @@ class HetznerClient : CloudProvider {
             for (i in 0 until servers.length()) {
                 val s = servers.optJSONObject(i) ?: continue
                 val name = s.optString("name", "hetzner-${s.optInt("id", 0)}")
-                val location = s.optJSONObject("datacenter")?.optJSONObject("location")?.optString("name").orEmpty()
-                val ip = s.optJSONObject("public_net")?.optJSONObject("ipv4")?.optString("ip")
+                // The `datacenter` field was removed from the Server resource; `location` is current.
+                val location = s.optJSONObject("location")?.optString("name").orEmpty()
+                val ip = publicV4(s)
                 if (ip.isNullOrBlank()) {
                     Logger.d("HetznerClient", "Server $name has no public v4 address — skipping")
                     continue
@@ -60,7 +61,10 @@ class HetznerClient : CloudProvider {
                         port = 22,
                         username = "root",
                         authType = "password",
-                        advancedSettings = """{"cloud_source":"hetzner:$accountName","cloud_region":"$location"}""",
+                        advancedSettings = cloudAdvancedSettings(
+                            "cloud_source" to "hetzner:$accountName",
+                            "cloud_region" to location
+                        ),
                         createdAt = System.currentTimeMillis()
                     ),
                     sourceLabel = "Hetzner / ${location.ifBlank { "?" }}"
@@ -88,17 +92,18 @@ class HetznerClient : CloudProvider {
                         "off" -> "stopped"
                         "starting" -> "starting"
                         "stopping" -> "stopping"
-                        "restarting" -> "rebooting"
                         else -> "unknown"
                     }
-                    val location = s.optJSONObject("datacenter")
-                        ?.optJSONObject("location")?.optString("name")
-                    val publicIp = s.optJSONObject("public_net")?.optJSONObject("ipv4")?.optString("ip")
+                    val location = s.optJSONObject("location")
+                        ?.optString("name")
+                    val publicIp = publicV4(s)
+                    val privateIp = s.optJSONArray("private_net")
+                        ?.optJSONObject(0)?.optString("ip")?.ifBlank { null }
                     out += CloudInstanceState(
                         id = s.optInt("id", 0).toString(),
                         name = s.optString("name", "hetzner-${s.optInt("id", 0)}"),
                         ip = publicIp?.ifBlank { null },
-                        privateIp = null,
+                        privateIp = privateIp,
                         status = normStatus,
                         rawStatus = rawStatus,
                         region = location
@@ -113,8 +118,13 @@ class HetznerClient : CloudProvider {
     override suspend fun startInstance(bearerToken: String, instanceId: String): Boolean =
         postServerAction(bearerToken, instanceId, "poweron")
 
+    /**
+     * `shutdown` sends an ACPI request so the guest OS shuts down cleanly;
+     * `poweroff` is the hard cut. Stop is defined as graceful, so use
+     * `shutdown` here.
+     */
     override suspend fun stopInstance(bearerToken: String, instanceId: String): Boolean =
-        postServerAction(bearerToken, instanceId, "poweroff")
+        postServerAction(bearerToken, instanceId, "shutdown")
 
     override suspend fun restartInstance(bearerToken: String, instanceId: String): Boolean =
         postServerAction(bearerToken, instanceId, "reboot")
@@ -122,6 +132,17 @@ class HetznerClient : CloudProvider {
     /** Hetzner reset = hard power cycle, equivalent to force restart. */
     override suspend fun forceRestartInstance(bearerToken: String, instanceId: String): Boolean =
         postServerAction(bearerToken, instanceId, "reset")
+
+    /**
+     * Public IPv4 from `public_net.ipv4.ip`, or null when the server has no
+     * public address. Hetzner reports "none" as the unspecified address
+     * `0.0.0.0` rather than omitting the field, so treat that as absent.
+     */
+    private fun publicV4(server: JSONObject): String? {
+        val ip = server.optJSONObject("public_net")
+            ?.optJSONObject("ipv4")?.optString("ip")?.trim()
+        return ip?.takeIf { it.isNotEmpty() && it != "0.0.0.0" }
+    }
 
     private fun doGet(url: String, bearerToken: String): JSONObject {
         val req = Request.Builder()

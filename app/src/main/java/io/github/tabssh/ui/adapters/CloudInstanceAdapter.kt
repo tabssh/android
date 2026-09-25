@@ -53,13 +53,13 @@ class CloudInstanceAdapter(
         val dotColor = when (inst.status) {
             "running" -> androidx.core.content.ContextCompat.getColor(ctx, io.github.tabssh.R.color.status_success)
             "stopped" -> androidx.core.content.ContextCompat.getColor(ctx, io.github.tabssh.R.color.status_error)
-            "starting", "stopping", "rebooting" -> androidx.core.content.ContextCompat.getColor(ctx, io.github.tabssh.R.color.status_warning)
+            "starting", "stopping", "rebooting", "suspended" -> androidx.core.content.ContextCompat.getColor(ctx, io.github.tabssh.R.color.status_warning)
             else -> androidx.core.content.ContextCompat.getColor(ctx, io.github.tabssh.R.color.status_neutral)
         }
         b.viewStatusDot.backgroundTintList = ColorStateList.valueOf(dotColor)
 
         val isRunning = inst.status == "running"
-        val inTransition = inst.status in listOf("starting", "stopping", "rebooting")
+        val inTransition = inst.status in listOf("starting", "stopping", "rebooting", "suspended")
 
         // Power toggle: "Start" when stopped, "Stop" when running, "Wait…" while transitioning
         b.btnPowerToggle.text = when {
