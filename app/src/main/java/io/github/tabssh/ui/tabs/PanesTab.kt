@@ -221,10 +221,13 @@ class PanesTab(
 
     /**
      * Re-point the focused window's [io.github.tabssh.terminal.TermuxBridge.broadcastTargets]
-     * at every other connected window's output stream, and clear targets
-     * everywhere else. Called whenever sync is toggled, focus moves, or the
-     * window list changes (open/close/reconnect) so the mirror always tracks
-     * "whichever pane is currently driving input".
+     * at every other window's [io.github.tabssh.terminal.BroadcastSink], and
+     * clear targets everywhere else. Called whenever sync is toggled, focus
+     * moves, or the window list changes (open/close/reconnect) so the mirror
+     * always tracks "whichever pane is currently driving input". Sinks are
+     * transport-agnostic — an SSH peer's sink writes its SSH stream, a mosh
+     * peer's sink writes its client PTY — so mixed SSH/mosh groups mirror
+     * correctly (raw output streams silently dropped mosh windows).
      */
     private fun applySyncInputRouting() {
         val entries = _entries.value
@@ -232,7 +235,7 @@ class PanesTab(
         entries.forEach { window ->
             val bridge = window.sshTab?.termuxBridge ?: return@forEach
             bridge.broadcastTargets = if (_syncInputEnabled.value && window === focused) {
-                entries.filter { it !== window }.mapNotNull { it.sshTab?.termuxBridge?.peerOutputStream() }
+                entries.filter { it !== window }.mapNotNull { it.sshTab?.termuxBridge?.broadcastSink }
             } else {
                 emptyList()
             }

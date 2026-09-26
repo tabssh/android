@@ -25,6 +25,28 @@ import java.io.OutputStream
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
+ * Transport-agnostic write target for broadcast/sync input (Wave 2.7 tab
+ * broadcast, Panes sync input). One sink wraps one peer [TermuxBridge]'s
+ * output side — its SSH stream when connected over SSH, its mosh-client PTY
+ * when connected over mosh — so a sender never needs to know which transport
+ * a peer uses. A raw OutputStream target could only ever serve SSH peers:
+ * the mosh path has no SSH stream (`outputStream` stays null), so mosh
+ * windows were silently dropped from every target list.
+ */
+interface BroadcastSink {
+    /**
+     * Enqueue [data] onto the peer bridge's own serialized write pipeline
+     * (its writeScope + writeLock), so the bytes land on the peer's active
+     * transport in order relative to the peer's own input and under the
+     * peer's writeLock — closing the GCM cipher-state race the old
+     * direct-to-stream fan-out deliberately accepted. Enqueue-only: never
+     * blocks on (or deadlocks with) the peer's lock, even for circular
+     * broadcast topologies. No-op while the peer is disconnected.
+     */
+    fun writeToPeer(data: ByteArray)
+}
+
+/**
  * Bridge between SSH streams and Termux terminal emulator.
  *
  * This class wraps Termux's TerminalEmulator to provide proper VT100/ANSI
@@ -358,14 +380,47 @@ class TermuxBridge(
     @Volatile
     private var outputStream: OutputStream? = null
 
+    /** Wave 2.7 — sink for this bridge's output side (SSH stream or mosh
+     *  PTY, whichever is currently active), handed to sibling bridges so
+     *  they can fan-out broadcast input. Write routes onto this bridge's
+     *  own writeScope/writeLock pipeline; no-op until a connect succeeds. */
+    val broadcastSink: BroadcastSink = object : BroadcastSink {
+        override fun writeToPeer(data: ByteArray) {
+            val copy = data.copyOf()
+            writeScope.launch {
+                writeLock.withLock {
+                    val ms = moshSession
+                    if (ms != null) {
+                        try { ms.write(copy, 0, copy.size) }
+                        catch (e: Exception) {
+                            Logger.w(TAG, "Broadcast to mosh PTY failed: ${e.message}")
+                        }
+                    } else {
+                        try {
+                            outputStream?.let { stream ->
+                                stream.write(copy)
+                                stream.flush()
+                            }
+                        } catch (e: Exception) {
+                            Logger.w(TAG, "Broadcast to peer stream failed: ${e.message}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /** Wave 2.7 — public read of the SSH outputStream so a sibling bridge can
-     *  fan-out broadcast input to it. May be null until [connect] runs. */
+     *  fan-out broadcast input to it. May be null until [connect] runs.
+     *  Superseded for new call sites by [broadcastSink], which also covers
+     *  mosh-connected peers; retained for source compatibility. */
     fun peerOutputStream(): OutputStream? = outputStream
 
-    /** Wave 2.7 — when non-empty, every keystroke written to our SSH stream is
-     *  also written to each of these. The owning Activity manages the list. */
+    /** Wave 2.7 — when non-empty, every keystroke written to our active
+     *  transport (SSH stream or mosh PTY) is also routed to each of these
+     *  peer sinks. The owning Activity/PanesTab manages the list. */
     @Volatile
-    var broadcastTargets: List<OutputStream> = emptyList()
+    var broadcastTargets: List<BroadcastSink> = emptyList()
 
     // Read loop job.
     // @Volatile — disconnect() reads/cancels from any thread while
@@ -801,25 +856,20 @@ class TermuxBridge(
                         }
                         // Wave 2.7 — broadcast input. After our own SSH write
                         // succeeds, fan the same bytes out to every registered
-                        // target (other tabs). Note: each target belongs to a
-                        // *different* JSch session with its own writeLock on
-                        // its owning bridge — our lock only serializes the
-                        // fan-out order from THIS bridge's perspective, it
-                        // does NOT prevent the peer bridge's own keystroke
-                        // writer from racing on the peer's GCM state. The
-                        // peer's TermuxBridge.terminalOutput.write() path
-                        // takes the peer's writeLock, which is the correct
-                        // place for that serialization; we deliberately
-                        // bypass it here because the broadcast bytes are
-                        // already serialized at the source and the peer
-                        // bridge's writeLock would deadlock on a circular
-                        // broadcast topology.
+                        // peer sink. Each sink routes the bytes onto the peer
+                        // bridge's own writeScope/writeLock pipeline (see
+                        // [BroadcastSink.writeToPeer]), so the peer's cipher
+                        // state is touched only under the peer's lock — the
+                        // GCM-tag race the old direct-to-stream fan-out
+                        // accepted is closed. The peer enqueue acquires no
+                        // locks of ours, so a circular broadcast topology
+                        // cannot deadlock: our fan-out completes, the peer
+                        // processes its copy independently.
                         val targets = broadcastTargets
                         if (targets.isNotEmpty()) {
                             for (t in targets) {
                                 try {
-                                    t.write(dataCopy)
-                                    t.flush()
+                                    t.writeToPeer(dataCopy)
                                 } catch (e: Exception) {
                                     Logger.w(TAG, "Broadcast to peer stream failed: ${e.message}")
                                 }
@@ -1153,6 +1203,25 @@ class TermuxBridge(
                         // Logger write queue with one entry per write.
                         Logger.dThrottled(TAG, "sentBytesMosh", 300) {
                             "Sent ${data.size} bytes to mosh-client PTY"
+                        }
+                        // Broadcast input (Wave 2.7 / Panes sync) — same
+                        // fan-out the SSH branch performs. Previously this
+                        // mosh branch returned without consulting
+                        // [broadcastTargets], so keystrokes typed into a
+                        // mosh-connected window never mirrored to siblings.
+                        // Each sink enqueues onto the peer bridge's own
+                        // serialized pipeline without acquiring our lock
+                        // (enqueue-only — see [BroadcastSink.writeToPeer]),
+                        // so this cannot deadlock.
+                        val targets = broadcastTargets
+                        if (targets.isNotEmpty()) {
+                            for (t in targets) {
+                                try {
+                                    t.writeToPeer(data)
+                                } catch (e: Exception) {
+                                    Logger.w(TAG, "Broadcast to peer sink failed: ${e.message}")
+                                }
+                            }
                         }
                     } catch (e: Exception) {
                         Logger.e(TAG, "Error writing to mosh session", e)

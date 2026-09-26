@@ -4,6 +4,7 @@ import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.ArrayAdapter
 import android.widget.Spinner
 import android.widget.TextView
@@ -42,6 +43,10 @@ object PaneGroupEditDialog {
 
     private const val MIN_WINDOWS = 2
     private const val MAX_WINDOWS = 6
+
+    /** One retry of [showKeyboardExplicit] after the initial show, to cover
+     *  the async cross-process IME bind race on Android 12+. */
+    private const val RETRY_SHOW_DELAY_MS = 120L
 
     fun show(
         context: Context,
@@ -116,6 +121,10 @@ object PaneGroupEditDialog {
             .setNegativeButton(R.string.cancel, null)
             .create()
         dialog.show()
+        dialog.window?.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                or WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
+        )
 
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val name = nameInput.text.toString().trim()
@@ -195,6 +204,12 @@ object PaneGroupEditDialog {
             .setNegativeButton(R.string.cancel, null)
             .create()
         dialog.show()
+        // The Step 2 list is clipped to 440dp; without adjust-resize the IME
+        // covers the lower rows entirely once it appears.
+        dialog.window?.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                or WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
+        )
 
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             if (slots.any { it.hostId.isBlank() }) {
@@ -252,7 +267,14 @@ object PaneGroupEditDialog {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
             val view = LayoutInflater.from(parent.context)
                 .inflate(R.layout.item_pane_window_slot, parent, false)
-            return VH(view)
+            // Keyboard-show wiring is per-view, installed once — NOT per bind
+            // (a per-bind install orphans the previous window-focus listener
+            // on every recycle). Text/watchers themselves are re-bound per
+            // bind below.
+            return VH(view).also { vh ->
+                attachExplicitKeyboardShow(vh.workingDir)
+                attachExplicitKeyboardShow(vh.customTitle)
+            }
         }
 
         override fun getItemCount(): Int = slots.size
@@ -291,7 +313,6 @@ object PaneGroupEditDialog {
                 if (row == RecyclerView.NO_POSITION) return@doAfterTextChanged
                 slots[row] = slots[row].copy(workingDir = text?.toString()?.trim().takeUnless { it.isNullOrBlank() })
             }
-            attachExplicitKeyboardShow(holder.workingDir)
 
             holder.customTitle.removeTextChangedListener(holder.customTitleWatcher)
             holder.customTitle.setText(slot.customTitle ?: "")
@@ -300,7 +321,6 @@ object PaneGroupEditDialog {
                 if (row == RecyclerView.NO_POSITION) return@doAfterTextChanged
                 slots[row] = slots[row].copy(customTitle = text?.toString()?.trim().takeUnless { it.isNullOrBlank() })
             }
-            attachExplicitKeyboardShow(holder.customTitle)
         }
     }
 
@@ -349,6 +369,15 @@ object PaneGroupEditDialog {
      * poisoned variant described above, and `SHOW_FORCED` adds nothing here
      * beyond a deprecated API in committed code.
      */
+    /**
+     * Install the explicit keyboard-show wiring on one editable field.
+     *
+     * Call ONCE per view — in `onCreateViewHolder` for recycled list rows, or
+     * once at dialog setup for a plain field — never per bind: each install
+     * registers a window-focus listener whose lifecycle is managed below, and
+     * re-installing on every RecyclerView bind would orphan the previous
+     * listener (the old per-bind install leaked exactly that way).
+     */
     private fun attachExplicitKeyboardShow(editText: TextInputEditText) {
         // At most one window-focus listener is ever outstanding per field.
         // Losing and regaining view focus before the window-focus event arrives
@@ -362,6 +391,46 @@ object PaneGroupEditDialog {
             if (observer.isAlive) observer.removeOnWindowFocusChangeListener(listener)
         }
 
+        /**
+         * Kick the IME for [view]. `restartInput` forces the input session to
+         * (re)bind to the view — the step `TerminalView.focusForPaneInput`
+         * uses for the same keyboard-never-shows symptom inside the Panes
+         * grid — then show on the next frame, plus one idempotent retry in
+         * case the first show landed while the window was still completing
+         * its (asynchronous, cross-process) IME bind and was silently
+         * swallowed: since Android 12 a `showSoftInput` on a window that
+         * does not yet hold IME focus is a no-op, and window focus does not
+         * guarantee the bind has finished. Both shows are no-ops once the
+         * keyboard is up, and the retry is guarded by real view focus so it
+         * can never raise the keyboard after the user has moved on.
+         */
+        fun requestShow(view: View) {
+            val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE)
+                as? android.view.inputmethod.InputMethodManager
+            try {
+                imm?.restartInput(view)
+            } catch (_: Exception) {
+                // restartInput throws nowhere in practice; guarded for safety
+                // so the fallback show below still runs if that ever changes.
+            }
+            view.post { showKeyboardExplicit(view) }
+            view.postDelayed({
+                if (view.isAttachedToWindow && view.isFocused && view.hasWindowFocus()) {
+                    showKeyboardExplicit(view)
+                }
+            }, RETRY_SHOW_DELAY_MS)
+        }
+
+        // A recycled view must not carry a stale pending listener from its
+        // previous bind into the next one.
+        editText.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewDetachedFromWindow(v: View) {
+                clearPending(v)
+            }
+
+            override fun onViewAttachedToWindow(v: View) {}
+        })
+
         editText.setOnFocusChangeListener { view, hasFocus ->
             if (!hasFocus) {
                 clearPending(view)
@@ -369,7 +438,7 @@ object PaneGroupEditDialog {
             }
             if (view.hasWindowFocus()) {
                 clearPending(view)
-                view.post { showKeyboardExplicit(view) }
+                requestShow(view)
                 return@setOnFocusChangeListener
             }
             if (pending != null) return@setOnFocusChangeListener
@@ -378,7 +447,7 @@ object PaneGroupEditDialog {
                     if (!hasWindowFocus) return
                     clearPending(view)
                     if (view.isAttachedToWindow && view.isFocused) {
-                        view.post { showKeyboardExplicit(view) }
+                        requestShow(view)
                     }
                 }
             }

@@ -4042,7 +4042,8 @@ class TabTerminalActivity : TabSSHActivity() {
      * The active tab keeps typing as normal; in addition, every keystroke is
      * fanned out to the SSH outputStream of each selected target tab.
      * Implementation: we mutate `termuxBridge.broadcastTargets` on the ACTIVE
-     * tab to the list of (peer-tab outputStreams). When the user switches
+     * tab to the list of (peer-tab broadcast sinks — transport-agnostic, so a
+     * mosh-connected target tab works too). When the user switches
      * tabs we don't currently re-thread the targets — they stay attached to
      * whichever tab was active when the dialog committed. That's the simple
      * intended semantic: "I'm typing here, mirror to those".
@@ -4077,17 +4078,17 @@ class TabTerminalActivity : TabSSHActivity() {
 
     private fun applyBroadcastTargets() {
         val active = tabManager.getActiveTab() ?: return
-        val targetStreams = tabManager.getAllTabs()
+        val targetSinks = tabManager.getAllTabs()
             .filter { broadcastTargetIds.contains(it.tabId) && it.tabId != active.tabId }
-            .mapNotNull { it.termuxBridge.peerOutputStream() }
-        active.termuxBridge.broadcastTargets = targetStreams
+            .map { it.termuxBridge.broadcastSink }
+        active.termuxBridge.broadcastTargets = targetSinks
         // Clear targets on every other tab so we don't accidentally double-broadcast.
         tabManager.getAllTabs().filter { it.tabId != active.tabId }
             .forEach { it.termuxBridge.broadcastTargets = emptyList() }
-        if (targetStreams.isEmpty()) {
+        if (targetSinks.isEmpty()) {
             Toast.makeText(this, getString(R.string.terminal_broadcast_off), Toast.LENGTH_SHORT).show()
         } else {
-            Toast.makeText(this, getString(R.string.terminal_broadcasting_to_tabs_fmt, targetStreams.size), Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.terminal_broadcasting_to_tabs_fmt, targetSinks.size), Toast.LENGTH_SHORT).show()
         }
     }
 
