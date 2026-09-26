@@ -146,10 +146,15 @@ object PaneGroupEditDialog {
             val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE)
                 as? android.view.inputmethod.InputMethodManager
             imm?.hideSoftInputFromWindow(dialogView.windowToken, 0)
-            // Deferring the Step 2 show to this dialog's dismiss callback lets
-            // its window finish tearing down before the next one is created.
+            // The IME hide is asynchronous; waiting for the dismiss callback
+            // isn't enough because the window can dismiss before the IME
+            // session fully closes. A short delay after dismiss lets the
+            // WindowManager finish the IME teardown so Step 2's window can
+            // acquire IME focus cleanly.
             dialog.setOnDismissListener {
-                showStep2(context, app, scope, existing, hosts, existingWindows, name, windowCount, onSaved)
+                dialogView.postDelayed({
+                    showStep2(context, app, scope, existing, hosts, existingWindows, name, windowCount, onSaved)
+                }, 150L) // slightly longer than RETRY_SHOW_DELAY_MS
             }
             dialog.dismiss()
         }
@@ -210,6 +215,14 @@ object PaneGroupEditDialog {
             WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
                 or WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
         )
+        // Ensure the first window's working-dir field gets focus so the
+        // keyboard shows for the first slot. The RecyclerView may not
+        // focus anything by default.
+        dialogView.post {
+            val firstSlot = windowsRecycler.findViewHolderForAdapterPosition(0)
+                as? PaneWindowSlotAdapter.VH
+            firstSlot?.workingDir?.requestFocus()
+        }
 
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             if (slots.any { it.hostId.isBlank() }) {

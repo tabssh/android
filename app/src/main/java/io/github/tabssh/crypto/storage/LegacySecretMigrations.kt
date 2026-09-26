@@ -97,6 +97,11 @@ object LegacySecretMigrations {
         if (removable.isNotEmpty()) {
             val editor = prefs.edit()
             removable.forEach { editor.remove(it) }
+            // Synchronous on purpose: the removal of plaintext credential keys must
+            // be durable before this returns, or a process death in the window
+            // re-leaves the plaintext and the migration re-runs. apply() defers to
+            // the next flush and can lose the write. Runs on Dispatchers.Default
+            // (applicationScope), so the disk hit never blocks the main thread.
             editor.commit()
         }
         Logger.i(

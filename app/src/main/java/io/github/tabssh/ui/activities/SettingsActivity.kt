@@ -1447,7 +1447,7 @@ class MonitoringSettingsFragment : androidx.preference.PreferenceFragmentCompat(
                     dirty = true
                 }
             }
-            if (dirty) edit.commit()
+            if (dirty) edit.apply()
         }
     }
 }

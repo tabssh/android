@@ -1006,11 +1006,13 @@ class TabSSHApplication : Application() {
                     // readability, but the SharedPreferences fallback
                     // survives a process restart and must not carry
                     // hostnames/IPs/credentials in plaintext.
+                    // Synchronous on purpose: the process is about to die, so an
+                    // async apply() would very likely be lost. Ignore the return
+                    // value — Intent extras below are the primary path.
                     getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE).edit()
                         .putString(KEY_LAST_CRASH,   Logger.sanitize(trace))
                         .putString(KEY_CRASH_THREAD, thread.name)
                         .putLong(KEY_CRASH_TIME,     crashTime)
-                        // synchronous; ignore return value — Intent extras are primary
                         .commit()
 
                     startActivity(
