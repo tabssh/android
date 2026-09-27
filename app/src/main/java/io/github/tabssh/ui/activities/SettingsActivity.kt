@@ -961,10 +961,17 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_logging, rootKey)
 
-        // Debug Logging category is developer-only. Hide it entirely in release
-        // builds so production users never see it.
-        if (!io.github.tabssh.BuildConfig.DEBUG_LOG) {
-            findPreference<androidx.preference.PreferenceCategory>("debug_logging_category")?.isVisible = false
+        // Debug Logging stays visible in release builds. It used to be hidden
+        // unless BuildConfig.DEBUG_LOG was set (debug/devel only), which made
+        // the sibling "View Debug Log" entry permanently useless in the
+        // shipped app: the file was never written, and the one control that
+        // could create it was not on screen. Production users do hit bugs that
+        // only a device log can explain, and the toggle defaults to off, so
+        // this costs a shipping user nothing until they opt in.
+        findPreference<androidx.preference.PreferenceCategory>("debug_logging_category")?.let { category ->
+            if (!io.github.tabssh.BuildConfig.DEBUG_LOG) {
+                category.title = getString(R.string.pref_debug_logging_category_user)
+            }
         }
 
         // Live-toggle the Logger when the user flips the master switch.

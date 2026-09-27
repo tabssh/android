@@ -77,9 +77,14 @@ object Logger {
     private val writeQueue = ArrayBlockingQueue<Runnable>(MAX_QUEUED_WRITES)
     private val executor = ThreadPoolExecutor(
         1, 1, 0L, TimeUnit.MILLISECONDS, writeQueue
-    ) { r, exec ->
-        exec.queue.poll()
-        exec.execute(r)
+    ) { r, _ ->
+        // Drop the INCOMING write when the queue is saturated. This handler
+        // previously called exec.queue.poll() + exec.execute(r), which
+        // evicted the OLDEST already-queued line — the opposite of what you
+        // want from a log: under a burst it discarded the earliest events,
+        // which are the ones that explain what caused the burst. A dropped
+        // trailing line costs far less than a missing "connecting to host X".
+        Log.w("$TAG_PREFIX:Logger", "Log write queue full — dropping a line")
     }
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
 
@@ -252,12 +257,13 @@ object Logger {
             i("Logger", "Android: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
             i("Logger", "Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
         } else {
-            // Debug mode disabled - delete log file if it exists
-            logFile = File(context.filesDir, LOG_FILE_NAME)
-            if (logFile?.exists() == true) {
-                logFile?.delete()
-                Log.i("$TAG_PREFIX:Logger", "Debug logging disabled - log file deleted")
-            }
+            // Debug mode disabled. The previous session's log file is left
+            // on disk rather than deleted: "the debug log is empty" is
+            // exactly the situation a user opens the viewer to investigate,
+            // and deleting the only copy on the next cold start destroyed
+            // the evidence for the crash that was already being reported.
+            // Rotation still bounds the file, and the settings screen has an
+            // explicit "delete log" action for when the user wants it gone.
             logFile = null
             logToFile = false
         }
@@ -526,7 +532,13 @@ object Logger {
     }
 
     private const val RATE_WINDOW_MS = 1000L
-    private const val MAX_TAG_LINES_PER_WINDOW = 8
+
+    // Raised from 8. Opening a pane group connects every member at once and
+    // all of them log under one tag, so a 6-pane launch burst tripped the cap
+    // and dropped exactly the connect sequence the user opened the log to
+    // see. The cap exists to stop a runaway hot loop from flooding the file;
+    // 64/s per tag is far above any legitimate burst and still bounds it.
+    private const val MAX_TAG_LINES_PER_WINDOW = 64
 
     private val debugSink = SinkWriter(LOG_FILE_NAME, MAX_LOG_SIZE.toLong())
     private val debugGate = NoiseGate()
@@ -1114,9 +1126,19 @@ object Logger {
         // app ever wrote to that file. Only the sanitized `logFile` path
         // (written via writeToFile(), which calls sanitizeForPublic())
         // is a real source of debug logs.
+        //
+        // Every level is included, not just D. The pane-group launch path
+        // logs at I/W — its short-circuit branches (group not found, member
+        // skipped, already open) are exactly the lines a user needs when
+        // panes fail to open — and filtering to D hid all of them, so the
+        // dialog reported "nothing" for a session that was logging fine.
         return logFile?.let { file ->
             if (file.exists()) {
-                file.readLines().filter { it.contains(" D/") }.takeLast(200).joinToString("\n")
+                file.readLines()
+                    .filter { it.contains("/$TAG_PREFIX:") }
+                    .takeLast(200)
+                    .joinToString("\n")
+                    .ifEmpty { "Debug log is empty (no entries yet)" }
             } else ""
         } ?: "Debug logging not enabled"
     }
@@ -1193,33 +1215,43 @@ object Logger {
     fun getRecentLogs(): List<io.github.tabssh.ui.activities.LogViewerActivity.LogEntry> {
         val logs = mutableListOf<io.github.tabssh.ui.activities.LogViewerActivity.LogEntry>()
 
-        logFile?.let { file ->
-            if (file.exists()) {
-                try {
-                    file.readLines().takeLast(500).forEach { line ->
-                        // Parse: 2025-12-19 12:34:56.123 I/TabSSH:TAG: Message
-                        val regex = Regex("""^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) (\w+)/TabSSH:(\w+): (.*)$""")
-                        regex.find(line)?.let { match ->
-                            val (timestamp, level, tag, message) = match.destructured
-                            val levelDisplay = when (level) {
-                                "D" -> "DEBUG"
-                                "I" -> "INFO"
-                                "W" -> "WARN"
-                                "E" -> "ERROR"
-                                "WTF" -> "FATAL"
-                                else -> level
-                            }
-                            logs.add(io.github.tabssh.ui.activities.LogViewerActivity.LogEntry(
-                                timestamp, levelDisplay, tag, message
-                            ))
-                        }
-                    }
-                } catch (e: Exception) {
-                    e("Logger", "Failed to read logs", e)
-                }
+        // Fall back to the on-disk file when debug logging is currently off.
+        // The debug log now survives across sessions (initialize() no longer
+        // deletes it), so it is the only place a user's log from the session
+        // where the bug reproduced can still be read — which is precisely
+        // when they open this screen.
+        val file = logFile?.takeIf { it.exists() }
+            ?: appContext?.let { ctx ->
+                File(ctx.filesDir, LOG_FILE_NAME).takeIf { it.exists() }
             }
+            ?: return logs
+        try {
+            file.readLines().takeLast(500).forEach { line ->
+                // Parse: 2025-12-19 12:34:56.123 I/TabSSH:TAG: Message
+                // TAG is [^\s:]+, not \w+: tags legitimately contain '.' and
+                // '-', and \w+ silently dropped every line those tags
+                // produced — including all pane activity.
+                val match = LOG_LINE_REGEX.find(line) ?: return@forEach
+                val (timestamp, level, tag, message) = match.destructured
+                val levelDisplay = when (level) {
+                    "D" -> "DEBUG"
+                    "I" -> "INFO"
+                    "W" -> "WARN"
+                    "E" -> "ERROR"
+                    "WTF" -> "FATAL"
+                    else -> level
+                }
+                logs.add(io.github.tabssh.ui.activities.LogViewerActivity.LogEntry(
+                    timestamp, levelDisplay, tag, message
+                ))
+            }
+        } catch (e: Exception) {
+            e("Logger", "Failed to read logs", e)
         }
 
         return logs
     }
+
+    private val LOG_LINE_REGEX =
+        Regex("""^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) (\w+)/TabSSH:([^\s:]+): (.*)$""")
 }

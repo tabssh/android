@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
-  xmlns:app="http://schemas.android.com/apk/res-auto">
+  xmlns:app="http://schemas.android.com/apk/res-auto"
+  xmlns:tools="http://schemas.android.com/tools">
 
   <!-- The application log has no on/off switch; this row explains why. -->
   <PreferenceCategory
@@ -16,7 +17,8 @@
 
   </PreferenceCategory>
 
-  <!-- Developer builds only — hidden at runtime in release by LoggingSettingsFragment. -->
+  <!-- Available in every build variant; the toggle defaults to off. The title is
+       reworded at runtime in release builds (LoggingSettingsFragment). -->
   <PreferenceCategory
     android:key="debug_logging_category"
     android:title="@string/prefcat_logging_debug"
@@ -76,6 +78,7 @@
       android:title="@string/prefs_host_log_max_size_mb_title"
       android:summary="@string/prefs_host_log_max_size_mb_summary"
       android:defaultValue="1"
+      tools:targetApi="26"
       android:min="1"
       android:max="10"
       app:showSeekBarValue="true"

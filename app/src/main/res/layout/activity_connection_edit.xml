@@ -336,6 +336,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="none"
+                            tools:targetApi="26"
                             android:tooltipText="Choose how to authenticate with server" />
 
                     </com.google.android.material.textfield.TextInputLayout>
@@ -380,6 +381,7 @@
                                 android:checked="true"
                                 android:text="@string/connection_edit_save_password_switch"
                                 android:textColor="?android:attr/textColorPrimary"
+                            tools:targetApi="26"
                                 android:tooltipText="Encrypted with hardware-backed keystore" />
 
                         </LinearLayout>
@@ -406,6 +408,7 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:inputType="none"
+                            tools:targetApi="26"
                                 android:tooltipText="Public key authentication (more secure)" />
 
                         </com.google.android.material.textfield.TextInputLayout>
@@ -457,6 +460,7 @@
                             android:layout_height="wrap_content"
                             android:inputType="none"
                             android:text="@string/connection_edit_terminal_type_default"
+                            tools:targetApi="26"
                             android:tooltipText="xterm-256color for best compatibility" />
 
                     </com.google.android.material.textfield.TextInputLayout>
@@ -469,6 +473,7 @@
                         android:text="@string/connection_edit_compression_switch"
                         android:textColor="?android:attr/textColorPrimary"
                         android:checked="true"
+                            tools:targetApi="26"
                         android:tooltipText="Reduce bandwidth usage on slow connections" />
 
                     <com.google.android.material.materialswitch.MaterialSwitch
@@ -493,6 +498,7 @@
                         android:text="@string/connection_edit_x11_forwarding_switch"
                         android:textColor="?android:attr/textColorPrimary"
                         android:checked="false"
+                            tools:targetApi="26"
                         android:tooltipText="Routes remote X11 traffic to localhost:6000. Install an X server (XServer-XSDL) on this device; without one, X11 apps will fail with 'cannot open display'." />
 
                     <!-- Wave 10 — Mosh mode: Off / Auto (default) / On -->
@@ -774,6 +780,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="none"
+                            tools:targetApi="26"
                             android:tooltipText="Choose how to handle multiplexer sessions on connect" />
 
                     </com.google.android.material.textfield.TextInputLayout>
@@ -793,6 +800,7 @@
                             android:layout_height="wrap_content"
                             android:inputType="text"
                             android:imeOptions="actionNext"
+                            tools:targetApi="26"
                             android:tooltipText="Custom session name (e.g., main, dev). Leave empty to use default." />
 
                     </com.google.android.material.textfield.TextInputLayout>
@@ -809,6 +817,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="none"
+                            tools:targetApi="26"
                             android:tooltipText="Pin the PRE key to a multiplexer, disable it, or leave on auto-detect" />
 
                     </com.google.android.material.textfield.TextInputLayout>
@@ -919,6 +928,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="none"
+                            tools:targetApi="26"
                             android:tooltipText="Override global theme for this connection" />
 
                     </com.google.android.material.textfield.TextInputLayout>
@@ -937,6 +947,7 @@
                             android:layout_height="wrap_content"
                             android:inputType="number"
                             android:imeOptions="actionDone"
+                            tools:targetApi="26"
                             android:tooltipText="Font size in sp (8-32). Leave empty for default." />
 
                     </com.google.android.material.textfield.TextInputLayout>
@@ -958,6 +969,7 @@
                             android:maxLines="5"
                             android:gravity="top"
                             android:fontFamily="monospace"
+                            tools:targetApi="26"
                             android:tooltipText="Shell commands to execute after SSH connection is established" />
 
                     </com.google.android.material.textfield.TextInputLayout>
@@ -980,6 +992,7 @@
                             android:maxLines="6"
                             android:gravity="top"
                             android:fontFamily="monospace"
+                            tools:targetApi="26"
                             android:tooltipText="Sent via SSH SETENV. Lines beginning with # are ignored." />
 
                     </com.google.android.material.textfield.TextInputLayout>
@@ -1038,6 +1051,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_sm"
                         android:text="@string/connection_edit_agent_forwarding_switch"
+                            tools:targetApi="26"
                         android:tooltipText="Forward your local SSH keys to the remote host (use carefully)" />
 
                 </LinearLayout>

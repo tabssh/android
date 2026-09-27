@@ -41,6 +41,8 @@ object TermuxMoshLauncher {
     const val TERMUX_RUN_COMMAND_ACTION = "com.termux.RUN_COMMAND"
     const val TERMUX_RUN_COMMAND_SERVICE = "com.termux.app.RunCommandService"
 
+    // Termux installs to this fixed path; not our app's files dir.
+    // Lint SdCardPath false positive: we must check Termux's specific location.
     const val MOSH_CLIENT_PATH = "/data/data/com.termux/files/usr/bin/mosh-client"
     const val TERMUX_PROPS_HINT = "~/.termux/termux.properties"
 

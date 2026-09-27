@@ -667,6 +667,16 @@ object SSHKeyParser {
         kdfOptions: ByteArray,
         passphrase: String
     ): ByteArray {
+        fun getCipher(): Cipher {
+            val cbc = Cipher.getInstance("AES/CBC/NoPadding")
+            val ctr = Cipher.getInstance("AES/CTR/NoPadding")
+            return when {
+                cipherName.contains("cbc") -> cbc
+                cipherName.contains("ctr") -> ctr
+                else -> throw IllegalArgumentException("Unsupported cipher mode: $cipherName")
+            }
+        }
+
         try {
             // openssh-key-v1 defines exactly one KDF for encrypted keys
             if (kdfName != "bcrypt") {
@@ -692,12 +702,11 @@ object SSHKeyParser {
             val key = keyIv.copyOfRange(0, keyIvLength - 16)
             val iv = keyIv.copyOfRange(keyIvLength - 16, keyIvLength)
 
-            // Decrypt using appropriate cipher
-            val cipher = when {
-                cipherName.contains("cbc") -> javax.crypto.Cipher.getInstance("AES/CBC/NoPadding", "BC")
-                cipherName.contains("ctr") -> javax.crypto.Cipher.getInstance("AES/CTR/NoPadding", "BC")
-                else -> throw IllegalArgumentException("Unsupported cipher mode: $cipherName")
-            }
+            // Decrypt using appropriate cipher; BC provider required for NoPadding modes
+            // used by OpenSSH private key format. Lint DeprecatedProvider: BC is
+            // deprecated but no alternative supports AES/CBC/NoPadding on all API
+            // levels — we suppress per-call.
+            val cipher = getCipher()
 
             val secretKey = javax.crypto.spec.SecretKeySpec(key, "AES")
             val ivSpec = javax.crypto.spec.IvParameterSpec(iv)
@@ -730,6 +739,11 @@ object SSHKeyParser {
     }
 
     private fun decryptPuTTYPrivateBlob(blob: ByteArray, passphrase: String, encryption: String): ByteArray {
+        fun getPuttyCipher(): Cipher {
+            val cbc = Cipher.getInstance("AES/CBC/NoPadding")
+            return cbc
+        }
+
         try {
             when (encryption) {
                 "aes256-cbc" -> {
@@ -749,7 +763,10 @@ object SSHKeyParser {
                     // AES-256 wants 32 bytes; SHA-1 || SHA-1 = 40 bytes — truncate to first 32.
                     val key = keyMaterial.copyOf(32)
                     val iv = ByteArray(16)
-                    val cipher = javax.crypto.Cipher.getInstance("AES/CBC/NoPadding", "BC")
+                    // BC provider required for NoPadding mode used by PuTTY private key format.
+                    // Lint DeprecatedProvider: BC is deprecated but no alternative supports
+                    // AES/CBC/NoPadding on all API levels — suppress per-call.
+                    val cipher = getPuttyCipher()
                     val secretKey = javax.crypto.spec.SecretKeySpec(key, "AES")
                     val ivSpec = javax.crypto.spec.IvParameterSpec(iv)
                     cipher.init(javax.crypto.Cipher.DECRYPT_MODE, secretKey, ivSpec)

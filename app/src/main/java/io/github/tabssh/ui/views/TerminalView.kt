@@ -1203,8 +1203,8 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
-     * Take keyboard input over from whichever sibling view had it, without
-     * showing or hiding the IME.
+     * Take keyboard input over from whichever sibling view had it, and make
+     * sure the IME is actually up for it.
      *
      * Moving Android focus alone is not enough inside a Panes grid: every
      * tile is a TerminalView with its own [onCreateInputConnection], and an
@@ -1212,13 +1212,38 @@ class TerminalView @JvmOverloads constructor(
      * when it came up. That is why switching panes appeared to do nothing
      * until the keyboard was toggled — [toggleKeyboard]'s `showSoftInput`
      * was what re-bound the connection. `restartInput` does exactly that
-     * re-bind on its own, leaving IME visibility alone so a pane switch
-     * never flickers the keyboard.
+     * re-bind on its own.
+     *
+     * `show` (not toggle) is deliberate: a tap that MOVES pane focus is the
+     * user saying "I want to type here", and if no IME is up the restart
+     * rebinds a connection nobody is typing into. Showing only when one is
+     * already visible keeps an in-progress keyboard from flickering on every
+     * pane switch, while still raising it on the first tap into a fresh
+     * pane — previously that tap did nothing visible and the pane read as
+     * simply refusing to accept input.
      */
     fun focusForPaneInput() {
         if (!isFocused) requestFocus()
         inputMethodManager.restartInput(this)
-        Logger.d("TerminalView", "Pane input focus taken")
+        if (!hasWindowFocus()) {
+            Logger.d("TerminalView", "Pane input focus taken (no window focus; IME not shown)")
+            return
+        }
+        val imeVisible = ViewCompat.getRootWindowInsets(this)
+            ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        if (imeVisible) {
+            Logger.d("TerminalView", "Pane input focus taken; IME already visible, left up")
+            return
+        }
+        if (hasHardwareKeyboard()) {
+            Logger.d("TerminalView", "Pane input focus taken; hardware keyboard active, IME not shown")
+            return
+        }
+        // SHOW_FORCED, for the same reason toggleKeyboard uses it: a prior
+        // explicit hide in this process poisons every later implicit show
+        // for the rest of the session (see toggleKeyboard).
+        inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_FORCED)
+        Logger.d("TerminalView", "Pane input focus taken; showing keyboard")
     }
 
     /**
@@ -2944,19 +2969,19 @@ class TerminalView @JvmOverloads constructor(
         }
 
         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-            // Inside a Panes tile, a tap that SWITCHES the focused pane must
-            // not also toggle the keyboard — see onPaneTapped's doc comment.
-            // Doing both on one tap (the previous behaviour) meant a click
-            // could never select a pane without also flickering the IME.
-            // But when the tapped pane is ALREADY the focused one, the tap
-            // has nothing left to select, so it falls through to the same
-            // toggleKeyboard() every standalone tab uses below — without
-            // this, the keyboard could never be raised for a pane at all.
+            // Inside a Panes tile the tap first selects this pane. Selecting
+            // runs focusForPaneInput(), which rebinds the InputConnection and
+            // raises the IME if it wasn't up — so there is nothing left for
+            // toggleKeyboard() to do here, and running it would flicker the
+            // keyboard on every pane switch (a switch while the IME is already
+            // visible: focusForPaneInput leaves it up, then toggleKeyboard
+            // would hide it). Return before the toggle for panes only; a
+            // standalone tab has no onPaneTapped and still toggles as before.
             val paneCallback = onPaneTapped
             if (paneCallback != null) {
-                val alreadyFocused = paneCallback()
+                paneCallback()
                 Logger.d("TerminalView", "Single tap — pane focus selected")
-                if (!alreadyFocused) return true
+                return true
             }
             // Single tap = toggle keyboard.
             toggleKeyboard()
@@ -3065,17 +3090,17 @@ class TerminalView @JvmOverloads constructor(
      * (single-tap, below), neither of which updates `PanesTab.
      * focusedPaneIndex` or the tile's highlighted border.
      *
-     * Returns true when the tapped pane was ALREADY the focused pane before
-     * this call (so [onSingleTapConfirmed] falls through to toggleKeyboard()
-     * for it), false when the tap just switched focus to a different pane
-     * (so the keyboard is left alone, avoiding an IME flicker on every pane
-     * switch). Without this, a tap could switch panes OR toggle the
-     * keyboard, but a pane's keyboard could never be raised at all.
+     * Invoked with the tile's grid index already captured by the holder; the
+     * implementation is expected to route to
+     * `PanesTab.setFocusedPane`, whose `focusedPaneIndex` collector calls
+     * [focusForPaneInput] on the newly focused view. That method both rebinds
+     * the InputConnection and raises the IME if it was not already up, so
+     * [onSingleTapConfirmed] has no further keyboard work to do for a tile.
      *
      * Standalone (non-Panes) tabs never set this, so their tap-to-toggle-
      * keyboard behaviour is unchanged.
      */
-    var onPaneTapped: (() -> Boolean)? = null
+    var onPaneTapped: (() -> Unit)? = null
 
     // ─────────────────────────────────────────────────────────────────
     // Drag-to-select range copy — public API

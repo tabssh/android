@@ -42,29 +42,36 @@ class LoggerNoiseGateTest {
     fun `rate cap suppresses excess D lines per tag within a window`() {
         val g = gate()
         var written = 0
-        for (i in 1..20) {
+        // 100 lines against a 64/window cap: the first 64 must survive and
+        // the burst past it must be dropped. The cap was raised from 8
+        // because opening a pane group connects every member at once under
+        // one tag, and 8 discarded exactly the connect sequence a user opens
+        // the log to see.
+        for (i in 1..100) {
             written += g.filter("D", "Chatty", "msg $i", true, "ts").size
         }
-        assertEquals(8, written)
+        assertEquals(64, written)
     }
 
     @Test
     fun `rate cap emits suppression summary when window rolls`() {
         val g = gate()
-        for (i in 1..20) {
+        for (i in 1..100) {
             g.filter("D", "Chatty", "msg $i", true, "ts")
         }
         clock += 1000L
         val out = g.filter("D", "Chatty", "next window", true, "ts")
         assertEquals(2, out.size)
-        assertTrue(out[0].contains("suppressed 12 lines"))
+        assertTrue(out[0].contains("suppressed 36 lines"))
         assertTrue(out[1].contains("next window"))
     }
 
     @Test
     fun `rate cap is per tag not global`() {
         val g = gate()
-        for (i in 1..8) {
+        // Saturate TagA to its full cap, then prove TagB still has its own
+        // budget rather than sharing the global window.
+        for (i in 1..64) {
             g.filter("D", "TagA", "a $i", true, "ts")
         }
         val out = g.filter("D", "TagB", "b 1", true, "ts")

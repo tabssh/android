@@ -28,8 +28,17 @@ import java.util.UUID
  * connect time (display/debug only — the `cd` itself already ran via the
  * session's postConnectScript, this field is not re-applied on its own).
  * [gridPosition] is this window's index in the grid (0-based, row-major).
+ *
+ * [windowId] is a stable identity assigned once at construction and carried
+ * through every later edit of this window. It exists because none of the
+ * other fields can identify a window across the grid rearranging:
+ * [hostId] repeats when the same host is open twice, [gridPosition] shifts
+ * when an earlier window closes, and [sshTab] is replaced on reconnect. The
+ * view layer keys its per-pane `TerminalView` on this so a view is never
+ * handed a different window's session — see `PanesViewHolder.terminalViewFor`.
  */
 data class PaneWindow(
+    val windowId: String = UUID.randomUUID().toString(),
     val hostId: String,
     var sshTab: SSHTab?,
     var customTitle: String? = null,

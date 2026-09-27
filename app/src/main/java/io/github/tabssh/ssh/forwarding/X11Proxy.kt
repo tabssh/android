@@ -56,7 +56,9 @@ class X11Proxy(
 ) {
     companion object {
         private const val TAG = "X11Proxy"
-        private const val TERMUX_X11_SOCKET = "/data/data/com.termux.x11/files/tmp/.X11-unix/X0"
+        // Termux:X11 installs to this fixed socket path; not our app's files dir.
+    // Lint SdCardPath false positive: we must connect to Termux:X11's specific socket.
+    private const val TERMUX_X11_SOCKET = "/data/data/com.termux.x11/files/tmp/.X11-unix/X0"
         private const val XSDL_HOST = "127.0.0.1"
         private const val XSDL_PORT = 6000
         private const val XSERVER_CONNECT_TIMEOUT_MS = 500

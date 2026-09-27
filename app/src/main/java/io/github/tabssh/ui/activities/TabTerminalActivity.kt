@@ -4619,6 +4619,7 @@ class TabTerminalActivity : TabSSHActivity() {
      * working directories) — each occurrence is dialed independently.
      */
     private fun openPaneGroup(groupId: String) {
+        Logger.i("TabTerminalActivity", "openPaneGroup: requested group $groupId")
         // Only one live session per group at a time — attach to whichever
         // is already open in the strip rather than dialing a duplicate set
         // of connections (e.g. relaunching the same group twice used to
@@ -4653,6 +4654,15 @@ class TabTerminalActivity : TabSSHActivity() {
                     .mapNotNull { hostId -> app.database.connectableHostDao().getById(hostId)?.let { hostId to it } }
                     .toMap()
             }
+            // Log the whole launch, not just its failure branches. Previously
+            // every early return above had a line and the success path had
+            // none, so a group that opened and then rendered wrong produced no
+            // output at all — the log was silent exactly when it was needed.
+            Logger.i(
+                "TabTerminalActivity",
+                "openPaneGroup: group='${group.name}' windows=${windowConfigs.size} " +
+                    "resolvedHosts=${hostsById.size} split=${group.splitDirection}"
+            )
             if (hostsById.isEmpty()) {
                 Logger.w("TabTerminalActivity", "openPaneGroup: no resolvable members for group ${group.name}")
                 Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_connection_not_found), Toast.LENGTH_SHORT).show()
@@ -4669,6 +4679,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 if (sshTab == null) {
                     Logger.w("TabTerminalActivity", "openPaneGroup: skipping unresolvable/failed member ${host.name}")
                 } else {
+                    Logger.i("TabTerminalActivity", "openPaneGroup: window $index -> '${host.name}' connected")
                     entries.add(
                         PaneWindow(
                             hostId = host.id,
@@ -4686,10 +4697,16 @@ class TabTerminalActivity : TabSSHActivity() {
             }
             val created = tabManager.createPanesTab(group.id, group.name, entries, group.splitDirection)
             if (created == null) {
+                Logger.w("TabTerminalActivity", "openPaneGroup: createPanesTab returned null for group $groupId")
                 entries.forEach { entry -> try { entry.sshTab?.cleanup() } catch (_: Exception) {} }
                 Toast.makeText(this@TabTerminalActivity, getString(R.string.virt_viewer_max_tabs), Toast.LENGTH_SHORT).show()
                 return@launch
             }
+            Logger.i(
+                "TabTerminalActivity",
+                "openPaneGroup: tab=${created.tabId} created for group $groupId " +
+                    "with ${created.currentEntries().size} window(s)"
+            )
             observePanesEmptyAutoClose(created)
             observePanesAllDisconnectedAutoClose(created)
             updateViewPagerAdapter()

@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.widget.TextViewCompat
 import com.google.android.material.button.MaterialButton
 import io.github.tabssh.R
+import io.github.tabssh.utils.logging.Logger
 
 /** Split direction for a 2-window Panes group. Persisted on [io.github.tabssh.storage.database.entities.PaneGroup.splitDirection]. */
 object PanesSplitDirection {
@@ -48,6 +49,7 @@ class PanesGridView @JvmOverloads constructor(
     companion object {
         private const val UNFOCUSED_BORDER_COLOR = Color.TRANSPARENT
         private const val NARROW_WIDTH_DP = 600
+        private const val TAG = "PanesGridView"
     }
 
     /**
@@ -61,6 +63,9 @@ class PanesGridView @JvmOverloads constructor(
         onClose: () -> Unit,
         onReconnect: () -> Unit
     ) : FrameLayout(context) {
+
+        /** True when [candidate] is this tile's content view. */
+        fun hosts(candidate: View): Boolean = content === candidate
         // Day/night-aware focus border — resolved once per tile, not per focus change
         private val focusBorderColor = ContextCompat.getColor(context, R.color.pane_focus_border)
 
@@ -204,6 +209,22 @@ class PanesGridView @JvmOverloads constructor(
     ) {
         this.onTileClicked = onTileClicked
         this.splitDirection = splitDirection
+
+        // Re-entrant call carrying the same views (the holder's `entries`
+        // collector re-runs this on every emission, including the redundant
+        // StateFlow replay at bind time) would otherwise tear every tile down
+        // and rebuild it. Detaching a TerminalView nulls its InputConnection,
+        // so that rebuild silently unbound the IME from the pane the user was
+        // typing into and typing died until they tapped again. Keep the
+        // existing tiles when the content set is unchanged; layout is
+        // re-applied either way, so a changed split direction or
+        // narrow-screen state is still honoured.
+        if (tiles.size == contents.size && tiles.indices.all { tiles[it].hosts(contents[it]) }) {
+            layoutTiles()
+            return
+        }
+
+        Logger.d(TAG, "Rebuilding ${contents.size} tile(s)")
         gridContainer.removeAllViews()
         stackContainer.removeAllViews()
         removeView(stackScroll)
@@ -225,6 +246,15 @@ class PanesGridView @JvmOverloads constructor(
             }
         }
 
+        layoutTiles()
+    }
+
+    /**
+     * (Re)place the current [tiles] into the narrow-screen stack or the grid
+     * container. Split out of [setContents] so the reuse path above reaches
+     * it too.
+     */
+    private fun layoutTiles() {
         if (isNarrowScreen()) {
             tiles.forEach { tile ->
                 stackContainer.addView(
@@ -247,6 +277,7 @@ class PanesGridView @JvmOverloads constructor(
      * input then reaches every window, not just the focused one.
      */
     fun setFocusedIndex(index: Int, highlightAll: Boolean = false) {
+        Logger.d(TAG, "Focus index $index (${tiles.size} tile(s), highlightAll=$highlightAll)")
         tiles.forEachIndexed { i, tile -> tile.setFocused(highlightAll || i == index) }
     }
 
@@ -256,6 +287,9 @@ class PanesGridView @JvmOverloads constructor(
      * per-tab: one window's shell exiting leaves its siblings running.
      */
     fun setDisconnectedIndices(disconnectedIndices: Set<Int>) {
+        if (disconnectedIndices.isNotEmpty()) {
+            Logger.d(TAG, "Disconnected tiles: $disconnectedIndices")
+        }
         tiles.forEachIndexed { i, tile -> tile.setDisconnected(i in disconnectedIndices) }
     }
 

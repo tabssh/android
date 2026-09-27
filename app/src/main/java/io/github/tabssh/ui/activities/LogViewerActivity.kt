@@ -124,11 +124,17 @@ class LogViewerActivity : TabSSHActivity() {
         lifecycleScope.launch {
             try {
                 // Disk reads must be off Main — readLines() on a multi-MB
-                // tabssh.log on slow flash would block the UI thread.
+                // log file on slow flash would block the UI thread.
                 val collected = withContext(Dispatchers.IO) {
                     val acc = mutableListOf<LogEntry>()
-                    val logFile = File(filesDir, "tabssh.log")
-                    if (logFile.exists()) {
+                    // The app log (tabssh_app.log), which Logger writes
+                    // unconditionally in every build variant. The previous
+                    // hardcoded "tabssh.log" was never written by anything, so
+                    // this branch always contributed zero entries and the
+                    // screen silently fell back to the debug log — which
+                    // does not exist at all unless debug logging is on.
+                    val logFile = Logger.getAppLogFile()
+                    if (logFile != null && logFile.exists()) {
                         logFile.useLines { seq ->
                             seq.forEach { line ->
                                 parseLogLine(line)?.let { acc.add(it) }

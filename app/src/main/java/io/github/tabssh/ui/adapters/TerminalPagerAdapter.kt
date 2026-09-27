@@ -11,6 +11,7 @@ import io.github.tabssh.hypervisor.spice.SpiceClient
 import io.github.tabssh.hypervisor.spice.SpiceConstants
 import io.github.tabssh.hypervisor.spice.SpiceListener
 import io.github.tabssh.hypervisor.vnc.console.VncConsoleChannel
+import io.github.tabssh.terminal.TermuxBridge
 import io.github.tabssh.themes.definitions.Theme
 import io.github.tabssh.ui.tabs.ConsoleDisplayMode
 import io.github.tabssh.ui.tabs.ConsoleTab
@@ -761,12 +762,28 @@ class TerminalPagerAdapter(
     ) : RecyclerView.ViewHolder(gridView) {
 
         private var boundPanesTab: PanesTab? = null
+        private companion object {
+            private const val TAG = "PanesViewHolder"
+        }
         // Keyed by grid index, not hostId — the same hostId can legitimately
         // appear in more than one window (same host, different working
         // directories; see PaneWindowConfig's doc comment), and keying by
         // hostId collapsed those into a single shared TerminalView/bridge
         // attachment.
         private var paneTerminalViews: MutableMap<Int, TerminalView> = mutableMapOf()
+        // The PaneWindow.windowId each entry of paneTerminalViews was built
+        // for. Read by terminalViewFor to detect that a view now holds a
+        // different window's session and must be thrown away rather than
+        // rebound — see its doc comment.
+        private var paneWindowIds: MutableMap<Int, String> = mutableMapOf()
+        // The TermuxBridge each view is currently attached to. windowId alone
+        // is not a sufficient key: reconnectPaneWindow replaces a window's
+        // SSHTab (and so its bridge) while keeping the same windowId, which
+        // would rebind the live view onto a brand-new session and leave it
+        // carrying the dead one's scroll offset and underline cache. Tracking
+        // the bridge catches that too — it is the object the view is actually
+        // bound to.
+        private var paneTerminalBridges: MutableMap<Int, TermuxBridge> = mutableMapOf()
         private var focusJob: Job? = null
         private var entriesJob: Job? = null
         private var disconnectedJob: Job? = null
@@ -787,11 +804,22 @@ class TerminalPagerAdapter(
                         gridView.setFocusedIndex(index, highlightAll = sync)
                         // A sync toggle alone must not re-grab input focus; only a real focus move does.
                         if (index == lastFocusedIndex) return@collect
+                        val view = paneTerminalViews[index]
+                        // bind() runs before the holder's itemView is attached,
+                        // and requestFocus()/restartInput() on an unattached
+                        // view are no-ops — so the first emission would latch
+                        // lastFocusedIndex with the focus never actually taken.
+                        // Don't latch until the view is in a window, so a real
+                        // focus move retries once the holder is attached.
+                        if (view != null && !view.isAttachedToWindow) {
+                            Logger.d(TAG, "Panes focus $index deferred — view not attached")
+                            return@collect
+                        }
                         lastFocusedIndex = index
                         // The border alone is not what makes a pane active —
                         // without this the IME keeps typing into the previously
                         // focused tile until the keyboard is toggled.
-                        paneTerminalViews[index]?.focusForPaneInput()
+                        view?.focusForPaneInput()
                     }
             }
             entriesJob = holderScope.launch {
@@ -800,6 +828,21 @@ class TerminalPagerAdapter(
             disconnectedJob = holderScope.launch {
                 panesTab.disconnectedWindowIds.collect { applyDisconnectedOverlays(panesTab) }
             }
+            // Pick up the focus hand-off that bind()'s first emission had to
+            // defer (itemView isn't attached yet at bind time). Re-apply once
+            // attached; the grid's tile set can change while it was detached,
+            // so resolve the view at this point rather than capturing it.
+            itemView.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(v: View) {
+                    v.removeOnAttachStateChangeListener(this)
+                    val index = panesTab.focusedPaneIndex.value
+                    Logger.d(TAG, "Panes holder attached — taking focus for pane $index")
+                    paneTerminalViews[index]?.focusForPaneInput()
+                }
+
+                override fun onViewDetachedFromWindow(v: View) = Unit
+            })
+            Logger.d(TAG, "Panes bound: ${panesTab.currentEntries().size} window(s)")
         }
 
         /**
@@ -830,8 +873,57 @@ class TerminalPagerAdapter(
         private fun themeForIndex(index: Int, entries: List<PaneWindow>): Theme? =
             entries.getOrNull(index)?.sshTab?.let { sshTab -> themeResolver?.invoke(sshTab.profile.theme) }
 
-        private fun terminalViewFor(index: Int): TerminalView =
-            paneTerminalViews.getOrPut(index) {
+        /**
+         * The [TerminalView] rendering the window at [index], keyed by
+         * [PaneWindow.windowId] rather than by grid position.
+         *
+         * A view's `TerminalView` is bound to one session for its whole
+         * lifetime. Keying by index let a different window inherit a view
+         * still wired to the previous occupant's bridge; the rebind called
+         * `attachTerminalEmulator`, which only clears the modifier latches
+         * (`resetPerTabTransientState`) and leaves everything else — scroll
+         * offset, URL underline map, cursor phase, cell metrics — pointing at
+         * the old session. The new pane then opened scrolled wherever the old
+         * one had been left.
+         *
+         * When the window at an index is no longer the one that view was
+         * built for, the view is discarded and a fresh one constructed: a
+         * brand-new view carries no state from any previous window, which
+         * closes the whole class of bug rather than enumerating fields to
+         * reset, and the next added field can't silently be missed.
+         */
+        private fun terminalViewFor(index: Int): TerminalView {
+            val entry = boundPanesTab?.currentEntries()?.getOrNull(index)
+                ?: return newTerminalView(index)
+            // Evict on either signal: a different window now occupies this
+            // grid slot (close/reorder), or this same window was handed a new
+            // session (reconnect). Both mean the view is stale.
+            val bridge = entry.sshTab?.termuxBridge
+            val existingWindowId = paneWindowIds[index]
+            val existingBridge = paneTerminalBridges[index]
+            // A null bridge means this window has no session yet (it is still
+            // resolving, or has dropped) — there is nothing new to bind, so
+            // leave the existing view alone. Comparing it as a *change* would
+            // evict the view on every rebuild for the whole connect window.
+            val windowChanged = existingWindowId != null && existingWindowId != entry.windowId
+            val sessionChanged = bridge != null && existingBridge != null && existingBridge !== bridge
+            if (windowChanged || sessionChanged) {
+                Logger.i(
+                    TAG,
+                    "Stale terminal view at index $index (windowChanged=$windowChanged, " +
+                        "sessionChanged=$sessionChanged) — rebuilding"
+                )
+                paneTerminalViews.remove(index)
+                paneTerminalBridges.remove(index)
+                paneWindowIds.remove(index)
+            }
+            return paneTerminalViews.getOrPut(index) { newTerminalView(index) }.also {
+                paneWindowIds[index] = entry.windowId
+                bridge?.let { b -> paneTerminalBridges[index] = b }
+            }
+        }
+
+        private fun newTerminalView(index: Int): TerminalView =
                 TerminalView(gridView.context).apply {
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -846,17 +938,22 @@ class TerminalPagerAdapter(
                     // doc comment) consumes every touch, so PanesGridView.Tile's
                     // OnClickListener never fires — route pane-focus selection
                     // through this callback instead so a tap both selects the
-                    // pane (updating the highlighted border) and no longer
-                    // toggles the keyboard as an uncoordinated side effect.
-                    // Report whether this pane was already focused so
-                    // TerminalView can fall through to toggleKeyboard() for
-                    // it — otherwise tapping into a pane never raises the
-                    // keyboard at all.
+                    // pane (updating the highlighted border) and hands the pane
+                    // its keyboard input. setFocusedPane drives
+                    // focusForPaneInput() on the newly focused view, which
+                    // rebinds the InputConnection and raises the IME when it
+                    // wasn't already up.
                     onPaneTapped = {
-                        val tab = boundPanesTab
-                        val wasFocused = tab?.focusedPaneIndex?.value == index
-                        tab?.setFocusedPane(index)
-                        wasFocused
+                        boundPanesTab?.setFocusedPane(index)
+                        // Also drive the focus hand-off directly. When this
+                        // tile is ALREADY the focused pane, setFocusedPane
+                        // writes the same value and the focusedPaneIndex
+                        // StateFlow does not re-emit, so the collector
+                        // below never calls focusForPaneInput() and the tap
+                        // raised nothing — the tile read as refusing input.
+                        // The call is idempotent, so running it when focus
+                        // did move is harmless.
+                        focusForPaneInput()
                     }
                     // Long-press opens the same bottom-sheet terminal menu
                     // (tab list, Toggle System Keyboard, Close Current Tab,
@@ -864,15 +961,24 @@ class TerminalPagerAdapter(
                     // PanesViewHolder constructor doc comment.
                     onContextMenuRequested = { _, _ -> this@PanesViewHolder.onContextMenuRequested?.invoke(0f, 0f) }
                 }
-            }
 
         private fun rebuildTiles(panesTab: PanesTab) {
             val entries = panesTab.currentEntries()
+            Logger.d(
+                TAG,
+                "rebuildTiles: group=${panesTab.groupId} windows=${entries.size} " +
+                    "connected=${entries.count { it.sshTab != null }} " +
+                    "split=${panesTab.splitDirection} focus=${panesTab.focusedPaneIndex.value}"
+            )
             // Drop terminal views for grid slots no longer present (e.g. a
             // pane was closed independently), so their TermuxBridge
             // attachment isn't held onto past its tile's lifetime.
             val liveIndices = entries.indices.toSet()
-            (paneTerminalViews.keys - liveIndices).forEach { paneTerminalViews.remove(it) }
+            (paneTerminalViews.keys - liveIndices).forEach {
+                paneTerminalViews.remove(it)
+                paneWindowIds.remove(it)
+                paneTerminalBridges.remove(it)
+            }
 
             val contents = entries.mapIndexed { index, entry ->
                 val terminalView = terminalViewFor(index)
@@ -931,6 +1037,8 @@ class TerminalPagerAdapter(
             disconnectedJob = null
             boundPanesTab = null
             paneTerminalViews.clear()
+            paneWindowIds.clear()
+            paneTerminalBridges.clear()
             holderScope.cancel()
             holderScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         }

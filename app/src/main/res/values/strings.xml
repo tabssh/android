@@ -487,9 +487,11 @@
     <string name="cloud_oci_next_step">Credentials are entered in the next step.</string>
     <string name="cloud_oci_title">OCI credentials — %1$s</string>
     <string name="cloud_oci_tenancy_hint">Tenancy OCID</string>
-    <string name="cloud_oci_tenancy_helper">ocid1.tenancy.oc1…</string>
+    <!-- Oracle Cloud Identifier format: ocid1.tenancy.oc1... — "oc1" is the realm, not a typo -->
+    <string name="cloud_oci_tenancy_helper" translatable="false">ocid1.tenancy.oc1…</string>
     <string name="cloud_oci_user_hint">User OCID</string>
-    <string name="cloud_oci_user_helper">ocid1.user.oc1…</string>
+    <!-- Oracle Cloud Identifier format: ocid1.user.oc1... — "oc1" is the realm, not a typo -->
+    <string name="cloud_oci_user_helper" translatable="false">ocid1.user.oc1…</string>
     <string name="cloud_oci_fingerprint_hint">API key fingerprint</string>
     <string name="cloud_oci_fingerprint_helper">aa:bb:cc:…</string>
     <string name="cloud_oci_region_hint">Region</string>
@@ -1660,6 +1662,7 @@
     <!-- Settings: Logging screen -->
     <string name="prefcat_logging_app">Application log</string>
     <string name="prefcat_logging_debug">Debug logging</string>
+    <string name="pref_debug_logging_category_user">Troubleshooting logs</string>
     <string name="prefcat_logging_host">Host logs</string>
     <string name="prefcat_logging_view">View logs</string>
     <string name="prefcat_logging_management">Log management</string>
@@ -2261,7 +2264,7 @@
     <string name="sftp_scp_message">SCP is the legacy fallback for servers without SFTP. Default Upload uses SFTP (recommended). Continue with SCP?</string>
     <string name="sftp_scp_confirm">SCP</string>
     <string name="sftp_error_connection_inactive">Connection not active</string>
-    <string name="sftp_scp_result_fmt">SCP: %1$s ok, %2$s failed</string>
+    <string name="sftp_scp_result_fmt">SCP: %1$s OK, %2$s failed</string>
     <string name="sftp_create_folder_title">Create Folder</string>
     <string name="sftp_create_folder_confirm">Create</string>
     <string name="sftp_folder_created_fmt">Folder created: %1$s</string>

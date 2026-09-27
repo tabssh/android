@@ -1086,10 +1086,18 @@ class TabSSHApplication : Application() {
         when (level) {
             TRIM_MEMORY_BACKGROUND,
             TRIM_MEMORY_MODERATE,
-            TRIM_MEMORY_COMPLETE -> {
-                // App is in background, trim memory usage
+            TRIM_MEMORY_COMPLETE,
+            TRIM_MEMORY_UI_HIDDEN -> {
+                // App is in background or UI hidden, trim memory usage
                 themeManager.clearCache()
                 Logger.d("TabSSHApplication", "Memory trimmed due to level $level")
+            }
+            TRIM_MEMORY_RUNNING_CRITICAL,
+            TRIM_MEMORY_RUNNING_LOW,
+            TRIM_MEMORY_RUNNING_MODERATE -> {
+                // App still running but under memory pressure; don't clear
+                // theme cache yet — user may still be interacting.
+                Logger.d("TabSSHApplication", "Memory pressure (running): $level")
             }
         }
 
@@ -1100,6 +1108,13 @@ class TabSSHApplication : Application() {
         when (level) {
             TRIM_MEMORY_RUNNING_CRITICAL,
             TRIM_MEMORY_COMPLETE -> trimTerminalScrollback(level)
+            TRIM_MEMORY_BACKGROUND,
+            TRIM_MEMORY_MODERATE,
+            TRIM_MEMORY_UI_HIDDEN,
+            TRIM_MEMORY_RUNNING_LOW,
+            TRIM_MEMORY_RUNNING_MODERATE -> {
+                // Explicitly no-op for lighter levels — scrollback retained
+            }
         }
     }
 
