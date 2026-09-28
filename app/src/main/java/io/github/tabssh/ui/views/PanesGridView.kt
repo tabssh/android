@@ -253,8 +253,21 @@ class PanesGridView @JvmOverloads constructor(
      * (Re)place the current [tiles] into the narrow-screen stack or the grid
      * container. Split out of [setContents] so the reuse path above reaches
      * it too.
+     *
+     * Detaches every tile and [stackScroll] from whatever currently holds them
+     * before re-adding. The reuse path in [setContents] deliberately skips the
+     * `removeAllViews()` teardown so the tiles — and the TerminalView's input
+     * connection — survive untouched, which means they are still parented here
+     * when this runs. Re-adding a view still attached to a parent throws
+     * IllegalStateException from ViewGroup.addView, so the detach here is what
+     * makes a re-layout safe, not just a no-op.
      */
     private fun layoutTiles() {
+        tiles.forEach { tile -> (tile.parent as? ViewGroup)?.removeView(tile) }
+        stackContainer.removeAllViews()
+        gridContainer.removeAllViews()
+        removeView(stackScroll)
+
         if (isNarrowScreen()) {
             tiles.forEach { tile ->
                 stackContainer.addView(
