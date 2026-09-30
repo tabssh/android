@@ -22,18 +22,13 @@ package io.github.tabssh.hypervisor.spice
  *   transport handshake. May be empty for hypervisors that use
  *   URL-embedded auth (rare for SPICE — Proxmox and oVirt both use
  *   tickets).
- * @param caCert PEM-encoded CA certificate that signed the SPICE
- *   server's TLS cert, or `null` to use the platform trust store.
- *   Required for Proxmox because its `pveproxy` cert is self-signed
- *   by the per-cluster PVE CA.
- * @param hostSubject Optional TLS certificate subject the C side will
- *   pin against — set to the SPICE server's expected subject line
- *   (e.g. `"O=Proxmox Virtual Environment, CN=<node-fqdn>"`). Null
- *   means no pinning beyond CA validation.
+ * @param caCert Legacy descriptor CA retained for compatibility; it is
+ *   not used as a stable identity when certificate validation is disabled.
+ * @param hostSubject Legacy descriptor subject retained for compatibility.
  * @param tlsVerify When true, libspice validates the TLS chain
  *   against [caCert] and [hostSubject]. When false, TLS is still used
- *   but validation is skipped — intended for the "trust this cert
- *   once" flow, never a default.
+ *   but validation is skipped. Infrastructure callers keep this disabled
+ *   because server identity is independent of rotating TLS certificates.
  */
 data class SpiceConnectionParams(
     val host: String,

@@ -256,6 +256,8 @@ class AzureVmClient : CloudProvider {
             exchangeForAccessToken(tenant, clientId, clientSecret)
         } catch (e: CloudAuthException) {
             throw e
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (_: Exception) { return@withContext false }
 
         val url = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Compute/virtualMachines/$vmName/$action?api-version=2023-03-01"
@@ -285,7 +287,7 @@ class AzureVmClient : CloudProvider {
             .post(body)
             .build()
         val raw = http.newCall(req).execute().use { resp ->
-            val r = resp.body?.string().orEmpty()
+            val r = readCloudResponseBody(resp.body)
             if (!resp.isSuccessful) {
                 if (resp.code == 401 || resp.code == 403) {
                     throw CloudAuthException("Azure OAuth2 rejected client credentials (HTTP ${resp.code})")
@@ -382,7 +384,7 @@ class AzureVmClient : CloudProvider {
             .get()
             .build()
         val raw = http.newCall(req).execute().use { resp ->
-            val r = resp.body?.string().orEmpty()
+            val r = readCloudResponseBody(resp.body)
             if (!resp.isSuccessful) {
                 if (resp.code == 401 || resp.code == 403) {
                     throw CloudAuthException("Azure token rejected (HTTP ${resp.code}): ${tryAzureError(r) ?: resp.message}")

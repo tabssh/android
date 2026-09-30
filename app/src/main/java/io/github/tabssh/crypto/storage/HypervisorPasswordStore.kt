@@ -20,7 +20,7 @@ import kotlinx.coroutines.withContext
  * discarding the plaintext it moved every still-populated value into
  * [TabSSHDatabase.HYPERVISOR_PASSWORD_CARRYOVER_TABLE]. [sweepLegacyPlaintext]
  * runs at application startup and drains that table into the Keystore,
- * dropping it once empty; [retrieve] drains the single row it needs on a
+ * leaving the now-empty schema table in place; [retrieve] drains the single row it needs on a
  * Keystore miss in case a connect beats the sweep. A row whose Keystore
  * write fails survives to the next attempt, so nothing is ever lost.
  *
@@ -127,19 +127,10 @@ object HypervisorPasswordStore {
     }
 
     /**
-     * Phase 1 cert pinning — TOFU persistence helper. Called by every
-     * hypervisor manager activity right after a successful authenticate()
-     * with the value from `client.getCapturedCertSha256()`. Writes to
-     * the DB only when:
-     *   * the client actually captured a SHA — first-connect TOFU in
-     *     either mode (verifySsl=true prompts or system-CA-vets; off
-     *     pins the first-seen cert silently), or a user-approved pin
-     *     update after a cert change, AND
-     *   * the row currently has no pin OR a different pin
-     *     (handles the "user clicked Forget pin and reconnected" path).
-     *
-     * No-op for connects where the pin already matched (capturedSha is
-     * null because the trust manager didn't write to it).
+     * Legacy schema compatibility hook. Current infrastructure TLS clients
+     * do not capture certificate pins, so callers pass null and this is a
+     * no-op. Keep accepting a value while old call sites and database rows
+     * are migrated without deleting the persisted column.
      */
     suspend fun persistCapturedPinIfAny(
         context: Context,
@@ -151,7 +142,7 @@ object HypervisorPasswordStore {
         val app = context.applicationContext as? TabSSHApplication ?: return@withContext
         try {
             app.database.hypervisorDao().updatePinnedCertSha256(profile.id, sha)
-            Logger.i(TAG, "TOFU pinned ${profile.name} (id=${profile.id}) → SHA-256:$sha")
+            Logger.i(TAG, "Updated legacy certificate pin for ${profile.name} (id=${profile.id})")
         } catch (e: Exception) {
             Logger.w(TAG, "Failed to persist captured pin for ${profile.name}", e)
         }
@@ -211,10 +202,9 @@ object HypervisorPasswordStore {
 
     /**
      * Startup sweep: drain the v13→v14 carry-over table into the Keystore
-     * instead of waiting for each row's next [retrieve], then drop the table
-     * once it is empty. Runs on every cold start; on a database that never
-     * carried plaintext across the upgrade the table does not exist and this
-     * costs one `sqlite_master` probe.
+     * instead of waiting for each row's next [retrieve]. The empty schema
+     * table remains in place because Room validates it during upgrades. Runs
+     * on every cold start and costs one `sqlite_master` probe.
      *
      * Keystore wins: if an alias already holds a password (the user updated
      * it since the plaintext was written), the carried-over value is dropped,
@@ -235,8 +225,8 @@ object HypervisorPasswordStore {
 
     /**
      * Move carried-over plaintext into the Keystore. With [onlyId] set, only
-     * that row is considered and the table is left in place; otherwise every
-     * row is drained and the table is dropped once empty.
+     * that row is considered; otherwise every row is drained. The empty table
+     * is retained as part of the Room schema.
      *
      * Returns the effective password for each id it successfully resolved, so
      * [retrieve] can serve the value it just migrated without a second read.
@@ -260,10 +250,10 @@ object HypervisorPasswordStore {
             } else {
                 db.query("SELECT `id`, `password` FROM `$CARRYOVER`")
             }
-            cursor.use {
-                while (it.moveToNext()) {
-                    val password = it.getString(1) ?: ""
-                    if (password.isNotEmpty()) pending.add(it.getLong(0) to password)
+            cursor.use { rows ->
+                while (rows.moveToNext()) {
+                    val password = rows.getString(1) ?: ""
+                    if (password.isNotEmpty()) pending.add(rows.getLong(0) to password)
                 }
             }
         } catch (e: Exception) {
@@ -278,16 +268,17 @@ object HypervisorPasswordStore {
                     Logger.w(TAG, "Carry-over retrievePassword($alias) threw — leaving row for retry", e)
                     continue
                 }
-                val effective = if (!existing.isNullOrEmpty()) {
+                val effective: String
+                if (!existing.isNullOrEmpty()) {
                     // Keystore already holds a newer secret — discard the carried value.
-                    existing
+                    effective = existing
                 } else {
                     val ok = pm.storePassword(alias, password, SecurePasswordManager.StorageLevel.ENCRYPTED)
                     if (!ok) {
                         Logger.w(TAG, "Carry-over storePassword($alias) returned false — leaving row for retry")
                         continue
                     }
-                    password
+                    effective = password
                 }
                 db.execSQL("DELETE FROM `$CARRYOVER` WHERE `id` = ?", arrayOf<Any>(id))
                 resolved[id] = effective
@@ -297,7 +288,6 @@ object HypervisorPasswordStore {
             }
         }
 
-        if (onlyId == null) dropCarryoverIfEmpty(db)
         return resolved
     }
 
@@ -313,25 +303,12 @@ object HypervisorPasswordStore {
             false
         }
 
-    /** Drop the carry-over table once the last row has been migrated. */
-    private fun dropCarryoverIfEmpty(db: SupportSQLiteDatabase) {
-        try {
-            val remaining = db.query("SELECT COUNT(*) FROM `$CARRYOVER`").use {
-                if (it.moveToFirst()) it.getLong(0) else 0L
-            }
-            if (remaining == 0L) db.execSQL("DROP TABLE IF EXISTS `$CARRYOVER`")
-        } catch (e: Exception) {
-            Logger.w(TAG, "Could not drop the drained carry-over table", e)
-        }
-    }
-
     /** Forget any carried-over plaintext for [id] without migrating it. */
     private fun discardCarryover(app: TabSSHApplication, id: Long) {
         try {
             val db = app.database.openHelper.writableDatabase
             if (!carryoverExists(db)) return
             db.execSQL("DELETE FROM `$CARRYOVER` WHERE `id` = ?", arrayOf<Any>(id))
-            dropCarryoverIfEmpty(db)
         } catch (e: Exception) {
             Logger.w(TAG, "Failed to discard carried-over plaintext for id=$id", e)
         }

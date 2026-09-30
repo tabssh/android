@@ -493,14 +493,12 @@ dependencies {
     // Coroutines
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0'
 
-    // Terminal Emulator - Termux (MIT licensed, full emoji/256-color support)
+    // Terminal Emulator - Termux (Apache-2.0, full emoji/256-color support)
     // Using only terminal-emulator (not terminal-view)
     // We render using our own TerminalView, just need the emulation engine
-    // JitPack format: com.github.termux.termux-app:module:version
-    implementation("com.github.termux.termux-app:terminal-emulator:${termuxTerminalVersion}") {
-        // Exclude terminal-view as we use our own TerminalView and it requires minSdk 24
-        exclude group: 'com.github.termux.termux-app', module: 'terminal-view'
-    }
+    // Built from the pinned upstream source in deps/termux-terminal-emulator
+    // so its JNI library can ship with 16 KB ELF page alignment.
+    implementation project(':termux-terminal-emulator')
 
     // Provides ListenableFuture + AbstractResolvableFuture required by profileinstaller and WorkManager.
     // The empty guava stub (9999.0-empty-to-avoid-conflict-with-guava) has no implementation and

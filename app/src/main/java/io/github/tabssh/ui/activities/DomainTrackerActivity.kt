@@ -348,7 +348,12 @@ class DomainTrackerActivity : TabSSHActivity() {
         lifecycleScope.launch {
             val text = withContext(Dispatchers.IO) {
                 try {
-                    contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    contentResolver.openInputStream(uri)?.use {
+                        io.github.tabssh.utils.BoundedTextReader.readUtf8(
+                            it,
+                            io.github.tabssh.utils.BoundedTextReader.MAX_TEXT_IMPORT_BYTES
+                        )
+                    }
                 } catch (e: Exception) {
                     Logger.e(TAG, "Domain CSV read failed", e)
                     null

@@ -72,8 +72,10 @@ class ThemeManager(private val context: Context) {
                 isInitialized = true
                 Logger.i("ThemeManager", "Theme manager initialized with ${_availableThemes.value.size} themes")
                 
-            } catch (e: Exception) {
-                Logger.e("ThemeManager", "Failed to initialize theme manager", e)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Logger.e("ThemeManager", "Failed to initialize theme manager", e)
             }
         }
     }
@@ -213,6 +215,8 @@ class ThemeManager(private val context: Context) {
             
             return true
             
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ThemeManager", "Failed to apply theme ${theme.name}", e)
             return false
@@ -298,6 +302,8 @@ class ThemeManager(private val context: Context) {
             Logger.i("ThemeManager", "Imported custom theme: ${finalTheme.name}")
             ImportThemeResult.Success(finalTheme)
             
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ThemeManager", "Failed to import theme", e)
             ImportThemeResult.Error("Import failed: ${e.message}")
@@ -338,6 +344,8 @@ class ThemeManager(private val context: Context) {
             loadAvailableThemes()
             Logger.i("ThemeManager", "Saved custom theme: ${finalTheme.name}")
             ImportThemeResult.Success(finalTheme)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ThemeManager", "Failed to save custom theme", e)
             ImportThemeResult.Error("Save failed: ${e.message}")
@@ -352,6 +360,8 @@ class ThemeManager(private val context: Context) {
         
         return try {
             themeParser.themeToJson(theme)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ThemeManager", "Failed to export theme $themeId", e)
             null
@@ -385,6 +395,8 @@ class ThemeManager(private val context: Context) {
             Logger.i("ThemeManager", "Deleted custom theme: $themeId")
             true
             
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ThemeManager", "Failed to delete theme $themeId", e)
             false

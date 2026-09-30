@@ -69,13 +69,13 @@ class AsciinemaCastWriter(
                     put("timestamp", System.currentTimeMillis() / 1000)
                     put("title", connectionName)
                 }
-                w.write(header.toString())
-                w.write("\n")
+                val headerLine = header.toString() + "\n"
+                w.write(headerLine)
                 w.flush()
 
                 writer = w
                 currentFilename = filename
-                bytesWritten = 0
+                bytesWritten = headerLine.toByteArray(Charsets.UTF_8).size.toLong()
                 startNanos = System.nanoTime()
                 isRecording = true
                 Logger.i("AsciinemaCastWriter", "Started cast recording: $filename")
@@ -100,14 +100,16 @@ class AsciinemaCastWriter(
                     put("o")
                     put(data)
                 }
-                w.write(event.toString())
-                w.write("\n")
-                w.flush()
-                bytesWritten += data.length
-                if (bytesWritten >= MAX_CAST_BYTES) {
-                    Logger.w("AsciinemaCastWriter", "Cast hit the ${MAX_CAST_BYTES / (1024 * 1024)}MB cap, stopping recording")
+                val eventLine = event.toString() + "\n"
+                val eventBytes = eventLine.toByteArray(Charsets.UTF_8)
+                if (bytesWritten + eventBytes.size > MAX_CAST_BYTES) {
+                    Logger.w("AsciinemaCastWriter", "Cast reached the ${MAX_CAST_BYTES / (1024 * 1024)}MB cap, stopping recording")
                     stopRecordingLocked()
+                    return
                 }
+                w.write(eventLine)
+                w.flush()
+                bytesWritten += eventBytes.size
             } catch (e: Exception) {
                 Logger.e("AsciinemaCastWriter", "Write failed", e)
             }

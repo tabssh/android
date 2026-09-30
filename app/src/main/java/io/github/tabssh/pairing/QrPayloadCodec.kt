@@ -40,11 +40,17 @@ internal object Cbor {
     /** Maximum container nesting accepted by [decode]. Real payloads use 3. */
     private const val MAX_DEPTH = 16
 
-    fun decode(bytes: ByteArray): Value = Decoder(bytes).decodeOne()
+    fun decode(bytes: ByteArray): Value = Decoder(bytes).decodeDocument()
 
     private class Decoder(private val bytes: ByteArray) {
         private var pos = 0
         private var depth = 0
+
+        fun decodeDocument(): Value {
+            val value = decodeOne()
+            if (pos != bytes.size) throw CborException("trailing CBOR data at byte $pos")
+            return value
+        }
 
         fun decodeOne(): Value {
             // Bound recursion: a QR payload of nothing but array headers
@@ -173,14 +179,14 @@ object QrPayloadCodec {
         if (root !is Cbor.Value.MapValue) throw IllegalArgumentException("envelope root is not a map")
         val map = root.entries
 
-        val version = (map.intField("version") ?: throw IllegalArgumentException("missing version")).toInt()
-        if (version > ENVELOPE_VERSION_SUPPORTED) {
-            throw UnsupportedVersionException("envelope version $version > $ENVELOPE_VERSION_SUPPORTED")
-        }
+        val version = supportedVersion(map, ENVELOPE_VERSION_SUPPORTED, "envelope")
 
         val salt = map.bytesField("salt") ?: throw IllegalArgumentException("missing salt")
         val nonce = map.bytesField("nonce") ?: throw IllegalArgumentException("missing nonce")
         val ciphertext = map.bytesField("ciphertext") ?: throw IllegalArgumentException("missing ciphertext")
+        require(salt.size == 16) { "salt must be 16 bytes" }
+        require(nonce.size == 12) { "nonce must be 12 bytes" }
+        require(ciphertext.size >= 16) { "ciphertext is missing its authentication tag" }
 
         return QrEnvelope(version, salt, nonce, ciphertext)
     }
@@ -194,10 +200,7 @@ object QrPayloadCodec {
         if (root !is Cbor.Value.MapValue) throw IllegalArgumentException("payload root is not a map")
         val map = root.entries
 
-        val version = (map.intField("version") ?: throw IllegalArgumentException("missing version")).toInt()
-        if (version > PAYLOAD_VERSION_SUPPORTED) {
-            throw UnsupportedVersionException("payload version $version > $PAYLOAD_VERSION_SUPPORTED")
-        }
+        val version = supportedVersion(map, PAYLOAD_VERSION_SUPPORTED, "payload")
 
         val expiresAt = map.intField("expires_at") ?: throw IllegalArgumentException("missing expires_at")
         val deviceLabel = map.textField("device_label")
@@ -224,7 +227,10 @@ object QrPayloadCodec {
         return ExportedConnection(
             name = m.textField("name") ?: throw IllegalArgumentException("connection.name missing"),
             host = m.textField("host") ?: throw IllegalArgumentException("connection.host missing"),
-            port = m.intField("port")?.toInt() ?: 22,
+            port = m.intField("port")?.let {
+                require(it in 1L..65535L) { "connection.port is out of range" }
+                it.toInt()
+            } ?: 22,
             username = m.textField("username") ?: throw IllegalArgumentException("connection.username missing"),
             protocol = m.textField("protocol") ?: "ssh",
             authType = m.textField("auth_type") ?: "PASSWORD",
@@ -274,6 +280,13 @@ object QrPayloadCodec {
 
     private fun Map<String, Cbor.Value>.intField(key: String): Long? =
         (this[key] as? Cbor.Value.IntValue)?.value
+
+    private fun supportedVersion(map: Map<String, Cbor.Value>, supported: Int, kind: String): Int {
+        val version = map.intField("version") ?: throw IllegalArgumentException("missing version")
+        if (version > supported) throw UnsupportedVersionException("$kind version $version > $supported")
+        require(version == supported.toLong()) { "$kind version $version is invalid" }
+        return version.toInt()
+    }
 
     private fun Map<String, Cbor.Value>.textField(key: String): String? {
         val v = this[key] ?: return null

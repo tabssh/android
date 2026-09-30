@@ -3,6 +3,7 @@ package io.github.tabssh.cloud
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
@@ -96,7 +97,7 @@ class GcpComputeClient : CloudProvider {
                 .get()
                 .build()
             val body = http.newCall(req).execute().use { resp ->
-                val raw = resp.body?.string().orEmpty()
+                val raw = readCloudResponseBody(resp.body)
                 if (!resp.isSuccessful) {
                     val msg = try {
                         JSONObject(raw).optJSONObject("error")?.optString("message") ?: resp.message
@@ -148,7 +149,7 @@ class GcpComputeClient : CloudProvider {
                     .get()
                     .build()
                 val rawBody = http.newCall(req).execute().use { resp ->
-                    val raw = resp.body?.string().orEmpty()
+                    val raw = readCloudResponseBody(resp.body)
                     if (!resp.isSuccessful) {
                         val msg = try {
                             JSONObject(raw).optJSONObject("error")?.optString("message") ?: resp.message
@@ -265,11 +266,11 @@ class GcpComputeClient : CloudProvider {
                     if (!resp.isSuccessful) {
                         throw IllegalStateException("GCP API HTTP ${resp.code}: ${resp.message}")
                     }
-                    JSONObject(resp.body?.string().orEmpty()).optString("status")
+                    JSONObject(readCloudResponseBody(resp.body)).optString("status")
                 }
                 if (status == "STOPPED" || status == "TERMINATED") return@withContext true
                 if (status == "RUNNING") return@withContext false
-                Thread.sleep(RESTART_POLL_INTERVAL_MS)
+                delay(RESTART_POLL_INTERVAL_MS)
             }
             false
         }
@@ -361,7 +362,7 @@ class GcpComputeClient : CloudProvider {
             .build()
 
         val raw = http.newCall(req).execute().use { resp ->
-            val r = resp.body?.string().orEmpty()
+            val r = readCloudResponseBody(resp.body)
             if (!resp.isSuccessful) {
                 if (resp.code == 401 || resp.code == 403) {
                     throw CloudAuthException("GCP OAuth2 rejected service-account credentials (HTTP ${resp.code})")

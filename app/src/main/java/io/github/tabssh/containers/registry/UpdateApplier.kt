@@ -9,9 +9,12 @@ import io.github.tabssh.containers.transport.ContainerTransport
 import io.github.tabssh.containers.transport.PullProgressEvent
 import io.github.tabssh.storage.database.dao.ContainerAutoUpdatePolicyDao
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.NonCancellable
 import org.json.JSONObject
 
 /**
@@ -109,52 +112,125 @@ class UpdateApplier(
             return@flow emit(ApplyEvent.Failed(RecreateStep.PULL_IMAGE, capturedPullError, false))
         }
 
-        // STOP_OLD — recoverable by simply restarting the old container.
-        emit(ApplyEvent.StepStarted(RecreateStep.STOP_OLD))
-        when (val r = transport.containerAction(name, ContainerAction.STOP)) {
-            is ContainerResult.Success -> Unit
-            else -> return@flow emit(ApplyEvent.Failed(RecreateStep.STOP_OLD, failureMessage(r), false))
-        }
-
-        // RENAME_OLD — from here on, failure means full rollback.
-        emit(ApplyEvent.StepStarted(RecreateStep.RENAME_OLD))
-        when (val r = transport.renameContainer(name, oldName)) {
-            is ContainerResult.Success -> Unit
-            else -> {
-                // The old container is merely stopped — restart it.
-                val restarted = transport.containerAction(name, ContainerAction.START)
-                return@flow emit(ApplyEvent.Failed(
-                    RecreateStep.RENAME_OLD, failureMessage(r),
-                    restarted is ContainerResult.Success
-                ))
+        var currentStep = RecreateStep.STOP_OLD
+        var stopAttempted = false
+        var renameAttempted = false
+        var createAttempted = false
+        try {
+            // STOP_OLD — recoverable by simply restarting the old container.
+            emit(ApplyEvent.StepStarted(RecreateStep.STOP_OLD))
+            stopAttempted = true
+            when (val r = transport.containerAction(name, ContainerAction.STOP)) {
+                is ContainerResult.Success -> Unit
+                else -> {
+                    stopAttempted = false
+                    return@flow emit(ApplyEvent.Failed(RecreateStep.STOP_OLD, failureMessage(r), false))
+                }
             }
-        }
 
-        // CREATE_NEW — each tier consumes its half of the plan.
-        emit(ApplyEvent.StepStarted(RecreateStep.CREATE_NEW))
-        when (val r = transport.createAndStartContainer(name, createBody, runArgv)) {
-            is ContainerResult.Success -> Unit
-            else -> return@flow emit(rollback(
-                transport, RecreateStep.CREATE_NEW, failureMessage(r), name, oldName,
-                removeNew = true
-            ))
-        }
+            // RENAME_OLD — from here on, failure means full rollback.
+            currentStep = RecreateStep.RENAME_OLD
+            emit(ApplyEvent.StepStarted(currentStep))
+            renameAttempted = true
+            when (val r = transport.renameContainer(name, oldName)) {
+                is ContainerResult.Success -> Unit
+                else -> {
+                    renameAttempted = false
+                    val restarted = transport.containerAction(name, ContainerAction.START)
+                    stopAttempted = false
+                    return@flow emit(ApplyEvent.Failed(
+                        RecreateStep.RENAME_OLD, failureMessage(r),
+                        restarted is ContainerResult.Success
+                    ))
+                }
+            }
 
-        // VERIFY_NEW — healthcheck status when the image defines one,
-        // still-running-after-window otherwise.
-        emit(ApplyEvent.StepStarted(RecreateStep.VERIFY_NEW))
-        val verifyError = verifyNew(transport, name)
-        if (verifyError != null) {
-            return@flow emit(rollback(
-                transport, RecreateStep.VERIFY_NEW, verifyError, name, oldName, removeNew = true
-            ))
-        }
+            // CREATE_NEW — each tier consumes its half of the plan.
+            currentStep = RecreateStep.CREATE_NEW
+            emit(ApplyEvent.StepStarted(currentStep))
+            createAttempted = true
+            when (val r = transport.createAndStartContainer(name, createBody, runArgv)) {
+                is ContainerResult.Success -> Unit
+                else -> {
+                    val event = rollback(
+                        transport, currentStep, failureMessage(r), name, oldName,
+                        removeNew = true
+                    )
+                    stopAttempted = false
+                    renameAttempted = false
+                    createAttempted = false
+                    return@flow emit(event)
+                }
+            }
 
-        // REMOVE_OLD — success path; a failed remove is logged, not fatal.
-        emit(ApplyEvent.StepStarted(RecreateStep.REMOVE_OLD))
-        when (val r = transport.removeContainer(oldName, force = true)) {
-            is ContainerResult.Success -> Unit
-            else -> Logger.w(TAG, "could not remove $oldName: ${failureMessage(r)}")
+            // VERIFY_NEW — healthcheck status when the image defines one,
+            // still-running-after-window otherwise.
+            currentStep = RecreateStep.VERIFY_NEW
+            emit(ApplyEvent.StepStarted(currentStep))
+            val verifyError = verifyNew(transport, name)
+            if (verifyError != null) {
+                val event = rollback(
+                    transport, currentStep, verifyError, name, oldName, removeNew = true
+                )
+                stopAttempted = false
+                renameAttempted = false
+                createAttempted = false
+                return@flow emit(event)
+            }
+
+            // REMOVE_OLD — success path; a failed remove is logged, not fatal.
+            stopAttempted = false
+            renameAttempted = false
+            createAttempted = false
+            currentStep = RecreateStep.REMOVE_OLD
+            emit(ApplyEvent.StepStarted(currentStep))
+            when (val r = transport.removeContainer(oldName, force = true)) {
+                is ContainerResult.Success -> Unit
+                else -> Logger.w(TAG, "could not remove $oldName: ${failureMessage(r)}")
+            }
+            stopAttempted = false
+            renameAttempted = false
+            createAttempted = false
+        } catch (e: CancellationException) {
+            if (stopAttempted) {
+                withContext(NonCancellable) {
+                    try {
+                        if (renameAttempted) {
+                            rollback(
+                                transport, currentStep, "Update cancelled", name, oldName,
+                                removeNew = createAttempted
+                            )
+                        } else {
+                            transport.containerAction(name, ContainerAction.START)
+                        }
+                    } catch (cleanupError: Exception) {
+                        Logger.e(TAG, "Failed to recover after update cancellation", cleanupError)
+                    }
+                }
+            }
+            throw e
+        } catch (e: Exception) {
+            val rolledBack = if (stopAttempted) {
+                withContext(NonCancellable) {
+                    try {
+                        if (renameAttempted) {
+                            rollback(
+                                transport, currentStep, e.message ?: "Update failed", name, oldName,
+                                removeNew = createAttempted
+                            ).rolledBack
+                        } else {
+                            transport.containerAction(name, ContainerAction.START) is ContainerResult.Success
+                        }
+                    } catch (cleanupError: Exception) {
+                        Logger.e(TAG, "Failed to recover after update failure", cleanupError)
+                        false
+                    }
+                }
+            } else {
+                false
+            }
+            emit(ApplyEvent.Failed(currentStep, e.message ?: "Update failed", rolledBack))
+            return@flow
         }
 
         policyDao.updatePendingUpdateDigest(policyId, null)
@@ -215,17 +291,32 @@ class UpdateApplier(
         name: String,
         oldName: String,
         removeNew: Boolean
-    ): ApplyEvent.Failed {
+    ): ApplyEvent.Failed = withContext(NonCancellable) {
         Logger.w(TAG, "recreate of $name failed at $step ($message) — rolling back")
         var ok = true
         if (removeNew) {
-            val removed = transport.removeContainer(name, force = true)
-            // NotFound is fine — create may never have happened.
-            if (removed !is ContainerResult.Success && removed !is ContainerResult.NotFound) ok = false
+            try {
+                val removed = transport.removeContainer(name, force = true)
+                // NotFound is fine — create may never have happened.
+                if (removed !is ContainerResult.Success && removed !is ContainerResult.NotFound) ok = false
+            } catch (e: Exception) {
+                ok = false
+                Logger.e(TAG, "Could not remove replacement container $name", e)
+            }
         }
-        if (transport.renameContainer(oldName, name) !is ContainerResult.Success) ok = false
-        if (transport.containerAction(name, ContainerAction.START) !is ContainerResult.Success) ok = false
-        return ApplyEvent.Failed(step, message, ok)
+        try {
+            if (transport.renameContainer(oldName, name) !is ContainerResult.Success) ok = false
+        } catch (e: Exception) {
+            ok = false
+            Logger.e(TAG, "Could not restore container name $name", e)
+        }
+        try {
+            if (transport.containerAction(name, ContainerAction.START) !is ContainerResult.Success) ok = false
+        } catch (e: Exception) {
+            ok = false
+            Logger.e(TAG, "Could not restart restored container $name", e)
+        }
+        ApplyEvent.Failed(step, message, ok)
     }
 
     /** Pre-plan failure — nothing was touched, so nothing to roll back. */

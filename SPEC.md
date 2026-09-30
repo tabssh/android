@@ -11,55 +11,43 @@
 
 ---
 
-## 1. Certificate pinning ships without a backup pin
+## 1. Infra TLS does not use leaf-certificate pinning
 
-**Overrides:** AI.md:1020 — *"Certificate pinning is optional and per-host, with a
-documented rotation plan (backup pin) — never pin without one."*
+**Overrides:** AI.md:755, 1017 and 1020 — the general TOFU, trust-all, and
+certificate-pinning rules.
 
-**Project behaviour:** `HypervisorTrustManagerFactory` stores exactly one SHA-256 pin
-per host, both in memory and in the profile columns
-(`HypervisorProfile.pinnedCertSha256`, `VncHost.pinnedCertSha256`). There is no second
-pin slot and no pin-history storage; `grep` for `backup.?pin|secondary.?pin|pin_history`
-across `app/src/main` returns nothing.
+**Project behaviour:** `HypervisorTrustManagerFactory` does not capture or enforce
+leaf-certificate pins. REST `verifySsl=true` uses OkHttp's platform CA-chain and
+hostname checks; `verifySsl=false` keeps TLS encryption but accepts any non-empty
+peer chain and skips hostname validation. Hypervisor console TLS also remains
+encrypted but skips certificate validation. SSH connections independently verify
+host keys through the app's known-hosts store. Old `pinnedCertSha256` database fields
+remain for backward-compatible schema/import handling and are ignored by TLS clients.
 
-**Why the override holds:** rotation is handled by re-validation rather than by a
-pre-staged second pin. On a pin mismatch the trust manager re-checks the system CA
-before treating the change as a MITM
-(`HypervisorTrustManagerFactory.kt:288-313`): a certificate that still chains to a
-system CA is re-pinned silently — this is the case that would otherwise strand a user
-on a legitimate rotation of a multi-tenant endpoint such as an OCI load-balanced API
-host. Self-signed and private-CA hosts never reach that branch, so they keep the
-strict confirm-on-change prompt. The security property AI.md's backup pin is
-protecting — never silently trusting a certificate that is not genuinely the host's —
-is preserved by that split; only the storage mechanism differs.
+**Why the override holds:** infrastructure providers and self-managed hypervisors can
+rotate or replace leaf certificates independently of the SSH server identity. Requiring
+users to approve every certificate change creates a recurring interruption and makes
+the certificate a misleading identity signal. SSH sessions continue to use their
+host-key verification flow. HTTPS-only APIs have no SSH host key on that transport;
+their configured `verifySsl` option therefore controls platform certificate checks,
+with the default off to support self-signed appliances.
 
-**If this ever changes:** a backup pin means accepting the presented cert if *either*
-pin matches, which is strictly weaker than the current re-validation check. Adding one
-requires re-deriving the threat model above, not just adding a column.
+**Accepted residual risk:** an HTTPS-only connection with `verifySsl=false` and a
+hypervisor console connection has no server identity check at the TLS layer. This is
+the explicit compatibility choice for private infrastructure; credentials and
+requests remain encrypted in transit, but a network attacker able to intercept that
+connection could impersonate the endpoint.
+
+**Already documented:** IDEA.md records the same behavior and distinction between
+SSH host identity and HTTPS certificate validation.
 
 ---
 
 ## 2. `verifySsl` defaults to off on hypervisor profiles
 
-**Overrides:** AI.md:755 and AI.md:1017 — *"TOFU with explicit user confirmation on
-change; never silent trust-all."*
-
-**Project behaviour:** `HypervisorProfile.verifySsl` defaults to `false`. With
-verification off, the first certificate seen is pinned silently, with no prompt
-(`HypervisorTrustManagerFactory.kt:140-148`). `OciApiClient` deliberately inverts this
-default to `true`, because OCI's public CA endpoint needs it.
-
-**Why the override holds:** hypervisor consoles are overwhelmingly deployed on
-private LANs with self-signed certificates; a first-use prompt that rejects them
-makes the product unusable for its primary audience. The pin is still captured and
-still enforced on every subsequent connection, and a *changed* certificate always
-prompts — the "silent" part is scoped to first contact only, never to a change.
-The bypass is per-entity (a profile field), never global, and a warning is logged at
-`installTrust`.
-
-**Already documented:** IDEA.md:232 states this as an accepted design decision and
-names the pin as the compensating control. This entry restates it so the AI.md
-contradiction resolves explicitly rather than being left implicit.
+This remains the accepted per-profile default described in IDEA.md. OCI cloud API
+clients default to `verifySsl=true` and therefore use normal platform CA and hostname
+verification without pinning an individual leaf certificate.
 
 ---
 
@@ -177,3 +165,22 @@ not re-open them:
 | Exported components | individually justified, extras validated | `LinkHandlerActivity.kt:54` |
 | Licensing | attribution for borrowed code | `LICENSE.md:222,226,346` |
 | Host toolchain | never install SDK/Gradle/JDK on host (AI.md:280) | enforced by PreToolUse hook |
+
+---
+
+## 5. R8 is pinned separately to match Kotlin metadata
+
+**Overrides:** AI.md:586-588 — the Kotlin/AGP/Gradle toolchain follows the
+maintained image's compatible versions.
+
+**Project behaviour:** Kotlin remains 2.4.10, AGP 8.13.2, and Gradle 8.14.5 as
+declared in `IDEA.md`; `settings.gradle` supplies R8 9.1.31, the first published
+patch meeting the 9.1.29 minimum. AGP 8.13.2 bundles
+R8 8.13.19, which emits Kotlin metadata parsing errors against Kotlin 2.4 during
+release minification. Android's compatibility table requires R8 9.1.29 for
+Kotlin 2.4. The override is pinned and applies to provider and F-Droid release
+minification.
+
+**Why the override holds:** upgrading AGP would also require changing the pinned
+Gradle wrapper and validated build image; using the documented R8 override keeps
+the current toolchain while matching Kotlin's metadata format.

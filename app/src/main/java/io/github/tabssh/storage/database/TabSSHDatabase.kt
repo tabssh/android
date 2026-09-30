@@ -57,9 +57,10 @@ import io.github.tabssh.utils.logging.Logger
         VpsHost::class,
         PaneGroup::class,
         ConnectableHost::class,
-        TelnetHost::class
+        TelnetHost::class,
+        HypervisorPasswordCarryover::class
     ],
-    version = 27,
+    version = 28,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -505,11 +506,10 @@ abstract class TabSSHDatabase : RoomDatabase() {
         }
 
         /**
-         * Name of the transient staging table MIGRATION_13_14 hands the legacy
-         * `hypervisors.password` values to. Not a Room entity — it exists only
-         * on databases that actually carried plaintext across the v14 upgrade,
-         * and `HypervisorPasswordStore.sweepLegacyPlaintext` drops it as soon
-         * as the last row has been moved into the Keystore.
+         * Name of the legacy handoff table MIGRATION_13_14 uses for old
+         * `hypervisors.password` values. It is a Room entity so the schema
+         * validator accepts it during upgrades; the table remains empty after
+         * startup moves any carried values into the Keystore.
          */
         const val HYPERVISOR_PASSWORD_CARRYOVER_TABLE = "hypervisor_password_carryover"
 
@@ -529,7 +529,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
          * [HYPERVISOR_PASSWORD_CARRYOVER_TABLE], and
          * `HypervisorPasswordStore.sweepLegacyPlaintext` — already invoked
          * during application startup — moves each row into the Keystore and
-         * deletes it, dropping the table once empty. A row whose Keystore
+         * deletes it. A row whose Keystore
          * write fails simply survives to the next attempt, so no stored
          * hypervisor password can be lost.
          */
@@ -1243,6 +1243,20 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        // Declares the legacy secret handoff table in Room's current schema.
+        // MIGRATION_13_14 already creates it for old installs; fresh installs
+        // and databases that were already at v27 need the empty table added.
+        val MIGRATION_27_28 = object : Migration(27, 28) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `$HYPERVISOR_PASSWORD_CARRYOVER_TABLE` (" +
+                        "`id` INTEGER NOT NULL, " +
+                        "`password` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -1252,7 +1266,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28)
                 .build()
                 INSTANCE = instance
                 instance

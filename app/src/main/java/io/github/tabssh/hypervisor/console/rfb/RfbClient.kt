@@ -125,6 +125,20 @@ class RfbClient(
          */
         private const val MAX_FB_PIXELS = 64 * 1024 * 1024
 
+        internal fun isIpAddressLiteral(host: String): Boolean {
+            val address = host.removeSurrounding("[", "]")
+            if (address.contains(':')) {
+                return runCatching {
+                    java.net.InetAddress.getByName(address) is java.net.Inet6Address
+                }.getOrDefault(false)
+            }
+            val octets = address.split('.')
+            return octets.size == 4 && octets.all { octet ->
+                octet.isNotEmpty() && octet.length <= 3 && octet.all(Char::isDigit) &&
+                    octet.toIntOrNull()?.let { it in 0..255 } == true
+            }
+        }
+
         /**
          * Encodings advertised to the server, in preference order.
          *
@@ -949,7 +963,9 @@ class RfbClient(
         sslSocket.tcpNoDelay = true
         if (tlsHost != null) {
             val params = sslSocket.sslParameters
-            params.serverNames = listOf(javax.net.ssl.SNIHostName(tlsHost))
+            if (!isIpAddressLiteral(tlsHost)) {
+                params.serverNames = listOf(javax.net.ssl.SNIHostName(tlsHost))
+            }
             // RFC 6125 / endpoint identification. Without this, the JSSE
             // SSLSocket only verifies the cert chain — the hostname in the
             // certificate's subjectAltName is NOT checked, leaving a MITM

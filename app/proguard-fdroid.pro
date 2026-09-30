@@ -14,8 +14,7 @@
 # F-Droid specific keeps
 -keep class io.github.tabssh.TabSSHApplication { *; }
 
-# Ensure consistent naming for reproducible builds
--useuniqueclassmembernames
+# Keep package names stable for reproducible builds
 -keeppackagenames doNotKeepAThing
 
 # Additional ProGuard rules for deterministic output.

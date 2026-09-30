@@ -203,6 +203,6 @@ class SpiceUriTest {
         assertEquals(0, params.port)
         assertEquals(5901, params.tlsPort)
         assertEquals("t", params.password)
-        assertTrue(params.tlsVerify)
+        assertFalse(params.tlsVerify)
     }
 }

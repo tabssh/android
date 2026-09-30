@@ -145,7 +145,7 @@ class LinodeClient : CloudProvider {
                 }
                 throw IllegalStateException("Linode API HTTP ${resp.code}: ${resp.message}")
             }
-            resp.body?.string().orEmpty()
+            readCloudResponseBody(resp.body)
         }
         return JSONObject(body)
     }

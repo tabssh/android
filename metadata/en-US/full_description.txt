@@ -49,7 +49,8 @@ TabSSH is a comprehensive, open-source SSH client for Android that provides a tr
 • Multi-Host Dashboard — side-by-side CPU/memory/disk metric graphs across hosts
 • Hypervisor management — Proxmox VE, XCP-ng, Xen Orchestra, VMware, QEMU/libvirt (KVM)
 • Cloud instance management — DigitalOcean, Hetzner, Linode, Vultr,
-  AWS EC2, Google Cloud Compute, Azure VMs, Oracle Cloud (OCI)
+  AWS EC2, Google Cloud Compute, Azure VMs, Oracle Cloud (OCI), Scaleway,
+  UpCloud, and Hostinger
 • Container host management — Docker, Incus, Podman, and LXC/LXD at full
   parity over SSH; containers, images, volumes, networks, and compose stacks
 • Panes — tile up to 6 SSH/Telnet/Mosh sessions in a resizable grid inside

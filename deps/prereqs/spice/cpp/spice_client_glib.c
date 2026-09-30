@@ -13,13 +13,11 @@
  *    tabssh_spice_impl_create. The handle is the pointer, cast to
  *    jlong and stashed in SpiceClient.nativeHandle on the Kotlin
  *    side.
- *  - A dedicated GMainContext + GMainLoop drives libspice signal
- *    dispatch on a worker GThread. All libspice calls happen on that
- *    thread; JNI callers post through g_main_context_invoke when they
- *    need to touch session state (e.g. sending input events after
- *    connect).
- *  - JNI callbacks into Kotlin cache a JavaVM* at first attach; each
- *    worker-thread callback attaches the current thread, resolves
+ *  - One process-wide GMainLoop drives the GLib default context on a
+ *    dedicated worker. libspice attaches sources to that global context,
+ *    so all sessions share the dispatcher and JNI callers queue work there.
+ *  - JNI callbacks into Kotlin cache a JavaVM* at first attach; the
+ *    dispatcher callback attaches its thread, resolves
  *    the cached jmethodIDs on the SpiceClient class, and invokes the
  *    matching internal `onNative*` method. The Kotlin object is kept
  *    alive by a global reference held in the session struct — it is
@@ -29,14 +27,10 @@
  *    become onNativeFramebufferUpdate calls with the dirty rect and
  *    a copy of the pixels for the affected region.
  *
- * IMPORTANT: This file is written against the documented public
- * spice-client-glib 0.42 API — see
- * https://gitlab.freedesktop.org/spice/spice-gtk — but it has NOT been
- * compile-verified inside TabSSH because the libs/spice prebuilts are
- * not yet in tree. First real verification will happen when task #14
- * or #15 exercises this against a live SPICE endpoint. Any deviations
- * from the documented API will surface as build failures at that
- * point; the JNI symbol table in spice_client.c is stable regardless.
+ * This file is written against the documented public spice-client-glib
+ * 0.42 API and has been cross-compiled and linked for Android arm64-v8a
+ * against the pinned dependency sources. Live endpoint behavior still
+ * needs device/server coverage.
  */
 
 #include <jni.h>
@@ -54,6 +48,9 @@
 #define LOGI(fmt, ...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, fmt, ##__VA_ARGS__)
 #define LOGW(fmt, ...) __android_log_print(ANDROID_LOG_WARN,  LOG_TAG, fmt, ##__VA_ARGS__)
 #define LOGE(fmt, ...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, fmt, ##__VA_ARGS__)
+
+#define MAX_SPICE_DIMENSION 16384
+#define MAX_SPICE_PIXELS (32LL * 1024LL * 1024LL)
 
 /*
  * Cached JavaVM. Populated at JNI_OnLoad; never cleared. Every
@@ -77,6 +74,14 @@ static jmethodID g_mid_on_agent_connected = NULL;
 static jmethodID g_mid_on_clipboard_text = NULL;
 static jmethodID g_mid_on_error = NULL;
 static jmethodID g_mid_on_disconnected = NULL;
+static GMutex g_client_class_mutex;
+static GMutex g_dispatcher_mutex;
+static GMainContext *g_dispatcher_context = NULL;
+static GMainLoop *g_dispatcher_loop = NULL;
+
+static void clear_jni_exception(JNIEnv *env) {
+    if (env && (*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+}
 
 typedef struct tabssh_spice_session {
     SpiceSession *session;
@@ -85,8 +90,10 @@ typedef struct tabssh_spice_session {
     SpiceInputsChannel *inputs_channel;
 
     GMainContext *main_ctx;
-    GMainLoop *main_loop;
-    GThread *loop_thread;
+    GMutex stop_mutex;
+    GCond stop_cond;
+    gboolean stop_requested;
+    gboolean stop_complete;
 
     /* Global ref to the Kotlin SpiceClient. Released in destroy(). */
     jobject client_ref;
@@ -100,15 +107,14 @@ typedef struct tabssh_spice_session {
     jintArray fb_array;
     int fb_width;
     int fb_height;
+    int fb_stride_bytes;
+    int fb_format;
     const uint32_t *fb_pixels;
 } tabssh_spice_session;
 
 /*
- * Attach the current worker thread to the JVM and return a JNIEnv*.
- * Every callback path uses this. The corresponding detach happens
- * when the worker thread exits (loop_thread_main returns) — we never
- * detach mid-callback because the worker only exists for the session
- * lifetime.
+ * Attach the shared dispatcher thread to the JVM and return a JNIEnv*.
+ * The dispatcher lives for the process lifetime, so it stays attached.
  */
 static JNIEnv *attach_current_thread(void) {
     JNIEnv *env = NULL;
@@ -132,16 +138,24 @@ static JNIEnv *attach_current_thread(void) {
  * rather than crash.
  */
 static gboolean ensure_client_class(JNIEnv *env) {
-    if (g_client_cls != NULL) return TRUE;
+    g_mutex_lock(&g_client_class_mutex);
+    if (g_client_cls != NULL) {
+        g_mutex_unlock(&g_client_class_mutex);
+        return TRUE;
+    }
     jclass local = (*env)->FindClass(env, "io/github/tabssh/hypervisor/spice/SpiceClient");
     if (!local) {
         LOGE("FindClass(SpiceClient) failed");
+        if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+        g_mutex_unlock(&g_client_class_mutex);
         return FALSE;
     }
     g_client_cls = (jclass)(*env)->NewGlobalRef(env, local);
     (*env)->DeleteLocalRef(env, local);
     if (!g_client_cls) {
         LOGE("NewGlobalRef(SpiceClient) failed");
+        if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+        g_mutex_unlock(&g_client_class_mutex);
         return FALSE;
     }
     g_mid_on_connected = (*env)->GetMethodID(env, g_client_cls,
@@ -165,9 +179,67 @@ static gboolean ensure_client_class(JNIEnv *env) {
         !g_mid_on_agent_connected || !g_mid_on_clipboard_text ||
         !g_mid_on_error || !g_mid_on_disconnected) {
         LOGE("GetMethodID for one or more onNative* callbacks failed");
+        (*env)->DeleteGlobalRef(env, g_client_cls);
+        g_client_cls = NULL;
+        g_mid_on_connected = NULL;
+        g_mid_on_framebuffer_update = NULL;
+        g_mid_on_desktop_resize = NULL;
+        g_mid_on_cursor_update = NULL;
+        g_mid_on_agent_connected = NULL;
+        g_mid_on_clipboard_text = NULL;
+        g_mid_on_error = NULL;
+        g_mid_on_disconnected = NULL;
+        if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+        g_mutex_unlock(&g_client_class_mutex);
         return FALSE;
     }
+    g_mutex_unlock(&g_client_class_mutex);
     return TRUE;
+}
+
+static gpointer dispatcher_thread_main(gpointer user_data) {
+    GMainLoop *loop = (GMainLoop *)user_data;
+    LOGI("SPICE shared GLib dispatcher starting");
+    g_main_loop_run(loop);
+    return NULL;
+}
+
+static gboolean ensure_dispatcher(void) {
+    g_mutex_lock(&g_dispatcher_mutex);
+    if (g_dispatcher_loop) {
+        g_mutex_unlock(&g_dispatcher_mutex);
+        return TRUE;
+    }
+
+    g_dispatcher_context = g_main_context_ref(g_main_context_default());
+    g_dispatcher_loop = g_main_loop_new(g_dispatcher_context, FALSE);
+    GError *err = NULL;
+    GThread *thread = g_thread_try_new("tabssh-spice", dispatcher_thread_main,
+                                       g_dispatcher_loop, &err);
+    if (!thread) {
+        LOGE("Could not start SPICE GLib dispatcher: %s", err ? err->message : "unknown error");
+        if (err) g_error_free(err);
+        g_main_loop_unref(g_dispatcher_loop);
+        g_dispatcher_loop = NULL;
+        g_main_context_unref(g_dispatcher_context);
+        g_dispatcher_context = NULL;
+        g_mutex_unlock(&g_dispatcher_mutex);
+        return FALSE;
+    }
+    g_thread_unref(thread);
+    g_mutex_unlock(&g_dispatcher_mutex);
+    return TRUE;
+}
+
+static void queue_on_dispatcher(GMainContext *context, GSourceFunc callback,
+                                gpointer user_data) {
+    GSource *source = g_idle_source_new();
+    if (!source) return;
+    g_source_set_priority(source, G_PRIORITY_DEFAULT);
+    g_source_set_callback(source, callback, user_data, NULL);
+    g_source_attach(source, context);
+    g_source_unref(source);
+    g_main_context_wakeup(context);
 }
 
 /*
@@ -209,28 +281,71 @@ static void emit_disconnected(tabssh_spice_session *sess, const char *reason) {
 static void on_display_primary_create(SpiceChannel *channel, gint format, gint width, gint height,
                                        gint stride, gint shmid, gpointer imgdata,
                                        gpointer user_data) {
-    (void) channel; (void) format; (void) stride; (void) shmid;
+    (void) channel; (void) shmid;
     tabssh_spice_session *sess = (tabssh_spice_session *)user_data;
     JNIEnv *env = attach_current_thread();
     if (!env || !ensure_client_class(env) || !sess->client_ref) return;
+
+    int64_t pixels = (int64_t)width * (int64_t)height;
+    int bytes_per_pixel = format == SPICE_SURFACE_FMT_32_xRGB ? 4 :
+        format == SPICE_SURFACE_FMT_16_555 ? 2 : 0;
+    if (bytes_per_pixel == 0 || width <= 0 || height <= 0 || width > MAX_SPICE_DIMENSION ||
+        height > MAX_SPICE_DIMENSION || pixels > MAX_SPICE_PIXELS ||
+        stride < width * bytes_per_pixel || stride % bytes_per_pixel != 0) {
+        emit_error(sess, "SPICE server announced an invalid framebuffer");
+        return;
+    }
 
     if (sess->fb_array) {
         (*env)->DeleteGlobalRef(env, sess->fb_array);
         sess->fb_array = NULL;
     }
-    jintArray local_fb = (*env)->NewIntArray(env, width * height);
+    jintArray local_fb = (*env)->NewIntArray(env, (jsize)pixels);
     if (!local_fb) {
+        clear_jni_exception(env);
         emit_error(sess, "NewIntArray(primary surface) failed");
         return;
     }
     sess->fb_array = (jintArray)(*env)->NewGlobalRef(env, local_fb);
     (*env)->DeleteLocalRef(env, local_fb);
+    if (!sess->fb_array) {
+        clear_jni_exception(env);
+        emit_error(sess, "Could not allocate SPICE framebuffer reference");
+        return;
+    }
     sess->fb_width = width;
     sess->fb_height = height;
+    sess->fb_stride_bytes = stride;
+    sess->fb_format = format;
     sess->fb_pixels = (const uint32_t *)imgdata;
     if (imgdata) {
-        (*env)->SetIntArrayRegion(env, sess->fb_array, 0, width * height,
-                                  (const jint *)imgdata);
+        for (gint row = 0; row < height; row++) {
+            const uint8_t *src = (const uint8_t *)imgdata + (size_t)row * (size_t)stride;
+            jint *converted = g_try_new(jint, width);
+            if (!converted) {
+                emit_error(sess, "Could not allocate SPICE framebuffer row");
+                return;
+            }
+            for (gint col = 0; col < width; col++) {
+                if (format == SPICE_SURFACE_FMT_32_xRGB) {
+                    converted[col] = ((const uint32_t *)src)[col] | (jint)0xff000000;
+                } else {
+                    guint16 pixel = ((const guint16 *)src)[col];
+                    guint red = (pixel >> 10) & 0x1f;
+                    guint green = (pixel >> 5) & 0x1f;
+                    guint blue = pixel & 0x1f;
+                    converted[col] = (jint)(0xff000000 | ((red << 3 | red >> 2) << 16) |
+                        ((green << 3 | green >> 2) << 8) | (blue << 3 | blue >> 2));
+                }
+            }
+            (*env)->SetIntArrayRegion(env, sess->fb_array, row * width, width, converted);
+            g_free(converted);
+            if ((*env)->ExceptionCheck(env)) {
+                clear_jni_exception(env);
+                emit_error(sess, "Could not copy SPICE framebuffer");
+                return;
+            }
+        }
     }
 
     /*
@@ -255,19 +370,48 @@ static void on_display_invalidate(SpiceChannel *channel, gint x, gint y, gint w,
     (void) channel;
     tabssh_spice_session *sess = (tabssh_spice_session *)user_data;
     if (!sess->fb_array || !sess->fb_pixels) return;
+    if (x < 0 || y < 0 || w <= 0 || h <= 0 ||
+        x > sess->fb_width || y > sess->fb_height ||
+        w > sess->fb_width - x || h > sess->fb_height - y) {
+        LOGW("Dropping out-of-bounds SPICE update rect %dx%d+%d+%d on %dx%d",
+             w, h, x, y, sess->fb_width, sess->fb_height);
+        return;
+    }
     JNIEnv *env = attach_current_thread();
     if (!env || !ensure_client_class(env) || !sess->client_ref) return;
 
     /*
-     * SPICE hands the primary surface as a contiguous ARGB buffer with
-     * stride = width * 4. Update the affected rows one span at a time
-     * to keep the JNI copy tight.
+     * Honor the server-provided stride and update the affected rows one
+     * span at a time to keep the JNI copy tight.
      */
+    gint *converted = g_try_new(gint, w);
+    if (!converted) return;
     for (gint row = 0; row < h; row++) {
-        gint offset = (y + row) * sess->fb_width + x;
-        (*env)->SetIntArrayRegion(env, sess->fb_array, offset, w,
-                                   (const jint *)(sess->fb_pixels + offset));
+        jint dst_offset = (y + row) * sess->fb_width + x;
+        const uint8_t *src = (const uint8_t *)sess->fb_pixels +
+            (size_t)(y + row) * (size_t)sess->fb_stride_bytes +
+            (size_t)x * (size_t)(sess->fb_format == SPICE_SURFACE_FMT_32_xRGB ? 4 : 2);
+        for (gint col = 0; col < w; col++) {
+            if (sess->fb_format == SPICE_SURFACE_FMT_32_xRGB) {
+                converted[col] = ((const uint32_t *)src)[col] | (jint)0xff000000;
+            } else {
+                guint16 pixel = ((const guint16 *)src)[col];
+                guint red = (pixel >> 10) & 0x1f;
+                guint green = (pixel >> 5) & 0x1f;
+                guint blue = pixel & 0x1f;
+                converted[col] = (jint)(0xff000000 | ((red << 3 | red >> 2) << 16) |
+                    ((green << 3 | green >> 2) << 8) | (blue << 3 | blue >> 2));
+            }
+        }
+        (*env)->SetIntArrayRegion(env, sess->fb_array, dst_offset, w, converted);
+        if ((*env)->ExceptionCheck(env)) {
+            g_free(converted);
+            clear_jni_exception(env);
+            emit_error(sess, "Could not copy SPICE framebuffer update");
+            return;
+        }
     }
+    g_free(converted);
     (*env)->CallVoidMethod(env, sess->client_ref, g_mid_on_framebuffer_update,
                             (jint)x, (jint)y, (jint)w, (jint)h, sess->fb_array);
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
@@ -396,65 +540,44 @@ static void on_session_disconnected(SpiceSession *session, gpointer user_data) {
     (void) session;
     tabssh_spice_session *sess = (tabssh_spice_session *)user_data;
     emit_disconnected(sess, "spice session disconnected");
-    if (sess->main_loop) g_main_loop_quit(sess->main_loop);
 }
 
-/*
- * Worker thread body — runs the GMainLoop that drives libspice's
- * signal dispatch. Started from tabssh_spice_impl_start and exits
- * when g_main_loop_quit fires (either from disconnect or from
- * tabssh_spice_impl_stop).
- */
-static gpointer loop_thread_main(gpointer user_data) {
+static gboolean connect_session_on_dispatcher(gpointer user_data) {
     tabssh_spice_session *sess = (tabssh_spice_session *)user_data;
+    g_mutex_lock(&sess->stop_mutex);
+    gboolean stopped = sess->stop_requested;
+    g_mutex_unlock(&sess->stop_mutex);
+    if (stopped) return G_SOURCE_REMOVE;
 
-    /*
-     * Initiate the connect HERE, inline on the worker thread, before entering
-     * g_main_loop_run. spice_session_connect is async: it returns immediately
-     * and its coroutine (gio-coroutine) schedules all socket-wait and signal
-     * wakeups on the GLOBAL default GMainContext. sess->main_ctx IS the global
-     * default (see impl_create), and this loop runs it, so those sources
-     * dispatch on this thread. We deliberately do NOT push a thread-default
-     * context: GLib forbids pushing the global-default context as
-     * thread-default, and with nothing pushed g_socket_client_connect_async
-     * also targets the global default — consistent with the coroutine.
-     */
-    LOGI("SPICE worker loop starting — initiating connect");
+    LOGI("Starting SPICE session on shared GLib dispatcher");
     if (!spice_session_connect(sess->session)) {
         LOGE("spice_session_connect failed");
         emit_error(sess, "spice_session_connect failed");
-    } else {
-        g_main_loop_run(sess->main_loop);
     }
-
-    LOGI("SPICE worker loop exited");
-
-    /* Detach so the JVM does not leak per-worker thread refs. */
-    if (g_vm) (*g_vm)->DetachCurrentThread(g_vm);
-    return NULL;
+    return G_SOURCE_REMOVE;
 }
 
 jlong tabssh_spice_impl_create(JNIEnv *env, jstring host, jint port, jint tls_port,
                                 jstring password, jbyteArray ca_cert, jstring host_subject,
                                 jboolean tls_verify) {
-    tabssh_spice_session *sess = g_new0(tabssh_spice_session, 1);
+    tabssh_spice_session *sess = g_try_new0(tabssh_spice_session, 1);
     if (!sess) return 0;
 
-    /*
-     * Use the GLOBAL default GMainContext, not a private one. spice-gtk's
-     * gio-coroutine schedules every wakeup on the default context: the
-     * socket-wait sources via g_source_attach(src, NULL) and the signal
-     * marshalling via g_idle_add() — both of which resolve to
-     * g_main_context_default() regardless of any thread-default. A private
-     * g_main_context_new() context is therefore never iterated by libspice's
-     * coroutine, so the connect coroutine starts but never advances: no
-     * socket, no channel-event, no error — exactly the silent black screen we
-     * saw. Running the worker loop on the default context makes those sources
-     * dispatch.
-     */
+    if (!ensure_dispatcher()) {
+        g_free(sess);
+        return 0;
+    }
     sess->main_ctx = g_main_context_ref(g_main_context_default());
-    sess->main_loop = g_main_loop_new(sess->main_ctx, FALSE);
+    g_mutex_init(&sess->stop_mutex);
+    g_cond_init(&sess->stop_cond);
     sess->session = spice_session_new();
+    if (!sess->session) {
+        g_cond_clear(&sess->stop_cond);
+        g_mutex_clear(&sess->stop_mutex);
+        g_main_context_unref(sess->main_ctx);
+        g_free(sess);
+        return 0;
+    }
 
     char *c_host = jstring_to_utf8(env, host);
     char *c_pw = jstring_to_utf8(env, password);
@@ -506,25 +629,20 @@ jboolean tabssh_spice_impl_start(JNIEnv *env, jlong handle, jobject self) {
     sess->client_ref = (*env)->NewGlobalRef(env, self);
     if (!sess->client_ref) return JNI_FALSE;
 
-    GError *err = NULL;
-    /*
-     * The worker (loop_thread_main) initiates spice_session_connect itself,
-     * inline before g_main_loop_run, so the async transport sources bind to
-     * main_ctx deterministically. No cross-thread source queuing here.
-     */
-    sess->loop_thread = g_thread_try_new("tabssh-spice", loop_thread_main, sess, &err);
-    if (!sess->loop_thread) {
-        LOGE("g_thread_try_new failed: %s", err ? err->message : "?");
-        if (err) g_error_free(err);
-        return JNI_FALSE;
-    }
+    queue_on_dispatcher(sess->main_ctx, connect_session_on_dispatcher, sess);
     return JNI_TRUE;
 }
 
-static gboolean stop_session_on_worker(gpointer user_data) {
+static gboolean stop_session_on_dispatcher(gpointer user_data) {
     tabssh_spice_session *sess = (tabssh_spice_session *)user_data;
-    if (sess->session) spice_session_disconnect(sess->session);
-    if (sess->main_loop) g_main_loop_quit(sess->main_loop);
+    g_mutex_lock(&sess->stop_mutex);
+    gboolean already_stopped = sess->stop_complete;
+    g_mutex_unlock(&sess->stop_mutex);
+    if (!already_stopped && sess->session) spice_session_disconnect(sess->session);
+    g_mutex_lock(&sess->stop_mutex);
+    sess->stop_complete = TRUE;
+    g_cond_broadcast(&sess->stop_cond);
+    g_mutex_unlock(&sess->stop_mutex);
     return G_SOURCE_REMOVE;
 }
 
@@ -532,27 +650,25 @@ void tabssh_spice_impl_stop(JNIEnv *env, jlong handle) {
     (void) env;
     tabssh_spice_session *sess = (tabssh_spice_session *)(uintptr_t)handle;
     if (!sess) return;
-    if (sess->main_ctx) g_main_context_invoke(sess->main_ctx, stop_session_on_worker, sess);
-    if (sess->loop_thread) {
-        g_thread_join(sess->loop_thread);
-        sess->loop_thread = NULL;
+    g_mutex_lock(&sess->stop_mutex);
+    sess->stop_requested = TRUE;
+    gboolean already_stopped = sess->stop_complete;
+    g_mutex_unlock(&sess->stop_mutex);
+    if (already_stopped) return;
+    if (g_main_context_is_owner(sess->main_ctx)) {
+        stop_session_on_dispatcher(sess);
+        return;
     }
+    queue_on_dispatcher(sess->main_ctx, stop_session_on_dispatcher, sess);
+    g_mutex_lock(&sess->stop_mutex);
+    while (!sess->stop_complete) g_cond_wait(&sess->stop_cond, &sess->stop_mutex);
+    g_mutex_unlock(&sess->stop_mutex);
 }
 
-void tabssh_spice_impl_destroy(JNIEnv *env, jlong handle) {
-    tabssh_spice_session *sess = (tabssh_spice_session *)(uintptr_t)handle;
-    if (!sess) return;
-    if (sess->loop_thread) {
-        /* stop() should have been called first; belt-and-braces. */
-        tabssh_spice_impl_stop(env, handle);
-    }
+static void destroy_session_resources(JNIEnv *env, tabssh_spice_session *sess) {
     if (sess->session) {
         g_object_unref(sess->session);
         sess->session = NULL;
-    }
-    if (sess->main_loop) {
-        g_main_loop_unref(sess->main_loop);
-        sess->main_loop = NULL;
     }
     if (sess->main_ctx) {
         g_main_context_unref(sess->main_ctx);
@@ -566,7 +682,59 @@ void tabssh_spice_impl_destroy(JNIEnv *env, jlong handle) {
         (*env)->DeleteGlobalRef(env, sess->client_ref);
         sess->client_ref = NULL;
     }
+    g_cond_clear(&sess->stop_cond);
+    g_mutex_clear(&sess->stop_mutex);
     g_free(sess);
+}
+
+typedef struct {
+    tabssh_spice_session *sess;
+    GMutex mutex;
+    GCond cond;
+    gboolean done;
+} destroy_waiter;
+
+static gboolean destroy_session_on_dispatcher(gpointer user_data) {
+    tabssh_spice_session *sess = (tabssh_spice_session *)user_data;
+    stop_session_on_dispatcher(sess);
+    JNIEnv *env = attach_current_thread();
+    destroy_session_resources(env, sess);
+    return G_SOURCE_REMOVE;
+}
+
+static gboolean destroy_session_and_signal(gpointer user_data) {
+    destroy_waiter *waiter = (destroy_waiter *)user_data;
+    tabssh_spice_session *sess = waiter->sess;
+    stop_session_on_dispatcher(sess);
+    JNIEnv *env = attach_current_thread();
+    destroy_session_resources(env, sess);
+    g_mutex_lock(&waiter->mutex);
+    waiter->done = TRUE;
+    g_cond_signal(&waiter->cond);
+    g_mutex_unlock(&waiter->mutex);
+    return G_SOURCE_REMOVE;
+}
+
+void tabssh_spice_impl_destroy(JNIEnv *env, jlong handle) {
+    tabssh_spice_session *sess = (tabssh_spice_session *)(uintptr_t)handle;
+    if (!sess) return;
+    if (g_main_context_is_owner(sess->main_ctx)) {
+        g_mutex_lock(&sess->stop_mutex);
+        sess->stop_requested = TRUE;
+        g_mutex_unlock(&sess->stop_mutex);
+        queue_on_dispatcher(sess->main_ctx, destroy_session_on_dispatcher, sess);
+        return;
+    }
+    tabssh_spice_impl_stop(env, handle);
+    destroy_waiter waiter = { .sess = sess };
+    g_mutex_init(&waiter.mutex);
+    g_cond_init(&waiter.cond);
+    queue_on_dispatcher(sess->main_ctx, destroy_session_and_signal, &waiter);
+    g_mutex_lock(&waiter.mutex);
+    while (!waiter.done) g_cond_wait(&waiter.cond, &waiter.mutex);
+    g_mutex_unlock(&waiter.mutex);
+    g_cond_clear(&waiter.cond);
+    g_mutex_clear(&waiter.mutex);
 }
 
 typedef struct {
@@ -591,9 +759,10 @@ void tabssh_spice_impl_send_key(JNIEnv *env, jlong handle, jint scancode, jboole
     (void) env;
     tabssh_spice_session *sess = (tabssh_spice_session *)(uintptr_t)handle;
     if (!sess || !sess->main_ctx) return;
-    input_dispatch *d = g_new0(input_dispatch, 1);
+    input_dispatch *d = g_try_new0(input_dispatch, 1);
+    if (!d) return;
     d->sess = sess; d->a = scancode; d->flag = down;
-    g_main_context_invoke(sess->main_ctx, dispatch_key, d);
+    queue_on_dispatcher(sess->main_ctx, dispatch_key, d);
 }
 
 static gboolean dispatch_pointer_move(gpointer user_data) {
@@ -610,9 +779,10 @@ void tabssh_spice_impl_send_pointer_move(JNIEnv *env, jlong handle, jint x, jint
     (void) env;
     tabssh_spice_session *sess = (tabssh_spice_session *)(uintptr_t)handle;
     if (!sess || !sess->main_ctx) return;
-    input_dispatch *d = g_new0(input_dispatch, 1);
+    input_dispatch *d = g_try_new0(input_dispatch, 1);
+    if (!d) return;
     d->sess = sess; d->a = x; d->b = y; d->c = mask;
-    g_main_context_invoke(sess->main_ctx, dispatch_pointer_move, d);
+    queue_on_dispatcher(sess->main_ctx, dispatch_pointer_move, d);
 }
 
 static gboolean dispatch_pointer_button(gpointer user_data) {
@@ -632,9 +802,10 @@ void tabssh_spice_impl_send_pointer_button(JNIEnv *env, jlong handle, jint butto
     (void) env;
     tabssh_spice_session *sess = (tabssh_spice_session *)(uintptr_t)handle;
     if (!sess || !sess->main_ctx) return;
-    input_dispatch *d = g_new0(input_dispatch, 1);
+    input_dispatch *d = g_try_new0(input_dispatch, 1);
+    if (!d) return;
     d->sess = sess; d->a = button; d->b = button_state; d->flag = down;
-    g_main_context_invoke(sess->main_ctx, dispatch_pointer_button, d);
+    queue_on_dispatcher(sess->main_ctx, dispatch_pointer_button, d);
 }
 
 typedef struct {
@@ -666,10 +837,11 @@ static gboolean dispatch_clipboard(gpointer user_data) {
 void tabssh_spice_impl_send_clipboard(JNIEnv *env, jlong handle, jstring text) {
     tabssh_spice_session *sess = (tabssh_spice_session *)(uintptr_t)handle;
     if (!sess || !sess->main_ctx) return;
-    clipboard_dispatch *d = g_new0(clipboard_dispatch, 1);
+    clipboard_dispatch *d = g_try_new0(clipboard_dispatch, 1);
+    if (!d) return;
     d->sess = sess;
     d->text = jstring_to_utf8(env, text);
-    g_main_context_invoke(sess->main_ctx, dispatch_clipboard, d);
+    queue_on_dispatcher(sess->main_ctx, dispatch_clipboard, d);
 }
 
 JNIEXPORT jint JNICALL

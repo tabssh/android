@@ -33,6 +33,7 @@ class PowerLockHelper(
     /**
      * Acquire an indefinite PARTIAL_WAKE_LOCK. Idempotent: no-op if already held.
      */
+    @Synchronized
     fun acquireWakeLockIndefinite() {
         if (wakeLock?.isHeld == true) return
         try {
@@ -51,6 +52,7 @@ class PowerLockHelper(
      * Acquire a timed PARTIAL_WAKE_LOCK that auto-releases after [timeoutMs].
      * Replaces any existing held lock so the timeout is always [timeoutMs] from now.
      */
+    @Synchronized
     fun acquireTimedWakeLock(timeoutMs: Long) {
         // Release any still-held prior lock (timed or indefinite) before
         // overwriting the reference — otherwise the old lock stays held with
@@ -68,6 +70,7 @@ class PowerLockHelper(
         }
     }
 
+    @Synchronized
     fun releaseWakeLock() {
         try {
             val wl = wakeLock?.takeIf { it.isHeld } ?: return
@@ -91,6 +94,7 @@ class PowerLockHelper(
      * Idempotent: no-op if already held.
      */
     @Suppress("DEPRECATION")
+    @Synchronized
     fun acquireWifiLock() {
         if (wifiLock?.isHeld == true) return
         try {
@@ -113,6 +117,7 @@ class PowerLockHelper(
     /**
      * Release the WiFi lock, allowing the radio to enter power-saving mode.
      */
+    @Synchronized
     fun releaseWifiLock() {
         try {
             val wl = wifiLock?.takeIf { it.isHeld } ?: return

@@ -76,7 +76,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginEnd="@dimen/space_sm"
-            android:text="@string/copy" />
+            android:text="@string/copy_button" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_restart"

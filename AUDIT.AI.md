@@ -9,8 +9,8 @@ no builds run, no source edited.
 ## Disposition
 
 Every finding below has been acted on. This file is kept as the record of what
-was found and why; it is not an open worklist. Remaining work lives in
-`TODO.AI.md`.
+was found and why; it is not an open worklist. The earlier AI-owned checklist
+was removed after completion; the current project task list is `TODO.md`.
 
 - **M1–M4, N1–N9** — fixed in the same commit that added this file.
 - **N10 (mosh bootstrap streams nulled without closing)** — investigated and
@@ -21,7 +21,7 @@ was found and why; it is not an open worklist. Remaining work lives in
   `connectMoshClient` would break the X11-retain path. Not a leak.
 
 The audit's own **Coverage** section at the end of this file names what it did
-not examine; those gaps are carried forward as items in `TODO.AI.md`.
+not examine. A follow-up pass is recorded below.
 
 ---
 
@@ -154,5 +154,168 @@ None found.
 **NOT covered (honest gaps):**
 - **Category H (CHANGELOG claims cross-check):** not performed — CHANGELOG is large; no claim-by-claim verification done.
 - **Category I (per-API-level correctness with internet citations):** not performed beyond in-code-documented items (e.g. TRIM_MEMORY deprecation already handled at TabSSHApplication.kt:1006-1010). No external CVE/API research was run this session.
-- **Deep reads of:** hypervisor/vnc/spice consoles, sftp internals, sync, backup, cloud provider clients, widget internals, services beyond grepped regions — several of these are assigned to sibling agents (console-stack-audit, rfb-stack-audit, sftp-explorer, panes-ime).
+- **Deep reads still needed:** hypervisor/vnc/spice consoles, sync and backup edge cases, provider-specific cloud behavior, and service lifecycle paths beyond the files changed in this pass. The pane group editor and its keyboard/input hand-off are now covered below.
 - Credential-logging sweep (grep for secrets in log statements) was not run exhaustively.
+
+---
+
+## Follow-up continuation — 2026-09-30
+
+This pass continued the production audit and fixed these confirmed issues:
+
+- **Untrusted backup/sync input could exhaust memory.** SAF backup and sync
+  files used unbounded `readBytes()`, ZIP entries could expand without a cap,
+  and GZIP sync payloads were unbounded after decryption. Added strict limits
+  on source files, entries, expanded ZIP data, and decompressed sync data.
+  Cloud-provider API responses now also reject bodies larger than 16 MiB.
+- **Encrypted archives could request unreasonable Argon2 work.** The V3
+  header accepted up to 1 GiB and 64 passes despite current archives using
+  64 MiB / 3 passes. Capped accepted parameters at 128 MiB / 10 passes before
+  key derivation.
+- **Cancellation could be swallowed while restoring/applying data.** Added
+  `CancellationException` propagation to row-level sync and backup import
+  handlers, data collection, conflict resolution, and backup/sync verification
+  operations.
+- **Replace-mode backup restore cleared SharedPreferences inside a Room
+  transaction.** SharedPreferences are not transactional, so a later DB
+  rollback could leave them erased. They are now cleared only after the Room
+  transaction commits.
+- **Recursive SFTP/SCP paths trusted filesystem/server link behavior.** SFTP
+  recursive downloads now reject paths escaping the selected destination,
+  skip remote symlinks, and cap recursion depth. Recursive uploads constrain
+  canonical local paths and stop symlink cycles. SCP directory uploads now
+  validate the top-level protocol name and honor cancellation while streaming.
+- **Widget refresh work outlived its broadcast without a pending result.**
+  `onUpdate()` now calls `goAsync()` and finishes the pending broadcast after
+  the database reads and widget updates complete.
+- **Logger anonymization state could race crash capture/export with its writer.**
+  Sanitization and map resets now share the logger monitor.
+- **Wake-lock, service state, and timestamp formatter concurrency findings**
+  are also fixed in `PowerLockHelper`, `SSHConnectionService`, and `Logger`.
+
+**Verification:** `git diff --check` and `make check` passed after these fixes.
+The check runs Kotlin compilation, unit tests, Android Lint, and resource
+processing in the project Docker image. Instrumented Room migration tests from
+the preceding continuation also passed on a clean emulator.
+
+## Follow-up continuation — panes IME and native-library alignment
+
+- **Panes editor fields did not open the Android keyboard.** On API 34, taps
+  focused the Step 2 row editors while Android's input manager still served the
+  activity RecyclerView. The dialog window retained `FLAG_ALT_FOCUSABLE_IM`
+  because its EditTexts are attached from a RecyclerView after the dialog is
+  shown. Clearing that flag and issuing an explicit tap-triggered show request
+  fixed the name, working-directory, and custom-title fields. Runtime checks
+  covered typing, saving, reloading an existing group, hiding/reopening the IME
+  on the same field, and canceling without changing stored values.
+- **The upstream Termux `libtermux.so` was only 4 KB ELF-aligned.** Replaced
+  the prebuilt artifact with the pinned Apache-licensed `v0.118.1` module source
+  and rebuilt it using 16 KB ELF linker flags. This keeps the Java/JNI API at
+  the pinned revision while removing the upstream APK compatibility warning.
+- **Regression coverage:** added an instrumentation check that loads the JNI
+  library from the app process. It passed on both API 34 and an API 35 emulator
+  whose `getconf PAGESIZE` reports 16384.
+
+**Verification:** `make check` passed with the vendored Termux JVM test suite.
+Release and F-Droid release builds passed. Every debug, release, and F-Droid
+APK passed `zipalign -c -P 16 -v 4`; all four Termux JNI ABIs report `p_align`
+`0x4000` for every ELF LOAD segment. The native-library instrumentation test
+also passed on the API 35 16 KB emulator.
+
+## Follow-up continuation — whole-tree release audit
+
+The audit was expanded beyond the prior subsystem-focused passes to cover
+remaining app packages and code paths across automation, pairing, text imports,
+session persistence, terminal recordings, audit logging, metrics, themes,
+and mosh cleanup.
+
+- **Tasker operations could swallow cancellation and leak SSH sessions** when
+  tab creation failed at the tab limit. Cancellation now propagates, and the
+  connection is closed when no tab can own it.
+- **Pairing CBOR parsing accepted trailing data and narrowed hostile integers**
+  before validating supported versions and ports. The decoder now requires
+  complete input consumption and validates exact bounds for versions, ports,
+  salts, nonces, and authenticated ciphertext. Regression tests cover trailing
+  bytes and impossible lengths.
+- **Container update cancellation could strand stopped or replaced workloads.**
+  The applier now restores the previous state under non-cancellable cleanup;
+  a regression test covers cancellation during replacement verification.
+- **Several SAF imports read arbitrarily large text/key files.** Added bounded
+  readers for connection, tracker, theme, cloud credential, key, and bulk
+  imports. Session history decompression and sync snapshots are capped too.
+- **Terminal recording limits counted characters rather than stored UTF-8 and
+  event framing.** Recording now stops before a complete event would exceed the
+  configured byte limit. Transcript paths fall back safely when external
+  storage is unavailable.
+- **Audit metadata interpolation could emit invalid JSON or forged syslog
+  records.** Metadata now uses JSON serialization and syslog messages strip
+  controls and line breaks. Retention cleanup now continues until under its
+  cap and enforces bounded preferences.
+- **Cancellation was also swallowed in metrics, theme operations, and mosh
+  server cleanup.** These suspend paths now rethrow `CancellationException`.
+
+**Verification:** the final Docker `make check` completed successfully after
+these changes, including Kotlin compilation, Android Lint, resource processing,
+and the JVM unit suite. `make release` and the workflow's
+`assembleFdroidRelease` variant both succeeded. All five APK outputs for each
+variant passed `zipalign -c -P 16 -v 4`. `git diff --check` passed.
+
+`make instrumented` was attempted, but the Docker build container could not
+reach an ADB device (`No device/emulator reachable`). Instrumented tests were
+therefore not run in this continuation; the earlier API 34/API 35 terminal
+checks recorded above are not evidence for this entire change set.
+
+## Follow-up continuation — infra TLS and VNC TLS hostnames
+
+- **Rotating infrastructure leaf certificates caused avoidable trust prompts.**
+  Removed leaf pin enforcement and the pin editor from the hypervisor REST flow.
+  Optional REST `verifySsl` now selects Android platform CA/hostname validation;
+  when off, TLS is encrypted without certificate identity checks. Hypervisor
+  console TLS follows the same no-certificate-check policy. SSH continues to use
+  the known-hosts host-key verifier. Legacy pin columns/credential fields remain
+  ignored for compatibility. Updated IDEA.md and SPEC.md to document the residual
+  risk and transport distinction.
+- **VNC TLS with an IP literal could fail before verification.** `RfbClient`
+  attempted to create a DNS SNI name from IPv4/IPv6 input. It now omits SNI for
+  address literals while preserving endpoint identification when certificate
+  verification is enabled, with unit coverage for IPv4, IPv6, DNS names, and an
+  invalid IPv4 address.
+- **SPICE teardown could join its own GLib worker.** Native error/disconnect
+  callbacks synchronously destroyed the session; native destruction stopped
+  and joined the GLib loop thread that made the callback. The bridge now uses
+  one process-wide dispatcher for GLib's global default context, serializes all
+  session operations there, and queues callback-triggered cleanup off the active
+  callback stack. Cleanup runs from `finally` so a throwing listener cannot leak
+  the native session. Kotlin holds the input write lock through stop and destroy
+  so no queued send can race session teardown.
+- **SPICE framebuffer callbacks trusted server geometry before JNI allocation
+  and copying.** Native code now caps geometry at 32 MP, validates stride and
+  dirty rectangles before touching buffers, honors row padding, and converts the
+  two documented primary formats (`32_xRGB`, `16_555`) to opaque Android ARGB.
+  This fixes both out-of-bounds native reads/writes and invalid colors/alpha.
+- **R8 was too old for the selected Kotlin metadata version.** AGP 8.13.2's
+  bundled R8 8.13.19 emitted repeated Kotlin metadata parsing errors against
+  Kotlin 2.4.10 during minification. Pinned R8 9.1.31 in `settings.gradle`,
+  which meets Android's documented 9.1.29 minimum for Kotlin 2.4. Removed an
+  F-Droid ProGuard option that R8 explicitly ignored.
+- **Recursive local-path containment mishandled `/` as the selected root.**
+  SFTP/SCP now build the containment prefix without adding a second separator.
+- **SPICE JNI allocation/copy failures could leave a pending JNI exception on
+  the persistent GLib thread.** The callback bridge clears allocation/copy
+  exceptions before reporting a session error, and its stale compile-status
+  comment now reflects the native build verification.
+- **Lint rejected misleading indentation in the password carry-over sweep.**
+  Rewrote the cursor and credential branches explicitly; the final lint run is
+  clean.
+
+**Verification:** final `make check` passed after all source and settings changes
+(Kotlin compilation, JVM unit tests, Android Lint, and resource processing).
+Containerized `assembleRelease` and `assembleFdroidRelease` both passed with the
+R8 override; the Kotlin-metadata parsing errors disappeared. R8 still reports
+that AGP's class-file provider cannot use asynchronous parsing, a non-fatal
+performance notice. The F-Droid task was rerun after removing the ignored option.
+The final SPICE bridge and pinned dependency stack cross-compiled and linked as
+`libtabssh_native.so` for arm64-v8a. Debug, provider-release, and F-Droid APKs
+passed 16 KB `zipalign`; debug/provider APK signatures verified. F-Droid output
+is unsigned as intended. The pane editor IME runtime checks on API 34 and the
+16 KB API 35 JNI instrumentation checks are recorded above from the prior pass.

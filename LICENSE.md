@@ -226,7 +226,7 @@ Licensed under the Apache License, Version 2.0
 **Copyright:** Fredrik Fornwall and Termux contributors  
 **Website:** https://github.com/termux/termux-app
 
-Terminal emulation engine (VT100/ANSI/xterm-256color). TabSSH renders with its own `TerminalView`, so only the `terminal-emulator` module is pulled in — `terminal-view` is explicitly excluded. Although the parent `termux-app` repository is GPLv3, the `terminal-emulator` module is carved out under Apache 2.0 (originally from `jackpal/Android-Terminal-Emulator`), so this dependency introduces no copyleft obligation.
+Terminal emulation engine (VT100/ANSI/xterm-256color). TabSSH renders with its own `TerminalView`, so only the `terminal-emulator` module is included. The source is pinned to Termux tag `v0.118.1` and built locally with 16 KB ELF alignment flags; `terminal-view` is not included. Although the parent `termux-app` repository is GPLv3, the `terminal-emulator` module is carved out under Apache 2.0 (originally from `jackpal/Android-Terminal-Emulator`), so this dependency introduces no copyleft obligation. The local source and build change are documented in `deps/termux-terminal-emulator/README.md`.
 
 ```
 Licensed under the Apache License, Version 2.0

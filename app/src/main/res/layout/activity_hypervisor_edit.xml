@@ -223,58 +223,6 @@
                 android:text="@string/hypervisor_edit_verify_ssl"
                 android:checked="false" />
 
-            <!-- Pinned cert fingerprint (Phase 1 cert pinning).
-                 Visible only when "Verify SSL" is on. Read-only display
-                 of the SHA-256 captured on the most recent successful
-                 connect; "Forget" clears it so the next connect
-                 captures fresh. -->
-            <LinearLayout
-                android:id="@+id/layout_pinned_cert"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:layout_marginTop="@dimen/space_sm"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/hypervisor_edit_pinned_cert_label"
-                    android:textSize="@dimen/text_size_caption"
-                    android:textColor="?attr/colorOnSurfaceVariant" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginTop="@dimen/space_2dp">
-
-                    <TextView
-                        android:id="@+id/text_pinned_cert"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/hypervisor_edit_pin_not_pinned_yet"
-                        android:textSize="@dimen/text_size_small_body"
-                        android:fontFamily="monospace"
-                        android:textColor="?attr/colorOnSurface"
-                        android:singleLine="true"
-                        android:ellipsize="middle" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/button_forget_pin"
-                        style="@style/Widget.Material3.Button.TextButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:minHeight="@dimen/tab_height"
-                        android:text="@string/hypervisor_edit_forget_pin"
-                        android:visibility="gone" />
-
-                </LinearLayout>
-
-            </LinearLayout>
-
             <!-- API Type Override (XCP-ng and VMware only) -->
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/layout_api_type"

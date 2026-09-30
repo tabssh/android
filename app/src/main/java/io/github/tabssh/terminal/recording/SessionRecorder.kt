@@ -35,7 +35,7 @@ class SessionRecorder(
 
             var w: FileWriter? = null
             try {
-                val transcriptsDir = File(context.getExternalFilesDir(null), "Transcripts")
+                val transcriptsDir = File(context.getExternalFilesDir(null) ?: context.filesDir, "Transcripts")
                 transcriptsDir.mkdirs()
 
                 val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
@@ -43,11 +43,12 @@ class SessionRecorder(
                 currentFile = File(transcriptsDir, "session_${sanitizedName}_${timestamp}.log")
                 w = FileWriter(currentFile, true)
 
-                w.write("# TabSSH Session: $connectionName - ${Date()}\n\n")
+                val header = "# TabSSH Session: $connectionName - ${Date()}\n\n"
+                w.write(header)
                 w.flush()
 
                 fileWriter = w
-                bytesWritten = 0
+                bytesWritten = header.toByteArray(Charsets.UTF_8).size.toLong()
                 isRecording = true
                 Logger.i("SessionRecorder", "Started recording")
             } catch (e: Exception) {
@@ -68,13 +69,18 @@ class SessionRecorder(
         synchronized(lock) {
             val w = fileWriter ?: return
             try {
+                val dataBytes = data.toByteArray(Charsets.UTF_8).size
+                if (bytesWritten + dataBytes > MAX_TRANSCRIPT_BYTES) {
+                    Logger.w(
+                        "SessionRecorder",
+                        "Transcript reached the ${MAX_TRANSCRIPT_BYTES / (1024 * 1024)}MB cap, stopping recording"
+                    )
+                    stopRecordingLocked()
+                    return
+                }
                 w.write(data)
                 w.flush()
-                bytesWritten += data.length
-                if (bytesWritten >= MAX_TRANSCRIPT_BYTES) {
-                    Logger.w("SessionRecorder", "Transcript hit the ${MAX_TRANSCRIPT_BYTES / (1024 * 1024)}MB cap, stopping recording")
-                    stopRecordingLocked()
-                }
+                bytesWritten += dataBytes
             } catch (e: Exception) {
                 Logger.e("SessionRecorder", "Write failed", e)
             }

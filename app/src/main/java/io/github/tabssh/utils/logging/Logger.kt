@@ -86,7 +86,16 @@ object Logger {
         // trailing line costs far less than a missing "connecting to host X".
         Log.w("$TAG_PREFIX:Logger", "Log write queue full — dropping a line")
     }
-    private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
+    private const val TIMESTAMP_PATTERN = "yyyy-MM-dd HH:mm:ss.SSS"
+
+    /**
+     * Create a formatter per use: log sinks call this from their single writer
+     * thread, while crash capture and log export can call it concurrently from
+     * the main or uncaught-exception thread. SimpleDateFormat is mutable and not
+     * thread-safe, and a fresh formatter also observes runtime locale changes.
+     */
+    private fun formatTimestamp(date: Date = Date()): String =
+        SimpleDateFormat(TIMESTAMP_PATTERN, Locale.getDefault()).format(date)
 
     private const val TAG_PREFIX = "TabSSH"
     private const val LOG_FILE_NAME = "tabssh_debug.log"
@@ -545,12 +554,14 @@ object Logger {
     private val appGate = NoiseGate()
     private val appSink = SinkWriter(APP_LOG_FILE_NAME, MAX_APP_LOG_SIZE.toLong()) {
         // Reset anonymization maps on app-log rotation (writer thread).
-        hostMap.clear()
-        userMap.clear()
-        hostCounter = 0
-        userCounter = 0
-        jumpHostMap.clear()
-        jumpHostCounter = 0
+        synchronized(this) {
+            hostMap.clear()
+            userMap.clear()
+            hostCounter = 0
+            userCounter = 0
+            jumpHostMap.clear()
+            jumpHostCounter = 0
+        }
         // NOTE: jumpHostSet is intentionally NOT cleared here.
         // The registry is populated at connect time by SSHConnection
         // and must survive log rotation so mid-session lines keep
@@ -585,7 +596,7 @@ object Logger {
         if (!logToFile || logFile == null) return
 
         executor.execute {
-            val timestamp = dateFormat.format(Date())
+            val timestamp = formatTimestamp()
             // Sanitize before writing — debug log is pre-sanitized at write
             // time so the full blob never needs expensive post-hoc regex.
             val body = buildString {
@@ -625,7 +636,7 @@ object Logger {
 
         executor.execute {
             try {
-                val timestamp = dateFormat.format(Date())
+                val timestamp = formatTimestamp()
                 val body = buildString {
                     append(sanitizeForPublic(message))
                     throwable?.let {
@@ -703,6 +714,7 @@ object Logger {
      *                         requiring at least one letter in the TLD)
      *  • /home/<name> and /Users/<name> paths
      */
+    @Synchronized
     private fun sanitizeForPublic(message: String): String {
         var s = message
 
@@ -839,7 +851,7 @@ object Logger {
      * Called from UncaughtExceptionHandler - must complete before process dies
      */
     fun writeCrashSync(thread: Thread, throwable: Throwable) {
-        val timestamp = dateFormat.format(Date())
+        val timestamp = formatTimestamp()
         val stackTrace = Log.getStackTraceString(throwable)
 
         // Write to debug log if enabled — sanitize here too so the debug log
@@ -947,7 +959,7 @@ object Logger {
 
             buildString {
                 appendLine("=== TabSSH Application Log ===")
-                appendLine("Generated: ${dateFormat.format(Date())}")
+                appendLine("Generated: ${formatTimestamp()}")
                 appendLine("App Version: ${io.github.tabssh.BuildConfig.VERSION_NAME} (${io.github.tabssh.BuildConfig.VERSION_CODE})")
                 appendLine("Build Commit: ${io.github.tabssh.BuildConfig.GIT_COMMIT_ID}")
                 appendLine("Log Size: ${file.length()} bytes")
@@ -998,13 +1010,15 @@ object Logger {
                 File(dir, "$APP_LOG_FILE_NAME.$i").delete()
             }
         }
-        // Reset anonymization maps
-        hostMap.clear()
-        userMap.clear()
-        hostCounter = 0
-        userCounter = 0
-        jumpHostMap.clear()
-        jumpHostCounter = 0
+        // Reset anonymization maps under the same monitor used by sanitization.
+        synchronized(this) {
+            hostMap.clear()
+            userMap.clear()
+            hostCounter = 0
+            userCounter = 0
+            jumpHostMap.clear()
+            jumpHostCounter = 0
+        }
         synchronized(jumpHostSet) { jumpHostSet.clear() }
         i("Logger", "App log cleared by user")
     }
@@ -1061,7 +1075,7 @@ object Logger {
 
             buildString {
                 appendLine("=== TabSSH Debug Log ===")
-                appendLine("Exported: ${dateFormat.format(Date())}")
+                appendLine("Exported: ${formatTimestamp()}")
                 appendLine("App Version: ${io.github.tabssh.BuildConfig.VERSION_NAME} (${io.github.tabssh.BuildConfig.VERSION_CODE})")
                 appendLine("Build Commit: ${io.github.tabssh.BuildConfig.GIT_COMMIT_ID}")
                 appendLine("Debug Log: $debugMode")
@@ -1185,7 +1199,7 @@ object Logger {
                     logFile.renameTo(backup)
                 }
 
-                val timestamp = dateFormat.format(Date())
+                val timestamp = formatTimestamp()
                 val line = "$timestamp ${level.padEnd(5)} $username@$host:$port $message\n"
                 FileWriter(logFile, true).use { it.append(line) }
             } catch (e: Exception) {

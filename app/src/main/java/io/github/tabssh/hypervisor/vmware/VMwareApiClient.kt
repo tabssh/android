@@ -21,19 +21,11 @@ class VMwareApiClient(
     private val host: String,
     private val username: String,
     private val password: String,
-    // Verification on by default: an omitted argument must never select the
-    // insecure path. Profiles that opt out of chain validation (TOFU pinning
-    // is the compensating control) pass false explicitly — AI.md PART 6.
+    // Direct client construction validates through the platform CA store;
+    // saved profiles may explicitly disable certificate validation.
     private val verifySsl: Boolean = true,
     private val pinnedCertSha256: String? = null,
-    /**
-     * Invoked synchronously, on the handshake thread, the instant
-     * [capturedPin] receives a new SHA-256 — TOFU accept, silent
-     * system-CA accept, or an explicit user ACCEPT_AND_PIN on a changed
-     * cert. Callers use this to persist [getCapturedCertSha256] to the DB
-     * right away instead of waiting for [authenticate] (or a later call
-     * on this same shared client) to finish without throwing.
-     */
+    /** Legacy compatibility callback; certificate pins are no longer captured. */
     private val onPinCaptured: (() -> Unit)? = null
 ) {
 
@@ -468,7 +460,7 @@ class VMwareApiClient(
         }
     }
 
-    /** POST one SOAP envelope to https://host/sdk, reusing the pinned/TOFU OkHttp client. */
+    /** POST one SOAP envelope to https://host/sdk using the configured TLS policy. */
     private fun soapCall(envelope: String, cookie: String?): SoapResponse {
         val builder = Request.Builder()
             .url("https://$host/sdk")

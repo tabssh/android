@@ -44,34 +44,11 @@ data class HypervisorProfile(
     @ColumnInfo(name = "realm")
     val realm: String? = null,
     
-    /**
-     * `false` is the correct default for Proxmox / XCP-ng / VMware / XO.
-     *
-     * Virtually every home-lab install uses a self-signed certificate; setting
-     * `true` by default would break first-connection for nearly all users.
-     * The threat model (IDEA.md) is addressed by `HypervisorTrustManagerFactory`
-     * TOFU: on first connect with an unrecognised cert, the user is shown the
-     * fingerprint and asked to confirm. The confirmed SHA-256 is saved in
-     * `pinned_cert_sha256` and enforced on every subsequent connect — so MITM
-     * after the initial trust decision is still detected. This is equivalent
-     * to OpenSSH's `StrictHostKeyChecking=accept-new` default.
-     *
-     * OCI `OciApiClient` deliberately defaults to `true` (public CA certs).
-     */
+    /** Whether to validate TLS certificates through the platform CA store. */
     @ColumnInfo(name = "verify_ssl")
     val verifySsl: Boolean = false,
 
-    /**
-     * SHA-256 fingerprint of the leaf certificate this host presented
-     * on its most recent successful connect. Captured by
-     * `HypervisorTrustManagerFactory` on a verifySsl=true connect when
-     * no prior pin existed (TOFU); enforced on subsequent connects —
-     * mismatch aborts the TLS handshake. NULL means "no pin yet";
-     * verifySsl=false ignores this column entirely.
-     *
-     * Format mirrors what we display: lowercase hex bytes joined by
-     * colons, e.g. `f1:c0:fe:...`. Stored without the `SHA-256:` prefix.
-     */
+    /** Legacy storage retained for database and sync compatibility; no longer used for TLS identity. */
     @ColumnInfo(name = "pinned_cert_sha256")
     val pinnedCertSha256: String? = null,
     

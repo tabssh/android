@@ -28,7 +28,7 @@ object TranscriptManager {
     )
     
     fun getTranscriptsDirectory(context: Context): File {
-        val dir = File(context.getExternalFilesDir(null), "Transcripts")
+        val dir = File(context.getExternalFilesDir(null) ?: context.filesDir, "Transcripts")
         dir.mkdirs()
         return dir
     }

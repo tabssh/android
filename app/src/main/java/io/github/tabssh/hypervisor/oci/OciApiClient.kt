@@ -20,10 +20,8 @@ import org.json.JSONObject
  *   - Compute / Networking (VNICs): `https://iaas.<region>.oraclecloud.com`
  *
  * All requests carry an HTTP Signature (`OciSigner`) — see
- * `signingrequests.htm`. We reuse the project's
- * `HypervisorTrustManagerFactory` so OCI inherits the same TLS pinning
- * behaviour as Proxmox/XCP-ng/VMware (`verifySsl=true` by default for OCI
- * since their endpoints have valid public certs).
+ * `signingrequests.htm`. TLS validation uses Android's platform CA and
+ * hostname checks by default; leaf certificates are not pinned.
  *
  * Mirrors the shape of `ProxmoxApiClient`: simple suspend functions per
  * call, no callback hell.
@@ -35,18 +33,8 @@ class OciApiClient(
     private val region: String,
     private val keyMaterial: OciKeyMaterial,
     private val verifySsl: Boolean = true,
-    private val pinnedCertSha256: String? = null,
-    /**
-     * Invoked synchronously, on the handshake thread, the instant either
-     * [identityCapturedPin] or [iaasCapturedPin] receives a new SHA-256 —
-     * TOFU accept, silent system-CA accept, or an explicit user
-     * ACCEPT_AND_PIN on a changed cert. Callers use this to persist
-     * [getCapturedCertSha256] to the DB right away instead of waiting for
-     * a later business call (e.g. [listInstances]) to finish without
-     * throwing — a failure anywhere after the handshake used to make an
-     * already-confirmed pin vanish once this client was discarded.
-     */
-    private val onPinCaptured: (() -> Unit)? = null
+    @Suppress("unused") private val pinnedCertSha256: String? = null,
+    @Suppress("unused") private val onPinCaptured: (() -> Unit)? = null
 ) {
 
     internal companion object {
@@ -86,43 +74,15 @@ class OciApiClient(
     private val identityBaseUrl = "https://$identityHost/20160918"
     private val iaasBaseUrl = "https://$iaasHost/20160918"
 
-    // OCI uses two distinct hostnames (identity.* and iaas.*) that carry
-    // separate TLS leaf certs.  We need one captured-pin holder per host so
-    // TOFU prompts for each cert are shown once and both pins are persisted.
-    //
-    // Storage format: "sha_identity;sha_iaas" — FIXED POSITIONS.
-    // An absent entry is represented by an empty string, NOT omitted.
-    // e.g. only-IAAS pin is stored as ";sha_iaas", only-identity as "sha_id;".
-    //
-    // DO NOT filter blank entries when parsing — that collapses positions and
-    // assigns the IAAS sha to the identity slot, triggering TOFU on every
-    // subsequent action call.
-    private val pinnedParts: List<String> = pinnedCertSha256
-        ?.split(";")
-        ?.map { it.trim() }
-        ?: emptyList()
-    private val identityPinnedSha: String? = pinnedParts.getOrNull(0)?.takeIf { it.isNotBlank() }
-    private val iaasPinnedSha: String?     = pinnedParts.getOrNull(1)?.takeIf { it.isNotBlank() }
-
     private val identityCapturedPin = io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.CapturedPin()
     private val iaasCapturedPin    = io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.CapturedPin()
 
-    /**
-     * Returns the fixed-position semicolon-delimited pin string to persist.
-     * Format is always "sha_identity;sha_iaas" — either slot may be blank but
-     * the semicolon separator is always present so positions never shift.
-     * Returns null only when both slots are blank (nothing to persist).
-     */
-    fun getCapturedCertSha256(): String? {
-        val idSha   = identityCapturedPin.sha256?.takeIf { it.isNotBlank() } ?: identityPinnedSha ?: ""
-        val iaasSha = iaasCapturedPin.sha256?.takeIf    { it.isNotBlank() } ?: iaasPinnedSha     ?: ""
-        if (idSha.isBlank() && iaasSha.isBlank()) return null
-        return "$idSha;$iaasSha"
-    }
+    /** Always null: current TLS clients do not capture leaf pins. */
+    fun getCapturedCertSha256(): String? = null
 
     private val signer = OciSigner(tenancyOcid, userOcid, fingerprint, keyMaterial)
 
-    // Separate HTTP clients so each endpoint's TLS session has its own pin.
+    // Separate HTTP clients so each endpoint has its own hostname validation.
     // Bounded timeouts so a stalled OCI endpoint cannot hang the UI forever.
     private val identityClient: OkHttpClient = io.github.tabssh.network.SharedHttpClient.client.newBuilder()
         .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
@@ -131,8 +91,7 @@ class OciApiClient(
         .callTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         .also { b ->
             io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
-                b, verifySsl, identityPinnedSha, identityCapturedPin, identityHost, 443,
-                onPinCaptured = onPinCaptured
+                b, verifySsl, null, identityCapturedPin, identityHost, 443
             )
         }
         .addInterceptor(signer.asInterceptor())
@@ -145,8 +104,7 @@ class OciApiClient(
         .callTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         .also { b ->
             io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
-                b, verifySsl, iaasPinnedSha, iaasCapturedPin, iaasHost, 443,
-                onPinCaptured = onPinCaptured
+                b, verifySsl, null, iaasCapturedPin, iaasHost, 443
             )
         }
         .addInterceptor(signer.asInterceptor())

@@ -28,7 +28,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 import io.github.tabssh.utils.showError
 import io.github.tabssh.utils.announceAccessibility
 import java.util.UUID
@@ -182,7 +181,10 @@ class ConnectionEditActivity : TabSSHActivity() {
                     lifecycleScope.launch(Dispatchers.IO) {
                         try {
                             val keyContent = contentResolver.openInputStream(uri)?.use { inputStream ->
-                                inputStream.bufferedReader().readText()
+                                io.github.tabssh.utils.BoundedTextReader.readUtf8(
+                                    inputStream,
+                                    io.github.tabssh.utils.BoundedTextReader.MAX_KEY_FILE_BYTES
+                                )
                             }
                             val display = resolveDisplayName(uri) ?: uri.lastPathSegment ?: "imported_key"
                             val suggestion = display.replace(Regex("\\.(pem|key|pub)$"), "")
@@ -2069,14 +2071,16 @@ class ConnectionEditActivity : TabSSHActivity() {
         }
     }
 
-    private fun isTestingTorRoute(): Boolean {
+    private suspend fun isTestingTorRoute(): Boolean {
         val profile = try { createConnectionProfile() } catch (_: Exception) { return false }
         val routeId = profile.routeId ?: app.preferencesManager.getDefaultRouteId() ?: return false
         val route = try {
-            runBlocking {
-                app.database.networkRouteDao().getById(routeId)
-            }
-        } catch (_: Exception) { return false }
+            app.database.networkRouteDao().getById(routeId)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return false
+        }
         return route?.builtInTor == true && route.enabled
     }
 

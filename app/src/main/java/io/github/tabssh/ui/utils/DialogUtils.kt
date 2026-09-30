@@ -48,7 +48,7 @@ object DialogUtils {
                 dialog.dismiss()
                 onDismiss?.invoke()
             }
-            .setNeutralButton(context.getString(R.string.copy)) { _, _ ->
+            .setNeutralButton(context.getString(R.string.copy_button)) { _, _ ->
                 copyToClipboard(context, copyText ?: message)
                 Toast.makeText(context, context.getString(R.string.dialog_error_message_copied_toast), Toast.LENGTH_SHORT).show()
             }
@@ -97,7 +97,7 @@ object DialogUtils {
                 dialog.dismiss()
                 onDismiss?.invoke()
             }
-            .setNeutralButton(context.getString(R.string.copy)) { _, _ ->
+            .setNeutralButton(context.getString(R.string.copy_button)) { _, _ ->
                 copyToClipboard(context, message)
                 Toast.makeText(context, context.getString(R.string.dialog_copied_to_clipboard_toast), Toast.LENGTH_SHORT).show()
             }

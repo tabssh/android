@@ -6,6 +6,7 @@ import io.github.tabssh.storage.database.entities.HostKeyEntry
 import io.github.tabssh.storage.database.entities.StoredKey
 import io.github.tabssh.storage.database.entities.ThemeDefinition
 import io.github.tabssh.sync.encryption.SyncEncryptor
+import io.github.tabssh.utils.BoundedTextReader
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +45,7 @@ class SyncBaseSnapshotStore(private val context: Context) {
     companion object {
         private const val TAG = "SyncBaseSnapshot"
         private const val FILE_NAME = "sync_base_snapshot.dat"
+        private const val MAX_SNAPSHOT_BYTES = 64 * 1024 * 1024
     }
 
     private val encryptor = SyncEncryptor()
@@ -59,7 +61,8 @@ class SyncBaseSnapshotStore(private val context: Context) {
         val file = snapshotFile()
         if (!file.exists()) return@withContext null
         try {
-            val plaintext = encryptor.decrypt(file.readBytes(), password)
+            val encrypted = file.inputStream().use { BoundedTextReader.readBytes(it, MAX_SNAPSHOT_BYTES) }
+            val plaintext = encryptor.decrypt(encrypted, password)
             json.decodeFromString<SyncBaseSnapshot>(plaintext.decodeToString())
         } catch (e: CancellationException) {
             throw e
@@ -77,6 +80,9 @@ class SyncBaseSnapshotStore(private val context: Context) {
         try {
             val plaintext = json.encodeToString(snapshot).encodeToByteArray()
             val encrypted = encryptor.encrypt(plaintext, password)
+            require(encrypted.size <= MAX_SNAPSHOT_BYTES) {
+                "Base snapshot exceeds the $MAX_SNAPSHOT_BYTES byte limit"
+            }
             val tmp = File(context.filesDir, "$FILE_NAME.tmp")
             tmp.writeBytes(encrypted)
             if (!tmp.renameTo(snapshotFile())) {

@@ -1,7 +1,6 @@
 package io.github.tabssh.hypervisor.vnc
 
 import android.content.Context
-import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.hypervisor.console.ConsoleWebSocketClient
 import io.github.tabssh.hypervisor.console.rfb.RfbClient
 import io.github.tabssh.storage.database.entities.VncHost

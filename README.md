@@ -115,9 +115,9 @@ Manage virtual machines directly from TabSSH — no separate app required.
 
 ### Cloud Provider Management ☁️
 
-Manage instances across 8 cloud providers from a single Cloud Accounts screen.
+Manage instances across 11 cloud providers from a single Cloud Accounts screen.
 
-- **DigitalOcean** · **Hetzner** · **Linode** · **Vultr** · **AWS EC2** · **Google Cloud Compute** · **Azure VMs** · **Oracle Cloud (OCI)**
+- **DigitalOcean** · **Hetzner** · **Linode** · **Vultr** · **AWS EC2** · **Google Cloud Compute** · **Azure VMs** · **Oracle Cloud (OCI)** · **Scaleway** · **UpCloud** · **Hostinger**
 - Live instance state (running / stopped / transitioning) with color-coded status dots
 - **Start / Stop** power toggle per instance
 - **Restart** (graceful) and **Force Restart** (hard power-cycle) for running instances
@@ -261,8 +261,8 @@ Cloud          → Infra → Cloud → tap account → view live instances
 | APK variants | 5 (universal + 4 arch-specific) |
 | Hypervisor backends | 4 (Proxmox, XCP-ng, VMware, QEMU/libvirt) |
 | Container engines | 4 (Docker, Incus, Podman, LXC/LXD) |
-| Cloud providers | 8 (DO, Hetzner, Linode, Vultr, AWS, GCP, Azure, OCI) |
-| Room DB version | 27 (24 forward migrations from v3) |
+| Cloud providers | 11 (DO, Hetzner, Linode, Vultr, AWS, GCP, Azure, OCI, Scaleway, UpCloud, Hostinger) |
+| Room DB version | 28 (25 forward migrations from v3) |
 | Trackers | 2 (Domain Tracker, VPS Hosting Tracker) |
 
 ---

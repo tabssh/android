@@ -151,7 +151,7 @@ class UpCloudClient : CloudProvider {
                 }
                 throw IllegalStateException("UpCloud API HTTP ${resp.code}: ${resp.message}")
             }
-            resp.body?.string().orEmpty()
+            readCloudResponseBody(resp.body)
         }
         return JSONObject(body)
     }

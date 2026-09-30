@@ -188,6 +188,8 @@ class SyncDataApplier {
                             database.connectionGroupDao().insertGroup(g)
                         }
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply group: ${g.name}", e)
                     }
@@ -214,6 +216,8 @@ class SyncDataApplier {
                             database.connectionDao().insertConnection(incoming)
                         }
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply connection: ${connection.name}", e)
                     }
@@ -231,6 +235,8 @@ class SyncDataApplier {
                         if (remoteIsStale(database.keyDao().getKeyById(key.keyId)?.modifiedAt, key.modifiedAt)) return@forEach
                         database.keyDao().upsertKey(key)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply key: ${key.name}", e)
                     }
@@ -244,6 +250,8 @@ class SyncDataApplier {
                         if (suppressed(TombstoneRecorder.THEME, theme.themeId, theme.modifiedAt)) return@forEach
                         database.themeDao().insertTheme(theme)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply theme: ${theme.name}", e)
                     }
@@ -257,6 +265,8 @@ class SyncDataApplier {
                         if (suppressed(TombstoneRecorder.HOST_KEY, hostKey.id, hostKey.modifiedAt)) return@forEach
                         database.hostKeyDao().insertHostKey(hostKey)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply host key: ${hostKey.hostname}", e)
                     }
@@ -276,6 +286,8 @@ class SyncDataApplier {
                         if (remoteIsStale(database.workspaceDao().getById(ws.id)?.modifiedAt, ws.modifiedAt)) return@forEach
                         database.workspaceDao().upsert(ws)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply workspace: ${ws.name}", e)
                     }
@@ -293,6 +305,8 @@ class SyncDataApplier {
                         if (remoteIsStale(existing?.modifiedAt, s.modifiedAt)) return@forEach
                         database.snippetDao().insertSnippet(s.copy(usageCount = existing?.usageCount ?: 0))
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply snippet: ${s.name}", e)
                     }
@@ -305,6 +319,8 @@ class SyncDataApplier {
                         if (remoteIsStale(database.identityDao().getIdentityById(id.id)?.modifiedAt, id.modifiedAt)) return@forEach
                         database.identityDao().insert(id)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply identity: ${id.name}", e)
                     }
@@ -324,6 +340,8 @@ class SyncDataApplier {
                         if (remoteIsStale(existing?.modifiedAt, h.modifiedAt)) return@forEach
                         database.hypervisorDao().upsertForSync(h.copy(connectionCount = existing?.connectionCount ?: 0))
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply hypervisor: ${h.name}", e)
                     }
@@ -336,6 +354,8 @@ class SyncDataApplier {
                         if (remoteIsStale(database.certificateDao().getCertificate(c.id)?.modifiedAt, c.modifiedAt)) return@forEach
                         database.certificateDao().insertCertificate(c)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply certificate: ${c.fingerprint}", e)
                     }
@@ -353,6 +373,8 @@ class SyncDataApplier {
                         if (remoteIsStale(existing?.modifiedAt, m.modifiedAt)) return@forEach
                         database.macroDao().insertMacro(m.copy(usageCount = existing?.usageCount ?: 0))
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply macro: ${m.id}", e)
                     }
@@ -365,6 +387,8 @@ class SyncDataApplier {
                         if (remoteIsStale(database.monitorSlotDao().getById(slot.id)?.modifiedAt, slot.modifiedAt)) return@forEach
                         database.monitorSlotDao().insertOrReplace(slot)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply monitor slot: ${slot.id}", e)
                     }
@@ -396,6 +420,8 @@ class SyncDataApplier {
                             hypervisorAccountIdRemap[a.id] = existing.id
                         }
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply hypervisor account: ${a.name}", e)
                     }
@@ -413,6 +439,8 @@ class SyncDataApplier {
                         if (remoteIsStale(existing?.modifiedAt, h.modifiedAt)) return@forEach
                         database.vncHostDao().insert(h.copy(connectionCount = existing?.connectionCount ?: 0))
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply VNC host: ${h.name}", e)
                     }
@@ -426,6 +454,8 @@ class SyncDataApplier {
                         if (remoteIsStale(database.vncIdentityDao().getById(vi.id)?.modifiedAt, vi.modifiedAt)) return@forEach
                         database.vncIdentityDao().insert(vi)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply VNC identity: ${vi.name}", e)
                     }
@@ -450,6 +480,8 @@ class SyncDataApplier {
                             )
                         )
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply cloud account: ${ca.name}", e)
                     }
@@ -464,6 +496,8 @@ class SyncDataApplier {
                         if (remoteIsStale(database.portForwardDao().getById(pf.id)?.modifiedAt, pf.modifiedAt)) return@forEach
                         database.portForwardDao().insert(pf)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply port forward: ${pf.name}", e)
                     }
@@ -479,6 +513,8 @@ class SyncDataApplier {
                         if (remoteIsStale(database.telnetHostDao().getById(th.id)?.modifiedAt, th.modifiedAt)) return@forEach
                         database.telnetHostDao().insert(th)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply telnet host: ${th.name}", e)
                     }
@@ -493,6 +529,8 @@ class SyncDataApplier {
                         if (remoteIsStale(database.domainDao().getById(d.id)?.modifiedAt, d.modifiedAt)) return@forEach
                         database.domainDao().insert(d)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply domain: ${d.domainName}", e)
                     }
@@ -507,6 +545,8 @@ class SyncDataApplier {
                         if (remoteIsStale(database.vpsHostDao().getById(v.id)?.modifiedAt, v.modifiedAt)) return@forEach
                         database.vpsHostDao().insert(v)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply VPS host: ${v.hostname}", e)
                     }
@@ -521,6 +561,8 @@ class SyncDataApplier {
                         if (remoteIsStale(database.networkRouteDao().getById(nr.id)?.modifiedAt, nr.modifiedAt)) return@forEach
                         database.networkRouteDao().insert(nr)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply network route: ${nr.name}", e)
                     }
@@ -535,6 +577,8 @@ class SyncDataApplier {
                         if (remoteIsStale(database.paneGroupDao().getById(pg.id)?.modifiedAt, pg.modifiedAt)) return@forEach
                         database.paneGroupDao().insert(pg)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply pane group: ${pg.name}", e)
                     }
@@ -555,6 +599,8 @@ class SyncDataApplier {
                         if (existing == null) database.containerHostDao().insert(incoming)
                         else database.containerHostDao().update(incoming)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply container host: ${h.name}", e)
                     }
@@ -567,6 +613,8 @@ class SyncDataApplier {
                         if (existing == null) database.registryCredentialDao().insert(c)
                         else database.registryCredentialDao().update(c)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply registry credential: ${c.registryHost}", e)
                     }
@@ -579,6 +627,8 @@ class SyncDataApplier {
                         if (existing == null) database.composeStackDao().insert(s)
                         else database.composeStackDao().update(s)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply compose stack: ${s.name}", e)
                     }
@@ -591,6 +641,8 @@ class SyncDataApplier {
                         if (existing == null) database.singleContainerConfigDao().insert(c)
                         else database.singleContainerConfigDao().update(c)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply single-container config: ${c.name}", e)
                     }
@@ -603,6 +655,8 @@ class SyncDataApplier {
                         if (existing == null) database.containerAutoUpdatePolicyDao().insert(p)
                         else database.containerAutoUpdatePolicyDao().update(p)
                         appliedCount++
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to apply container auto-update policy: ${p.containerNameOrStackName}", e)
                     }
@@ -639,6 +693,8 @@ class SyncDataApplier {
 
             Logger.i(TAG, "Applied $appliedCount items from sync data")
             ApplyResult.Success(appliedCount)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -897,6 +953,8 @@ class SyncDataApplier {
                         dao.recordIfAbsent(t)
                         deleted++
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Logger.w(TAG, "Failed to apply tombstone ${t.entityType}/${t.entityKey}: ${e.message}")
                 }
@@ -937,6 +995,8 @@ class SyncDataApplier {
                 // Persist for transitive propagation to a third device.
                 dao.recordIfAbsent(t)
                 deleted++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.w(TAG, "Failed to apply secret tombstone for alias $alias: ${e.message}")
             }
@@ -997,6 +1057,8 @@ class SyncDataApplier {
                         passwordCount++
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.w(TAG, "Failed to restore secret $alias: ${e.message}")
             }
@@ -1063,6 +1125,8 @@ class SyncDataApplier {
             ApplyResult.Success(appliedCount)
         } catch (e: CancellationException) {
             throw e
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to apply sync data", e)
             ApplyResult.Error("Failed to apply sync data: ${e.message}")
@@ -1092,6 +1156,8 @@ class SyncDataApplier {
                     Logger.d(TAG, "Added connection: ${connection.name}")
                 }
                 count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to add connection: ${connection.name}", e)
             }
@@ -1111,6 +1177,8 @@ class SyncDataApplier {
                 database.connectionDao().updateConnection(merged)
                 count++
                 Logger.d(TAG, "Updated connection: ${connection.name}")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to update connection: ${connection.name}", e)
             }
@@ -1127,6 +1195,8 @@ class SyncDataApplier {
                     .removeConnectionProfile(database, connectionId)
                 count++
                 Logger.d(TAG, "Deleted connection: $connectionId")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to delete connection: $connectionId", e)
             }
@@ -1146,6 +1216,8 @@ class SyncDataApplier {
                 database.keyDao().insertKey(key)
                 count++
                 Logger.d(TAG, "Added key: ${key.name}")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to add key: ${key.name}", e)
             }
@@ -1156,6 +1228,8 @@ class SyncDataApplier {
                 database.keyDao().updateKey(key)
                 count++
                 Logger.d(TAG, "Updated key: ${key.name}")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to update key: ${key.name}", e)
             }
@@ -1166,6 +1240,8 @@ class SyncDataApplier {
                 database.keyDao().deleteKeyById(keyId)
                 count++
                 Logger.d(TAG, "Deleted key: $keyId")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to delete key: $keyId", e)
             }
@@ -1185,6 +1261,8 @@ class SyncDataApplier {
                 database.themeDao().insertTheme(theme)
                 count++
                 Logger.d(TAG, "Added theme: ${theme.name}")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to add theme: ${theme.name}", e)
             }
@@ -1195,6 +1273,8 @@ class SyncDataApplier {
                 database.themeDao().updateTheme(theme)
                 count++
                 Logger.d(TAG, "Updated theme: ${theme.name}")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to update theme: ${theme.name}", e)
             }
@@ -1205,6 +1285,8 @@ class SyncDataApplier {
                 database.themeDao().deleteThemeById(themeId)
                 count++
                 Logger.d(TAG, "Deleted theme: $themeId")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to delete theme: $themeId", e)
             }
@@ -1224,6 +1306,8 @@ class SyncDataApplier {
                 database.hostKeyDao().insertHostKey(hostKey)
                 count++
                 Logger.d(TAG, "Added host key: ${hostKey.hostname}:${hostKey.port}")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to add host key: ${hostKey.hostname}:${hostKey.port}", e)
             }
@@ -1234,6 +1318,8 @@ class SyncDataApplier {
                 database.hostKeyDao().updateHostKey(hostKey)
                 count++
                 Logger.d(TAG, "Updated host key: ${hostKey.hostname}:${hostKey.port}")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to update host key: ${hostKey.hostname}:${hostKey.port}", e)
             }
@@ -1244,6 +1330,8 @@ class SyncDataApplier {
                 database.hostKeyDao().deleteHostKeyById(hostKeyId)
                 count++
                 Logger.d(TAG, "Deleted host key: $hostKeyId")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to delete host key: $hostKeyId", e)
             }
@@ -1337,6 +1425,8 @@ class SyncDataApplier {
             containers?.let {
                 count += applyContainerPreferences(it)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to apply preferences", e)
         }
@@ -1384,6 +1474,8 @@ class SyncDataApplier {
                     "autoResolve"           -> preferenceManager.setAutoResolveConflicts(value as Boolean)
                 }
                 count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to apply sync preference: $key", e)
             }
@@ -1416,10 +1508,14 @@ class SyncDataApplier {
                         })
                     }
                     count++
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Logger.e(TAG, "Failed to apply multiplexer preference: $key", e)
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to apply multiplexer preferences", e)
         }
@@ -1436,6 +1532,8 @@ class SyncDataApplier {
                     "screenReader"      -> preferenceManager.setScreenReaderEnabled(value as Boolean)
                 }
                 count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to apply accessibility preference: $key", e)
             }
@@ -1455,6 +1553,8 @@ class SyncDataApplier {
                     "pastebinApiKey" -> preferenceManager.setPastebinApiKey(value as String)
                 }
                 count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to apply paste preference: $key", e)
             }
@@ -1474,6 +1574,8 @@ class SyncDataApplier {
                     "logOutput"   -> preferenceManager.setAuditLogOutputEnabled(value as Boolean)
                 }
                 count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to apply audit preference: $key", e)
             }
@@ -1500,6 +1602,8 @@ class SyncDataApplier {
                     }
                 }
                 count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to apply tasker preference: $key", e)
             }
@@ -1519,6 +1623,8 @@ class SyncDataApplier {
                     "hostLogMaxSizeMb"  -> preferenceManager.setHostLogMaxSizeMb((value as Number).toInt())
                 }
                 count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to apply logging preference: $key", e)
             }
@@ -1534,6 +1640,8 @@ class SyncDataApplier {
                     "updateCheckEnabled" -> preferenceManager.setContainerUpdateCheckEnabled(value as Boolean)
                 }
                 count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to apply docker preference: $key", e)
             }
@@ -1566,6 +1674,8 @@ class SyncDataApplier {
                     "language" -> preferenceManager.setLanguage(value as String)
                 }
                 count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to apply general preference: $key", e)
             }
@@ -1610,6 +1720,8 @@ class SyncDataApplier {
                     "preventScreenshots" -> preferenceManager.setPreventScreenshots(value as Boolean)
                 }
                 count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to apply security preference: $key", e)
             }
@@ -1670,6 +1782,8 @@ class SyncDataApplier {
                     "copyOnSelect"  -> preferenceManager.setCopyOnSelect(value as Boolean)
                 }
                 count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to apply terminal preference: $key", e)
             }
@@ -1697,6 +1811,8 @@ class SyncDataApplier {
                     "keepScreenOn"     -> preferenceManager.setKeepScreenOn(value as Boolean)
                 }
                 count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to apply UI preference: $key", e)
             }
@@ -1745,6 +1861,8 @@ class SyncDataApplier {
                     )
                 }
                 count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to apply connection preference: $key", e)
             }
@@ -1777,6 +1895,8 @@ class SyncDataApplier {
                     "layoutJson" -> preferenceManager.setKeyboardLayoutJson(value as String)
                 }
                 count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to apply keyboard preference: $key", e)
             }
@@ -1798,6 +1918,8 @@ class SyncDataApplier {
                     "notification_vibrate" -> editor.putBoolean(key, value as Boolean)
                 }
                 count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to apply notification preference: $key", e)
             }
@@ -1838,6 +1960,8 @@ class SyncDataApplier {
                     }
                 }
                 count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to apply monitoring preference: $key", e)
             }
@@ -1864,6 +1988,8 @@ class SyncDataApplier {
                 val editor = sp.edit()
                 values.forEach { (k, v) -> if (SharedPrefsCodec.decodeInto(editor, k, v)) applied++ }
                 editor.apply()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.w(TAG, "Failed to apply SharedPreferences file $name: ${e.message}")
             }
@@ -1887,6 +2013,8 @@ class SyncDataApplier {
             editor.apply()
             Logger.d(TAG, "Applied $applied dashboard config keys")
             applied
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.w(TAG, "Failed to apply dashboard config: ${e.message}")
             0
@@ -2026,6 +2154,8 @@ class SyncDataApplier {
                 }
                 MergeStrategy.SKIP -> false
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to import connection", e)
             false
@@ -2052,6 +2182,8 @@ class SyncDataApplier {
                 }
                 MergeStrategy.SKIP -> false
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to import key", e)
             false

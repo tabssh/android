@@ -589,7 +589,12 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val json = requireContext().contentResolver
-                    .openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    .openInputStream(uri)?.use {
+                        io.github.tabssh.utils.BoundedTextReader.readUtf8(
+                            it,
+                            io.github.tabssh.utils.BoundedTextReader.MAX_TEXT_IMPORT_BYTES
+                        )
+                    }
                 if (json.isNullOrBlank()) {
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                         Toast.makeText(requireContext(), getString(R.string.settings_toast_theme_file_empty), Toast.LENGTH_SHORT).show()
@@ -1113,7 +1118,7 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                     .setTitle(title)
                     .setView(scrollView)
                     .setPositiveButton(R.string.close, null)
-                    .setNeutralButton(R.string.copy) { _, _ ->
+                    .setNeutralButton(R.string.copy_button) { _, _ ->
                         io.github.tabssh.utils.ClipboardHelper.copy(requireContext(), title, displayContent, sensitive = false)
                         android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_log_copied), android.widget.Toast.LENGTH_SHORT).show()
                     }
@@ -1189,7 +1194,7 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                     .setTitle(logFile.name)
                     .setView(scrollView)
                     .setPositiveButton(R.string.close, null)
-                    .setNeutralButton(R.string.copy) { _, _ ->
+                    .setNeutralButton(R.string.copy_button) { _, _ ->
                         // Host logs contain real hostnames/usernames (never sanitized —
                         // see Logger.logHostEvent) — mark sensitive so the clipboard
                         // auto-clear timeout applies.

@@ -8,6 +8,7 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
@@ -93,6 +94,8 @@ class TaskerWorker(
                 }
             }
             Result.success()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Work failed", e)
             broadcastError("Action failed: ${e.message}")
@@ -167,6 +170,8 @@ class TaskerWorker(
             broadcastConnected(profile)
             logTaskerEvent("connect", "${profile.id}/${profile.name}")
             Logger.i(TAG, "Connected to ${profile.name}")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Connection failed", e)
             broadcastError("Connection failed: ${e.message}")
@@ -202,13 +207,13 @@ class TaskerWorker(
             connection.connect()
             val cursorStyle = app.preferencesManager.getCursorStyleInt()
             tab = app.tabManager.createTab(profile, cursorStyle, app.preferencesManager.getTranscriptRows())
-            tab?.connect(connection)
+            if (tab == null) {
+                connection.disconnect()
+                broadcastError("Tab limit reached — close an existing session first")
+                return
+            }
+            tab.connect(connection)
         }
-        if (tab == null) {
-            broadcastError("Failed to create tab")
-            return
-        }
-
         tab.termuxBridge.sendText("$command\n")
         logTaskerEvent("send_command", "${profile.id}/${profile.name}: $command")
 

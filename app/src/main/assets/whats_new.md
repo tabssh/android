@@ -1,5 +1,20 @@
 # What's New
 
+## Wave 72 — safer imports and recovery
+
+- **Interrupted container updates restore the old service.** If an automatic
+  recreate is cancelled or the transport fails after the old container stops,
+  TabSSH now attempts rollback and restart before reporting the interruption.
+- **Large or malformed imports are bounded.** Text, key, theme, tracker, SSH
+  config, and bulk-import files are size-limited; QR pairing rejects malformed
+  CBOR and invalid ports before showing profiles for import.
+- **Tasker no longer leaks a connection at the tab limit.** A command that
+  cannot get a tab closes the SSH connection it just opened, and cancelling a
+  Tasker action now cancels the work instead of reporting an ordinary failure.
+- **Saved terminal history and recordings stay within their size limits.**
+  Session restore caps decompressed history, and transcript/asciicast limits
+  count encoded bytes rather than character count.
+
 ## Wave 71 — Panes windows, and reconnect for every terminal protocol
 
 ### Panes
@@ -38,6 +53,13 @@
   of the "Prevent screenshots" setting.
 - **The Infra tab's container list is now called "Containers"**
   instead of "Docker Hosts" — it covers Incus, Podman, and LXC/LXD too.
+
+### Cloud Accounts
+
+- **Hostinger VPS accounts can now be managed alongside your other cloud
+  providers.** Add a Hostinger API token to import VPS hosts, check their
+  live status and IP addresses, and start, stop, or restart them.
+
 
 ### VPS Hosting Tracker
 

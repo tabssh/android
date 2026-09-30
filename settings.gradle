@@ -4,6 +4,19 @@ pluginManagement {
         google()
         mavenCentral()
     }
+    buildscript {
+        repositories {
+            google()
+        }
+        dependencies {
+            // Kotlin 2.4 metadata needs R8 9.1.29+; 9.1.31 is the first
+            // published patch at or above that minimum. AGP 8.13.2 bundles
+            // R8 8.13.19 and otherwise emits metadata parser errors during
+            // release minification. Keep AGP/Gradle pinned for the project
+            // toolchain while supplying the compatible R8 release.
+            classpath 'com.android.tools:r8:9.1.31'
+        }
+    }
 }
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
@@ -11,10 +24,9 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven { url 'https://jitpack.io' }
-        // Termux terminal emulator
-        maven { url 'https://termux.dev/termux-app/maven/' }
     }
 }
 
 rootProject.name = "TabSSH"
-include ':app'
+include ':app', ':termux-terminal-emulator'
+project(':termux-terminal-emulator').projectDir = file('deps/termux-terminal-emulator')

@@ -47,8 +47,7 @@ class SpiceClient(
          * server-declared geometry overflowing Int before it is used as an
          * array bound.
          */
-        private const val MAX_PIXELS = SpiceConstants.MAX_DIMENSION.toLong() *
-            SpiceConstants.MAX_DIMENSION.toLong()
+        private const val MAX_PIXELS = 32L * 1024L * 1024L
     }
 
     /**
@@ -163,10 +162,7 @@ class SpiceClient(
         if (!running.compareAndSet(true, false)) return
         val handle = nativeHandle.getAndSet(0L)
         if (handle == 0L) return
-        try { nativeStopSession(handle) } catch (t: Throwable) {
-            Logger.w(TAG, "nativeStopSession threw", t)
-        }
-        destroyOwned(handle)
+        stopAndDestroyOwned(handle)
         Logger.i(TAG, "SPICE session stopped")
     }
 
@@ -181,6 +177,27 @@ class SpiceClient(
             try { nativeDestroySession(handle) } catch (t: Throwable) {
                 Logger.w(TAG, "nativeDestroySession threw", t)
             }
+        }
+    }
+
+    private fun stopAndDestroyOwned(handle: Long) {
+        if (handle == 0L) return
+        handleLock.write {
+            try { nativeStopSession(handle) } catch (t: Throwable) {
+                Logger.w(TAG, "nativeStopSession threw", t)
+            }
+            try { nativeDestroySession(handle) } catch (t: Throwable) {
+                Logger.w(TAG, "nativeDestroySession threw", t)
+            }
+        }
+    }
+
+    /** Native callbacks run on the GLib dispatcher; teardown is queued off its stack. */
+    private fun destroyAfterNativeCallback(handle: Long) {
+        if (handle == 0L) return
+        Thread({ stopAndDestroyOwned(handle) }, "tabssh-spice-destroy").apply {
+            isDaemon = true
+            start()
         }
     }
 
@@ -344,8 +361,11 @@ class SpiceClient(
         // CAS instead of set: true→false means the session died on its own,
         // false means stop() already claimed the shutdown (user-initiated).
         val wasRunning = running.compareAndSet(true, false)
-        listener?.onError(message)
-        destroyOwned(handle)
+        try {
+            listener?.onError(message)
+        } finally {
+            destroyAfterNativeCallback(handle)
+        }
         if (wasRunning) {
             onSessionEnded?.invoke(ConsoleDisconnectReason.ERROR, message)
         }
@@ -359,8 +379,11 @@ class SpiceClient(
         // the disconnect triggered by stop()'s own nativeStopSession is
         // user-initiated and must not reach the close-policy gate.
         val wasRunning = running.compareAndSet(true, false)
-        listener?.onDisconnected(reason)
-        destroyOwned(handle)
+        try {
+            listener?.onDisconnected(reason)
+        } finally {
+            destroyAfterNativeCallback(handle)
+        }
         if (wasRunning) {
             onSessionEnded?.invoke(ConsoleDisconnectReason.CLEAN, reason)
         }

@@ -2,6 +2,7 @@ package io.github.tabssh.performance
 
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -46,6 +47,8 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
                     platformInfo = platformInfo
                 )
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("MetricsCollector", "Failed to collect metrics", e)
             Result.failure(e)
@@ -64,9 +67,13 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
                 sshConnection.executeCommand(
                     "nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 1"
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) { "1" }
             val coreCount = coreOutput.trim().toIntOrNull()?.coerceAtLeast(1) ?: 1
             parseCpuStats(statOutput, coreCount)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.d("MetricsCollector", "CPU metrics unavailable: ${e.message}")
             CpuMetrics.empty()
@@ -113,6 +120,8 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
         return try {
             val output = sshConnection.executeCommand("cat /proc/meminfo | head -20")
             parseMemoryInfo(output)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.d("MetricsCollector", "Memory metrics unavailable: ${e.message}")
             MemoryMetrics.empty()
@@ -167,6 +176,8 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
         return try {
             val output = sshConnection.executeCommand("df -B1 / | tail -1")
             parseDiskUsage(output)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.d("MetricsCollector", "Disk metrics unavailable: ${e.message}")
             DiskMetrics.empty()
@@ -203,6 +214,8 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
         return try {
             val output = sshConnection.executeCommand("cat /proc/net/dev | grep -E 'eth0|ens|enp' | head -1")
             parseNetworkStats(output)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.d("MetricsCollector", "Network metrics unavailable: ${e.message}")
             NetworkMetrics.empty()
@@ -274,6 +287,8 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
             val loadOutput = sshConnection.executeCommand("cat /proc/loadavg")
             val uptimeOutput = sshConnection.executeCommand("cat /proc/uptime | cut -d' ' -f1")
             parseLoadMetrics(loadOutput, uptimeOutput)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.d("MetricsCollector", "Load metrics unavailable: ${e.message}")
             LoadMetrics.empty()
@@ -326,6 +341,8 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
             // Try to get distro info from /etc/os-release (most common)
             val osReleaseOutput = try {
                 sshConnection.executeCommand("cat /etc/os-release 2>/dev/null || cat /etc/lsb-release 2>/dev/null || echo ''")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 ""
             }
@@ -334,6 +351,8 @@ class MetricsCollector(private val sshConnection: SSHConnection) {
             cachedPlatformInfo = platformInfo
             Logger.d("MetricsCollector", "Detected platform: ${platformInfo.getDisplayName()} (${platformInfo.architecture})")
             platformInfo
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.d("MetricsCollector", "Platform info unavailable: ${e.message}")
             PlatformInfo.empty()

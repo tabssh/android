@@ -8,8 +8,10 @@ import io.github.tabssh.storage.database.entities.AuditLogEntry
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 /**
  * Audit log manager — records security-relevant events for compliance and review.
@@ -143,9 +145,9 @@ class AuditLogManager(
     private fun retentionDays(): Int {
         val mdm = getMdmBundle()
         if (mdm != null && mdm.containsKey(MDM_AUDIT_RETENTION_DAYS)) {
-            return mdm.getInt(MDM_AUDIT_RETENTION_DAYS, MDM_DEFAULT_RET_DAYS)
+            return mdm.getInt(MDM_AUDIT_RETENTION_DAYS, MDM_DEFAULT_RET_DAYS).coerceIn(1, 3650)
         }
-        return preferencesManager.getAuditLogMaxAgeDays()
+        return preferencesManager.getAuditLogMaxAgeDays().coerceIn(1, 3650)
     }
 
     // ── Session lifecycle ────────────────────────────────────────────────────
@@ -171,7 +173,7 @@ class AuditLogManager(
             user         = connection.username,
             host         = connection.host,
             port         = connection.port,
-            metadata     = """{"duration_ms":$durationMs}"""
+            metadata     = metadataJson("duration_ms" to durationMs)
         ))
     }
 
@@ -186,7 +188,7 @@ class AuditLogManager(
             user         = connection.username,
             host         = connection.host,
             port         = connection.port,
-            metadata     = """{"method":"$method"}"""
+            metadata     = metadataJson("method" to method)
         ))
     }
 
@@ -199,7 +201,7 @@ class AuditLogManager(
             user         = connection.username,
             host         = connection.host,
             port         = connection.port,
-            metadata     = """{"method":"$method","reason":"${reason.take(200)}"}"""
+            metadata     = metadataJson("method" to method, "reason" to reason.take(200))
         ))
     }
 
@@ -212,7 +214,7 @@ class AuditLogManager(
             user         = connection.username,
             host         = connection.host,
             port         = connection.port,
-            metadata     = """{"key":"${keyName.take(100)}","fingerprint":"${fingerprint ?: "unknown"}"}"""
+            metadata     = metadataJson("key" to keyName.take(100), "fingerprint" to (fingerprint ?: "unknown"))
         ))
     }
 
@@ -227,7 +229,7 @@ class AuditLogManager(
             user         = connection.username,
             host         = connection.host,
             port         = connection.port,
-            metadata     = """{"fingerprint":"${fingerprint.take(100)}","new":$isNew}"""
+            metadata     = metadataJson("fingerprint" to fingerprint.take(100), "new" to isNew)
         ))
     }
 
@@ -240,7 +242,7 @@ class AuditLogManager(
             user         = connection.username,
             host         = connection.host,
             port         = connection.port,
-            metadata     = """{"fingerprint":"${fingerprint.take(100)}"}"""
+            metadata     = metadataJson("fingerprint" to fingerprint.take(100))
         ))
     }
 
@@ -253,7 +255,7 @@ class AuditLogManager(
             user         = connection.username,
             host         = connection.host,
             port         = connection.port,
-            metadata     = """{"old":"${oldFingerprint.take(100)}","new":"${newFingerprint.take(100)}"}"""
+            metadata     = metadataJson("old" to oldFingerprint.take(100), "new" to newFingerprint.take(100))
         ))
     }
 
@@ -310,7 +312,7 @@ class AuditLogManager(
             user         = connection.username,
             host         = connection.host,
             port         = connection.port,
-            metadata     = """{"path":"${remotePath.take(500)}","bytes":$bytes}""",
+            metadata     = metadataJson("path" to remotePath.take(500), "bytes" to bytes),
             sizeBytes    = bytes + 200
         ))
     }
@@ -324,7 +326,7 @@ class AuditLogManager(
             user         = connection.username,
             host         = connection.host,
             port         = connection.port,
-            metadata     = """{"path":"${remotePath.take(500)}","bytes":$bytes}"""
+            metadata     = metadataJson("path" to remotePath.take(500), "bytes" to bytes)
         ))
     }
 
@@ -337,7 +339,7 @@ class AuditLogManager(
             user         = connection.username,
             host         = connection.host,
             port         = connection.port,
-            metadata     = """{"path":"${remotePath.take(500)}"}"""
+            metadata     = metadataJson("path" to remotePath.take(500))
         ))
     }
 
@@ -350,7 +352,7 @@ class AuditLogManager(
             user         = connection.username,
             host         = connection.host,
             port         = connection.port,
-            metadata     = """{"path":"${remotePath.take(500)}"}"""
+            metadata     = metadataJson("path" to remotePath.take(500))
         ))
     }
 
@@ -365,7 +367,7 @@ class AuditLogManager(
             user         = connection.username,
             host         = connection.host,
             port         = connection.port,
-            metadata     = """{"spec":"${spec.take(200)}"}"""
+            metadata     = metadataJson("spec" to spec.take(200))
         ))
     }
 
@@ -378,7 +380,7 @@ class AuditLogManager(
             user         = connection.username,
             host         = connection.host,
             port         = connection.port,
-            metadata     = """{"spec":"${spec.take(200)}"}"""
+            metadata     = metadataJson("spec" to spec.take(200))
         ))
     }
 
@@ -397,7 +399,7 @@ class AuditLogManager(
             user         = actor,
             host         = "local",
             port         = 0,
-            metadata     = """{"detail":"${detail.take(500)}"}"""
+            metadata     = metadataJson("detail" to detail.take(500))
         ))
     }
 
@@ -418,7 +420,8 @@ class AuditLogManager(
         }
         val ts  = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", java.util.Locale.US).format(java.util.Date(entry.timestamp))
         val hostname = android.os.Build.MODEL.replace(' ', '-').take(64)
-        val msg = "<$pri>1 $ts $hostname TabSSH - - - ${entry.getDisplayEvent()}"
+        val message = entry.getDisplayEvent().replace(Regex("[\\r\\n\\u0000-\\u001F\\u007F]"), " ").take(2048)
+        val msg = "<$pri>1 $ts $hostname TabSSH - - - $message"
         try {
             val bytes = msg.toByteArray(Charsets.UTF_8)
             java.net.DatagramSocket().use { sock ->
@@ -437,6 +440,8 @@ class AuditLogManager(
             try {
                 auditDao.insert(entry)
                 syslogForward(entry)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("AuditLogManager", "Failed to insert audit entry", e)
             }
@@ -453,12 +458,17 @@ class AuditLogManager(
         }
     }
 
+    private fun metadataJson(vararg values: Pair<String, Any?>): String = JSONObject().apply {
+        values.forEach { (key, value) -> put(key, value ?: JSONObject.NULL) }
+    }.toString()
+
     suspend fun checkAndCleanup() {
         withContext(Dispatchers.IO) {
-            val maxSizeMB  = preferencesManager.getAuditLogMaxSizeMb().toLong()
-            val currentSize = auditDao.getTotalSize() ?: 0L
-            if (currentSize > maxSizeMB * 1024 * 1024) {
-                auditDao.deleteOldest(100)
+            val maxBytes = preferencesManager.getAuditLogMaxSizeMb().coerceIn(1, 10_000).toLong() * 1024 * 1024
+            var currentSize = auditDao.getTotalSize() ?: 0L
+            while (currentSize > maxBytes) {
+                if (auditDao.deleteOldest(100) == 0) break
+                currentSize = auditDao.getTotalSize() ?: 0L
             }
             val cutoff = System.currentTimeMillis() - (retentionDays().toLong() * 86_400_000L)
             auditDao.deleteOlderThan(cutoff)

@@ -210,7 +210,7 @@ class AwsEc2Client : CloudProvider {
             .get()
             .build()
         return http.newCall(req).execute().use { resp ->
-            val body = resp.body?.string().orEmpty()
+            val body = readCloudResponseBody(resp.body)
             if (!resp.isSuccessful) {
                 if (resp.code == 401 || resp.code == 403) {
                     throw CloudAuthException("AWS credentials rejected (HTTP ${resp.code}): ${extractAwsError(body) ?: resp.message}")

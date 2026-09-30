@@ -28,21 +28,11 @@ class ProxmoxApiClient(
     private val username: String,
     private val password: String,
     private val realm: String = "pam",
-    // Verification on by default: an omitted argument must never be the
-    // insecure choice. Profiles that need the TOFU-only path pass false
-    // explicitly (per-entity opt-out, AI.md PART 6).
+    // Direct client construction validates through the platform CA store;
+    // saved profiles may explicitly disable certificate validation.
     private val verifySsl: Boolean = true,
     private val pinnedCertSha256: String? = null,
-    /**
-     * Invoked synchronously, on the handshake thread, the instant
-     * [capturedPin] receives a new SHA-256 — TOFU accept, silent
-     * system-CA accept, or an explicit user ACCEPT_AND_PIN on a changed
-     * cert. Callers use this to persist [getCapturedCertSha256] to the DB
-     * right away instead of waiting for [authenticate] (or a later call
-     * on this same shared client) to finish without throwing — a failure
-     * anywhere after the handshake used to make an already-confirmed pin
-     * vanish once this client was discarded.
-     */
+    /** Legacy compatibility callback; certificate pins are no longer captured. */
     private val onPinCaptured: (() -> Unit)? = null
 ) {
 
@@ -97,8 +87,7 @@ class ProxmoxApiClient(
         }
     }
 
-    /** Phase 1 TLS pin — caller reads after authenticate() to persist
-     *  the TOFU capture. Null when verifySsl is false or pin already set. */
+    /** Legacy compatibility accessor; always null with the current TLS policy. */
     private val capturedPin = io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.CapturedPin()
     fun getCapturedCertSha256(): String? = capturedPin.sha256
 
@@ -696,12 +685,10 @@ class ProxmoxApiClient(
         val proxy: String?,
     ) {
         /**
-         * Convert to a [SpiceConnectionParams] ready for [io.github.tabssh
-         * .hypervisor.spice.SpiceClient]. Always sets `tlsVerify=true` — the
-         * PEM CA in [caCert] is trusted material issued by the same Proxmox
-         * cluster the user already authenticated against, so falling back
-         * to `tlsVerify=false` would silently downgrade a chain we have every
-         * reason to validate.
+         * Convert to [SpiceConnectionParams] ready for [io.github.tabssh
+         * .hypervisor.spice.SpiceClient]. TLS remains encrypted, but the
+         * descriptor CA is not used as a durable server identity because
+         * infrastructure certificates can rotate independently.
          */
         fun toConnectionParams(): SpiceConnectionParams = SpiceConnectionParams(
             host = host,
@@ -710,7 +697,7 @@ class ProxmoxApiClient(
             password = password,
             caCert = caCert,
             hostSubject = hostSubject,
-            tlsVerify = true,
+            tlsVerify = false,
         )
 
         override fun equals(other: Any?): Boolean {

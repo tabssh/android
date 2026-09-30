@@ -25,6 +25,11 @@ import io.github.tabssh.storage.database.entities.RegistryCredential
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
 import org.junit.Test
@@ -190,6 +195,57 @@ class UpdateCheckerTest {
         val result = checker.checkOne(policy(), transport(runningDigest = OLD))
         assertEquals(UpdateChecker.Status.ERROR, result.status)
         assertTrue(dao.pendingWrites.isEmpty())
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `cancelling replacement verification restores the old container`() = runTest {
+        val dao = FakePolicyDao(policy(pending = NEW))
+        val operations = mutableListOf<String>()
+        val transport = object : FakeTransport() {
+            override suspend fun inspectContainer(id: String): ContainerResult<String> =
+                ContainerResult.Success(
+                    """{"Id":"c1","Config":{"Image":"nginx:1.27"},"HostConfig":{}}"""
+                )
+
+            override fun pullImage(ref: String): Flow<PullProgressEvent> =
+                flowOf(PullProgressEvent("complete"))
+
+            override suspend fun containerAction(id: String, action: ContainerAction): ContainerResult<Unit> {
+                operations += "${action.name}:$id"
+                return ContainerResult.Success(Unit)
+            }
+
+            override suspend fun renameContainer(id: String, newName: String): ContainerResult<Unit> {
+                operations += "rename:$id:$newName"
+                return ContainerResult.Success(Unit)
+            }
+
+            override suspend fun createAndStartContainer(
+                name: String,
+                createBody: JSONObject,
+                runArgv: List<String>
+            ): ContainerResult<Unit> {
+                operations += "create:$name"
+                return ContainerResult.Success(Unit)
+            }
+
+            override suspend fun removeContainer(id: String, force: Boolean): ContainerResult<Unit> {
+                operations += "remove:$id"
+                return ContainerResult.Success(Unit)
+            }
+        }
+
+        val job = backgroundScope.launch {
+            UpdateApplier(dao).apply(1, transport).collect { }
+        }
+        runCurrent()
+        job.cancelAndJoin()
+
+        assertTrue(operations.contains("rename:web:web_old"))
+        assertTrue(operations.contains("remove:web"))
+        assertTrue(operations.contains("rename:web_old:web"))
+        assertTrue(operations.contains("START:web"))
     }
 
     // ── fixtures ─────────────────────────────────────────────────────────────

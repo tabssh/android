@@ -72,7 +72,12 @@ class AuthKeysFragment : Fragment() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val text = ctx.contentResolver
-                    .openInputStream(uri)?.bufferedReader()?.use { it.readText() }?.trim().orEmpty()
+                    .openInputStream(uri)?.use {
+                        io.github.tabssh.utils.BoundedTextReader.readUtf8(
+                            it,
+                            io.github.tabssh.utils.BoundedTextReader.MAX_KEY_FILE_BYTES
+                        )
+                    }?.trim().orEmpty()
                 withContext(Dispatchers.Main) {
                     if (!isAdded) return@withContext
                     if (validateCert(text)) setKeyCert(key, text, getString(R.string.identity_cert_attached_toast))
@@ -585,7 +590,12 @@ class AuthKeysFragment : Fragment() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val content = requireContext().contentResolver
-                    .openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    .openInputStream(uri)?.use {
+                        io.github.tabssh.utils.BoundedTextReader.readUtf8(
+                            it,
+                            io.github.tabssh.utils.BoundedTextReader.MAX_KEY_FILE_BYTES
+                        )
+                    }
                     ?: return@launch
                 val display = resolveDisplayName(uri) ?: uri.lastPathSegment ?: getString(R.string.identity_default_imported_key_name)
                 val filenameBase = extractKeyNameFromFilename(display)

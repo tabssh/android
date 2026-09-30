@@ -19,6 +19,7 @@ import io.github.tabssh.sync.models.SyncItemCounts
 import io.github.tabssh.sync.tombstone.TombstoneRecorder
 import io.github.tabssh.utils.SharedPrefsCodec
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -242,6 +243,8 @@ class SyncDataCollector {
     private suspend fun collectHypervisorAccounts(): List<io.github.tabssh.storage.database.entities.HypervisorAccount> {
         return try {
             database.hypervisorAccountDao().getAllAccountsList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("hypervisor accounts", e)
         }
@@ -251,6 +254,8 @@ class SyncDataCollector {
     private suspend fun collectVncHosts(): List<io.github.tabssh.storage.database.entities.VncHost> {
         return try {
             database.vncHostDao().getAllHostsList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("VNC hosts", e)
         }
@@ -261,6 +266,8 @@ class SyncDataCollector {
     private suspend fun collectVncIdentities(): List<io.github.tabssh.storage.database.entities.VncIdentity> {
         return try {
             database.vncIdentityDao().getAllIdentitiesList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("VNC identities", e)
         }
@@ -269,6 +276,8 @@ class SyncDataCollector {
     private suspend fun collectHypervisors(): List<io.github.tabssh.storage.database.entities.HypervisorProfile> {
         return try {
             database.hypervisorDao().getAllList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("hypervisors", e)
         }
@@ -277,6 +286,8 @@ class SyncDataCollector {
     private suspend fun collectCertificates(): List<io.github.tabssh.storage.database.entities.TrustedCertificate> {
         return try {
             database.certificateDao().getAllCertificates().first()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("certificates", e)
         }
@@ -285,6 +296,8 @@ class SyncDataCollector {
     private suspend fun collectSnippets(): List<io.github.tabssh.storage.database.entities.Snippet> {
         return try {
             database.snippetDao().getAllSnippets().first()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("snippets", e)
         }
@@ -293,6 +306,8 @@ class SyncDataCollector {
     private suspend fun collectIdentities(): List<io.github.tabssh.storage.database.entities.Identity> {
         return try {
             database.identityDao().getAllIdentitiesList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("identities", e)
         }
@@ -301,6 +316,8 @@ class SyncDataCollector {
     private suspend fun collectGroups(): List<io.github.tabssh.storage.database.entities.ConnectionGroup> {
         return try {
             database.connectionGroupDao().getAllGroups().first()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("groups", e)
         }
@@ -313,6 +330,8 @@ class SyncDataCollector {
     private suspend fun collectWorkspaces(): List<io.github.tabssh.storage.database.entities.Workspace> {
         return try {
             database.workspaceDao().getAll()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("workspaces", e)
         }
@@ -322,6 +341,8 @@ class SyncDataCollector {
     private suspend fun collectPortForwards(): List<io.github.tabssh.storage.database.entities.PortForward> {
         return try {
             database.portForwardDao().getAllList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("port forwards", e)
         }
@@ -333,6 +354,8 @@ class SyncDataCollector {
     private suspend fun collectTelnetHosts(): List<io.github.tabssh.storage.database.entities.TelnetHost> {
         return try {
             database.telnetHostDao().getAllList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("telnet hosts", e)
         }
@@ -342,6 +365,8 @@ class SyncDataCollector {
     private suspend fun collectNetworkRoutes(): List<io.github.tabssh.storage.database.entities.NetworkRoute> {
         return try {
             database.networkRouteDao().getAllList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("network routes", e)
         }
@@ -351,6 +376,8 @@ class SyncDataCollector {
     private suspend fun collectPaneGroups(): List<io.github.tabssh.storage.database.entities.PaneGroup> {
         return try {
             database.paneGroupDao().getAllList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("pane groups", e)
         }
@@ -360,6 +387,8 @@ class SyncDataCollector {
     private suspend fun collectDomains(): List<io.github.tabssh.storage.database.entities.Domain> {
         return try {
             database.domainDao().getAllList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("domains", e)
         }
@@ -369,6 +398,8 @@ class SyncDataCollector {
     private suspend fun collectVpsHosts(): List<io.github.tabssh.storage.database.entities.VpsHost> {
         return try {
             database.vpsHostDao().getAllList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("VPS hosts", e)
         }
@@ -378,6 +409,8 @@ class SyncDataCollector {
     private suspend fun collectContainerHosts(): List<io.github.tabssh.storage.database.entities.ContainerHost> {
         return try {
             database.containerHostDao().getAllList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("container hosts", e)
         }
@@ -387,6 +420,8 @@ class SyncDataCollector {
     private suspend fun collectRegistryCredentials(): List<io.github.tabssh.storage.database.entities.RegistryCredential> {
         return try {
             database.registryCredentialDao().getAllList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("registry credentials", e)
         }
@@ -396,6 +431,8 @@ class SyncDataCollector {
     private suspend fun collectComposeStacks(): List<io.github.tabssh.storage.database.entities.ComposeStack> {
         return try {
             database.composeStackDao().getAllList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("compose stacks", e)
         }
@@ -405,6 +442,8 @@ class SyncDataCollector {
     private suspend fun collectSingleContainerConfigs(): List<io.github.tabssh.storage.database.entities.SingleContainerConfig> {
         return try {
             database.singleContainerConfigDao().getAllList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("single-container configs", e)
         }
@@ -414,6 +453,8 @@ class SyncDataCollector {
     private suspend fun collectContainerAutoUpdatePolicies(): List<io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy> {
         return try {
             database.containerAutoUpdatePolicyDao().getAllList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("container auto-update policies", e)
         }
@@ -423,6 +464,8 @@ class SyncDataCollector {
     private suspend fun collectMacros(): List<io.github.tabssh.storage.database.entities.Macro> {
         return try {
             database.macroDao().getAllMacrosList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("macros", e)
         }
@@ -433,6 +476,8 @@ class SyncDataCollector {
     private suspend fun collectMonitorSlots(): List<io.github.tabssh.storage.database.entities.MonitorSlot> {
         return try {
             database.monitorSlotDao().getAllSlots().first()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("monitor slots", e)
         }
@@ -451,6 +496,8 @@ class SyncDataCollector {
                 val sp = context.getSharedPreferences(name, android.content.Context.MODE_PRIVATE)
                 val values = SharedPrefsCodec.encodeAll(sp)
                 if (values.isNotEmpty()) out[name] = values
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.w(TAG, "Failed to collect SharedPreferences file $name: ${e.message}")
             }
@@ -465,6 +512,8 @@ class SyncDataCollector {
         return try {
             val sp = context.getSharedPreferences("multi_host_dashboard", android.content.Context.MODE_PRIVATE)
             SharedPrefsCodec.encodeAll(sp)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to collect dashboard config", e)
             emptyMap()
@@ -477,6 +526,8 @@ class SyncDataCollector {
     private suspend fun collectCloudAccounts(): List<io.github.tabssh.storage.database.entities.CloudAccount> {
         return try {
             database.cloudAccountDao().getAll()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("cloud accounts", e)
         }
@@ -675,25 +726,63 @@ class SyncDataCollector {
         // Secrets carry no category toggle of their own: each alias family is
         // gated individually at apply time by SyncDataApplier.isSecretAliasEnabled.
         out += TombstoneRecorder.SECRET
-        if (preferenceManager.isSyncConnectionsEnabled())        out += TombstoneRecorder.CONNECTION
-        if (preferenceManager.isSyncKeysEnabled())               out += TombstoneRecorder.KEY
-        if (preferenceManager.isSyncThemesEnabled())             out += TombstoneRecorder.THEME
-        if (preferenceManager.isSyncHostKeysEnabled())           out += TombstoneRecorder.HOST_KEY
-        if (preferenceManager.isSyncWorkspacesEnabled())         out += TombstoneRecorder.WORKSPACE
-        if (preferenceManager.isSyncSnippetsEnabled())           out += TombstoneRecorder.SNIPPET
-        if (preferenceManager.isSyncIdentitiesEnabled())         out += TombstoneRecorder.IDENTITY
-        if (preferenceManager.isSyncGroupsEnabled())             out += TombstoneRecorder.GROUP
-        if (preferenceManager.isSyncHypervisorsEnabled())        out += TombstoneRecorder.HYPERVISOR
-        if (preferenceManager.isSyncCertificatesEnabled())       out += TombstoneRecorder.CERTIFICATE
-        if (preferenceManager.isSyncMacrosEnabled())             out += TombstoneRecorder.MACRO
-        if (preferenceManager.isSyncMonitorSlotsEnabled())       out += TombstoneRecorder.MONITOR_SLOT
-        if (preferenceManager.isSyncHypervisorAccountsEnabled()) out += TombstoneRecorder.HYPERVISOR_ACCOUNT
-        if (preferenceManager.isSyncVncHostsEnabled())           out += TombstoneRecorder.VNC_HOST
-        if (preferenceManager.isSyncVncIdentitiesEnabled())      out += TombstoneRecorder.VNC_IDENTITY
-        if (preferenceManager.isSyncCloudAccountsEnabled())      out += TombstoneRecorder.CLOUD_ACCOUNT
-        if (preferenceManager.isSyncPortForwardsEnabled())       out += TombstoneRecorder.PORT_FORWARD
-        if (preferenceManager.isSyncNetworkRoutesEnabled())      out += TombstoneRecorder.NETWORK_ROUTE
-        if (preferenceManager.isSyncPaneGroupsEnabled())         out += TombstoneRecorder.PANE_GROUP
+        if (preferenceManager.isSyncConnectionsEnabled()) {
+            out += TombstoneRecorder.CONNECTION
+        }
+        if (preferenceManager.isSyncKeysEnabled()) {
+            out += TombstoneRecorder.KEY
+        }
+        if (preferenceManager.isSyncThemesEnabled()) {
+            out += TombstoneRecorder.THEME
+        }
+        if (preferenceManager.isSyncHostKeysEnabled()) {
+            out += TombstoneRecorder.HOST_KEY
+        }
+        if (preferenceManager.isSyncWorkspacesEnabled()) {
+            out += TombstoneRecorder.WORKSPACE
+        }
+        if (preferenceManager.isSyncSnippetsEnabled()) {
+            out += TombstoneRecorder.SNIPPET
+        }
+        if (preferenceManager.isSyncIdentitiesEnabled()) {
+            out += TombstoneRecorder.IDENTITY
+        }
+        if (preferenceManager.isSyncGroupsEnabled()) {
+            out += TombstoneRecorder.GROUP
+        }
+        if (preferenceManager.isSyncHypervisorsEnabled()) {
+            out += TombstoneRecorder.HYPERVISOR
+        }
+        if (preferenceManager.isSyncCertificatesEnabled()) {
+            out += TombstoneRecorder.CERTIFICATE
+        }
+        if (preferenceManager.isSyncMacrosEnabled()) {
+            out += TombstoneRecorder.MACRO
+        }
+        if (preferenceManager.isSyncMonitorSlotsEnabled()) {
+            out += TombstoneRecorder.MONITOR_SLOT
+        }
+        if (preferenceManager.isSyncHypervisorAccountsEnabled()) {
+            out += TombstoneRecorder.HYPERVISOR_ACCOUNT
+        }
+        if (preferenceManager.isSyncVncHostsEnabled()) {
+            out += TombstoneRecorder.VNC_HOST
+        }
+        if (preferenceManager.isSyncVncIdentitiesEnabled()) {
+            out += TombstoneRecorder.VNC_IDENTITY
+        }
+        if (preferenceManager.isSyncCloudAccountsEnabled()) {
+            out += TombstoneRecorder.CLOUD_ACCOUNT
+        }
+        if (preferenceManager.isSyncPortForwardsEnabled()) {
+            out += TombstoneRecorder.PORT_FORWARD
+        }
+        if (preferenceManager.isSyncNetworkRoutesEnabled()) {
+            out += TombstoneRecorder.NETWORK_ROUTE
+        }
+        if (preferenceManager.isSyncPaneGroupsEnabled()) {
+            out += TombstoneRecorder.PANE_GROUP
+        }
         if (preferenceManager.isSyncContainersEnabled()) {
             out += TombstoneRecorder.CONTAINER_HOST
             out += TombstoneRecorder.REGISTRY_CREDENTIAL
@@ -701,9 +790,15 @@ class SyncDataCollector {
             out += TombstoneRecorder.SINGLE_CONTAINER_CONFIG
             out += TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY
         }
-        if (preferenceManager.isSyncTelnetHostsEnabled())        out += TombstoneRecorder.TELNET_HOST
-        if (preferenceManager.isSyncDomainsEnabled())            out += TombstoneRecorder.DOMAIN
-        if (preferenceManager.isSyncVpsHostsEnabled())           out += TombstoneRecorder.VPS_HOST
+        if (preferenceManager.isSyncTelnetHostsEnabled()) {
+            out += TombstoneRecorder.TELNET_HOST
+        }
+        if (preferenceManager.isSyncDomainsEnabled()) {
+            out += TombstoneRecorder.DOMAIN
+        }
+        if (preferenceManager.isSyncVpsHostsEnabled()) {
+            out += TombstoneRecorder.VPS_HOST
+        }
         return out
     }
 
@@ -763,12 +858,16 @@ class SyncDataCollector {
             "key_passphrase_", "container_host_", "registry_credential_"
         )
         pm.storedAliases().forEach { alias ->
-            if (wirePrefixes.any { alias.startsWith(it) }) out += alias
+            if (wirePrefixes.any { alias.startsWith(it) }) {
+                out += alias
+            }
         }
         // Connection passwords: Keystore alias is the bare connection id, so it
         // is only recognisable by cross-referencing the connection table.
         database.connectionDao().getAllConnections().first().forEach { c ->
-            if (pm.hasStoredPassword(c.id)) out += "conn_pw_${c.id}"
+            if (pm.hasStoredPassword(c.id)) {
+                out += "conn_pw_${c.id}"
+            }
         }
         // SSH private key material lives in KeyStorage, not SecurePasswordManager.
         database.keyDao().getAllKeys().first().forEach { key -> out += "ssh_key_${key.keyId}" }
@@ -795,6 +894,8 @@ class SyncDataCollector {
                 if (vanished.isNotEmpty()) {
                     Logger.d(TAG, "Backstop tombstoned ${vanished.size} vanished $type row(s)")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.w(TAG, "Backstop failed for type=$type: ${e.message}")
             }
@@ -807,6 +908,8 @@ class SyncDataCollector {
             val enabled = enabledTombstoneTypes()
             runBackstop(enabled)
             database.syncTombstoneDao().getAll().filter { it.entityType in enabled }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("tombstones", e)
         }
@@ -821,6 +924,8 @@ class SyncDataCollector {
     suspend fun purgeExpiredTombstones() = withContext(Dispatchers.IO) {
         try {
             database.syncTombstoneDao().purgeOlderThan(tombstonePurgeCutoff(System.currentTimeMillis()))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             // Purge is maintenance — a failure must not turn an otherwise successful sync into an error.
             Logger.w(TAG, "Tombstone purge failed: ${e.message}")
@@ -854,6 +959,8 @@ class SyncDataCollector {
                 val rows = liveKeys(type).map { SyncShadow(type, it) }
                 shadowDao.clearType(type)
                 if (rows.isNotEmpty()) shadowDao.putAll(rows)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.w(TAG, "snapshotState failed for type=$type: ${e.message}")
             }
@@ -1019,6 +1126,8 @@ class SyncDataCollector {
                     }
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.w(TAG, "collectSecrets failed: ${e.message}")
         }
@@ -1032,6 +1141,8 @@ class SyncDataCollector {
         return try {
             val connectionsFlow = database.connectionDao().getAllConnections()
             connectionsFlow.first()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("connections", e)
         }
@@ -1044,6 +1155,8 @@ class SyncDataCollector {
         return try {
             val keysFlow = database.keyDao().getAllKeys()
             keysFlow.first()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("keys", e)
         }
@@ -1056,6 +1169,8 @@ class SyncDataCollector {
         return try {
             val themesFlow = database.themeDao().getAllThemes()
             themesFlow.first()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("themes", e)
         }
@@ -1068,6 +1183,8 @@ class SyncDataCollector {
         return try {
             val hostKeysFlow = database.hostKeyDao().getAllHostKeys()
             hostKeysFlow.first()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw SyncCollectException("host keys", e)
         }
@@ -1106,6 +1223,8 @@ class SyncDataCollector {
             prefs["tasker"]         = anyMapToJsonObject(collectTaskerPreferences())
             prefs["logging"]        = anyMapToJsonObject(collectLoggingPreferences())
             prefs["containers"]     = anyMapToJsonObject(collectContainerPreferences())
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to collect preferences", e)
         }
@@ -1364,30 +1483,30 @@ class SyncDataCollector {
             themes            = database.themeDao().getThemeCount(),
             preferences       = collectPreferences().size,
             hostKeys          = database.hostKeyDao().getHostKeyCount(),
-            workspaces        = try { database.workspaceDao().getAll().size } catch (_: Exception) { 0 },
-            snippets          = try { database.snippetDao().getAllSnippets().first().size } catch (_: Exception) { 0 },
-            identities        = try { database.identityDao().getAllIdentitiesList().size } catch (_: Exception) { 0 },
-            groups            = try { database.connectionGroupDao().getAllGroups().first().size } catch (_: Exception) { 0 },
-            hypervisors       = try { database.hypervisorDao().getAllList().size } catch (_: Exception) { 0 },
-            certificates      = try { database.certificateDao().getAllCertificates().first().size } catch (_: Exception) { 0 },
-            macros            = try { database.macroDao().getAllMacrosList().size } catch (_: Exception) { 0 },
-            monitorSlots      = try { database.monitorSlotDao().getAllSlots().first().size } catch (_: Exception) { 0 },
-            hypervisorAccounts= try { database.hypervisorAccountDao().getAllAccountsList().size } catch (_: Exception) { 0 },
-            vncHosts          = try { database.vncHostDao().getAllHostsList().size } catch (_: Exception) { 0 },
-            vncIdentities     = try { database.vncIdentityDao().getAllIdentitiesList().size } catch (_: Exception) { 0 },
-            cloudAccounts     = try { database.cloudAccountDao().getAll().size } catch (_: Exception) { 0 },
-            dashboard         = try { collectDashboardConfig().size } catch (_: Exception) { 0 },
-            portForwards      = try { database.portForwardDao().getAllList().size } catch (_: Exception) { 0 },
-            networkRoutes     = try { database.networkRouteDao().getAllList().size } catch (_: Exception) { 0 },
-            paneGroups        = try { database.paneGroupDao().getAllList().size } catch (_: Exception) { 0 },
-            containerHosts    = try { database.containerHostDao().getAllList().size } catch (_: Exception) { 0 },
-            registryCredentials = try { database.registryCredentialDao().getAllList().size } catch (_: Exception) { 0 },
-            composeStacks     = try { database.composeStackDao().getAllList().size } catch (_: Exception) { 0 },
-            singleContainerConfigs = try { database.singleContainerConfigDao().getAllList().size } catch (_: Exception) { 0 },
-            containerAutoUpdatePolicies = try { database.containerAutoUpdatePolicyDao().getAllList().size } catch (_: Exception) { 0 },
-            telnetHosts       = try { database.telnetHostDao().getAllList().size } catch (_: Exception) { 0 },
-            domains           = try { database.domainDao().getAllList().size } catch (_: Exception) { 0 },
-            vpsHosts          = try { database.vpsHostDao().getAllList().size } catch (_: Exception) { 0 }
+            workspaces        = try { database.workspaceDao().getAll().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            snippets          = try { database.snippetDao().getAllSnippets().first().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            identities        = try { database.identityDao().getAllIdentitiesList().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            groups            = try { database.connectionGroupDao().getAllGroups().first().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            hypervisors       = try { database.hypervisorDao().getAllList().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            certificates      = try { database.certificateDao().getAllCertificates().first().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            macros            = try { database.macroDao().getAllMacrosList().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            monitorSlots      = try { database.monitorSlotDao().getAllSlots().first().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            hypervisorAccounts= try { database.hypervisorAccountDao().getAllAccountsList().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            vncHosts          = try { database.vncHostDao().getAllHostsList().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            vncIdentities     = try { database.vncIdentityDao().getAllIdentitiesList().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            cloudAccounts     = try { database.cloudAccountDao().getAll().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            dashboard         = try { collectDashboardConfig().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            portForwards      = try { database.portForwardDao().getAllList().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            networkRoutes     = try { database.networkRouteDao().getAllList().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            paneGroups        = try { database.paneGroupDao().getAllList().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            containerHosts    = try { database.containerHostDao().getAllList().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            registryCredentials = try { database.registryCredentialDao().getAllList().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            composeStacks     = try { database.composeStackDao().getAllList().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            singleContainerConfigs = try { database.singleContainerConfigDao().getAllList().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            containerAutoUpdatePolicies = try { database.containerAutoUpdatePolicyDao().getAllList().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            telnetHosts       = try { database.telnetHostDao().getAllList().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            domains           = try { database.domainDao().getAllList().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 },
+            vpsHosts          = try { database.vpsHostDao().getAllList().size } catch (e: CancellationException) { throw e } catch (_: Exception) { 0 }
         )
     }
 
@@ -1397,6 +1516,8 @@ class SyncDataCollector {
     suspend fun collectConnection(id: String): ConnectionProfile? {
         return try {
             database.connectionDao().getConnectionById(id)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to collect connection: $id", e)
             null
@@ -1409,6 +1530,8 @@ class SyncDataCollector {
     suspend fun collectKey(id: String): StoredKey? {
         return try {
             database.keyDao().getKeyById(id)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to collect key: $id", e)
             null
@@ -1421,6 +1544,8 @@ class SyncDataCollector {
     suspend fun collectTheme(id: String): ThemeDefinition? {
         return try {
             database.themeDao().getThemeById(id)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to collect theme: $id", e)
             null

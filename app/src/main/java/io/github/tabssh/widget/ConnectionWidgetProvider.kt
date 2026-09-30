@@ -13,6 +13,7 @@ import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.ui.activities.MainActivity
 import io.github.tabssh.ui.activities.TabTerminalActivity
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,9 +31,20 @@ open class ConnectionWidgetProvider : AppWidgetProvider() {
         appWidgetIds: IntArray
     ) {
         Logger.d("Widget", "onUpdate called for ${appWidgetIds.size} widgets")
-        
-        appWidgetIds.forEach { widgetId ->
-            updateWidget(context, appWidgetManager, widgetId)
+
+        // AppWidgetProvider callbacks are broadcasts. A detached coroutine may
+        // be killed as soon as onUpdate returns, leaving stale widget contents;
+        // keep the broadcast alive until the Room reads and RemoteViews updates
+        // have finished.
+        val pendingResult = goAsync()
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            try {
+                appWidgetIds.forEach { widgetId ->
+                    loadAndUpdateWidget(context, appWidgetManager, widgetId)
+                }
+            } finally {
+                pendingResult.finish()
+            }
         }
     }
 
@@ -52,6 +64,16 @@ open class ConnectionWidgetProvider : AppWidgetProvider() {
         private const val PREFS_NAME = "io.github.tabssh.widget"
 
         fun updateWidget(context: Context, appWidgetManager: AppWidgetManager, widgetId: Int) {
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                loadAndUpdateWidget(context, appWidgetManager, widgetId)
+            }
+        }
+
+        private suspend fun loadAndUpdateWidget(
+            context: Context,
+            appWidgetManager: AppWidgetManager,
+            widgetId: Int
+        ) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val connectionId = prefs.getString("connection_id_$widgetId", null)
             
@@ -69,20 +91,20 @@ open class ConnectionWidgetProvider : AppWidgetProvider() {
                 // actually blocked the main thread, but launching on IO
                 // matches every other DAO call in the app and is harder
                 // to misread later.
-                CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-                    try {
-                        val app = context.applicationContext as TabSSHApplication
-                        val connection = app.database.connectionDao().getConnectionById(connectionId)
+                try {
+                    val app = context.applicationContext as TabSSHApplication
+                    val connection = app.database.connectionDao().getConnectionById(connectionId)
 
-                        if (connection != null) {
-                            updateWidgetWithConnection(context, appWidgetManager, widgetId, connection, layoutResId)
-                        } else {
-                            updateWidgetEmpty(context, appWidgetManager, widgetId, layoutResId)
-                        }
-                    } catch (e: Exception) {
-                        Logger.e("Widget", "Failed to load connection", e)
+                    if (connection != null) {
+                        updateWidgetWithConnection(context, appWidgetManager, widgetId, connection, layoutResId)
+                    } else {
                         updateWidgetEmpty(context, appWidgetManager, widgetId, layoutResId)
                     }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Logger.e("Widget", "Failed to load connection", e)
+                    updateWidgetEmpty(context, appWidgetManager, widgetId, layoutResId)
                 }
             } else {
                 updateWidgetEmpty(context, appWidgetManager, widgetId, layoutResId)

@@ -143,6 +143,7 @@ import io.github.tabssh.utils.ClipboardHelper
 import io.github.tabssh.utils.NotificationHelper
 import io.github.tabssh.utils.TerminalLinkClassifier
 import io.github.tabssh.utils.RecordingActions
+import io.github.tabssh.utils.ShellCommandEscaper
 import io.github.tabssh.utils.VideoRecordingStorage
 import java.util.Collections
 import java.util.UUID
@@ -1558,7 +1559,7 @@ class TabTerminalActivity : TabSSHActivity() {
             .setPositiveButton(R.string.container_option_open) { _, _ ->
                 openUrl(url)
             }
-            .setNeutralButton(R.string.copy) { _, _ ->
+            .setNeutralButton(R.string.copy_button) { _, _ ->
                 copyToClipboard("URL", url)
             }
             .setNegativeButton(R.string.cancel, null)
@@ -1579,7 +1580,7 @@ class TabTerminalActivity : TabSSHActivity() {
             .setPositiveButton(R.string.connect_button) { _, _ ->
                 connectSshLink(action)
             }
-            .setNeutralButton(R.string.copy) { _, _ ->
+            .setNeutralButton(R.string.copy_button) { _, _ ->
                 copyToClipboard(getString(R.string.terminal_clip_label_ssh_link), action.url)
             }
             .setNegativeButton(R.string.cancel, null)
@@ -1625,7 +1626,7 @@ class TabTerminalActivity : TabSSHActivity() {
             .setPositiveButton(R.string.connect_button) { _, _ ->
                 connectSftpLink(action)
             }
-            .setNeutralButton(R.string.copy) { _, _ ->
+            .setNeutralButton(R.string.copy_button) { _, _ ->
                 copyToClipboard(getString(R.string.terminal_clip_label_sftp_link), action.url)
             }
             .setNegativeButton(R.string.cancel, null)
@@ -1761,7 +1762,7 @@ class TabTerminalActivity : TabSSHActivity() {
         val builder = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_open_link_title)
             .setMessage(message)
-            .setNeutralButton(R.string.copy) { _, _ ->
+            .setNeutralButton(R.string.copy_button) { _, _ ->
                 copyToClipboard("URL", url)
             }
             .setNegativeButton(R.string.cancel, null)
@@ -2166,7 +2167,7 @@ class TabTerminalActivity : TabSSHActivity() {
         val callback = object : ActionMode.Callback {
             override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
                 mode.title = null
-                menu.add(0, 1, 0, getString(R.string.copy))
+                menu.add(0, 1, 0, getString(R.string.copy_button))
                     .setIcon(android.R.drawable.ic_menu_set_as)
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
                 menu.add(0, 2, 1, getString(R.string.select_all))
@@ -4446,7 +4447,7 @@ class TabTerminalActivity : TabSSHActivity() {
             }
 
         if (!workingDir.isNullOrBlank()) {
-            val cdCommand = "cd -- ${'"'}$workingDir${'"'}"
+            val cdCommand = "cd -- ${ShellCommandEscaper.quotePosixArgument(workingDir)}"
             profile = profile.copy(
                 postConnectScript = listOfNotNull(profile.postConnectScript, cdCommand)
                     .joinToString("\n")
@@ -5154,6 +5155,7 @@ class TabTerminalActivity : TabSSHActivity() {
      */
     private fun beginCastOnlyRecording(tab: Tab.Ssh) {
         startCastWriter(tab)
+
         recordingTabId = tab.tabId
         Toast.makeText(this, getString(R.string.video_recording_started), Toast.LENGTH_SHORT).show()
     }

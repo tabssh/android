@@ -147,12 +147,26 @@ class SyncEncryptorTest {
 
     @Test
     fun absurdMemoryCost_isRejectedRatherThanAttempted() {
-        // A corrupt header must not be allowed to ask for gigabytes of RAM.
+        // A corrupt header must not be allowed to request excessive Android heap.
         val blob = encryptor.encrypt("payload".toByteArray(), "pw123456").copyOf()
         blob[15] = 0x7F
         blob[16] = 0xFF.toByte()
         blob[17] = 0xFF.toByte()
         blob[18] = 0xFF.toByte()
+
+        assertFailsWith<SyncEncryptionException> {
+            encryptor.decrypt(blob, "pw123456")
+        }
+    }
+
+    @Test
+    fun excessiveIterationCount_isRejectedRatherThanAttempted() {
+        val blob = encryptor.encrypt("payload".toByteArray(), "pw123456").copyOf()
+        val excessive = SyncEncryptor.ITERATIONS_MAX + 1
+        blob[19] = (excessive ushr 24).toByte()
+        blob[20] = (excessive ushr 16).toByte()
+        blob[21] = (excessive ushr 8).toByte()
+        blob[22] = excessive.toByte()
 
         assertFailsWith<SyncEncryptionException> {
             encryptor.decrypt(blob, "pw123456")
@@ -200,6 +214,20 @@ class SyncEncryptorTest {
         }
         assertFailsWith<IllegalArgumentException> {
             SyncEncryptor.Argon2Params(memoryKib = 1024, iterations = 3, parallelism = 0)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SyncEncryptor.Argon2Params(
+                memoryKib = SyncEncryptor.MEMORY_MAX_KIB + 1,
+                iterations = 3,
+                parallelism = 1
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SyncEncryptor.Argon2Params(
+                memoryKib = 1024,
+                iterations = SyncEncryptor.ITERATIONS_MAX + 1,
+                parallelism = 1
+            )
         }
     }
 

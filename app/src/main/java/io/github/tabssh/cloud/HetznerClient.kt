@@ -158,7 +158,7 @@ class HetznerClient : CloudProvider {
                 }
                 throw IllegalStateException("Hetzner API HTTP ${resp.code}: ${resp.message}")
             }
-            resp.body?.string().orEmpty()
+            readCloudResponseBody(resp.body)
         }
         return JSONObject(body)
     }

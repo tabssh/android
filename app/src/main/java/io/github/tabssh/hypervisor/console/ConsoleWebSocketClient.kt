@@ -21,22 +21,10 @@ class ConsoleWebSocketClient(
     private val verifySsl: Boolean = false,
     private val protocol: ConsoleProtocol = ConsoleProtocol.PROXMOX_TERM,
     private val pinnedCertSha256: String? = null,
-    /** Display-only — used by the cert-prompt dialogs to show
-     *  "Server: $host:$port" in the body text. The actual WS URL
-     *  passed to connect() is the source of truth for routing. */
+    /** Legacy display metadata; the WebSocket URL is the routing source of truth. */
     private val displayHost: String = "",
     private val displayPort: Int = 0,
-    /**
-     * Invoked synchronously, on the handshake thread, the instant
-     * [capturedPin] receives a new SHA-256 — TOFU accept, silent
-     * system-CA accept, or an explicit user ACCEPT_AND_PIN on a changed
-     * cert. Callers use this to persist [getCapturedCertSha256] to the DB
-     * right away instead of only reading it after [connect] succeeds —
-     * a console WebSocket that disconnects/errors right after the
-     * handshake (a common console-viewer failure mode) used to make an
-     * already-confirmed pin vanish, forcing the same TOFU/mismatch prompt
-     * on every subsequent console open. See [io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust].
-     */
+    /** Legacy compatibility callback; certificate pins are no longer captured. */
     private val onPinCaptured: (() -> Unit)? = null
 ) {
     companion object {
@@ -237,8 +225,7 @@ class ConsoleWebSocketClient(
         try { webSocket?.close(1011, "inbound pipe overflow") } catch (_: Exception) {}
     }
 
-    /** Phase 1 TLS pin holder — caller reads via getCapturedCertSha256
-     *  after a successful connect to persist a TOFU capture. */
+    /** Legacy compatibility holder; no TLS pin is captured. */
     private val capturedPin = io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.CapturedPin()
     fun getCapturedCertSha256(): String? = capturedPin.sha256
 

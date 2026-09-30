@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import io.github.tabssh.sync.encryption.SyncEncryptor
 import io.github.tabssh.sync.models.SyncDataPackage
+import io.github.tabssh.utils.BoundedTextReader
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -13,6 +14,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
@@ -45,6 +47,8 @@ class SAFSyncManager(private val context: Context) {
         // here until the remote write completes, and a truncated remote file is
         // rewritten from it on the next download.
         private const val PENDING_UPLOAD_FILE = "sync_upload_pending.dat"
+        private const val MAX_SYNC_FILE_BYTES = 64 * 1024 * 1024
+        private const val MAX_SYNC_PLAINTEXT_BYTES = 128 * 1024 * 1024
     }
 
     private val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -277,6 +281,9 @@ class SAFSyncManager(private val context: Context) {
             // Encrypt
             Logger.d(TAG, "upload: starting AES-GCM encrypt (Argon2id key derivation)")
             val encrypted = encryptor.encrypt(compressed, password)
+            if (encrypted.size > MAX_SYNC_FILE_BYTES) {
+                throw IOException("Sync data exceeds the supported file size limit")
+            }
             Logger.d(TAG, "upload: encrypted to ${encrypted.size} bytes")
 
             // Journal the payload locally first: "wt" truncates the remote file
@@ -346,7 +353,7 @@ class SAFSyncManager(private val context: Context) {
         try {
             // Read from URI
             val encrypted = context.contentResolver.openInputStream(uri)?.use { input ->
-                input.readBytes()
+                BoundedTextReader.readBytes(input, MAX_SYNC_FILE_BYTES)
             } ?: throw Exception("Could not open input stream")
 
             Logger.d(TAG, "Read ${encrypted.size} bytes from sync file")
@@ -441,7 +448,9 @@ class SAFSyncManager(private val context: Context) {
         val pending = pendingUploadFile()
         if (!pending.exists()) return null
         return try {
-            val bytes = pending.readBytes()
+            val bytes = pending.inputStream().use {
+                BoundedTextReader.readBytes(it, MAX_SYNC_FILE_BYTES)
+            }
             val compressed = encryptor.decrypt(bytes, password)
             context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
                 output.write(bytes)
@@ -463,11 +472,15 @@ class SAFSyncManager(private val context: Context) {
      */
     suspend fun verifyPassword(uri: Uri, password: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            val bytes = context.contentResolver.openInputStream(uri)?.use {
+                BoundedTextReader.readBytes(it, MAX_SYNC_FILE_BYTES)
+            }
                 ?: return@withContext false
             if (bytes.isEmpty()) return@withContext true
             encryptor.decrypt(bytes, password)
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.w(TAG, "Password verification failed", e)
             false
@@ -554,7 +567,9 @@ class SAFSyncManager(private val context: Context) {
     }
 
     private fun decompress(data: ByteArray): ByteArray {
-        return GZIPInputStream(data.inputStream()).use { it.readBytes() }
+        return GZIPInputStream(data.inputStream()).use {
+            BoundedTextReader.readBytes(it, MAX_SYNC_PLAINTEXT_BYTES)
+        }
     }
 }
 

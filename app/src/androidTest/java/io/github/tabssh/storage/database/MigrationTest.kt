@@ -11,8 +11,8 @@ import org.junit.Assert.assertTrue
 /**
  * Room migration tests for TabSSHDatabase.
  *
- * Coverage: v3 → v4 → v5 → v6, plus v8 → v9 (all schema JSONs present in
- * app/schemas/).
+ * Coverage: focused row-preservation checks for older migrations plus the
+ * complete v3 → current-schema chain.
  *
  * Each single-step test verifies that the migration SQL runs without
  * error and that Room's schema validator agrees the resulting DB
@@ -201,21 +201,39 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
-    // Full chain v3 → v10 — exercises every migration in sequence
+    // Full chain v3 → current schema — exercises every migration in sequence
     // -------------------------------------------------------------------------
 
     @Test
-    fun migrateChain3To10() {
+    fun migrateChain3ToCurrent() {
         helper.createDatabase(testDbName, 3).close()
         helper.runMigrationsAndValidate(
-            testDbName, 10, true,
+            testDbName, 28, true,
             TabSSHDatabase.MIGRATION_3_4,
             TabSSHDatabase.MIGRATION_4_5,
             TabSSHDatabase.MIGRATION_5_6,
             TabSSHDatabase.MIGRATION_6_7,
             TabSSHDatabase.MIGRATION_7_8,
             TabSSHDatabase.MIGRATION_8_9,
-            TabSSHDatabase.MIGRATION_9_10
+            TabSSHDatabase.MIGRATION_9_10,
+            TabSSHDatabase.MIGRATION_10_11,
+            TabSSHDatabase.MIGRATION_11_12,
+            TabSSHDatabase.MIGRATION_12_13,
+            TabSSHDatabase.MIGRATION_13_14,
+            TabSSHDatabase.MIGRATION_14_15,
+            TabSSHDatabase.MIGRATION_15_16,
+            TabSSHDatabase.MIGRATION_16_17,
+            TabSSHDatabase.MIGRATION_17_18,
+            TabSSHDatabase.MIGRATION_18_19,
+            TabSSHDatabase.MIGRATION_19_20,
+            TabSSHDatabase.MIGRATION_20_21,
+            TabSSHDatabase.MIGRATION_21_22,
+            TabSSHDatabase.MIGRATION_22_23,
+            TabSSHDatabase.MIGRATION_23_24,
+            TabSSHDatabase.MIGRATION_24_25,
+            TabSSHDatabase.MIGRATION_25_26,
+            TabSSHDatabase.MIGRATION_26_27,
+            TabSSHDatabase.MIGRATION_27_28
         ).close()
     }
 }

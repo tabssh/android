@@ -37,7 +37,7 @@
     <string name="show_keyboard">⌨️ Tastatur anzeigen</string>
     <string name="hide_keyboard">⌨️ Tastatur ausblenden</string>
     <string name="paste">📋 Einfügen</string>
-    <string name="copy">📋 Kopieren</string>
+    <string name="copy_button">📋 Kopieren</string>
     <string name="select_all">🔲 Alles auswählen</string>
     <string name="open_files">📁 Dateien</string>
 

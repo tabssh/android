@@ -87,13 +87,9 @@ data class VirtViewerConnection(
     val effectivePort: Int get() = if (port != 0) port else tlsPort
 
     /**
-     * Build [SpiceConnectionParams] for `SpiceClient`.
-     *
-     * `tlsVerify` is true whenever a [caCert] was supplied — that CA is the
-     * whole reason the hypervisor put it in the descriptor, and ignoring it
-     * would silently downgrade a chain we can validate. Without a CA there
-     * is nothing to validate a self-signed hypervisor certificate against,
-     * so verification is left off rather than failing every connection.
+     * Build [SpiceConnectionParams] for `SpiceClient`. TLS stays enabled,
+     * but certificate validation is skipped because infrastructure
+     * certificates can rotate and this descriptor has no SSH host key.
      *
      * Throws [IllegalArgumentException] when [type] is not
      * [VirtViewerType.SPICE] — a VNC descriptor must go down the RFB path.
@@ -107,7 +103,7 @@ data class VirtViewerConnection(
             password = password ?: "",
             caCert = caCert?.toByteArray(Charsets.US_ASCII),
             hostSubject = hostSubject,
-            tlsVerify = caCert != null,
+            tlsVerify = false,
         )
     }
 

@@ -84,6 +84,9 @@ class SFTPManager(private val sshConnection: SSHConnection) {
         /** Transfers allowed to hold a dedicated SFTP channel simultaneously. */
         private const val MAX_CONCURRENT_TRANSFERS = 3
 
+        /** Prevent a hostile server directory tree from exhausting the call stack. */
+        private const val MAX_DIRECTORY_DEPTH = 128
+
         /**
          * Decide how many bytes of [sourceSize] already exist at the destination
          * and may therefore be skipped.
@@ -110,6 +113,13 @@ class SFTPManager(private val sshConnection: SSHConnection) {
             if (destinationSize >= sourceSize) return 0L
             return destinationSize
         }
+    }
+
+    /** True only for a strict descendant, including when root is `/`. */
+    private fun isStrictDescendant(root: File, candidate: File): Boolean {
+        val rootPath = root.path
+        val prefix = if (rootPath.endsWith(File.separator)) rootPath else rootPath + File.separator
+        return candidate.path.startsWith(prefix)
     }
 
     init {
@@ -366,7 +376,16 @@ class SFTPManager(private val sshConnection: SSHConnection) {
                 return@withContext
             }
 
-            uploadDirectoryContents(channel, localDir, remoteDir, task)
+            val localRoot = localDir.canonicalFile
+            uploadDirectoryContents(
+                channel,
+                localDir,
+                remoteDir,
+                task,
+                localRoot,
+                mutableSetOf(localRoot.path),
+                depth = 0
+            )
 
             if (task.isCancelled()) {
                 task.complete(TransferResult.Cancelled)
@@ -419,8 +438,14 @@ class SFTPManager(private val sshConnection: SSHConnection) {
         channel: ChannelSftp,
         localDir: File,
         remoteDir: String,
-        task: TransferTask
+        task: TransferTask,
+        localRoot: File,
+        visitedDirectories: MutableSet<String>,
+        depth: Int
     ) {
+        if (depth >= MAX_DIRECTORY_DEPTH) {
+            throw IOException("Local directory tree exceeds the supported depth")
+        }
         try {
             channel.mkdir(remoteDir)
         } catch (e: SftpException) {
@@ -436,6 +461,11 @@ class SFTPManager(private val sshConnection: SSHConnection) {
         for (child in children) {
             if (task.isCancelled()) return
 
+            val canonicalChild = child.canonicalFile
+            if (!isStrictDescendant(localRoot, canonicalChild)) {
+                throw IOException("Local directory entry escapes the selected upload directory")
+            }
+
             val remoteChildPath = if (remoteDir.endsWith("/")) {
                 "$remoteDir${child.name}"
             } else {
@@ -443,7 +473,20 @@ class SFTPManager(private val sshConnection: SSHConnection) {
             }
 
             if (child.isDirectory) {
-                uploadDirectoryContents(channel, child, remoteChildPath, task)
+                // A symlink can point to an ancestor or an already visited
+                // directory. Skip repeated canonical targets to avoid cycles
+                // and duplicate uploads.
+                if (visitedDirectories.add(canonicalChild.path)) {
+                    uploadDirectoryContents(
+                        channel,
+                        child,
+                        remoteChildPath,
+                        task,
+                        localRoot,
+                        visitedDirectories,
+                        depth + 1
+                    )
+                }
                 continue
             }
 
@@ -554,7 +597,11 @@ class SFTPManager(private val sshConnection: SSHConnection) {
      * entry with an unsafe name (same rule as [listRemoteFiles]). Assumes
      * the caller already holds [channelMutex] (via [withChannel]).
      */
-    private fun remoteDirectorySize(channel: ChannelSftp, remoteDir: String): Long {
+    private fun remoteDirectorySize(channel: ChannelSftp, remoteDir: String, depth: Int = 0): Long {
+        if (depth >= MAX_DIRECTORY_DEPTH) {
+            Logger.w("SFTPManager", "Directory size walk reached the maximum depth")
+            return 0L
+        }
         val entries = try {
             @Suppress("UNCHECKED_CAST")
             channel.ls(remoteDir) as Vector<ChannelSftp.LsEntry>
@@ -565,10 +612,10 @@ class SFTPManager(private val sshConnection: SSHConnection) {
 
         var total = 0L
         for (entry in entries) {
-            if (!isSafeRemoteName(entry.filename)) continue
+            if (!isSafeRemoteName(entry.filename) || entry.attrs.isLink) continue
             val childPath = if (remoteDir.endsWith("/")) "$remoteDir${entry.filename}" else "$remoteDir/${entry.filename}"
             total += if (entry.attrs.isDir) {
-                remoteDirectorySize(channel, childPath)
+                remoteDirectorySize(channel, childPath, depth + 1)
             } else {
                 entry.attrs.size
             }
@@ -592,7 +639,14 @@ class SFTPManager(private val sshConnection: SSHConnection) {
         try {
             task.updateState(TransferState.ACTIVE)
 
-            downloadDirectoryContents(channel, remoteDir, localDir, task)
+            downloadDirectoryContents(
+                channel,
+                remoteDir,
+                localDir,
+                localDir.canonicalFile,
+                task,
+                depth = 0
+            )
 
             if (task.isCancelled()) {
                 task.complete(TransferResult.Cancelled)
@@ -643,8 +697,16 @@ class SFTPManager(private val sshConnection: SSHConnection) {
         channel: ChannelSftp,
         remoteDir: String,
         localDir: File,
-        task: TransferTask
+        localRoot: File,
+        task: TransferTask,
+        depth: Int
     ) {
+        if (depth >= MAX_DIRECTORY_DEPTH) {
+            throw IOException("Remote directory tree exceeds the supported depth")
+        }
+        if (localDir.canonicalFile != localRoot && !isStrictDescendant(localRoot, localDir.canonicalFile)) {
+            throw IOException("Remote directory entry escapes the selected local directory")
+        }
         if (!localDir.exists() && !localDir.mkdirs()) {
             throw IOException("Failed to create local directory: ${localDir.absolutePath}")
         }
@@ -652,7 +714,7 @@ class SFTPManager(private val sshConnection: SSHConnection) {
         @Suppress("UNCHECKED_CAST")
         val entries = channel.ls(remoteDir) as Vector<ChannelSftp.LsEntry>
         val children = entries
-            .filter { isSafeRemoteName(it.filename) }
+            .filter { isSafeRemoteName(it.filename) && !it.attrs.isLink }
             .sortedWith(compareBy<ChannelSftp.LsEntry> { !it.attrs.isDir }.thenBy { it.filename.lowercase() })
 
         for (entry in children) {
@@ -662,8 +724,19 @@ class SFTPManager(private val sshConnection: SSHConnection) {
             val childLocalFile = File(localDir, entry.filename)
 
             if (entry.attrs.isDir) {
-                downloadDirectoryContents(channel, childRemotePath, childLocalFile, task)
+                downloadDirectoryContents(
+                    channel,
+                    childRemotePath,
+                    childLocalFile,
+                    localRoot,
+                    task,
+                    depth + 1
+                )
                 continue
+            }
+
+            if (!isStrictDescendant(localRoot, childLocalFile.canonicalFile)) {
+                throw IOException("Remote file entry escapes the selected local directory")
             }
 
             channel.get(childRemotePath).use { inputStream ->

@@ -37,6 +37,7 @@ import io.github.tabssh.storage.database.entities.VpsHost
 import io.github.tabssh.storage.database.entities.Workspace
 import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -162,6 +163,7 @@ class BackupImporter(
         // Preference files and Keystore secrets live outside the database, so
         // they are applied only after the transaction has committed — secrets
         // last so every row they reference already exists.
+        if (replaceMode) clearSharedPreferencesForReplace(backupData)
         backupData[BackupExporter.FILE_PREFERENCES]?.let {
             restorePreferences(it); out["preferences"] = 1
             Logger.d(TAG, "Restored preferences")
@@ -358,20 +360,24 @@ class BackupImporter(
         if (backupData.containsKey(BackupExporter.FILE_CONTAINER_AUTO_UPDATE_POLICIES)) {
             database.containerAutoUpdatePolicyDao().getAllList().forEach { database.containerAutoUpdatePolicyDao().delete(it) }
         }
-        if (backupData.containsKey(BackupExporter.FILE_DASHBOARD)) {
-            context.getSharedPreferences("multi_host_dashboard", android.content.Context.MODE_PRIVATE).edit().clear().apply()
-        }
-        if (backupData.containsKey(BackupExporter.FILE_PREFS_TABSSH)) {
-            context.getSharedPreferences("TabSSH", android.content.Context.MODE_PRIVATE).edit().clear().apply()
-        }
-        if (backupData.containsKey(BackupExporter.FILE_PREFS_CLUSTER_COMMANDS)) {
-            context.getSharedPreferences("cluster_commands", android.content.Context.MODE_PRIVATE).edit().clear().apply()
-        }
-        if (backupData.containsKey(BackupExporter.FILE_PREFS_SNIPPET_VAR_RECALL)) {
-            context.getSharedPreferences("snippet_var_recall", android.content.Context.MODE_PRIVATE).edit().clear().apply()
-        }
         if (backupData.containsKey(BackupExporter.FILE_TAB_SESSIONS)) database.tabSessionDao().deleteAllSessions()
         if (backupData.containsKey(BackupExporter.FILE_AUDIT_LOG)) database.auditLogDao().deleteAll()
+    }
+
+    /** SharedPreferences are outside Room's transaction; clear them only after the database restore commits. */
+    private fun clearSharedPreferencesForReplace(backupData: Map<String, String>) {
+        val files = listOf(
+            BackupExporter.FILE_DASHBOARD to "multi_host_dashboard",
+            BackupExporter.FILE_PREFS_TABSSH to "TabSSH",
+            BackupExporter.FILE_PREFS_CLUSTER_COMMANDS to "cluster_commands",
+            BackupExporter.FILE_PREFS_SNIPPET_VAR_RECALL to "snippet_var_recall"
+        )
+        files.forEach { (backupKey, prefsName) ->
+            if (backupData.containsKey(backupKey)) {
+                context.getSharedPreferences(prefsName, android.content.Context.MODE_PRIVATE)
+                    .edit().clear().apply()
+            }
+        }
     }
 
     // ── Connections ──────────────────────────────────────────────────────────
@@ -745,6 +751,8 @@ class BackupImporter(
         for (item in list) {
             try {
                 if (applyOne(item)) count++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 // Collected, not swallowed: the failure reaches the caller's
                 // RestoreOutcome so the restore is never reported as an
@@ -800,6 +808,8 @@ class BackupImporter(
                             SecurePasswordManager.StorageLevel.ENCRYPTED)
                         Logger.d(TAG, "Restored secret alias: $alias")
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Logger.w(TAG, "Failed to restore secret $alias: ${e.message}")
                 }
@@ -817,6 +827,8 @@ class BackupImporter(
                             val bytes = android.util.Base64.decode(b64, android.util.Base64.NO_WRAP)
                             ks.importKeyFromBackup(keyId, bytes)
                             Logger.d(TAG, "Restored SSH key: $keyId")
+                        } catch (e: CancellationException) {
+                            throw e
                         } catch (e: Exception) {
                             Logger.w(TAG, "Failed to restore SSH key $keyId: ${e.message}")
                         }
@@ -825,6 +837,8 @@ class BackupImporter(
             } else {
                 Logger.w(TAG, "KeyStorage unavailable — SSH key bytes not restored")
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.w(TAG, "Failed to parse secrets file: ${e.message}")
         }
@@ -1055,6 +1069,8 @@ class BackupImporter(
             }
             editor.apply()
             count
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.w(TAG, "Failed to restore dashboard config: ${e.message}")
             0
@@ -1081,6 +1097,8 @@ class BackupImporter(
             }
             editor.apply()
             count
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.w(TAG, "Failed to restore SharedPreferences '$prefsName': ${e.message}")
             0

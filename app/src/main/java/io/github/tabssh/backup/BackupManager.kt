@@ -12,12 +12,15 @@ import io.github.tabssh.crypto.storage.SecurePasswordManager
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.preferences.PreferenceManager
 import io.github.tabssh.sync.encryption.SyncEncryptor
+import io.github.tabssh.utils.BoundedTextReader
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.text.SimpleDateFormat
@@ -131,6 +134,15 @@ class BackupManager(private val context: Context) {
 
         private const val TAG = "BackupManager"
 
+        // SAF files and ZIP entries are untrusted input. Bound both the
+        // compressed archive and its expanded contents to prevent oversized
+        // files and ZIP bombs from exhausting the Android process heap.
+        private const val MAX_BACKUP_FILE_BYTES = 64 * 1024 * 1024
+        private const val MAX_BACKUP_EXPANDED_BYTES = 128 * 1024 * 1024
+        private const val MAX_BACKUP_ENTRY_BYTES = 64 * 1024 * 1024
+        private const val MAX_BACKUP_MANIFEST_BYTES = 1024 * 1024
+        private const val MAX_BACKUP_ENTRIES = 256
+
         /** True when [data] starts with the [SyncEncryptor] magic header. */
         internal fun isSyncEncrypted(data: ByteArray): Boolean =
             data.size >= ENCRYPTED_MAGIC.length &&
@@ -205,11 +217,29 @@ class BackupManager(private val context: Context) {
         internal fun readBackupZip(input: InputStream): Pair<String?, Map<String, ByteArray>> {
             var manifest: String? = null
             val entries = linkedMapOf<String, ByteArray>()
+            var expandedBytes = 0L
+            var entryCount = 0
             val zip = ZipInputStream(input)
             var entry: ZipEntry? = zip.nextEntry
             while (entry != null) {
-                if (!entry.isDirectory) {
-                    val bytes = zip.readBytes()
+                if (++entryCount > MAX_BACKUP_ENTRIES) {
+                    throw IOException("Backup contains too many entries")
+                }
+                if (entry.isDirectory) {
+                    if (zip.read() != -1) {
+                        throw IOException("Backup directory entry contains unexpected data")
+                    }
+                } else {
+                    val limit = if (entry.name == MANIFEST_ENTRY) {
+                        MAX_BACKUP_MANIFEST_BYTES
+                    } else {
+                        MAX_BACKUP_ENTRY_BYTES
+                    }
+                    val bytes = BoundedTextReader.readBytes(zip, limit)
+                    expandedBytes += bytes.size
+                    if (expandedBytes > MAX_BACKUP_EXPANDED_BYTES) {
+                        throw IOException("Backup expands beyond the supported size limit")
+                    }
                     if (entry.name == MANIFEST_ENTRY) manifest = String(bytes, Charsets.UTF_8)
                     else entries[entry.name] = bytes
                 }
@@ -222,9 +252,31 @@ class BackupManager(private val context: Context) {
         /** Read only the manifest entry, stopping as soon as it has been seen. */
         internal fun readManifestOnly(input: InputStream): String? {
             val zip = ZipInputStream(input)
+            var expandedBytes = 0L
+            var entryCount = 0
             var entry: ZipEntry? = zip.nextEntry
             while (entry != null) {
-                if (entry.name == MANIFEST_ENTRY) return String(zip.readBytes(), Charsets.UTF_8)
+                if (++entryCount > MAX_BACKUP_ENTRIES) {
+                    throw IOException("Backup contains too many entries")
+                }
+                if (entry.name == MANIFEST_ENTRY) {
+                    val bytes = BoundedTextReader.readBytes(zip, MAX_BACKUP_MANIFEST_BYTES)
+                    if (expandedBytes + bytes.size > MAX_BACKUP_EXPANDED_BYTES) {
+                        throw IOException("Backup expands beyond the supported size limit")
+                    }
+                    return bytes.toString(Charsets.UTF_8)
+                }
+                if (entry.isDirectory) {
+                    if (zip.read() != -1) {
+                        throw IOException("Backup directory entry contains unexpected data")
+                    }
+                } else {
+                    val bytes = BoundedTextReader.readBytes(zip, MAX_BACKUP_ENTRY_BYTES)
+                    expandedBytes += bytes.size
+                    if (expandedBytes > MAX_BACKUP_EXPANDED_BYTES) {
+                        throw IOException("Backup expands beyond the supported size limit")
+                    }
+                }
                 zip.closeEntry()
                 entry = zip.nextEntry
             }
@@ -312,6 +364,8 @@ class BackupManager(private val context: Context) {
                 metadata = metadata,
                 filePath = outputUri.path
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to create backup", e)
             return@withContext BackupResult(
@@ -328,7 +382,9 @@ class BackupManager(private val context: Context) {
      */
     suspend fun validateBackup(inputUri: Uri): BackupResult = withContext(Dispatchers.IO) {
         try {
-            val allBytes = context.contentResolver.openInputStream(inputUri)?.use { it.readBytes() }
+            val allBytes = context.contentResolver.openInputStream(inputUri)?.use {
+                BoundedTextReader.readBytes(it, MAX_BACKUP_FILE_BYTES)
+            }
                 ?: return@withContext BackupResult(false, "Unable to open the backup file")
             when (sniffFormat(allBytes)) {
                 BackupFileFormat.ZIP -> {
@@ -354,6 +410,8 @@ class BackupManager(private val context: Context) {
                 BackupFileFormat.UNKNOWN ->
                     BackupResult(false, "Not a TabSSH backup file")
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             BackupResult(false, "Invalid backup: ${e.message}")
         }
@@ -380,7 +438,9 @@ class BackupManager(private val context: Context) {
         try {
             Logger.i(TAG, "Starting restore...")
 
-            val allBytes = context.contentResolver.openInputStream(inputUri)?.use { it.readBytes() }
+            val allBytes = context.contentResolver.openInputStream(inputUri)?.use {
+                BoundedTextReader.readBytes(it, MAX_BACKUP_FILE_BYTES)
+            }
                 ?: return@withContext RestoreResult(
                     success = false,
                     message = "Unable to open the backup file"
@@ -486,6 +546,8 @@ class BackupManager(private val context: Context) {
                 restoredItems = outcome.restoredItems,
                 errors = outcome.errors
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to restore backup", e)
             return@withContext RestoreResult(

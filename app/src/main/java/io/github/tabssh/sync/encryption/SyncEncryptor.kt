@@ -132,14 +132,17 @@ class SyncEncryptor(
             parallelism = ARGON2_PARALLELISM
         )
 
-        // Guard bands for header-declared cost parameters. The upper bounds
-        // stop a corrupt header from exhausting the heap or running for
-        // minutes; the lower bounds reject values Argon2id will not accept.
-        // 1 GiB is far past anything an Android device should attempt.
+        // Guard bands for header-declared cost parameters. These headers are
+        // untrusted input when restoring a backup or sync file, so the limits
+        // must remain usable on low-memory Android devices and must bound CPU
+        // work as well as reject malformed values. Current production writes
+        // use 64 MiB / 3 passes; 128 MiB / 10 passes leaves room for stronger
+        // future archives without letting one imported file request gigabytes
+        // of heap or thousands of seconds of derivation.
         const val MEMORY_MIN_KIB = 8
-        const val MEMORY_MAX_KIB = 1024 * 1024
+        const val MEMORY_MAX_KIB = 128 * 1024
         const val ITERATIONS_MIN = 1
-        const val ITERATIONS_MAX = 64
+        const val ITERATIONS_MAX = 10
         const val PARALLELISM_MIN = 1
         const val PARALLELISM_MAX = 16
 

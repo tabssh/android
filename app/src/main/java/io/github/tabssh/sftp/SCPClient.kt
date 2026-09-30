@@ -3,11 +3,13 @@ package io.github.tabssh.sftp
 import com.jcraft.jsch.ChannelExec
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.utils.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
+import java.io.IOException
 
 /**
  * Wave 1.9 — SCP (rcp-style) device → server upload.
@@ -31,6 +33,7 @@ class SCPClient(private val sshConnection: SSHConnection) {
         private const val TAG = "SCPClient"
         // Per-chunk buffer when streaming.
         private const val BUFFER_SIZE = 64 * 1024
+        private const val MAX_DIRECTORY_DEPTH = 128
 
         /**
          * Parent directory of a remote POSIX path, for use as the `scp -t`
@@ -126,8 +129,7 @@ class SCPClient(private val sshConnection: SSHConnection) {
             // names outright rather than silently truncating.
             val mode = "0644"
             val name = File(remotePath).name
-            if (name.isEmpty() || name == "." || name == ".." ||
-                name.contains('/') || name.any { it.code < 0x20 }) {
+            if (!isSafeScpName(name)) {
                 Logger.e(TAG, "SCP refused unsafe remote filename")
                 task.complete(TransferResult.Error("Unsafe remote filename"))
                 return@withContext false
@@ -175,6 +177,9 @@ class SCPClient(private val sshConnection: SSHConnection) {
             task.complete(TransferResult.Success)
             Logger.i(TAG, "SCP upload complete: ${localFile.name} → $remotePath")
             true
+        } catch (e: CancellationException) {
+            task.complete(TransferResult.Cancelled)
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "SCP upload failed", e)
             task.complete(TransferResult.Error(e.message ?: "SCP error"))
@@ -238,6 +243,10 @@ class SCPClient(private val sshConnection: SSHConnection) {
             // single FILE named photos holding b.jpg's bytes.
             val remoteParent = scpParentPath(remoteDir)
             val remoteName = scpBaseName(remoteDir)
+            if (!isSafeScpName(remoteName)) {
+                task.complete(TransferResult.Error("Unsafe remote directory name"))
+                return@withContext false
+            }
             val cmd = "scp -t -r " + shellEscape(remoteParent)
             channel = session.openChannel("exec") as ChannelExec
             channel.setCommand(cmd)
@@ -261,7 +270,22 @@ class SCPClient(private val sshConnection: SSHConnection) {
                 return@withContext false
             }
 
-            uploadDirectoryContents(localDir, out, inStream, task)
+            val localRoot = localDir.canonicalFile
+            val uploaded = uploadDirectoryContents(
+                localDir,
+                out,
+                inStream,
+                task,
+                localRoot,
+                mutableSetOf(localRoot.path),
+                depth = 0
+            )
+
+            if (!uploaded || task.isCancelled()) {
+                task.complete(TransferResult.Cancelled)
+                Logger.i(TAG, "SCP directory upload cancelled: ${localDir.name}")
+                return@withContext false
+            }
 
             if (!task.isCancelled()) {
                 out.write("E\n".toByteArray(Charsets.UTF_8))
@@ -280,6 +304,9 @@ class SCPClient(private val sshConnection: SSHConnection) {
             task.complete(TransferResult.Success)
             Logger.i(TAG, "SCP directory upload complete: ${localDir.name} → $remoteDir")
             true
+        } catch (e: CancellationException) {
+            task.complete(TransferResult.Cancelled)
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "SCP directory upload failed", e)
             task.complete(TransferResult.Error(e.message ?: "SCP error"))
@@ -303,20 +330,30 @@ class SCPClient(private val sshConnection: SSHConnection) {
         localDir: File,
         out: OutputStream,
         inStream: InputStream,
-        task: TransferTask
-    ) {
+        task: TransferTask,
+        localRoot: File,
+        visitedDirectories: MutableSet<String>,
+        depth: Int
+    ): Boolean {
+        if (depth >= MAX_DIRECTORY_DEPTH) {
+            throw IOException("Local directory tree exceeds the supported depth")
+        }
         val children = localDir.listFiles()?.sortedBy { it.name } ?: emptyList()
         for (child in children) {
-            if (task.isCancelled()) return
+            if (task.isCancelled()) return false
 
-            if (child.name.isEmpty() || child.name == "." || child.name == ".." ||
-                child.name.contains('/') || child.name.any { it.code < 0x20 }
-            ) {
+            if (!isSafeScpName(child.name)) {
                 Logger.w(TAG, "SCP skipped unsafe local filename: ${child.name}")
                 continue
             }
+            val canonicalChild = child.canonicalFile
+            if (!isStrictDescendant(localRoot, canonicalChild)) {
+                throw IOException("Local directory entry escapes the selected upload directory")
+            }
 
             if (child.isDirectory) {
+                // Canonical paths stop symlink cycles and duplicate traversal.
+                if (!visitedDirectories.add(canonicalChild.path)) continue
                 val header = "D0755 0 ${child.name}\n"
                 out.write(header.toByteArray(Charsets.UTF_8))
                 out.flush()
@@ -324,7 +361,16 @@ class SCPClient(private val sshConnection: SSHConnection) {
                     throw java.io.IOException("SCP server rejected directory header for ${child.name}")
                 }
 
-                uploadDirectoryContents(child, out, inStream, task)
+                if (!uploadDirectoryContents(
+                        child,
+                        out,
+                        inStream,
+                        task,
+                        localRoot,
+                        visitedDirectories,
+                        depth + 1
+                    )
+                ) return false
 
                 out.write("E\n".toByteArray(Charsets.UTF_8))
                 out.flush()
@@ -344,6 +390,7 @@ class SCPClient(private val sshConnection: SSHConnection) {
             child.inputStream().use { fin ->
                 val buf = ByteArray(BUFFER_SIZE)
                 while (true) {
+                    if (task.isCancelled()) return false
                     val read = fin.read(buf)
                     if (read <= 0) break
                     out.write(buf, 0, read)
@@ -359,6 +406,22 @@ class SCPClient(private val sshConnection: SSHConnection) {
                 throw java.io.IOException("SCP server rejected transfer terminator for ${child.name}")
             }
         }
+        return true
+    }
+
+    private fun isSafeScpName(name: String): Boolean =
+        name.isNotEmpty() &&
+            name != "." &&
+            name != ".." &&
+            !name.contains('/') &&
+            !name.contains('\\') &&
+            name.none { it.code < 0x20 }
+
+    /** True only for a strict descendant, including when root is `/`. */
+    private fun isStrictDescendant(root: File, candidate: File): Boolean {
+        val rootPath = root.path
+        val prefix = if (rootPath.endsWith(File.separator)) rootPath else rootPath + File.separator
+        return candidate.path.startsWith(prefix)
     }
 
     /**

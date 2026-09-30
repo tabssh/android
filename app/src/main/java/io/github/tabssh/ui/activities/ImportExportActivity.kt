@@ -381,7 +381,12 @@ class ImportExportActivity : TabSSHActivity() {
         lifecycleScope.launch {
             val text = withContext(Dispatchers.IO) {
                 try {
-                    contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    contentResolver.openInputStream(uri)?.use {
+                        io.github.tabssh.utils.BoundedTextReader.readUtf8(
+                            it,
+                            io.github.tabssh.utils.BoundedTextReader.MAX_TEXT_IMPORT_BYTES
+                        )
+                    }
                 } catch (e: Exception) {
                     Logger.e("ImportExportActivity", "Bulk import read failed", e)
                     null
@@ -472,7 +477,12 @@ class ImportExportActivity : TabSSHActivity() {
                 // ParcelFileDescriptor closes even if the reader exhausts
                 // the stream — assigning to a `val` first leaked the fd.
                 try {
-                    contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    contentResolver.openInputStream(uri)?.use {
+                        io.github.tabssh.utils.BoundedTextReader.readUtf8(
+                            it,
+                            io.github.tabssh.utils.BoundedTextReader.MAX_TEXT_IMPORT_BYTES
+                        )
+                    }
                 } catch (e: Exception) {
                     Logger.e("ImportExportActivity", "SSH config read failed", e)
                     null

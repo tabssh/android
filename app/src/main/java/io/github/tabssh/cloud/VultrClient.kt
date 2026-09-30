@@ -145,7 +145,7 @@ class VultrClient : CloudProvider {
                 }
                 throw IllegalStateException("Vultr API HTTP ${resp.code}: ${resp.message}")
             }
-            resp.body?.string().orEmpty()
+            readCloudResponseBody(resp.body)
         }
         return JSONObject(body)
     }

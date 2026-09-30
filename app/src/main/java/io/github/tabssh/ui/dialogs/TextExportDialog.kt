@@ -25,7 +25,7 @@ object TextExportDialog {
         MaterialAlertDialogBuilder(context)
             .setTitle(title)
             .setView(view)
-            .setPositiveButton(R.string.copy) { _, _ ->
+            .setPositiveButton(R.string.copy_button) { _, _ ->
                 ClipboardHelper.copy(context, title, text, sensitive = false)
                 Toast.makeText(context, R.string.dialog_copied_to_clipboard_toast, Toast.LENGTH_SHORT).show()
             }

@@ -197,7 +197,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
             null,
             com.google.android.material.R.attr.materialButtonOutlinedStyle
         ).apply {
-            text = ctx.getString(io.github.tabssh.R.string.copy)
+            text = ctx.getString(io.github.tabssh.R.string.copy_button)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT

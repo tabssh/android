@@ -262,7 +262,7 @@ class VirtViewerFileTest {
     }
 
     @Test
-    fun `toSpiceParams carries the ticket and enables verification only with a ca`() {
+    fun `toSpiceParams carries ticket and CA without enabling certificate checks`() {
         val withoutCa = VirtViewerFile.parse(
             "[virt-viewer]\ntype=spice\nhost=h\nport=5900\npassword=t"
         ).toSpiceParams()
@@ -277,7 +277,7 @@ class VirtViewerFileTest {
         ).toSpiceParams()
         assertEquals(5901, withCa.tlsPort)
         assertNotNull(withCa.caCert)
-        assertTrue(withCa.tlsVerify)
+        assertFalse(withCa.tlsVerify)
     }
 
     @Test

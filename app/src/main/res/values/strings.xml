@@ -37,7 +37,7 @@
     <string name="show_keyboard">Show Keyboard</string>
     <string name="hide_keyboard">Hide Keyboard</string>
     <string name="paste">Paste</string>
-    <string name="copy">Copy</string>
+    <string name="copy_button">Copy</string>
     <string name="select_all">Select All</string>
     <string name="text_import_hint">Paste text here</string>
     <string name="text_import_clipboard_empty">Clipboard is empty or contains no text</string>

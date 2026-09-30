@@ -30,6 +30,7 @@ import io.github.tabssh.storage.database.entities.VncHost
 import io.github.tabssh.ui.tabs.ConsoleConnectParams
 import io.github.tabssh.ui.tabs.HypervisorConsoleType
 import io.github.tabssh.utils.TerminalLinkClassifier
+import io.github.tabssh.utils.BoundedTextReader
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -299,14 +300,7 @@ class LinkHandlerActivity : AppCompatActivity() {
      */
     private fun readBounded(uri: Uri, maxBytes: Int): String? =
         contentResolver.openInputStream(uri)?.use { stream ->
-            val buffer = ByteArray(maxBytes)
-            var filled = 0
-            while (filled < buffer.size) {
-                val read = stream.read(buffer, filled, buffer.size - filled)
-                if (read <= 0) break
-                filled += read
-            }
-            String(buffer, 0, filled, Charsets.UTF_8)
+            BoundedTextReader.readUtf8(stream, maxBytes)
         }
 
     /**

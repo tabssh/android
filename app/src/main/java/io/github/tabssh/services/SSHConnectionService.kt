@@ -31,7 +31,8 @@ class SSHConnectionService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private lateinit var app: TabSSHApplication
 
-    private var activeConnections = 0
+    @Volatile private var activeConnections = 0
+    @Volatile private var serviceDestroyed = false
     private var sessionListener: SessionManagerListener? = null
 
     // PARTIAL_WAKE_LOCK strategy — screen-aware to save battery:
@@ -270,7 +271,9 @@ class SSHConnectionService : Service() {
     
     override fun onBind(intent: Intent?): IBinder? = null
     
+    @Synchronized
     override fun onDestroy() {
+        serviceDestroyed = true
         super.onDestroy()
 
         Logger.d("SSHConnectionService", "Service destroyed")
@@ -302,7 +305,9 @@ class SSHConnectionService : Service() {
         graphicalStateObservers.clear()
     }
     
+    @Synchronized
     private fun startForegroundService() {
+        if (serviceDestroyed) return
         // Acquire the appropriate wake lock immediately — before any session
         // event fires. Without a lock the CPU can idle during the connecting /
         // authenticating phase (aggressive power management on many OEMs can
@@ -806,7 +811,9 @@ class SSHConnectionService : Service() {
         app.tabManager.addListener(listener)
     }
 
+    @Synchronized
     private fun updateConnectionCount() {
+        if (serviceDestroyed) return
         // Count active tabs rather than raw SSH sessions so that mosh tabs
         // (whose underlying SSH session may be closed after handoff) are
         // still counted as live connections. A tab is "live" as long as its
@@ -850,7 +857,9 @@ class SSHConnectionService : Service() {
 
     // ── Screen-state callbacks ────────────────────────────────────────────────
 
+    @Synchronized
     private fun onScreenOff() {
+        if (serviceDestroyed) return
         isScreenOn = false
         if (activeConnections == 0) return
         // Switch from indefinite wake lock to the battery-efficient background
@@ -860,7 +869,9 @@ class SSHConnectionService : Service() {
         Logger.d(TAG, "Screen off — switched to background keepalive wake cycle")
     }
 
+    @Synchronized
     private fun onScreenOn() {
+        if (serviceDestroyed) return
         isScreenOn = true
         // Cancel the background cycle; transition back to indefinite wake lock.
         backgroundWakeCycleJob?.cancel()
@@ -888,7 +899,9 @@ class SSHConnectionService : Service() {
      * Net effect: CPU awake ~15 s out of every ~60 s → ≈75 % battery saving
      * versus holding the lock indefinitely, while the SSH session stays alive.
      */
+    @Synchronized
     private fun ensureBackgroundWakeCycleRunning() {
+        if (serviceDestroyed) return
         if (backgroundWakeCycleJob?.isActive == true) return
         val keepaliveMs = try {
             app.preferencesManager.getServerAliveIntervalMs()

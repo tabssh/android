@@ -12,6 +12,7 @@ import io.github.tabssh.sync.models.ConflictResolution
 import io.github.tabssh.sync.models.ConflictResolutionOption
 import io.github.tabssh.sync.tombstone.TombstoneRecorder
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 
 /**
@@ -47,6 +48,8 @@ class ConflictResolver(
                     } else {
                         syncLogManager.recordResolution(resolution.conflict, resolution.resolution)
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     errors.add("${resolution.conflict.entityType}: ${e.message}")
                 }

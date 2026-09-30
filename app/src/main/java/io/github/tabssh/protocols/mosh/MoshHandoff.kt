@@ -245,6 +245,8 @@ object MoshHandoff {
                 }
             }
             Logger.d(TAG, "Reaped orphaned mosh-server (pid=${pid ?: "?"}, port=$port)")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.d(TAG, "mosh-server reap best-effort failed: ${e.message}")
         } finally {

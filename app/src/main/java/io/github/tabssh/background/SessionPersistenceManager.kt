@@ -10,6 +10,7 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.TabSession
 import io.github.tabssh.ui.tabs.SSHTab
 import io.github.tabssh.ui.tabs.TabManager
+import io.github.tabssh.utils.BoundedTextReader
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
@@ -23,6 +24,11 @@ class SessionPersistenceManager(
     private val context: Context,
     private val tabManager: TabManager
 ) : Application.ActivityLifecycleCallbacks {
+
+    private companion object {
+        const val MAX_RESTORED_TERMINAL_BYTES = 16 * 1024 * 1024
+        const val MAX_ENCODED_TERMINAL_CHARS = MAX_RESTORED_TERMINAL_BYTES * 4 / 3 + 4
+    }
     
     private val app = context.applicationContext as TabSSHApplication
     private val database = app.database
@@ -279,6 +285,8 @@ class SessionPersistenceManager(
 
                 Logger.i("SessionPersistenceManager", "Saved session state for ${tabs.size} tabs")
 
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.e("SessionPersistenceManager", "Failed to save session state", e)
             }
@@ -352,6 +360,8 @@ class SessionPersistenceManager(
             
             database.tabSessionDao().insertSession(tabSession)
             
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("SessionPersistenceManager", "Failed to save tab session for ${tab.profile.getDisplayName()}", e)
         }
@@ -413,6 +423,8 @@ class SessionPersistenceManager(
                         }
                     }
 
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Logger.e("SessionPersistenceManager", "Failed to restore session ${session.sessionId}", e)
                 }
@@ -421,6 +433,8 @@ class SessionPersistenceManager(
             Logger.i("SessionPersistenceManager", "Restored $restoredCount of ${sessionsToRestore.size} sessions")
             true
             
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("SessionPersistenceManager", "Failed to restore session state", e)
             false
@@ -455,6 +469,8 @@ class SessionPersistenceManager(
             val newest = database.tabSessionDao().getActiveSessionsList()
                 .maxOfOrNull { it.lastActivity } ?: return 0L
             if (newest > 0L) (System.currentTimeMillis() - newest).coerceAtLeast(0L) else 0L
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("SessionPersistenceManager", "Failed to read saved session age", e)
             0L
@@ -490,6 +506,8 @@ class SessionPersistenceManager(
 
             Logger.d("SessionPersistenceManager", "Restored terminal state for tab: ${session.title}")
             
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("SessionPersistenceManager", "Failed to restore terminal state", e)
         }
@@ -499,6 +517,8 @@ class SessionPersistenceManager(
         try {
             database.tabSessionDao().deleteAllSessions()
             Logger.d("SessionPersistenceManager", "Cleared old session data")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("SessionPersistenceManager", "Failed to clear old sessions", e)
         }
@@ -536,17 +556,29 @@ class SessionPersistenceManager(
     }
     
     private fun decompressTerminalContent(compressedContent: String): String {
+        if (compressedContent.length > MAX_ENCODED_TERMINAL_CHARS) {
+            Logger.w("SessionPersistenceManager", "Saved terminal content exceeds the restore limit")
+            return ""
+        }
+        val compressedBytes = try {
+            android.util.Base64.decode(compressedContent, android.util.Base64.NO_WRAP)
+        } catch (e: Exception) {
+            return compressedContent.takeIf {
+                it.toByteArray(Charsets.UTF_8).size <= MAX_RESTORED_TERMINAL_BYTES
+            }.orEmpty()
+        }
+        if (compressedBytes.size < 2 || compressedBytes[0] != 0x1f.toByte() || compressedBytes[1] != 0x8b.toByte()) {
+            return compressedContent.takeIf {
+                it.toByteArray(Charsets.UTF_8).size <= MAX_RESTORED_TERMINAL_BYTES
+            }.orEmpty()
+        }
         return try {
-            val compressedBytes = android.util.Base64.decode(compressedContent, android.util.Base64.NO_WRAP)
-            java.util.zip.GZIPInputStream(
-                java.io.ByteArrayInputStream(compressedBytes)
-            ).use { gzipIn ->
-                gzipIn.readBytes().toString(Charsets.UTF_8)
+            java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(compressedBytes)).use { gzipIn ->
+                BoundedTextReader.readUtf8(gzipIn, MAX_RESTORED_TERMINAL_BYTES)
             }
         } catch (e: Exception) {
-            Logger.w("SessionPersistenceManager", "Failed to decompress terminal content", e)
-            // Return as-is if decompression fails
-            compressedContent
+            Logger.w("SessionPersistenceManager", "Failed to decompress saved terminal content", e)
+            ""
         }
     }
     

@@ -47,6 +47,7 @@ media: no
 build_image: casjaysdev/android:latest
 kotlin: 2.4.10
 agp: 8.13.2
+r8: 9.1.31 # first published patch meeting Android's R8 9.1.29 minimum for Kotlin 2.4
 gradle: 8.14.5
 compile_sdk: 35
 target_sdk: 34
@@ -91,7 +92,7 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 - Per-session status notifications — every open tab gets its own shade entry (even when tabs share one host), tapping jumps to that exact tab, a Disconnect action closes just that session, and entries clear as soon as their tab closes
 
 ### Security requirements
-- All passwords and private key passphrases must never be stored in plaintext or in the database
+- All passwords and private key passphrases must never be stored in plaintext or in the database. Migration-only exception: pre-v14 hypervisor passwords are staged in a dedicated carryover table until startup moves them into Android Keystore; no new credential is written there, and successfully migrated rows are deleted.
 - Credential storage with tiered access levels: never / session-only / encrypted / biometric — encrypted tiers are backed by hardware-backed device key storage
 - Biometric unlock for stored passwords — re-authentication gates every read; encrypted credentials persist until the user removes them, never expiring on a timer (no TTL)
 - App-lock PIN with a failed-attempt lockout — the PIN must never be stored in plaintext or in any recoverable form
@@ -138,12 +139,13 @@ New entity checklist: decide sync inclusion, then update
 - Built-in VNC console client for VM graphical consoles — consoles open as swipeable tabs next to terminal sessions
 - SPICE console client for hypervisors that expose SPICE displays
 - Reusable hypervisor credential accounts (username/password or OCI API key) shared across hypervisor profiles
-- TLS certificate pinning (TOFU) for hypervisor REST APIs whether or not SSL verification is enabled on the profile (off by default to accommodate self-signed hypervisor certs) — with verification off the first-seen certificate is pinned silently; in both modes a changed certificate is accepted only on explicit user re-approval
+- Hypervisor and console TLS stays encrypted; REST certificate validation is optional and off by default, console certificate checks are disabled, and no leaf-certificate pins or certificate-change prompts are used. SSH transports use the known-hosts host-key verifier for server identity
 - OCI API key authentication (tenancy, user, region, fingerprint, optional compartment, private key — the private key is Keystore-only)
 
 ### Cloud provider management
-- Manage SSH-accessible instances across DigitalOcean, Hetzner, Linode, Vultr, AWS EC2, Google Cloud Compute, Azure VMs, and Oracle Cloud (OCI)
-- All eight providers expose the same feature surface — list instances, live state, power control, SSH connect — no provider gets a reduced experience
+- Manage SSH-accessible instances across DigitalOcean, Hetzner, Linode, Vultr, AWS EC2, Google Cloud Compute, Azure VMs, Oracle Cloud (OCI), Scaleway, UpCloud, and Hostinger
+- All eleven providers expose the same feature surface — list instances, live state, power control, SSH connect — no provider gets a reduced experience
+- Hostinger integration uses its public VPS API, which is currently beta; API changes or service-side availability can affect this provider independently of the app
 - Live instance state (running / stopped / transitioning) with start/stop control
 - Cloud account credentials must never be stored in the database
 - No vendor SDKs embedded — all providers accessed via their REST APIs
@@ -203,7 +205,7 @@ compatibility note here (and a heads-up to the sibling repos) is incomplete:
   `manifest.json`, then one `{"v":4,"items":[...]}` file per entity (version 3
   single-JSON archives still restore); a backup made by any sibling must
   restore cleanly on the others
-- Room schema (currently v27) — Desktop's SQLite and Web's schema track
+- Room schema (currently v28) — Desktop's SQLite and Web's schema track
   Android's entity shapes and field set; schema version numbers are
   independent per platform but the fields must line up
 - Built-in terminal theme catalogue (23 themes) — byte-identical theme
@@ -229,7 +231,7 @@ Compatibility notes:
 ### Trust boundaries
 - Remote SSH/telnet hosts, hypervisor and cloud APIs, clipboard contents, QR payloads, imported config/bulk files, and user-supplied sync storage are all untrusted input
 - The device keystore and the app's own encrypted storage are the only trusted secret stores
-- verifySsl defaults to off on hypervisor profiles — an accepted, documented design decision to accommodate self-signed hypervisor certs; TOFU pinning is the compensating control
+- verifySsl defaults to off on hypervisor profiles — an accepted, documented design decision to accommodate self-signed and rotating infrastructure certificates. TLS remains encrypted; SSH host identity is verified by the known-hosts host key. HTTPS-only endpoints do not get an identity check from a pinned leaf certificate
 - Cleartext HTTP stays permitted in network_security_config.xml — an accepted, documented deviation from the AI.md PART 9 cleartext ban: hypervisor/cloud endpoints are user-configured and may be plain-http consoles on private LANs; blocking cleartext would break those setups
 
 ### Permission justifications

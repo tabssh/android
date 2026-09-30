@@ -162,6 +162,7 @@ class TabSSHApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        io.github.tabssh.network.SharedHttpClient.initialize(this)
         INSTANCE = this
 
         // Android ships a stripped "BC" provider that is missing KeyFactory/RSA
@@ -315,8 +316,7 @@ class TabSSHApplication : Application() {
             wireGlobalHostKeyCallbacks()
             wireGlobalNotifications()
             // Drain the v13->v14 hypervisor password carry-over table into the
-            // Keystore now instead of waiting for each row's next retrieve(),
-            // and drop the table once it is empty.
+            // Keystore now instead of waiting for each row's next retrieve().
             io.github.tabssh.crypto.storage.HypervisorPasswordStore
                 .sweepLegacyPlaintext(this@TabSSHApplication)
             migrateLegacyPrefixKeyPref()

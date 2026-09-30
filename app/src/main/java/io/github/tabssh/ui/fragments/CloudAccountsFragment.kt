@@ -129,7 +129,12 @@ class CloudAccountsFragment : Fragment() {
             val parsed = withContext(Dispatchers.IO) {
                 try {
                     requireContext().contentResolver.openInputStream(uri)
-                        ?.bufferedReader()?.use { it.readText() }
+                        ?.use {
+                            io.github.tabssh.utils.BoundedTextReader.readUtf8(
+                                it,
+                                io.github.tabssh.utils.BoundedTextReader.MAX_TEXT_IMPORT_BYTES
+                            )
+                        }
                         ?.let { parseOciConfigIni(it) }
                 } catch (e: Exception) {
                     Logger.e(TAG, "OCI config read failed", e)
@@ -177,7 +182,12 @@ class CloudAccountsFragment : Fragment() {
             val pem = withContext(Dispatchers.IO) {
                 try {
                     requireContext().contentResolver.openInputStream(uri)
-                        ?.bufferedReader()?.use { it.readText() }?.trim()
+                        ?.use {
+                            io.github.tabssh.utils.BoundedTextReader.readUtf8(
+                                it,
+                                io.github.tabssh.utils.BoundedTextReader.MAX_KEY_FILE_BYTES
+                            )
+                        }?.trim()
                 } catch (e: Exception) {
                     Logger.e(TAG, "OCI key file read failed", e)
                     null

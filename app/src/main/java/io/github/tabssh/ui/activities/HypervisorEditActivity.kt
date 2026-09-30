@@ -74,14 +74,6 @@ class HypervisorEditActivity : TabSSHActivity() {
     private var availableSshKeys: List<io.github.tabssh.storage.database.entities.StoredKey> = emptyList()
     private var selectedSshIdentityId: String? = null
 
-    // Phase 1 cert pinning UI. Visible only when verifySsl is on.
-    private lateinit var layoutPinnedCert: LinearLayout
-    private lateinit var textPinnedCert: TextView
-    private lateinit var buttonForgetPin: MaterialButton
-    /** Holds the current pin while the activity is open. Reset to null
-     *  when the user taps "Forget" so the save path writes pinnedCertSha256=null. */
-    private var currentPin: String? = null
-
     private var hypervisorId: Long? = null
     private var editingHypervisor: HypervisorProfile? = null
     private var linkedConnectionId: String? = null
@@ -184,7 +176,6 @@ class HypervisorEditActivity : TabSSHActivity() {
         dropdownSshIdentity.addTextChangedListener(watcher)
         switchVerifySsl.setOnCheckedChangeListener { _, checked ->
             hasUnsavedChanges = true
-            updatePinnedCertVisibility(checked)
         }
         spinnerType.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
@@ -323,40 +314,6 @@ class HypervisorEditActivity : TabSSHActivity() {
         layoutAccount = findViewById(R.id.layout_account)
         dropdownSshIdentity = findViewById(R.id.dropdown_ssh_identity)
         layoutSshIdentity = findViewById(R.id.layout_ssh_identity)
-        layoutPinnedCert = findViewById(R.id.layout_pinned_cert)
-        textPinnedCert = findViewById(R.id.text_pinned_cert)
-        buttonForgetPin = findViewById(R.id.button_forget_pin)
-        // Pinned-cert row visibility tracks the verify-SSL switch — wired in
-        // setupUnsavedChangesGuard(), which also flips hasUnsavedChanges.
-        buttonForgetPin.setOnClickListener {
-            currentPin = null
-            renderPinnedCertText()
-            io.github.tabssh.utils.logging.Logger.i(
-                "HypervisorEditActivity",
-                "User cleared pinned cert — next connect will TOFU re-capture"
-            )
-        }
-    }
-
-    /**
-     * Show/hide the pin row based on the verify-SSL switch, and refresh
-     * the displayed value. Called from the switch's listener and from
-     * loadHypervisor() once the value has been read in.
-     */
-    private fun updatePinnedCertVisibility(verifySslOn: Boolean) {
-        layoutPinnedCert.visibility = if (verifySslOn) View.VISIBLE else View.GONE
-        renderPinnedCertText()
-    }
-
-    private fun renderPinnedCertText() {
-        val pin = currentPin
-        if (pin.isNullOrBlank()) {
-            textPinnedCert.text = getString(R.string.hypervisor_edit_pin_not_pinned_yet)
-            buttonForgetPin.visibility = View.GONE
-        } else {
-            textPinnedCert.text = getString(R.string.hypervisor_edit_pin_sha256, pin)
-            buttonForgetPin.visibility = View.VISIBLE
-        }
     }
 
     private fun setupToolbar() {
@@ -668,8 +625,6 @@ class HypervisorEditActivity : TabSSHActivity() {
                     )
                     editRealm.setText(hypervisor.realm ?: "pam")
                     switchVerifySsl.isChecked = hypervisor.verifySsl
-                    currentPin = hypervisor.pinnedCertSha256
-                    updatePinnedCertVisibility(hypervisor.verifySsl)
 
                     // Account dropdown — re-fetch on IO for the same reason, then
                     // hand off to the single adapter/listener owner so the saved
@@ -777,25 +732,18 @@ class HypervisorEditActivity : TabSSHActivity() {
                 val realm = account?.realm ?: editRealm.text.toString()
 
                 var success = false
-                var capturedTestSha: String? = null
                 when (type) {
                     HypervisorType.PROXMOX -> {
-                        val client = ProxmoxApiClient(host, port, username, password, realm, verifySsl,
-                            pinnedCertSha256 = currentPin)
+                        val client = ProxmoxApiClient(host, port, username, password, realm, verifySsl)
                         success = client.authenticate()
-                        capturedTestSha = client.getCapturedCertSha256()
                     }
                     HypervisorType.XCPNG -> {
-                        val client = XCPngApiClient(host, port, username, password, verifySsl,
-                            pinnedCertSha256 = currentPin)
+                        val client = XCPngApiClient(host, port, username, password, verifySsl)
                         success = client.authenticate()
-                        capturedTestSha = client.getCapturedCertSha256()
                     }
                     HypervisorType.VMWARE -> {
-                        val client = VMwareApiClient(host, username, password, verifySsl,
-                            pinnedCertSha256 = currentPin)
+                        val client = VMwareApiClient(host, username, password, verifySsl)
                         success = client.authenticate()
-                        capturedTestSha = client.getCapturedCertSha256()
                     }
                     HypervisorType.LIBVIRT -> {
                         // SSH-based; just do a quick connect/disconnect
@@ -820,14 +768,6 @@ class HypervisorEditActivity : TabSSHActivity() {
                         Toast.makeText(this@HypervisorEditActivity,
                             getString(R.string.hypervisor_edit_test_not_supported), Toast.LENGTH_SHORT).show()
                     }
-                }
-
-                // Persist any cert the user pinned during this test — update currentPin
-                // so saveHypervisor() writes the SHA to the DB row.
-                if (!capturedTestSha.isNullOrBlank() &&
-                    !capturedTestSha.equals(currentPin, ignoreCase = true)) {
-                    currentPin = capturedTestSha
-                    renderPinnedCertText()
                 }
 
                 if (success) {
@@ -896,7 +836,7 @@ class HypervisorEditActivity : TabSSHActivity() {
                         editRealm.text.toString()
                     } else null,
                     verifySsl = switchVerifySsl.isChecked,
-                    pinnedCertSha256 = currentPin,
+                    pinnedCertSha256 = editingHypervisor?.pinnedCertSha256,
                     apiTypeOverride = apiTypeOverride,
                     linkedConnectionId = linkedConnectionId,
                     accountId = accountId,

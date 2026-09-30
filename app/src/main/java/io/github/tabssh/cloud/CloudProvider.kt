@@ -1,6 +1,8 @@
 package io.github.tabssh.cloud
 
 import io.github.tabssh.storage.database.entities.ConnectionProfile
+import okhttp3.ResponseBody
+import java.io.IOException
 
 /**
  * Wave 5.1 — Cloud provider abstraction.
@@ -57,7 +59,8 @@ enum class CloudProviderType(val tag: String, val displayName: String, val token
     AZURE("azure", "Azure VMs", "TENANT:CLIENT_ID:CLIENT_SECRET:SUBSCRIPTION_ID"),
     OCI("oci", "Oracle Cloud (OCI)", "Multi-field — tap 'Configure OCI…' after choosing this provider"),
     SCALEWAY("scaleway", "Scaleway", "API secret key (X-Auth-Token)"),
-    UPCLOUD("upcloud", "UpCloud", "api_username:api_password");
+    UPCLOUD("upcloud", "UpCloud", "api_username:api_password"),
+    HOSTINGER("hostinger", "Hostinger", "API token (Bearer)");
 
     companion object {
         fun fromTag(tag: String): CloudProviderType? = entries.firstOrNull { it.tag == tag }
@@ -92,6 +95,7 @@ fun CloudProviderType.newClient(): CloudProvider = when (this) {
     CloudProviderType.OCI -> OciCloudClient()
     CloudProviderType.SCALEWAY -> ScalewayClient()
     CloudProviderType.UPCLOUD -> UpCloudClient()
+    CloudProviderType.HOSTINGER -> HostingerClient()
 }
 
 /**
@@ -104,6 +108,26 @@ fun CloudProviderType.newClient(): CloudProvider = when (this) {
  * "Load failed: …" toast continues to surface the underlying message.
  */
 class CloudAuthException(message: String) : RuntimeException(message)
+
+/**
+ * Read a bounded provider response. Inventory and action endpoints are remote
+ * input; an unexpectedly large/misbehaving response must not be buffered
+ * without limit on the Android heap.
+ */
+internal fun readCloudResponseBody(body: ResponseBody?): String {
+    body ?: return ""
+    if (body.contentLength() > MAX_CLOUD_RESPONSE_BYTES) {
+        throw IOException("Cloud provider response exceeds the supported size limit")
+    }
+    val source = body.source()
+    source.request(MAX_CLOUD_RESPONSE_BYTES + 1L)
+    if (source.buffer.size > MAX_CLOUD_RESPONSE_BYTES) {
+        throw IOException("Cloud provider response exceeds the supported size limit")
+    }
+    return source.readByteString().utf8()
+}
+
+private const val MAX_CLOUD_RESPONSE_BYTES = 16L * 1024L * 1024L
 
 /**
  * Build the `advancedSettings` JSON stored on an imported profile.

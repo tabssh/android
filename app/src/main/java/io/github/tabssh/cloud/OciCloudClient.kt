@@ -24,28 +24,15 @@ import org.json.JSONObject
  *   compartment — compartment OCID; defaults to tenancy when blank
  *   pem         — RSA private key PEM (newlines embedded as literal \n in JSON)
  *   passphrase  — PEM passphrase; empty string when the key is unencrypted
- *   tls_pin     — semicolon-delimited identity;iaas TLS leaf-cert SHA-256
- *                 pair, written back by CloudAccountManagerActivity after the
- *                 first TOFU accept.  Missing/empty → TOFU on first connect.
+ *   tls_pin     — legacy field ignored by current clients.
  *
  * Only RUNNING instances with a reachable IP (public preferred, private
  * fallback) are returned. Instances with no IP at all are silently skipped —
  * there is no SSH address to import.
  *
- * Pin-persistence contract
- * ========================
- * OCI endpoints use TLS certs that are NOT in the Android trust store (they
- * are Oracle-managed but may be self-signed or behind a private CA).
- * OciApiClient runs TOFU the first time it sees an unknown cert.  To avoid
- * a TOFU prompt on every app open the caller must:
- *
- *   1. Read the current `tls_pin` from the stored token JSON (may be absent).
- *   2. Call [fetchLiveInstances] / any action.
- *   3. If [getCapturedCertSha256] returns a non-null value that differs from
- *      the value already in the JSON, the caller MUST write the updated JSON
- *      back to the Keystore so the next connect skips TOFU.
- *
- * [CloudAccountManagerActivity] implements step 3 via `persistOciCloudPin()`.
+ * OCI API requests use platform CA and hostname validation. The legacy TLS pin
+ * helpers remain temporarily for stored credential compatibility and return no
+ * newly captured pins.
  */
 class OciCloudClient : CloudProvider {
 
@@ -55,31 +42,13 @@ class OciCloudClient : CloudProvider {
 
     override val type: CloudProviderType = CloudProviderType.OCI
 
-    /**
-     * Holds the most recently created API client so the caller can read any
-     * newly-captured TLS pin after each operation via [getCapturedCertSha256].
-     */
+    /** Legacy compatibility accessor; current API clients do not capture TLS pins. */
     private var lastApiClient: OciApiClient? = null
 
-    /**
-     * Returns the full semicolon-delimited pin set after the most recent
-     * API operation, or null if no client has been used yet.  Delegates to
-     * [OciApiClient.getCapturedCertSha256] which merges existing + newly
-     * captured SHAs so incremental persist calls are idempotent.
-     */
+    /** Always null: TLS leaf certificates are not persisted as host identity. */
     fun getCapturedCertSha256(): String? = lastApiClient?.getCapturedCertSha256()
 
-    /**
-     * Set by the caller (e.g. `CloudAccountManagerActivity`) right after
-     * obtaining this client. Invoked synchronously, on the handshake
-     * thread, the instant any pin is captured — TOFU accept, silent
-     * system-CA accept, or an explicit user ACCEPT_AND_PIN — so the
-     * caller can persist immediately rather than only after a whole
-     * multi-instance `fetchLiveInstances`/`fetchInventory` call finishes
-     * without throwing. A per-instance failure partway through that loop
-     * used to make an already-confirmed pin vanish, since the next call
-     * builds a brand-new `OciApiClient` from the still-stale stored pin.
-     */
+    /** Legacy compatibility callback; current TLS clients never capture pins. */
     var onPinCaptured: (() -> Unit)? = null
 
     private fun buildApiClient(creds: JSONObject): OciApiClient {

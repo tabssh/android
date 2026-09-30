@@ -5,9 +5,13 @@ import io.github.tabssh.sync.encryption.SyncEncryptor
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -137,6 +141,24 @@ class BackupFormatTest {
             manifestJson,
             BackupManager.readManifestOnly(ByteArrayInputStream(out.toByteArray()))
         )
+    }
+
+    @Test
+    fun `ZIP directory entries with payload are rejected instead of drained unbounded`() {
+        val out = ByteArrayOutputStream()
+        ZipOutputStream(out).use { zip ->
+            zip.putNextEntry(ZipEntry("folder/"))
+            zip.write(byteArrayOf(1))
+            zip.closeEntry()
+        }
+        val archive = out.toByteArray()
+
+        assertFailsWith<IOException> {
+            BackupManager.readBackupZip(ByteArrayInputStream(archive))
+        }
+        assertFailsWith<IOException> {
+            BackupManager.readManifestOnly(ByteArrayInputStream(archive))
+        }
     }
 
     @Test

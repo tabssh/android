@@ -304,7 +304,12 @@ class KeyStorage(private val context: Context) {
     suspend fun importKeyFromFile(fileUri: Uri, passphrase: String? = null): ImportResult = withContext(Dispatchers.IO) {
         try {
             val keyContent = context.contentResolver.openInputStream(fileUri)
-                ?.bufferedReader()?.use { it.readText() }
+                ?.use {
+                    io.github.tabssh.utils.BoundedTextReader.readUtf8(
+                        it,
+                        io.github.tabssh.utils.BoundedTextReader.MAX_KEY_FILE_BYTES
+                    )
+                }
                 ?: return@withContext ImportResult.Error(KeyImportErrorType.READ_FAILED)
 
             // Query the content resolver for the human-readable display name.
