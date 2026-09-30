@@ -15,6 +15,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Panes no longer leave an empty tab after its final window closes or all pane sessions end.** The TabManager now watches pane state for the lifetime of its sessions, including across Activity recreation.
+
 ### Added
 
 - **Hostinger VPS accounts can now be managed from Cloud Accounts** — import SSH-ready VPS hosts, view live status and addresses, and start, stop, or restart instances with a Hostinger API token

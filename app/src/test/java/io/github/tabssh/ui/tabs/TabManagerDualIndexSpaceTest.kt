@@ -2,8 +2,10 @@ package io.github.tabssh.ui.tabs
 
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.ConnectionProfile
+import io.github.tabssh.ssh.connection.ConnectionState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -108,6 +110,40 @@ class TabManagerDualIndexSpaceTest {
 
         assertNull(closed)
         assertEquals(before, tabManager.getTabCount())
+    }
+
+    @Test
+    fun `closing the last panes window removes its tab`() {
+        val panesTab = requireNotNull(
+            tabManager.createPanesTab(
+                groupId = "group",
+                groupName = "Group",
+                entries = listOf(PaneWindow(hostId = "host", sshTab = null))
+            )
+        )
+
+        panesTab.closeWindow(0)
+
+        assertEquals(0, tabManager.getTabCount())
+        assertTrue(tabManager.getAllTabsSealed().isEmpty())
+    }
+
+    @Test
+    fun `all disconnected pane sessions remove their tab`() {
+        val connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
+        val sshTab = mock(SSHTab::class.java)
+        org.mockito.Mockito.`when`(sshTab.tabId).thenReturn("pane-tab")
+        org.mockito.Mockito.`when`(sshTab.connectionState).thenReturn(connectionState)
+        tabManager.createPanesTab(
+            groupId = "group",
+            groupName = "Group",
+            entries = listOf(PaneWindow(hostId = "host", sshTab = sshTab))
+        )
+
+        connectionState.value = ConnectionState.CONNECTED
+        connectionState.value = ConnectionState.DISCONNECTED
+
+        assertEquals(0, tabManager.getTabCount())
     }
 
     @Test

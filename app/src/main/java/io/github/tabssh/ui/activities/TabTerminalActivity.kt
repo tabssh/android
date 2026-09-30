@@ -60,7 +60,6 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import kotlin.math.abs
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flowOn
 import io.github.tabssh.network.ConnectionDiagnostic
@@ -4640,7 +4639,6 @@ class TabTerminalActivity : TabSSHActivity() {
             val reclaimed = tabManager.reclaimParkedPanesTab(groupId)
             if (reclaimed != null) {
                 Logger.i("TabTerminalActivity", "Reattached parked panes tab for group $groupId")
-                observePanesEmptyAutoClose(reclaimed)
                 updateViewPagerAdapter()
                 return
             }
@@ -4711,63 +4709,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 "openPaneGroup: tab=${created.tabId} created for group $groupId " +
                     "with ${created.currentEntries().size} window(s)"
             )
-            observePanesEmptyAutoClose(created)
-            observePanesAllDisconnectedAutoClose(created)
             updateViewPagerAdapter()
-        }
-    }
-
-    /**
-     * Closing individual panes one at a time (see `PanesTab.closeWindow`,
-     * wired from each tile's own close button) can leave a Panes tab with
-     * zero windows — there is otherwise no separate "kill the last
-     * connection" affordance for that state, so once the window list goes
-     * empty the whole tab is removed automatically (its sessions are
-     * already disconnected by `closeWindow`, so this is pure bookkeeping,
-     * not another disconnect).
-     */
-    private fun observePanesEmptyAutoClose(panesTab: PanesTab) {
-        lifecycleScope.launch {
-            panesTab.entries.collect { entries ->
-                if (entries.isEmpty()) {
-                    tabManager.closeTabByIdSealed(panesTab.tabId)
-                    // Closing the last window of the last tab used to leave
-                    // an empty pager behind — a blank terminal screen with
-                    // nothing on it. Every other close path finishes the
-                    // activity in that case, so this one does too.
-                    if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
-                        finish()
-                        return@collect
-                    }
-                    updateViewPagerAdapter()
-                }
-            }
-        }
-    }
-
-    /**
-     * Every pane in the grid has had its session end on its own (remote
-     * `exit`, `reboot`, dropped link) — the user never closed any of them,
-     * so the "dead tile" overlays are up but there is nothing left to
-     * reconnect individually. Close the whole tab instead of leaving a
-     * blank grid of disconnected tiles.
-     */
-    private fun observePanesAllDisconnectedAutoClose(panesTab: PanesTab) {
-        lifecycleScope.launch {
-            combine(panesTab.entries, panesTab.disconnectedWindowIds) { entries, disconnectedIds ->
-                entries.isNotEmpty() && entries.all { window ->
-                    window.sshTab?.tabId in disconnectedIds
-                }
-            }.collect { allDisconnected ->
-                if (allDisconnected) {
-                    tabManager.closeTabByIdSealed(panesTab.tabId)
-                    if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
-                        finish()
-                        return@collect
-                    }
-                    updateViewPagerAdapter()
-                }
-            }
         }
     }
 

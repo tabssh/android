@@ -16,7 +16,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -86,6 +88,8 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
     // path in TabTerminalActivity.updateTabIcon() never fires (Issue #50).
     private val tabObserverScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val tabObservers = mutableMapOf<String, Job>()
+    // Pane cleanup must outlive Activity recreation with the app-owned tabs.
+    private val panesTabObservers = mutableMapOf<String, Job>()
 
     // Background scope for work closeTab() defers off the caller's thread:
     // per-tab cleanup() (blocking JSch/stream teardown) and the matching
@@ -239,6 +243,10 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
         entries: List<PaneWindow>,
         splitDirection: String = "horizontal"
     ): PanesTab? = synchronized(tabsLock) {
+        if (entries.isEmpty()) {
+            Logger.w("TabManager", "Rejected empty Panes tab for group $groupId")
+            return null
+        }
         if (tabs.size >= maxTabs) {
             Logger.w("TabManager", "Maximum tabs reached: $maxTabs")
             return null
@@ -247,6 +255,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
         val tab = PanesTab(groupId, groupName, entries, splitDirection)
         tabs.add(Tab.Panes(tab))
         activeTabIndex = tabs.size - 1
+        observePanesTab(tab)
 
         Logger.d("TabManager", "Created new panes tab: ${tab.getDisplayTitle()} (${entries.size} panes)")
         publishTabs()
@@ -277,6 +286,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
         parkedPanesTabs[entry.panesTab.groupId] = entry.panesTab
         tabs.removeAt(index)
         tabObservers.remove(entry.tabId)?.cancel()
+        panesTabObservers.remove(entry.tabId)?.cancel()
         if (activeTabIndex >= index && activeTabIndex > 0) {
             activeTabIndex--
         }
@@ -295,6 +305,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
         val tab = parkedPanesTabs.remove(groupId) ?: return null
         tabs.add(Tab.Panes(tab))
         activeTabIndex = tabs.size - 1
+        observePanesTab(tab)
         Logger.d("TabManager", "Reclaimed parked panes tab: ${tab.tabId} (group $groupId)")
         publishTabs()
         return tab
@@ -474,6 +485,7 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
             val entry = tabs[index]
             tabs.removeAt(index)
             tabObservers.remove(entry.tabId)?.cancel()
+            panesTabObservers.remove(entry.tabId)?.cancel()
 
             // Adjust active tab index
             if (activeTabIndex >= index && activeTabIndex > 0) {
@@ -525,6 +537,20 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
                     }
                 }
             }
+        }
+    }
+
+    private fun observePanesTab(tab: PanesTab) {
+        panesTabObservers.remove(tab.tabId)?.cancel()
+        panesTabObservers[tab.tabId] = tabObserverScope.launch {
+            combine(tab.entries, tab.disconnectedWindowIds) { entries, disconnectedIds ->
+                entries.isEmpty() || (
+                    entries.isNotEmpty() && entries.all { window ->
+                        window.sshTab?.tabId?.let(disconnectedIds::contains) == true
+                    }
+                )
+            }.first { it }
+            closeTabByIdSealed(tab.tabId)
         }
     }
 
@@ -930,6 +956,8 @@ class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int 
         Logger.d("TabManager", "Cleaning up tab manager")
         tabObservers.values.forEach { it.cancel() }
         tabObservers.clear()
+        panesTabObservers.values.forEach { it.cancel() }
+        panesTabObservers.clear()
         // cleanup() also tears down each tab's connectionScope and the
         // Termux bridge (SSHTab) or rfbClient + parked session (VncTab) —
         // disconnect() alone leaked both.

@@ -2,6 +2,7 @@
 
 ## Wave 73 — audit, automation, and recording fixes
 
+- Panes tabs close automatically after the final pane closes or all pane sessions end, including after Activity recreation.
 - Cast recordings use Documents/TabSSH on Android 10+, where Android permits non-media files. Videos remain in Movies/TabSSH.
 
 - Startup credential migration preserves pending credentials and continues if secure storage initialization fails.

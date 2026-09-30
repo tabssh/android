@@ -58,7 +58,7 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 
 ### Core SSH features the app must have
 - Multi-tab SSH sessions modeled on browser tabs — swipe and keyboard navigation between live sessions
-- Panes — tile up to 6 SSH/Telnet/Mosh sessions in a fixed auto-sized grid inside one terminal tab (two panes can split side by side or stacked); tap a pane to focus it; Sync Input mirrors typing from the focused pane to every other pane and highlights all pane tiles while on; close individually or as a group (Disconnect All / Keep Running in Background); auto-stacks to a single column on narrow screens
+- Panes — tile up to 6 SSH/Telnet/Mosh sessions in a fixed auto-sized grid inside one terminal tab (two panes can split side by side or stacked); tap a pane to focus it; Sync Input mirrors typing from the focused pane to every other pane and highlights all pane tiles while on; close individually or as a group (Disconnect All / Keep Running in Background); the tab closes when its last pane is closed or every pane session ends; auto-stacks to a single column on narrow screens
 - Full VT100/ANSI/xterm-256color terminal emulation
 - SSH authentication: password, SSH key (RSA, ECDSA, Ed25519, legacy DSA; OpenSSH, PEM, and PuTTY .ppk formats), keyboard-interactive
 - SSH key management: import (file / paste), generate (RSA, ECDSA, Ed25519), fingerprint display, passphrase protection, OpenSSH certificate attachment
