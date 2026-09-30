@@ -44,7 +44,7 @@ created, synced, or paired on any one of the three works unmodified on the other
 - 🌐 **IPv4 / IPv6 selection** — Per-host auto/ipv4/ipv6 with fallback toast
 - 🔗 **ProxyJump** — Multi-hop connections through bastion hosts
 - ⏺️ **Session Recording** — Capture and replay raw terminal sessions (transcript)
-- 🎥 **Session Video Recorder** — Record any tab (SSH, VNC, Panes) to mp4 via screen capture; SSH tabs can also record an asciinema `.cast` alongside it; saved to `Movies/TabSSH` and shareable straight from the stop notification
+- 🎥 **Session Video Recorder** — Record any tab (SSH, VNC, Panes) to mp4 via screen capture; SSH tabs can also record an asciinema `.cast`; videos save to `Movies/TabSSH`, casts to `Documents/TabSSH` on Android 10+ (both use `Movies/TabSSH` on older Android), and recordings can be shared after stopping
 - 📟 **Telnet Hosts** — Plain-text legacy Telnet hosts kept in their own list, separate from SSH profiles; tap to connect in a terminal tab, long-press to edit or delete
 - 🗃️ **Workspaces** — Save the currently open tabs as a named workspace and reopen them all later (or delete saved ones) from the terminal menu
 - 🪟 **Panes** — Up to 6 SSH/Telnet/Mosh sessions tiled in a resizable grid inside one terminal tab; tap a pane to focus it, close individually or as a group (Disconnect All / Keep Running in Background), auto-stacks to a single column on narrow screens
