@@ -24,6 +24,7 @@ import io.github.tabssh.storage.registry.ConnectableHostRegistry
 import io.github.tabssh.ui.views.PanesSplitDirection
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
@@ -47,6 +48,10 @@ object PaneGroupEditDialog {
     /** One retry of [showKeyboardExplicit] after the initial show, to cover
      *  the async cross-process IME bind race on Android 12+. */
     private const val RETRY_SHOW_DELAY_MS = 120L
+
+    /** Settle time after the Step 1 dialog is dismissed, before Step 2's
+     *  window asks for IME focus. See [afterDialogDismissed]. */
+    internal const val HANDOFF_DELAY_MS = 150L
 
     fun show(
         context: Context,
@@ -152,11 +157,40 @@ object PaneGroupEditDialog {
             // WindowManager finish the IME teardown so Step 2's window can
             // acquire IME focus cleanly.
             dialog.setOnDismissListener {
-                dialogView.postDelayed({
+                afterDialogDismissed(scope) {
                     showStep2(context, app, scope, existing, hosts, existingWindows, name, windowCount, onSaved)
-                }, 150L) // slightly longer than RETRY_SHOW_DELAY_MS
+                }
             }
             dialog.dismiss()
+        }
+    }
+
+    /**
+     * Runs [block] once the window is really gone, so the next dialog window
+     * can take IME focus cleanly (see the hide-above comment in [showStep1]).
+     *
+     * Scheduled on [scope] — never on a view. `View.postDelayed` on a view
+     * that is not attached does not schedule on the main looper at all: it
+     * parks the runnable in the view's own run-queue, which
+     * `View.dispatchAttachedToWindow` drains only the next time the view is
+     * attached. A dismissed dialog's content view never is, so that version
+     * silently never ran — tapping Next closed the dialog and Step 2 never
+     * appeared, leaving the group uneditable. A scope launch is queued on the
+     * looper and so runs regardless of view attachment, and it additionally
+     * ties the handoff to the caller's lifecycle, so Step 2 cannot appear over
+     * a screen the user has already navigated away from.
+     *
+     * Extracted so the scheduling itself is directly testable — see
+     * `PaneGroupEditDialogHandoffTest`.
+     */
+    internal fun afterDialogDismissed(
+        scope: CoroutineScope,
+        delayMs: Long = HANDOFF_DELAY_MS,
+        block: () -> Unit
+    ) {
+        scope.launch {
+            delay(delayMs) // slightly longer than RETRY_SHOW_DELAY_MS
+            block()
         }
     }
 
