@@ -316,8 +316,10 @@
   consent flow. On an SSH tab you can additionally record an asciinema
   `.cast` alongside it, so you get a real terminal-cast file (not just
   pixels) from the same "start recording" action.
-- Both files save to `Movies/TabSSH`, and a Share action appears in the
-  stop notification and a post-stop dialog once recording finishes.
+- Videos save to `Movies/TabSSH`; on Android 10+ casts save to
+  `Documents/TabSSH` because MediaStore restricts non-media files to Documents
+  (older Android stores both in `Movies/TabSSH`). A Share action appears in
+  the post-stop dialog once recording finishes.
 - Recording pauses (not stops) if you swipe away from the recorded tab,
   and auto-stops with a toast if that tab is closed while recording.
 - mp4 quality (Low/Medium/High) and whether the `.cast` is included by
