@@ -93,6 +93,7 @@ class SessionRecordingService : Service() {
         const val EXTRA_RESULT_CODE = "result_code"
         const val EXTRA_RESULT_DATA = "result_data"
         const val EXTRA_FILENAME = "filename"
+        const val EXTRA_RECORDING_SAVED = "recording_saved"
         const val EXTRA_TAB_TITLE = "tab_title"
 
         // Broadcast (local, same-process) so the Activity/indicator can react
@@ -206,7 +207,7 @@ class SessionRecordingService : Service() {
             intent.getParcelableExtra(EXTRA_RESULT_DATA)
         }
         val filename = intent.getStringExtra(EXTRA_FILENAME)
-        val tabTitle = intent.getStringExtra(EXTRA_TAB_TITLE) ?: "TabSSH"
+        currentFilename = filename
 
         if (resultData == null || filename == null) {
             Logger.e(TAG, "Missing projection result data or filename — cannot start capture")
@@ -219,14 +220,18 @@ class SessionRecordingService : Service() {
             return false
         }
 
+        outputFd = fd
         return try {
             val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             val projection = projectionManager.getMediaProjection(resultCode, resultData)
+            mediaProjection = projection
             projection.registerCallback(projectionCallback, null)
 
             val (width, height, densityDpi) = displayMetrics()
 
-            val recorder = MediaRecorder().apply {
+            val recorder = MediaRecorder()
+            mediaRecorder = recorder
+            recorder.apply {
                 setVideoSource(MediaRecorder.VideoSource.SURFACE)
                 setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                 setVideoEncoder(MediaRecorder.VideoEncoder.H264)
@@ -244,13 +249,8 @@ class SessionRecordingService : Service() {
                 recorder.surface, null, null
             )
 
-            recorder.start()
-
-            mediaProjection = projection
             virtualDisplay = display
-            mediaRecorder = recorder
-            outputFd = fd
-            currentFilename = filename
+            recorder.start()
             startedAtMillis = System.currentTimeMillis()
             isRecording = true
 
@@ -262,7 +262,6 @@ class SessionRecordingService : Service() {
             true
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to start capture for $filename", e)
-            try { fd.close() } catch (_: Exception) {}
             false
         }
     }
@@ -304,7 +303,7 @@ class SessionRecordingService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Logger.d(TAG, "Service destroyed")
-        teardownCapture()
+        finishCapture()
         powerLocks.releaseWakeLock()
         powerLocks.releaseWifiLock()
     }
@@ -340,14 +339,23 @@ class SessionRecordingService : Service() {
     }
 
     private fun stopRecordingAndSelf() {
-        val filename = currentFilename
-        teardownCapture()
-        if (filename != null) {
-            VideoRecordingStorage.finalizePendingFile(this, filename)
-            sendBroadcast(Intent(ACTION_RECORDING_STOPPED).setPackage(packageName).putExtra(EXTRA_FILENAME, filename))
-        }
+        finishCapture()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun finishCapture() {
+        val filename = currentFilename
+        val started = isRecording
+        teardownCapture()
+        if (filename != null) {
+            if (started) {
+                VideoRecordingStorage.finalizePendingFile(this, filename)
+            } else {
+                VideoRecordingStorage.discardPendingFile(this, filename)
+            }
+            sendBroadcast(Intent(ACTION_RECORDING_STOPPED).setPackage(packageName).putExtra(EXTRA_FILENAME, filename).putExtra(EXTRA_RECORDING_SAVED, started))
+        }
     }
 
     private fun teardownCapture() {

@@ -219,7 +219,15 @@ object HypervisorPasswordStore {
             Logger.w(TAG, "Legacy plaintext sweep could not open the database", e)
             return@withContext
         }
-        drainCarryover(db, app.securePasswordManager)
+        try {
+            drainCarryover(db, app.securePasswordManager)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Keystore initialization itself can fail before drainCarryover handles
+            // individual writes. Preserve the carry-over rows for a later retry.
+            Logger.w(TAG, "Legacy plaintext sweep could not access secure storage", e)
+        }
         Unit
     }
 

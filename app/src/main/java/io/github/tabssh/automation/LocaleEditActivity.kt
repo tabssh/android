@@ -122,8 +122,8 @@ class LocaleEditActivity : AppCompatActivity() {
             return
         }
         val action = actionValues[actionSpinner.selectedItemPosition]
-        val command = commandInput.text.toString().take(LocalePlugin.MAX_COMMAND_LENGTH)
-        val keys = keysInput.text.toString().take(LocalePlugin.MAX_KEYS_LENGTH)
+        val command = commandInput.text.toString()
+        val keys = keysInput.text.toString()
         if (action == TaskerWorker.ACTION_SEND_COMMAND && command.isBlank()) {
             Toast.makeText(this, getString(R.string.locale_toast_enter_command), Toast.LENGTH_SHORT).show()
             return
@@ -141,6 +141,10 @@ class LocaleEditActivity : AppCompatActivity() {
             keys = keys.ifBlank { null },
             waitForResult = waitCheck.isChecked
         )
+        if (!LocalePlugin.isBundleValid(bundle)) {
+            Toast.makeText(this, getString(R.string.locale_toast_request_too_large), Toast.LENGTH_LONG).show()
+            return
+        }
         val blurb = LocalePlugin.buildBlurb(action, profile.name, command, keys)
         setResult(RESULT_OK, Intent().apply {
             putExtra(LocalePlugin.EXTRA_BUNDLE, bundle)

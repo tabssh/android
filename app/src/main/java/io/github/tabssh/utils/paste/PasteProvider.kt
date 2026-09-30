@@ -1,5 +1,6 @@
 package io.github.tabssh.utils.paste
 
+import io.github.tabssh.network.readBoundedText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
@@ -77,7 +78,7 @@ class LenpasteProvider(private val baseUrl: String) : PasteProvider {
             .build()
         val responseBody = sharedHttpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw Exception("Lenpaste upload failed: HTTP ${response.code}")
-            response.body?.string() ?: throw Exception("Lenpaste returned empty response")
+            response.body?.readBoundedText(1024 * 1024L) ?: throw Exception("Lenpaste returned empty response")
         }
         val id = JSONObject(responseBody).getString("id")
         "$base/$id".also { url ->
@@ -101,7 +102,7 @@ class StikkedProvider(private val baseUrl: String) : PasteProvider {
             .build()
         sharedHttpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw Exception("Stikked upload failed: HTTP ${response.code}")
-            val url = response.body?.string()?.trim() ?: throw Exception("Stikked returned empty response")
+            val url = response.body?.readBoundedText(1024 * 1024L)?.trim() ?: throw Exception("Stikked returned empty response")
             if (!url.startsWith("http")) throw Exception("Stikked returned unexpected response: $url")
             url
         }
@@ -125,7 +126,7 @@ class PastebinProvider(private val apiKey: String, private val baseUrl: String) 
             .build()
         val responseText = sharedHttpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw Exception("Pastebin upload failed: HTTP ${response.code}")
-            response.body?.string()?.trim() ?: throw Exception("Pastebin returned empty response")
+            response.body?.readBoundedText(1024 * 1024L)?.trim() ?: throw Exception("Pastebin returned empty response")
         }
         if (responseText.startsWith("Bad API request")) throw Exception(responseText)
         responseText

@@ -16,9 +16,9 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * MediaStore-scoped save location for the session video recorder
- * (TODO.AI.md item 53): both the mp4 and its paired `.cast` file land in the
- * same user-visible `Movies/TabSSH` folder, matching the TODO item's "saved
- * to the device's Videos/TabSSH directory" requirement.
+ * Videos use `Movies/TabSSH`. On scoped storage, `.cast` documents use
+ * `Documents/TabSSH` because MediaStore rejects non-media files in Movies.
+ * Legacy devices keep both formats in Movies/TabSSH.
  *
  * No prior MediaStore convention exists elsewhere in the app — every other
  * "save a file" path (e.g. [io.github.tabssh.terminal.recording.SessionRecorder])
@@ -35,6 +35,7 @@ object VideoRecordingStorage {
 
     private const val TAG = "VideoRecordingStorage"
     private const val RELATIVE_PATH = "Movies/TabSSH"
+    private const val CAST_RELATIVE_PATH = "Documents/TabSSH"
 
     private data class PendingEntry(val uri: Uri?, val legacyFile: File?)
 
@@ -61,6 +62,7 @@ object VideoRecordingStorage {
                     ?: return null
                 pending[filename] = PendingEntry(uri, null)
                 context.contentResolver.openFileDescriptor(uri, "w")
+                    ?: throw java.io.IOException("Unable to open pending video")
             } else {
                 val dir = File(
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
@@ -72,6 +74,7 @@ object VideoRecordingStorage {
                 ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_READ_WRITE)
             }
         } catch (e: Exception) {
+            discardPendingFile(context, filename)
             Logger.e(TAG, "Failed to open pending video target for $filename", e)
             null
         }
@@ -79,7 +82,7 @@ object VideoRecordingStorage {
 
     /**
      * Open (creating if needed) a pending `.cast` (JSON) output stream for
-     * [filename], saved alongside the mp4 in the same [RELATIVE_PATH]. Goes
+     * [filename], saved in Documents/TabSSH on scoped storage. Goes
      * through the generic `MediaStore.Files` collection since `.cast` is not
      * a video/audio/image type MediaStore.Video would accept.
      */
@@ -87,15 +90,16 @@ object VideoRecordingStorage {
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val values = ContentValues().apply {
-                    put(MediaStore.Files.FileColumns.RELATIVE_PATH, RELATIVE_PATH)
+                    put(MediaStore.Files.FileColumns.RELATIVE_PATH, CAST_RELATIVE_PATH)
                     put(MediaStore.Files.FileColumns.DISPLAY_NAME, filename)
-                    put(MediaStore.Files.FileColumns.MIME_TYPE, "application/json")
+                    put(MediaStore.Files.FileColumns.MIME_TYPE, "application/x-asciicast")
                     put(MediaStore.Files.FileColumns.IS_PENDING, 1)
                 }
                 val collection = MediaStore.Files.getContentUri("external")
                 val uri = context.contentResolver.insert(collection, values) ?: return null
                 pending[filename] = PendingEntry(uri, null)
                 context.contentResolver.openOutputStream(uri)
+                    ?: throw java.io.IOException("Unable to open pending cast")
             } else {
                 val dir = File(
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
@@ -107,8 +111,23 @@ object VideoRecordingStorage {
                 FileOutputStream(file)
             }
         } catch (e: Exception) {
+            discardPendingFile(context, filename)
             Logger.e(TAG, "Failed to open cast output stream for $filename", e)
             null
+        }
+    }
+
+    /** Remove a recording target when setup failed before it could be used. */
+    fun discardPendingFile(context: Context, filename: String) {
+        val entry = pending.remove(filename) ?: return
+        try {
+            if (entry.uri != null) {
+                context.contentResolver.delete(entry.uri, null, null)
+            } else {
+                entry.legacyFile?.delete()
+            }
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to discard unfinished recording $filename", e)
         }
     }
 
@@ -150,10 +169,11 @@ object VideoRecordingStorage {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // Re-query rather than trust `pending` (already cleared by finalize).
             val projection = arrayOf(MediaStore.MediaColumns._ID)
-            val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ?"
+            val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND " +
+                "${MediaStore.MediaColumns.RELATIVE_PATH} IN (?, ?) AND ${MediaStore.MediaColumns.IS_PENDING} = 0"
             val collections = listOf(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, MediaStore.Files.getContentUri("external"))
             for (collection in collections) {
-                context.contentResolver.query(collection, projection, selection, arrayOf(filename), null)?.use { cursor ->
+                context.contentResolver.query(collection, projection, selection, arrayOf(filename, "$RELATIVE_PATH/", "$CAST_RELATIVE_PATH/"), null)?.use { cursor ->
                     if (cursor.moveToFirst()) {
                         val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
                         return Uri.withAppendedPath(collection, id.toString())
@@ -177,7 +197,7 @@ object VideoRecordingStorage {
     )
 
     /**
-     * Enumerate all finished recordings in the `Movies/TabSSH` folder for the
+     * Enumerate finished videos and casts in their recording folders for the
      * Recordings browser. API 29+ queries MediaStore (videos from the Video
      * collection, `.cast` files from the generic Files collection); the
      * legacy path lists the public directory itself. Rows still marked
@@ -194,8 +214,8 @@ object VideoRecordingStorage {
                     MediaStore.MediaColumns.DATE_MODIFIED,
                 )
                 // RELATIVE_PATH is stored with a trailing slash ("Movies/TabSSH/").
-                val selection = "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
-                val args = arrayOf("$RELATIVE_PATH%")
+                val selection = "${MediaStore.MediaColumns.RELATIVE_PATH} IN (?, ?) AND ${MediaStore.MediaColumns.IS_PENDING} = 0"
+                val args = arrayOf("$RELATIVE_PATH/", "$CAST_RELATIVE_PATH/")
                 val collections = listOf(
                     MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
                     MediaStore.Files.getContentUri("external"),

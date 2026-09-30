@@ -168,7 +168,7 @@ not re-open them:
 
 ---
 
-## 5. R8 is pinned separately to match Kotlin metadata
+## 6. R8 is pinned separately to match Kotlin metadata
 
 **Overrides:** AI.md:586-588 — the Kotlin/AGP/Gradle toolchain follows the
 maintained image's compatible versions.

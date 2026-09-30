@@ -25,37 +25,28 @@ class TaskerActionReceiver : BroadcastReceiver() {
         val action = intent.action ?: return
         Logger.d("TaskerActionReceiver", "Received $action")
 
-        // ConnectionProfile.id is a UUID String, not a Long. Accept either
-        // form on the wire (older Tasker tasks may have written numeric
-        // values) and prefer the string extra when present.
-        val connectionIdExtra: String? = intent.getStringExtra(TaskerWorker.KEY_CONNECTION_ID)
-            ?: intent.getLongExtra(TaskerWorker.KEY_CONNECTION_ID, -1L)
-                .takeIf { it > 0 }?.toString()
-
-        // Length-limit free-form strings so a malicious Tasker integration
-        // cannot embed a megabyte-sized blob in WorkManager input data
-        // (capped at ~10 KB by androidx.work, but better to fail fast).
-        val command = intent.getStringExtra(TaskerWorker.KEY_COMMAND)?.take(8192)
-        val keys = intent.getStringExtra(TaskerWorker.KEY_KEYS)?.take(1024)
-        val name = intent.getStringExtra(TaskerWorker.KEY_CONNECTION_NAME)?.take(256)
-
-        val dataBuilder = Data.Builder()
-            .putString(TaskerWorker.KEY_ACTION, action)
-            .putString(TaskerWorker.KEY_CONNECTION_ID, connectionIdExtra)
-            .putString(TaskerWorker.KEY_CONNECTION_NAME, name)
-            .putString(TaskerWorker.KEY_COMMAND, command)
-            .putString(TaskerWorker.KEY_KEYS, keys)
-            .putBoolean(TaskerWorker.KEY_WAIT_FOR_RESULT, intent.getBooleanExtra(TaskerWorker.KEY_WAIT_FOR_RESULT, false))
-        // Forward the timeout only when the caller supplied one — otherwise
-        // leave the key unset so the worker falls back to the user's
-        // tasker_command_timeout preference.
-        if (intent.hasExtra(TaskerWorker.KEY_TIMEOUT_MS)) {
-            dataBuilder.putLong(
-                TaskerWorker.KEY_TIMEOUT_MS,
-                intent.getLongExtra(TaskerWorker.KEY_TIMEOUT_MS, TaskerWorker.DEFAULT_TIMEOUT_MS)
+        val data = try {
+            val connectionId = intent.getStringExtra(TaskerWorker.KEY_CONNECTION_ID)
+                ?: intent.getLongExtra(TaskerWorker.KEY_CONNECTION_ID, -1L)
+                    .takeIf { it > 0 }?.toString()
+            TaskerInputData.create(
+                action = action,
+                connectionId = connectionId,
+                connectionName = intent.getStringExtra(TaskerWorker.KEY_CONNECTION_NAME),
+                command = intent.getStringExtra(TaskerWorker.KEY_COMMAND),
+                keys = intent.getStringExtra(TaskerWorker.KEY_KEYS),
+                waitForResult = intent.getBooleanExtra(TaskerWorker.KEY_WAIT_FOR_RESULT, false),
+                timeoutMs = if (intent.hasExtra(TaskerWorker.KEY_TIMEOUT_MS)) {
+                    intent.getLongExtra(TaskerWorker.KEY_TIMEOUT_MS, TaskerWorker.DEFAULT_TIMEOUT_MS)
+                } else null
             )
+        } catch (_: RuntimeException) {
+            null
         }
-        val data = dataBuilder.build()
+        if (data == null) {
+            Logger.w("TaskerActionReceiver", "Rejected invalid or oversized automation request")
+            return
+        }
 
         val request = OneTimeWorkRequestBuilder<TaskerWorker>()
             .setInputData(data)

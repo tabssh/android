@@ -1,5 +1,6 @@
 package io.github.tabssh.hypervisor.xcpng
 
+import io.github.tabssh.network.readBoundedText
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -226,7 +227,7 @@ class XenOrchestraApiClient(
 
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
-                    val responseBody = response.body?.string()
+                    val responseBody = response.body?.readBoundedText()
                     if (responseBody != null) {
                         val responseJson = JSONObject(responseBody)
                         val token = responseJson.optString("token")
@@ -319,7 +320,7 @@ class XenOrchestraApiClient(
                     return@withContext client.newCall(newRequest).execute()
                 }
                 // Re-auth failed. Falling through here returned the response that
-                // was just closed above, so every caller's response.body?.string()
+                // was just closed above, so every caller's response.body?.readBoundedText()
                 // threw IllegalStateException("closed") and the real cause — an
                 // authentication failure — was lost.
                 throw IOException("Xen Orchestra request failed: 401 (re-authentication failed)")
@@ -336,7 +337,7 @@ class XenOrchestraApiClient(
      * Handle API error responses
      */
     private fun handleApiError(response: Response) {
-        val errorBody = response.body?.string()
+        val errorBody = response.body?.readBoundedText()
         try {
             if (errorBody != null) {
                 val errorJson = JSONObject(errorBody)
@@ -385,7 +386,7 @@ class XenOrchestraApiClient(
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
-                val body = response.body?.string()
+                val body = response.body?.readBoundedText()
                 if (body != null) {
                     val jsonArray = JSONArray(body)
                     val vms = mutableListOf<XoVM>()
@@ -449,7 +450,7 @@ class XenOrchestraApiClient(
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
-                val body = response.body?.string()
+                val body = response.body?.readBoundedText()
                 if (body != null) {
                     val vmJson = JSONObject(body)
                     
@@ -724,7 +725,7 @@ class XenOrchestraApiClient(
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
-                val body = response.body?.string()
+                val body = response.body?.readBoundedText()
                 if (body != null) {
                     val jsonArray = JSONArray(body)
                     val snapshots = mutableListOf<XoSnapshot>()
@@ -884,7 +885,7 @@ class XenOrchestraApiClient(
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
-                val body = response.body?.string()
+                val body = response.body?.readBoundedText()
                 if (body != null) {
                     val jsonArray = JSONArray(body)
                     val jobs = mutableListOf<XoBackupJob>()
@@ -935,7 +936,7 @@ class XenOrchestraApiClient(
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
-                val body = response.body?.string()
+                val body = response.body?.readBoundedText()
                 if (body != null) {
                     val jobJson = JSONObject(body)
                     
@@ -1007,7 +1008,7 @@ class XenOrchestraApiClient(
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
-                val body = response.body?.string()
+                val body = response.body?.readBoundedText()
                 if (body != null) {
                     val jsonArray = JSONArray(body)
                     val runs = mutableListOf<XoBackupRun>()
@@ -1064,7 +1065,7 @@ class XenOrchestraApiClient(
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
-                val body = response.body?.string()
+                val body = response.body?.readBoundedText()
                 if (body != null) {
                     val jsonArray = JSONArray(body)
                     val pools = mutableListOf<XoPool>()
@@ -1116,7 +1117,7 @@ class XenOrchestraApiClient(
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
-                val body = response.body?.string()
+                val body = response.body?.readBoundedText()
                 if (body != null) {
                     val poolJson = JSONObject(body)
                     
@@ -1159,7 +1160,7 @@ class XenOrchestraApiClient(
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
-                val body = response.body?.string()
+                val body = response.body?.readBoundedText()
                 if (body != null) {
                     val jsonArray = JSONArray(body)
                     val hosts = mutableListOf<XoHost>()
@@ -1222,7 +1223,7 @@ class XenOrchestraApiClient(
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
-                val body = response.body?.string()
+                val body = response.body?.readBoundedText()
                 if (body != null) {
                     val hostJson = JSONObject(body)
                     
@@ -1267,7 +1268,7 @@ class XenOrchestraApiClient(
             val response = executeRequest(request)
             
             if (response.isSuccessful) {
-                val body = response.body?.string()
+                val body = response.body?.readBoundedText()
                 if (body != null) {
                     val statsJson = JSONObject(body)
                     val stats = mutableMapOf<String, Any>()
@@ -1324,7 +1325,7 @@ class XenOrchestraApiClient(
                 // closed, so the connection stayed checked out of the pool.
                 val consoleUrl = executeRequest(request).use { response ->
                     if (!response.isSuccessful) null
-                    else response.body?.string()?.let { JSONObject(it).optString("url") }
+                    else response.body?.readBoundedText()?.let { JSONObject(it).optString("url") }
                 }
 
                 if (!consoleUrl.isNullOrEmpty()) {

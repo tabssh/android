@@ -3,7 +3,6 @@ package io.github.tabssh.automation
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import io.github.tabssh.utils.logging.Logger
@@ -23,28 +22,16 @@ class LocaleFireReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != LocalePlugin.ACTION_FIRE_SETTING) return
-        val bundle = intent.getBundleExtra(LocalePlugin.EXTRA_BUNDLE)
-        if (!LocalePlugin.isBundleValid(bundle)) {
-            Logger.w("LocaleFireReceiver", "Rejected invalid plugin bundle")
+        val data = try {
+            LocalePlugin.toWorkerData(intent.getBundleExtra(LocalePlugin.EXTRA_BUNDLE))
+        } catch (_: RuntimeException) {
+            null
+        }
+        if (data == null) {
+            Logger.w("LocaleFireReceiver", "Rejected invalid or oversized plugin bundle")
             return
         }
-        requireNotNull(bundle)
-        val action = bundle.getString(LocalePlugin.BUNDLE_KEY_ACTION) ?: return
-
-        val data = Data.Builder()
-            .putString(TaskerWorker.KEY_ACTION, action)
-            .putString(TaskerWorker.KEY_CONNECTION_ID, bundle.getString(LocalePlugin.BUNDLE_KEY_CONNECTION_ID))
-            .putString(TaskerWorker.KEY_CONNECTION_NAME, bundle.getString(LocalePlugin.BUNDLE_KEY_CONNECTION_NAME))
-            .putString(TaskerWorker.KEY_COMMAND, bundle.getString(LocalePlugin.BUNDLE_KEY_COMMAND))
-            .putString(TaskerWorker.KEY_KEYS, bundle.getString(LocalePlugin.BUNDLE_KEY_KEYS))
-            .putBoolean(
-                TaskerWorker.KEY_WAIT_FOR_RESULT,
-                bundle.getBoolean(LocalePlugin.BUNDLE_KEY_WAIT_FOR_RESULT, false)
-            )
-            // The plugin bundle carries no timeout key — leave KEY_TIMEOUT_MS
-            // unset so the worker falls back to the user's
-            // tasker_command_timeout preference.
-            .build()
+        val action = data.getString(TaskerWorker.KEY_ACTION)
 
         Logger.d("LocaleFireReceiver", "Enqueuing plugin action $action")
         val request = OneTimeWorkRequestBuilder<TaskerWorker>()

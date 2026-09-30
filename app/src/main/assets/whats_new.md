@@ -1,5 +1,18 @@
 # What's New
 
+## Wave 73 — audit, automation, and recording fixes
+
+- Cast recordings use Documents/TabSSH on Android 10+, where Android permits non-media files. Videos remain in Movies/TabSSH.
+
+- Startup credential migration preserves pending credentials and continues if secure storage initialization fails.
+
+- X11 forwarding listens only on this device and closes disconnected relays promptly.
+- Large file uploads no longer cause unrelated audit history to be deleted.
+- Oversized Tasker/Locale requests are rejected without crashing or running a truncated command.
+- Simultaneous recordings have separate filenames, and failed recording setup cleans up its resources.
+- Recording sharing and deletion select finished files from the recording folder.
+- Oversized server responses fail with an error instead of exhausting memory.
+
 ## Wave 72 — safer imports and recovery
 
 - **Interrupted container updates restore the old service.** If an automatic

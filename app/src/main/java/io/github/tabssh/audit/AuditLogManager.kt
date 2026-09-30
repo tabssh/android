@@ -281,8 +281,7 @@ class AuditLogManager(
             command      = command.take(4096),
             user         = connection.username,
             host         = connection.host,
-            port         = connection.port,
-            sizeBytes    = (command.length + 200).toLong()
+            port         = connection.port
         ))
     }
 
@@ -296,8 +295,7 @@ class AuditLogManager(
             output       = output.take(8192),
             user         = connection.username,
             host         = connection.host,
-            port         = connection.port,
-            sizeBytes    = (output.length + 200).toLong()
+            port         = connection.port
         ))
     }
 
@@ -312,8 +310,7 @@ class AuditLogManager(
             user         = connection.username,
             host         = connection.host,
             port         = connection.port,
-            metadata     = metadataJson("path" to remotePath.take(500), "bytes" to bytes),
-            sizeBytes    = bytes + 200
+            metadata     = metadataJson("path" to remotePath.take(500), "bytes" to bytes)
         ))
     }
 
@@ -438,7 +435,7 @@ class AuditLogManager(
     private suspend fun insert(entry: AuditLogEntry) {
         withContext(Dispatchers.IO) {
             try {
-                auditDao.insert(entry)
+                auditDao.insert(entry.copy(sizeBytes = entry.estimatedStorageBytes()))
                 syslogForward(entry)
             } catch (e: CancellationException) {
                 throw e

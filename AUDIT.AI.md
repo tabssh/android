@@ -319,3 +319,67 @@ The final SPICE bridge and pinned dependency stack cross-compiled and linked as
 passed 16 KB `zipalign`; debug/provider APK signatures verified. F-Droid output
 is unsigned as intended. The pane editor IME runtime checks on API 34 and the
 16 KB API 35 JNI instrumentation checks are recorded above from the prior pass.
+
+
+## Follow-up audit — automation, recordings, retention, and X11
+
+Baseline: `6680c1201cee`. SPEC.md was read first, including its accepted TLS
+and cleartext behavior. This pass traced exported automation requests, audit
+storage/retention, recording creation/sharing/cleanup, X11 relay sockets,
+container health verification, and remaining unbounded HTTP reads.
+
+Confirmed findings fixed:
+
+- **High — X11 listener exposed beyond the device.** `X11Proxy.start()` used
+  `ServerSocket(0)`, which binds every interface despite its localhost contract.
+  It now binds IPv4 loopback explicitly. Either relay reaching EOF closes both
+  sockets; repeated starts retain the existing listener. Regression coverage
+  verifies the bind address and server-side EOF against a local test X server.
+- **High — audit history removed after large SFTP uploads.** Upload events used
+  the transfer byte count as the log-entry size, while most other events defaulted
+  to zero. Retention now measures stored UTF-8 row content, including existing
+  and imported rows. Room-backed tests cover a 2 GiB upload and Unicode entries
+  whose legacy size was zero.
+- **High — automation receiver crash and truncated commands.** Character caps
+  did not enforce WorkManager's serialized 10 KB limit. Both receivers now use
+  one validated builder and reject oversize input instead of truncating command
+  text. The Locale editor rejects a request it cannot dispatch. Tests include
+  a Unicode payload below the character cap but above the serialized limit.
+- **Medium — recording collisions and long-name failures.** Second-resolution
+  filenames let simultaneous sessions append to the same transcript or overwrite
+  pending recording bookkeeping. A shared bounded filename generator adds a UUID
+  for transcript, cast, and video targets. Concurrent cast uploads also use unique
+  temporary files, and anonymous upload identity creation is synchronized.
+- **Medium — failed capture setup leaked resources and pending files.** The
+  service now owns resources immediately after allocation, cleans them up on
+  failed setup, and finishes recording storage on destruction. MediaStore open
+  failures discard their pending row; terminal writers close on write failure.
+- **Medium — recording lookup could select a same-named file in another folder.**
+  Share/delete lookup now restricts the exact recording directory and excludes
+  pending rows. Listing uses the same filters. Provider-backed unit coverage
+  checks failed opens and query filters; a device test covers cast creation,
+  pending visibility, finalization, reading, and deletion.
+- **Medium — unbounded remote response allocations remained.** Xen Orchestra,
+  paste providers, and cast uploads now enforce decoded byte limits while
+  retaining OkHttp charset handling. Tests cover unknown-length bodies and
+  exact-limit non-UTF-8 text.
+- **Low — wall-clock changes distorted timeout/backoff windows.** Container
+  replacement verification and X11 retry backoff now use monotonic elapsed time.
+
+- **High — startup migration could terminate the application.** Keystore initialization
+  was outside the migration error handler. Initialization failures now preserve
+  carry-over credentials for retry and allow startup to continue; cancellation
+  still propagates. The full JVM suite exposed this through its unavailable
+  Android Keystore provider.
+
+- **High — scoped-storage cast recordings could not start.** The API 35 device
+  test reproduced MediaProvider rejecting JSON files in Movies. Casts now use
+  Documents/TabSSH and their own MIME type; listing and lookup include both
+  exact directories, retaining legacy Movies compatibility.
+
+Device verification: all 8 connected tests passed on API 35 with 16 KB pages
+in casjaysdev/android:latest, including real cast MediaStore lifecycle coverage.
+Final `make check` passed (Docker compilation, Android Lint, and 1,168 JVM
+tests: zero failures, 10 skipped). `git diff --check` passed. Live cloud
+provider operations and full GUI protocol interoperability are outside the
+runtime coverage of this pass.

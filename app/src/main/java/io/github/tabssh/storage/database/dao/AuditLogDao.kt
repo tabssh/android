@@ -5,6 +5,12 @@ import io.github.tabssh.storage.database.entities.AuditLogEntry
 import io.github.tabssh.storage.database.entities.AuditLogSummary
 import kotlinx.coroutines.flow.Flow
 
+// Estimate retained row bytes from the actual content, including legacy/imported rows
+// whose size_bytes field is zero or incorrectly contains an SFTP transfer size.
+private const val AUDIT_ENTRY_SIZE_SQL = "128 + length(CAST(" +
+    "id || connection_id || session_id || event_type || user || host || " +
+    "coalesce(command, '') || coalesce(output, '') || coalesce(metadata, '') AS BLOB))"
+
 /**
  * Data Access Object for audit log operations
  */
@@ -81,10 +87,10 @@ interface AuditLogDao {
     """)
     suspend fun getByEventTypeSummary(eventType: String): List<AuditLogSummary>
     
-    @Query("SELECT SUM(size_bytes) FROM audit_log")
+    @Query("SELECT SUM(" + AUDIT_ENTRY_SIZE_SQL + ") FROM audit_log")
     suspend fun getTotalSize(): Long?
     
-    @Query("SELECT SUM(size_bytes) FROM audit_log WHERE connection_id = :connectionId")
+    @Query("SELECT SUM(" + AUDIT_ENTRY_SIZE_SQL + ") FROM audit_log WHERE connection_id = :connectionId")
     suspend fun getTotalSizeForConnection(connectionId: String): Long?
     
     @Query("SELECT COUNT(*) FROM audit_log")

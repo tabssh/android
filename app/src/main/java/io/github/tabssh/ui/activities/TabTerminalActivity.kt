@@ -433,6 +433,9 @@ class TabTerminalActivity : TabSSHActivity() {
     private fun registerRecordingStoppedReceiver() {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.getBooleanExtra(SessionRecordingService.EXTRA_RECORDING_SAVED, false) != true) {
+                    recordingVideoFilename = null
+                }
                 recordingSshTabRef?.let { sshTab ->
                     sshTab.castWriter?.stopRecording()
                     sshTab.castWriter = null
@@ -5168,9 +5171,7 @@ class TabTerminalActivity : TabSSHActivity() {
 
     private fun beginVideoRecording(tab: Tab, resultCode: Int, resultData: Intent, includeCast: Boolean) {
         val tabTitle = tab.shortTitle()
-        val sanitizedName = tabTitle.replace(Regex("[^a-zA-Z0-9_-]"), "_")
-        val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
-        val filename = "video_${sanitizedName}_$timestamp.mp4"
+        val filename = io.github.tabssh.utils.RecordingFileNames.create("video", tabTitle, "mp4")
 
         if (includeCast && tab is Tab.Ssh) {
             startCastWriter(tab)

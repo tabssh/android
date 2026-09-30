@@ -1,6 +1,7 @@
 package io.github.tabssh.automation
 
 import android.os.Bundle
+import androidx.work.Data
 
 /**
  * Shared constants and bundle marshalling for the com.twofortyfouram
@@ -71,27 +72,19 @@ object LocalePlugin {
      * this process cannot load throws, and an uncaught throw inside
      * `onReceive`/`onCreate` is a crash any installed app could trigger.
      */
-    fun isBundleValid(bundle: Bundle?): Boolean = runCatching {
-        if (bundle == null) return@runCatching false
-        if (bundle.getInt(BUNDLE_KEY_VERSION, -1) != BUNDLE_VERSION) return@runCatching false
-        val action = bundle.getString(BUNDLE_KEY_ACTION) ?: return@runCatching false
-        if (action !in SUPPORTED_ACTIONS) return@runCatching false
-        // The connection ID is mandatory, not interchangeable with the name:
-        // IDs are opaque UUIDs only obtainable through LocaleEditActivity, while
-        // names are guessable, which would let any app target a profile blind.
+    fun isBundleValid(bundle: Bundle?): Boolean = toWorkerData(bundle) != null
+
+    internal fun toWorkerData(bundle: Bundle?): Data? = runCatching {
+        if (bundle == null || bundle.getInt(BUNDLE_KEY_VERSION, -1) != BUNDLE_VERSION) return@runCatching null
+        val action = bundle.getString(BUNDLE_KEY_ACTION) ?: return@runCatching null
         val id = bundle.getString(BUNDLE_KEY_CONNECTION_ID)
-        if (id.isNullOrEmpty() || id.length > MAX_NAME_LENGTH) return@runCatching false
-        if ((bundle.getString(BUNDLE_KEY_CONNECTION_NAME)?.length ?: 0) > MAX_NAME_LENGTH) return@runCatching false
-        if ((bundle.getString(BUNDLE_KEY_COMMAND)?.length ?: 0) > MAX_COMMAND_LENGTH) return@runCatching false
-        if ((bundle.getString(BUNDLE_KEY_KEYS)?.length ?: 0) > MAX_KEYS_LENGTH) return@runCatching false
-        if (action == TaskerWorker.ACTION_SEND_COMMAND &&
-            bundle.getString(BUNDLE_KEY_COMMAND).isNullOrEmpty()
-        ) return@runCatching false
-        if (action == TaskerWorker.ACTION_SEND_KEYS &&
-            bundle.getString(BUNDLE_KEY_KEYS).isNullOrEmpty()
-        ) return@runCatching false
-        true
-    }.getOrDefault(false)
+        if (id.isNullOrEmpty()) return@runCatching null
+        TaskerInputData.create(
+            action, id, bundle.getString(BUNDLE_KEY_CONNECTION_NAME),
+            bundle.getString(BUNDLE_KEY_COMMAND), bundle.getString(BUNDLE_KEY_KEYS),
+            bundle.getBoolean(BUNDLE_KEY_WAIT_FOR_RESULT, false)
+        )
+    }.getOrNull()
 
     /** Short human-readable summary shown in the host app's task editor. */
     fun buildBlurb(action: String, connectionName: String, command: String?, keys: String?): String {

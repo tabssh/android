@@ -242,7 +242,7 @@ class UpdateApplier(
      * Returns null on success, a failure message otherwise.
      */
     private suspend fun verifyNew(transport: ContainerTransport, name: String): String? {
-        val start = System.currentTimeMillis()
+        val start = System.nanoTime()
         var sawHealthcheck = false
         while (true) {
             delay(VERIFY_POLL_MS)
@@ -256,7 +256,7 @@ class UpdateApplier(
                 return "Replacement container is not running"
             }
             val health = state.optJSONObject("Health")?.optString("Status").orEmpty()
-            val elapsed = System.currentTimeMillis() - start
+            val elapsed = (System.nanoTime() - start) / 1_000_000L
             when {
                 health == "healthy" -> return null
                 health == "unhealthy" -> return "Replacement container reported unhealthy"

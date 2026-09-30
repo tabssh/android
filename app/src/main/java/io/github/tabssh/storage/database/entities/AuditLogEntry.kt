@@ -111,6 +111,11 @@ data class AuditLogEntry(
         const val EVENT_CONFIG_CHANGE   = "CONFIG_CHANGE"
     }
     
+    /** Estimated retained bytes, independent of any transferred file size. */
+    fun estimatedStorageBytes(): Long = 128L + listOf(
+        id, connectionId, sessionId, eventType, user, host, command, output, metadata
+    ).sumOf { it?.toByteArray(Charsets.UTF_8)?.size?.toLong() ?: 0L }
+
     fun getDisplayTimestamp(): String {
         val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
         return sdf.format(java.util.Date(timestamp))

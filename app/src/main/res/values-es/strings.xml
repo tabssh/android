@@ -224,4 +224,5 @@
     <string name="cloud_manager_toast_credentials_clear_failed">No se pudieron borrar las credenciales: %1$s</string>
     <string name="sync_log_clear_failed">No se pudo borrar el registro de sincronización</string>
 
+    <string name="locale_toast_request_too_large">La acción de automatización es demasiado grande. Acorta el comando o las teclas e inténtalo de nuevo.</string>
 </resources>

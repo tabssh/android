@@ -1,5 +1,6 @@
 package io.github.tabssh.terminal.recording
 
+import io.github.tabssh.network.readBoundedText
 import android.content.Context
 import androidx.core.content.edit
 import io.github.tabssh.network.SharedHttpClient
@@ -79,7 +80,7 @@ object AsciinemaUploader {
             if (!response.isSuccessful) {
                 throw IOException("HTTP ${response.code} ${response.message}")
             }
-            val resultUrl = response.body?.string()?.trim()
+            val resultUrl = response.body?.readBoundedText(1024 * 1024L)?.trim()
             if (resultUrl.isNullOrBlank()) {
                 throw IOException("Empty response from $baseUrl")
             }
@@ -103,7 +104,7 @@ object AsciinemaUploader {
     fun uploadByFilename(context: Context, filename: String, legacyFile: File?, serverUrl: String): String {
         val uri = VideoRecordingStorage.shareableUriFor(context, filename, legacyFile)
             ?: throw IOException("Could not resolve $filename for upload")
-        val tempFile = File(context.cacheDir, "upload_$filename")
+        val tempFile = File.createTempFile("cast_upload_", ".cast", context.cacheDir)
         try {
             context.contentResolver.openInputStream(uri)?.use { input ->
                 tempFile.outputStream().use { output -> input.copyTo(output) }
@@ -119,6 +120,7 @@ object AsciinemaUploader {
      * tied to any account/user-identifying value, matching the official
      * CLI's anonymous-upload identity model.
      */
+    @Synchronized
     private fun installId(context: Context): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.getString(KEY_INSTALL_ID, null)?.let { return it }

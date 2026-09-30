@@ -227,4 +227,5 @@
     <string name="cloud_manager_toast_credentials_clear_failed">Zugangsdaten konnten nicht gelöscht werden: %1$s</string>
     <string name="sync_log_clear_failed">Sync-Protokoll konnte nicht geleert werden</string>
 
+    <string name="locale_toast_request_too_large">Die Automatisierungsaktion ist zu groß. Kürzen Sie den Befehl oder die Tastenfolge und versuchen Sie es erneut.</string>
 </resources>

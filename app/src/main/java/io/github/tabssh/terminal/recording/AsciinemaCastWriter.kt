@@ -1,14 +1,13 @@
 package io.github.tabssh.terminal.recording
 
 import android.content.Context
+import io.github.tabssh.utils.RecordingFileNames
 import io.github.tabssh.utils.VideoRecordingStorage
 import io.github.tabssh.utils.logging.Logger
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.io.Writer
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 /**
  * Writes an [asciicast v2](https://docs.asciinema.org/manual/asciicast/v2/)
@@ -53,11 +52,8 @@ class AsciinemaCastWriter(
             if (isRecording) return
 
             var w: Writer? = null
+            val filename = RecordingFileNames.create("cast", connectionName, "cast")
             try {
-                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(java.util.Date())
-                val sanitizedName = connectionName.replace(Regex("[^a-zA-Z0-9_-]"), "_")
-                val filename = "cast_${sanitizedName}_$timestamp.cast"
-
                 val out = VideoRecordingStorage.openCastOutputStream(context, filename)
                     ?: throw java.io.IOException("Unable to open output stream for $filename")
                 w = OutputStreamWriter(out, Charsets.UTF_8)
@@ -67,7 +63,7 @@ class AsciinemaCastWriter(
                     put("width", columns)
                     put("height", rows)
                     put("timestamp", System.currentTimeMillis() / 1000)
-                    put("title", connectionName)
+                    put("title", connectionName.take(256))
                 }
                 val headerLine = header.toString() + "\n"
                 w.write(headerLine)
@@ -82,6 +78,7 @@ class AsciinemaCastWriter(
             } catch (e: Exception) {
                 try { w?.close() } catch (_: Exception) {}
                 writer = null
+                VideoRecordingStorage.discardPendingFile(context, filename)
                 Logger.e("AsciinemaCastWriter", "Failed to start", e)
             }
         }
@@ -112,6 +109,7 @@ class AsciinemaCastWriter(
                 bytesWritten += eventBytes.size
             } catch (e: Exception) {
                 Logger.e("AsciinemaCastWriter", "Write failed", e)
+                stopRecordingLocked()
             }
         }
     }

@@ -224,4 +224,5 @@
     <string name="cloud_manager_toast_credentials_clear_failed">Impossible d\'effacer les identifiants : %1$s</string>
     <string name="sync_log_clear_failed">Impossible d\'effacer le journal de synchronisation</string>
 
+    <string name="locale_toast_request_too_large">L’action d’automatisation est trop volumineuse. Raccourcissez la commande ou les touches et réessayez.</string>
 </resources>

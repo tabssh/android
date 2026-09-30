@@ -1,10 +1,10 @@
 package io.github.tabssh.terminal.recording
 
 import android.content.Context
+import io.github.tabssh.utils.RecordingFileNames
 import io.github.tabssh.utils.logging.Logger
 import java.io.File
 import java.io.FileWriter
-import java.text.SimpleDateFormat
 import java.util.*
 
 class SessionRecorder(
@@ -38,12 +38,10 @@ class SessionRecorder(
                 val transcriptsDir = File(context.getExternalFilesDir(null) ?: context.filesDir, "Transcripts")
                 transcriptsDir.mkdirs()
 
-                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-                val sanitizedName = connectionName.replace(Regex("[^a-zA-Z0-9_-]"), "_")
-                currentFile = File(transcriptsDir, "session_${sanitizedName}_${timestamp}.log")
-                w = FileWriter(currentFile, true)
+                currentFile = File(transcriptsDir, RecordingFileNames.create("session", connectionName, "log"))
+                w = FileWriter(currentFile, false)
 
-                val header = "# TabSSH Session: $connectionName - ${Date()}\n\n"
+                val header = "# TabSSH Session: ${connectionName.take(256)} - ${Date()}\n\n"
                 w.write(header)
                 w.flush()
 
@@ -83,6 +81,7 @@ class SessionRecorder(
                 bytesWritten += dataBytes
             } catch (e: Exception) {
                 Logger.e("SessionRecorder", "Write failed", e)
+                stopRecordingLocked()
             }
         }
     }
@@ -104,7 +103,10 @@ class SessionRecorder(
         fileWriter = null
         isRecording = false
         try {
-            w?.write("\n# Session ended: ${Date()}\n")
+            val footer = "\n# Session ended: ${Date()}\n"
+            if (bytesWritten + footer.toByteArray(Charsets.UTF_8).size <= MAX_TRANSCRIPT_BYTES) {
+                w?.write(footer)
+            }
         } catch (e: Exception) {
             Logger.e("SessionRecorder", "Stop write failed", e)
         }

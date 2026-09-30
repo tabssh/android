@@ -1,9 +1,9 @@
-## 🗃️ Changelog: 2026-09-30 at 16:09:33 🗃️  
+## 🗃️ Changelog: 2026-09-30 at 16:59:00 🗃️  
 
   
 
 
-### 🗃️ End of changes for 202609301609-git 🗃️  
+### 🗃️ End of changes for 202609301659-git 🗃️  
 
 ----  
 # Changelog
@@ -76,6 +76,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Credential dialogs could be screenshotted or captured in the recent-apps thumbnail regardless of the "Prevent screenshots" setting** — the identity password prompt, the registry credential dialog, the sync passphrase dialog, and the import/export password prompts each open in their own dialog window, which doesn't inherit the FLAG_SECURE already applied to the PIN screen and container secret screens. Every dialog that shows or accepts a password, passphrase, token, or key now always blocks screenshots and screen recording on its own window, independent of that setting. A leftover unused dialog and its string that predated this audit were also removed
 
 ### Fixed
+
+- Cast recordings use Documents/TabSSH on Android 10+, where Android permits non-media files. Videos remain in Movies/TabSSH.
+
+- Startup credential migration preserves pending credentials and continues if secure storage initialization fails.
+
+- **X11 forwarding stays local to the device.** The proxy now binds only to loopback, and a closed X server connection releases both relay directions instead of leaving clients hanging.
+- **Large uploads no longer erase audit history.** Retention measures the stored log content rather than the transferred file size, including legacy entries with inaccurate or zero byte counts.
+- **Oversized automation requests are rejected safely.** Tasker/Locale validates the complete serialized payload, including Unicode, and no longer truncates executable commands before dispatch.
+- **Simultaneous recordings stay separate.** Transcript, cast, and video filenames are unique and bounded; failed capture setup releases allocated resources and removes pending files. Recording actions select only finished files in the recording directory.
+- **Oversized server replies fail cleanly.** Xen Orchestra, paste services, and cast uploads now cap response bodies. Concurrent cast uploads use separate temporary files.
 
 - **Tasker actions now respect worker cancellation and release connections when the tab limit is reached.** Previously an interrupted connection attempt was reported as a normal failure, and sending a command could leave a newly opened SSH session running without a tab when all tab slots were occupied
 - **QR pairing now rejects malformed CBOR and out-of-range ports before import.** Trailing data after the payload is no longer ignored, and version/port values are checked before narrowing to an integer

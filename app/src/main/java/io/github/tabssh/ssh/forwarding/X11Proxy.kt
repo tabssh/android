@@ -7,10 +7,12 @@ import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.ServerSocket
+import java.net.InetAddress
 import java.net.Socket
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Local TCP proxy that bridges JSch's X11 channel forwarding to an X display
@@ -83,10 +85,9 @@ class X11Proxy(
     @Volatile
     private var running = false
 
-    @Volatile
-    private var noServerNotified = false
+    private val noServerNotified = AtomicBoolean(false)
 
-    // Monotonic timestamp (System.currentTimeMillis) before which XSDL is
+    // Monotonic timestamp (milliseconds) before which XSDL is
     // considered unreachable and TCP probes are skipped. 0 = probe is allowed.
     @Volatile
     private var xsdlUnreachableUntil: Long = 0L
@@ -105,9 +106,11 @@ class X11Proxy(
      * Must be called before reading [port].
      * Throws [java.io.IOException] if the socket cannot be bound.
      */
+    @Synchronized
     fun start() {
-        // port 0 = OS assigns
-        val ss = ServerSocket(0)
+        if (running) return
+        check(!executor.isShutdown) { "A stopped X11 proxy cannot be restarted" }
+        val ss = ServerSocket(0, 8, InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)))
         serverSocket = ss
         port = ss.localPort
         running = true
@@ -119,6 +122,7 @@ class X11Proxy(
      * Stop accepting connections, close the server socket, and shut down all
      * relay threads. Idempotent — safe to call multiple times.
      */
+    @Synchronized
     fun stop() {
         running = false
         try {
@@ -145,7 +149,12 @@ class X11Proxy(
         while (running) {
             try {
                 val client = ss.accept()
-                executor.submit { handleClient(client) }
+                try {
+                    executor.submit { handleClient(client) }
+                } catch (e: Exception) {
+                    client.close()
+                    throw e
+                }
             } catch (e: Exception) {
                 if (running) {
                     Logger.w(TAG, "X11 proxy accept error: ${e.message}")
@@ -162,11 +171,10 @@ class X11Proxy(
         val xServer = connectToXServer()
         if (xServer == null) {
             Logger.w(TAG, "No X server reachable — dropping X11 channel")
-            if (!noServerNotified) {
-                noServerNotified = true
+            try { client.close() } catch (_: Exception) {}
+            if (noServerNotified.compareAndSet(false, true)) {
                 onNoServer()
             }
-            try { client.close() } catch (_: Exception) {}
             return
         }
 
@@ -176,8 +184,12 @@ class X11Proxy(
             // relay() is asynchronous, so awaiting the returned futures is what
             // keeps the connection open — closing here without the await tore
             // every X11 channel down the instant it was set up.
-            val clientToServer = relay(client.inputStream, xServer.outputStream)
-            val serverToClient = relay(xServer.inputStream, client.outputStream)
+            val closeBoth = {
+                try { client.close() } catch (_: Exception) {}
+                try { xServer.close() } catch (_: Exception) {}
+            }
+            val clientToServer = relay(client.inputStream, xServer.outputStream, closeBoth)
+            val serverToClient = relay(xServer.inputStream, client.outputStream, closeBoth)
             // Either direction reaching EOF ends the channel; close then unblocks
             // the other pump's read and its future completes on the way out.
             clientToServer.get()
@@ -219,7 +231,7 @@ class X11Proxy(
         // avoid leaking the TCP Socket fd on a failed connect().
         // Short-circuit if a recent probe already failed: sequential channel
         // opens would otherwise pay 500 ms per attempt.
-        val now = System.currentTimeMillis()
+        val now = (System.nanoTime() / 1_000_000L)
         if (now < xsdlUnreachableUntil) {
             return null
         }
@@ -232,7 +244,7 @@ class X11Proxy(
             return TcpSocketConnection(tcp)
         } catch (e: Exception) {
             try { tcp.close() } catch (_: Exception) {}
-            xsdlUnreachableUntil = System.currentTimeMillis() + XSDL_UNREACHABLE_BACKOFF_MS
+            xsdlUnreachableUntil = (System.nanoTime() / 1_000_000L) + XSDL_UNREACHABLE_BACKOFF_MS
             Logger.d(TAG, "XServer XSDL not reachable: ${e.message} — suppressing probes for ${XSDL_UNREACHABLE_BACKOFF_MS}ms")
         }
 
@@ -245,7 +257,7 @@ class X11Proxy(
      * Spawn a daemon thread that copies [input] → [output] until EOF or error.
      * The returned future completes when that pump stops.
      */
-    private fun relay(input: InputStream, output: OutputStream): Future<*> {
+    private fun relay(input: InputStream, output: OutputStream, onClosed: () -> Unit): Future<*> {
         return executor.submit {
             try {
                 val buf = ByteArray(RELAY_BUFFER_SIZE)
@@ -257,6 +269,9 @@ class X11Proxy(
                 }
             } catch (_: Exception) {
                 // EOF or stream closed — normal relay termination
+            } finally {
+                // Interrupting a worker does not unblock Socket.read(); closing does.
+                onClosed()
             }
         }
     }
