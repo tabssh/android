@@ -1384,39 +1384,38 @@ class SSHConnection(
             jumpSession.timeout = profile.connectTimeout * 1000
             stepDone("jump-config")
 
-            // Authenticate to jump host
-            when (effectiveProxyAuthType) {
-                AuthType.PUBLIC_KEY.name -> {
+            // Authenticate to jump host. Reusable route rows store the key mode
+            // as "KEY"; legacy inline proxy rows use "PUBLIC_KEY". Normalize
+            // both through AuthType so either persisted form loads the key.
+            when {
+                AuthType.fromString(effectiveProxyAuthType) == AuthType.PUBLIC_KEY -> {
                     val jumpKeyId = effectiveProxyKeyId
-                    if (jumpKeyId != null) {
-                        Logger.d("SSHConnection", "Jump host: Using public key authentication")
-                        // Load jump host SSH key as OpenSSH PEM bytes.
-                        // getJSchBytesWithFallback() returns the correct format for
-                        // JSch's byte-array addIdentity(); retrievePrivateKey().encoded
-                        // returns PKCS#8 DER which JSch rejects as "invalid private key".
-                        val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
-                            ?: throw SSHException("applicationContext is not TabSSHApplication")
-                        val jschBytes = app.keyStorage.getJSchBytesWithFallback(jumpKeyId)
-                        if (jschBytes != null) {
-                            try {
-                                jsch.addIdentity(
-                                    jumpKeyId,
-                                    jschBytes,
-                                    // public key (JSch can derive it)
-                                    null,
-                                    // passphrase — keys stored unencrypted in Keystore
-                                    null
-                                )
-                            } finally {
-                                // Zero plaintext key bytes once JSch has parsed them.
-                                jschBytes.fill(0)
-                            }
-                        } else {
-                            throw SSHException("Jump host key not found: $jumpKeyId")
-                        }
+                        ?: throw SSHException("Jump host is configured for key authentication but has no key selected")
+                    Logger.d("SSHConnection", "Jump host: Using public key authentication")
+                    // Load the JSch-compatible private-key bytes; PKCS#8 DER
+                    // from retrievePrivateKey().encoded is not accepted here.
+                    val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+                        ?: throw SSHException("applicationContext is not TabSSHApplication")
+                    val jschBytes = app.keyStorage.getJSchBytesWithFallback(jumpKeyId)
+                        ?: throw SSHException("Jump host key not found: $jumpKeyId")
+                    val passphraseBytes = app.securePasswordManager
+                        .retrievePassword("key_passphrase_$jumpKeyId")
+                        ?.toByteArray()
+                    val certificateBytes = app.database.keyDao().getKeyById(jumpKeyId)
+                        ?.certificate?.takeIf { it.isNotBlank() }
+                        ?.toByteArray(Charsets.US_ASCII)
+                    try {
+                        jsch.addIdentity(jumpKeyId, jschBytes, certificateBytes, passphraseBytes)
+                    } finally {
+                        // JSch parses/copies these synchronously; scrub all
+                        // plaintext credential material on success or failure.
+                        jschBytes.fill(0)
+                        passphraseBytes?.fill(0)
+                        certificateBytes?.fill(0)
                     }
                 }
-                AuthType.PASSWORD.name, null -> {
+                effectiveProxyAuthType.isNullOrBlank() ||
+                    effectiveProxyAuthType.equals(AuthType.PASSWORD.name, ignoreCase = true) -> {
                     Logger.d("SSHConnection", "Jump host: Using password authentication")
                     // Use same password as main connection for jump host
                     val password = getPasswordForAuthentication()

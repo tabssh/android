@@ -18,6 +18,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - **Panes no longer leave an empty tab after its final window closes or all pane sessions end.** The TabManager now watches pane state for the lifetime of its sessions, including across Activity recreation.
+- **SSH jump hosts now accept their saved SSH key.** Reusable routes store key authentication as `KEY`; the connection path now recognizes that value, loads key passphrases and attached certificates, and reports a missing key instead of silently attempting password auth. Changing a connection or identity's auth mode no longer removes its saved password; clearing the password or explicitly turning off Save Password removes it.
 
 ### Added
 

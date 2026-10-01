@@ -212,6 +212,11 @@ class ConnectionEditActivity : TabSSHActivity() {
     // SSH identities (Identity table)
     private var availableIdentities: List<io.github.tabssh.storage.database.entities.Identity> = emptyList()
     private var selectedIdentityId: String? = null
+    // True only when an existing per-connection password was actually decrypted
+    // into this form. A locked/unavailable biometric secret must not be erased
+    // just because the password field is blank while editing another auth mode.
+    private var loadedConnectionPassword = false
+    private var savePasswordExplicitlyChanged = false
 
     // VNC identities (VncIdentity table)
     private var availableVncIdentities: List<VncIdentity> = emptyList()
@@ -940,6 +945,10 @@ class ConnectionEditActivity : TabSSHActivity() {
         binding.editPort.addTextChangedListener(watcher)
         binding.editUsername.addTextChangedListener(watcher)
         binding.editPassword.addTextChangedListener(watcher)
+        binding.switchSavePassword.setOnClickListener {
+            savePasswordExplicitlyChanged = true
+            hasUnsavedChanges = true
+        }
         binding.editConnectTimeout.addTextChangedListener(watcher)
         binding.editReadTimeout.addTextChangedListener(watcher)
         binding.editServerAliveInterval.addTextChangedListener(watcher)
@@ -1078,6 +1087,8 @@ class ConnectionEditActivity : TabSSHActivity() {
     }
 
     private suspend fun populateFields(profile: ConnectionProfile) {
+        loadedConnectionPassword = false
+        savePasswordExplicitlyChanged = false
         binding.editName.setText(profile.name)
         binding.editHost.setText(profile.host)
         binding.editPort.setText(profile.port.toString())
@@ -1139,14 +1150,22 @@ class ConnectionEditActivity : TabSSHActivity() {
             }
         }
 
-        if (authType == AuthType.PASSWORD || authType == AuthType.KEYBOARD_INTERACTIVE) {
-            val storedPassword = withContext(Dispatchers.IO) {
-                app.securePasswordManager.retrievePassword(profile.id)
+        // Keep the saved secret in the form even while key auth hides its field.
+        // Changing auth mode alone must not discard a reusable fallback password.
+        val storedPassword = withContext(Dispatchers.IO) {
+            app.securePasswordManager.retrievePassword(profile.id)
+        }
+        if (storedPassword != null) {
+            loadedConnectionPassword = true
+            binding.editPassword.setText(storedPassword)
+            binding.switchSavePassword.isChecked = true
+        } else if (withContext(Dispatchers.IO) {
+                app.securePasswordManager.hasStoredPassword(profile.id)
             }
-            if (storedPassword != null) {
-                binding.editPassword.setText(storedPassword)
-                binding.switchSavePassword.isChecked = true
-            }
+        ) {
+            // Keep the save toggle in sync when biometric auth temporarily
+            // prevents this screen from decrypting the saved password.
+            binding.switchSavePassword.isChecked = true
         }
 
         binding.spinnerTerminalType.setText(profile.terminalType, false)
@@ -1574,26 +1593,20 @@ class ConnectionEditActivity : TabSSHActivity() {
                 showToast(getString(R.string.conn_edit_connection_saved))
             }
 
-            val authType = getSelectedAuthType()
-            if (authType == AuthType.PASSWORD || authType == AuthType.KEYBOARD_INTERACTIVE) {
-                val password = binding.editPassword.text.toString()
-                val savePassword = binding.switchSavePassword.isChecked
-                if (password.isNotEmpty() && savePassword) {
-                    val storageLevel = if (app.securePasswordManager.requiresEnhancedSecurity(profile.host)) {
-                        io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.BIOMETRIC
-                    } else {
-                        io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
-                    }
-                    app.securePasswordManager.storePassword(profile.id, password, storageLevel)
-                } else if (!savePassword) {
-                    // User explicitly unchecked "Save Password" — revoke any previously
-                    // stored credential so it is not silently reused on the next connect.
-                    try { app.securePasswordManager.clearPassword(profile.id) } catch (_: Exception) {}
+            val password = binding.editPassword.text.toString()
+            val savePassword = binding.switchSavePassword.isChecked
+            if (password.isNotEmpty() && savePassword) {
+                val storageLevel = if (app.securePasswordManager.requiresEnhancedSecurity(profile.host)) {
+                    io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.BIOMETRIC
+                } else {
+                    io.github.tabssh.crypto.storage.SecurePasswordManager.StorageLevel.ENCRYPTED
                 }
-            }
-            // bug-21: switching to PUBLIC_KEY leaves a stale password in SecurePasswordManager
-            // that could be picked up by a future auth attempt as a fallback.
-            if (authType == AuthType.PUBLIC_KEY) {
+                app.securePasswordManager.storePassword(profile.id, password, storageLevel)
+            } else if ((password.isEmpty() && loadedConnectionPassword) ||
+                (savePasswordExplicitlyChanged && !savePassword)
+            ) {
+                // Clearing the field is an explicit delete. Merely changing auth
+                // mode leaves its text intact (and key mode hides the save switch).
                 try { app.securePasswordManager.clearPassword(profile.id) } catch (_: Exception) {}
             }
 

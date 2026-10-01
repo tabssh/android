@@ -191,11 +191,10 @@ class AuthSshFragment : Fragment() {
             // (alias identity_${id}) — check there asynchronously, keeping the
             // DB column as a fallback for legacy rows that predate the move.
             lifecycleScope.launch(Dispatchers.IO) {
-                val hasPassword = !existing.password.isNullOrEmpty() || try {
-                    app.securePasswordManager.retrievePassword("identity_${existing.id}")?.isNotBlank() == true
-                } catch (_: Exception) {
-                    false
-                }
+                val passwordAlias = "identity_${existing.id}"
+                val hasPassword = !existing.password.isNullOrEmpty() ||
+                    app.securePasswordManager.hasStoredPassword(passwordAlias) ||
+                    app.securePasswordManager.retrievePassword(passwordAlias)?.isNotBlank() == true
                 withContext(Dispatchers.Main) {
                     if (hasPassword) {
                         passwordInput.setText(PASSWORD_MASK)
@@ -231,12 +230,12 @@ class AuthSshFragment : Fragment() {
                 }
 
                 if (existing == null) {
-                    val password = if (authType == AuthType.PASSWORD) passwordText.ifBlank { null } else null
+                    val password = passwordText.ifBlank { null }
                     createIdentity(name, username, authType, password, selectedKeyId, description.ifBlank { null })
                 } else {
+                    val passwordWasEdited = passwordText != PASSWORD_MASK
                     val newPassword = when {
-                        authType != AuthType.PASSWORD -> null
-                        passwordText == PASSWORD_MASK -> existing.password
+                        !passwordWasEdited -> existing.password
                         passwordText.isBlank() -> null
                         else -> passwordText
                     }
@@ -248,7 +247,7 @@ class AuthSshFragment : Fragment() {
                         keyId = selectedKeyId,
                         description = description.ifBlank { null },
                         modifiedAt = System.currentTimeMillis()
-                    ))
+                    ), passwordWasEdited)
                 }
             }
             .setNegativeButton(getString(R.string.cancel), null)
@@ -384,16 +383,27 @@ class AuthSshFragment : Fragment() {
         }
     }
 
-    private fun updateIdentity(identity: Identity) {
+    private fun updateIdentity(identity: Identity, passwordWasEdited: Boolean) {
         lifecycleScope.launch(Dispatchers.IO) {
             val legacyPassword = identity.password
             val updated = identity.copy(password = null)
             app.database.identityDao().update(updated)
-            if (legacyPassword != null) {
-                app.securePasswordManager.storePassword(
-                    "identity_${identity.id}", legacyPassword,
-                    SecurePasswordManager.StorageLevel.ENCRYPTED
-                )
+            when {
+                passwordWasEdited && !identity.password.isNullOrBlank() -> {
+                    app.securePasswordManager.storePassword(
+                        "identity_${identity.id}", identity.password,
+                        SecurePasswordManager.StorageLevel.ENCRYPTED
+                    )
+                }
+                passwordWasEdited -> {
+                    app.securePasswordManager.clearPassword("identity_${identity.id}")
+                }
+                legacyPassword != null -> {
+                    app.securePasswordManager.storePassword(
+                        "identity_${identity.id}", legacyPassword,
+                        SecurePasswordManager.StorageLevel.ENCRYPTED
+                    )
+                }
             }
             withContext(Dispatchers.Main) {
                 Toast.makeText(requireContext(), getString(R.string.identity_updated_toast), Toast.LENGTH_SHORT).show()

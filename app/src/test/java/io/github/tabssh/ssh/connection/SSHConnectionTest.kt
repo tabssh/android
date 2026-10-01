@@ -91,6 +91,7 @@ class SSHConnectionTest {
     fun `test auth type from string`() {
         assertEquals(AuthType.PASSWORD, AuthType.fromString("PASSWORD"))
         assertEquals(AuthType.PUBLIC_KEY, AuthType.fromString("PUBLIC_KEY"))
+        assertEquals(AuthType.PUBLIC_KEY, AuthType.fromString("KEY"))
         assertEquals(AuthType.PASSWORD, AuthType.fromString(null)) // Default
         assertEquals(AuthType.PASSWORD, AuthType.fromString("INVALID")) // Default
     }

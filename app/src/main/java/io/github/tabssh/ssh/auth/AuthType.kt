@@ -20,7 +20,7 @@ enum class AuthType(val displayName: String, val description: String) {
         fun fromString(name: String?): AuthType {
             if (name == null) return PASSWORD
             return when (name.lowercase().trim()) {
-                "public_key", "publickey", "public-key" -> PUBLIC_KEY
+                "public_key", "publickey", "public-key", "key" -> PUBLIC_KEY
                 "password" -> PASSWORD
                 "keyboard_interactive", "keyboard-interactive", "keyboard" -> KEYBOARD_INTERACTIVE
                 else -> try { valueOf(name) } catch (_: IllegalArgumentException) { PASSWORD }
