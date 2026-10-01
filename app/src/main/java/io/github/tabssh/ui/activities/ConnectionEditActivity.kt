@@ -65,6 +65,7 @@ class ConnectionEditActivity : TabSSHActivity() {
         const val EXTRA_DEFAULT_PROTOCOL = "default_protocol"
         // Bundle key for the dirty flag saved/restored across rotation.
         private const val KEY_HAS_UNSAVED_CHANGES = "has_unsaved_changes"
+        private const val KEY_SAVE_PASSWORD_EXPLICITLY_CHANGED = "save_password_explicitly_changed"
 
         // Fixed positions in the network route spinner. Saved routes start at
         // index 2; the final index is always the "+ Add new route…" action.
@@ -315,6 +316,7 @@ class ConnectionEditActivity : TabSSHActivity() {
         super.onSaveInstanceState(outState)
         saveFormState(outState, binding.root)
         outState.putBoolean(KEY_HAS_UNSAVED_CHANGES, hasUnsavedChanges)
+        outState.putBoolean(KEY_SAVE_PASSWORD_EXPLICITLY_CHANGED, savePasswordExplicitlyChanged)
     }
 
     /**
@@ -328,6 +330,8 @@ class ConnectionEditActivity : TabSSHActivity() {
         pendingFormState?.let { saved ->
             restoreFormState(saved, binding.root)
             hasUnsavedChanges = saved.getBoolean(KEY_HAS_UNSAVED_CHANGES, false)
+            savePasswordExplicitlyChanged =
+                saved.getBoolean(KEY_SAVE_PASSWORD_EXPLICITLY_CHANGED, false)
         }
         pendingFormState = null
     }

@@ -3,7 +3,7 @@
 ## Wave 73 — audit, automation, and recording fixes
 
 - Panes tabs close automatically after the final pane closes or all pane sessions end, including after Activity recreation.
-- SSH jump hosts authenticate with the route's selected key, including encrypted keys and attached SSH certificates. Changing a connection or identity's auth mode keeps its saved password; clearing it removes the saved credential.
+- SSH jump hosts authenticate with the route's selected key, including encrypted keys and attached SSH certificates. Changing a connection or identity's auth mode keeps its saved password; clearing it removes the saved credential, and that choice survives screen rotation.
 - Cast recordings use Documents/TabSSH on Android 10+, where Android permits non-media files. Videos remain in Movies/TabSSH.
 
 - Startup credential migration preserves pending credentials and continues if secure storage initialization fails.

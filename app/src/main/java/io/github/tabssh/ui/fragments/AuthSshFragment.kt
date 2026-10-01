@@ -191,10 +191,10 @@ class AuthSshFragment : Fragment() {
             // (alias identity_${id}) — check there asynchronously, keeping the
             // DB column as a fallback for legacy rows that predate the move.
             lifecycleScope.launch(Dispatchers.IO) {
-                val passwordAlias = "identity_${existing.id}"
+                val identitySecretAlias = "identity_${existing.id}"
                 val hasPassword = !existing.password.isNullOrEmpty() ||
-                    app.securePasswordManager.hasStoredPassword(passwordAlias) ||
-                    app.securePasswordManager.retrievePassword(passwordAlias)?.isNotBlank() == true
+                    app.securePasswordManager.hasStoredPassword(identitySecretAlias) ||
+                    app.securePasswordManager.retrievePassword(identitySecretAlias)?.isNotBlank() == true
                 withContext(Dispatchers.Main) {
                     if (hasPassword) {
                         passwordInput.setText(PASSWORD_MASK)
