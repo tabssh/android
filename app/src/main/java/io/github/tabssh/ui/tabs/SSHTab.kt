@@ -100,6 +100,10 @@ class SSHTab(
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
+    @Volatile
+    var hasEverConnected: Boolean = false
+        private set
+
     /** Wall-clock time this tab last transitioned into CONNECTED; null while not connected. */
     var connectedAt: Long? = null
         private set
@@ -112,6 +116,7 @@ class SSHTab(
      */
     private fun setState(state: ConnectionState) {
         if (state == ConnectionState.CONNECTED) {
+            hasEverConnected = true
             if (_connectionState.value != ConnectionState.CONNECTED) {
                 connectedAt = System.currentTimeMillis()
             }

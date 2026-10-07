@@ -4298,6 +4298,7 @@ class TabTerminalActivity : TabSSHActivity() {
     private var bottomTerminalView: TerminalView? = null
     private var bottomPaneFocused: Boolean = false
     private var splitMultiplexerObserverJob: Job? = null
+    private var splitDisconnectObserverJob: Job? = null
     private var splitConnectJob: Job? = null
 
     /**
@@ -4388,6 +4389,7 @@ class TabTerminalActivity : TabSSHActivity() {
                     delay(150)
                     if (newTab.connect(telnet)) {
                         splitTab = newTab
+                        observeSplitDisconnect(newTab)
                         runOnUiThread {
                             setBottomPaneFocused(true)
                             Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_split_telnet_ready), Toast.LENGTH_SHORT).show()
@@ -4445,6 +4447,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 delay(150)
                 if (attachPaneSession(newTab, ssh, profile)) {
                     splitTab = newTab
+                    observeSplitDisconnect(newTab)
                     observeSplitMultiplexer(newTab)
                     runOnUiThread {
                         setBottomPaneFocused(true)
@@ -4494,8 +4497,10 @@ class TabTerminalActivity : TabSSHActivity() {
         }
     }
 
-    private fun closeSplitPane() {
+    private fun closeSplitPane(showToast: Boolean = true) {
         val tab = splitTab
+        splitDisconnectObserverJob?.cancel()
+        splitDisconnectObserverJob = null
         if (tab == null) {
             splitConnectJob?.cancel()
             splitConnectJob = null
@@ -4503,7 +4508,9 @@ class TabTerminalActivity : TabSSHActivity() {
             splitOwnerTabId = null
             findViewById<View>(R.id.split_bottom_pane).visibility = View.GONE
             setBottomPaneFocused(false, announce = false)
-            Toast.makeText(this, getString(R.string.terminal_split_pane_closed), Toast.LENGTH_SHORT).show()
+            if (showToast) {
+                Toast.makeText(this, getString(R.string.terminal_split_pane_closed), Toast.LENGTH_SHORT).show()
+            }
             return
         }
         // Disconnect work is blocking I/O (JSch socket teardown + termux
@@ -4531,7 +4538,41 @@ class TabTerminalActivity : TabSSHActivity() {
         bottomTerminalView = null
         setBottomPaneFocused(false, announce = false)
         findViewById<View>(R.id.split_bottom_pane).visibility = View.GONE
-        Toast.makeText(this, getString(R.string.terminal_split_pane_closed), Toast.LENGTH_SHORT).show()
+        if (showToast) {
+            Toast.makeText(this, getString(R.string.terminal_split_pane_closed), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * A quick split is not registered with TabManager, so it needs its own
+     * terminal lifecycle handling. A clean remote exit means the user ended
+     * the shell; close the split so it does not remain as an inert window.
+     * Unexpected disconnects stay visible with the close control available.
+     */
+    private fun observeSplitDisconnect(tab: SSHTab) {
+        splitDisconnectObserverJob?.cancel()
+        splitDisconnectObserverJob = lifecycleScope.launch {
+            var hasBeenConnected = tab.hasEverConnected
+            tab.connectionState
+                .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+                .collect { state ->
+                    when (state) {
+                        ConnectionState.CONNECTED -> hasBeenConnected = true
+                        ConnectionState.DISCONNECTED -> {
+                            if (!hasBeenConnected || splitTab !== tab) return@collect
+                            val exitStatus = tab.connection?.getShellExitStatus()
+                                ?: tab.termuxBridge.moshLastExitCode
+                            Logger.i("TabTerminalActivity", "Quick split ${tab.tabId} disconnected (exit=$exitStatus)")
+                            if (exitStatus == 0) {
+                                closeSplitPane(showToast = false)
+                            }
+                            splitDisconnectObserverJob = null
+                            cancel()
+                        }
+                        else -> Unit
+                    }
+                }
+        }
     }
 
     private fun observeSplitMultiplexer(tab: SSHTab) {

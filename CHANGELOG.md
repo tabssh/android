@@ -23,6 +23,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Proxmox consoles now prefer SPICE, then VNC, then serial.** A working serial console no longer masks a VM's configured graphical display; TabSSH falls back only when the higher-priority console is unavailable.
 - **Container host lists refresh when returning to the Infra Containers page.** Hosts no longer remain hidden until the user navigates away and back to the Docker list.
 - **Quick horizontal splits now route input to the focused terminal and provide visible Focus and Close controls.** The split session also uses the normal Mosh handoff when its profile enables Mosh.
+- **Quick splits now close after a clean shell exit.** Typing `exit` no longer leaves an inert split window; unexpected disconnects keep the split visible so it can be inspected or closed.
 - **Sync-on-change now runs.** The Room database observer is started with the application after database initialization, so edits trigger the configured debounced two-way sync instead of silently waiting for a periodic or manual run.
 - **Group drag reordering now follows the dragged row across every intervening row** and writes the completed order atomically.
 - **Named group icons display as icons** in group management instead of showing identifiers such as `folder` or `server` as plain text.
