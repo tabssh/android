@@ -20,6 +20,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Herdr is now supported as a terminal multiplexer.** It can be selected for auto-launch and the PRE key, uses its Ctrl+B prefix by default, and supports named-session attach and the ask-on-connect picker.
 - **Bundled Tor routes now stay enabled and report startup failures clearly.** Devices without the bundled Tor binary keep the normal route toggle; the Tor test status now includes the failure reason.
 - **Ungrouped SSH hosts can now be collapsed and expanded.** The setting is remembered when returning to the Hosts screen.
+- **Proxmox consoles now prefer SPICE, then VNC, then serial.** A working serial console no longer masks a VM's configured graphical display; TabSSH falls back only when the higher-priority console is unavailable.
 - **Quick horizontal splits now route input to the focused terminal and provide visible Focus and Close controls.** The split session also uses the normal Mosh handoff when its profile enables Mosh.
 - **Sync-on-change now runs.** The Room database observer is started with the application after database initialization, so edits trigger the configured debounced two-way sync instead of silently waiting for a periodic or manual run.
 - **Group drag reordering now follows the dragged row across every intervening row** and writes the completed order atomically.

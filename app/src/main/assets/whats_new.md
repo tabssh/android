@@ -1,5 +1,9 @@
 # What's New
 
+## Wave 78 — Proxmox console selection
+
+- Proxmox VM consoles prefer SPICE, then VNC, then serial, so a configured graphical display is selected ahead of a serial console.
+
 ## Wave 77 — Herdr multiplexer support
 
 - Herdr can be selected for terminal multiplexer launch and PRE-key control. Named sessions and the default Ctrl+B prefix are supported.

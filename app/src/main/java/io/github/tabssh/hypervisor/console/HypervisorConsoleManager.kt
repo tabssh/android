@@ -165,11 +165,11 @@ class HypervisorConsoleManager {
     /**
      * Connect to Proxmox VM console.
      *
-     * Tries termproxy first (text-based serial console). If the VM has no
-     * serial interface configured, Proxmox returns an error containing
-     * "serial"; in that case we automatically fall back to vncproxy (raw
-     * RFB over WebSocket), which works for every running VM regardless of
-     * hardware configuration. The caller sees a connected console either way.
+     * Prefers the richest configured display: SPICE, then VNC/RFB, then the
+     * text-based serial console. This keeps a configured graphical display
+     * from being hidden by a working serial interface. Each strategy falls
+     * through when Proxmox cannot provide that console, and exhaustion
+     * surfaces one actionable error.
      *
      * Auth differences between the two paths:
      *  - termproxy: PVEAuthCookie in HTTP upgrade header PLUS
@@ -203,23 +203,12 @@ class HypervisorConsoleManager {
     ): ConsoleConnection? = withContext(Dispatchers.IO) {
         activeListener = listener
         resizeReconnectAttempted = false
-        // Phase 1: obtain a console ticket via an ordered strategy chain.
-        // termproxy first — text consoles are the mobile-friendly default;
-        // spiceproxy second — richest graphical protocol, but only for qemu
-        // VMs and only when the native SPICE library shipped in this APK;
-        // vncproxy last — every running VM has a graphical framebuffer
-        // even without a serial device.  Intermediate failures are silent
-        // (Logger.i inside the chain); only exhaustion surfaces to the user.
+        // Phase 1: obtain a console ticket via the preferred display order.
+        // SPICE is the richest display, VNC is the general graphical fallback,
+        // and serial is the text-only fallback when no display is available.
+        // Intermediate failures stay silent; only exhaustion reaches the user.
         Logger.i(TAG, "Connecting to Proxmox console: $vmName (vmid=$vmid)")
-        val strategies = mutableListOf<ConsoleStrategy<ProxmoxTicket>>(
-            object : ConsoleStrategy<ProxmoxTicket> {
-                override val name = "proxmox-termproxy"
-                override suspend fun resolve(): ProxmoxTicket = ProxmoxTicket.Ws(
-                    client.getTermProxy(node, vmid, type),
-                    ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM
-                )
-            }
-        )
+        val strategies = mutableListOf<ConsoleStrategy<ProxmoxTicket>>()
         if (type == "qemu" && SpiceLoader.isSpiceAvailable()) {
             strategies.add(object : ConsoleStrategy<ProxmoxTicket> {
                 override val name = "proxmox-spiceproxy"
@@ -237,6 +226,13 @@ class HypervisorConsoleManager {
                     ?: throw java.io.IOException("vncproxy returned no data")
                 return ProxmoxTicket.Ws(vnc, ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC)
             }
+        })
+        strategies.add(object : ConsoleStrategy<ProxmoxTicket> {
+            override val name = "proxmox-termproxy"
+            override suspend fun resolve(): ProxmoxTicket = ProxmoxTicket.Ws(
+                client.getTermProxy(node, vmid, type),
+                ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM
+            )
         })
         val chain = ConsoleStrategyChain(strategies) { listener?.onStrategyAttempt(it) }
         val resolved = try {
