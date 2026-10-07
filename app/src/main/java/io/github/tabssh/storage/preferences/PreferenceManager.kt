@@ -150,6 +150,7 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_MULTIPLEXER_PREFIX_TMUX = "multiplexer_custom_prefix_tmux"
         private const val KEY_MULTIPLEXER_PREFIX_SCREEN = "multiplexer_custom_prefix_screen"
         private const val KEY_MULTIPLEXER_PREFIX_ZELLIJ = "multiplexer_custom_prefix_zellij"
+        private const val KEY_MULTIPLEXER_PREFIX_HERDR = "multiplexer_custom_prefix_herdr"
 
         // Audit log preferences — keys MUST match preferences_audit.xml.
         // audit_log_max_size_mb / audit_log_max_age_days are EditTextPreference
@@ -204,6 +205,7 @@ class PreferenceManager(private val context: Context) {
         const val DEFAULT_PREFIX_SCREEN = "C-x"
         // zellij default — C-Space (dfmgr zellij config.kdl binds Ctrl+Space to enter tmux-mode)
         const val DEFAULT_PREFIX_ZELLIJ = "C-Space"
+        const val DEFAULT_PREFIX_HERDR = "C-b"
         const val DEFAULT_STARTUP_BEHAVIOR = "last_session"
         const val DEFAULT_PASSWORD_STORAGE_LEVEL = "encrypted"
         const val DEFAULT_THEME = "dracula"
@@ -545,6 +547,7 @@ class PreferenceManager(private val context: Context) {
             "tmux" -> getString(KEY_MULTIPLEXER_PREFIX_TMUX, DEFAULT_PREFIX_TMUX)
             "screen" -> getString(KEY_MULTIPLEXER_PREFIX_SCREEN, DEFAULT_PREFIX_SCREEN)
             "zellij" -> getString(KEY_MULTIPLEXER_PREFIX_ZELLIJ, DEFAULT_PREFIX_ZELLIJ)
+            "herdr" -> getString(KEY_MULTIPLEXER_PREFIX_HERDR, DEFAULT_PREFIX_HERDR)
             else -> DEFAULT_PREFIX_TMUX
         }
     }
@@ -554,6 +557,7 @@ class PreferenceManager(private val context: Context) {
             "tmux" -> setString(KEY_MULTIPLEXER_PREFIX_TMUX, prefix)
             "screen" -> setString(KEY_MULTIPLEXER_PREFIX_SCREEN, prefix)
             "zellij" -> setString(KEY_MULTIPLEXER_PREFIX_ZELLIJ, prefix)
+            "herdr" -> setString(KEY_MULTIPLEXER_PREFIX_HERDR, prefix)
         }
     }
 

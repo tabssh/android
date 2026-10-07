@@ -102,7 +102,7 @@ data class KeyboardKey(
             KeyboardKey("TOGGLE", "⌨", "", KeyCategory.ACTION),
 
             // PREFIX sends the current multiplexer prefix byte (C-Space for
-            // tmux/zellij, C-x for screen by default). The active multiplexer
+            // tmux/zellij, C-x for screen, C-b for Herdr by default). The active multiplexer
             // is auto-detected after connect or falls back to the global
             // `gesture_multiplexer_type` preference. Placed in the default
             // layout under ENT so it's always reachable in a tmux/screen

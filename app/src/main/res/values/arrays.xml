@@ -327,11 +327,13 @@
         <item>@string/arr_multiplexer_type_tmux</item>
         <item>@string/arr_multiplexer_type_screen</item>
         <item>@string/arr_multiplexer_type_zellij</item>
+        <item>@string/arr_multiplexer_type_herdr</item>
     </string-array>
     <string-array name="multiplexer_type_values">
         <item>tmux</item>
         <item>screen</item>
         <item>zellij</item>
+        <item>herdr</item>
     </string-array>
 
     <!-- Per-host notification alert modes. Maps to ConnectionProfile
@@ -375,6 +377,7 @@
         <item>@string/arr_multiplexer_override_tmux</item>
         <item>@string/arr_multiplexer_override_zellij</item>
         <item>@string/arr_multiplexer_override_screen</item>
+        <item>@string/arr_multiplexer_override_herdr</item>
         <item>@string/arr_multiplexer_override_off_disable_pre_key</item>
     </string-array>
     <string-array name="multiplexer_override_values">
@@ -382,6 +385,7 @@
         <item>tmux</item>
         <item>zellij</item>
         <item>screen</item>
+        <item>herdr</item>
         <item>off</item>
     </string-array>
 

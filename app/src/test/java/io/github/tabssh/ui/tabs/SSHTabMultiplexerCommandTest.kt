@@ -46,6 +46,13 @@ class SSHTabMultiplexerCommandTest {
     }
 
     @Test
+    fun `herdr uses named session launch and attach commands`() {
+        assertEquals("herdr --session 'tabssh'", cmd("herdr", "AUTO_ATTACH"))
+        assertEquals("herdr --session 'tabssh'", cmd("herdr", "CREATE_NEW"))
+        assertEquals("herdr session attach 'work'", SSHTab.buildAttachCommand("herdr", "work"))
+    }
+
+    @Test
     fun `single quotes in a session name are escaped, not dropped`() {
         assertEquals(
             "tmux new -A -s 'dev'\\''box' \\; set -q mouse on",
@@ -132,5 +139,17 @@ class SSHTabMultiplexerCommandTest {
             emptyList(),
             SSHTab.parseMultiplexerSessions("zellij", "No active zellij sessions found.\n")
         )
+    }
+
+    @Test
+    fun `herdr session list parses named sessions from JSON`() {
+        assertEquals(
+            listOf("default", "work"),
+            SSHTab.parseMultiplexerSessions(
+                "herdr",
+                """{"result":{"sessions":[{"name":"default"},{"name":"work"}]}}"""
+            )
+        )
+        assertEquals(emptyList(), SSHTab.parseMultiplexerSessions("herdr", "not json"))
     }
 }

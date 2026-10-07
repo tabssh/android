@@ -186,6 +186,15 @@
       android:inputType="text"
       app:useSimpleSummaryProvider="true" />
 
+    <EditTextPreference
+      android:key="multiplexer_custom_prefix_herdr"
+      android:title="@string/prefs_multiplexer_custom_prefix_herdr_title"
+      android:summary="@string/prefs_multiplexer_custom_prefix_herdr_summary"
+      android:dialogMessage="@string/prefs_multiplexer_custom_prefix_herdr_dialog"
+      android:defaultValue="C-b"
+      android:inputType="text"
+      app:useSimpleSummaryProvider="true" />
+
   </PreferenceCategory>
 
   <PreferenceCategory

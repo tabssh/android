@@ -1306,7 +1306,9 @@ class SSHConnection(
             }
         }
 
-        resolvedRoute = effective?.takeIf { it.enabled }
+        resolvedRoute = effective?.takeIf {
+            it.enabled || (it.builtInTor && io.github.tabssh.protocols.tor.TorNativeClient.isAvailable(context))
+        }
 
         val route = resolvedRoute
         if (route != null && route.builtInTor) {

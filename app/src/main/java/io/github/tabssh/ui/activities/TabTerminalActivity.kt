@@ -3398,20 +3398,21 @@ class TabTerminalActivity : TabSSHActivity() {
     }
 
     /**
-     * Resolve the PRE-key prefix binding to use for [type] ("tmux"/"screen"/
-     * "zellij") on [profile]'s connection. Precedence: [profile]'s own
+     * Resolve the PRE-key prefix binding to use for [type] (tmux, screen,
+     * zellij, or Herdr) on [profile]'s connection. Precedence: [profile]'s own
      * per-host override for that type (`ConnectionProfile
      * .multiplexerPrefixTmuxOverride`/`...ScreenOverride`/`...ZellijOverride`)
      * if set and valid > the app-wide global default
      * (`PreferenceManager.getMultiplexerPrefix(type)`). Lets one host bind
      * PRE to "C-b" for tmux while every other host keeps the global "C-Space",
-     * independently for each of tmux/screen/zellij.
+     * independently for tmux/screen/zellij. Herdr uses its global setting.
      */
     private fun resolvePrefixBinding(profile: ConnectionProfile?, type: String?): String {
         val override = when (type) {
             "tmux"   -> profile?.multiplexerPrefixTmuxOverride
             "screen" -> profile?.multiplexerPrefixScreenOverride
             "zellij" -> profile?.multiplexerPrefixZellijOverride
+            "herdr" -> null
             else     -> null
         }
         if (!override.isNullOrBlank() && PrefixParser.isValid(override)) {
@@ -3455,16 +3456,18 @@ class TabTerminalActivity : TabSSHActivity() {
         val tmuxLabel   = prefixToShortLabel(prefs.getMultiplexerPrefix("tmux"))
         val zellijLabel = prefixToShortLabel(prefs.getMultiplexerPrefix("zellij"))
         val screenLabel = prefixToShortLabel(prefs.getMultiplexerPrefix("screen"))
+        val herdrLabel = prefixToShortLabel(prefs.getMultiplexerPrefix("herdr"))
         val isEnabled = tab.isPrefixKeyEnabled
         val types = arrayOf(
             getString(R.string.terminal_pre_key_picker_auto),
             getString(R.string.terminal_pre_key_picker_tmux, tmuxLabel),
             getString(R.string.terminal_pre_key_picker_zellij, zellijLabel),
             getString(R.string.terminal_pre_key_picker_screen, screenLabel),
+            getString(R.string.terminal_pre_key_picker_herdr, herdrLabel),
             if (isEnabled) getString(R.string.terminal_pre_key_picker_disable)
             else getString(R.string.terminal_pre_key_picker_enable)
         )
-        val keys = arrayOf("auto", "tmux", "zellij", "screen", "toggle_off")
+        val keys = arrayOf("auto", "tmux", "zellij", "screen", "herdr", "toggle_off")
         // setMessage and setItems both occupy the dialog body — using both silently
         // hides the item list. Move the hint into the title so the list renders.
         MaterialAlertDialogBuilder(this)

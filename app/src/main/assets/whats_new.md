@@ -1,5 +1,14 @@
 # What's New
 
+## Wave 77 — Herdr multiplexer support
+
+- Herdr can be selected for terminal multiplexer launch and PRE-key control. Named sessions and the default Ctrl+B prefix are supported.
+
+## Wave 76 — route and host-list fixes
+
+- Bundled Tor routes stay enabled on supported devices, and failed Tor checks show why startup failed.
+- Ungrouped SSH hosts can be collapsed and expanded; the choice is remembered.
+
 ## Wave 75 — quick split controls
 
 - Quick horizontal splits route IME, hardware-keyboard, and custom-keyboard input to the focused terminal.

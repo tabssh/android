@@ -169,6 +169,7 @@ class PortForwardingActivity : TabSSHActivity() {
     }
 
     private fun setRouteEnabled(route: NetworkRoute, enabled: Boolean) {
+        if (route.builtInTor && io.github.tabssh.protocols.tor.TorNativeClient.isAvailable(this)) return
         if (route.enabled == enabled) return
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {

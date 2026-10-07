@@ -352,12 +352,12 @@ class TabSSHApplication : Application() {
     /**
      * Keep the bundled tor process in sync with the saved route table.
      *
-     * "Enabled" for a built-in tor route means the user has opted into Tor as a
-     * transport, so the process must already be up when a connect happens —
-     * otherwise every session through it pays a cold bootstrap. Enabling or
-     * disabling the route (or deleting it) starts/stops tor to match. Failures
-     * are logged and left to the connect path, which aborts rather than
-     * silently connecting direct.
+     * A saved built-in Tor route means the user has opted into Tor as a
+     * transport, so the process stays bootstrapped before a connect happens —
+     * otherwise every session through it pays a cold bootstrap. On ABIs with
+     * the bundled binary, the route cannot be disabled; deleting the route
+     * stops Tor. Failures are logged and the connect path reports the reason
+     * rather than silently connecting direct.
      */
     private fun autostartTorIfEnabled() {
         val torManager = io.github.tabssh.protocols.tor.TorManager.getInstance(this)
@@ -367,7 +367,12 @@ class TabSSHApplication : Application() {
         }
         applicationScope.launch {
             database.networkRouteDao().getAll().collectLatest { routes ->
-                val wanted = routes.any { it.builtInTor && it.enabled }
+                // The bundled Tor preset is not user-disableable on devices
+                // that ship its binary. Keep it bootstrapped whenever its
+                // route exists, including routes synced with the old toggle off.
+                val wanted = routes.any {
+                    it.builtInTor && (it.enabled || torManager.isAvailable())
+                }
                 val busy = torManager.status.value.let {
                     it is io.github.tabssh.protocols.tor.TorStatus.Starting ||
                         it is io.github.tabssh.protocols.tor.TorStatus.Bootstrapping

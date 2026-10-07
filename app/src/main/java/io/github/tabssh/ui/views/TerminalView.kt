@@ -2803,7 +2803,7 @@ class TerminalView @JvmOverloads constructor(
                 return true
             }
             // Alternate screen buffer active (vim, less, man, htop — and this is
-            // also what tmux/screen/zellij panes switch to whenever the program
+            // also what tmux/screen/zellij/Herdr panes switch to whenever the program
             // running inside them uses it) without mouse tracking. The alt screen
             // has no client-side scrollback (activeTranscriptRows is always 0
             // there, by design — see maxScrollYPx()), so falling through to the
@@ -2813,7 +2813,7 @@ class TerminalView @JvmOverloads constructor(
             // already know how to interpret as navigation.
             //
             // NOTE: this only reaches programs that consume arrow keys directly
-            // (vim, less, man, htop...). It does NOT reach tmux/screen/zellij's
+            // (vim, less, man, htop...). It does NOT reach multiplexer-owned
             // OWN scrollback view (their copy-mode) when the user is sitting at a
             // plain shell prompt with no alt-screen program running — that only
             // has a client-detectable trigger via mouse-tracking mode. TabSSH

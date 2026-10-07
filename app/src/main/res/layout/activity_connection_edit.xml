@@ -740,7 +740,7 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Multiplexer Settings (tmux/screen/zellij) — SSH-only -->
+            <!-- Multiplexer Settings (tmux/screen/zellij/Herdr) — SSH-only -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/card_multiplexer"
                 android:layout_width="match_parent"
@@ -822,10 +822,9 @@
 
                     </com.google.android.material.textfield.TextInputLayout>
 
-                    <!-- Per-host PRE-key binding overrides, independent for
-                         each of tmux/screen/zellij. Blank = inherit the
-                         app-wide global default from Settings for that
-                         type. -->
+                    <!-- Per-host PRE-key binding overrides for tmux, screen,
+                         and zellij. Herdr uses its global prefix. Blank
+                         inherits the app-wide setting for that type. -->
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"

@@ -214,7 +214,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
         /**
          * v6 → v7: add `connections.multiplexer_override` — per-connection
          * PRE-key multiplexer pin set via the long-press picker (null = auto,
-         * "tmux"/"screen"/"zellij" = pinned type, "off" = PRE key disabled).
+         * a supported multiplexer name = pinned type, "off" = PRE key disabled).
          * Additive nullable ADD COLUMN, no data transform; existing rows
          * default to NULL (auto-detect, the pre-v7 behavior).
          */

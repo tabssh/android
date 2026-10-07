@@ -14,6 +14,7 @@ import com.google.android.material.materialswitch.MaterialSwitch
 import io.github.tabssh.R
 import io.github.tabssh.storage.database.entities.NetworkRoute
 import io.github.tabssh.storage.database.entities.NetworkRouteType
+import io.github.tabssh.protocols.tor.TorNativeClient
 
 /**
  * RecyclerView adapter for saved [NetworkRoute] rows (proxies and SSH jump
@@ -52,7 +53,9 @@ class NetworkRouteAdapter(
             chipType.text = context.getString(typeLabelRes(route))
             textSummary.text = route.getSummary()
 
-            val (labelRes, colorAttr) = if (route.enabled) {
+            val torAlwaysEnabled = route.builtInTor && TorNativeClient.isAvailable(context)
+            val routeEnabled = route.enabled || torAlwaysEnabled
+            val (labelRes, colorAttr) = if (routeEnabled) {
                 R.string.route_status_enabled to com.google.android.material.R.attr.colorPrimary
             } else {
                 R.string.route_status_disabled to android.R.attr.textColorSecondary
@@ -63,12 +66,15 @@ class NetworkRouteAdapter(
             // Detach the listener before syncing checked state so recycling a row
             // never fires an unwanted toggle callback.
             switchEnabled.setOnCheckedChangeListener(null)
-            switchEnabled.isChecked = route.enabled
+            switchEnabled.visibility = if (torAlwaysEnabled) View.GONE else View.VISIBLE
+            switchEnabled.isChecked = routeEnabled
             switchEnabled.contentDescription = context.getString(
-                if (route.enabled) R.string.route_disable else R.string.route_enable
+                if (routeEnabled) R.string.route_disable else R.string.route_enable
             )
-            switchEnabled.setOnCheckedChangeListener { _, isChecked ->
-                onToggleEnabled(route, isChecked)
+            if (!torAlwaysEnabled) {
+                switchEnabled.setOnCheckedChangeListener { _, isChecked ->
+                    onToggleEnabled(route, isChecked)
+                }
             }
 
             btnMore.setOnClickListener { showMenu(route) }

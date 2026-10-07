@@ -22,7 +22,8 @@ class GroupedConnectionAdapter(
     private val onConnectionClick: (ConnectionProfile) -> Unit,
     private val onConnectionLongClick: (ConnectionProfile) -> Unit,
     private val onGroupClick: (ConnectionListItem.GroupHeader) -> Unit,
-    private val onGroupLongClick: (ConnectionListItem.GroupHeader) -> Unit
+    private val onGroupLongClick: (ConnectionListItem.GroupHeader) -> Unit,
+    private val onUngroupedClick: () -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
@@ -156,7 +157,7 @@ class GroupedConnectionAdapter(
 
             // Click to expand/collapse
             itemView.setOnClickListener {
-                // Toggle ungrouped expansion (handled by MainActivity)
+                onUngroupedClick()
                 Logger.d("GroupedConnectionAdapter", "Clicked ungrouped header")
             }
 

@@ -1,6 +1,7 @@
-[ ] add herdr multiplexer support, and others.
-[ ] make Routes/Forwarder tor be always enabled if tor binary is bundled(no toggle on of as its bundled and already strating), and also fix test, maybe return status from the tor check, where is just says sucess/failed if failed report why.
-[ ] can not expand collapse ungrouped hostd so they always show.
+[x] add Herdr multiplexer support.
+[ ] add support for other multiplexers (names not specified yet).
+[x] make Routes/Forwarder tor be always enabled if tor binary is bundled(no toggle on of as its bundled and already strating), and also fix test, maybe return status from the tor check, where is just says sucess/failed if failed report why.
+[x] can not expand collapse ungrouped hostd so they always show.
 [ ] try to find and fix vim displaying content oddly, duplicate statusline, might be vim and not app though.
 
 # do not implement these as i am unsure about the items below, just thinking!

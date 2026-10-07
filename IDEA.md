@@ -83,7 +83,7 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 - Mosh support — sessions must survive IP changes and network roaming
 - Telnet connections alongside SSH (plain-text legacy protocol, clearly separated from SSH profiles)
 - X11 forwarding to a local Android X server (XServer-XSDL / Termux:X11)
-- Terminal multiplexer integration (tmux / screen / zellij) — auto-attach, create-new, and ask-on-connect modes, automatic detection of a running multiplexer, and a manual override picker
+- Terminal multiplexer integration (tmux / screen / zellij / Herdr) — auto-attach, create-new, and ask-on-connect modes, automatic detection of a running multiplexer, and a manual override picker
 - Post-connect script execution
 - Per-connection color tags, font size overrides, custom themes
 - URL detection on long-press

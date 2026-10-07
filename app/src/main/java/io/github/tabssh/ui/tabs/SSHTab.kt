@@ -177,13 +177,13 @@ class SSHTab(
         }
 
     /**
-     * Active multiplexer type for this tab ("tmux", "screen", "zellij", or null
+     * Active multiplexer type for this tab ("tmux", "screen", "zellij", "herdr", or null
      * when none is detected). Exposed as a [StateFlow] so the keyboard bar can
      * react in real time when the user attaches or detaches a multiplexer.
      *
      * Updated by:
      *  - [runPostConnectCommands] when the app auto-launches one (immediate)
-     *  - [detectMultiplexerViaExec] which probes $TMUX/$STY/$ZELLIJ_SESSION_NAME
+     *  - [detectMultiplexerViaExec] which probes multiplexer environment and sessions
      *    via a lightweight exec channel: once at connect + every 30 s thereafter
      *    so attach/detach events are caught without requiring a reconnect
      *
@@ -207,7 +207,7 @@ class SSHTab(
      * [ConnectionProfile.multiplexerOverride] and updatable mid-session via
      * the long-press picker (the picker persists the same value to the DB
      * row separately). Precedence: override > live detection > global
-     * default. null = auto; "tmux"/"screen"/"zellij" = pinned; "off" = the
+     * default. null = auto; a supported multiplexer name = pinned; "off" = the
      * PRE key is disabled for this connection.
      */
     @Volatile
@@ -1064,7 +1064,7 @@ class SSHTab(
 
     /**
      * Issue #170 — assemble the post-connect command stream:
-     * (1) optional tmux/screen/zellij auto-launch (if profile.multiplexerMode
+     * (1) optional tmux/screen/zellij/Herdr auto-launch (if profile.multiplexerMode
      *     != OFF), (2) profile.postConnectScript lines (one per line, in
      *     order). Both are sent down the same shell channel; the remote
      *     reads them as if the user typed them.
@@ -1196,7 +1196,7 @@ class SSHTab(
      * the key — the 30 s periodic loop may not have caught a newly-launched
      * multiplexer yet.
      *
-     * Returns the detected type ("tmux"/"screen"/"zellij") or null. Also
+     * Returns the detected type ("tmux"/"screen"/"zellij"/"herdr") or null. Also
      * updates `_activeMultiplexerType` as a side-effect so any collectors
      * (e.g. the PREFIX key visual state) refresh.
      */
@@ -1247,6 +1247,7 @@ class SSHTab(
                     "if [ -n \"\$TMUX\" ]; then echo tmux:env; exit 0; fi; " +
                     "if [ -n \"\$STY\" ]; then echo screen:env; exit 0; fi; " +
                     "if [ -n \"\$ZELLIJ_SESSION_NAME\" ]; then echo zellij:env; exit 0; fi; " +
+                    "if [ -n \"\$HERDR_ENV\" ]; then echo herdr:env; exit 0; fi; " +
                     "if command -v tmux >/dev/null 2>&1 && tmux ls >/dev/null 2>&1; then echo tmux:live-socket; exit 0; fi; " +
                     // The tmux-new session manager runs its server on a named socket (`-L tmux-new`), invisible to a default `tmux ls` — probe that socket explicitly so PREFIX works there too
                     "if command -v tmux >/dev/null 2>&1 && tmux -L tmux-new ls >/dev/null 2>&1; then echo tmux:live-socket; exit 0; fi; " +
@@ -1257,6 +1258,7 @@ class SSHTab(
                     // with zellij installed, regardless of whether a session exists.
                     // Exclude lines containing "No active" to require a real session line.
                     "if command -v zellij >/dev/null 2>&1 && zellij list-sessions 2>/dev/null | grep -v \"No active\" | grep -q .; then echo zellij:live-socket; exit 0; fi; " +
+                    "if command -v herdr >/dev/null 2>&1 && herdr status server >/dev/null 2>&1; then echo herdr:live-server; exit 0; fi; " +
                     "if pgrep -u \"\$(id -u)\" -x tmux >/dev/null 2>&1; then echo tmux:live-proc; exit 0; fi; " +
                     "if pgrep -u \"\$(id -u)\" -x screen >/dev/null 2>&1; then echo screen:live-proc; exit 0; fi; " +
                     "if pgrep -u \"\$(id -u)\" -x zellij >/dev/null 2>&1; then echo zellij:live-proc; exit 0; fi'",
@@ -1269,7 +1271,7 @@ class SSHTab(
             // failed to see a genuinely running tmux server over the exec channel).
             Logger.d("SSHTab", "Multiplexer probe raw output: '$rawOutput'")
             val output = rawOutput.substringBefore(':')
-            val detected = if (output in listOf("tmux", "screen", "zellij")) output else null
+            val detected = if (output in listOf("tmux", "screen", "zellij", "herdr")) output else null
             // A pinned per-connection override always wins over detection —
             // report what was detected but never overwrite the pinned state.
             // Guards the on-demand probeMultiplexerNow() path too (the
@@ -1311,6 +1313,7 @@ class SSHTab(
             "tmux" -> "tmux ls -F '#S' 2>/dev/null"
             "screen" -> "screen -ls 2>/dev/null"
             "zellij" -> "zellij list-sessions -s 2>/dev/null || zellij list-sessions 2>/dev/null"
+            "herdr" -> "herdr session list --json 2>/dev/null"
             else -> return emptyList()
         }
         return try {
@@ -1411,6 +1414,12 @@ class SSHTab(
                     "CREATE_NEW"         -> "zellij --session $safeName"
                     else                 -> null
                 }
+                // Herdr's named-session launcher attaches when present and
+                // creates the session when absent.
+                "herdr" -> when (mode) {
+                    "AUTO_ATTACH", "ASK", "CREATE_NEW" -> "herdr --session $safeName"
+                    else -> null
+                }
                 else -> null
             }
         }
@@ -1440,6 +1449,7 @@ class SSHTab(
                 "tmux"   -> "tmux attach -t $safe \\; set -q mouse on"
                 "screen" -> "screen -r $safe"
                 "zellij" -> "zellij attach $safe"
+                "herdr" -> "herdr session attach $safe"
                 else     -> null
             }
         }
@@ -1471,7 +1481,45 @@ class SSHTab(
                         .mapNotNull { it.split(Regex("\\s+")).firstOrNull() }
                         .filter { it.isNotBlank() }
                 }
+                "herdr" -> parseHerdrSessionNames(raw)
                 else -> emptyList()
+            }
+        }
+
+        /** Parse session names from Herdr's machine-readable CLI response. */
+        internal fun parseHerdrSessionNames(raw: String): List<String> {
+            val names = linkedSetOf<String>()
+            fun collect(value: Any?, allowSessionStrings: Boolean = false) {
+                when (value) {
+                    is org.json.JSONObject -> {
+                        val keys = value.keys()
+                        while (keys.hasNext()) {
+                            val key = keys.next()
+                            val child = value.opt(key)
+                            if (key in setOf("name", "session_name", "sessionName") && child is String) {
+                                child.trim().takeIf { it.isNotEmpty() }?.let(names::add)
+                            } else {
+                                collect(child, key == "sessions")
+                            }
+                        }
+                    }
+                    is org.json.JSONArray -> {
+                        for (index in 0 until value.length()) {
+                            val child = value.opt(index)
+                            if (allowSessionStrings && child is String) {
+                                child.trim().takeIf { it.isNotEmpty() }?.let(names::add)
+                            } else {
+                                collect(child)
+                            }
+                        }
+                    }
+                }
+            }
+            return try {
+                collect(org.json.JSONTokener(raw).nextValue())
+                names.toList()
+            } catch (_: Exception) {
+                emptyList()
             }
         }
     }

@@ -73,6 +73,7 @@ class NetworkRouteEditActivity : TabSSHActivity() {
     private lateinit var spinnerKey: MaterialAutoCompleteTextView
 
     private lateinit var switchEnabled: MaterialSwitch
+    private lateinit var textEnabledDescription: TextView
 
     // Ordered to match the type dropdown.
     private val types = listOf(
@@ -175,6 +176,7 @@ class NetworkRouteEditActivity : TabSSHActivity() {
         spinnerKey = findViewById(R.id.spinner_key)
 
         switchEnabled = findViewById(R.id.switch_enabled)
+        textEnabledDescription = findViewById(R.id.text_enabled_description)
     }
 
     private fun setupToolbar() {
@@ -270,6 +272,12 @@ class NetworkRouteEditActivity : TabSSHActivity() {
         layoutJumpAuth.visibility = if (isJump && showEndpoint) View.VISIBLE else View.GONE
         textTorDesc.visibility = if (builtInTor) View.VISIBLE else View.GONE
         layoutTorStatus.visibility = if (builtInTor) View.VISIBLE else View.GONE
+        val builtInTorAlwaysEnabled = builtInTor && torManager.isAvailable()
+        switchEnabled.visibility = if (builtInTorAlwaysEnabled) View.GONE else View.VISIBLE
+        textEnabledDescription.setText(
+            if (builtInTorAlwaysEnabled) R.string.route_tor_always_enabled
+            else R.string.route_switch_enabled_desc
+        )
         updateKeyVisibility()
         updatePresetVisibility()
     }
@@ -353,7 +361,7 @@ class NetworkRouteEditActivity : TabSSHActivity() {
             }
         }
 
-        switchEnabled.isChecked = route.enabled
+        switchEnabled.isChecked = route.enabled || (route.builtInTor && torManager.isAvailable())
         // Legacy rows saved before the dedicated TOR type existed are still
         // typed PROXY_SOCKS5 with built_in_tor=true; treat them as TOR here
         // so the editor shows the right type, and re-saving normalizes the
@@ -429,7 +437,7 @@ class NetworkRouteEditActivity : TabSSHActivity() {
             authType = authType,
             keyId = keyId,
             builtInTor = builtInTor,
-            enabled = switchEnabled.isChecked,
+            enabled = builtInTor && torManager.isAvailable() || switchEnabled.isChecked,
             modifiedAt = System.currentTimeMillis()
         )
         persist(result)

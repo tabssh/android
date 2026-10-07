@@ -67,6 +67,7 @@ class SshHostsFragment : Fragment() {
     private var currentSearchQuery = ""
     private var currentSortOption = SortOption.NAME_ASC
     private var currentGroupSortOption = GroupSortOption.NAME_ASC
+    private var ungroupedCollapsed = false
     // Default to grouped view
     private var useGroupedView = true
 
@@ -223,6 +224,7 @@ class SshHostsFragment : Fragment() {
         currentSortOption = SortOption.entries.find { it.name == connectionsPref } ?: SortOption.NAME_ASC
         val groupsPref = prefs.getString("groups_sort", GroupSortOption.NAME_ASC.name)
         currentGroupSortOption = GroupSortOption.entries.find { it.name == groupsPref } ?: GroupSortOption.NAME_ASC
+        ungroupedCollapsed = prefs.getBoolean(PREF_UNGROUPED_COLLAPSED, false)
     }
 
     private fun setupRecyclerView() {
@@ -1097,14 +1099,16 @@ class SshHostsFragment : Fragment() {
         if (ungroupedConnections.isNotEmpty()) {
             items.add(ConnectionListItem.UngroupedHeader(
                 connectionCount = ungroupedConnections.size,
-                isExpanded = true
+                isExpanded = !ungroupedCollapsed
             ))
-            ungroupedConnections.forEach { connection ->
-                items.add(ConnectionListItem.Connection(
-                    profile = connection,
-                    isInGroup = false,
-                    indentLevel = 0
-                ))
+            if (!ungroupedCollapsed) {
+                ungroupedConnections.forEach { connection ->
+                    items.add(ConnectionListItem.Connection(
+                        profile = connection,
+                        isInGroup = false,
+                        indentLevel = 0
+                    ))
+                }
             }
         }
         
@@ -1122,7 +1126,8 @@ class SshHostsFragment : Fragment() {
                     else HostContextActions.showSshConnectionMenu(this, app, connection)
                 },
                 onGroupClick = { groupHeader -> toggleGroupExpanded(groupHeader) },
-                onGroupLongClick = { groupHeader -> showGroupMenu(groupHeader) }
+                onGroupLongClick = { groupHeader -> showGroupMenu(groupHeader) },
+                onUngroupedClick = { toggleUngroupedExpanded() }
             )
             recyclerView.adapter = groupedAdapter
         } else {
@@ -1181,6 +1186,15 @@ class SshHostsFragment : Fragment() {
             }
         }
     }
+
+    private fun toggleUngroupedExpanded() {
+        ungroupedCollapsed = !ungroupedCollapsed
+        requireContext().getSharedPreferences("TabSSH", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(PREF_UNGROUPED_COLLAPSED, ungroupedCollapsed)
+            .apply()
+        applyGroupedView()
+    }
     
     private fun applySortAndFilter() {
         filterConnections(currentSearchQuery)
@@ -1238,6 +1252,8 @@ class SshHostsFragment : Fragment() {
     }
 
     companion object {
+        private const val PREF_UNGROUPED_COLLAPSED = "ssh_hosts_ungrouped_collapsed"
+
         fun newInstance() = SshHostsFragment()
     }
 }

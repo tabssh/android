@@ -529,6 +529,7 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
             when (type) {
                 "screen" -> "multiplexer_custom_prefix_screen"
                 "zellij" -> "multiplexer_custom_prefix_zellij"
+                "herdr" -> "multiplexer_custom_prefix_herdr"
                 else -> "multiplexer_custom_prefix_tmux"
             }
         }
@@ -536,6 +537,7 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
             when (type) {
                 "screen" -> io.github.tabssh.storage.preferences.PreferenceManager.DEFAULT_PREFIX_SCREEN
                 "zellij" -> io.github.tabssh.storage.preferences.PreferenceManager.DEFAULT_PREFIX_ZELLIJ
+                "herdr" -> io.github.tabssh.storage.preferences.PreferenceManager.DEFAULT_PREFIX_HERDR
                 else -> io.github.tabssh.storage.preferences.PreferenceManager.DEFAULT_PREFIX_TMUX
             }
         }
@@ -562,7 +564,8 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
             if (key == "gesture_multiplexer_type" ||
                 key == "multiplexer_custom_prefix_tmux" ||
                 key == "multiplexer_custom_prefix_screen" ||
-                key == "multiplexer_custom_prefix_zellij") {
+                key == "multiplexer_custom_prefix_zellij" ||
+                key == "multiplexer_custom_prefix_herdr") {
                 multiplexerTypePref?.let { p ->
                     val sp = p.summaryProvider
                     p.summaryProvider = null

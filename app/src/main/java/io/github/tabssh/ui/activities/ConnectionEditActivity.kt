@@ -2106,7 +2106,8 @@ class ConnectionEditActivity : TabSSHActivity() {
         } catch (_: Exception) {
             return false
         }
-        return route?.builtInTor == true && route.enabled
+        return route?.builtInTor == true &&
+            (route.enabled || io.github.tabssh.protocols.tor.TorNativeClient.isAvailable(this))
     }
 
     // -------------------------------------------------------------------------

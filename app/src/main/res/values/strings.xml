@@ -433,6 +433,7 @@
     <string name="route_tor_status_bootstrapping">Bootstrapping Tor circuit… %1$d%%</string>
     <string name="route_tor_status_connected">Tor circuit established — usable as a proxy</string>
     <string name="route_tor_status_failed">Tor failed: %1$s</string>
+    <string name="route_tor_always_enabled">Bundled Tor is always enabled on this device.</string>
     <string name="route_tor_test_button">Test Tor Connection</string>
     <string name="route_host_hint">Host</string>
     <string name="route_port_hint">Port</string>
@@ -795,6 +796,7 @@
     <string name="terminal_pre_key_picker_tmux">tmux (%1$s)</string>
     <string name="terminal_pre_key_picker_zellij">zellij (%1$s)</string>
     <string name="terminal_pre_key_picker_screen">screen (%1$s)</string>
+    <string name="terminal_pre_key_picker_herdr">Herdr (%1$s)</string>
     <string name="terminal_pre_key_picker_disable">Disable PRE key</string>
     <string name="terminal_pre_key_picker_enable">Enable PRE key</string>
     <string name="terminal_connection_closed_title">Connection closed</string>
@@ -1632,6 +1634,9 @@
     <string name="prefs_multiplexer_custom_prefix_screen_title">screen prefix</string>
     <string name="prefs_multiplexer_custom_prefix_screen_summary">Sent by the PRE key when screen is active (default: C-x)</string>
     <string name="prefs_multiplexer_custom_prefix_screen_dialog">Enter the prefix key for GNU screen.\n\nExamples:\n• C-x or ^x → Ctrl+X (app default)\n• C-a or ^a → Ctrl+A (screen upstream default)\n• C-b or ^b → Ctrl+B\n• C-Space or ^Space → Ctrl+Space\n• M-b or Alt-b → Alt+B\n• 0x01 → Hex byte value\n• ` → Backtick literal\n\nLeave empty to restore the default (C-x).</string>
+    <string name="prefs_multiplexer_custom_prefix_herdr_title">Herdr prefix</string>
+    <string name="prefs_multiplexer_custom_prefix_herdr_summary">Sent by the PRE key when Herdr is active (default: C-b)</string>
+    <string name="prefs_multiplexer_custom_prefix_herdr_dialog">Enter the prefix key for Herdr.\n\nExamples:\n• C-b or ^b → Ctrl+B (Herdr default)\n• C-a or ^a → Ctrl+A\n• M-b or Alt-b → Alt+B\n• 0x02 → Hex byte value\n\nLeave empty to restore the default (C-b).</string>
 
     <!-- Settings: App Security screen -->
     <string name="prefcat_security_app_lock">App lock</string>
@@ -2619,7 +2624,7 @@
     <string name="connection_edit_notifications_description">Status notifications stay silent. Choose if connect/disconnect events should sound or vibrate — handy for long-running tasks where a non-zero exit means something went wrong.</string>
     <string name="connection_edit_notif_sound_hint">Sound</string>
     <string name="connection_edit_multiplexer_title">Terminal Multiplexer</string>
-    <string name="connection_edit_multiplexer_description">Auto-attach to tmux, screen, or zellij sessions</string>
+    <string name="connection_edit_multiplexer_description">Auto-attach to tmux, screen, zellij, or Herdr sessions</string>
     <string name="connection_edit_multiplexer_mode_hint">Multiplexer Mode</string>
     <string name="connection_edit_multiplexer_session_name_hint">Session Name (optional)</string>
     <string name="connection_edit_multiplexer_override_hint">PRE Key Override</string>
@@ -4146,6 +4151,7 @@
     <string name="arr_multiplexer_type_tmux">tmux</string>
     <string name="arr_multiplexer_type_screen">screen</string>
     <string name="arr_multiplexer_type_zellij">zellij</string>
+    <string name="arr_multiplexer_type_herdr">Herdr</string>
     <string name="arr_notif_alert_mode_silent_default">Silent (default)</string>
     <string name="arr_notif_alert_mode_always">Always</string>
     <string name="arr_notif_alert_mode_only_on_error">Only on error</string>
@@ -4160,6 +4166,7 @@
     <string name="arr_multiplexer_override_tmux">tmux</string>
     <string name="arr_multiplexer_override_zellij">zellij</string>
     <string name="arr_multiplexer_override_screen">screen</string>
+    <string name="arr_multiplexer_override_herdr">Herdr</string>
     <string name="arr_multiplexer_override_off_disable_pre_key">Off (disable PRE key)</string>
     <string name="arr_log_levels_verbose">Verbose</string>
     <string name="arr_log_levels_debug">Debug</string>

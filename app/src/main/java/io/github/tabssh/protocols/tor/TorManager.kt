@@ -50,28 +50,37 @@ class TorManager private constructor(private val appContext: Context) {
                 _status.value = TorStatus.Connected
                 return socksPort
             }
-            // Clean up a dead session before restarting.
-            existing?.close()
-            session = null
-            socksPort = 0
-
             _status.value = TorStatus.Starting
-            val port = findFreeLoopbackPort()
-            val dataDir = File(appContext.filesDir, TOR_DATA_DIR)
-            val started = TorNativeClient.spawn(appContext, port, dataDir) { percent ->
-                _status.value = TorStatus.Bootstrapping(percent)
-            }
-            if (!started.awaitBootstrap(BOOTSTRAP_TIMEOUT_MS)) {
-                started.close()
-                val reason = "Tor failed to bootstrap within ${BOOTSTRAP_TIMEOUT_MS}ms"
+            var started: TorNativeClient.Session? = null
+            try {
+                // Clean up a dead session before restarting.
+                existing?.close()
+                session = null
+                socksPort = 0
+
+                val port = findFreeLoopbackPort()
+                val dataDir = File(appContext.filesDir, TOR_DATA_DIR)
+                started = TorNativeClient.spawn(appContext, port, dataDir) { percent ->
+                    _status.value = TorStatus.Bootstrapping(percent)
+                }
+                if (!started.awaitBootstrap(BOOTSTRAP_TIMEOUT_MS)) {
+                    throw IllegalStateException("Tor failed to bootstrap within ${BOOTSTRAP_TIMEOUT_MS}ms")
+                }
+                session = started
+                socksPort = port
+                _status.value = TorStatus.Connected
+                Logger.i(TAG, "Tor bootstrapped; loopback SOCKS on 127.0.0.1:$port")
+                return port
+            } catch (e: Exception) {
+                try { started?.close() } catch (_: Exception) {}
+                session = null
+                socksPort = 0
+                val reason = e.message?.takeIf { it.isNotBlank() }
+                    ?: e.javaClass.simpleName.ifBlank { "Unknown Tor startup error" }
                 _status.value = TorStatus.Failed(reason)
-                throw IllegalStateException(reason)
+                if (e is IllegalStateException && e.message == reason) throw e
+                throw IllegalStateException(reason, e)
             }
-            session = started
-            socksPort = port
-            _status.value = TorStatus.Connected
-            Logger.i(TAG, "Tor bootstrapped; loopback SOCKS on 127.0.0.1:$port")
-            return port
         }
     }
 

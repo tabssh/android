@@ -92,7 +92,7 @@ data class ConnectionProfile(
     /**
      * Per-connection PRE-key multiplexer override, set via the long-press
      * picker on the PREFIX keyboard key (or the connection editor).
-     * null = auto (live detection decides); "tmux"/"screen"/"zellij" = pin
+     * null = auto (live detection decides); a supported multiplexer name pins
      * the PRE key to that multiplexer's prefix; "off" = disable the PRE key
      * for this connection. Precedence: override > live detection > global
      * default (`gesture_multiplexer_type`).
