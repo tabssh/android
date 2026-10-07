@@ -1,3 +1,7 @@
+[ ] fix group reorder bug
+[ ] fix group icon bug: sho2s name instead of icon
+[ ] add ability to add group from within the add/update host so user does not need to go to groups then create then back to the edit host, bad U
+[ ] fix the sync not actually syncing, i have 2 devices, things i modified days ago still not synced.
 
 # do not implement these as i am unsure about the items below, just thinking!
 [ ] remove the cloud vm hosts from the the items as the change below would now end up creating duplicates. now they will just 
