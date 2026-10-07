@@ -36,6 +36,7 @@ class GroupManagementActivity : TabSSHActivity() {
     private lateinit var fab: FloatingActionButton
     private lateinit var adapter: GroupAdapter
     private val groups = mutableListOf<ConnectionGroup>()
+    private var reorderPending = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,18 +80,26 @@ class GroupManagementActivity : TabSSHActivity() {
             ): Boolean {
                 val fromPosition = viewHolder.bindingAdapterPosition
                 val toPosition = target.bindingAdapterPosition
+                if (fromPosition == RecyclerView.NO_POSITION || toPosition == RecyclerView.NO_POSITION ||
+                    fromPosition !in groups.indices || toPosition !in groups.indices || fromPosition == toPosition
+                ) return false
                 
-                // Swap items
-                val temp = groups[fromPosition]
-                groups[fromPosition] = groups[toPosition]
-                groups[toPosition] = temp
+                // Move the dragged item through the list. Swapping endpoints
+                // breaks the visual order when a row crosses more than one item.
+                val movedGroup = groups.removeAt(fromPosition)
+                groups.add(toPosition, movedGroup)
+                reorderPending = true
                 
                 adapter.notifyItemMoved(fromPosition, toPosition)
-                
-                // Update sort orders
-                updateSortOrders()
-                
                 return true
+            }
+
+            override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
+                super.clearView(recyclerView, viewHolder)
+                if (reorderPending) {
+                    reorderPending = false
+                    updateSortOrders()
+                }
             }
 
             override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
@@ -327,9 +336,14 @@ class GroupManagementActivity : TabSSHActivity() {
     private fun updateSortOrders() {
         lifecycleScope.launch {
             try {
-                groups.forEachIndexed { index, group ->
-                    app.database.connectionGroupDao().updateGroupSortOrder(group.id, index)
+                app.database.withTransaction {
+                    groups.forEachIndexed { index, group ->
+                        app.database.connectionGroupDao().updateGroupSortOrder(group.id, index)
+                    }
                 }
+                getSharedPreferences("TabSSH", MODE_PRIVATE).edit()
+                    .putString("groups_sort", "CUSTOM")
+                    .apply()
                 Logger.d("GroupManagementActivity", "Updated sort orders")
             } catch (e: Exception) {
                 Logger.e("GroupManagementActivity", "Failed to update sort orders", e)
@@ -376,8 +390,19 @@ class GroupManagementActivity : TabSSHActivity() {
                 holder.colorIndicator.visibility = View.GONE
             }
 
-            // Show details (icon if set)
-            holder.detailsText.text = group.icon ?: holder.itemView.context.getString(R.string.group_mgmt_empty_icon)
+            // Icon identifiers are semantic names (for example "folder"),
+            // while user-provided emoji are already displayable glyphs.
+            holder.detailsText.text = when (group.icon?.trim()?.lowercase()) {
+                null, "" -> holder.itemView.context.getString(R.string.group_mgmt_empty_icon)
+                "folder" -> "📁"
+                "server" -> "🖥️"
+                "cloud" -> "☁️"
+                "vm", "virtual-machine" -> "🖥️"
+                "database" -> "🗄️"
+                "network" -> "🌐"
+                "security", "lock" -> "🔒"
+                else -> group.icon
+            }
 
             holder.itemView.setOnClickListener {
                 onGroupClick(group)

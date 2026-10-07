@@ -90,11 +90,28 @@ class SyncDataApplier {
          */
         internal fun remoteIsStale(localModifiedAt: Long?, remoteModifiedAt: Long): Boolean =
             localModifiedAt != null && localModifiedAt > remoteModifiedAt
+
+        internal fun <T> needsWrite(existing: T?, incoming: T): Boolean = existing != incoming
     }
 
     private val context: Context
     private val database: TabSSHDatabase
     private val preferenceManager: PreferenceManager
+
+    /**
+     * Avoid Room invalidations when a peer re-sends a row already applied here.
+     * The database observer treats invalidations as local edits, so identical
+     * writes would otherwise schedule another sync indefinitely.
+     */
+    private suspend fun <T> writeIfChanged(
+        existing: T?,
+        incoming: T,
+        write: suspend (T) -> Unit
+    ): Boolean {
+        if (!needsWrite(existing, incoming)) return false
+        write(incoming)
+        return true
+    }
 
     // Credential managers — resolved from Application singleton so that
     // Keystore-backed secrets in the sync payload are restored on this device.
@@ -211,11 +228,14 @@ class SyncDataApplier {
                             .findDuplicate(incoming.host, incoming.port, incoming.username, incoming.id)
                         if (existing != null) {
                             val merged = mergeConnectionFields(existing, incoming)
-                            database.connectionDao().updateConnection(merged)
+                            if (writeIfChanged(existing, merged) {
+                                    database.connectionDao().updateConnection(it)
+                                }
+                            ) appliedCount++
                         } else {
                             database.connectionDao().insertConnection(incoming)
+                            appliedCount++
                         }
-                        appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -232,9 +252,9 @@ class SyncDataApplier {
                         // upsert, not insert: KeyDao.insertKey aborts on an
                         // existing keyId, so a remote *edit* to an already-known
                         // key threw and was swallowed by the catch below.
-                        if (remoteIsStale(database.keyDao().getKeyById(key.keyId)?.modifiedAt, key.modifiedAt)) return@forEach
-                        database.keyDao().upsertKey(key)
-                        appliedCount++
+                        val existing = database.keyDao().getKeyById(key.keyId)
+                        if (remoteIsStale(existing?.modifiedAt, key.modifiedAt)) return@forEach
+                        if (writeIfChanged(existing, key) { database.keyDao().upsertKey(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -248,8 +268,8 @@ class SyncDataApplier {
                 data.themes.forEach { theme ->
                     try {
                         if (suppressed(TombstoneRecorder.THEME, theme.themeId, theme.modifiedAt)) return@forEach
-                        database.themeDao().insertTheme(theme)
-                        appliedCount++
+                        val existing = database.themeDao().getThemeById(theme.themeId)
+                        if (writeIfChanged(existing, theme) { database.themeDao().insertTheme(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -263,8 +283,8 @@ class SyncDataApplier {
                 data.hostKeys.forEach { hostKey ->
                     try {
                         if (suppressed(TombstoneRecorder.HOST_KEY, hostKey.id, hostKey.modifiedAt)) return@forEach
-                        database.hostKeyDao().insertHostKey(hostKey)
-                        appliedCount++
+                        val existing = database.hostKeyDao().getHostKeyById(hostKey.id)
+                        if (writeIfChanged(existing, hostKey) { database.hostKeyDao().insertHostKey(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -283,9 +303,9 @@ class SyncDataApplier {
                 data.workspaces.forEach { ws ->
                     try {
                         if (suppressed(TombstoneRecorder.WORKSPACE, ws.id, ws.modifiedAt)) return@forEach
-                        if (remoteIsStale(database.workspaceDao().getById(ws.id)?.modifiedAt, ws.modifiedAt)) return@forEach
-                        database.workspaceDao().upsert(ws)
-                        appliedCount++
+                        val existing = database.workspaceDao().getById(ws.id)
+                        if (remoteIsStale(existing?.modifiedAt, ws.modifiedAt)) return@forEach
+                        if (writeIfChanged(existing, ws) { database.workspaceDao().upsert(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -303,8 +323,8 @@ class SyncDataApplier {
                         // existing local value across this whole-row REPLACE.
                         val existing = database.snippetDao().getSnippetById(s.id)
                         if (remoteIsStale(existing?.modifiedAt, s.modifiedAt)) return@forEach
-                        database.snippetDao().insertSnippet(s.copy(usageCount = existing?.usageCount ?: 0))
-                        appliedCount++
+                        val incoming = s.copy(usageCount = existing?.usageCount ?: 0)
+                        if (writeIfChanged(existing, incoming) { database.snippetDao().insertSnippet(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -316,9 +336,9 @@ class SyncDataApplier {
                 data.identities.forEach { id ->
                     try {
                         if (suppressed(TombstoneRecorder.IDENTITY, id.id, id.modifiedAt)) return@forEach
-                        if (remoteIsStale(database.identityDao().getIdentityById(id.id)?.modifiedAt, id.modifiedAt)) return@forEach
-                        database.identityDao().insert(id)
-                        appliedCount++
+                        val existing = database.identityDao().getIdentityById(id.id)
+                        if (remoteIsStale(existing?.modifiedAt, id.modifiedAt)) return@forEach
+                        if (writeIfChanged(existing, id) { database.identityDao().insert(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -338,8 +358,8 @@ class SyncDataApplier {
                         // the existing local value across this whole-row REPLACE.
                         val existing = database.hypervisorDao().getById(h.id)
                         if (remoteIsStale(existing?.modifiedAt, h.modifiedAt)) return@forEach
-                        database.hypervisorDao().upsertForSync(h.copy(connectionCount = existing?.connectionCount ?: 0))
-                        appliedCount++
+                        val incoming = h.copy(connectionCount = existing?.connectionCount ?: 0)
+                        if (writeIfChanged(existing, incoming) { database.hypervisorDao().upsertForSync(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -351,9 +371,9 @@ class SyncDataApplier {
                 data.certificates.forEach { c ->
                     try {
                         if (suppressed(TombstoneRecorder.CERTIFICATE, c.id, c.modifiedAt)) return@forEach
-                        if (remoteIsStale(database.certificateDao().getCertificate(c.id)?.modifiedAt, c.modifiedAt)) return@forEach
-                        database.certificateDao().insertCertificate(c)
-                        appliedCount++
+                        val existing = database.certificateDao().getCertificate(c.id)
+                        if (remoteIsStale(existing?.modifiedAt, c.modifiedAt)) return@forEach
+                        if (writeIfChanged(existing, c) { database.certificateDao().insertCertificate(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -371,8 +391,8 @@ class SyncDataApplier {
                         // existing local value across this whole-row REPLACE.
                         val existing = database.macroDao().getMacroById(m.id)
                         if (remoteIsStale(existing?.modifiedAt, m.modifiedAt)) return@forEach
-                        database.macroDao().insertMacro(m.copy(usageCount = existing?.usageCount ?: 0))
-                        appliedCount++
+                        val incoming = m.copy(usageCount = existing?.usageCount ?: 0)
+                        if (writeIfChanged(existing, incoming) { database.macroDao().insertMacro(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -384,9 +404,9 @@ class SyncDataApplier {
                 data.monitorSlots.forEach { slot ->
                     try {
                         if (suppressed(TombstoneRecorder.MONITOR_SLOT, slot.id, slot.modifiedAt)) return@forEach
-                        if (remoteIsStale(database.monitorSlotDao().getById(slot.id)?.modifiedAt, slot.modifiedAt)) return@forEach
-                        database.monitorSlotDao().insertOrReplace(slot)
-                        appliedCount++
+                        val existing = database.monitorSlotDao().getById(slot.id)
+                        if (remoteIsStale(existing?.modifiedAt, slot.modifiedAt)) return@forEach
+                        if (writeIfChanged(existing, slot) { database.monitorSlotDao().insertOrReplace(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -414,12 +434,15 @@ class SyncDataApplier {
                         if (existing == null) {
                             val newId = database.hypervisorAccountDao().insert(a.copy(id = 0L))
                             hypervisorAccountIdRemap[a.id] = newId
+                            appliedCount++
                         } else {
                             if (remoteIsStale(existing.modifiedAt, a.modifiedAt)) return@forEach
-                            database.hypervisorAccountDao().update(a.copy(id = existing.id))
                             hypervisorAccountIdRemap[a.id] = existing.id
+                            val incoming = a.copy(id = existing.id)
+                            if (writeIfChanged(existing, incoming) { database.hypervisorAccountDao().update(it) }) {
+                                appliedCount++
+                            }
                         }
-                        appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -437,8 +460,8 @@ class SyncDataApplier {
                         // the existing local value across this whole-row REPLACE.
                         val existing = database.vncHostDao().getById(h.id)
                         if (remoteIsStale(existing?.modifiedAt, h.modifiedAt)) return@forEach
-                        database.vncHostDao().insert(h.copy(connectionCount = existing?.connectionCount ?: 0))
-                        appliedCount++
+                        val incoming = h.copy(connectionCount = existing?.connectionCount ?: 0)
+                        if (writeIfChanged(existing, incoming) { database.vncHostDao().insert(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -451,9 +474,9 @@ class SyncDataApplier {
                 data.vncIdentities.forEach { vi ->
                     try {
                         if (suppressed(TombstoneRecorder.VNC_IDENTITY, vi.id, vi.modifiedAt)) return@forEach
-                        if (remoteIsStale(database.vncIdentityDao().getById(vi.id)?.modifiedAt, vi.modifiedAt)) return@forEach
-                        database.vncIdentityDao().insert(vi)
-                        appliedCount++
+                        val existing = database.vncIdentityDao().getById(vi.id)
+                        if (remoteIsStale(existing?.modifiedAt, vi.modifiedAt)) return@forEach
+                        if (writeIfChanged(existing, vi) { database.vncIdentityDao().insert(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -473,13 +496,11 @@ class SyncDataApplier {
                         // this whole-row REPLACE.
                         val localCa = database.cloudAccountDao().getById(ca.id)
                         if (remoteIsStale(localCa?.modifiedAt, ca.modifiedAt)) return@forEach
-                        database.cloudAccountDao().upsert(
-                            ca.copy(
-                                connectionCount = localCa?.connectionCount ?: 0,
-                                lastConnected = localCa?.lastConnected ?: 0
-                            )
+                        val incoming = ca.copy(
+                            connectionCount = localCa?.connectionCount ?: 0,
+                            lastConnected = localCa?.lastConnected ?: 0
                         )
-                        appliedCount++
+                        if (writeIfChanged(localCa, incoming) { database.cloudAccountDao().upsert(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -493,9 +514,9 @@ class SyncDataApplier {
                 data.portForwards.forEach { pf ->
                     try {
                         if (suppressed(TombstoneRecorder.PORT_FORWARD, pf.id, pf.modifiedAt)) return@forEach
-                        if (remoteIsStale(database.portForwardDao().getById(pf.id)?.modifiedAt, pf.modifiedAt)) return@forEach
-                        database.portForwardDao().insert(pf)
-                        appliedCount++
+                        val existing = database.portForwardDao().getById(pf.id)
+                        if (remoteIsStale(existing?.modifiedAt, pf.modifiedAt)) return@forEach
+                        if (writeIfChanged(existing, pf) { database.portForwardDao().insert(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -510,9 +531,9 @@ class SyncDataApplier {
                 data.telnetHosts.forEach { th ->
                     try {
                         if (suppressed(TombstoneRecorder.TELNET_HOST, th.id, th.modifiedAt)) return@forEach
-                        if (remoteIsStale(database.telnetHostDao().getById(th.id)?.modifiedAt, th.modifiedAt)) return@forEach
-                        database.telnetHostDao().insert(th)
-                        appliedCount++
+                        val existing = database.telnetHostDao().getById(th.id)
+                        if (remoteIsStale(existing?.modifiedAt, th.modifiedAt)) return@forEach
+                        if (writeIfChanged(existing, th) { database.telnetHostDao().insert(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -526,9 +547,9 @@ class SyncDataApplier {
                 data.domains.forEach { d ->
                     try {
                         if (suppressed(TombstoneRecorder.DOMAIN, d.id, d.modifiedAt)) return@forEach
-                        if (remoteIsStale(database.domainDao().getById(d.id)?.modifiedAt, d.modifiedAt)) return@forEach
-                        database.domainDao().insert(d)
-                        appliedCount++
+                        val existing = database.domainDao().getById(d.id)
+                        if (remoteIsStale(existing?.modifiedAt, d.modifiedAt)) return@forEach
+                        if (writeIfChanged(existing, d) { database.domainDao().insert(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -542,9 +563,9 @@ class SyncDataApplier {
                 data.vpsHosts.forEach { v ->
                     try {
                         if (suppressed(TombstoneRecorder.VPS_HOST, v.id, v.modifiedAt)) return@forEach
-                        if (remoteIsStale(database.vpsHostDao().getById(v.id)?.modifiedAt, v.modifiedAt)) return@forEach
-                        database.vpsHostDao().insert(v)
-                        appliedCount++
+                        val existing = database.vpsHostDao().getById(v.id)
+                        if (remoteIsStale(existing?.modifiedAt, v.modifiedAt)) return@forEach
+                        if (writeIfChanged(existing, v) { database.vpsHostDao().insert(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -558,9 +579,9 @@ class SyncDataApplier {
                 data.networkRoutes.forEach { nr ->
                     try {
                         if (suppressed(TombstoneRecorder.NETWORK_ROUTE, nr.id, nr.modifiedAt)) return@forEach
-                        if (remoteIsStale(database.networkRouteDao().getById(nr.id)?.modifiedAt, nr.modifiedAt)) return@forEach
-                        database.networkRouteDao().insert(nr)
-                        appliedCount++
+                        val existing = database.networkRouteDao().getById(nr.id)
+                        if (remoteIsStale(existing?.modifiedAt, nr.modifiedAt)) return@forEach
+                        if (writeIfChanged(existing, nr) { database.networkRouteDao().insert(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -574,9 +595,9 @@ class SyncDataApplier {
                 data.paneGroups.forEach { pg ->
                     try {
                         if (suppressed(TombstoneRecorder.PANE_GROUP, pg.id, pg.modifiedAt)) return@forEach
-                        if (remoteIsStale(database.paneGroupDao().getById(pg.id)?.modifiedAt, pg.modifiedAt)) return@forEach
-                        database.paneGroupDao().insert(pg)
-                        appliedCount++
+                        val existing = database.paneGroupDao().getById(pg.id)
+                        if (remoteIsStale(existing?.modifiedAt, pg.modifiedAt)) return@forEach
+                        if (writeIfChanged(existing, pg) { database.paneGroupDao().insert(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -596,9 +617,11 @@ class SyncDataApplier {
                         val existing = database.containerHostDao().getById(h.id)
                         if (remoteIsStale(existing?.modifiedAt, h.modifiedAt)) return@forEach
                         val incoming = h.copy(connectionCount = existing?.connectionCount ?: 0)
-                        if (existing == null) database.containerHostDao().insert(incoming)
-                        else database.containerHostDao().update(incoming)
-                        appliedCount++
+                        if (writeIfChanged(existing, incoming) {
+                                if (existing == null) database.containerHostDao().insert(it)
+                                else database.containerHostDao().update(it)
+                            }
+                        ) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -610,9 +633,11 @@ class SyncDataApplier {
                         if (suppressed(TombstoneRecorder.REGISTRY_CREDENTIAL, TombstoneRecorder.naturalKey(c), c.modifiedAt)) return@forEach
                         val existing = database.registryCredentialDao().getById(c.id)
                         if (remoteIsStale(existing?.modifiedAt, c.modifiedAt)) return@forEach
-                        if (existing == null) database.registryCredentialDao().insert(c)
-                        else database.registryCredentialDao().update(c)
-                        appliedCount++
+                        if (writeIfChanged(existing, c) {
+                                if (existing == null) database.registryCredentialDao().insert(it)
+                                else database.registryCredentialDao().update(it)
+                            }
+                        ) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -624,9 +649,11 @@ class SyncDataApplier {
                         if (suppressed(TombstoneRecorder.COMPOSE_STACK, TombstoneRecorder.naturalKey(s), s.modifiedAt)) return@forEach
                         val existing = database.composeStackDao().getById(s.id)
                         if (remoteIsStale(existing?.modifiedAt, s.modifiedAt)) return@forEach
-                        if (existing == null) database.composeStackDao().insert(s)
-                        else database.composeStackDao().update(s)
-                        appliedCount++
+                        if (writeIfChanged(existing, s) {
+                                if (existing == null) database.composeStackDao().insert(it)
+                                else database.composeStackDao().update(it)
+                            }
+                        ) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -638,9 +665,11 @@ class SyncDataApplier {
                         if (suppressed(TombstoneRecorder.SINGLE_CONTAINER_CONFIG, TombstoneRecorder.naturalKey(c), c.modifiedAt)) return@forEach
                         val existing = database.singleContainerConfigDao().getById(c.id)
                         if (remoteIsStale(existing?.modifiedAt, c.modifiedAt)) return@forEach
-                        if (existing == null) database.singleContainerConfigDao().insert(c)
-                        else database.singleContainerConfigDao().update(c)
-                        appliedCount++
+                        if (writeIfChanged(existing, c) {
+                                if (existing == null) database.singleContainerConfigDao().insert(it)
+                                else database.singleContainerConfigDao().update(it)
+                            }
+                        ) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -652,9 +681,11 @@ class SyncDataApplier {
                         if (suppressed(TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY, TombstoneRecorder.naturalKey(p), p.modifiedAt)) return@forEach
                         val existing = database.containerAutoUpdatePolicyDao().getById(p.id)
                         if (remoteIsStale(existing?.modifiedAt, p.modifiedAt)) return@forEach
-                        if (existing == null) database.containerAutoUpdatePolicyDao().insert(p)
-                        else database.containerAutoUpdatePolicyDao().update(p)
-                        appliedCount++
+                        if (writeIfChanged(existing, p) {
+                                if (existing == null) database.containerAutoUpdatePolicyDao().insert(it)
+                                else database.containerAutoUpdatePolicyDao().update(it)
+                            }
+                        ) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {

@@ -36,6 +36,14 @@ class SyncDataApplierStaleGuardTest {
     }
 
     @Test
+    fun `identical remote rows do not need a database write`() {
+        val row = listOf("host", 22, "user")
+        assertFalse(SyncDataApplier.needsWrite(row, row.toList()))
+        assertTrue(SyncDataApplier.needsWrite(row, listOf("host", 2222, "user")))
+        assertTrue(SyncDataApplier.needsWrite(null, row))
+    }
+
+    @Test
     fun `account secret aliases follow the remapped local id`() {
         val secrets = mapOf(
             "hypervisor_account_7" to "pw",

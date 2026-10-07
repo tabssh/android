@@ -3181,6 +3181,7 @@
     <string name="key_import_error_unknown">Key import failed.</string>
     <string name="conn_edit_no_identity">No Identity</string>
     <string name="conn_edit_no_group">No Group</string>
+    <string name="conn_edit_create_group_option">＋ Create group…</string>
     <string name="conn_edit_use_global_default">Use Global Default</string>
     <string name="conn_edit_knock_sequence_saved">✓ Knock sequence saved: %1$d ports</string>
     <string name="conn_edit_knock_sequence_cleared">Sequence cleared</string>
@@ -3879,6 +3880,9 @@
     <string name="terminal_split_failed_telnet_fmt">Split failed: telnet %1$s:%2$d</string>
     <string name="terminal_split_failed_ssh_fmt">Split failed: ssh %1$s@%2$s:%3$d</string>
     <string name="terminal_split_display_fmt">Split: %1$s</string>
+    <string name="terminal_split_focus_bottom">Focus bottom</string>
+    <string name="terminal_split_focus_top">Focus top</string>
+    <string name="terminal_split_close">Close split</string>
     <string name="terminal_recording_macro">Recording macro</string>
     <string name="terminal_no_saved_macros">No saved macros</string>
     <string name="terminal_mosh_handoff_needs_ssh">Mosh handoff needs an SSH connection</string>

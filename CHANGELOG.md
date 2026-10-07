@@ -17,6 +17,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Quick horizontal splits now route input to the focused terminal and provide visible Focus and Close controls.** The split session also uses the normal Mosh handoff when its profile enables Mosh.
+- **Sync-on-change now runs.** The Room database observer is started with the application after database initialization, so edits trigger the configured debounced two-way sync instead of silently waiting for a periodic or manual run.
+- **Group drag reordering now follows the dragged row across every intervening row** and writes the completed order atomically.
+- **Named group icons display as icons** in group management instead of showing identifiers such as `folder` or `server` as plain text.
+- **Groups can be created from the host editor's group dropdown.** The new group is selected in the form immediately and saved with the host.
+
 - **Panes no longer leave an empty tab after its final window closes or all pane sessions end.** The TabManager now watches pane state for the lifetime of its sessions, including across Activity recreation.
 - **SSH jump hosts now accept their saved SSH key.** Reusable routes store key authentication as `KEY`; the connection path now recognizes that value, loads key passphrases and attached certificates, and reports a missing key instead of silently attempting password auth. Changing a connection or identity's auth mode no longer removes its saved password; clearing the password or explicitly turning off Save Password removes it, including after screen rotation.
 

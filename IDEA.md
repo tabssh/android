@@ -59,6 +59,7 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 ### Core SSH features the app must have
 - Multi-tab SSH sessions modeled on browser tabs — swipe and keyboard navigation between live sessions
 - Panes — tile up to 6 SSH/Telnet/Mosh sessions in a fixed auto-sized grid inside one terminal tab (two panes can split side by side or stacked); tap a pane to focus it; Sync Input mirrors typing from the focused pane to every other pane and highlights all pane tiles while on; close individually or as a group (Disconnect All / Keep Running in Background); the tab closes when its last pane is closed or every pane session ends; auto-stacks to a single column on narrow screens
+- Quick horizontal split — open a second SSH/Telnet/Mosh host below the active terminal; terminal touches and the focus control select the input target for IME, hardware, and custom-keyboard input; keep a visible close control while the split is open.
 - Full VT100/ANSI/xterm-256color terminal emulation
 - SSH authentication: password, SSH key (RSA, ECDSA, Ed25519, legacy DSA; OpenSSH, PEM, and PuTTY .ppk formats), keyboard-interactive
 - SSH key management: import (file / paste), generate (RSA, ECDSA, Ed25519), fingerprint display, passphrase protection, OpenSSH certificate attachment
@@ -74,6 +75,7 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 - Dedicated Recording & Transcripts settings screen — recording and transcription options live in their own settings section (not under Terminal), so they apply to every tab type that can record and leave room for new recording features
 - `~/.ssh/config` import
 - Bulk import: CSV, JSON, PuTTY .reg, Terraform `.tf` config files — each format maps its fields onto connection profiles (host, port, user, auth, group)
+- Connection groups can be created and assigned in the host editor, use named or custom emoji icons, and support drag ordering for the Custom group sort.
 - Custom on-screen keyboard with configurable rows
 - Find-in-scrollback
 - Snippet library with `{var}` and `{?name:default|hint}` placeholder substitution — placeholders are filled through a prompt UI at run time
@@ -103,6 +105,7 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 
 ### Sync and backup
 - Cross-device sync via SAF — user supplies any DocumentsProvider (Google Drive, Dropbox, OneDrive, Nextcloud, local); app embeds no cloud SDKs
+- Sync can run manually, periodically, or after database edits when sync-on-change is enabled; edit-triggered runs are debounced.
 - Cross-device merge with per-entity conflict resolution — a conflicting row pauses sync and offers keep local / keep remote / keep both, with last-write-wins preselected
 - Every conflict and its resolution is recorded in a dedicated Sync Log, viewable in the app; conflicts never go to the application or debug log, which stay reserved for genuine app faults
 - Reusable network routes (proxies and SSH jump hosts) sync device-to-device like port-forward rules — full row, last-write-wins, and no secrets to keep Keystore-bound

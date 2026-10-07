@@ -90,7 +90,7 @@ class SyncWorkScheduler(private val context: Context) {
 
         workManager.enqueueUniqueWork(
             SyncWorker.WORK_NAME_ONE_TIME,
-            ExistingWorkPolicy.REPLACE,
+            ExistingWorkPolicy.APPEND_OR_REPLACE,
             oneTimeWorkRequest
         )
 

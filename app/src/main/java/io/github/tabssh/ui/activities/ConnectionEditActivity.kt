@@ -887,6 +887,8 @@ class ConnectionEditActivity : TabSSHActivity() {
             }.filter { it.groupType.isEmpty() }
             val groupsList = mutableListOf(getString(R.string.conn_edit_no_group))
             groups.forEach { group -> groupsList.add(group.name) }
+            val createGroupPosition = groupsList.size
+            groupsList.add(getString(R.string.conn_edit_create_group_option))
 
             val adapter = ArrayAdapter(
                 this@ConnectionEditActivity,
@@ -895,6 +897,11 @@ class ConnectionEditActivity : TabSSHActivity() {
             )
             binding.spinnerGroup.setAdapter(adapter)
             binding.spinnerGroup.setOnItemClickListener { _, _, position, _ ->
+                if (position == createGroupPosition) {
+                    binding.spinnerGroup.setText(selectedGroupName, false)
+                    showGroupSelectionDialog()
+                    return@setOnItemClickListener
+                }
                 selectedGroupId = if (position == 0) null else groups[position - 1].id
                 selectedGroupName = groupsList[position]
                 // Reflect the choice in the action-bar subtitle (bug-23): clear it
@@ -917,7 +924,8 @@ class ConnectionEditActivity : TabSSHActivity() {
                     supportActionBar?.subtitle = null
                 }
             } ?: run {
-                binding.spinnerGroup.setText(getString(R.string.conn_edit_no_group), false)
+                selectedGroupName = getString(R.string.conn_edit_no_group)
+                binding.spinnerGroup.setText(selectedGroupName, false)
             }
         }
     }
@@ -2469,22 +2477,21 @@ class ConnectionEditActivity : TabSSHActivity() {
             .setPositiveButton(R.string.conn_edit_set) { _, _ ->
                 val groupName = editText.text.toString().trim()
                 if (groupName.isEmpty()) {
-                    selectedGroupId = null
-                    selectedGroupName = getString(R.string.conn_edit_no_group)
-                    supportActionBar?.subtitle = null
-                    showToast(getString(R.string.conn_edit_group_cleared))
+                    clearSelectedGroup()
                 } else {
                     lifecycleScope.launch {
                         try {
                             val groupDao = app.database.connectionGroupDao()
-                            val existing = withContext(Dispatchers.IO) {
-                                groupDao.getGroupByName(groupName)
+                            val userGroups = withContext(Dispatchers.IO) {
+                                groupDao.getAllGroupsList().filter { it.groupType.isEmpty() }
                             }
+                            val existing = userGroups.firstOrNull { it.name.equals(groupName, ignoreCase = true) }
                             val groupId = if (existing != null) {
                                 existing.id
                             } else {
+                                val nextSortOrder = (userGroups.maxOfOrNull { it.sortOrder } ?: -1) + 1
                                 val newGroup = io.github.tabssh.storage.database.entities.ConnectionGroup(
-                                    name = groupName, icon = "folder", sortOrder = 0
+                                    name = groupName, icon = "folder", sortOrder = nextSortOrder
                                 )
                                 withContext(Dispatchers.IO) {
                                     groupDao.insertGroup(newGroup)
@@ -2493,7 +2500,9 @@ class ConnectionEditActivity : TabSSHActivity() {
                             }
                             selectedGroupId = groupId
                             selectedGroupName = groupName
+                            binding.spinnerGroup.setText(groupName, false)
                             supportActionBar?.subtitle = groupName
+                            hasUnsavedChanges = true
                             showToast(getString(R.string.conn_edit_group_set_to, groupName))
                         } catch (e: Exception) {
                             Logger.e("ConnectionEditActivity", "Failed to resolve group '$groupName'", e)
@@ -2504,12 +2513,18 @@ class ConnectionEditActivity : TabSSHActivity() {
             }
             .setNegativeButton(R.string.cancel, null)
             .setNeutralButton(R.string.action_clear) { _, _ ->
-                selectedGroupId = null
-                selectedGroupName = getString(R.string.conn_edit_no_group)
-                supportActionBar?.subtitle = null
-                showToast(getString(R.string.conn_edit_group_cleared))
+                clearSelectedGroup()
             }
             .show()
+    }
+
+    private fun clearSelectedGroup() {
+        selectedGroupId = null
+        selectedGroupName = getString(R.string.conn_edit_no_group)
+        binding.spinnerGroup.setText(selectedGroupName, false)
+        supportActionBar?.subtitle = null
+        hasUnsavedChanges = true
+        showToast(getString(R.string.conn_edit_group_cleared))
     }
 
     private fun setupTerminalTypeSpinner() {

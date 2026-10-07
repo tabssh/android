@@ -140,25 +140,64 @@
 
         <!-- Wave 2.8 — Split-view bottom pane. Hidden until user invokes
              "Split current view…". Hosts a separate SSHTab + TerminalView. -->
-        <FrameLayout
+        <LinearLayout
             android:id="@+id/split_bottom_pane"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:background="@color/terminal_background"
+            android:orientation="vertical"
             android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/split_bottom_controls"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="?attr/colorSurfaceVariant"
+                android:paddingStart="@dimen/space_sm"
+                android:paddingEnd="@dimen/space_sm">
+
+                <TextView
+                    android:id="@+id/split_bottom_host_label"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textAppearance="?attr/textAppearanceLabelLarge"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/split_bottom_focus_button"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="@dimen/min_touch_target"
+                    android:text="@string/terminal_split_focus_bottom" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/split_bottom_close_button"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="@dimen/min_touch_target"
+                    android:text="@string/terminal_split_close" />
+            </LinearLayout>
 
             <io.github.tabssh.ui.views.TerminalView
                 android:id="@+id/split_bottom_terminal"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
                 android:background="@color/terminal_background"
                 app:terminalFontSize="@dimen/terminal_text_size_default"
                 app:terminalFontFamily="monospace"
                 app:showScrollbar="true"
                 app:scrollbackLines="1000" />
 
-        </FrameLayout>
+        </LinearLayout>
 
         <!-- Multi-Row Custom Keyboard -->
         <io.github.tabssh.ui.keyboard.MultiRowKeyboardView

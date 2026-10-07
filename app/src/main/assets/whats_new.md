@@ -1,5 +1,17 @@
 # What's New
 
+## Wave 75 — quick split controls
+
+- Quick horizontal splits route IME, hardware-keyboard, and custom-keyboard input to the focused terminal.
+- The split pane has visible focus and close controls, and split sessions respect a host's Mosh setting.
+
+## Wave 74 — group management and device sync
+
+- Group reordering follows the dragged row through the list and saves the final order.
+- Group icons display as icons in group management.
+- Create and select a group directly from the host editor.
+- Database edits now start the configured debounced sync automatically.
+
 ## Wave 73 — audit, automation, and recording fixes
 
 - Panes tabs close automatically after the final pane closes or all pane sessions end, including after Activity recreation.

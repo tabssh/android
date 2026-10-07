@@ -48,6 +48,7 @@ created, synced, or paired on any one of the three works unmodified on the other
 - 📟 **Telnet Hosts** — Plain-text legacy Telnet hosts kept in their own list, separate from SSH profiles; tap to connect in a terminal tab, long-press to edit or delete
 - 🗃️ **Workspaces** — Save the currently open tabs as a named workspace and reopen them all later (or delete saved ones) from the terminal menu
 - 🪟 **Panes** — Up to 6 SSH/Telnet/Mosh sessions tiled in a resizable grid inside one terminal tab; tap a pane to focus it, close individually or as a group (Disconnect All / Keep Running in Background); the tab closes when its last pane is closed or every pane session ends; auto-stacks to a single column on narrow screens
+- ↕️ **Quick Horizontal Split** — Open a second SSH/Telnet/Mosh session below the active terminal; focus either terminal to route keyboard input there, and close the split from its visible header.
 
 ### Security
 
@@ -88,10 +89,10 @@ created, synced, or paired on any one of the three works unmodified on the other
 - 📡 **Background Monitoring** — Periodic TCP reachability probes; down/recovery notifications; CPU/memory/disk threshold alerts via SSH; configurable cooldown (15 min–12 h)
 - 📱 **Mosh Protocol** — Mobile shell for unstable connections with roaming support
 - 💾 **Backup & Restore** — Export/import everything as a ZIP, encrypted when you set a password
-- ☁️ **Cloud Sync** — Storage Access Framework (Google Drive, Dropbox, OneDrive, Nextcloud, local — no Google services dependency); AES-256-GCM + Argon2id + 3-way merge with conflict UI
+- ☁️ **Cloud Sync** — Storage Access Framework (Google Drive, Dropbox, OneDrive, Nextcloud, local — no Google services dependency); AES-256-GCM + Argon2id + 3-way merge with conflict UI; manual, periodic, and debounced sync-on-change modes
 - 🔗 **Cross-Platform Compatible** — sync blobs, encrypted backups, QR pairing payloads, and theme files are byte-compatible with [TabSSH Desktop](https://github.com/tabssh/desktop) and [TabSSH Web](https://github.com/tabssh/web); pair or restore on any of the three and pick up the exact same connections, keys, and settings
 - 🏠 **Home Screen Widgets** — Quick-connect from launcher
-- 📂 **Connection Groups** — Folders with expand/collapse; group badges in search
+- 📂 **Connection Groups** — Create groups from the host editor, choose emoji or named icons, expand/collapse folders, drag groups into custom order, and see group badges in search
 - 🔍 **Search & Sort** — Real-time search, 8 sort options
 - 📊 **Connection Statistics** — Visible "Connected N times • 2h ago" subtitle with relative last-connected time; connection counts are local-only per-device stats and never overwritten by sync; the Frequent list ranks hosts by a hybrid of usage count and recency decay; VNC hosts, Cloud Account instances, Hypervisor VMs, and Container hosts all track connection count and last-connected too, not just SSH/Telnet/Mosh hosts
 - 🕘 **Connection History** — Saved connections you have opened (up to the 500 most recent), newest first, with target, last-connected time, and connection count; tap a row to reconnect (drawer → Connection History)

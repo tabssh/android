@@ -27,6 +27,7 @@ import kotlinx.coroutines.withContext
  * Handles application-level initialization and dependency injection
  */
 class TabSSHApplication : Application() {
+    private var databaseChangeObserver: io.github.tabssh.sync.observer.DatabaseChangeObserver? = null
 
     companion object {
         const val STARTUP_PREFS = "tabssh_startup"
@@ -306,6 +307,11 @@ class TabSSHApplication : Application() {
         // lazy fires on whichever thread hits it first, same as before.
         applicationScope.launch {
             initializeCoreComponents()
+            // Keep sync-on-change active for the lifetime of the app process.
+            // The observer watches Room writes and enqueues the normal merge
+            // worker after its debounce window.
+            databaseChangeObserver = io.github.tabssh.sync.observer.DatabaseChangeObserver(this@TabSSHApplication)
+                .also { it.startObserving() }
             // Single source of truth for host-key verification dialogs. Set
             // on SSHSessionManager so EVERY future connection inherits it
             // (SSHSessionManager.createConnection copies these onto each new

@@ -122,6 +122,14 @@ class SshHostsFragment : Fragment() {
         
         Logger.d("SshHostsFragment", "Fragment created")
     }
+
+    override fun onResume() {
+        super.onResume()
+        if (::recyclerView.isInitialized) {
+            loadSortPreference()
+            if (useGroupedView) applyGroupedView() else applySortAndFilter()
+        }
+    }
     
     private fun setupToolbar() {
         toolbar.addMenuProvider(object : MenuProvider {

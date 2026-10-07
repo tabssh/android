@@ -45,6 +45,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.viewpager2.widget.ViewPager2
@@ -1268,8 +1269,32 @@ class TabTerminalActivity : TabSSHActivity() {
     // the ACTION_UP that was supposed to reset the flag) and tab swiping
     // stayed permanently dead after the first mid-screen touch.
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        updateSplitPaneFocusFromTouch(ev)
         applyEdgeSwipeGate(ev)
         return super.dispatchTouchEvent(ev)
+    }
+
+    private fun updateSplitPaneFocusFromTouch(event: MotionEvent) {
+        if (event.actionMasked != MotionEvent.ACTION_DOWN || splitTab == null) return
+        val splitPane = findViewById<View>(R.id.split_bottom_pane)
+        if (isTouchInsideView(event, findViewById(R.id.split_bottom_controls))) return
+        if (isTouchInsideView(event, splitPane)) {
+            setBottomPaneFocused(true)
+            return
+        }
+
+        val topPane = if (swipeEnabled) viewPager else terminalView
+        if (topPane != null && isTouchInsideView(event, topPane)) {
+            setBottomPaneFocused(false)
+        }
+    }
+
+    private fun isTouchInsideView(event: MotionEvent, view: View): Boolean {
+        if (view.visibility != View.VISIBLE || view.width <= 0 || view.height <= 0) return false
+        val location = IntArray(2)
+        view.getLocationOnScreen(location)
+        return event.rawX >= location[0] && event.rawX < location[0] + view.width &&
+            event.rawY >= location[1] && event.rawY < location[1] + view.height
     }
 
     // Per-gesture gate: on ACTION_DOWN decide whether THIS gesture may swipe
@@ -3329,6 +3354,7 @@ class TabTerminalActivity : TabSSHActivity() {
      * ~11 call sites — keeps the fix isolated and additive.
      */
     private fun resolveActiveSshTabForPrefixKey(): SSHTab? {
+        if (bottomPaneFocused) return splitTab
         return when (val entry = tabManager.getActiveTabSealed()) {
             is Tab.Ssh -> entry.sshTab
             is Tab.Panes -> entry.panesTab.focusedEntry()?.sshTab
@@ -3349,6 +3375,7 @@ class TabTerminalActivity : TabSSHActivity() {
         // can tell the difference between "mux running" and "about to send prefix".
         val MUX_GREEN = ContextCompat.getColor(this, R.color.status_success)
         val activeTab = resolveActiveSshTabForPrefixKey()
+        val activeMultiplexerType = if (activeTab != null) activeTab.activeMultiplexerType else multiplexerType
         when {
             activeTab != null && !activeTab.isPrefixKeyEnabled ->
                 binding.multiRowKeyboard.setKeyState(
@@ -3356,7 +3383,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 )
             prefixArmed ->
                 binding.multiRowKeyboard.setKeyState("PREFIX", active = true, enabled = true)
-            multiplexerType != null ->
+            activeMultiplexerType != null ->
                 binding.multiRowKeyboard.setKeyState(
                     "PREFIX", active = false, enabled = true, accentColor = MUX_GREEN
                 )
@@ -3422,7 +3449,7 @@ class TabTerminalActivity : TabSSHActivity() {
      */
     private fun showMultiplexerPickerDialog() {
         val prefs = app.preferencesManager
-        val tab = tabManager.getActiveTab() ?: return
+        val tab = resolveActiveSshTabForPrefixKey() ?: return
         val tmuxLabel   = prefixToShortLabel(prefs.getMultiplexerPrefix("tmux"))
         val zellijLabel = prefixToShortLabel(prefs.getMultiplexerPrefix("zellij"))
         val screenLabel = prefixToShortLabel(prefs.getMultiplexerPrefix("screen"))
@@ -4261,6 +4288,8 @@ class TabTerminalActivity : TabSSHActivity() {
     private var splitTab: SSHTab? = null
     private var bottomTerminalView: TerminalView? = null
     private var bottomPaneFocused: Boolean = false
+    private var splitMultiplexerObserverJob: Job? = null
+    private var splitConnectJob: Job? = null
 
     /**
      * Tracks the coroutine that collects SSH non-fatal warnings for the most
@@ -4271,7 +4300,7 @@ class TabTerminalActivity : TabSSHActivity() {
     private var warningsJob: Job? = null
 
     private fun showSplitConnectionPicker() {
-        if (splitTab != null) {
+        if (splitTab != null || splitConnectJob?.isActive == true) {
             Toast.makeText(this, getString(R.string.terminal_already_split), Toast.LENGTH_SHORT).show()
             return
         }
@@ -4301,20 +4330,34 @@ class TabTerminalActivity : TabSSHActivity() {
     }
 
     private fun openSplitWithProfile(profile: ConnectionProfile) {
-        val pane = findViewById<FrameLayout>(R.id.split_bottom_pane)
+        val pane = findViewById<View>(R.id.split_bottom_pane)
         val term = findViewById<TerminalView>(R.id.split_bottom_terminal)
+        findViewById<TextView>(R.id.split_bottom_host_label).text = profile.getDisplayName()
+        findViewById<View>(R.id.split_bottom_focus_button).setOnClickListener {
+            setBottomPaneFocused(!bottomPaneFocused)
+        }
+        findViewById<View>(R.id.split_bottom_close_button).setOnClickListener {
+            closeSplitPane()
+        }
         bottomTerminalView = term
         pane.visibility = View.VISIBLE
-        // Tap-to-focus indicator: simple border swap.
-        pane.setOnClickListener { setBottomPaneFocused(true) }
-        term.setOnClickListener { setBottomPaneFocused(true) }
-        // Tap on top FrameLayout (parent of viewPager / classic terminalView) to refocus top.
-        findViewById<View>(R.id.view_pager)?.setOnClickListener { setBottomPaneFocused(false) }
-        terminalView?.setOnClickListener { setBottomPaneFocused(false) }
 
-        lifecycleScope.launch {
-            val ssh = if (profile.protocol.equals("telnet", ignoreCase = true)) null
+        splitConnectJob = lifecycleScope.launch {
+            val ssh = try {
+                if (profile.protocol.equals("telnet", ignoreCase = true)) null
                 else app.sshSessionManager.connectToServer(profile)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.e("TabTerminalActivity", "Failed to open split host ${profile.getDisplayName()}", e)
+                runOnUiThread {
+                    pane.visibility = View.GONE
+                    bottomTerminalView = null
+                    setBottomPaneFocused(false, announce = false)
+                    Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_split_failed_ssh_fmt, profile.username, profile.host, profile.port), Toast.LENGTH_LONG).show()
+                }
+                return@launch
+            }
             // Telnet branch (separate path)
             if (profile.protocol.equals("telnet", ignoreCase = true)) {
                 val telnet = TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23, app.networkDetector)
@@ -4330,10 +4373,16 @@ class TabTerminalActivity : TabSSHActivity() {
                     delay(150)
                     if (newTab.connect(telnet)) {
                         splitTab = newTab
-                        runOnUiThread { Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_split_telnet_ready), Toast.LENGTH_SHORT).show() }
+                        runOnUiThread {
+                            setBottomPaneFocused(true)
+                            Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_split_telnet_ready), Toast.LENGTH_SHORT).show()
+                        }
                     } else {
+                        try { newTab.disconnect() } catch (_: Exception) {}
                         runOnUiThread {
                             pane.visibility = View.GONE
+                            bottomTerminalView = null
+                            setBottomPaneFocused(false, announce = false)
                             Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_split_failed_telnet_fmt, profile.host, profile.port.takeIf { it > 0 } ?: 23), Toast.LENGTH_LONG).show()
                         }
                     }
@@ -4342,14 +4391,29 @@ class TabTerminalActivity : TabSSHActivity() {
                     // disconnect the partial tab so the TelnetConnection socket is closed
                     // and the pane is not left visible with a stale bridge.
                     try { newTab.disconnect() } catch (_: Exception) {}
-                    runOnUiThread { pane.visibility = View.GONE }
+                    runOnUiThread {
+                        pane.visibility = View.GONE
+                        bottomTerminalView = null
+                        setBottomPaneFocused(false, announce = false)
+                    }
                     throw e
+                } catch (e: Exception) {
+                    Logger.e("TabTerminalActivity", "Split telnet failed for ${profile.getDisplayName()}", e)
+                    try { newTab.disconnect() } catch (_: Exception) {}
+                    runOnUiThread {
+                        pane.visibility = View.GONE
+                        bottomTerminalView = null
+                        setBottomPaneFocused(false, announce = false)
+                        Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_split_failed_telnet_fmt, profile.host, profile.port.takeIf { it > 0 } ?: 23), Toast.LENGTH_LONG).show()
+                    }
                 }
                 return@launch
             }
             if (ssh == null) {
                 runOnUiThread {
                     pane.visibility = View.GONE
+                    bottomTerminalView = null
+                    setBottomPaneFocused(false, announce = false)
                     Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_split_failed_ssh_fmt, profile.username, profile.host, profile.port), Toast.LENGTH_LONG).show()
                 }
                 return@launch
@@ -4364,14 +4428,19 @@ class TabTerminalActivity : TabSSHActivity() {
             term.attachTerminalEmulator(newTab.termuxBridge)
             try {
                 delay(150)
-                if (newTab.connect(ssh)) {
+                if (attachPaneSession(newTab, ssh, profile)) {
                     splitTab = newTab
+                    observeSplitMultiplexer(newTab)
                     runOnUiThread {
+                        setBottomPaneFocused(true)
                         Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_split_display_fmt, profile.getDisplayName()), Toast.LENGTH_SHORT).show()
                     }
                 } else {
+                    try { newTab.disconnect() } catch (_: Exception) {}
                     runOnUiThread {
                         pane.visibility = View.GONE
+                        bottomTerminalView = null
+                        setBottomPaneFocused(false, announce = false)
                         Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_split_failed_ssh_fmt, profile.username, profile.host, profile.port), Toast.LENGTH_LONG).show()
                     }
                 }
@@ -4388,8 +4457,24 @@ class TabTerminalActivity : TabSSHActivity() {
                 if (!tabManager.isProfileInUse(profile.id)) {
                     try { app.sshSessionManager.closeConnection(profile.id) } catch (_: Exception) {}
                 }
-                runOnUiThread { pane.visibility = View.GONE }
+                runOnUiThread {
+                    pane.visibility = View.GONE
+                    bottomTerminalView = null
+                    setBottomPaneFocused(false, announce = false)
+                }
                 throw e
+            } catch (e: Exception) {
+                Logger.e("TabTerminalActivity", "Split session failed for ${profile.getDisplayName()}", e)
+                try { newTab.disconnect() } catch (_: Exception) {}
+                if (!tabManager.isProfileInUse(profile.id)) {
+                    try { app.sshSessionManager.closeConnection(profile.id) } catch (_: Exception) {}
+                }
+                runOnUiThread {
+                    pane.visibility = View.GONE
+                    bottomTerminalView = null
+                    setBottomPaneFocused(false, announce = false)
+                    Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_split_failed_ssh_fmt, profile.username, profile.host, profile.port), Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -4397,13 +4482,20 @@ class TabTerminalActivity : TabSSHActivity() {
     private fun closeSplitPane() {
         val tab = splitTab
         if (tab == null) {
-            Toast.makeText(this, getString(R.string.terminal_no_split_pane), Toast.LENGTH_SHORT).show()
+            splitConnectJob?.cancel()
+            splitConnectJob = null
+            bottomTerminalView = null
+            findViewById<View>(R.id.split_bottom_pane).visibility = View.GONE
+            setBottomPaneFocused(false, announce = false)
+            Toast.makeText(this, getString(R.string.terminal_split_pane_closed), Toast.LENGTH_SHORT).show()
             return
         }
         // Disconnect work is blocking I/O (JSch socket teardown + termux
         // bridge stream close). Run on IO so the UI thread is not blocked
         // and ANR'd while the SSH session tears down.
         val profileId = tab.profile.id
+        splitMultiplexerObserverJob?.cancel()
+        splitMultiplexerObserverJob = null
         app.applicationScope.launch(Dispatchers.IO) {
             try { tab.disconnect() } catch (e: Exception) {
                 Logger.w("TabTerminalActivity", "Split tab disconnect: ${e.message}")
@@ -4420,9 +4512,20 @@ class TabTerminalActivity : TabSSHActivity() {
         }
         splitTab = null
         bottomTerminalView = null
-        bottomPaneFocused = false
+        setBottomPaneFocused(false, announce = false)
         findViewById<View>(R.id.split_bottom_pane).visibility = View.GONE
         Toast.makeText(this, getString(R.string.terminal_split_pane_closed), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun observeSplitMultiplexer(tab: SSHTab) {
+        splitMultiplexerObserverJob?.cancel()
+        splitMultiplexerObserverJob = lifecycleScope.launch {
+            tab.activeMultiplexerTypeFlow
+                .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+                .collect { type ->
+                    if (bottomPaneFocused) updatePrefixKeyVisual(type)
+            }
+        }
     }
 
     /**
@@ -4754,15 +4857,19 @@ class TabTerminalActivity : TabSSHActivity() {
         }
     }
 
-    private fun setBottomPaneFocused(focus: Boolean) {
+    private fun setBottomPaneFocused(focus: Boolean, announce: Boolean = true) {
         if (focus && splitTab == null) return
         // Skip the toast (but still flip the focus flag) if we're moving
         // focus off a pane that was never focused — avoids a spurious
         // "Top pane focused" announcement on the first taps after split.
         val changed = bottomPaneFocused != focus
         bottomPaneFocused = focus
-        // No theme-aware tinting yet — just announce so user notices.
-        if (changed) {
+        findViewById<MaterialButton>(R.id.split_bottom_focus_button)?.setText(
+            if (focus) R.string.terminal_split_focus_top else R.string.terminal_split_focus_bottom
+        )
+        getActiveInputView()?.requestFocus()
+        updatePrefixKeyVisual(resolveActiveSshTabForPrefixKey()?.activeMultiplexerType)
+        if (changed && announce) {
             val msg = if (focus) getString(R.string.terminal_bottom_pane_focused) else getString(R.string.terminal_top_pane_focused)
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
@@ -5360,12 +5467,17 @@ class TabTerminalActivity : TabSSHActivity() {
      * never matches) is the fix for standalone VNC tabs wrongly falling
      * through to "No active session" for paste/copy/custom-keyboard input.
      */
-    private fun activeGraphicalDisplayMode(): ConsoleDisplayMode? =
-        when (val tab = tabManager.getActiveTabSealed()) {
+    private fun activeGraphicalDisplayMode(): ConsoleDisplayMode? {
+        // The split is a text terminal layered over the active tab. When it
+        // owns focus, keyboard and clipboard input must bypass graphical
+        // routing for the underlying tab.
+        if (bottomPaneFocused) return null
+        return when (val tab = tabManager.getActiveTabSealed()) {
             is Tab.Vnc -> ConsoleDisplayMode.RFB
             is Tab.Console -> tab.consoleTab.displayMode.value.takeIf { tab.consoleTab.isGraphicalMode.value }
             else -> null
         }
+    }
 
     /**
      * Route a custom-keyboard-bar key press to the active tab's graphical
@@ -6153,12 +6265,8 @@ class TabTerminalActivity : TabSSHActivity() {
 
                 if (name.isNotBlank() && command.isNotBlank()) {
                     lifecycleScope.launch {
-                        val snippet = Snippet(
-                            name = name,
-                            command = command,
-                            description = inputDescription.text.toString().trim(),
-                            category = category
-                        )
+                        val description = inputDescription.text.toString().trim()
+                        val snippet = Snippet(name = name, command = command, description = description, category = category)
                         withContext(Dispatchers.IO) { app.database.snippetDao().insertSnippet(snippet) }
                         showToast("Snippet created: $name")
                         Logger.d("TabTerminalActivity", "Created snippet: $name")
@@ -6605,7 +6713,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 // fire after the user picks a (possibly different) type —
                 // mirrors the second-tap disarm path above.
                 if (prefixArmed) {
-                    val tab = tabManager.getActiveTab()
+                    val tab = resolveActiveSshTabForPrefixKey()
                     val type = tab?.activeMultiplexerType
                     prefixArmed = false
                     prefixArmedType = null
@@ -6755,7 +6863,7 @@ class TabTerminalActivity : TabSSHActivity() {
                     handleConsolePrefixKey(consoleMode)
                     return
                 }
-                val tab = tabManager.getActiveTab()
+                val tab = resolveActiveSshTabForPrefixKey()
                 val type = tab?.activeMultiplexerType
                 if (prefixArmed) {
                     // Second tap on PRE while already armed — cancel the latch
@@ -6819,7 +6927,7 @@ class TabTerminalActivity : TabSSHActivity() {
                         tv.onPrefixConsumed = {
                             prefixArmed = false
                             prefixArmedType = null
-                            updatePrefixKeyVisual(tabManager.getActiveTab()?.activeMultiplexerType)
+                            updatePrefixKeyVisual(resolveActiveSshTabForPrefixKey()?.activeMultiplexerType)
                         }
                     }
                     updatePrefixKeyVisual(type)
@@ -6847,7 +6955,7 @@ class TabTerminalActivity : TabSSHActivity() {
                         tv.consumePendingPrefix()
                         tv.onPrefixConsumed = null
                     }
-                    updatePrefixKeyVisual(tabManager.getActiveTab()?.activeMultiplexerType)
+                    updatePrefixKeyVisual(resolveActiveSshTabForPrefixKey()?.activeMultiplexerType)
                     if (consumedType != null) {
                         Logger.d(
                             "TabTerminalActivity",

@@ -2,14 +2,11 @@ package io.github.tabssh.sync.observer
 
 import android.content.Context
 import androidx.room.InvalidationTracker
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.preferences.PreferenceManager
-import io.github.tabssh.sync.worker.SyncWorker
+import io.github.tabssh.sync.worker.SyncWorkScheduler
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.*
-import java.util.concurrent.TimeUnit
 
 /**
  * Observes database changes and triggers sync when data is modified
@@ -56,7 +53,6 @@ class DatabaseChangeObserver(private val context: Context) {
 
     private val database = TabSSHDatabase.getDatabase(context)
     private val preferenceManager = PreferenceManager(context)
-    private val workManager = WorkManager.getInstance(context)
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var observerJob: Job? = null
@@ -136,14 +132,8 @@ class DatabaseChangeObserver(private val context: Context) {
      * Trigger sync immediately
      */
     fun triggerSync() {
-        val syncRequest = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setInitialDelay(0, TimeUnit.SECONDS)
-            .addTag("sync_on_change")
-            .build()
-
-        workManager.enqueue(syncRequest)
-
-        Logger.d(TAG, "Enqueued sync work request")
+        SyncWorkScheduler(context).scheduleImmediateSync()
+        Logger.d(TAG, "Scheduled sync work request")
     }
 
     /**
