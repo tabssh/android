@@ -818,7 +818,7 @@
     </plurals>
     <string name="terminal_delete_workspace_action">Delete…</string>
     <string name="terminal_delete_workspace_title">Delete workspace</string>
-    <string name="terminal_split_bottom_pane_title">Split — open in bottom pane</string>
+    <string name="terminal_split_bottom_pane_title">Quick split — open below</string>
     <string name="terminal_save_macro_title">Save macro (%1$d bytes)</string>
     <string name="terminal_replay_macro_title">Replay macro</string>
     <string name="terminal_mosh_handoff_ready_title">Mosh handoff ready</string>
@@ -4022,7 +4022,7 @@
     <string name="terminal_menu_broadcast_choose_targets">Broadcast input: choose targets…</string>
     <string name="terminal_menu_save_workspace">Save current tabs as workspace…</string>
     <string name="terminal_menu_open_workspace">Open workspace…</string>
-    <string name="terminal_menu_split_horizontal">Split horizontally (open below)…</string>
+    <string name="terminal_menu_split_horizontal">Quick split this tab below…</string>
     <string name="terminal_menu_record_macro">Record macro…</string>
     <string name="terminal_menu_replay_macro">Replay macro…</string>
 

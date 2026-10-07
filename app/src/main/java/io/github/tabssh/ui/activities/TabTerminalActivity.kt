@@ -568,6 +568,7 @@ class TabTerminalActivity : TabSSHActivity() {
 
             override fun onTabClosed(tab: SSHTab, index: Int) {
                 Handler(Looper.getMainLooper()).post {
+                    if (tab.tabId == splitOwnerTabId) closeSplitPane()
                     // Auto-stop an in-flight video recording if the closed
                     // tab is the one being recorded — see stopVideoRecording.
                     if (tab.tabId == recordingTabId) {
@@ -632,6 +633,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 // close — closeConsoleTab no longer does its own UI work.
                 Handler(Looper.getMainLooper()).post {
                     if (isFinishing || isDestroyed) return@post
+                    if (tab.tabId == splitOwnerTabId) closeSplitPane()
                     // The PRE key's remembered multiplexer is tab-scoped —
                     // drop it with the tab so a recycled id can't inherit it.
                     consoleMultiplexerType.remove(tab.tabId)
@@ -3568,6 +3570,7 @@ class TabTerminalActivity : TabSSHActivity() {
      * every tab instead of being per-tab.
      */
     private fun syncActiveTabUi(index: Int) {
+        syncSplitPaneForActiveTab()
         // Disarm any pending PREFIX latch — the latch belongs to the previous tab's
         // terminal session and must not bleed into the new tab.
         if (prefixArmed) {
@@ -4286,6 +4289,9 @@ class TabTerminalActivity : TabSSHActivity() {
      * problem and not in scope yet.
      */
     private var splitTab: SSHTab? = null
+    // The quick split belongs to the terminal tab that opened it. The split
+    // view lives beside the pager, so hide it for every other tab.
+    private var splitOwnerTabId: String? = null
     private var bottomTerminalView: TerminalView? = null
     private var bottomPaneFocused: Boolean = false
     private var splitMultiplexerObserverJob: Job? = null
@@ -4330,6 +4336,12 @@ class TabTerminalActivity : TabSSHActivity() {
     }
 
     private fun openSplitWithProfile(profile: ConnectionProfile) {
+        val ownerTabId = tabManager.getActiveTabSealed()?.tabId
+        if (ownerTabId == null) {
+            Toast.makeText(this, getString(R.string.terminal_no_active_tab), Toast.LENGTH_SHORT).show()
+            return
+        }
+        splitOwnerTabId = ownerTabId
         val pane = findViewById<View>(R.id.split_bottom_pane)
         val term = findViewById<TerminalView>(R.id.split_bottom_terminal)
         findViewById<TextView>(R.id.split_bottom_host_label).text = profile.getDisplayName()
@@ -4340,7 +4352,7 @@ class TabTerminalActivity : TabSSHActivity() {
             closeSplitPane()
         }
         bottomTerminalView = term
-        pane.visibility = View.VISIBLE
+        syncSplitPaneForActiveTab()
 
         splitConnectJob = lifecycleScope.launch {
             val ssh = try {
@@ -4485,6 +4497,7 @@ class TabTerminalActivity : TabSSHActivity() {
             splitConnectJob?.cancel()
             splitConnectJob = null
             bottomTerminalView = null
+            splitOwnerTabId = null
             findViewById<View>(R.id.split_bottom_pane).visibility = View.GONE
             setBottomPaneFocused(false, announce = false)
             Toast.makeText(this, getString(R.string.terminal_split_pane_closed), Toast.LENGTH_SHORT).show()
@@ -4511,6 +4524,7 @@ class TabTerminalActivity : TabSSHActivity() {
             }
         }
         splitTab = null
+        splitOwnerTabId = null
         bottomTerminalView = null
         setBottomPaneFocused(false, announce = false)
         findViewById<View>(R.id.split_bottom_pane).visibility = View.GONE
@@ -4858,7 +4872,7 @@ class TabTerminalActivity : TabSSHActivity() {
     }
 
     private fun setBottomPaneFocused(focus: Boolean, announce: Boolean = true) {
-        if (focus && splitTab == null) return
+        if (focus && (splitTab == null || splitOwnerTabId != tabManager.getActiveTabSealed()?.tabId)) return
         // Skip the toast (but still flip the focus flag) if we're moving
         // focus off a pane that was never focused — avoids a spurious
         // "Top pane focused" announcement on the first taps after split.
@@ -4872,6 +4886,17 @@ class TabTerminalActivity : TabSSHActivity() {
         if (changed && announce) {
             val msg = if (focus) getString(R.string.terminal_bottom_pane_focused) else getString(R.string.terminal_top_pane_focused)
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** Show the quick split only while its owning terminal tab is active. */
+    private fun syncSplitPaneForActiveTab() {
+        val pane = findViewById<View>(R.id.split_bottom_pane) ?: return
+        val belongsToActiveTab = bottomTerminalView != null && splitOwnerTabId != null &&
+            splitOwnerTabId == tabManager.getActiveTabSealed()?.tabId
+        pane.visibility = if (belongsToActiveTab) View.VISIBLE else View.GONE
+        if (!belongsToActiveTab && bottomPaneFocused) {
+            setBottomPaneFocused(false, announce = false)
         }
     }
 
