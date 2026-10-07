@@ -11,6 +11,7 @@ import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.room.withTransaction
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -30,6 +31,7 @@ import io.github.tabssh.ui.dialogs.ContainerActionSheet
 import io.github.tabssh.ui.utils.ContainerText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -56,6 +58,7 @@ class ContainerHostsFragment : Fragment() {
     private lateinit var buttonAddFirst: Button
 
     private lateinit var adapter: ContainerHostAdapter
+    private var hostCollectionJob: Job? = null
 
     /** Guards against overlapping forced transport re-tests from repeat taps. */
     private var testInFlight = false
@@ -156,48 +159,46 @@ class ContainerHostsFragment : Fragment() {
     private fun loadContainerHosts() {
         progressBar.visibility = View.VISIBLE
 
-        // viewLifecycleOwner: the collect below touches view fields, so the
-        // Flow must die with the view tree (HypervisorsFragment pattern).
-        viewLifecycleOwner.lifecycleScope.launch {
+        // Start observing only while this nested pager page is active. In
+        // particular, re-collect Room's current snapshot when Infra returns
+        // from another main tab; the first emission can otherwise be applied
+        // while ViewPager2 still has this page detached or measured at zero.
+        hostCollectionJob?.cancel()
+        hostCollectionJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // Connection names resolve linked_connection_id → display name.
-                val names = withContext(Dispatchers.IO) {
-                    app.database.connectionDao().getAllConnectionsList()
-                        .associate { it.id to it.name }
-                }
-                app.database.containerHostDao().getAllHosts().collect { list ->
-                    if (!isAdded) return@collect
-
-                    adapter.updateList(list, names)
-
-                    // Toggle the swipe container, not the recycler — the
-                    // wrapper keeps its layout weight even with a GONE child.
-                    errorState.visibility = View.GONE
-                    if (list.isEmpty()) {
-                        swipeRefresh.visibility = View.GONE
-                        emptyState.visibility = View.VISIBLE
-                        // The empty state carries its own "add your first host"
-                        // button — leaving the FAB up too puts two add buttons
-                        // on one screen for the same action.
-                        fabAdd.visibility = View.GONE
-                    } else {
-                        swipeRefresh.visibility = View.VISIBLE
-                        emptyState.visibility = View.GONE
-                        fabAdd.visibility = View.VISIBLE
-                        // This fragment is sub-tab 0 of a ViewPager2 nested
-                        // inside the main-tab ViewPager2: it can be inflated
-                        // while its page still has a stale/zero measured
-                        // size from the outer page-change animation, so the
-                        // first data emission lands in a RecyclerView that
-                        // never gets a proper layout pass until some other
-                        // event (e.g. switching sub-tabs) forces one — rows
-                        // exist in the adapter but nothing draws. Request a
-                        // fresh layout on every emission so the fix does not
-                        // depend on that timing.
-                        recyclerView.requestLayout()
+                viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                    // Connection names resolve linked_connection_id → display name.
+                    val names = withContext(Dispatchers.IO) {
+                        app.database.connectionDao().getAllConnectionsList()
+                            .associate { it.id to it.name }
                     }
+                    app.database.containerHostDao().getAllHosts().collect { list ->
+                        if (!isAdded) return@collect
 
-                    progressBar.visibility = View.GONE
+                        adapter.updateList(list, names)
+
+                        // Toggle the swipe container, not the recycler — the
+                        // wrapper keeps its layout weight even with a GONE child.
+                        errorState.visibility = View.GONE
+                        if (list.isEmpty()) {
+                            swipeRefresh.visibility = View.GONE
+                            emptyState.visibility = View.VISIBLE
+                            // The empty state carries its own "add your first host"
+                            // button — leaving the FAB up too puts two add buttons
+                            // on one screen for the same action.
+                            fabAdd.visibility = View.GONE
+                        } else {
+                            swipeRefresh.visibility = View.VISIBLE
+                            emptyState.visibility = View.GONE
+                            fabAdd.visibility = View.VISIBLE
+                            // The page is nested inside two ViewPagers. Re-layout
+                            // after the current traversal so a snapshot delivered
+                            // during page activation is measured at its final size.
+                            recyclerView.post { recyclerView.requestLayout() }
+                        }
+
+                        progressBar.visibility = View.GONE
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e

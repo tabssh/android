@@ -1,5 +1,5 @@
 [x] Proxmox console selection prefers SPICE, then VNC, then serial, and fails only when every configured console option is unavailable.
-[ ] Infra > Docker host lists refresh from Room and render when returning to the Containers page.
+[x] Infra > Docker host lists refresh from Room and render when returning to the Containers page.
 [ ] add support for other multiplexers (names not specified yet).
 [ ] try to find and fix vim displaying content oddly, duplicate statusline, might be vim and not app though when keyboard toggles so it seems its a resize issue.
 

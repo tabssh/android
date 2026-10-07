@@ -1,5 +1,9 @@
 # What's New
 
+## Wave 79 — Container host list refresh
+
+- The Containers page reloads its host list when it becomes active, so saved hosts appear without navigating away and back.
+
 ## Wave 78 — Proxmox console selection
 
 - Proxmox VM consoles prefer SPICE, then VNC, then serial, so a configured graphical display is selected ahead of a serial console.
