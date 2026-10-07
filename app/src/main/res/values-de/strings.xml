@@ -228,4 +228,9 @@
     <string name="sync_log_clear_failed">Sync-Protokoll konnte nicht geleert werden</string>
 
     <string name="locale_toast_request_too_large">Die Automatisierungsaktion ist zu groß. Kürzen Sie den Befehl oder die Tastenfolge und versuchen Sie es erneut.</string>
+    <string name="route_tor_test_button">Tor-Status prüfen</string>
+    <string name="route_tor_check_success">Tor wurde gestartet und der SOCKS5-Listener hat erfolgreich geantwortet.</string>
+    <string name="route_tor_check_failed">Tor-Statusprüfung fehlgeschlagen: %1$s</string>
+    <string name="route_tor_check_failed_unknown">Unbekannter Fehler</string>
+    <string name="conn_route_unavailable">Ausgewählte Route ist auf diesem Gerät nicht verfügbar</string>
 </resources>

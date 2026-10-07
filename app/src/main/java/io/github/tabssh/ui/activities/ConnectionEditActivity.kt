@@ -150,6 +150,7 @@ class ConnectionEditActivity : TabSSHActivity() {
     //   NetworkRoute.DIRECT -> force a direct connection (no proxy/jump)
     //   any other value     -> the referenced NetworkRoute id
     private var availableRoutes: List<NetworkRoute> = emptyList()
+    private var unavailableTorRouteIds: Set<String> = emptySet()
     private var selectedRouteId: String? = null
     private var routesLoaded: Boolean = false
 
@@ -833,9 +834,15 @@ class ConnectionEditActivity : TabSSHActivity() {
      */
     private fun loadRoutesIntoSpinner(forceSelectRouteId: String? = null) {
         lifecycleScope.launch {
-            availableRoutes = withContext(Dispatchers.IO) {
+            val allRoutes = withContext(Dispatchers.IO) {
                 app.database.networkRouteDao().getAllList()
             }
+            val torAvailable = io.github.tabssh.protocols.tor.TorNativeClient.isAvailable(this@ConnectionEditActivity)
+            availableRoutes = if (torAvailable) allRoutes else allRoutes.filterNot { it.builtInTor }
+            unavailableTorRouteIds = if (torAvailable) emptySet() else allRoutes
+                .filter { it.builtInTor }
+                .map { it.id }
+                .toSet()
             routesLoaded = true
             if (forceSelectRouteId != null) {
                 selectedRouteId = forceSelectRouteId
@@ -862,6 +869,7 @@ class ConnectionEditActivity : TabSSHActivity() {
                 val idx = availableRoutes.indexOfFirst { it.id == id }
                 when {
                     idx >= 0 -> labels[idx + ROUTE_POS_ROUTES_START]
+                    id in unavailableTorRouteIds -> getString(R.string.conn_route_unavailable)
                     // Referenced route was deleted — fall back to the global default.
                     routesLoaded -> {
                         selectedRouteId = null

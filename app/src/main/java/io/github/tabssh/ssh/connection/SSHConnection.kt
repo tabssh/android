@@ -161,6 +161,7 @@ class SSHConnection(
     /** Loopback SOCKS port for a built-in Tor route (0 = not started). */
     @Volatile
     private var resolvedTorPort: Int = 0
+    private val torUsageOwner = Any()
     // X11 forwarding proxy — non-null only while x11Forwarding is active
     @Volatile
     private var x11Proxy: X11Proxy? = null
@@ -1306,15 +1307,18 @@ class SSHConnection(
             }
         }
 
-        resolvedRoute = effective?.takeIf {
-            it.enabled || (it.builtInTor && io.github.tabssh.protocols.tor.TorNativeClient.isAvailable(context))
+        if (effective?.builtInTor == true &&
+            !io.github.tabssh.protocols.tor.TorNativeClient.isAvailable(context)
+        ) {
+            throw IllegalStateException("Built-in Tor is not bundled for this device")
         }
+        resolvedRoute = effective?.takeIf { it.enabled || it.builtInTor }
 
         val route = resolvedRoute
         if (route != null && route.builtInTor) {
             try {
                 resolvedTorPort = io.github.tabssh.protocols.tor.TorManager
-                    .getInstance(context).ensureStarted()
+                    .getInstance(context).acquireUsage(torUsageOwner)
                 Logger.i("SSHConnection", "Built-in Tor ready on loopback SOCKS port $resolvedTorPort")
             } catch (e: Exception) {
                 // A built-in Tor route is an explicit user privacy choice. If tor
@@ -2175,6 +2179,7 @@ class SSHConnection(
         reconnector?.cancel()
         reconnector = null
         hadSuccessfulConnect = false
+        releaseTorUsage()
 
         // Issue #163 — close every channel a tab opened against this session,
         // not just the legacy single shellChannel pointer. Snapshot the
@@ -2263,6 +2268,8 @@ class SSHConnection(
         _detailedError.value = errorInfo
         notifyListeners { onError(id, error) }
 
+        if (!hadSuccessfulConnect) releaseTorUsage()
+
         // Auth-fail markers JSch actually emits — substring matches on
         // "password" / "publickey" alone caught unrelated kex failures.
         val isAuthError = error.message?.let { msg ->
@@ -2311,6 +2318,12 @@ class SSHConnection(
         //  - 5-minute fallback poll for missed network callbacks
         reconnector?.onConnectionLost()
             ?: Logger.w("SSHConnection", "reconnector is null after successful connect — this is a bug")
+    }
+
+    private fun releaseTorUsage() {
+        io.github.tabssh.protocols.tor.TorManager.getInstance(context)
+            .releaseUsage(torUsageOwner)
+        resolvedTorPort = 0
     }
     
     /**

@@ -225,4 +225,9 @@
     <string name="sync_log_clear_failed">No se pudo borrar el registro de sincronización</string>
 
     <string name="locale_toast_request_too_large">La acción de automatización es demasiado grande. Acorta el comando o las teclas e inténtalo de nuevo.</string>
+    <string name="route_tor_test_button">Comprobar estado de Tor</string>
+    <string name="route_tor_check_success">Tor se inició y el listener SOCKS5 respondió correctamente.</string>
+    <string name="route_tor_check_failed">Falló la comprobación del estado de Tor: %1$s</string>
+    <string name="route_tor_check_failed_unknown">Error desconocido</string>
+    <string name="conn_route_unavailable">La ruta seleccionada no está disponible en este dispositivo</string>
 </resources>

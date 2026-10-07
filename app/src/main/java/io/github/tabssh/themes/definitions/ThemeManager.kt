@@ -207,7 +207,16 @@ class ThemeManager(private val context: Context) {
             
             // Update usage statistics
             if (theme.isBuiltIn) {
-                database.themeDao().incrementUsageCount(theme.id)
+                try {
+                    database.themeDao().incrementUsageCount(theme.id)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Usage counts are optional telemetry. A concurrent sync or
+                    // edit can hold SQLite's single writer; that must not turn a
+                    // successfully selected theme into a reported failure.
+                    Logger.w("ThemeManager", "Could not update usage count for ${theme.id}", e)
+                }
             }
             
             Logger.i("ThemeManager", "Applied theme: ${theme.name}")

@@ -18,7 +18,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - **Herdr is now supported as a terminal multiplexer.** It can be selected for auto-launch and the PRE key, uses its Ctrl+B prefix by default, and supports named-session attach and the ask-on-connect picker.
-- **Bundled Tor routes now stay enabled and report startup failures clearly.** Devices without the bundled Tor binary keep the normal route toggle; the Tor test status now includes the failure reason.
+- **Bundled Tor is available without an enable switch and runs only while in use.** Builds without its native binary hide the Tor route. “Check Tor Status” now bootstraps Tor and verifies the SOCKS5 listener, reporting success or failure.
+- **Theme selection no longer fails when its optional usage counter cannot write to SQLite.** Sync preferences are applied after the bulk database transaction, and a SQLite lock error rolls back the sync apply for WorkManager retry instead of committing a partial payload.
 - **Ungrouped SSH hosts can now be collapsed and expanded.** The setting is remembered when returning to the Hosts screen.
 - **Proxmox consoles now prefer SPICE, then VNC, then serial.** A working serial console no longer masks a VM's configured graphical display; TabSSH falls back only when the higher-priority console is unavailable.
 - **Container host lists refresh when returning to the Infra Containers page.** Hosts no longer remain hidden until the user navigates away and back to the Docker list.

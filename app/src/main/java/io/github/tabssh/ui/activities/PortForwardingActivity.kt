@@ -122,10 +122,12 @@ class PortForwardingActivity : TabSSHActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 app.database.networkRouteDao().getAll().collectLatest { routes ->
-                    currentRoutes = routes
-                    routeAdapter.submitList(routes)
-                    emptyRoutes.visibility = if (routes.isEmpty()) View.VISIBLE else View.GONE
-                    recyclerRoutes.visibility = if (routes.isEmpty()) View.GONE else View.VISIBLE
+                    val bundledTorAvailable =
+                        io.github.tabssh.protocols.tor.TorNativeClient.isAvailable(this@PortForwardingActivity)
+                    currentRoutes = routes.filter { !it.builtInTor || bundledTorAvailable }
+                    routeAdapter.submitList(currentRoutes)
+                    emptyRoutes.visibility = if (currentRoutes.isEmpty()) View.VISIBLE else View.GONE
+                    recyclerRoutes.visibility = if (currentRoutes.isEmpty()) View.GONE else View.VISIBLE
                     renderDefaultRoute()
                 }
             }

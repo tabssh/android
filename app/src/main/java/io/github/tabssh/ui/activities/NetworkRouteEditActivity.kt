@@ -24,6 +24,7 @@ import io.github.tabssh.protocols.tor.TorStatus
 import io.github.tabssh.storage.database.entities.NetworkRoute
 import io.github.tabssh.storage.database.entities.NetworkRouteType
 import io.github.tabssh.storage.database.entities.StoredKey
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -84,6 +85,7 @@ class NetworkRouteEditActivity : TabSSHActivity() {
     )
     private var selectedType: NetworkRouteType = NetworkRouteType.PROXY_SOCKS5
     private var builtInTor: Boolean = false
+    private var torStatusCheckRunning: Boolean = false
     private var jumpAuthIsKey: Boolean = false
 
     private var availableKeys: List<StoredKey> = emptyList()
@@ -130,7 +132,8 @@ class NetworkRouteEditActivity : TabSSHActivity() {
         }
         torStatusDot.setBackgroundResource(drawableRes)
         textTorStatus.text = text
-        btnTestTor.isEnabled = status !is TorStatus.Starting && status !is TorStatus.Bootstrapping
+        btnTestTor.isEnabled = !torStatusCheckRunning &&
+            status !is TorStatus.Starting && status !is TorStatus.Bootstrapping
     }
 
     /**
@@ -270,9 +273,10 @@ class NetworkRouteEditActivity : TabSSHActivity() {
         layoutUsername.helperText =
             if (isJump) null else getString(R.string.route_username_optional_helper)
         layoutJumpAuth.visibility = if (isJump && showEndpoint) View.VISIBLE else View.GONE
-        textTorDesc.visibility = if (builtInTor) View.VISIBLE else View.GONE
-        layoutTorStatus.visibility = if (builtInTor) View.VISIBLE else View.GONE
-        val builtInTorAlwaysEnabled = builtInTor && torManager.isAvailable()
+        val builtInTorAvailable = torManager.isAvailable()
+        textTorDesc.visibility = if (builtInTor && builtInTorAvailable) View.VISIBLE else View.GONE
+        layoutTorStatus.visibility = if (builtInTor && builtInTorAvailable) View.VISIBLE else View.GONE
+        val builtInTorAlwaysEnabled = builtInTor && builtInTorAvailable
         switchEnabled.visibility = if (builtInTorAlwaysEnabled) View.GONE else View.VISIBLE
         textEnabledDescription.setText(
             if (builtInTorAlwaysEnabled) R.string.route_tor_always_enabled
@@ -283,16 +287,34 @@ class NetworkRouteEditActivity : TabSSHActivity() {
     }
 
     /**
-     * Actually spawns/reuses the bundled tor process so the status row (wired
-     * to [TorManager.status] in [observeTorStatus]) shows a real result instead
-     * of leaving "enabled" as the only signal of whether Tor works.
+     * Bootstraps Tor, probes its SOCKS5 handshake and shows the result. A
+     * check with no active route user is temporary; TorManager stops it after.
      */
     private fun testTorConnection() {
+        torStatusCheckRunning = true
+        btnTestTor.isEnabled = false
         lifecycleScope.launch {
             try {
-                withContext(Dispatchers.IO) { torManager.ensureStarted() }
-            } catch (_: Exception) {
-                // TorManager already published TorStatus.Failed; nothing else to do here.
+                withContext(Dispatchers.IO) { torManager.checkStatus() }
+                android.widget.Toast.makeText(
+                    this@NetworkRouteEditActivity,
+                    R.string.route_tor_check_success,
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val reason = e.message?.takeIf { it.isNotBlank() }
+                    ?: getString(R.string.route_tor_check_failed_unknown)
+                android.widget.Toast.makeText(
+                    this@NetworkRouteEditActivity,
+                    getString(R.string.route_tor_check_failed, reason),
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            } finally {
+                torStatusCheckRunning = false
+                val status = torManager.status.value
+                btnTestTor.isEnabled = status !is TorStatus.Starting && status !is TorStatus.Bootstrapping
             }
         }
     }
@@ -332,6 +354,16 @@ class NetworkRouteEditActivity : TabSSHActivity() {
             } else {
                 null
             }
+            if (loaded?.builtInTor == true && !torManager.isAvailable()) {
+                android.widget.Toast.makeText(
+                    this@NetworkRouteEditActivity,
+                    R.string.conn_route_unavailable,
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+                setResult(Activity.RESULT_CANCELED)
+                finish()
+                return@launch
+            }
             existing = loaded
             if (loaded != null) populate(loaded) else applyType(NetworkRouteType.PROXY_SOCKS5)
             // Field/spinner changes above flip the dirty-flag listeners
@@ -343,7 +375,7 @@ class NetworkRouteEditActivity : TabSSHActivity() {
 
     private fun populate(route: NetworkRoute) {
         editName.setText(route.name)
-        builtInTor = route.builtInTor
+        builtInTor = route.builtInTor && torManager.isAvailable()
         editHost.setText(route.host.orEmpty())
         if (route.port > 0) editPort.setText(route.port.toString())
         editUsername.setText(route.username.orEmpty())

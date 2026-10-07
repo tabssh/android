@@ -1,6 +1,7 @@
 package io.github.tabssh.sync.data
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabaseLockedException
 import androidx.preference.PreferenceManager as AndroidPreferenceManager
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.keys.KeyStorage
@@ -208,6 +209,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply group: ${g.name}", e)
                     }
                 }
@@ -239,6 +241,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply connection: ${connection.name}", e)
                     }
                 }
@@ -258,6 +261,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply key: ${key.name}", e)
                     }
                 }
@@ -273,6 +277,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply theme: ${theme.name}", e)
                     }
                 }
@@ -288,14 +293,10 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply host key: ${hostKey.hostname}", e)
                     }
                 }
-            }
-
-            // Apply preferences
-            if (preferenceManager.isSyncSettingsEnabled()) {
-                appliedCount += applyPreferences(data.preferences)
             }
 
             // Wave 5.3 — apply workspaces (last-write-wins via REPLACE).
@@ -309,6 +310,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply workspace: ${ws.name}", e)
                     }
                 }
@@ -328,6 +330,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply snippet: ${s.name}", e)
                     }
                 }
@@ -342,6 +345,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply identity: ${id.name}", e)
                     }
                 }
@@ -363,6 +367,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply hypervisor: ${h.name}", e)
                     }
                 }
@@ -377,6 +382,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply certificate: ${c.fingerprint}", e)
                     }
                 }
@@ -396,6 +402,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply macro: ${m.id}", e)
                     }
                 }
@@ -410,6 +417,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply monitor slot: ${slot.id}", e)
                     }
                 }
@@ -446,6 +454,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply hypervisor account: ${a.name}", e)
                     }
                 }
@@ -465,6 +474,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply VNC host: ${h.name}", e)
                     }
                 }
@@ -480,6 +490,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply VNC identity: ${vi.name}", e)
                     }
                 }
@@ -504,6 +515,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply cloud account: ${ca.name}", e)
                     }
                 }
@@ -520,6 +532,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply port forward: ${pf.name}", e)
                     }
                 }
@@ -537,6 +550,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply telnet host: ${th.name}", e)
                     }
                 }
@@ -553,6 +567,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply domain: ${d.domainName}", e)
                     }
                 }
@@ -569,6 +584,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply VPS host: ${v.hostname}", e)
                     }
                 }
@@ -585,6 +601,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply network route: ${nr.name}", e)
                     }
                 }
@@ -601,6 +618,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply pane group: ${pg.name}", e)
                     }
                 }
@@ -625,6 +643,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply container host: ${h.name}", e)
                     }
                 }
@@ -641,6 +660,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply registry credential: ${c.registryHost}", e)
                     }
                 }
@@ -657,6 +677,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply compose stack: ${s.name}", e)
                     }
                 }
@@ -673,6 +694,7 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply single-container config: ${c.name}", e)
                     }
                 }
@@ -689,12 +711,21 @@ class SyncDataApplier {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        rethrowIfDatabaseLocked(e)
                         Logger.w(TAG, "Failed to apply container auto-update policy: ${p.containerNameOrStackName}", e)
                     }
                 }
             }
 
             } // end withTransaction
+
+            // Preferences touch SharedPreferences, UI state and ThemeManager;
+            // apply them after the database transaction commits so they cannot
+            // lengthen the write lock or leave external state ahead of a failed
+            // database apply.
+            if (preferenceManager.isSyncSettingsEnabled()) {
+                appliedCount += applyPreferences(data.preferences)
+            }
 
             // H6 — apply remote tombstones (delete propagation). A peer that
             // deleted a row ships its tombstone in the payload; without this
@@ -724,8 +755,6 @@ class SyncDataApplier {
 
             Logger.i(TAG, "Applied $appliedCount items from sync data")
             ApplyResult.Success(appliedCount)
-        } catch (e: CancellationException) {
-            throw e
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -987,6 +1016,7 @@ class SyncDataApplier {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
+                    rethrowIfDatabaseLocked(e)
                     Logger.w(TAG, "Failed to apply tombstone ${t.entityType}/${t.entityKey}: ${e.message}")
                 }
             }
@@ -1190,6 +1220,7 @@ class SyncDataApplier {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                rethrowIfDatabaseLocked(e)
                 Logger.e(TAG, "Failed to add connection: ${connection.name}", e)
             }
         }
@@ -1211,6 +1242,7 @@ class SyncDataApplier {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                rethrowIfDatabaseLocked(e)
                 Logger.e(TAG, "Failed to update connection: ${connection.name}", e)
             }
         }
@@ -1229,6 +1261,7 @@ class SyncDataApplier {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                rethrowIfDatabaseLocked(e)
                 Logger.e(TAG, "Failed to delete connection: $connectionId", e)
             }
         }
@@ -1250,6 +1283,7 @@ class SyncDataApplier {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                rethrowIfDatabaseLocked(e)
                 Logger.e(TAG, "Failed to add key: ${key.name}", e)
             }
         }
@@ -1262,6 +1296,7 @@ class SyncDataApplier {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                rethrowIfDatabaseLocked(e)
                 Logger.e(TAG, "Failed to update key: ${key.name}", e)
             }
         }
@@ -1274,6 +1309,7 @@ class SyncDataApplier {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                rethrowIfDatabaseLocked(e)
                 Logger.e(TAG, "Failed to delete key: $keyId", e)
             }
         }
@@ -1295,6 +1331,7 @@ class SyncDataApplier {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                rethrowIfDatabaseLocked(e)
                 Logger.e(TAG, "Failed to add theme: ${theme.name}", e)
             }
         }
@@ -1307,6 +1344,7 @@ class SyncDataApplier {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                rethrowIfDatabaseLocked(e)
                 Logger.e(TAG, "Failed to update theme: ${theme.name}", e)
             }
         }
@@ -1319,6 +1357,7 @@ class SyncDataApplier {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                rethrowIfDatabaseLocked(e)
                 Logger.e(TAG, "Failed to delete theme: $themeId", e)
             }
         }
@@ -1340,6 +1379,7 @@ class SyncDataApplier {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                rethrowIfDatabaseLocked(e)
                 Logger.e(TAG, "Failed to add host key: ${hostKey.hostname}:${hostKey.port}", e)
             }
         }
@@ -1352,6 +1392,7 @@ class SyncDataApplier {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                rethrowIfDatabaseLocked(e)
                 Logger.e(TAG, "Failed to update host key: ${hostKey.hostname}:${hostKey.port}", e)
             }
         }
@@ -1364,11 +1405,26 @@ class SyncDataApplier {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                rethrowIfDatabaseLocked(e)
                 Logger.e(TAG, "Failed to delete host key: $hostKeyId", e)
             }
         }
 
         return count
+    }
+
+    /** Re-throw transient SQLite write contention so the enclosing sync transaction rolls back. */
+    private fun rethrowIfDatabaseLocked(error: Exception) {
+        var cause: Throwable? = error
+        while (cause != null) {
+            if (cause is SQLiteDatabaseLockedException ||
+                cause.message?.contains("SQLITE_BUSY", ignoreCase = true) == true ||
+                cause.message?.contains("database is locked", ignoreCase = true) == true
+            ) {
+                throw error
+            }
+            cause = cause.cause
+        }
     }
 
     /**

@@ -35,7 +35,7 @@ created, synced, or paired on any one of the three works unmodified on the other
 - 🖥️ **Full Terminal Emulation** — Termux TerminalEmulator (VT100/ANSI, 256 colors, vim/htop/tmux fully functional)
 - 📁 **Integrated SFTP** — File manager with upload/download progress, remote editor, chmod
 - 🧭 **Routing & Forwarding** — Reusable proxy / jump-host routes picked per-connection or set as a global default, plus local/remote/dynamic (SOCKS5) port forwards, all in one section
-- 🧅 **Tor** — Route SSH through Tor via a built-in bundled `tor` loopback SOCKS proxy (no separate app needed), or through any SOCKS5 route such as a separately installed Orbot
+- 🧅 **Tor** — On builds that bundle `tor`, route SSH through its loopback SOCKS proxy; it starts on demand and stops when no active route uses it. Builds without the binary hide the built-in Tor route. External SOCKS5 routes such as Orbot remain available.
 - 🖼️ **X11 Forwarding** — Run graphical apps remotely via Termux:X11 or XServer XSDL
 - 🌐 **SSH Config Import** — `~/.ssh/config` with RemoteCommand, SendEnv, RequestTTY, ProxyJump
 - ❤️ **Always-on Keepalive** — 60s serverAliveInterval; idle sessions survive carrier NAT and Wi-Fi sleep

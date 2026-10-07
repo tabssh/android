@@ -434,7 +434,11 @@
     <string name="route_tor_status_connected">Tor circuit established — usable as a proxy</string>
     <string name="route_tor_status_failed">Tor failed: %1$s</string>
     <string name="route_tor_always_enabled">Bundled Tor is always enabled on this device.</string>
-    <string name="route_tor_test_button">Test Tor Connection</string>
+    <string name="route_tor_test_button">Check Tor Status</string>
+    <string name="route_tor_check_success">Tor bootstrapped and the SOCKS5 listener responded successfully.</string>
+    <string name="route_tor_check_failed">Tor status check failed: %1$s</string>
+    <string name="route_tor_check_failed_unknown">Unknown error</string>
+    <string name="conn_route_unavailable">Selected route is unavailable on this device</string>
     <string name="route_host_hint">Host</string>
     <string name="route_port_hint">Port</string>
     <string name="route_username_optional_helper">Optional</string>
