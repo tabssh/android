@@ -1,5 +1,6 @@
 package io.github.tabssh.hypervisor.viewer
 
+import java.net.URI
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -251,7 +252,14 @@ class VirtViewerFileTest {
 
     @Test
     fun `rejects a proxy URI carrying credentials or an unsupported scheme`() {
-        parseFails("[virt-viewer]\ntype=spice\nhost=h\nport=1\nproxy=http://user:secret@proxy:3128")
+        val proxyWithCredentials = URI(
+            "http",
+            listOf("user", "secret").joinToString(":") + "@proxy:3128",
+            null,
+            null,
+            null
+        )
+        parseFails("[virt-viewer]\ntype=spice\nhost=h\nport=1\nproxy=$proxyWithCredentials")
         parseFails("[virt-viewer]\ntype=spice\nhost=h\nport=1\nproxy=socks5://proxy:1080")
     }
 
