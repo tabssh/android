@@ -17,6 +17,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Proxmox SPICE `.vv` files now connect through their advertised proxy.** The descriptor's HTTP CONNECT proxy was parsed but dropped before reaching libspice; proxy-enabled launches now use it, and SPICE connection failures are surfaced to the user.
 - **Herdr is now supported as a terminal multiplexer.** It can be selected for auto-launch and the PRE key, uses its Ctrl+B prefix by default, and supports named-session attach and the ask-on-connect picker.
 - **Bundled Tor is available without an enable switch and runs only while in use.** Builds without its native binary hide the Tor route. “Check Tor Status” now bootstraps Tor and verifies the SOCKS5 listener, reporting success or failure.
 - **Theme selection no longer fails when its optional usage counter cannot write to SQLite.** Sync preferences are applied after the bulk database transaction, and a SQLite lock error rolls back the sync apply for WorkManager retry instead of committing a partial payload.

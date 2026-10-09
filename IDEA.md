@@ -142,6 +142,7 @@ New entity checklist: decide sync inclusion, then update
 - QEMU/libvirt is managed over an SSH transport to the remote host — no libvirt TCP daemon needs to be exposed
 - Built-in VNC console client for VM graphical consoles — consoles open as swipeable tabs next to terminal sessions
 - SPICE console client for hypervisors that expose SPICE displays
+- Opens virt-viewer `.vv` files and honors their advertised SPICE HTTP CONNECT proxy
 - Proxmox VM console selection prefers SPICE, then VNC, then serial; unavailable console types fall through in that order
 - Reusable hypervisor credential accounts (username/password or OCI API key) shared across hypervisor profiles
 - Hypervisor and console TLS stays encrypted; REST certificate validation is optional and off by default, console certificate checks are disabled, and no leaf-certificate pins or certificate-change prompts are used. SSH transports use the known-hosts host-key verifier for server identity

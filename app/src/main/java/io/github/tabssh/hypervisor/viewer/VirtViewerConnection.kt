@@ -104,6 +104,7 @@ data class VirtViewerConnection(
             caCert = caCert?.toByteArray(Charsets.US_ASCII),
             hostSubject = hostSubject,
             tlsVerify = false,
+            proxy = proxy,
         )
     }
 
@@ -117,7 +118,7 @@ data class VirtViewerConnection(
             "password=${if (password.isNullOrEmpty()) "<none>" else "xxxxx"}, " +
             "username=$username, " +
             "caCert=${caCert?.let { "${it.length} chars" } ?: "null"}, " +
-            "hostSubject=$hostSubject, proxy=$proxy, title=$title, " +
+            "hostSubject=$hostSubject, proxy=${if (proxy == null) "<none>" else "xxxxx"}, title=$title, " +
             "deleteThisFile=$deleteThisFile, fullscreen=$fullscreen, " +
             "enableUsbredir=$enableUsbredir)"
 }

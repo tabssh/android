@@ -59,7 +59,7 @@ Java_io_github_tabssh_hypervisor_spice_SpiceLoader_nativeIsSpiceAvailable(
  * glib code can be JNI-agnostic.
  */
 #ifdef TABSSH_SPICE_AVAILABLE
-jlong tabssh_spice_impl_create(JNIEnv *env, jstring host, jint port, jint tls_port,
+jlong tabssh_spice_impl_create(JNIEnv *env, jstring host, jstring proxy, jint port, jint tls_port,
                                 jstring password, jbyteArray ca_cert, jstring host_subject,
                                 jboolean tls_verify);
 jboolean tabssh_spice_impl_start(JNIEnv *env, jlong handle, jobject self);
@@ -231,15 +231,15 @@ Java_io_github_tabssh_hypervisor_spice_SpiceLoader_nativeInstallCrashHandler(
 JNIEXPORT jlong JNICALL
 Java_io_github_tabssh_hypervisor_spice_SpiceClient_nativeCreateSession(
     JNIEnv *env, jobject thiz,
-    jstring host, jint port, jint tls_port,
+    jstring host, jstring proxy, jint port, jint tls_port,
     jstring password, jbyteArray ca_cert, jstring host_subject,
     jboolean tls_verify) {
     (void) thiz;
 #ifdef TABSSH_SPICE_AVAILABLE
-    return tabssh_spice_impl_create(env, host, port, tls_port, password,
+    return tabssh_spice_impl_create(env, host, proxy, port, tls_port, password,
                                     ca_cert, host_subject, tls_verify);
 #else
-    (void) env; (void) host; (void) port; (void) tls_port;
+    (void) env; (void) host; (void) proxy; (void) port; (void) tls_port;
     (void) password; (void) ca_cert; (void) host_subject; (void) tls_verify;
     log_unavailable_once("nativeCreateSession");
     return 0;

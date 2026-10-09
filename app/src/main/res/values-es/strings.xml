@@ -230,4 +230,5 @@
     <string name="route_tor_check_failed">Falló la comprobación del estado de Tor: %1$s</string>
     <string name="route_tor_check_failed_unknown">Error desconocido</string>
     <string name="conn_route_unavailable">La ruta seleccionada no está disponible en este dispositivo</string>
+    <string name="spice_connection_failed">Falló la conexión SPICE. Comprueba los datos de conexión y el registro de depuración.</string>
 </resources>

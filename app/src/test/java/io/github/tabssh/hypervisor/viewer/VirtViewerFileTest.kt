@@ -56,6 +56,7 @@ class VirtViewerFileTest {
         assertEquals("s3cret", vv.password)
         assertEquals("O=Example,CN=host.example.org", vv.hostSubject)
         assertEquals("http://proxy.example.org:3128", vv.proxy)
+        assertEquals("http://proxy.example.org:3128", vv.toSpiceParams().proxy)
         assertEquals("web-01", vv.title)
         assertTrue(vv.deleteThisFile)
         assertTrue(vv.fullscreen)
@@ -248,6 +249,12 @@ class VirtViewerFileTest {
         parseFails("[virt-viewer]\ntype=spice\nhost=evil\\share\nport=1")
     }
 
+    @Test
+    fun `rejects a proxy URI carrying credentials or an unsupported scheme`() {
+        parseFails("[virt-viewer]\ntype=spice\nhost=h\nport=1\nproxy=http://user:secret@proxy:3128")
+        parseFails("[virt-viewer]\ntype=spice\nhost=h\nport=1\nproxy=socks5://proxy:1080")
+    }
+
     // ── Helpers on the parsed value ───────────────────────────────────────────
 
     @Test
@@ -262,13 +269,14 @@ class VirtViewerFileTest {
     }
 
     @Test
-    fun `toSpiceParams carries ticket and CA without enabling certificate checks`() {
+    fun `toSpiceParams carries ticket proxy and CA without enabling certificate checks`() {
         val withoutCa = VirtViewerFile.parse(
-            "[virt-viewer]\ntype=spice\nhost=h\nport=5900\npassword=t"
+            "[virt-viewer]\ntype=spice\nhost=h\nport=5900\npassword=t\nproxy=http://proxy.example.org:3128"
         ).toSpiceParams()
         assertEquals("h", withoutCa.host)
         assertEquals(5900, withoutCa.port)
         assertEquals("t", withoutCa.password)
+        assertEquals("http://proxy.example.org:3128", withoutCa.proxy)
         assertNull(withoutCa.caCert)
         assertFalse(withoutCa.tlsVerify)
 

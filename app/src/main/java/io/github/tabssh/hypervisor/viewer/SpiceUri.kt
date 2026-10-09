@@ -94,7 +94,7 @@ object SpiceUri {
             password = params["password"]?.takeIf { it.isNotEmpty() },
             caCert = params["ca"]?.takeIf { it.isNotBlank() },
             hostSubject = params["host-subject"]?.takeIf { it.isNotBlank() },
-            proxy = params["proxy"]?.takeIf { it.isNotBlank() },
+            proxy = params["proxy"]?.takeIf { it.isNotBlank() }?.let(VirtViewerFile::httpProxy),
             title = params["title"]?.takeIf { it.isNotBlank() },
         )
     }

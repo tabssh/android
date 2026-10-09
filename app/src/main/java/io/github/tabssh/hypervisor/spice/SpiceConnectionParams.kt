@@ -25,6 +25,7 @@ package io.github.tabssh.hypervisor.spice
  * @param caCert Legacy descriptor CA retained for compatibility; it is
  *   not used as a stable identity when certificate validation is disabled.
  * @param hostSubject Legacy descriptor subject retained for compatibility.
+ * @param proxy Optional HTTP CONNECT proxy URI from a virt-viewer file.
  * @param tlsVerify When true, libspice validates the TLS chain
  *   against [caCert] and [hostSubject]. When false, TLS is still used
  *   but validation is skipped. Infrastructure callers keep this disabled
@@ -38,6 +39,7 @@ data class SpiceConnectionParams(
     val caCert: ByteArray? = null,
     val hostSubject: String? = null,
     val tlsVerify: Boolean = true,
+    val proxy: String? = null,
 ) {
     init {
         require(host.isNotEmpty()) { "host must not be empty" }
@@ -58,7 +60,8 @@ data class SpiceConnectionParams(
             (caCert?.contentEquals(other.caCert) == true ||
                 (caCert == null && other.caCert == null)) &&
             hostSubject == other.hostSubject &&
-            tlsVerify == other.tlsVerify
+            tlsVerify == other.tlsVerify &&
+            proxy == other.proxy
     }
 
     /**
@@ -71,7 +74,8 @@ data class SpiceConnectionParams(
         "SpiceConnectionParams(host=$host, port=$port, tlsPort=$tlsPort, " +
             "password=${if (password.isEmpty()) "<none>" else "xxxxx"}, " +
             "caCert=${caCert?.let { "${it.size} bytes" } ?: "null"}, " +
-            "hostSubject=$hostSubject, tlsVerify=$tlsVerify)"
+            "hostSubject=$hostSubject, tlsVerify=$tlsVerify, " +
+            "proxy=${if (proxy == null) "<none>" else "xxxxx"})"
 
     override fun hashCode(): Int {
         var result = host.hashCode()
@@ -81,6 +85,7 @@ data class SpiceConnectionParams(
         result = 31 * result + (caCert?.contentHashCode() ?: 0)
         result = 31 * result + (hostSubject?.hashCode() ?: 0)
         result = 31 * result + tlsVerify.hashCode()
+        result = 31 * result + (proxy?.hashCode() ?: 0)
         return result
     }
 }

@@ -20,7 +20,7 @@ on:
       version:
         description: 'Packaging version for the spice-libs-<version> release tag'
         required: false
-        default: '0.42.0'
+        default: '0.42.1'
 
 permissions:
   contents: write   # need write to create the release

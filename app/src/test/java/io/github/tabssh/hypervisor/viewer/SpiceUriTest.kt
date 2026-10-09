@@ -197,12 +197,15 @@ class SpiceUriTest {
 
     @Test
     fun `converts to spice params`() {
-        val params = SpiceUri.parse("spice+tls://h:5901?password=t&ca=PEM").toSpiceParams()
+        val params = SpiceUri.parse(
+            "spice+tls://h:5901?password=t&ca=PEM&proxy=http%3A%2F%2Fproxy.example.org%3A3128"
+        ).toSpiceParams()
 
         assertEquals("h", params.host)
         assertEquals(0, params.port)
         assertEquals(5901, params.tlsPort)
         assertEquals("t", params.password)
+        assertEquals("http://proxy.example.org:3128", params.proxy)
         assertFalse(params.tlsVerify)
     }
 }

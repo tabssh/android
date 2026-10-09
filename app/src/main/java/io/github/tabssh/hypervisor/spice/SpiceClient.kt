@@ -104,6 +104,7 @@ class SpiceClient(
         val handle = try {
             nativeCreateSession(
                 params.host,
+                params.proxy,
                 params.port,
                 params.tlsPort,
                 params.password,
@@ -391,6 +392,7 @@ class SpiceClient(
 
     private external fun nativeCreateSession(
         host: String,
+        proxy: String?,
         port: Int,
         tlsPort: Int,
         password: String,

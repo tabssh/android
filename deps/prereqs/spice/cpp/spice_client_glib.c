@@ -557,7 +557,7 @@ static gboolean connect_session_on_dispatcher(gpointer user_data) {
     return G_SOURCE_REMOVE;
 }
 
-jlong tabssh_spice_impl_create(JNIEnv *env, jstring host, jint port, jint tls_port,
+jlong tabssh_spice_impl_create(JNIEnv *env, jstring host, jstring proxy, jint port, jint tls_port,
                                 jstring password, jbyteArray ca_cert, jstring host_subject,
                                 jboolean tls_verify) {
     tabssh_spice_session *sess = g_try_new0(tabssh_spice_session, 1);
@@ -580,6 +580,7 @@ jlong tabssh_spice_impl_create(JNIEnv *env, jstring host, jint port, jint tls_po
     }
 
     char *c_host = jstring_to_utf8(env, host);
+    char *c_proxy = jstring_to_utf8(env, proxy);
     char *c_pw = jstring_to_utf8(env, password);
     char *c_subj = jstring_to_utf8(env, host_subject);
     char port_str[8] = {0};
@@ -589,6 +590,7 @@ jlong tabssh_spice_impl_create(JNIEnv *env, jstring host, jint port, jint tls_po
 
     g_object_set(sess->session,
                   "host", c_host,
+                  "proxy", c_proxy,
                   "port", port > 0 ? port_str : NULL,
                   "tls-port", tls_port > 0 ? tls_port_str : NULL,
                   "password", c_pw,
@@ -615,7 +617,7 @@ jlong tabssh_spice_impl_create(JNIEnv *env, jstring host, jint port, jint tls_po
     g_signal_connect(sess->session, "disconnected",
                       G_CALLBACK(on_session_disconnected), sess);
 
-    g_free(c_host); g_free(c_pw); g_free(c_subj);
+    g_free(c_host); g_free(c_proxy); g_free(c_pw); g_free(c_subj);
     return (jlong)(uintptr_t)sess;
 }
 

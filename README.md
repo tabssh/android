@@ -157,6 +157,7 @@ Pixel-perfect graphical console access to VMs — no separate VNC viewer require
 ### SPICE Console 🖥️
 
 - Native SPICE client for VM consoles that opens as a swipeable tab, used when the APK ships the native SPICE library
+- Opens virt-viewer `.vv` console files, including Proxmox downloads that require an HTTP CONNECT proxy
 - **Proxmox VE** — QEMU VMs try `spiceproxy` after the serial console and before VNC
 - **QEMU/libvirt** — detects a SPICE display via `virsh domdisplay` and tunnels it over SSH
 - Falls back to VNC automatically when SPICE is unavailable

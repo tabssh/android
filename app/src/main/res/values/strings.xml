@@ -4221,4 +4221,5 @@
     <string name="report_submit_failed_fmt">Failed to submit report: %1$s</string>
 
     <string name="locale_toast_request_too_large">Automation action is too large. Shorten the command or keys and try again.</string>
+    <string name="spice_connection_failed">SPICE connection failed. Check the connection details and debug log.</string>
 </resources>

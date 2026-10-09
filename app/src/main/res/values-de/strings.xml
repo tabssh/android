@@ -233,4 +233,5 @@
     <string name="route_tor_check_failed">Tor-Statusprüfung fehlgeschlagen: %1$s</string>
     <string name="route_tor_check_failed_unknown">Unbekannter Fehler</string>
     <string name="conn_route_unavailable">Ausgewählte Route ist auf diesem Gerät nicht verfügbar</string>
+    <string name="spice_connection_failed">SPICE-Verbindung fehlgeschlagen. Prüfen Sie die Verbindungsdaten und das Debug-Protokoll.</string>
 </resources>

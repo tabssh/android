@@ -230,4 +230,5 @@
     <string name="route_tor_check_failed">Échec de la vérification de l’état de Tor : %1$s</string>
     <string name="route_tor_check_failed_unknown">Erreur inconnue</string>
     <string name="conn_route_unavailable">La route sélectionnée n’est pas disponible sur cet appareil</string>
+    <string name="spice_connection_failed">Échec de la connexion SPICE. Vérifiez les paramètres de connexion et le journal de débogage.</string>
 </resources>

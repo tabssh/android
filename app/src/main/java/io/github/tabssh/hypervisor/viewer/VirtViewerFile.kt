@@ -1,5 +1,7 @@
 package io.github.tabssh.hypervisor.viewer
 
+import java.net.URI
+
 /**
  * Parser for virt-viewer `.vv` connection files.
  *
@@ -96,6 +98,7 @@ object VirtViewerFile {
         }
 
         val ca = keys["ca"]?.takeIf { it.isNotBlank() }?.let { unescape(it) }
+        val proxy = keys["proxy"]?.takeIf { it.isNotBlank() }?.let(::httpProxy)
 
         return VirtViewerConnection(
             type = type,
@@ -105,7 +108,7 @@ object VirtViewerFile {
             password = keys["password"]?.takeIf { it.isNotEmpty() },
             caCert = ca,
             hostSubject = keys["host-subject"]?.takeIf { it.isNotBlank() },
-            proxy = keys["proxy"]?.takeIf { it.isNotBlank() },
+            proxy = proxy,
             title = keys["title"]?.takeIf { it.isNotBlank() },
             deleteThisFile = bool(keys["delete-this-file"]),
             fullscreen = bool(keys["fullscreen"]),
@@ -255,6 +258,24 @@ object VirtViewerFile {
             it.isWhitespace() || it.isISOControl() ||
                 it == '/' || it == '\\' || it == '@' || it == '"'
         }
+
+    internal fun httpProxy(value: String): String {
+        if (value.length > MAX_VALUE_LEN) throw VirtViewerParseException("'proxy' too long")
+        val raw = value.trim()
+        val uri = try {
+            URI(if (raw.contains("://")) raw else "http://$raw")
+        } catch (e: Exception) {
+            throw VirtViewerParseException("invalid 'proxy'")
+        }
+        val validPort = uri.port == -1 || uri.port in 1..65535
+        if (!uri.scheme.equals("http", ignoreCase = true) || uri.host.isNullOrBlank() ||
+            uri.rawUserInfo != null || uri.rawQuery != null || uri.rawFragment != null ||
+            uri.rawPath.orEmpty().let { it.isNotEmpty() && it != "/" } || !validPort
+        ) {
+            throw VirtViewerParseException("invalid 'proxy'")
+        }
+        return "http://${uri.rawAuthority}"
+    }
 
     /**
      * Strip control characters out of a value before it is quoted into an

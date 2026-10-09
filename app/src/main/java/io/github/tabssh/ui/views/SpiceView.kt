@@ -16,6 +16,8 @@ import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
+import android.widget.Toast
+import io.github.tabssh.R
 import io.github.tabssh.hypervisor.spice.SpiceConstants
 import io.github.tabssh.hypervisor.spice.SpiceKeyMap
 import io.github.tabssh.hypervisor.spice.SpiceListener
@@ -308,6 +310,9 @@ class SpiceView @JvmOverloads constructor(
 
         override fun onError(message: String) {
             Logger.e(TAG, "SPICE error: $message")
+            post {
+                Toast.makeText(context, R.string.spice_connection_failed, Toast.LENGTH_LONG).show()
+            }
         }
 
         override fun onDisconnected(reason: String) {
