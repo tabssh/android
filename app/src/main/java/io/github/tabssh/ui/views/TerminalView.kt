@@ -679,6 +679,15 @@ class TerminalView @JvmOverloads constructor(
                     "onScreenChanged - scheduling redraw (rows=$terminalRows cols=$terminalCols scrollYf=$scrollYf)"
                 }
                 post {
+                    // RIS (`reset`) can clear the emulator transcript while
+                    // this view is scrolled into it. Keep the viewport inside
+                    // the remaining transcript so drawing resumes at the live
+                    // screen instead of indexing rows that no longer exist.
+                    val maxScroll = maxScrollYPx().toFloat()
+                    if (scrollYf > maxScroll) {
+                        scrollYf = maxScroll
+                        scroller.forceFinished(true)
+                    }
                     // Screen content changed, so the cached URL underline map
                     // no longer matches what is on screen.
                     urlUnderlineDirty = true
