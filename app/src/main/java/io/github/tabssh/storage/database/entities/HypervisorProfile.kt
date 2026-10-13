@@ -89,8 +89,9 @@ data class HypervisorProfile(
     val createdAt: Long = System.currentTimeMillis(),
 
     /**
-     * Auth-style discriminator. Existing types (PROXMOX/XCPNG/VMWARE) use
-     * `"password"` — username + (Keystore-stored) password. OCI uses
+     * Auth-style discriminator. Values include password, Proxmox/XO API
+     * tokens, VMware OAuth, and OCI API key. Passwords and provider token
+     * secrets are Keystore-only. OCI uses
      * `"oci_api_key"` — five OCIDs + RSA key pair stored in Keystore under
      * `oci_private_key_${id}` (and optional `oci_passphrase_${id}`).
      *
@@ -134,6 +135,18 @@ data class HypervisorProfile(
      */
     @ColumnInfo(name = "ssh_identity_id")
     val sshIdentityId: String? = null,
+
+    /** OIDC issuer for VMware OAuth authorization-code sign-in. */
+    @ColumnInfo(name = "oauth_issuer_url")
+    val oauthIssuerUrl: String? = null,
+
+    /** Public OAuth client ID registered with the VMware identity provider. */
+    @ColumnInfo(name = "oauth_client_id")
+    val oauthClientId: String? = null,
+
+    /** Optional vCenter OAuth resource/audience requested during token exchange. */
+    @ColumnInfo(name = "oauth_audience")
+    val oauthAudience: String? = null,
 
     /** Last local modification time, used for sync last-write-wins comparisons. */
     @ColumnInfo(name = "modified_at")

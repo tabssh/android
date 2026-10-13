@@ -144,7 +144,11 @@ New entity checklist: decide sync inclusion, then update
 - SPICE console client for hypervisors that expose SPICE displays
 - Opens virt-viewer `.vv` files and honors their advertised SPICE HTTP CONNECT proxy
 - Proxmox VM console selection prefers SPICE, then VNC, then serial; unavailable console types fall through in that order
-- Reusable hypervisor credential accounts (username/password or OCI API key) shared across hypervisor profiles
+- Reusable hypervisor credential accounts (passwords, Proxmox/Xen Orchestra API tokens, or OCI API keys) shared across compatible profiles; secrets remain Keystore-only
+- Proxmox supports API-token login and password login with a transient TOTP or recovery-key challenge. Proxmox WebAuthn/passkey login is not supported
+- Xen Orchestra supports a user-created API token for accounts protected by TOTP. Direct XCP-ng XAPI remains password-only; use Xen Orchestra when MFA is required
+- VMware vCenter supports browser-based OIDC authorization-code login with PKCE and vCenter token exchange for identity providers configured with MFA
+- QEMU/libvirt SSH connections support server-configured keyboard-interactive prompts, including PAM-backed OTP
 - Hypervisor and console TLS stays encrypted; REST certificate validation is optional and off by default, console certificate checks are disabled, and no leaf-certificate pins or certificate-change prompts are used. SSH transports use the known-hosts host-key verifier for server identity
 - OCI API key authentication (tenancy, user, region, fingerprint, optional compartment, private key — the private key is Keystore-only)
 
@@ -211,7 +215,7 @@ compatibility note here (and a heads-up to the sibling repos) is incomplete:
   `manifest.json`, then one `{"v":4,"items":[...]}` file per entity (version 3
   single-JSON archives still restore); a backup made by any sibling must
   restore cleanly on the others
-- Room schema (currently v28) — Desktop's SQLite and Web's schema track
+- Room schema (currently v29) — Desktop's SQLite and Web's schema track
   Android's entity shapes and field set; schema version numbers are
   independent per platform but the fields must line up
 - Built-in terminal theme catalogue (23 themes) — byte-identical theme

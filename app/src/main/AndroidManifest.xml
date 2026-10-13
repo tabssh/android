@@ -235,6 +235,22 @@
             android:parentActivityName=".ui.activities.MainActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity
+            android:name=".ui.activities.VMwareOAuthActivity"
+            android:exported="false"
+            android:launchMode="singleTop" />
+
+        <activity
+            android:name="net.openid.appauth.RedirectUriReceiverActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="io.github.tabssh" />
+            </intent-filter>
+        </activity>
+
         <!-- Hypervisor Edit activity -->
         <activity
             android:name=".ui.activities.HypervisorEditActivity"

@@ -46,7 +46,8 @@ object HypervisorPasswordStore {
     data class Credentials(
         val username: String,
         val password: String,
-        val realm: String?
+        val realm: String?,
+        val authType: String = "password"
     )
 
     /**
@@ -68,7 +69,7 @@ object HypervisorPasswordStore {
     suspend fun resolveCredentials(context: Context, profile: HypervisorProfile): Credentials =
         withContext(Dispatchers.IO) {
             val app = context.applicationContext as? TabSSHApplication
-                ?: return@withContext Credentials(profile.username, "", profile.realm)
+                ?: return@withContext Credentials(profile.username, "", profile.realm, profile.authType)
             val accountId = profile.accountId
             if (accountId != null) {
                 val account = try {
@@ -80,11 +81,11 @@ object HypervisorPasswordStore {
                 if (account != null) {
                     val pw = retrieveAccountPassword(context, account.id) ?: ""
                     val realm = profile.realm?.takeIf { it.isNotBlank() } ?: account.realm
-                    return@withContext Credentials(account.username, pw, realm)
+                    return@withContext Credentials(account.username, pw, realm, account.authType)
                 }
                 Logger.w(TAG, "accountId=$accountId set but row not found — using per-host inline credentials")
             }
-            Credentials(profile.username, retrieve(context, profile), profile.realm)
+            Credentials(profile.username, retrieve(context, profile), profile.realm, profile.authType)
         }
 
     /** Fetch a stored account password from the Keystore. Returns null

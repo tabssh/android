@@ -9,7 +9,9 @@ import kotlinx.serialization.Serializable
  * Reusable hypervisor credential set. Covers two auth styles:
  *
  *  **Password** (`authType = "password"`) — username + Keystore-stored
- *  password + optional realm. Multiple `HypervisorProfile` rows can
+ *  password + optional realm.
+ *  **Provider token** (`proxmox_api_token` or `xo_api_token`) — token user
+ *  metadata + Keystore-stored token secret. Multiple `HypervisorProfile` rows can
  *  reference one account via `HypervisorProfile.accountId`, so a single
  *  "Proxmox admin" credential drives N servers without duplication.
  *
@@ -49,7 +51,7 @@ data class HypervisorAccount(
      * password. `"oci_api_key"` — OCI API-key HTTP-signature auth;
      * the five OCI fields below carry credential metadata and the PEM
      * lives in Keystore under `oci_private_key_account_${id}`.
-     * Free-form TEXT so future auth styles land without schema changes.
+     * Free-form TEXT so provider token styles can share the same schema.
      */
     @ColumnInfo(name = "auth_type")
     val authType: String = "password",

@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
@@ -134,6 +135,16 @@ class VMwareManagerActivity : TabSSHActivity() {
      */
     private var snapshotDialog: AlertDialog? = null
 
+    private val oauthLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val token = result.data?.getStringExtra(VMwareOAuthActivity.EXTRA_ACCESS_TOKEN)
+            if (!token.isNullOrBlank()) connectAndRefresh(currentHypervisorId, token)
+            else showError(getString(R.string.vmware_error_auth_failed))
+        } else {
+            showError(getString(R.string.vmware_error_auth_failed))
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_vmware_manager)
@@ -196,7 +207,7 @@ class VMwareManagerActivity : TabSSHActivity() {
         }
     }
 
-    private fun connectAndRefresh(hypervisorId: Long) {
+    private fun connectAndRefresh(hypervisorId: Long, oauthToken: String? = null) {
         lifecycleScope.launch {
             showProgress(getString(R.string.status_connecting))
             val profile = withContext(Dispatchers.IO) {
@@ -210,6 +221,25 @@ class VMwareManagerActivity : TabSSHActivity() {
             if (isFinishing || isDestroyed) return@launch
             currentProfile = profile
             supportActionBar?.title = safeName(profile.name)
+
+            if (profile.authType == "vmware_oauth" && oauthToken == null) {
+                val issuer = profile.oauthIssuerUrl?.takeIf { it.isNotBlank() }
+                val clientId = profile.oauthClientId?.takeIf { it.isNotBlank() }
+                if (issuer == null || clientId == null) {
+                    showError(getString(R.string.vmware_oauth_config_required))
+                    return@launch
+                }
+                val oauthIntent = Intent(this@VMwareManagerActivity, VMwareOAuthActivity::class.java)
+                    .putExtra(VMwareOAuthActivity.EXTRA_ISSUER, issuer)
+                    .putExtra(VMwareOAuthActivity.EXTRA_CLIENT_ID, clientId)
+                    .putExtra(VMwareOAuthActivity.EXTRA_AUDIENCE, profile.oauthAudience)
+                    .putExtra(VMwareOAuthActivity.EXTRA_HOST, profile.host)
+                    .putExtra(VMwareOAuthActivity.EXTRA_PORT, profile.port)
+                    .putExtra(VMwareOAuthActivity.EXTRA_VERIFY_SSL, profile.verifySsl)
+                    .putExtra(VMwareOAuthActivity.EXTRA_PIN, profile.pinnedCertSha256)
+                oauthLauncher.launch(oauthIntent)
+                return@launch
+            }
 
             try {
                 val creds = HypervisorPasswordStore.resolveCredentials(this@VMwareManagerActivity, profile)
@@ -234,7 +264,9 @@ class VMwareManagerActivity : TabSSHActivity() {
                                 Logger.w(TAG, "Immediate pin persist failed: ${e.message}")
                             }
                         }
-                    }
+                    },
+                    bearerToken = oauthToken,
+                    port = profile.port
                 )
                 val ok = client.authenticate()
                 if (!ok) {
@@ -304,13 +336,17 @@ class VMwareManagerActivity : TabSSHActivity() {
     // ── VM actions ────────────────────────────────────────────────────────────
 
     private fun confirmStop(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient) {
-        MaterialAlertDialogBuilder(this)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.vmware_stop_title_fmt, safeName(vm.name)))
             .setMessage(getString(R.string.vmware_stop_message))
-            .setPositiveButton(getString(R.string.vmware_shutdown_guest_button)) { _, _ -> vmAction(vm, client, "shutdown") }
-            .setNeutralButton(getString(R.string.vmware_power_off_button)) { _, _ -> vmAction(vm, client, "stop") }
             .setNegativeButton(getString(R.string.cancel), null)
-            .show()
+        if (client.supportsSoapPasswordLogin) {
+            dialog.setPositiveButton(getString(R.string.vmware_shutdown_guest_button)) { _, _ -> vmAction(vm, client, "shutdown") }
+                .setNeutralButton(getString(R.string.vmware_power_off_button)) { _, _ -> vmAction(vm, client, "stop") }
+        } else {
+            dialog.setPositiveButton(getString(R.string.vmware_power_off_button)) { _, _ -> vmAction(vm, client, "stop") }
+        }
+        dialog.show()
     }
 
     private fun confirmHardReset(vm: VMwareApiClient.VMwareVM, client: VMwareApiClient) {
@@ -645,11 +681,11 @@ class VMwareManagerActivity : TabSSHActivity() {
             // Button visibility by power state
             when (vm.powerState.uppercase()) {
                 "POWERED_ON" -> {
-                    holder.btnConsole.visibility = View.VISIBLE
+                    holder.btnConsole.visibility = if (client.supportsSoapPasswordLogin) View.VISIBLE else View.GONE
                     holder.btnSsh.visibility = if (!vm.ipAddress.isNullOrBlank()) View.VISIBLE else View.GONE
                     holder.btnStart.visibility = View.GONE
                     holder.btnStop.visibility = View.VISIBLE
-                    holder.btnReboot.visibility = View.VISIBLE
+                    holder.btnReboot.visibility = if (client.supportsSoapPasswordLogin) View.VISIBLE else View.GONE
                     holder.btnReset.visibility = View.VISIBLE
                 }
                 "POWERED_OFF" -> {
@@ -675,7 +711,10 @@ class VMwareManagerActivity : TabSSHActivity() {
             holder.rowSecondary.visibility = if (holder.btnReboot.visibility == View.VISIBLE || holder.btnReset.visibility == View.VISIBLE) View.VISIBLE else View.GONE
 
             // Long-press opens the snapshot management dialog
-            holder.itemView.setOnLongClickListener { showSnapshotDialog(vm); true }
+            holder.itemView.setOnLongClickListener {
+                if (client.supportsSoapPasswordLogin) showSnapshotDialog(vm)
+                client.supportsSoapPasswordLogin
+            }
 
             holder.btnConsole.setOnClickListener { openVncConsole(vm) }
             holder.btnSsh.setOnClickListener { openSshConsole(vm) }

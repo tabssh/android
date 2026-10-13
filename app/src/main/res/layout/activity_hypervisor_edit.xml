@@ -150,6 +150,81 @@
 
             </com.google.android.material.textfield.TextInputLayout>
 
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_auth_type"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_md"
+                android:hint="@string/hypervisor_auth_type_hint"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
+                <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                    android:id="@+id/dropdown_auth_type"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <TextView
+                android:id="@+id/text_auth_type_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/layout_vmware_oauth"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_sm"
+                    android:hint="@string/vmware_oauth_issuer_hint"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/edit_oauth_issuer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textUri"
+                        android:maxLines="1" />
+                </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_sm"
+                    android:hint="@string/vmware_oauth_client_id_hint"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/edit_oauth_client_id"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="text"
+                        android:maxLines="1" />
+                </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_sm"
+                    android:hint="@string/vmware_oauth_audience_hint"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/edit_oauth_audience"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="text"
+                        android:maxLines="1" />
+                </com.google.android.material.textfield.TextInputLayout>
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_xs"
+                    android:text="@string/vmware_oauth_redirect_help"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+            </LinearLayout>
+
             <!-- Username (hidden when an account is linked) -->
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/layout_username"

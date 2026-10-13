@@ -11,6 +11,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.crypto.storage.HypervisorPasswordStore
 import io.github.tabssh.hypervisor.xcpng.XCPngApiClient
 import io.github.tabssh.hypervisor.xcpng.XenOrchestraApiClient
 import io.github.tabssh.storage.database.entities.HypervisorProfile
@@ -289,6 +290,12 @@ class XCPngManagerActivity : TabSSHActivity() {
         // Check for manual override
         val override = profile.apiTypeOverride
 
+        val credentials = HypervisorPasswordStore.resolveCredentials(this, profile)
+        if (credentials.authType == "xo_api_token") {
+            Logger.d(TAG, "XO API token selected; skipping direct XAPI authentication")
+            return tryXenOrchestra(profile)?.let { Pair(it, true) } ?: Pair(false, true)
+        }
+
         // If user forced centralized (Xen Orchestra only)
         if (override == "centralized") {
             Logger.d(TAG, "User override: Force Xen Orchestra")
@@ -360,8 +367,7 @@ class XCPngManagerActivity : TabSSHActivity() {
             Logger.d(TAG, "Trying Xen Orchestra REST API...")
             statusText.text = getString(R.string.xcpng_trying_xo)
 
-            val creds = io.github.tabssh.crypto.storage.HypervisorPasswordStore
-                .resolveCredentials(this, profile)
+            val creds = HypervisorPasswordStore.resolveCredentials(this, profile)
             currentClient = null
             currentXoClient = XenOrchestraApiClient(
                 host = profile.host,
@@ -384,7 +390,8 @@ class XCPngManagerActivity : TabSSHActivity() {
                             Logger.w(TAG, "Immediate pin persist failed: ${e.message}")
                         }
                     }
-                }
+                },
+                authType = creds.authType
             )
 
             if (currentXoClient?.authenticate() == true) {
@@ -407,8 +414,7 @@ class XCPngManagerActivity : TabSSHActivity() {
             Logger.d(TAG, "Trying XCP-ng XML-RPC API...")
             statusText.text = getString(R.string.xcpng_trying_direct)
 
-            val creds = io.github.tabssh.crypto.storage.HypervisorPasswordStore
-                .resolveCredentials(this, profile)
+            val creds = HypervisorPasswordStore.resolveCredentials(this, profile)
             currentXoClient = null
             currentClient = XCPngApiClient(
                 host = profile.host,

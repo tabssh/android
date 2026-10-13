@@ -91,6 +91,7 @@ android {
 
     defaultConfig {
         applicationId "io.github.tabssh"
+        manifestPlaceholders += [appAuthRedirectScheme: "io.github.tabssh"]
         // Android 7.0. Raised from 21 to eliminate a class of latent
         // NewApi crashes: dozens of API 22-24 calls (ThreadLocal.withInitial,
         // ConcurrentHashMap.newKeySet, SNIHostName, KeyGenParameterSpec,
@@ -454,6 +455,8 @@ dependencies {
     // but never referenced, so it is intentionally omitted — removing its
     // alpha Tink dependency off the credential path.
     implementation 'androidx.biometric:biometric:1.1.0'
+    // OAuth authorization-code flow with PKCE for externally MFA-protected vCenter accounts.
+    implementation 'net.openid:appauth:0.11.1'
 
     // JSR-305 annotations — supply javax.annotation.* referenced by OkHttp so
     // R8 does not warn (see the -dontwarn/-keep javax.annotation rules).

@@ -31,7 +31,8 @@ class XenOrchestraApiClient(
     private val verifySsl: Boolean = false,
     private val pinnedCertSha256: String? = null,
     /** Legacy compatibility callback; certificate pins are no longer captured. */
-    private val onPinCaptured: (() -> Unit)? = null
+    private val onPinCaptured: (() -> Unit)? = null,
+    private val authType: String = "password"
 ) {
 
     private val baseUrl = "https://$host:$port"
@@ -181,6 +182,24 @@ class XenOrchestraApiClient(
      * Response: {"token": "...", "userId": "..."}
      */
     suspend fun authenticate(): Boolean = withContext(Dispatchers.IO) {
+        if (authType == "xo_api_token") {
+            if (password.isBlank() || password.length > 4096 || password.any { it.isISOControl() }) {
+                Logger.e(TAG, "XO API token is missing or invalid")
+                return@withContext false
+            }
+            authToken = password
+            for (version in API_VERSIONS) {
+                if (authenticateWithToken(version)) {
+                    apiPrefix = version
+                    detectedApiVersion = version
+                    Logger.i(TAG, "Xen Orchestra token authentication successful")
+                    return@withContext true
+                }
+            }
+            authToken = null
+            Logger.e(TAG, "Xen Orchestra token authentication failed")
+            return@withContext false
+        }
         // If we already detected a working API version, use it
         if (detectedApiVersion != null) {
             return@withContext authenticateWithVersion(apiPrefix)
@@ -230,7 +249,9 @@ class XenOrchestraApiClient(
                     val responseBody = response.body?.readBoundedText()
                     if (responseBody != null) {
                         val responseJson = JSONObject(responseBody)
-                        val token = responseJson.optString("token")
+                        val token = responseJson.optJSONObject("token")?.optString("id")
+                            ?.takeIf { it.isNotBlank() }
+                            ?: responseJson.optString("token")
                         if (token.isNotEmpty()) {
                             authToken = token
                             detectedApiVersion = version
@@ -261,6 +282,21 @@ class XenOrchestraApiClient(
             throw e
         } catch (e: Exception) {
             Logger.d(TAG, "Error with $version: ${e.message}")
+            false
+        }
+    }
+
+    private suspend fun authenticateWithToken(version: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("$baseUrl$version/users/me")
+                .addHeader("Cookie", "authenticationToken=$authToken")
+                .get()
+                .build()
+            client.newCall(request).execute().use { response -> response.isSuccessful }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
             false
         }
     }

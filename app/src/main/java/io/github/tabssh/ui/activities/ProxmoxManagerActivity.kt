@@ -38,6 +38,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import io.github.tabssh.utils.tabSSHApp
+import io.github.tabssh.ui.dialogs.promptProxmoxSecondFactor
 
 /**
  * Displays the list of VMs on a single Proxmox hypervisor. Launched by
@@ -216,9 +217,12 @@ class ProxmoxManagerActivity : TabSSHActivity() {
                                 Logger.w(TAG, "Immediate pin persist failed: ${e.message}")
                             }
                         }
-                    }
+                    },
+                    authType = creds.authType
                 )
-                val ok = client.authenticate()
+                val ok = client.authenticate {
+                    withContext(Dispatchers.Main) { promptProxmoxSecondFactor() }
+                }
                 if (!ok) {
                     showError(getString(R.string.proxmox_connect_auth_failed))
                     return@launch

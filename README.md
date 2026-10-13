@@ -107,10 +107,10 @@ created, synced, or paired on any one of the three works unmodified on the other
 
 Manage virtual machines directly from TabSSH — no separate app required.
 
-- **Proxmox VE** — Full REST API; list/start/stop/shutdown/reboot/reset VMs and LXC containers; serial console (termproxy) with automatic VNC fallback; `last_connected` tracking
-- **XCP-ng / Xen Orchestra** — XML-RPC direct host or Xen Orchestra REST + WebSocket; real-time VM state; snapshot/backup operations; pool/host info; auto-detects XO vs. direct
-- **VMware vSphere / ESXi** — REST API; auto-detects ESXi vs. vCenter; full VM power management
-- **QEMU/libvirt (KVM)** — SSH tunnel to host; `virsh list` domain enumeration; start/shutdown/reboot/hard-reset; VNC console tunnelled over SSH (no VNC port exposure required); SSH fallback via ProxyJump when VNC not configured
+- **Proxmox VE** — Password login supports TOTP and recovery-code challenges; API-token login is also available (tokens cannot open VM or system consoles); list/start/stop/shutdown/reboot/reset VMs and LXC containers; serial console (termproxy) with automatic VNC fallback; `last_connected` tracking
+- **XCP-ng / Xen Orchestra** — XML-RPC direct host or Xen Orchestra REST + WebSocket; real-time VM state; snapshot/backup operations; pool/host info; auto-detects XO vs. direct; use Xen Orchestra with an API token for accounts protected by MFA
+- **VMware vSphere / ESXi** — REST API; auto-detects ESXi vs. vCenter; password login or vCenter OIDC sign-in with PKCE and identity-provider MFA (OAuth supports REST operations; SOAP-based console, snapshot, and guest operations require password login)
+- **QEMU/libvirt (KVM)** — SSH tunnel to host with password, key, or keyboard-interactive MFA; `virsh list` domain enumeration; start/shutdown/reboot/hard-reset; VNC console tunnelled over SSH (no VNC port exposure required); SSH fallback via ProxyJump when VNC not configured
 
 > **OCI Compute** has moved to **Cloud Accounts** (see below) for a unified multi-cloud experience.
 

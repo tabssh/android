@@ -36,6 +36,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import io.github.tabssh.utils.tabSSHApp
+import io.github.tabssh.ui.dialogs.promptSshKeyboardInteractive
 
 /**
  * Displays the list of libvirt domains on a QEMU/KVM hypervisor and lets the
@@ -160,7 +161,13 @@ class LibvirtManagerActivity : TabSSHActivity() {
             hypervisorProfile = profile
             supportActionBar?.title = profile.name
 
-            val client = LibvirtApiClient(this@LibvirtManagerActivity, profile)
+            val client = LibvirtApiClient(
+                this@LibvirtManagerActivity,
+                profile,
+                keyboardInteractivePrompt = { prompts, echo, password ->
+                    promptSshKeyboardInteractive(prompts, echo, password)
+                }
+            )
             try {
                 withContext(Dispatchers.IO) { client.connect() }
                 withContext(Dispatchers.IO) {

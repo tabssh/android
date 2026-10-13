@@ -26,11 +26,17 @@ class VMwareApiClient(
     private val verifySsl: Boolean = true,
     private val pinnedCertSha256: String? = null,
     /** Legacy compatibility callback; certificate pins are no longer captured. */
-    private val onPinCaptured: (() -> Unit)? = null
+    private val onPinCaptured: (() -> Unit)? = null,
+    private val bearerToken: String? = null,
+    private val port: Int = 443
 ) {
 
-    private val baseUrl = "https://$host/api"
+    private val baseUrl = "https://$host:$port/api"
     private val client: OkHttpClient
+
+    /** OAuth sessions use vCenter's REST bearer-token API; vim25 SOAP still requires password login. */
+    val supportsSoapPasswordLogin: Boolean
+        get() = bearerToken.isNullOrBlank()
 
     // authenticate() writes this on one IO thread; every later request reads it
     // from another IO dispatcher thread, so the write must be visible to them.
@@ -138,7 +144,7 @@ class VMwareApiClient(
             .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
             .callTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         io.github.tabssh.crypto.tls.HypervisorTrustManagerFactory.installTrust(
-            builder, verifySsl, pinnedCertSha256, capturedPin, host, 443,
+            builder, verifySsl, pinnedCertSha256, capturedPin, host, port,
             onPinCaptured = onPinCaptured
         )
         client = builder.build()
@@ -151,6 +157,20 @@ class VMwareApiClient(
 
     suspend fun authenticate(): Boolean = withContext(Dispatchers.IO) {
         try {
+            val suppliedToken = bearerToken
+            if (!suppliedToken.isNullOrBlank()) {
+                if (suppliedToken.length > 8192 || suppliedToken.any { it.isISOControl() }) return@withContext false
+                val request = authenticatedRequestBuilder("$baseUrl/vcenter/vm").get().build()
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        Logger.i("VMwareAPI", "OAuth authentication successful")
+                        true
+                    } else {
+                        Logger.e("VMwareAPI", "OAuth authentication failed: ${response.code}")
+                        false
+                    }
+                }
+            } else {
             val credentials = "$username:$password"
             val encodedCredentials = android.util.Base64.encodeToString(
                 credentials.toByteArray(),
@@ -173,6 +193,7 @@ class VMwareApiClient(
                     Logger.e("VMwareAPI", "Authentication failed: ${response.code}")
                     false
                 }
+            }
             }
         } catch (e: CancellationException) {
             throw e
@@ -260,11 +281,7 @@ class VMwareApiClient(
      * retry still fails or we have no session at all, the error propagates.
      */
     private suspend fun apiGet(endpoint: String, isRetry: Boolean = false): String {
-        val request = Request.Builder()
-            .url("$baseUrl$endpoint")
-            .addHeader("vmware-api-session-id", sessionId ?: "")
-            .get()
-            .build()
+        val request = authenticatedRequestBuilder("$baseUrl$endpoint").get().build()
 
         client.newCall(request).execute().use { response ->
             // The 401 branch must decide before the body is read: the previous
@@ -288,11 +305,7 @@ class VMwareApiClient(
     private suspend fun apiPost(endpoint: String, body: String = "", isRetry: Boolean = false): String {
         val requestBody = body.toRequestBody("application/json".toMediaType())
 
-        val request = Request.Builder()
-            .url("$baseUrl$endpoint")
-            .addHeader("vmware-api-session-id", sessionId ?: "")
-            .post(requestBody)
-            .build()
+        val request = authenticatedRequestBuilder("$baseUrl$endpoint").post(requestBody).build()
 
         client.newCall(request).execute().use { response ->
             if (response.code == 401 && !isRetry && sessionId != null) {
@@ -304,6 +317,14 @@ class VMwareApiClient(
             if (response.isSuccessful) return responseBody ?: ""
             throw IOException("API request failed: ${response.code}")
         }
+    }
+
+    private fun authenticatedRequestBuilder(url: String): Request.Builder {
+        val request = Request.Builder().url(url)
+        val token = bearerToken
+        if (!token.isNullOrBlank()) request.addHeader("Authorization", "Bearer $token")
+        else request.addHeader("vmware-api-session-id", sessionId ?: "")
+        return request
     }
 
     /**
@@ -744,6 +765,9 @@ class VMwareApiClient(
      * the resolved PropertyCollector MoRef and the vmware_soap_session cookie.
      */
     private suspend fun <T> withSoapSession(block: (propertyCollector: String, cookie: String) -> T): T = withContext(Dispatchers.IO) {
+        if (!supportsSoapPasswordLogin) {
+            throw IOException("This OAuth session supports vCenter REST operations; SOAP console, guest operations, and snapshots require password authentication.")
+        }
         val content = soapCall(
             soapEnvelope(
                 "<vim25:RetrieveServiceContent>" +

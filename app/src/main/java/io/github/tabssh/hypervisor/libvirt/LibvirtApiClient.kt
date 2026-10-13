@@ -42,7 +42,8 @@ import java.io.OutputStream
 class LibvirtApiClient(
     private val context: Context,
     private val profile: HypervisorProfile,
-    private val passwordOverride: String? = null
+    private val passwordOverride: String? = null,
+    private val keyboardInteractivePrompt: ((Array<String>, BooleanArray, String) -> Array<String>?)? = null
 ) {
     internal companion object {
         private const val TAG = "LibvirtApiClient"
@@ -246,19 +247,37 @@ class LibvirtApiClient(
                     // passphrase — LIBVIRT keys stored unencrypted in Keystore
                     null
                 )
-                config["PreferredAuthentications"] = "publickey,password"
+                config["PreferredAuthentications"] = "publickey,password,keyboard-interactive"
                 Logger.i(TAG, "SSH key identity loaded for ${profile.host} (keyId=$keyId)")
             } else {
                 Logger.w(TAG, "sshIdentityId=$keyId set but JSch bytes not found — falling back to password")
-                config["PreferredAuthentications"] = "password"
+                config["PreferredAuthentications"] = "password,keyboard-interactive"
             }
         } else {
-            config["PreferredAuthentications"] = "password"
+            config["PreferredAuthentications"] = "password,keyboard-interactive"
         }
 
         val sess = jsch.getSession(profile.username, profile.host, profile.port)
         sess.setPassword(password)
         sess.setConfig(config)
+        sess.setUserInfo(object : com.jcraft.jsch.UserInfo, com.jcraft.jsch.UIKeyboardInteractive {
+            override fun getPassword(): String = password
+            override fun promptYesNo(message: String): Boolean = false
+            override fun getPassphrase(): String? = null
+            override fun promptPassphrase(message: String): Boolean = false
+            override fun promptPassword(message: String): Boolean = true
+            override fun showMessage(message: String) = Unit
+            override fun promptKeyboardInteractive(
+                destination: String,
+                name: String,
+                instruction: String,
+                prompt: Array<String>,
+                echo: BooleanArray
+            ): Array<String>? {
+                if (prompt.isEmpty()) return emptyArray()
+                return keyboardInteractivePrompt?.invoke(prompt, echo, password)
+            }
+        })
         sess.connect(CONNECT_TIMEOUT_MS)
         session = sess
         Logger.i(TAG, "SSH session established to ${profile.host}:${profile.port}")

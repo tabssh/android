@@ -24,6 +24,20 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="@dimen/space_sm"
+        android:hint="@string/hypervisor_auth_type_hint"
+        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
+        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+            android:id="@+id/dropdown_account_auth_type"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="none" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/layout_account_username"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="@dimen/space_sm"
         android:hint="@string/username_hint"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
         <com.google.android.material.textfield.TextInputEditText
@@ -35,6 +49,7 @@
     </com.google.android.material.textfield.TextInputLayout>
 
     <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/layout_account_secret"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="@dimen/space_sm"
@@ -50,6 +65,7 @@
     </com.google.android.material.textfield.TextInputLayout>
 
     <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/layout_account_realm"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="@dimen/space_xs"

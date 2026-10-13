@@ -33,7 +33,8 @@ class ProxmoxApiClient(
     private val verifySsl: Boolean = true,
     private val pinnedCertSha256: String? = null,
     /** Legacy compatibility callback; certificate pins are no longer captured. */
-    private val onPinCaptured: (() -> Unit)? = null
+    private val onPinCaptured: (() -> Unit)? = null,
+    private val authType: String = "password"
 ) {
 
     private val baseUrl = "https://$host:$port/api2/json"
@@ -44,6 +45,8 @@ class ProxmoxApiClient(
     private var authTicket: String? = null
     @Volatile
     private var csrfToken: String? = null
+    @Volatile
+    private var apiTokenAuthorization: String? = null
 
     internal companion object {
         /**
@@ -134,41 +137,82 @@ class ProxmoxApiClient(
         try { client.dispatcher.cancelAll() } catch (e: Exception) { Logger.w("ProxmoxAPI", "cancelAll: ${e.message}") }
     }
 
-    suspend fun authenticate(): Boolean = withContext(Dispatchers.IO) {
+    suspend fun authenticate(requestSecondFactor: suspend () -> String? = { null }): Boolean = withContext(Dispatchers.IO) {
         try {
-            val formBody = FormBody.Builder()
-                .add("username", "$username@$realm")
-                .add("password", password)
-                .build()
-
-            val request = Request.Builder()
-                .url("$baseUrl/access/ticket")
-                .post(formBody)
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                val responseBody = readBounded(response)
-
-                if (response.isSuccessful && responseBody != null) {
-                    val json = JSONObject(responseBody)
-                    val data = json.getJSONObject("data")
-
-                    authTicket = data.getString("ticket")
-                    csrfToken = data.getString("CSRFPreventionToken")
-
-                    Logger.i("ProxmoxAPI", "Authentication successful")
+            if (authType == "proxmox_api_token") {
+                val tokenUser = username.substringBefore('!').let {
+                    if ('@' in it) it else "$it@$realm"
+                }
+                val tokenId = username.substringAfter('!', "")
+                if (tokenUser.isBlank() || tokenUser.length > 128 || tokenId.isBlank() || tokenId.length > 128 ||
+                    password.isBlank() || password.length > 1024 ||
+                    tokenUser.any { it.isISOControl() } || tokenId.any { it.isISOControl() } ||
+                    password.any { it.isISOControl() }) {
+                    Logger.e("ProxmoxAPI", "API token credentials are incomplete or invalid")
+                    return@withContext false
+                }
+                apiTokenAuthorization = "PVEAPIToken=$tokenUser!$tokenId=$password"
+                val authenticated = try {
+                    apiGet("/cluster/resources?type=vm")
                     true
-                } else {
-                    Logger.e("ProxmoxAPI", "Authentication failed: ${response.code}")
+                } catch (e: Exception) {
+                    apiTokenAuthorization = null
+                    Logger.e("ProxmoxAPI", "API token authentication failed", e)
                     false
                 }
+                if (authenticated) Logger.i("ProxmoxAPI", "API token authentication successful")
+                return@withContext authenticated
             }
+
+            val loginName = if ('@' in username) username else "$username@$realm"
+            val firstResponse = postTicket(
+                FormBody.Builder().add("username", loginName).add("password", password).build()
+            ) ?: return@withContext false
+            val firstData = firstResponse.optJSONObject("data") ?: return@withContext false
+            if (firstData.optBoolean("NeedTFA")) {
+                val challengeTicket = firstData.optString("ticket").takeIf { it.isNotBlank() }
+                    ?: return@withContext false
+                val response = requestSecondFactor() ?: return@withContext false
+                val kind = response.substringBefore(':')
+                val code = response.substringAfter(':', "")
+                if (kind !in setOf("totp", "recovery") || code.isBlank() || code.any { it.isISOControl() }) {
+                    return@withContext false
+                }
+                val secondResponse = postTicket(
+                    FormBody.Builder()
+                        .add("username", loginName)
+                        .add("tfa-challenge", challengeTicket)
+                        .add("password", "$kind:$code")
+                        .build()
+                ) ?: return@withContext false
+                setSession(secondResponse.optJSONObject("data") ?: return@withContext false)
+            } else {
+                setSession(firstData)
+            }
+            Logger.i("ProxmoxAPI", "Authentication successful")
+            true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Authentication error", e)
             false
         }
+    }
+
+    private fun postTicket(body: RequestBody): JSONObject? {
+        val request = Request.Builder().url("$baseUrl/access/ticket").post(body).build()
+        return client.newCall(request).execute().use { response ->
+            val responseBody = readBounded(response)
+            if (response.isSuccessful && responseBody != null) JSONObject(responseBody) else {
+                Logger.e("ProxmoxAPI", "Authentication failed: ${response.code}")
+                null
+            }
+        }
+    }
+
+    private fun setSession(data: JSONObject) {
+        authTicket = data.getString("ticket")
+        csrfToken = data.getString("CSRFPreventionToken")
     }
 
     suspend fun getNodes(): List<ProxmoxNode> = withContext(Dispatchers.IO) {
@@ -844,11 +888,9 @@ class ProxmoxApiClient(
         }
 
     private fun apiGet(endpoint: String): JSONObject {
-        val request = Request.Builder()
-            .url("$baseUrl$endpoint")
-            .addHeader("Cookie", "PVEAuthCookie=$authTicket")
-            .get()
-            .build()
+        val builder = Request.Builder().url("$baseUrl$endpoint")
+        addAuth(builder)
+        val request = builder.get().build()
 
         return client.newCall(request).execute().use { response ->
             val responseBody = readBounded(response)
@@ -860,13 +902,20 @@ class ProxmoxApiClient(
         }
     }
 
+    private fun addAuth(builder: Request.Builder) {
+        val tokenAuthorization = apiTokenAuthorization
+        if (tokenAuthorization != null) {
+            builder.addHeader("Authorization", tokenAuthorization)
+        } else {
+            builder.addHeader("Cookie", "PVEAuthCookie=$authTicket")
+        }
+    }
+
     private fun apiDelete(endpoint: String): JSONObject {
-        val request = Request.Builder()
-            .url("$baseUrl$endpoint")
-            .addHeader("Cookie", "PVEAuthCookie=$authTicket")
-            .addHeader("CSRFPreventionToken", csrfToken ?: "")
-            .delete()
-            .build()
+        val builder = Request.Builder().url("$baseUrl$endpoint")
+        addAuth(builder)
+        if (apiTokenAuthorization == null) builder.addHeader("CSRFPreventionToken", csrfToken ?: "")
+        val request = builder.delete().build()
 
         return client.newCall(request).execute().use { response ->
             val responseBody = readBounded(response)
@@ -910,12 +959,10 @@ class ProxmoxApiClient(
             formParams.forEach { (k, v) -> add(k, v) }
         }.build()
 
-        val request = Request.Builder()
-            .url("$baseUrl$endpoint")
-            .addHeader("Cookie", "PVEAuthCookie=$authTicket")
-            .addHeader("CSRFPreventionToken", csrfToken ?: "")
-            .post(formBody)
-            .build()
+        val builder = Request.Builder().url("$baseUrl$endpoint")
+        addAuth(builder)
+        if (apiTokenAuthorization == null) builder.addHeader("CSRFPreventionToken", csrfToken ?: "")
+        val request = builder.post(formBody).build()
 
         return client.newCall(request).execute().use { response ->
             val responseBody = readBounded(response)

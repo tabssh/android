@@ -2543,6 +2543,22 @@
 
     <!-- dialog_add_hypervisor.xml -->
     <string name="hypervisor_add_realm_hint">Realm (pam/pve)</string>
+    <string name="hypervisor_auth_type_hint">Authentication method</string>
+    <string name="hypervisor_auth_password">Password (2FA prompt supported)</string>
+    <string name="hypervisor_auth_proxmox_token">Proxmox API token</string>
+    <string name="hypervisor_auth_xo_token">Xen Orchestra API token</string>
+    <string name="hypervisor_auth_proxmox_token_user_hint">Proxmox user@realm!token-id</string>
+    <string name="hypervisor_auth_token_secret_hint">API token secret</string>
+    <string name="hypervisor_auth_secret_required">Enter the password or API token secret.</string>
+    <string name="hypervisor_auth_proxmox_token_console_note">Proxmox API tokens cannot open VM or system consoles. Token access also depends on token ACLs and the backing user permissions.</string>
+    <string name="hypervisor_auth_xo_token_note">Create this token in Xen Orchestra after signing in with TOTP. It follows account permissions and expiry.</string>
+    <string name="hypervisor_auth_vmware_oauth_note">OAuth provides vCenter REST access. VMware console access, snapshots, and guest shutdown or restart require password authentication.</string>
+    <string name="hypervisor_auth_vmware_oauth">VMware OAuth sign-in</string>
+    <string name="vmware_oauth_issuer_hint">OpenID Connect issuer URL</string>
+    <string name="vmware_oauth_client_id_hint">Public OAuth client ID</string>
+    <string name="vmware_oauth_audience_hint">vCenter audience/resource (optional)</string>
+    <string name="vmware_oauth_redirect_help">Register this redirect URI with your identity provider: io.github.tabssh:/oauth2redirect. The client must allow authorization-code sign-in with PKCE.</string>
+    <string name="vmware_oauth_config_required">Enter the OIDC issuer URL and public client ID.</string>
     <string name="hypervisor_add_api_type_hint">API Type</string>
     <string name="hypervisor_add_api_type_auto_detect">Auto-detect (recommended)</string>
     <string name="hypervisor_add_api_type_explanation">Auto-detect: Try both APIs automatically\nDirect: Connect to host directly\nCentralized: Connect via management server</string>

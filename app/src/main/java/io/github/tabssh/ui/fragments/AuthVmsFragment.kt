@@ -96,6 +96,41 @@ class AuthVmsFragment : Fragment() {
         val editUsername = dialogView.findViewById<TextInputEditText>(R.id.edit_username)
         val editPassword = dialogView.findViewById<TextInputEditText>(R.id.edit_password)
         val editRealm    = dialogView.findViewById<TextInputEditText>(R.id.edit_realm)
+        val dropdownAuthType = dialogView.findViewById<com.google.android.material.textfield.MaterialAutoCompleteTextView>(R.id.dropdown_account_auth_type)
+        val usernameLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_account_username)
+        val secretLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_account_secret)
+        val realmLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_account_realm)
+        val authTypes = listOf(
+            "password" to getString(R.string.hypervisor_auth_password),
+            "proxmox_api_token" to getString(R.string.hypervisor_auth_proxmox_token),
+            "xo_api_token" to getString(R.string.hypervisor_auth_xo_token)
+        )
+        dropdownAuthType.setAdapter(android.widget.ArrayAdapter(
+            requireContext(), android.R.layout.simple_dropdown_item_1line, authTypes.map { it.second }
+        ))
+        var selectedAuthType = existing?.authType?.takeIf { type -> authTypes.any { it.first == type } } ?: "password"
+        dropdownAuthType.setText(authTypes.first { it.first == selectedAuthType }.second, false)
+        dropdownAuthType.setOnItemClickListener { _, _, position, _ ->
+            val nextAuthType = authTypes.getOrNull(position)?.first ?: "password"
+            if (nextAuthType != selectedAuthType) editPassword.setText("")
+            selectedAuthType = nextAuthType
+            usernameLayout.hint = getString(
+                if (selectedAuthType == "proxmox_api_token") R.string.hypervisor_auth_proxmox_token_user_hint
+                else R.string.username_hint
+            )
+            secretLayout.hint = getString(
+                if (selectedAuthType == "password") R.string.password_hint else R.string.hypervisor_auth_token_secret_hint
+            )
+            realmLayout.visibility = if (selectedAuthType == "xo_api_token") View.GONE else View.VISIBLE
+        }
+        usernameLayout.hint = getString(
+            if (selectedAuthType == "proxmox_api_token") R.string.hypervisor_auth_proxmox_token_user_hint
+            else R.string.username_hint
+        )
+        secretLayout.hint = getString(
+            if (selectedAuthType == "password") R.string.password_hint else R.string.hypervisor_auth_token_secret_hint
+        )
+        realmLayout.visibility = if (selectedAuthType == "xo_api_token") View.GONE else View.VISIBLE
 
         existing?.let { acc ->
             editName.setText(acc.name)
@@ -105,7 +140,7 @@ class AuthVmsFragment : Fragment() {
                 val hasPw = HypervisorPasswordStore
                     .retrieveAccountPassword(requireContext(), acc.id)?.isNotBlank() == true
                 withContext(Dispatchers.Main) {
-                    if (hasPw) {
+                    if (hasPw && selectedAuthType == acc.authType) {
                         editPassword.setText(PASSWORD_MASK)
                         editPassword.hint = getString(R.string.identity_password_set_hint)
                     }
@@ -122,7 +157,7 @@ class AuthVmsFragment : Fragment() {
                     Toast.makeText(requireContext(), getString(R.string.xcpng_name_required), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-                saveVirtAccount(existing, name, editUsername, editPassword, editRealm)
+                saveVirtAccount(existing, name, selectedAuthType, editUsername, editPassword, editRealm)
             }
             .setNegativeButton(getString(R.string.cancel), null)
             .show()
@@ -132,6 +167,7 @@ class AuthVmsFragment : Fragment() {
     private fun saveVirtAccount(
         existing: HypervisorAccount?,
         name: String,
+        authType: String,
         editUsername: TextInputEditText,
         editPassword: TextInputEditText,
         editRealm: TextInputEditText
@@ -140,15 +176,25 @@ class AuthVmsFragment : Fragment() {
         val password = editPassword.text?.toString().orEmpty()
         val realm = editRealm.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
 
-        if (username.isBlank()) {
+        if (username.isBlank() && authType != "xo_api_token") {
             Toast.makeText(requireContext(), getString(R.string.identity_username_required), Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (password.isBlank() && existing == null) {
+            Toast.makeText(requireContext(), getString(R.string.hypervisor_auth_secret_required), Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (existing != null && existing.authType != authType &&
+            (password.isBlank() || password == PASSWORD_MASK)
+        ) {
+            Toast.makeText(requireContext(), getString(R.string.hypervisor_auth_secret_required), Toast.LENGTH_SHORT).show()
             return
         }
 
         lifecycleScope.launch {
             val savedId: Long = if (existing == null) {
                 app.database.hypervisorAccountDao().insert(
-                    HypervisorAccount(name = name, username = username, realm = realm)
+                    HypervisorAccount(name = name, username = username, realm = realm, authType = authType)
                 )
             } else {
                 app.database.hypervisorAccountDao().update(
@@ -156,6 +202,7 @@ class AuthVmsFragment : Fragment() {
                         name = name,
                         username = username,
                         realm = realm,
+                        authType = authType,
                         modifiedAt = System.currentTimeMillis()
                     )
                 )

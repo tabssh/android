@@ -25,6 +25,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import io.github.tabssh.utils.showError
 import io.github.tabssh.utils.tabSSHApp
+import io.github.tabssh.ui.dialogs.promptProxmoxSecondFactor
+import io.github.tabssh.ui.dialogs.promptSshKeyboardInteractive
+import androidx.activity.result.contract.ActivityResultContracts
 
 class HypervisorEditActivity : TabSSHActivity() {
 
@@ -64,6 +67,44 @@ class HypervisorEditActivity : TabSSHActivity() {
     // account; the inline username/password/realm fields hide.
     private lateinit var dropdownAccount: AutoCompleteTextView
     private lateinit var layoutAccount: com.google.android.material.textfield.TextInputLayout
+    private lateinit var dropdownAuthType: AutoCompleteTextView
+    private lateinit var layoutAuthType: com.google.android.material.textfield.TextInputLayout
+    private lateinit var layoutVmwareOauth: LinearLayout
+    private lateinit var editOauthIssuer: TextInputEditText
+    private lateinit var editOauthClientId: TextInputEditText
+    private lateinit var editOauthAudience: TextInputEditText
+    private lateinit var textAuthTypeHint: TextView
+    private var selectedAuthType: String = "password"
+    private val vmwareOAuthTestLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val token = result.data?.getStringExtra(VMwareOAuthActivity.EXTRA_ACCESS_TOKEN)
+        val host = editHost.text?.toString().orEmpty()
+        val verifySsl = switchVerifySsl.isChecked
+        val port = editPort.text?.toString()?.toIntOrNull() ?: 443
+        lifecycleScope.launch {
+            try {
+                val ok = result.resultCode == RESULT_OK && !token.isNullOrBlank() && withContext(Dispatchers.IO) {
+                    VMwareApiClient(
+                        host = host,
+                        username = "",
+                        password = "",
+                        verifySsl = verifySsl,
+                        bearerToken = token,
+                        port = port
+                    ).authenticate()
+                }
+                Toast.makeText(
+                    this@HypervisorEditActivity,
+                    getString(if (ok) R.string.hypervisor_edit_test_successful else R.string.hypervisor_edit_test_failed),
+                    Toast.LENGTH_LONG
+                ).show()
+            } finally {
+                if (!isFinishing && !isDestroyed) {
+                    buttonTestConnection.isEnabled = true
+                    buttonTestConnection.text = getString(R.string.hypervisor_edit_test_connection_button)
+                }
+            }
+        }
+    }
     private var availableAccounts: List<io.github.tabssh.storage.database.entities.HypervisorAccount> = emptyList()
     private var selectedAccountId: Long? = null
 
@@ -173,6 +214,10 @@ class HypervisorEditActivity : TabSSHActivity() {
         editNotes.addTextChangedListener(watcher)
         dropdownApiType.addTextChangedListener(watcher)
         dropdownAccount.addTextChangedListener(watcher)
+        dropdownAuthType.addTextChangedListener(watcher)
+        editOauthIssuer.addTextChangedListener(watcher)
+        editOauthClientId.addTextChangedListener(watcher)
+        editOauthAudience.addTextChangedListener(watcher)
         dropdownSshIdentity.addTextChangedListener(watcher)
         switchVerifySsl.setOnCheckedChangeListener { _, checked ->
             hasUnsavedChanges = true
@@ -278,10 +323,13 @@ class HypervisorEditActivity : TabSSHActivity() {
         // calls applyAccountSelection(null) again → infinite recursion → ANR.
         if (accountChosen) {
             layoutRealm.visibility = View.GONE
+            selectedAuthType = availableAccounts.firstOrNull { it.id == accountId }?.authType ?: "password"
         } else {
             val isProxmox = hypervisorTypes.getOrNull(spinnerType.selectedItemPosition) == HypervisorType.PROXMOX
             layoutRealm.visibility = if (isProxmox) View.VISIBLE else View.GONE
+            refreshAuthTypeDropdown(hypervisorTypes.getOrNull(spinnerType.selectedItemPosition) ?: HypervisorType.PROXMOX)
         }
+        if (::layoutVmwareOauth.isInitialized) applyAuthTypeUi()
     }
 
     private fun setupViews() {
@@ -312,6 +360,13 @@ class HypervisorEditActivity : TabSSHActivity() {
         buttonImportHost = findViewById(R.id.button_import_host)
         dropdownAccount = findViewById(R.id.dropdown_account)
         layoutAccount = findViewById(R.id.layout_account)
+        dropdownAuthType = findViewById(R.id.dropdown_auth_type)
+        layoutAuthType = findViewById(R.id.layout_auth_type)
+        layoutVmwareOauth = findViewById(R.id.layout_vmware_oauth)
+        editOauthIssuer = findViewById(R.id.edit_oauth_issuer)
+        editOauthClientId = findViewById(R.id.edit_oauth_client_id)
+        editOauthAudience = findViewById(R.id.edit_oauth_audience)
+        textAuthTypeHint = findViewById(R.id.text_auth_type_hint)
         dropdownSshIdentity = findViewById(R.id.dropdown_ssh_identity)
         layoutSshIdentity = findViewById(R.id.layout_ssh_identity)
     }
@@ -520,6 +575,7 @@ class HypervisorEditActivity : TabSSHActivity() {
         layoutAccount.visibility = View.VISIBLE
 
         refreshAccountDropdown()
+        refreshAuthTypeDropdown(selectedType)
 
         when (selectedType) {
             HypervisorType.PROXMOX -> {
@@ -557,6 +613,68 @@ class HypervisorEditActivity : TabSSHActivity() {
         }
     }
 
+    private fun refreshAuthTypeDropdown(type: HypervisorType) {
+        val values = when (type) {
+            HypervisorType.PROXMOX -> listOf(
+                "password" to getString(R.string.hypervisor_auth_password),
+                "proxmox_api_token" to getString(R.string.hypervisor_auth_proxmox_token)
+            )
+            HypervisorType.XCPNG -> listOf(
+                "password" to getString(R.string.hypervisor_auth_password),
+                "xo_api_token" to getString(R.string.hypervisor_auth_xo_token)
+            )
+            HypervisorType.VMWARE -> listOf(
+                "password" to getString(R.string.hypervisor_auth_password),
+                "vmware_oauth" to getString(R.string.hypervisor_auth_vmware_oauth)
+            )
+            else -> listOf("password" to getString(R.string.hypervisor_auth_password))
+        }
+        val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, values.map { it.second })
+        dropdownAuthType.setAdapter(adapter)
+        val index = values.indexOfFirst { it.first == selectedAuthType }.takeIf { it >= 0 } ?: 0
+        selectedAuthType = values[index].first
+        dropdownAuthType.setText(values[index].second, false)
+        dropdownAuthType.setOnItemClickListener { _, _, position, _ ->
+            val nextAuthType = values.getOrNull(position)?.first ?: "password"
+            if (nextAuthType != selectedAuthType) editPassword.setText("")
+            selectedAuthType = nextAuthType
+            applyAuthTypeUi()
+        }
+        val hasAccount = selectedAccountId != null
+        layoutAuthType.visibility = if (hasAccount) View.GONE else View.VISIBLE
+        if (hasAccount) {
+            val account = availableAccounts.firstOrNull { it.id == selectedAccountId }
+            selectedAuthType = account?.authType ?: "password"
+        }
+        applyAuthTypeUi()
+    }
+
+    private fun applyAuthTypeUi() {
+        val isOAuth = selectedAuthType == "vmware_oauth"
+        layoutVmwareOauth.visibility = if (isOAuth && selectedAccountId == null) View.VISIBLE else View.GONE
+        val selectedType = hypervisorTypes.getOrNull(spinnerType.selectedItemPosition)
+        textAuthTypeHint.text = if (selectedType == HypervisorType.PROXMOX && selectedAuthType == "proxmox_api_token") {
+            getString(R.string.hypervisor_auth_proxmox_token_console_note)
+        } else if (selectedType == HypervisorType.XCPNG && selectedAuthType == "xo_api_token") {
+            getString(R.string.hypervisor_auth_xo_token_note)
+        } else if (selectedType == HypervisorType.VMWARE && isOAuth) {
+            getString(R.string.hypervisor_auth_vmware_oauth_note)
+        } else ""
+        textAuthTypeHint.visibility = if (textAuthTypeHint.text.isNotBlank()) View.VISIBLE else View.GONE
+        if (selectedAccountId == null) {
+            layoutUsername.visibility = if (isOAuth) View.GONE else View.VISIBLE
+            layoutPassword.visibility = if (isOAuth) View.GONE else View.VISIBLE
+        }
+        val tokenMode = selectedAuthType != "password"
+        layoutUsername.hint = getString(
+            if (selectedAuthType == "proxmox_api_token") R.string.hypervisor_auth_proxmox_token_user_hint
+            else R.string.username_hint
+        )
+        layoutPassword.hint = getString(
+            if (tokenMode && !isOAuth) R.string.hypervisor_auth_token_secret_hint else R.string.password_hint
+        )
+    }
+
     /**
      * Sole owner of the account dropdown's adapter AND its item-click listener —
      * the two must always be built from the same filtered list or a tap resolves
@@ -566,8 +684,13 @@ class HypervisorEditActivity : TabSSHActivity() {
      * list; otherwise clears to "(none)".
      */
     private fun refreshAccountDropdown() {
-        // OCI accounts are never shown via this spinner; filter them out for all types
-        val filtered = availableAccounts.filter { acc -> acc.authType != "oci_api_key" }
+        val selectedType = hypervisorTypes.getOrNull(spinnerType.selectedItemPosition)
+        val compatibleTypes = when (selectedType) {
+            HypervisorType.PROXMOX -> setOf("password", "proxmox_api_token")
+            HypervisorType.XCPNG -> setOf("password", "xo_api_token")
+            else -> setOf("password")
+        }
+        val filtered = availableAccounts.filter { acc -> acc.authType in compatibleTypes }
         val labels = mutableListOf(getString(R.string.hypervisor_edit_account_none))
         labels += filtered.map { it.getDisplayName() }
         dropdownAccount.setAdapter(
@@ -623,7 +746,11 @@ class HypervisorEditActivity : TabSSHActivity() {
                     editPassword.setText(
                         HypervisorPasswordStore.retrieve(this@HypervisorEditActivity, hypervisor)
                     )
+                    selectedAuthType = hypervisor.authType
                     editRealm.setText(hypervisor.realm ?: "pam")
+                    editOauthIssuer.setText(hypervisor.oauthIssuerUrl.orEmpty())
+                    editOauthClientId.setText(hypervisor.oauthClientId.orEmpty())
+                    editOauthAudience.setText(hypervisor.oauthAudience.orEmpty())
                     switchVerifySsl.isChecked = hypervisor.verifySsl
 
                     // Account dropdown — re-fetch on IO for the same reason, then
@@ -699,6 +826,12 @@ class HypervisorEditActivity : TabSSHActivity() {
 
     private fun testConnection() {
         if (!validateFields()) return
+
+        val selectedType = hypervisorTypes[spinnerType.selectedItemPosition]
+        if (selectedType == HypervisorType.VMWARE && selectedAuthType == "vmware_oauth") {
+            testVmwareOAuthConnection()
+            return
+        }
         
         buttonTestConnection.isEnabled = false
         buttonTestConnection.text = getString(R.string.conn_edit_testing_ellipsis)
@@ -730,16 +863,30 @@ class HypervisorEditActivity : TabSSHActivity() {
                     editPassword.text.toString()
                 }
                 val realm = account?.realm ?: editRealm.text.toString()
+                val authType = account?.authType ?: selectedAuthType
 
                 var success = false
                 when (type) {
                     HypervisorType.PROXMOX -> {
-                        val client = ProxmoxApiClient(host, port, username, password, realm, verifySsl)
-                        success = client.authenticate()
+                        val client = ProxmoxApiClient(
+                            host, port, username, password, realm, verifySsl = verifySsl,
+                            authType = authType
+                        )
+                        success = client.authenticate {
+                            withContext(Dispatchers.Main) { promptProxmoxSecondFactor() }
+                        }
                     }
                     HypervisorType.XCPNG -> {
-                        val client = XCPngApiClient(host, port, username, password, verifySsl)
-                        success = client.authenticate()
+                        if (authType == "xo_api_token") {
+                            val client = io.github.tabssh.hypervisor.xcpng.XenOrchestraApiClient(
+                                host = host, port = port, email = username, password = password,
+                                verifySsl = verifySsl, authType = authType
+                            )
+                            success = client.authenticate()
+                        } else {
+                            val client = XCPngApiClient(host, port, username, password, verifySsl)
+                            success = client.authenticate()
+                        }
                     }
                     HypervisorType.VMWARE -> {
                         val client = VMwareApiClient(host, username, password, verifySsl)
@@ -758,7 +905,10 @@ class HypervisorEditActivity : TabSSHActivity() {
                                 verifySsl = verifySsl,
                                 sshIdentityId = selectedSshIdentityId
                             ),
-                            passwordOverride = password
+                            passwordOverride = password,
+                            keyboardInteractivePrompt = { prompts, echo, cachedPassword ->
+                                promptSshKeyboardInteractive(prompts, echo, cachedPassword)
+                            }
                         )
                         client.connect()
                         client.disconnect()
@@ -791,6 +941,26 @@ class HypervisorEditActivity : TabSSHActivity() {
         }
     }
 
+    private fun testVmwareOAuthConnection() {
+        val issuer = editOauthIssuer.text?.toString()?.trim().orEmpty()
+        val clientId = editOauthClientId.text?.toString()?.trim().orEmpty()
+        if (issuer.isBlank() || clientId.isBlank()) {
+            showError(getString(R.string.vmware_oauth_config_required), getString(R.string.status_error))
+            return
+        }
+        buttonTestConnection.isEnabled = false
+        buttonTestConnection.text = getString(R.string.conn_edit_testing_ellipsis)
+        vmwareOAuthTestLauncher.launch(
+            android.content.Intent(this, VMwareOAuthActivity::class.java)
+                .putExtra(VMwareOAuthActivity.EXTRA_ISSUER, issuer)
+                .putExtra(VMwareOAuthActivity.EXTRA_CLIENT_ID, clientId)
+                .putExtra(VMwareOAuthActivity.EXTRA_AUDIENCE, editOauthAudience.text?.toString()?.trim())
+                .putExtra(VMwareOAuthActivity.EXTRA_HOST, editHost.text.toString().trim())
+                .putExtra(VMwareOAuthActivity.EXTRA_PORT, editPort.text.toString().toInt())
+                .putExtra(VMwareOAuthActivity.EXTRA_VERIFY_SSL, switchVerifySsl.isChecked)
+        )
+    }
+
     private fun saveHypervisor() {
         if (!validateFields()) return
         // A second tap while the first save coroutine is still in flight used to
@@ -820,6 +990,9 @@ class HypervisorEditActivity : TabSSHActivity() {
                 // / password / realm (those resolve from the account at
                 // connect time via HypervisorPasswordStore.resolveCredentials).
                 val accountId = selectedAccountId
+                val effectiveAuthType = if (accountId != null) {
+                    availableAccounts.firstOrNull { it.id == accountId }?.authType ?: "password"
+                } else selectedAuthType
                 val plaintextPassword = editPassword.text.toString()
                 val hypervisor = HypervisorProfile(
                     id = hypervisorId ?: 0,
@@ -840,6 +1013,10 @@ class HypervisorEditActivity : TabSSHActivity() {
                     apiTypeOverride = apiTypeOverride,
                     linkedConnectionId = linkedConnectionId,
                     accountId = accountId,
+                    authType = effectiveAuthType,
+                    oauthIssuerUrl = editOauthIssuer.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                    oauthClientId = editOauthClientId.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+                    oauthAudience = editOauthAudience.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
                     notes = editNotes.text.toString().takeIf { it.isNotBlank() },
                     lastConnected = editingHypervisor?.lastConnected ?: 0,
                     createdAt = editingHypervisor?.createdAt ?: System.currentTimeMillis(),
@@ -865,7 +1042,10 @@ class HypervisorEditActivity : TabSSHActivity() {
                 // keeps the credential state consistent with the row.
                 val storeOk = withContext(NonCancellable) {
                     if (accountId == null) {
-                        if (plaintextPassword.isNotBlank()) {
+                        if (effectiveAuthType == "vmware_oauth") {
+                            HypervisorPasswordStore.clear(this@HypervisorEditActivity, savedId)
+                            true
+                        } else if (plaintextPassword.isNotBlank()) {
                             // Inline-credential path: persist the per-host password.
                             HypervisorPasswordStore.store(
                                 this@HypervisorEditActivity, savedId, plaintextPassword
@@ -934,7 +1114,15 @@ class HypervisorEditActivity : TabSSHActivity() {
         // Skip inline credential checks when a reusable account is selected;
         // those fields are hidden and credentials resolve from the account.
         if (selectedAccountId == null) {
-            if (editUsername.text.toString().isBlank()) {
+            val selectedType = hypervisorTypes.getOrNull(spinnerType.selectedItemPosition)
+            val isOAuth = selectedType == HypervisorType.VMWARE && selectedAuthType == "vmware_oauth"
+            val usernameOptional = selectedType == HypervisorType.XCPNG && selectedAuthType == "xo_api_token"
+            if (isOAuth) {
+                if (editOauthIssuer.text.toString().isBlank() || editOauthClientId.text.toString().isBlank()) {
+                    showError(getString(R.string.vmware_oauth_config_required), getString(R.string.status_error))
+                    return false
+                }
+            } else if (!usernameOptional && editUsername.text.toString().isBlank()) {
                 layoutUsername.error = getString(R.string.identity_username_required)
                 return false
             }
@@ -942,7 +1130,7 @@ class HypervisorEditActivity : TabSSHActivity() {
             // selected — the key alone is sufficient for pubkey auth.
             val isLibvirtWithKey = hypervisorTypes.getOrNull(spinnerType.selectedItemPosition) == HypervisorType.LIBVIRT
                 && selectedSshIdentityId != null
-            if (!isLibvirtWithKey && editPassword.text.toString().isBlank()) {
+            if (!isOAuth && !isLibvirtWithKey && editPassword.text.toString().isBlank()) {
                 layoutPassword.error = getString(R.string.hypervisor_edit_password_required)
                 return false
             }
