@@ -194,9 +194,21 @@ class SyncDataApplier {
                 data.groups.forEach { g ->
                     try {
                         if (suppressed(TombstoneRecorder.GROUP, g.id, g.modifiedAt)) return@forEach
+                        val sameId = database.connectionGroupDao().getGroupById(g.id)
                         val existing = database.connectionGroupDao()
                             .findByNaturalKey(g.name, g.parentId, g.id)
-                        if (existing != null) {
+                        if (sameId != null && existing == null) {
+                            // Same group on both devices: the newer edit wins, including a
+                            // rename. Previously the REPLACE below let a stale remote name
+                            // overwrite a newer local rename.
+                            if (!remoteIsStale(sameId.modifiedAt, g.modifiedAt)) {
+                                val incoming = g.copy(isCollapsed = sameId.isCollapsed)
+                                if (writeIfChanged(sameId, incoming) { database.connectionGroupDao().updateGroup(it) }) {
+                                    appliedCount++
+                                }
+                            }
+                            return@forEach
+                        } else if (existing != null) {
                             groupIdRemap[g.id] = existing.id
                             val merged = mergeGroupFields(existing, g)
                             if (merged != existing) {
@@ -1206,7 +1218,8 @@ class SyncDataApplier {
                 // UUID PK, so a remote row that semantically matches a local
                 // one but has a different UUID slips through as "added" — we
                 // catch it here and merge instead of inserting a duplicate.
-                val existing = database.connectionDao()
+                val sameId = database.connectionDao().getConnectionById(connection.id)
+                val existing = sameId ?: database.connectionDao()
                     .findDuplicate(connection.host, connection.port, connection.username, connection.id)
                 if (existing != null) {
                     val merged = mergeConnectionFields(existing, connection)
@@ -1277,7 +1290,7 @@ class SyncDataApplier {
 
         result.added.forEach { key ->
             try {
-                database.keyDao().insertKey(key)
+                database.keyDao().upsertKey(key)
                 count++
                 Logger.d(TAG, "Added key: ${key.name}")
             } catch (e: CancellationException) {

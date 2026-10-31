@@ -11,6 +11,7 @@ import io.github.tabssh.sync.log.SyncLogManager
 import io.github.tabssh.sync.models.Conflict
 import io.github.tabssh.sync.models.ConflictResolution
 import io.github.tabssh.sync.models.SyncDataPackage
+import io.github.tabssh.sync.tombstone.TombstoneRecorder
 
 /**
  * Orchestrates the full §9.6 three-way merge on top of the existing apply path.
@@ -105,6 +106,40 @@ class SyncMergeCoordinator(private val context: Context) {
             if (mapped != conn.groupId) conn.copy(groupId = mapped) else conn
         }
 
+        // 3b. A row this device deleted must not come back just because a peer
+        //     still carries it. applyAll honours local tombstones for every other
+        //     table, but the four merge types bypass it, so the same filter runs
+        //     here. A remote edit strictly newer than the delete is a deliberate
+        //     resurrection: it proceeds and the stale tombstone is cleared.
+        val tombstones = database.syncTombstoneDao().getAll()
+            .associate { (it.entityType to it.entityKey) to it.deletedAt }
+        suspend fun <T> keepUnsuppressed(
+            rows: List<T>,
+            type: String,
+            keyOf: (T) -> String,
+            modifiedOf: (T) -> Long
+        ): List<T> = rows.filter { row ->
+            val deletedAt = tombstones[type to keyOf(row)] ?: return@filter true
+            if (modifiedOf(row) > deletedAt) {
+                database.syncTombstoneDao().clear(type, keyOf(row))
+                true
+            } else {
+                false
+            }
+        }
+        val liveRemoteConnections = keepUnsuppressed(
+            remoteConnections, TombstoneRecorder.CONNECTION, { it.id }, { it.modifiedAt }
+        )
+        val liveRemoteKeys = keepUnsuppressed(
+            remote.keys, TombstoneRecorder.KEY, { it.keyId }, { it.modifiedAt }
+        )
+        val liveRemoteThemes = keepUnsuppressed(
+            remote.themes, TombstoneRecorder.THEME, { it.themeId }, { it.modifiedAt }
+        )
+        val liveRemoteHostKeys = keepUnsuppressed(
+            remote.hostKeys, TombstoneRecorder.HOST_KEY, { it.id }, { it.modifiedAt }
+        )
+
         // 4. Collect local state after the remainder apply so the merge sees the
         //    current DB (the remainder never touches these four types, but
         //    collecting afterwards keeps the ordering unambiguous).
@@ -117,22 +152,22 @@ class SyncMergeCoordinator(private val context: Context) {
         val connResult = mergeEngine.mergeConnections(
             base?.connections?.associateBy { it.id } ?: emptyMap(),
             localConnections,
-            remoteConnections
+            liveRemoteConnections
         )
         val keyResult = mergeEngine.mergeKeys(
             base?.keys?.associateBy { it.keyId } ?: emptyMap(),
             localKeys,
-            remote.keys
+            liveRemoteKeys
         )
         val themeResult = mergeEngine.mergeThemes(
             base?.themes?.associateBy { it.themeId } ?: emptyMap(),
             localThemes,
-            remote.themes
+            liveRemoteThemes
         )
         val hostKeyResult = mergeEngine.mergeHostKeys(
             base?.hostKeys?.associateBy { it.id } ?: emptyMap(),
             localHostKeys,
-            remote.hostKeys
+            liveRemoteHostKeys
         )
 
         val conflicts = connResult.conflicts + keyResult.conflicts +
@@ -156,8 +191,9 @@ class SyncMergeCoordinator(private val context: Context) {
         val autoMode = conflicts.isNotEmpty() &&
             resolveConflicts == null &&
             preferenceManager.isAutoResolveConflictsEnabled()
+        val autoResolutions = if (autoMode) resolver.autoResolveConflicts(conflicts) else emptyList()
         val autoUnresolvable = if (autoMode) {
-            conflicts.filter { !it.autoResolvable || it.localTimestamp == it.remoteTimestamp }
+            conflicts.filter { c -> autoResolutions.none { it.conflict === c } }
         } else {
             emptyList()
         }
@@ -199,9 +235,8 @@ class SyncMergeCoordinator(private val context: Context) {
                 // Conflicts it cannot decide are persisted and deferred to the
                 // next foreground open instead of being silently dropped.
                 preferenceManager.isAutoResolveConflictsEnabled() -> {
-                    val resolutions = resolver.autoResolveConflicts(conflicts)
-                    if (resolutions.isNotEmpty()) {
-                        resolver.applyResolutions(resolutions, auto = true)
+                    if (autoResolutions.isNotEmpty()) {
+                        resolver.applyResolutions(autoResolutions, auto = true)
                     }
                     if (autoUnresolvable.isNotEmpty()) {
                         deferredConflicts = autoUnresolvable.size

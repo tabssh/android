@@ -112,8 +112,12 @@ class MergeEngine {
                 }
                 localConn != null && remoteConn == null -> {
                     if (baseConn != null) {
-                        conflicts.add(createDeletedModifiedConflict("connection", id, localConn, true))
-                        merged.add(localConn)
+                        if (syncedView(localConn) == syncedView(baseConn)) {
+                            deleted.add(id)
+                        } else {
+                            conflicts.add(createDeletedModifiedConflict("connection", id, localConn, true))
+                            merged.add(localConn)
+                        }
                     } else {
                         merged.add(localConn)
                         added.add(localConn)
@@ -121,8 +125,10 @@ class MergeEngine {
                 }
                 localConn == null && remoteConn != null -> {
                     if (baseConn != null) {
-                        conflicts.add(createDeletedModifiedConflict("connection", id, remoteConn, false))
-                        merged.add(remoteConn)
+                        if (syncedView(remoteConn) != syncedView(baseConn)) {
+                            conflicts.add(createDeletedModifiedConflict("connection", id, remoteConn, false))
+                            merged.add(remoteConn)
+                        }
                     } else {
                         merged.add(remoteConn)
                         added.add(remoteConn)
@@ -305,18 +311,26 @@ class MergeEngine {
                     }
                 }
                 localKey != null && remoteKey == null -> {
-                    if (baseKey != null) {
-                        conflicts.add(createDeletedModifiedConflict("key", id, localKey, true))
+                    if (baseKey != null && syncedView(localKey) == syncedView(baseKey)) {
+                        deleted.add(id)
+                    } else {
+                        if (baseKey != null) {
+                            conflicts.add(createDeletedModifiedConflict("key", id, localKey, true))
+                        }
+                        merged.add(localKey)
+                        if (baseKey == null) added.add(localKey)
                     }
-                    merged.add(localKey)
-                    if (baseKey == null) added.add(localKey)
                 }
                 localKey == null && remoteKey != null -> {
-                    if (baseKey != null) {
-                        conflicts.add(createDeletedModifiedConflict("key", id, remoteKey, false))
+                    if (baseKey != null && syncedView(remoteKey) == syncedView(baseKey)) {
+                        Unit
+                    } else {
+                        if (baseKey != null) {
+                            conflicts.add(createDeletedModifiedConflict("key", id, remoteKey, false))
+                        }
+                        merged.add(remoteKey)
+                        if (baseKey == null) added.add(remoteKey)
                     }
-                    merged.add(remoteKey)
-                    if (baseKey == null) added.add(remoteKey)
                 }
                 else -> {
                     if (baseKey != null) deleted.add(id)

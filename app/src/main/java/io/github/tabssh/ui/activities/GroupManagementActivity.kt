@@ -219,6 +219,10 @@ class GroupManagementActivity : TabSSHActivity() {
     private fun createGroup(name: String, color: String?, icon: String?) {
         lifecycleScope.launch {
             try {
+                if (app.database.connectionGroupDao().findByNaturalKey(name, null) != null) {
+                    showError(getString(R.string.connections_group_name_taken_fmt, name), getString(R.string.status_error))
+                    return@launch
+                }
                 val group = ConnectionGroup(
                     name = name,
                     color = color,
@@ -247,6 +251,10 @@ class GroupManagementActivity : TabSSHActivity() {
     private fun updateGroup(group: ConnectionGroup, name: String, color: String?, icon: String?) {
         lifecycleScope.launch {
             try {
+                if (app.database.connectionGroupDao().findByNaturalKey(name, group.parentId, group.id) != null) {
+                    showError(getString(R.string.connections_group_name_taken_fmt, name), getString(R.string.status_error))
+                    return@launch
+                }
                 val updatedGroup = group.copy(
                     name = name,
                     color = color,

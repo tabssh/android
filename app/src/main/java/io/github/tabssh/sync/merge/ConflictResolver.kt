@@ -10,6 +10,7 @@ import io.github.tabssh.sync.log.SyncLogManager
 import io.github.tabssh.sync.models.Conflict
 import io.github.tabssh.sync.models.ConflictResolution
 import io.github.tabssh.sync.models.ConflictResolutionOption
+import io.github.tabssh.sync.models.ConflictType
 import io.github.tabssh.sync.tombstone.TombstoneRecorder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -264,21 +265,26 @@ class ConflictResolver(
      */
     fun autoResolveConflicts(conflicts: List<Conflict>): List<ConflictResolution> {
         return conflicts.mapNotNull { conflict ->
-            if (conflict.autoResolvable) {
-                val resolution = when {
-                    conflict.localTimestamp > conflict.remoteTimestamp ->
+            val resolution = when {
+                // Edit vs delete: the edited row survives. Whichever side still
+                // holds the row is the side to keep.
+                conflict.conflictType == ConflictType.DELETED_MODIFIED ->
+                    if (conflict.localEntity != null) {
                         ConflictResolutionOption.KEEP_LOCAL
-                    conflict.localTimestamp < conflict.remoteTimestamp ->
+                    } else {
                         ConflictResolutionOption.KEEP_REMOTE
-                    else -> null
-                }
-
-                resolution?.let {
-                    ConflictResolution(conflict, it, applyToAll = false)
-                }
-            } else {
-                null
+                    }
+                !conflict.autoResolvable -> null
+                conflict.localTimestamp > conflict.remoteTimestamp ->
+                    ConflictResolutionOption.KEEP_LOCAL
+                conflict.localTimestamp < conflict.remoteTimestamp ->
+                    ConflictResolutionOption.KEEP_REMOTE
+                // Exact tie: both devices wrote in the same millisecond. Either
+                // choice is arbitrary, so keep local to stay deterministic
+                // rather than deferring a conflict nobody can meaningfully decide.
+                else -> ConflictResolutionOption.KEEP_LOCAL
             }
+            resolution?.let { ConflictResolution(conflict, it, applyToAll = false) }
         }
     }
 

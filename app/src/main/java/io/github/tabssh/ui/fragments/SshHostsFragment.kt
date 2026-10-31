@@ -307,9 +307,11 @@ class SshHostsFragment : Fragment() {
                 if (newName.isNotBlank() && newName != group.name) {
                     lifecycleScope.launch {
                         try {
-                            // Check for duplicate group name before renaming
-                            val existing = app.database.connectionGroupDao().getGroupByName(newName)
-                            if (existing != null && existing.id != group.id) {
+                            // Same natural key sync uses (case/whitespace-insensitive name + parent),
+                            // otherwise a rename that passes here is collapsed into its twin on the next sync.
+                            val existing = app.database.connectionGroupDao()
+                                .findByNaturalKey(newName, group.parentId, group.id)
+                            if (existing != null) {
                                 Toast.makeText(
                                     requireContext(),
                                     getString(R.string.connections_group_name_taken_fmt, newName),

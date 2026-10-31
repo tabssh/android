@@ -341,14 +341,22 @@ class SSHSessionManager(private val context: Context) {
     suspend fun closeAllConnections() {
         Logger.d("SSHSessionManager", "Closing all connections (${activeConnections.size} active)")
         
-        activeConnections.values.forEach { connection ->
-            try {
-                connection.disconnect()
-            } catch (e: Exception) {
-                Logger.e("SSHSessionManager", "Error disconnecting connection ${connection.id}", e)
-            }
+        // Teardown runs in parallel: each disconnect can wait on a stalled
+        // socket, and a serial loop made the total wait N times the worst case.
+        coroutineScope {
+            activeConnections.values.toList().map { connection ->
+                async {
+                    try {
+                        connection.disconnect()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Logger.e("SSHSessionManager", "Error disconnecting connection ${connection.id}", e)
+                    }
+                }
+            }.awaitAll()
         }
-        
+
         activeConnections.clear()
         connectionPool.clear()
         updateConnectionStates()

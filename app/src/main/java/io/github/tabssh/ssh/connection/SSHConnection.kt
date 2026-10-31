@@ -908,6 +908,12 @@ class SSHConnection(
     }
 
     private companion object {
+        // Detached daemon-style scope for blocking JSch teardown. Independent of the
+        // per-connection scope so a cancelled owner cannot stop a close from running.
+        val teardownScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+        const val TEARDOWN_TIMEOUT_MS = 5_000L
+
         // X11 target on the Android device. XServer-XSDL and Termux:X11 both
         // default to display :0 = TCP localhost:6000. If we ever expose this
         // per-host, it lands as columns on ConnectionProfile + a UI field.
@@ -1942,7 +1948,12 @@ class SSHConnection(
             // before close on a clean `exit`.
             val exit = try { channel.exitStatus } catch (_: Exception) { -1 }
             if (exit >= 0) lastShellExitStatus = exit
-            try { channel.disconnect() } catch (_: Exception) {}
+            // channel.disconnect() writes a close packet under the session write
+            // lock and blocks on a stalled socket. Callers include the main
+            // thread (tab onDisconnected), so run it on the teardown scope.
+            teardownScope.launch {
+                try { channel.disconnect() } catch (_: Exception) {}
+            }
             // Keep the legacy [shellChannel] pointer pointing at SOMETHING
             // valid if it was the one we just closed — pick any remaining
             // open channel or null out.
@@ -2160,6 +2171,27 @@ class SSHConnection(
      * level — a future Main-thread caller will not compile without wrapping in
      * a launch or withContext, preventing silent ANR regressions.
      */
+    /**
+     * Run a blocking JSch call off the caller's thread and wait at most
+     * [timeoutMs] for it. withTimeout cannot interrupt a blocking call (it only
+     * throws after the call returns), so the work runs in its own job and the
+     * caller abandons the wait instead.
+     */
+    private suspend fun runTeardownBounded(label: String, timeoutMs: Long = TEARDOWN_TIMEOUT_MS, block: () -> Unit) {
+        val job = teardownScope.launch {
+            try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.d("SSHConnection", "$label suppressed: ${e.message}")
+            }
+        }
+        if (withTimeoutOrNull(timeoutMs) { job.join() } == null) {
+            Logger.w("SSHConnection", "$label timed out after ${timeoutMs}ms; abandoning")
+        }
+    }
+
     suspend fun disconnect() = withContext(Dispatchers.IO) {
         Logger.i("SSHConnection", "Disconnecting from ${profile.host}")
         val effectiveUser = resolvedIdentity?.username?.takeIf { it.isNotBlank() } ?: profile.username
@@ -2190,10 +2222,13 @@ class SSHConnection(
             val exit = try { shellChannel?.exitStatus ?: -1 } catch (_: Exception) { -1 }
             if (exit >= 0) lastShellExitStatus = exit
         }
-        openChannels.toList().forEach {
-            try { it.disconnect() } catch (_: Exception) {}
-        }
+        val channelsToClose = openChannels.toList()
         openChannels.clear()
+        if (channelsToClose.isNotEmpty()) {
+            runTeardownBounded("channel disconnect") {
+                channelsToClose.forEach { ch -> try { ch.disconnect() } catch (_: Exception) {} }
+            }
+        }
         shellChannel = null
         shellChannelRawIn = null
         shellChannelRawOut = null
@@ -2204,7 +2239,7 @@ class SSHConnection(
         countedOutRef = null
         countedOutWrap = null
 
-        sftpChannel?.disconnect()
+        sftpChannel?.let { sftp -> runTeardownBounded("sftp disconnect") { sftp.disconnect() } }
         sftpChannel = null
 
         // Stop X11 proxy before closing the session so any in-flight relay
@@ -2216,12 +2251,10 @@ class SSHConnection(
         // half-closed socket (e.g. remote dropped the connection without a
         // clean FIN). Bound it so a hung teardown can't hang the caller —
         // the session reference is still cleared either way.
-        try {
-            withTimeout(5_000) { session?.disconnect() }
-        } catch (_: TimeoutCancellationException) {
-            Logger.w("SSHConnection", "Session disconnect timed out after 5s")
-        } finally {
-            session = null
+        val sessionToClose = session
+        session = null
+        if (sessionToClose != null) {
+            runTeardownBounded("session disconnect") { sessionToClose.disconnect() }
         }
 
         // Disconnect jump host session if active
@@ -2234,13 +2267,11 @@ class SSHConnection(
             } catch (e: Exception) {
                 Logger.w("SSHConnection", "Failed to remove port forwarding", e)
             }
-            try {
-                withTimeout(5_000) { jumpHostSession?.disconnect() }
-            } catch (_: TimeoutCancellationException) {
-                Logger.w("SSHConnection", "Jump host session disconnect timed out after 5s")
-            } finally {
-                jumpHostSession = null
-                jumpHostLocalPort = 0
+            val jumpToClose = jumpHostSession
+            jumpHostSession = null
+            jumpHostLocalPort = 0
+            if (jumpToClose != null) {
+                runTeardownBounded("jump host session disconnect") { jumpToClose.disconnect() }
             }
         }
 

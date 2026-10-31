@@ -18,6 +18,7 @@ import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.performance.PerformanceManager
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Main application class for TabSSH
@@ -27,6 +28,9 @@ class TabSSHApplication : Application() {
     private var databaseChangeObserver: io.github.tabssh.sync.observer.DatabaseChangeObserver? = null
 
     companion object {
+        // Upper bound on the synchronous connection flush while the process is dying.
+        private const val CRASH_CLEANUP_TIMEOUT_MS = 3_000L
+
         const val STARTUP_PREFS = "tabssh_startup"
         const val KEY_STARTUP_ERROR = "startup_error"
         const val KEY_LAST_CRASH   = "last_crash"
@@ -1007,7 +1011,7 @@ class TabSSHApplication : Application() {
                 // The default handler below is about to terminate the process, so
                 // there is no later point at which these connections could be
                 // closed asynchronously — block briefly here to flush them first.
-                runBlocking { sshSessionManager.closeAllConnections() }
+                runBlocking { withTimeoutOrNull(CRASH_CLEANUP_TIMEOUT_MS) { sshSessionManager.closeAllConnections() } }
             } catch (e: Exception) {
                 Logger.w("TabSSHApplication", "Cleanup on crash failed: ${e.message}", e)
             }
@@ -1030,7 +1034,7 @@ class TabSSHApplication : Application() {
             // process is being torn down, so connections must be closed
             // synchronously here rather than fired off into a scope that may
             // never get to run.
-            runBlocking { sshSessionManager.closeAllConnections() }
+            runBlocking { withTimeoutOrNull(CRASH_CLEANUP_TIMEOUT_MS) { sshSessionManager.closeAllConnections() } }
         }
         if (securePasswordManagerLazy.isInitialized()) {
             securePasswordManager.clearSensitiveData()

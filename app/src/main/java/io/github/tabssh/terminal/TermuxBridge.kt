@@ -13,6 +13,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -79,6 +80,10 @@ class TermuxBridge(
 
         // Shared empty array for the pendingUtf8 hold-back buffer.
         private val EMPTY_BYTES = ByteArray(0)
+
+        // Closing an SSH channel stream writes a close packet and can block on a stalled
+        // socket. disconnect() is reachable from the main thread, so closes run here.
+        private val streamCloseScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
         /**
          * Number of bytes at the end of [buf] (within [len]) that form the
@@ -1073,6 +1078,7 @@ class TermuxBridge(
         // Start read loop
         Logger.i(TAG, "Starting read loop...")
         startReadLoop()
+        pushPtySizeToRemote()
 
         // Notify listeners
         Logger.i(TAG, "Notifying ${listeners.size} listeners of connection")
@@ -1485,6 +1491,28 @@ class TermuxBridge(
     @Volatile
     var onResizeCallback: ((cols: Int, rows: Int) -> Unit)? = null
 
+    /**
+     * Send the current grid size to the remote PTY. The shell channel is opened
+     * at a fixed 80x24, and layout can settle before this bridge has a resize
+     * callback; resize() then updates its size fields without telling the
+     * remote, so full-screen apps (vim, nvim, tmux) draw for the wrong
+     * geometry until the next keyboard toggle forces a size change.
+     */
+    private fun pushPtySizeToRemote() {
+        val cb = onResizeCallback ?: return
+        val cols = currentColumns
+        val rows = currentRows
+        writeScope.launch {
+            writeLock.withLock {
+                try {
+                    cb(cols, rows)
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Initial PTY size push failed: ${e.message}")
+                }
+            }
+        }
+    }
+
     fun resize(newColumns: Int, newRows: Int) {
         if (newColumns != currentColumns || newRows != currentRows) {
             currentColumns = newColumns
@@ -1575,19 +1603,24 @@ class TermuxBridge(
         // bridge's lifetime, and cancelling kills it permanently. Pending
         // writes drop on the floor when outputStream becomes null below.
 
-        try {
-            inputStream?.close()
-        } catch (e: Exception) {
-            Logger.w(TAG, "Error closing input stream", e)
-        }
+        val inToClose = inputStream
+        val outToClose = outputStream
         inputStream = null
-
-        try {
-            outputStream?.close()
-        } catch (e: Exception) {
-            Logger.w(TAG, "Error closing output stream", e)
-        }
         outputStream = null
+        if (inToClose != null || outToClose != null) {
+            streamCloseScope.launch {
+                try {
+                    inToClose?.close()
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Error closing input stream", e)
+                }
+                try {
+                    outToClose?.close()
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Error closing output stream", e)
+                }
+            }
+        }
 
         // Mosh PTY session — finishIfRunning() sends SIGHUP to the child
         // process and closes the master PTY fd.

@@ -17,6 +17,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Exiting an SSH or mosh session no longer hangs.** Closing the channel, streams, SFTP channel and session now run off the main thread, and the 5-second teardown bound is real (a blocking JSch call could not be interrupted by the old timeout). Closing all connections runs in parallel with a bounded wait on the crash and terminate paths.
+- **Full-screen apps (vim, nvim, tmux) get the right size on connect.** The remote PTY opened at 80x24 and was only corrected on the next keyboard toggle; the current grid size is now sent as soon as the session is wired.
+- **Sync no longer errors on keys present on both devices, and deleted items stay deleted.** Keys added on both sides are upserted instead of aborting, a connection present on both sides keeps its row instead of being replaced, and local tombstones are honoured for connections, keys, themes and host keys. A row deleted on one side and untouched on the other is now a clean delete instead of a conflict.
+- **Sync conflicts resolve newest-wins when auto-resolve is on.** Exact timestamp ties keep the local row, and edit-versus-delete keeps the edited row, instead of deferring the conflict indefinitely. Host-key fingerprint mismatches are still never auto-resolved.
+- **Renaming a group is no longer reverted or collapsed by sync.** A newer rename now propagates to other devices and a stale one can no longer overwrite it, and the rename and create dialogs use the same case-insensitive name and parent check as sync.
 - **Proxmox SPICE `.vv` files now connect through their advertised proxy.** The descriptor's HTTP CONNECT proxy was parsed but dropped before reaching libspice; proxy-enabled launches now use it, and SPICE connection failures are surfaced to the user.
 - **Herdr is now supported as a terminal multiplexer.** It can be selected for auto-launch and the PRE key, uses its Ctrl+B prefix by default, and supports named-session attach and the ask-on-connect picker.
 - **Bundled Tor is available without an enable switch and runs only while in use.** Builds without its native binary hide the Tor route. “Check Tor Status” now bootstraps Tor and verifies the SOCKS5 listener, reporting success or failure.
