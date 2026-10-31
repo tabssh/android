@@ -1,8 +1,8 @@
-[ ] fix the logout bug(exit hang from ssh/mosh).
-[ ] fix sync errors and deduplicate/merge(newest wins).
-[ ] fix group renaming bugs.
-[ ] fix main thread and slow actions.
-[ ] fix keyboard resizing/toggle ui issues(IE: vim/nvim breaks)
+[x] fix the logout bug(exit hang from ssh/mosh).
+[x] fix sync errors and deduplicate/merge(newest wins).
+[x] fix group renaming bugs.
+[x] fix main thread and slow actions.
+[x] fix keyboard resizing/toggle ui issues(IE: vim/nvim breaks)
 [ ] there are other bugs that also must be fixed, but will require code tracing.
 
 # do not implement these as i am unsure about the items below, just thinking but...
