@@ -4051,7 +4051,6 @@
     <string name="terminal_menu_split_horizontal">Quick split this tab below…</string>
     <string name="terminal_menu_mouse_enable">Enable Mouse Support</string>
     <string name="terminal_menu_mouse_disable">Disable Mouse Support</string>
-    <string name="terminal_menu_mouse_unavailable">The remote app has not enabled mouse support. Mouse mode will take effect once it does.</string>
     <string name="terminal_menu_record_macro">Record macro…</string>
     <string name="terminal_menu_replay_macro">Replay macro…</string>
 

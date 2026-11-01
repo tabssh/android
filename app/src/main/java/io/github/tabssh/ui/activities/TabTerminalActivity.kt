@@ -1221,9 +1221,6 @@ class TabTerminalActivity : TabSSHActivity() {
             mouseButton.setOnClickListener {
                 bottomSheet.dismiss()
                 mouseBridge.setTouchMouseMode(!mouseBridge.touchMouseMode)
-                if (mouseBridge.touchMouseMode && mouseBridge.getEmulator()?.isMouseTrackingActive() != true) {
-                    Toast.makeText(this, R.string.terminal_menu_mouse_unavailable, Toast.LENGTH_LONG).show()
-                }
             }
         }
 

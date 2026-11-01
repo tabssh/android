@@ -2446,15 +2446,20 @@ class TerminalView @JvmOverloads constructor(
     }
 
     private fun sendTrackpadButton(button: Int, pressed: Boolean) {
-        val emulator = termuxBridge?.getEmulator() ?: return
-        if (!emulator.isMouseTrackingActive()) {
-            Logger.d("TerminalView.Mouse", "button=$button pressed=$pressed dropped: remote mouse tracking is off")
-            return
+        sendTrackpadEvent(button, mouseCol(tpPointerX), mouseRow(tpPointerY), pressed)
+    }
+
+    // Delivers a mouse event. With remote tracking on the emulator picks the encoding;
+    // with it off (mosh drops the request, apps start late) we force SGR so mouse mode still works.
+    private fun sendTrackpadEvent(button: Int, col: Int, row: Int, pressed: Boolean) {
+        val bridge = termuxBridge ?: return
+        val emulator = bridge.getEmulator() ?: return
+        Logger.d("TerminalView.Mouse", "button=$button pressed=$pressed at $col,$row tracking=${emulator.isMouseTrackingActive()}")
+        if (emulator.isMouseTrackingActive()) {
+            emulator.sendMouseEvent(button, col, row, pressed)
+        } else {
+            bridge.writeString("\u001b[<$button;$col;$row${if (pressed) 'M' else 'm'}")
         }
-        val col = mouseCol(tpPointerX)
-        val row = mouseRow(tpPointerY)
-        Logger.d("TerminalView.Mouse", "button=$button pressed=$pressed at $col,$row")
-        emulator.sendMouseEvent(button, col, row, pressed)
     }
 
     private fun trackpadClick(button: Int) {
@@ -2490,7 +2495,7 @@ class TerminalView @JvmOverloads constructor(
             if (col != tpDragCol || row != tpDragRow) {
                 tpDragCol = col
                 tpDragRow = row
-                termuxBridge?.getEmulator()?.sendMouseEvent(
+                sendTrackpadEvent(
                     com.termux.terminal.TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, col, row, true
                 )
             }
