@@ -79,6 +79,22 @@
             android:textColor="?attr/colorOnSurfaceVariant" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_toggle_mouse"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/button_height"
+            android:paddingStart="@dimen/space_md"
+            android:paddingEnd="@dimen/space_md"
+            android:gravity="start|center_vertical"
+            android:text="@string/terminal_menu_mouse_enable"
+            android:visibility="gone"
+            app:icon="@drawable/ic_radio_checked"
+            app:iconGravity="start"
+            app:iconPadding="@dimen/space_12dp"
+            app:iconSize="@dimen/icon_size_action" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_toggle_system_keyboard"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
@@ -87,7 +103,7 @@
             android:paddingStart="@dimen/space_md"
             android:paddingEnd="@dimen/space_md"
             android:gravity="start|center_vertical"
-            android:text="@string/terminal_menu_toggle_system_keyboard"
+            android:text="@string/terminal_menu_show_system_keyboard"
             app:icon="@drawable/ic_keyboard"
             app:iconGravity="start"
             app:iconPadding="@dimen/space_12dp"

@@ -15,6 +15,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Touch mouse support for terminal sessions.** "Enable Mouse Support" in the terminal menu (SSH, telnet, mosh, serial console, panes) turns taps into clicks and one-finger drags into held-button drags for apps that use mouse reporting (vim, tmux, herdr). It is per tab, off by default, resets on disconnect, and long-press still opens the menu. The system keyboard menu item now says Show or Hide according to its state.
+
 ### Fixed
 
 - **Exiting an SSH or mosh session no longer hangs.** Closing the channel, streams, SFTP channel and session now run off the main thread, and the 5-second teardown bound is real (a blocking JSch call could not be interrupted by the old timeout). Closing all connections runs in parallel with a bounded wait on the crash and terminate paths.

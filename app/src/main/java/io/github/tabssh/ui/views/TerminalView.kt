@@ -2373,6 +2373,11 @@ class TerminalView @JvmOverloads constructor(
         // as the scrollbar thumb, mirrored on the opposite edge.
         if (handleWheelZoneTouch(event)) return true
 
+        // Touch-to-mouse: when the user switched mouse mode on and the remote
+        // app has enabled mouse tracking, one-finger taps and drags become
+        // clicks and button-held drags instead of keyboard toggle / scroll.
+        if (handleMouseModeTouch(event)) return true
+
         // Handle single-finger gestures (scroll, tap, long press)
         if (!isScaling) {
             gestureDetector.onTouchEvent(event)
@@ -2383,6 +2388,127 @@ class TerminalView @JvmOverloads constructor(
             isScaling = false
         }
 
+        return true
+    }
+
+    // Touch-to-mouse gesture state. mouseGestureActive swallows every event of
+    // a one-finger gesture until it ends so the regular gesture detector never
+    // sees a half-gesture.
+    private var mouseGestureActive = false
+    private var mouseDragging = false
+    private var mouseLongPressFired = false
+    private var mouseDownX = 0f
+    private var mouseDownY = 0f
+    private var mouseLastCol = 0
+    private var mouseLastRow = 0
+    private var mouseLongPressRunnable: Runnable? = null
+
+    private fun mouseModeEngaged(): Boolean {
+        val bridge = termuxBridge ?: return false
+        if (!bridge.touchMouseMode) return false
+        return bridge.getEmulator()?.isMouseTrackingActive() == true
+    }
+
+    private fun mouseCol(x: Float): Int = mouseCell(x, paddingLeft.toFloat(), cellWidth, terminalCols)
+
+    private fun mouseRow(y: Float): Int = mouseCell(y, gridTop, cellHeight, terminalRows)
+
+    private fun sendMouse(button: Int, col: Int, row: Int, pressed: Boolean) {
+        termuxBridge?.getEmulator()?.sendMouseEvent(button, col, row, pressed)
+    }
+
+    private fun endMouseDrag(x: Float, y: Float) {
+        if (!mouseDragging) return
+        sendMouse(
+            com.termux.terminal.TerminalEmulator.MOUSE_LEFT_BUTTON,
+            mouseCol(x), mouseRow(y), false
+        )
+        mouseDragging = false
+    }
+
+    private fun cancelMouseLongPress() {
+        mouseLongPressRunnable?.let { removeCallbacks(it) }
+        mouseLongPressRunnable = null
+    }
+
+    /**
+     * Translate a one-finger gesture into mouse events. Edge zones (wheel,
+     * scrollbar) are handled before this runs, and multi-finger gestures are
+     * left to pinch-zoom and two-finger scrolling. Long-press is kept for the
+     * terminal menu so mouse mode can always be switched back off.
+     */
+    private fun handleMouseModeTouch(event: MotionEvent): Boolean {
+        if (!mouseGestureActive) {
+            if (event.actionMasked != MotionEvent.ACTION_DOWN || event.pointerCount != 1) return false
+            if (!mouseModeEngaged()) return false
+            mouseGestureActive = true
+            mouseDragging = false
+            mouseLongPressFired = false
+            mouseDownX = event.x
+            mouseDownY = event.y
+            mouseLastCol = mouseCol(event.x)
+            mouseLastRow = mouseRow(event.y)
+            requestFocus()
+            val fire = Runnable {
+                mouseLongPressRunnable = null
+                if (mouseGestureActive && !mouseDragging) {
+                    mouseLongPressFired = true
+                    performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                    onContextMenuRequested?.invoke(mouseDownX, mouseDownY)
+                }
+            }
+            mouseLongPressRunnable = fire
+            postDelayed(fire, android.view.ViewConfiguration.getLongPressTimeout().toLong())
+            return true
+        }
+
+        when (event.actionMasked) {
+            MotionEvent.ACTION_MOVE -> {
+                if (mouseLongPressFired) return true
+                val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
+                if (!mouseDragging) {
+                    val dx = event.x - mouseDownX
+                    val dy = event.y - mouseDownY
+                    if (dx * dx + dy * dy < slop * slop) return true
+                    cancelMouseLongPress()
+                    mouseDragging = true
+                    sendMouse(
+                        com.termux.terminal.TerminalEmulator.MOUSE_LEFT_BUTTON,
+                        mouseLastCol, mouseLastRow, true
+                    )
+                }
+                val col = mouseCol(event.x)
+                val row = mouseRow(event.y)
+                if (col != mouseLastCol || row != mouseLastRow) {
+                    mouseLastCol = col
+                    mouseLastRow = row
+                    sendMouse(
+                        com.termux.terminal.TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED,
+                        col, row, true
+                    )
+                }
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                cancelMouseLongPress()
+                endMouseDrag(event.x, event.y)
+            }
+            MotionEvent.ACTION_UP -> {
+                cancelMouseLongPress()
+                if (mouseDragging) {
+                    endMouseDrag(event.x, event.y)
+                } else if (!mouseLongPressFired) {
+                    val button = com.termux.terminal.TerminalEmulator.MOUSE_LEFT_BUTTON
+                    sendMouse(button, mouseLastCol, mouseLastRow, true)
+                    sendMouse(button, mouseLastCol, mouseLastRow, false)
+                }
+                mouseGestureActive = false
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                cancelMouseLongPress()
+                endMouseDrag(event.x, event.y)
+                mouseGestureActive = false
+            }
+        }
         return true
     }
 
@@ -4062,6 +4188,16 @@ class TerminalView @JvmOverloads constructor(
     }
 
     companion object {
+        /**
+         * 1-based terminal cell for a pixel coordinate, clamped to the grid.
+         * Mouse protocols address cells from 1, and a touch outside the grid
+         * (padding, the scrollbar gutter) must still map to a valid cell.
+         */
+        internal fun mouseCell(pos: Float, origin: Float, cellSize: Float, cells: Int): Int {
+            val size = if (cellSize > 0f) cellSize else 1f
+            return (((pos - origin) / size).toInt() + 1).coerceIn(1, cells.coerceAtLeast(1))
+        }
+
         private const val CURSOR_BLINK_INTERVAL_MS = 500L
         // Keyboard open/close animation fires two onSizeChanged events ~30 ms
         // apart. Debounce longer than the animation gap so only the settled

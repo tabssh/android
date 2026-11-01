@@ -2876,7 +2876,8 @@
     <string name="terminal_menu_new_tab">New Tab…</string>
     <string name="terminal_menu_section_open_tabs">OPEN TABS</string>
     <string name="terminal_menu_section_terminal">TERMINAL</string>
-    <string name="terminal_menu_toggle_system_keyboard">Toggle System Keyboard</string>
+    <string name="terminal_menu_show_system_keyboard">Show System Keyboard</string>
+    <string name="terminal_menu_hide_system_keyboard">Hide System Keyboard</string>
     <string name="terminal_menu_find_in_scrollback">Find in Scrollback…</string>
     <string name="terminal_menu_snippets">Snippets…</string>
     <string name="terminal_menu_start_recording">Start Transcript</string>
@@ -4048,6 +4049,9 @@
     <string name="terminal_menu_save_workspace">Save current tabs as workspace…</string>
     <string name="terminal_menu_open_workspace">Open workspace…</string>
     <string name="terminal_menu_split_horizontal">Quick split this tab below…</string>
+    <string name="terminal_menu_mouse_enable">Enable Mouse Support</string>
+    <string name="terminal_menu_mouse_disable">Disable Mouse Support</string>
+    <string name="terminal_menu_mouse_unavailable">The remote app has not enabled mouse support. Mouse mode will take effect once it does.</string>
     <string name="terminal_menu_record_macro">Record macro…</string>
     <string name="terminal_menu_replay_macro">Replay macro…</string>
 

@@ -1082,11 +1082,17 @@ class TabTerminalActivity : TabSSHActivity() {
             }
 
         // Terminal section.
-        view.findViewById<MaterialButton>(R.id.btn_toggle_system_keyboard)
-            ?.setOnClickListener {
-                bottomSheet.dismiss()
-                toggleKeyboard()
-            }
+        val systemKeyboardBtn = view.findViewById<MaterialButton>(R.id.btn_toggle_system_keyboard)
+        val imeShowing = window.decorView.let { ViewCompat.getRootWindowInsets(it) }
+            ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        systemKeyboardBtn?.text = getString(
+            if (imeShowing) R.string.terminal_menu_hide_system_keyboard
+            else R.string.terminal_menu_show_system_keyboard
+        )
+        systemKeyboardBtn?.setOnClickListener {
+            bottomSheet.dismiss()
+            toggleKeyboard()
+        }
 
         val keyBarBtn = view.findViewById<MaterialButton>(R.id.btn_toggle_key_bar)
         keyBarBtn?.text = if (customKeyboardVisible) getString(R.string.terminal_hide_key_bar) else getString(R.string.terminal_show_key_bar)
@@ -1192,6 +1198,28 @@ class TabTerminalActivity : TabSSHActivity() {
                 bottomSheet.dismiss()
                 showOpenWorkspaceDialog()
             }
+
+        val mouseBridge = when (activeTabSealed) {
+            is Tab.Ssh -> activeTabSealed.sshTab.termuxBridge
+            is Tab.Console -> activeTabSealed.consoleTab.termuxBridge
+            is Tab.Panes -> activeTabSealed.panesTab.focusedEntry()?.sshTab?.termuxBridge
+            else -> null
+        }
+        view.findViewById<MaterialButton>(R.id.btn_toggle_mouse)?.let { mouseButton ->
+            if (mouseBridge == null) return@let
+            mouseButton.visibility = View.VISIBLE
+            mouseButton.text = getString(
+                if (mouseBridge.touchMouseMode) R.string.terminal_menu_mouse_disable
+                else R.string.terminal_menu_mouse_enable
+            )
+            mouseButton.setOnClickListener {
+                bottomSheet.dismiss()
+                mouseBridge.touchMouseMode = !mouseBridge.touchMouseMode
+                if (mouseBridge.touchMouseMode && mouseBridge.getEmulator()?.isMouseTrackingActive() != true) {
+                    Toast.makeText(this, R.string.terminal_menu_mouse_unavailable, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
 
         view.findViewById<MaterialButton>(R.id.btn_record_macro)
             ?.setOnClickListener {

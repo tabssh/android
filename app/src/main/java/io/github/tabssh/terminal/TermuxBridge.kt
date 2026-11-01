@@ -1492,6 +1492,14 @@ class TermuxBridge(
     var onResizeCallback: ((cols: Int, rows: Int) -> Unit)? = null
 
     /**
+     * Per-session switch for touch-to-mouse translation in the terminal view.
+     * Off by default and reset on every disconnect, so a reconnected session
+     * always starts with the normal tap-toggles-keyboard behaviour.
+     */
+    @Volatile
+    var touchMouseMode: Boolean = false
+
+    /**
      * Send the current grid size to the remote PTY. The shell channel is opened
      * at a fixed 80x24, and layout can settle before this bridge has a resize
      * callback; resize() then updates its size fields without telling the
@@ -1597,6 +1605,7 @@ class TermuxBridge(
         Logger.i(TAG, "Disconnecting")
 
         _isConnected.value = false
+        touchMouseMode = false
         readJob?.cancel()
         readJob = null
         // Don't cancel writeScope's Job — it's a `val` shared across the
