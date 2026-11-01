@@ -164,6 +164,9 @@ class TabTerminalActivity : TabSSHActivity() {
     override val drawerMode: DrawerMode = DrawerMode.TOOLBAR_ONLY
 
     companion object {
+        // Delay before the menu's Show/Hide keyboard action so the activity window has regained focus.
+        private const val KEYBOARD_ACTION_DELAY_MS = 250L
+
         // Shared instance for quick-connect embedded-profile JSON decoding —
         // creating a new Json{} per call is measurably slower under repeated use.
         private val quickConnectJson = Json { ignoreUnknownKeys = true }
@@ -1091,7 +1094,10 @@ class TabTerminalActivity : TabSSHActivity() {
         )
         systemKeyboardBtn?.setOnClickListener {
             bottomSheet.dismiss()
-            toggleKeyboard()
+            // Act on the state the label showed, not on a fresh read: opening the sheet moves
+            // window focus away from the activity, which hides the IME. Also wait for the
+            // activity window to regain focus, or showSoftInput is silently dropped.
+            window.decorView.postDelayed({ setSystemKeyboardVisible(!imeShowing) }, KEYBOARD_ACTION_DELAY_MS)
         }
 
         val keyBarBtn = view.findViewById<MaterialButton>(R.id.btn_toggle_key_bar)
@@ -1214,7 +1220,7 @@ class TabTerminalActivity : TabSSHActivity() {
             )
             mouseButton.setOnClickListener {
                 bottomSheet.dismiss()
-                mouseBridge.touchMouseMode = !mouseBridge.touchMouseMode
+                mouseBridge.setTouchMouseMode(!mouseBridge.touchMouseMode)
                 if (mouseBridge.touchMouseMode && mouseBridge.getEmulator()?.isMouseTrackingActive() != true) {
                     Toast.makeText(this, R.string.terminal_menu_mouse_unavailable, Toast.LENGTH_LONG).show()
                 }
@@ -5943,6 +5949,22 @@ class TabTerminalActivity : TabSSHActivity() {
         Logger.d("TabTerminalActivity", "Font size reset to baseline: $baseline")
     }
     
+    private fun setSystemKeyboardVisible(show: Boolean) {
+        if (isFinishing || isDestroyed) return
+        val inputView = getActiveInputView() ?: run {
+            Logger.d("TabTerminalActivity", "setSystemKeyboardVisible($show): no active input view — no-op")
+            return
+        }
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        if (show) {
+            inputView.requestFocus()
+            imm.showSoftInput(inputView, InputMethodManager.SHOW_FORCED)
+        } else {
+            imm.hideSoftInputFromWindow(inputView.windowToken, 0)
+        }
+        Logger.d("TabTerminalActivity", "System keyboard ${if (show) "shown" else "hidden"} from menu")
+    }
+
     private fun toggleKeyboard() {
         // getActiveInputView() resolves TerminalView / VncView / SpiceView
         // depending on tab type and console display mode — VncView and

@@ -17,7 +17,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- **Touch mouse support for terminal sessions.** "Enable Mouse Support" in the terminal menu (SSH, telnet, mosh, serial console, panes) turns taps into clicks and one-finger drags into held-button drags for apps that use mouse reporting (vim, tmux, herdr). It is per tab, off by default, resets on disconnect, and long-press still opens the menu. The system keyboard menu item now says Show or Hide according to its state.
+- **Trackpad-style mouse support for terminal sessions.** "Enable Mouse Support" in the terminal menu (SSH, telnet, mosh, serial console, panes) turns the terminal into a touchpad for apps that use mouse reporting (vim, tmux, herdr): a visible pointer moves with one-finger drags, a tap clicks, a two-finger tap right-clicks, a two-finger drag scrolls, and tap-then-drag holds the button. Taps never show or hide the keyboard while it is on, and long-press still opens the menu. It is per tab, off by default, and resets on disconnect. The menu now offers Show or Hide System Keyboard from its current state, and the action no longer fails when the menu closes.
 
 ### Fixed
 

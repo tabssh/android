@@ -722,6 +722,10 @@ class TerminalView @JvmOverloads constructor(
                 post { invalidate() }
             }
 
+            override fun onTouchMouseModeChanged() {
+                post { invalidate() }
+            }
+
             override fun onCursorStateChanged(visible: Boolean) {
                 post {
                     val prefs = androidx.preference.PreferenceManager
@@ -1504,6 +1508,7 @@ class TerminalView @JvmOverloads constructor(
             }
             // Scrollback thumb overlay — last so it sits above all content.
             drawScrollThumb(canvas)
+            drawTrackpadPointer(canvas)
             return
         }
 
@@ -2373,10 +2378,9 @@ class TerminalView @JvmOverloads constructor(
         // as the scrollbar thumb, mirrored on the opposite edge.
         if (handleWheelZoneTouch(event)) return true
 
-        // Touch-to-mouse: when the user switched mouse mode on and the remote
-        // app has enabled mouse tracking, one-finger taps and drags become
-        // clicks and button-held drags instead of keyboard toggle / scroll.
-        if (handleMouseModeTouch(event)) return true
+        // Trackpad-style touch mouse (menu: Enable Mouse Support). While on, the
+        // terminal body behaves like a laptop touchpad and never toggles the keyboard.
+        if (handleTrackpadTouch(event)) return true
 
         // Handle single-finger gestures (scroll, tap, long press)
         if (!isScaling) {
@@ -2391,125 +2395,262 @@ class TerminalView @JvmOverloads constructor(
         return true
     }
 
-    // Touch-to-mouse gesture state. mouseGestureActive swallows every event of
-    // a one-finger gesture until it ends so the regular gesture detector never
-    // sees a half-gesture.
-    private var mouseGestureActive = false
-    private var mouseDragging = false
-    private var mouseLongPressFired = false
-    private var mouseDownX = 0f
-    private var mouseDownY = 0f
-    private var mouseLastCol = 0
-    private var mouseLastRow = 0
-    private var mouseLongPressRunnable: Runnable? = null
-
-    private fun mouseModeEngaged(): Boolean {
-        val bridge = termuxBridge ?: return false
-        if (!bridge.touchMouseMode) return false
-        return bridge.getEmulator()?.isMouseTrackingActive() == true
-    }
+    // Trackpad-style touch mouse. The pointer is a persistent virtual cursor moved
+    // by relative one-finger drags (not placed under the finger), drawn as an overlay.
+    // Gestures: tap = left click, two-finger tap = right click, two-finger drag =
+    // wheel, tap then drag = held-button drag, long-press = terminal menu.
+    private var tpActive = false
+    private var tpPointerX = -1f
+    private var tpPointerY = -1f
+    private var tpLastX = 0f
+    private var tpLastY = 0f
+    private var tpDownX = 0f
+    private var tpDownY = 0f
+    private var tpMoved = false
+    private var tpDragging = false
+    private var tpTapDragArmed = false
+    private var tpLastTapUpTime = 0L
+    private var tpLongPressFired = false
+    private var tpMultiTouch = false
+    private var tpMultiScrolled = false
+    private var tpMultiStartTime = 0L
+    private var tpMultiStartY = 0f
+    private var tpScrollLastY = 0f
+    private var tpScrollAccum = 0f
+    private var tpDragCol = 0
+    private var tpDragRow = 0
+    private var tpLongPressRunnable: Runnable? = null
+    private val tpPointerPath = Path()
+    private val tpFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val tpStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
 
     private fun mouseCol(x: Float): Int = mouseCell(x, paddingLeft.toFloat(), cellWidth, terminalCols)
 
     private fun mouseRow(y: Float): Int = mouseCell(y, gridTop, cellHeight, terminalRows)
 
-    private fun sendMouse(button: Int, col: Int, row: Int, pressed: Boolean) {
-        termuxBridge?.getEmulator()?.sendMouseEvent(button, col, row, pressed)
+    private fun ensureTrackpadPointer() {
+        if (tpPointerX < 0f || tpPointerY < 0f) {
+            tpPointerX = width / 2f
+            tpPointerY = height / 2f
+        }
+        clampTrackpadPointer()
     }
 
-    private fun endMouseDrag(x: Float, y: Float) {
-        if (!mouseDragging) return
-        sendMouse(
-            com.termux.terminal.TerminalEmulator.MOUSE_LEFT_BUTTON,
-            mouseCol(x), mouseRow(y), false
-        )
-        mouseDragging = false
+    private fun clampTrackpadPointer() {
+        val left = paddingLeft.toFloat()
+        val right = (width - paddingRight - scrollbarReservePx).toFloat().coerceAtLeast(left + 1f)
+        val top = gridTop.coerceAtLeast(0f)
+        val bottom = minOf(height.toFloat(), gridTop + terminalRows * cellHeight).coerceAtLeast(top + 1f)
+        tpPointerX = tpPointerX.coerceIn(left, right - 1f)
+        tpPointerY = tpPointerY.coerceIn(top, bottom - 1f)
     }
 
-    private fun cancelMouseLongPress() {
-        mouseLongPressRunnable?.let { removeCallbacks(it) }
-        mouseLongPressRunnable = null
+    private fun sendTrackpadButton(button: Int, pressed: Boolean) {
+        val emulator = termuxBridge?.getEmulator() ?: return
+        if (!emulator.isMouseTrackingActive()) {
+            Logger.d("TerminalView.Mouse", "button=$button pressed=$pressed dropped: remote mouse tracking is off")
+            return
+        }
+        val col = mouseCol(tpPointerX)
+        val row = mouseRow(tpPointerY)
+        Logger.d("TerminalView.Mouse", "button=$button pressed=$pressed at $col,$row")
+        emulator.sendMouseEvent(button, col, row, pressed)
+    }
+
+    private fun trackpadClick(button: Int) {
+        sendTrackpadButton(button, true)
+        sendTrackpadButton(button, false)
+    }
+
+    private fun cancelTrackpadLongPress() {
+        tpLongPressRunnable?.let { removeCallbacks(it) }
+        tpLongPressRunnable = null
+    }
+
+    private fun endTrackpadDrag() {
+        if (!tpDragging) return
+        sendTrackpadButton(com.termux.terminal.TerminalEmulator.MOUSE_LEFT_BUTTON, false)
+        tpDragging = false
+    }
+
+    private fun abortTrackpadGesture() {
+        cancelTrackpadLongPress()
+        endTrackpadDrag()
+        tpActive = false
+        tpMultiTouch = false
+    }
+
+    private fun moveTrackpadPointer(dx: Float, dy: Float) {
+        tpPointerX += dx * TRACKPAD_GAIN
+        tpPointerY += dy * TRACKPAD_GAIN
+        clampTrackpadPointer()
+        if (tpDragging) {
+            val col = mouseCol(tpPointerX)
+            val row = mouseRow(tpPointerY)
+            if (col != tpDragCol || row != tpDragRow) {
+                tpDragCol = col
+                tpDragRow = row
+                termuxBridge?.getEmulator()?.sendMouseEvent(
+                    com.termux.terminal.TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, col, row, true
+                )
+            }
+        }
+        invalidate()
+    }
+
+    private fun drawTrackpadPointer(canvas: Canvas) {
+        if (termuxBridge?.touchMouseMode != true || cellHeight <= 0f) return
+        ensureTrackpadPointer()
+        val s = cellHeight * 1.15f
+        val x = tpPointerX
+        val y = tpPointerY
+        tpPointerPath.reset()
+        tpPointerPath.moveTo(x, y)
+        tpPointerPath.lineTo(x, y + 0.85f * s)
+        tpPointerPath.lineTo(x + 0.22f * s, y + 0.66f * s)
+        tpPointerPath.lineTo(x + 0.38f * s, y + 1.0f * s)
+        tpPointerPath.lineTo(x + 0.52f * s, y + 0.94f * s)
+        tpPointerPath.lineTo(x + 0.36f * s, y + 0.6f * s)
+        tpPointerPath.lineTo(x + 0.64f * s, y + 0.6f * s)
+        tpPointerPath.close()
+        tpFillPaint.color = textPaint.color
+        tpStrokePaint.color = backgroundPaint.color
+        tpStrokePaint.strokeWidth = resources.displayMetrics.density * 1.5f
+        canvas.drawPath(tpPointerPath, tpStrokePaint)
+        canvas.drawPath(tpPointerPath, tpFillPaint)
     }
 
     /**
-     * Translate a one-finger gesture into mouse events. Edge zones (wheel,
-     * scrollbar) are handled before this runs, and multi-finger gestures are
-     * left to pinch-zoom and two-finger scrolling. Long-press is kept for the
-     * terminal menu so mouse mode can always be switched back off.
+     * Drive the trackpad. Runs after the edge zones (wheel, scrollbar) and pinch
+     * zoom, so those keep working. While mouse mode is on every gesture that starts
+     * in the terminal body is owned here, which is what keeps taps from toggling
+     * the keyboard.
      */
-    private fun handleMouseModeTouch(event: MotionEvent): Boolean {
-        if (!mouseGestureActive) {
-            if (event.actionMasked != MotionEvent.ACTION_DOWN || event.pointerCount != 1) return false
-            if (!mouseModeEngaged()) return false
-            mouseGestureActive = true
-            mouseDragging = false
-            mouseLongPressFired = false
-            mouseDownX = event.x
-            mouseDownY = event.y
-            mouseLastCol = mouseCol(event.x)
-            mouseLastRow = mouseRow(event.y)
-            requestFocus()
-            val fire = Runnable {
-                mouseLongPressRunnable = null
-                if (mouseGestureActive && !mouseDragging) {
-                    mouseLongPressFired = true
-                    performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-                    onContextMenuRequested?.invoke(mouseDownX, mouseDownY)
-                }
-            }
-            mouseLongPressRunnable = fire
-            postDelayed(fire, android.view.ViewConfiguration.getLongPressTimeout().toLong())
-            return true
+    private fun handleTrackpadTouch(event: MotionEvent): Boolean {
+        if (termuxBridge?.touchMouseMode != true) {
+            if (tpActive) abortTrackpadGesture()
+            return false
         }
-
+        val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
         when (event.actionMasked) {
-            MotionEvent.ACTION_MOVE -> {
-                if (mouseLongPressFired) return true
-                val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
-                if (!mouseDragging) {
-                    val dx = event.x - mouseDownX
-                    val dy = event.y - mouseDownY
-                    if (dx * dx + dy * dy < slop * slop) return true
-                    cancelMouseLongPress()
-                    mouseDragging = true
-                    sendMouse(
-                        com.termux.terminal.TerminalEmulator.MOUSE_LEFT_BUTTON,
-                        mouseLastCol, mouseLastRow, true
-                    )
+            MotionEvent.ACTION_DOWN -> {
+                abortTrackpadGesture()
+                ensureTrackpadPointer()
+                tpActive = true
+                tpMoved = false
+                tpDragging = false
+                tpLongPressFired = false
+                tpMultiTouch = false
+                tpDownX = event.x
+                tpDownY = event.y
+                tpLastX = event.x
+                tpLastY = event.y
+                tpTapDragArmed = tpLastTapUpTime != 0L &&
+                    event.eventTime - tpLastTapUpTime <= TAP_DRAG_WINDOW_MS
+                requestFocus()
+                val fire = Runnable {
+                    tpLongPressRunnable = null
+                    if (tpActive && !tpMoved && !tpMultiTouch) {
+                        tpLongPressFired = true
+                        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                        Logger.d("TerminalView.Mouse", "long press -> terminal menu")
+                        onContextMenuRequested?.invoke(tpDownX, tpDownY)
+                    }
                 }
-                val col = mouseCol(event.x)
-                val row = mouseRow(event.y)
-                if (col != mouseLastCol || row != mouseLastRow) {
-                    mouseLastCol = col
-                    mouseLastRow = row
-                    sendMouse(
-                        com.termux.terminal.TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED,
-                        col, row, true
-                    )
-                }
+                tpLongPressRunnable = fire
+                postDelayed(fire, android.view.ViewConfiguration.getLongPressTimeout().toLong())
+                return true
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
-                cancelMouseLongPress()
-                endMouseDrag(event.x, event.y)
+                if (!tpActive) return false
+                cancelTrackpadLongPress()
+                if (!tpMultiTouch && !tpDragging && event.pointerCount == 2) {
+                    tpMultiTouch = true
+                    tpMultiScrolled = false
+                    tpMultiStartTime = event.eventTime
+                    tpMultiStartY = (event.getY(0) + event.getY(1)) / 2f
+                    tpScrollLastY = tpMultiStartY
+                    tpScrollAccum = 0f
+                }
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (!tpActive) return false
+                if (tpLongPressFired) return true
+                if (tpMultiTouch) {
+                    if (event.pointerCount >= 2) {
+                        val avgY = (event.getY(0) + event.getY(1)) / 2f
+                        if (Math.abs(avgY - tpMultiStartY) > slop) tpMultiScrolled = true
+                        tpScrollAccum += tpScrollLastY - avgY
+                        tpScrollLastY = avgY
+                        val cellH = if (cellHeight > 0f) cellHeight else 20f
+                        val ticks = (tpScrollAccum / cellH).toInt()
+                        if (ticks != 0) {
+                            tpScrollAccum -= ticks * cellH
+                            val button = if (ticks > 0) {
+                                com.termux.terminal.TerminalEmulator.MOUSE_WHEELUP_BUTTON
+                            } else {
+                                com.termux.terminal.TerminalEmulator.MOUSE_WHEELDOWN_BUTTON
+                            }
+                            repeat(Math.abs(ticks)) { sendTrackpadButton(button, true) }
+                        }
+                    }
+                    return true
+                }
+                if (!tpMoved) {
+                    val dx0 = event.x - tpDownX
+                    val dy0 = event.y - tpDownY
+                    if (dx0 * dx0 + dy0 * dy0 < slop * slop) return true
+                    tpMoved = true
+                    cancelTrackpadLongPress()
+                    if (tpTapDragArmed) {
+                        tpDragging = true
+                        tpDragCol = mouseCol(tpPointerX)
+                        tpDragRow = mouseRow(tpPointerY)
+                        sendTrackpadButton(com.termux.terminal.TerminalEmulator.MOUSE_LEFT_BUTTON, true)
+                    }
+                }
+                val dx = event.x - tpLastX
+                val dy = event.y - tpLastY
+                tpLastX = event.x
+                tpLastY = event.y
+                moveTrackpadPointer(dx, dy)
+                return true
+            }
+            MotionEvent.ACTION_POINTER_UP -> {
+                if (!tpActive) return false
+                if (tpMultiTouch && event.pointerCount == 2 && !tpMultiScrolled &&
+                    event.eventTime - tpMultiStartTime <= android.view.ViewConfiguration.getLongPressTimeout()
+                ) {
+                    tpMultiScrolled = true
+                    trackpadClick(TRACKPAD_RIGHT_BUTTON)
+                }
+                return true
             }
             MotionEvent.ACTION_UP -> {
-                cancelMouseLongPress()
-                if (mouseDragging) {
-                    endMouseDrag(event.x, event.y)
-                } else if (!mouseLongPressFired) {
-                    val button = com.termux.terminal.TerminalEmulator.MOUSE_LEFT_BUTTON
-                    sendMouse(button, mouseLastCol, mouseLastRow, true)
-                    sendMouse(button, mouseLastCol, mouseLastRow, false)
+                if (!tpActive) return false
+                cancelTrackpadLongPress()
+                if (tpDragging) {
+                    endTrackpadDrag()
+                    tpLastTapUpTime = 0L
+                } else if (!tpMoved && !tpLongPressFired && !tpMultiTouch) {
+                    trackpadClick(com.termux.terminal.TerminalEmulator.MOUSE_LEFT_BUTTON)
+                    tpLastTapUpTime = event.eventTime
+                } else {
+                    tpLastTapUpTime = 0L
                 }
-                mouseGestureActive = false
+                tpActive = false
+                tpMultiTouch = false
+                return true
             }
             MotionEvent.ACTION_CANCEL -> {
-                cancelMouseLongPress()
-                endMouseDrag(event.x, event.y)
-                mouseGestureActive = false
+                if (!tpActive) return false
+                abortTrackpadGesture()
+                tpLastTapUpTime = 0L
+                return true
             }
         }
-        return true
+        return tpActive
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -4188,6 +4329,15 @@ class TerminalView @JvmOverloads constructor(
     }
 
     companion object {
+        /** Pointer travel per pixel of finger travel in trackpad mode. */
+        private const val TRACKPAD_GAIN = 1.5f
+
+        /** A second touch-down within this window of a tap becomes a held-button drag. */
+        private const val TAP_DRAG_WINDOW_MS = 300L
+
+        /** xterm button code for the right button. */
+        private const val TRACKPAD_RIGHT_BUTTON = 2
+
         /**
          * 1-based terminal cell for a pixel coordinate, clamped to the grid.
          * Mouse protocols address cells from 1, and a touch outside the grid

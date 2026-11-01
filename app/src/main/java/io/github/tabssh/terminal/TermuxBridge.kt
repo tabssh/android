@@ -1498,6 +1498,15 @@ class TermuxBridge(
      */
     @Volatile
     var touchMouseMode: Boolean = false
+        private set
+
+    /** Switch touch-mouse mode and tell listeners so the pointer overlay redraws. */
+    fun setTouchMouseMode(enabled: Boolean) {
+        if (touchMouseMode == enabled) return
+        touchMouseMode = enabled
+        Logger.i(TAG, "Touch mouse mode ${if (enabled) "enabled" else "disabled"}")
+        runOnMain { listeners.forEach { it.onTouchMouseModeChanged() } }
+    }
 
     /**
      * Send the current grid size to the remote PTY. The shell channel is opened
@@ -1605,7 +1614,7 @@ class TermuxBridge(
         Logger.i(TAG, "Disconnecting")
 
         _isConnected.value = false
-        touchMouseMode = false
+        setTouchMouseMode(false)
         readJob?.cancel()
         readJob = null
         // Don't cancel writeScope's Job — it's a `val` shared across the
@@ -1968,4 +1977,5 @@ interface TermuxBridgeListener {
     fun onCopyToClipboard(text: String)
     fun onPasteFromClipboard()
     fun onError(e: Exception)
+    fun onTouchMouseModeChanged() {}
 }
