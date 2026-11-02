@@ -17,6 +17,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Long press on plain text no longer opens a link.** On screens where full-width lines are joined into one block, any long press used to return the first link in the block. Only a press directly on a link opens the link dialog now.
+- **Link detection handles quotes and parentheses.** A link in quotes runs to its closing quote, so an inner `'` or `)` no longer cuts it short, and a `)` that closes a `(` inside the link (e.g. `Foo_(bar)`) stays part of it. Plain links, encoded characters and links wrapped in parentheses behave as before.
 - **Trackpad-style mouse support for terminal sessions.** "Enable Mouse Support" in the terminal menu (SSH, telnet, mosh, serial console, panes) turns the terminal into a touchpad for apps that use mouse reporting (vim, tmux, herdr): a visible pointer moves with one-finger drags, a tap clicks, a two-finger tap right-clicks, a two-finger drag scrolls, and tap-then-drag holds the button. Taps never show or hide the keyboard while it is on, and long-press still opens the menu. Clicks, drags and wheel events are sent even when the remote app has not announced mouse support (mosh does not pass the request through), using SGR encoding. A quick second tap is a double click. Two fingers act like a touchpad: moving together scrolls, spreading or pinching zooms the font, and a quick two-finger tap right-clicks. It is per tab, off by default, and resets on disconnect. The menu now offers Show or Hide System Keyboard from its current state, and the action no longer fails when the menu closes.
 
 ### Fixed

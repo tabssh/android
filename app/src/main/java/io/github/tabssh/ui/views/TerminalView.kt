@@ -242,7 +242,6 @@ class TerminalView @JvmOverloads constructor(
 
     // Trailing characters that should be stripped from a matched URL when they
     // appear at the very end (e.g. "see https://example.com." in a sentence).
-    private val urlTrailingStripRe = Regex("[.,;:!?)\\]'\"]+$")
     var onUrlDetected: ((String) -> Unit)? = null
 
     // Performance optimization: dirty region tracking
@@ -1534,9 +1533,9 @@ class TerminalView @JvmOverloads constructor(
                     val line = buffer.getLine(row)
                     // Regex URL underlines
                     val rowText = line?.map { it.char }?.joinToString("") ?: continue
-                    for (match in urlPattern.findAll(rowText)) {
-                        val ux = paddingLeft + match.range.first * cellWidth
-                        val uw = (match.range.last - match.range.first + 1) * cellWidth
+                    for (urlRange in findUrlRanges(rowText, urlPattern)) {
+                        val ux = paddingLeft + urlRange.first * cellWidth
+                        val uw = (urlRange.last - urlRange.first + 1) * cellWidth
                         canvas.drawRect(ux, fbUnderlineTop, ux + uw, fbUnderlineBottom, urlUnderlinePaint)
                     }
                     // OSC 8 cell-attribute underlines — run-length encoded to avoid
@@ -1861,9 +1860,9 @@ class TerminalView @JvmOverloads constructor(
                 val rowText = try {
                     buffer.getSelectedText(0, externalRow, cols, externalRow) ?: ""
                 } catch (_: Exception) { "" }
-                for (match in urlPattern.findAll(rowText)) {
-                    val ux = startX + match.range.first * cellWidth
-                    val uw = (match.range.last - match.range.first + 1) * cellWidth
+                for (urlRange in findUrlRanges(rowText, urlPattern)) {
+                    val ux = startX + urlRange.first * cellWidth
+                    val uw = (urlRange.last - urlRange.first + 1) * cellWidth
                     canvas.drawRect(ux, urlUnderlineTop, ux + uw, urlUnderlineBottom, urlUnderlinePaint)
                 }
             }
@@ -2098,9 +2097,9 @@ class TerminalView @JvmOverloads constructor(
                     val rr = r + i
                     perRowLen[i] = joinRowText(rr, rr == segEnd).length
                 }
-                for (match in urlPattern.findAll(combined)) {
-                    val mStart = match.range.first
-                    val mEnd = match.range.last
+                for (urlRange in findUrlRanges(combined, urlPattern)) {
+                    val mStart = urlRange.first
+                    val mEnd = urlRange.last
                     var acc = 0
                     for (i in 0 until nRows) {
                         val rowStart = acc
@@ -2247,9 +2246,9 @@ class TerminalView @JvmOverloads constructor(
         // return the full URL instead of a cut-off fragment.
         val rowText = getRowText(row)
         val rowTrimmedLen = rowText.trimEnd().length
-        urlPattern.findAll(rowText).firstOrNull { col in it.range }?.let { match ->
-            val touchesWrapBoundary = match.range.last >= rowTrimmedLen - 1 && isRowSoftWrapped(row)
-            if (!touchesWrapBoundary) return normaliseUrl(match.value)
+        findUrlRanges(rowText, urlPattern).firstOrNull { col in it }?.let { urlRange ->
+            val touchesWrapBoundary = urlRange.last >= rowTrimmedLen - 1 && isRowSoftWrapped(row)
+            if (!touchesWrapBoundary) return normaliseUrl(rowText.substring(urlRange))
         }
 
         // Walk backward to find the first row of the soft-wrap segment containing `row`.
@@ -2290,13 +2289,9 @@ class TerminalView @JvmOverloads constructor(
         }
         tapOffset = tapOffset.coerceIn(0, combined.length)
 
-        // Return the URL whose range covers tapOffset; fall back to the first URL found.
-        var fallback: String? = null
-        for (match in urlPattern.findAll(combined)) {
-            if (tapOffset in match.range) return normaliseUrl(match.value)
-            if (fallback == null) fallback = normaliseUrl(match.value)
-        }
-        return fallback
+        // Only a URL that actually covers the tapped character counts. Returning any other
+        // URL in the window made a long press anywhere on a link-bearing screen open a link.
+        return urlCoveringOffset(combined, tapOffset, urlPattern)?.let { normaliseUrl(it) }
     }
 
     /**
@@ -2304,7 +2299,7 @@ class TerminalView @JvmOverloads constructor(
      * is not part of the URL itself (e.g. a period at the end of a sentence).
      */
     private fun normaliseUrl(raw: String): String {
-        var url = urlTrailingStripRe.replace(raw, "")
+        var url = trimUrlTail(raw)
         if (url.startsWith("www.", ignoreCase = true) && !url.startsWith("http", ignoreCase = true)) {
             url = "http://$url"
         }
@@ -4383,6 +4378,73 @@ class TerminalView @JvmOverloads constructor(
 
         /** A second touch-down within this window of a tap becomes a held-button drag. */
         private const val TAP_DRAG_WINDOW_MS = 300L
+        // Raw URL in [text] whose range contains [offset], or null when none does
+        internal fun urlCoveringOffset(text: String, offset: Int, pattern: Regex): String? =
+            findUrlRanges(text, pattern).firstOrNull { offset in it }?.let { text.substring(it) }
+
+        // Characters a bare URL body may not contain (same set the base pattern excludes)
+        private fun isUrlStop(c: Char): Boolean = c.isWhitespace() || c in "<>\"')[]\\"
+
+        private fun countOf(text: String, from: Int, toInclusive: Int, c: Char): Int {
+            var n = 0
+            for (i in from..toInclusive) if (text[i] == c) n++
+            return n
+        }
+
+        // A quote closes a quoted URL when whatever follows could not continue the URL
+        private fun closesQuotedUrl(text: String, next: Int): Boolean =
+            next >= text.length || text[next].isWhitespace() || text[next] in ",;)]}>."
+
+        // Extends a base match: a quoted URL runs to its closing quote (so inner ' and ) stay in),
+        // and a ")" that closes a "(" inside the URL is kept (Wikipedia-style links).
+        internal fun extendUrlRange(text: String, base: IntRange): IntRange {
+            val start = base.first
+            if (start > 0 && (text[start - 1] == '"' || text[start - 1] == '\'')) {
+                val quote = text[start - 1]
+                var j = start
+                while (j < text.length && !text[j].isWhitespace()) {
+                    if (text[j] == quote && closesQuotedUrl(text, j + 1)) {
+                        if (j - 1 >= base.last) return start..(j - 1)
+                        break
+                    }
+                    j++
+                }
+            }
+            var end = base.last
+            while (end + 1 < text.length && text[end + 1] == ')' &&
+                countOf(text, start, end, '(') > countOf(text, start, end, ')')
+            ) {
+                end++
+                while (end + 1 < text.length && !isUrlStop(text[end + 1])) end++
+            }
+            return start..end
+        }
+
+        // Every URL range in [text]: base pattern matches, extended, never overlapping
+        internal fun findUrlRanges(text: String, pattern: Regex): List<IntRange> {
+            val out = ArrayList<IntRange>()
+            var nextFree = 0
+            for (match in pattern.findAll(text)) {
+                if (match.range.first < nextFree) continue
+                val range = extendUrlRange(text, match.range)
+                out.add(range)
+                nextFree = range.last + 1
+            }
+            return out
+        }
+
+        // Strips sentence punctuation from the end; a ")" stays when it closes a "(" in the URL
+        internal fun trimUrlTail(raw: String): String {
+            var end = raw.length
+            while (end > 0) {
+                val c = raw[end - 1]
+                if (c !in ".,;:!?)]'\"") break
+                if (c == ')' && countOf(raw, 0, end - 1, '(') >= countOf(raw, 0, end - 1, ')')) break
+                end--
+            }
+            return raw.substring(0, end)
+        }
+
         private const val TP_MULTI_UNDECIDED = 0
         private const val TP_MULTI_SCROLL = 1
         private const val TP_MULTI_PINCH = 2

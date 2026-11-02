@@ -348,6 +348,13 @@ android {
             // Argon2id derivations in the sync/backup tests each claim 64 MiB of
             // Java heap; the default fork heap is too small to run them
             maxHeapSize = '2g'
+            // Use pre-downloaded Robolectric android-all jars when present so a
+            // rate-limited Maven Central (HTTP 429) cannot fail the Robolectric tests
+            def robolectricCache = rootProject.file('.robolectric-cache')
+            if (robolectricCache.isDirectory()) {
+                systemProperty 'robolectric.dependency.dir', robolectricCache.absolutePath
+                systemProperty 'robolectric.offline', 'true'
+            }
             jacoco {
                 includeNoLocationClasses = true
                 excludes = ['jdk.internal.*']

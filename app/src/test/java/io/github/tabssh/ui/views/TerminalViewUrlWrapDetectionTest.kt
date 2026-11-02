@@ -70,18 +70,24 @@ class TerminalViewUrlWrapDetectionTest {
         field.set(view, value)
     }
 
+    // A view that was never laid out has a zero cell height, which collapses every
+    // tap onto row 0; give it a real height so taps can address other rows.
     private fun cellSize(view: TerminalView): Pair<Float, Float> {
         val cellWidthField = TerminalView::class.java.getDeclaredField("cellWidth")
         cellWidthField.isAccessible = true
         val cellHeightField = TerminalView::class.java.getDeclaredField("cellHeight")
         cellHeightField.isAccessible = true
+        if ((cellHeightField.get(view) as Float) <= 0f) cellHeightField.set(view, 20f)
         return Pair(cellWidthField.get(view) as Float, cellHeightField.get(view) as Float)
     }
 
     private fun detectUrlAt(view: TerminalView, row: Int, col: Int): String? {
         val (cellWidth, cellHeight) = cellSize(view)
         val x = view.paddingLeft + col * cellWidth + 1f
-        val y = view.paddingTop + row * cellHeight + 1f
+        // The tap handler measures rows from gridTop, so build the tap the same way.
+        val gridTopMethod = TerminalView::class.java.getDeclaredMethod("getGridTop")
+        gridTopMethod.isAccessible = true
+        val y = (gridTopMethod.invoke(view) as Float) + row * cellHeight + 1f
         val method = TerminalView::class.java.getDeclaredMethod(
             "detectUrlAtPosition", Float::class.java, Float::class.java
         )
@@ -100,7 +106,8 @@ class TerminalViewUrlWrapDetectionTest {
         view.sendData(line.toByteArray(Charsets.US_ASCII))
 
         for (tapRow in 0 until wrappedRows) {
-            val detected = detectUrlAt(view, tapRow, col = 5)
+            // Row 0 starts with the shell prompt; tap on the URL itself there.
+            val detected = detectUrlAt(view, tapRow, col = if (tapRow == 0) 20 else 5)
             assertEquals(url, detected, "tap on row $tapRow should resolve the full wrapped URL")
         }
     }
@@ -131,7 +138,8 @@ class TerminalViewUrlWrapDetectionTest {
         val view = newTermuxView(rows = rowsUsed + 4, data = hardBroken)
 
         for (tapRow in 0 until rowsUsed) {
-            val detected = detectUrlAt(view, tapRow, col = 5)
+            // Row 0 starts with the shell prompt; tap on the URL itself there.
+            val detected = detectUrlAt(view, tapRow, col = if (tapRow == 0) 20 else 5)
             assertEquals(url, detected, "tap on row $tapRow should resolve the full hard-broken URL")
         }
     }
