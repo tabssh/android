@@ -2356,7 +2356,7 @@ class TerminalView @JvmOverloads constructor(
         }
 
         // Handle pinch-to-zoom first (multi-touch)
-        if (event.pointerCount >= 2) {
+        if (event.pointerCount >= 2 && termuxBridge?.touchMouseMode != true) {
             scaleGestureDetector.onTouchEvent(event)
             if (isScaling) {
                 return true
@@ -2417,6 +2417,9 @@ class TerminalView @JvmOverloads constructor(
     private var tpMultiStartY = 0f
     private var tpScrollLastY = 0f
     private var tpScrollAccum = 0f
+    private var tpMultiStartDist = 0f
+    private var tpPinchStartSize = 0f
+    private var tpMultiMode = TP_MULTI_UNDECIDED
     private var tpDragCol = 0
     private var tpDragRow = 0
     private var tpLongPressRunnable: Runnable? = null
@@ -2478,9 +2481,28 @@ class TerminalView @JvmOverloads constructor(
         tpDragging = false
     }
 
+    private fun twoFingerDistance(event: MotionEvent): Float =
+        Math.hypot((event.getX(0) - event.getX(1)).toDouble(), (event.getY(0) - event.getY(1)).toDouble()).toFloat()
+
+    // Applies the pinch font scale, same as the non-mouse pinch path
+    private fun applyTrackpadPinch(event: MotionEvent) {
+        if (tpMultiStartDist <= 0f) return
+        val newSize = (tpPinchStartSize * twoFingerDistance(event) / tpMultiStartDist).coerceIn(minFontSize, maxFontSize)
+        textPaint.textSize = newSize * resources.displayMetrics.density
+        calculateCellDimensions()
+        invalidate()
+    }
+
+    private fun endTrackpadPinch() {
+        if (tpMultiMode != TP_MULTI_PINCH) return
+        tpMultiMode = TP_MULTI_DONE
+        onFontSizeChanged?.invoke(textPaint.textSize / resources.displayMetrics.density)
+    }
+
     private fun abortTrackpadGesture() {
         cancelTrackpadLongPress()
         endTrackpadDrag()
+        endTrackpadPinch()
         tpActive = false
         tpMultiTouch = false
     }
@@ -2569,9 +2591,14 @@ class TerminalView @JvmOverloads constructor(
             MotionEvent.ACTION_POINTER_DOWN -> {
                 if (!tpActive) return false
                 cancelTrackpadLongPress()
-                if (!tpMultiTouch && !tpDragging && event.pointerCount == 2) {
+                if (tpMultiTouch && event.pointerCount > 2) {
+                    tpMultiScrolled = true
+                } else if (!tpMultiTouch && !tpDragging && event.pointerCount == 2) {
                     tpMultiTouch = true
                     tpMultiScrolled = false
+                    tpMultiMode = TP_MULTI_UNDECIDED
+                    tpMultiStartDist = twoFingerDistance(event)
+                    tpPinchStartSize = textPaint.textSize / resources.displayMetrics.density
                     tpMultiStartTime = event.eventTime
                     tpMultiStartY = (event.getY(0) + event.getY(1)) / 2f
                     tpScrollLastY = tpMultiStartY
@@ -2585,7 +2612,22 @@ class TerminalView @JvmOverloads constructor(
                 if (tpMultiTouch) {
                     if (event.pointerCount >= 2) {
                         val avgY = (event.getY(0) + event.getY(1)) / 2f
-                        if (Math.abs(avgY - tpMultiStartY) > slop) tpMultiScrolled = true
+                        if (tpMultiMode == TP_MULTI_UNDECIDED) {
+                            val spread = Math.abs(twoFingerDistance(event) - tpMultiStartDist)
+                            val pan = Math.abs(avgY - tpMultiStartY)
+                            if (spread > slop || pan > slop) {
+                                tpMultiScrolled = true
+                                tpMultiMode = if (spread > pan) TP_MULTI_PINCH else TP_MULTI_SCROLL
+                                tpScrollLastY = avgY
+                                tpScrollAccum = 0f
+                            }
+                            return true
+                        }
+                        if (tpMultiMode == TP_MULTI_PINCH) {
+                            applyTrackpadPinch(event)
+                            return true
+                        }
+                        if (tpMultiMode == TP_MULTI_DONE) return true
                         tpScrollAccum += tpScrollLastY - avgY
                         tpScrollLastY = avgY
                         val cellH = if (cellHeight > 0f) cellHeight else 20f
@@ -2624,6 +2666,7 @@ class TerminalView @JvmOverloads constructor(
             }
             MotionEvent.ACTION_POINTER_UP -> {
                 if (!tpActive) return false
+                endTrackpadPinch()
                 if (tpMultiTouch && event.pointerCount == 2 && !tpMultiScrolled &&
                     event.eventTime - tpMultiStartTime <= android.view.ViewConfiguration.getLongPressTimeout()
                 ) {
@@ -2635,6 +2678,7 @@ class TerminalView @JvmOverloads constructor(
             MotionEvent.ACTION_UP -> {
                 if (!tpActive) return false
                 cancelTrackpadLongPress()
+                endTrackpadPinch()
                 if (tpDragging) {
                     endTrackpadDrag()
                     tpLastTapUpTime = 0L
@@ -4339,6 +4383,10 @@ class TerminalView @JvmOverloads constructor(
 
         /** A second touch-down within this window of a tap becomes a held-button drag. */
         private const val TAP_DRAG_WINDOW_MS = 300L
+        private const val TP_MULTI_UNDECIDED = 0
+        private const val TP_MULTI_SCROLL = 1
+        private const val TP_MULTI_PINCH = 2
+        private const val TP_MULTI_DONE = 3
 
         /** xterm button code for the right button. */
         private const val TRACKPAD_RIGHT_BUTTON = 2
