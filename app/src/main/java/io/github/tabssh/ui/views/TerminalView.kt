@@ -2448,15 +2448,18 @@ class TerminalView @JvmOverloads constructor(
     }
 
     // Delivers a mouse event. With remote tracking on the emulator picks the encoding;
-    // with it off (mosh drops the request, apps start late) we force SGR so mouse mode still works.
+    // with it off (mosh drops the request) we force SGR, but only on the alternate screen where
+    // full-screen apps (tmux, vim, herdr) live; at a shell prompt the bytes would print as junk.
     private fun sendTrackpadEvent(button: Int, col: Int, row: Int, pressed: Boolean) {
         val bridge = termuxBridge ?: return
         val emulator = bridge.getEmulator() ?: return
         Logger.d("TerminalView.Mouse", "button=$button pressed=$pressed at $col,$row tracking=${emulator.isMouseTrackingActive()}")
         if (emulator.isMouseTrackingActive()) {
             emulator.sendMouseEvent(button, col, row, pressed)
-        } else {
+        } else if (emulator.isAlternateBufferActive()) {
             bridge.writeString("\u001b[<$button;$col;$row${if (pressed) 'M' else 'm'}")
+        } else {
+            Logger.d("TerminalView.Mouse", "dropped: no mouse tracking and main screen (shell prompt)")
         }
     }
 
