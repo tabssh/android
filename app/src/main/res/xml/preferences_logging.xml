@@ -149,7 +149,21 @@
       android:summary="@string/prefs_paste_service_summary"
       android:entries="@array/paste_service_labels"
       android:entryValues="@array/paste_service_values"
-      android:defaultValue="stikked" />
+      android:defaultValue="auto" />
+
+    <EditTextPreference
+      android:key="paste_auto_url"
+      android:title="@string/prefs_paste_auto_url_title"
+      android:defaultValue="https://pste.us"
+      android:inputType="textUri"
+      app:useSimpleSummaryProvider="true" />
+
+    <EditTextPreference
+      android:key="paste_cairnbin_url"
+      android:title="@string/prefs_paste_cairnbin_url_title"
+      android:defaultValue="https://cb.pste.us"
+      android:inputType="textUri"
+      app:useSimpleSummaryProvider="true" />
 
     <EditTextPreference
       android:key="paste_stikked_url"
@@ -177,6 +191,34 @@
       android:title="@string/prefs_paste_pastebin_url_title"
       android:defaultValue="https://pastebin.com"
       android:inputType="textUri"
+      app:useSimpleSummaryProvider="true" />
+
+    <EditTextPreference
+      android:key="paste_hastebin_url"
+      android:title="@string/prefs_paste_hastebin_url_title"
+      android:defaultValue="https://hastebin.com"
+      android:inputType="textUri"
+      app:useSimpleSummaryProvider="true" />
+
+    <EditTextPreference
+      android:key="paste_dpaste_url"
+      android:title="@string/prefs_paste_dpaste_url_title"
+      android:defaultValue="https://dpaste.org"
+      android:inputType="textUri"
+      app:useSimpleSummaryProvider="true" />
+
+    <EditTextPreference
+      android:key="paste_nullpointer_url"
+      android:title="@string/prefs_paste_nullpointer_url_title"
+      android:defaultValue="https://0x0.st"
+      android:inputType="textUri"
+      app:useSimpleSummaryProvider="true" />
+
+    <EditTextPreference
+      android:key="paste_termbin_url"
+      android:title="@string/prefs_paste_termbin_url_title"
+      android:defaultValue="termbin.com:9999"
+      android:inputType="text"
       app:useSimpleSummaryProvider="true" />
 
     <EditTextPreference

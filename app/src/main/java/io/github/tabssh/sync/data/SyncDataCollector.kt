@@ -1424,6 +1424,13 @@ class SyncDataCollector {
         "microbinUrl"    to preferenceManager.getPasteMicrobinUrl(),
         "lenpasteUrl"    to preferenceManager.getPasteLenpasteUrl(),
         "stikkedUrl"     to preferenceManager.getPasteStikkedUrl(),
+        "pastebinUrl"    to preferenceManager.getPastebinUrl(),
+        "autoUrl"        to preferenceManager.getPasteUrl("auto"),
+        "cairnbinUrl"    to preferenceManager.getPasteUrl("cairnbin"),
+        "hastebinUrl"    to preferenceManager.getPasteUrl("hastebin"),
+        "dpasteUrl"      to preferenceManager.getPasteUrl("dpaste"),
+        "nullpointerUrl" to preferenceManager.getPasteUrl("nullpointer"),
+        "termbinUrl"     to preferenceManager.getPasteUrl("termbin"),
         "pastebinApiKey" to preferenceManager.getPastebinApiKey()
     )
 

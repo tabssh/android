@@ -10,6 +10,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.util.concurrent.TimeUnit
 
 interface PasteProvider {
@@ -17,7 +19,7 @@ interface PasteProvider {
     suspend fun upload(title: String, content: String): String
 }
 
-private val sharedHttpClient: OkHttpClient by lazy {
+internal val sharedHttpClient: OkHttpClient by lazy {
     io.github.tabssh.network.SharedHttpClient.client.newBuilder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -133,31 +135,192 @@ class PastebinProvider(private val apiKey: String, private val baseUrl: String) 
     }
 }
 
+class CairnbinProvider(private val baseUrl: String) : PasteProvider {
+    override suspend fun upload(title: String, content: String): String = withContext(Dispatchers.IO) {
+        val base = baseUrl.trimEnd('/')
+        // Cairnbin's native API requires the double-submit CSRF token: the csrf_token
+        // cookie from any page must be echoed in the X-CSRF-Token header.
+        val csrf = sharedHttpClient.newCall(Request.Builder().url("$base/").get().build()).execute().use { response ->
+            response.headers("Set-Cookie")
+                .firstOrNull { it.startsWith("csrf_token=") }
+                ?.substringAfter("csrf_token=")?.substringBefore(';')
+        } ?: throw Exception("Cairnbin did not issue a CSRF token")
+        val payload = JSONObject()
+            .put("content", content)
+            .put("title", title)
+            .put("language", "text")
+            .put("expires_in", "never")
+            .toString()
+        val request = Request.Builder()
+            .url("$base/pastes")
+            .header("Accept", "application/json")
+            .header("Cookie", "csrf_token=$csrf")
+            .header("X-CSRF-Token", csrf)
+            .post(payload.toRequestBody("application/json".toMediaType()))
+            .build()
+        val body = sharedHttpClient.newCall(request).execute().use { response ->
+            val text = response.body?.readBoundedText(1024 * 1024L).orEmpty()
+            if (!response.isSuccessful) throw Exception("Cairnbin upload failed: HTTP ${response.code}")
+            text
+        }
+        val link = JSONObject(body).optJSONObject("data")?.optString("link").orEmpty()
+        if (!link.startsWith("http")) throw Exception("Cairnbin returned unexpected response")
+        link
+    }
+}
+
+class HastebinProvider(private val baseUrl: String) : PasteProvider {
+    override suspend fun upload(title: String, content: String): String = withContext(Dispatchers.IO) {
+        val base = baseUrl.trimEnd('/')
+        // haste-server: POST /documents with the raw body, answers {"key":"..."}
+        val request = Request.Builder()
+            .url("$base/documents")
+            .post(content.toRequestBody("text/plain".toMediaType()))
+            .build()
+        val body = sharedHttpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw Exception("Hastebin upload failed: HTTP ${response.code}")
+            response.body?.readBoundedText(1024 * 1024L) ?: throw Exception("Hastebin returned empty response")
+        }
+        val key = JSONObject(body).optString("key")
+        if (key.isBlank()) throw Exception("Hastebin returned no key")
+        "$base/$key"
+    }
+}
+
+class DpasteProvider(private val baseUrl: String) : PasteProvider {
+    override suspend fun upload(title: String, content: String): String = withContext(Dispatchers.IO) {
+        val base = baseUrl.trimEnd('/')
+        val requestBody = FormBody.Builder()
+            .add("content", content)
+            .add("lexer", "_text")
+            .add("format", "url")
+            .add("expires", "604800")
+            .build()
+        val request = Request.Builder().url("$base/api/").post(requestBody).build()
+        sharedHttpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw Exception("dpaste upload failed: HTTP ${response.code}")
+            // The v2 API answers the bare URL, sometimes JSON-quoted
+            val url = response.body?.readBoundedText(1024 * 1024L)?.trim()?.trim('"')
+                ?: throw Exception("dpaste returned empty response")
+            if (!url.startsWith("http")) throw Exception("dpaste returned unexpected response: $url")
+            url
+        }
+    }
+}
+
+class NullPointerProvider(private val baseUrl: String) : PasteProvider {
+    override suspend fun upload(title: String, content: String): String = withContext(Dispatchers.IO) {
+        val base = baseUrl.trimEnd('/')
+        // 0x0.st style: multipart "file" part, answers the bare URL. 0x0.st rejects
+        // requests without a User-Agent, so set one explicitly.
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("file", "tabssh.txt", content.toRequestBody("text/plain".toMediaType()))
+            .addFormDataPart("expires", "168")
+            .build()
+        val request = Request.Builder()
+            .url("$base/")
+            .header("User-Agent", "TabSSH")
+            .post(requestBody)
+            .build()
+        sharedHttpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw Exception("0x0.st upload failed: HTTP ${response.code}")
+            val url = response.body?.readBoundedText(1024 * 1024L)?.trim()
+                ?: throw Exception("0x0.st returned empty response")
+            if (!url.startsWith("http")) throw Exception("0x0.st returned unexpected response: $url")
+            url
+        }
+    }
+}
+
+class TermbinProvider(private val hostPort: String) : PasteProvider {
+    override suspend fun upload(title: String, content: String): String = withContext(Dispatchers.IO) {
+        val (host, port) = parseHostPort(hostPort)
+        Socket().use { socket ->
+            socket.connect(InetSocketAddress(host, port), 15_000)
+            socket.soTimeout = 15_000
+            // termbin/fiche protocol: stream the content, close the write side, read the URL
+            socket.getOutputStream().apply {
+                write(content.toByteArray(Charsets.UTF_8))
+                flush()
+            }
+            socket.shutdownOutput()
+            val reply = socket.getInputStream().readNBytes(4096).toString(Charsets.UTF_8)
+                .trim().trim('\u0000')
+            if (!reply.startsWith("http")) throw Exception("termbin returned unexpected response: $reply")
+            reply
+        }
+    }
+
+    companion object {
+        private const val DEFAULT_PORT = 9999
+
+        /** Accepts "host", "host:port" or a URL; defaults to port 9999. */
+        internal fun parseHostPort(raw: String): Pair<String, Int> {
+            val authority = raw.trim().substringAfter("://").substringBefore('/')
+            val host = authority.substringBeforeLast(':', authority)
+            val port = authority.substringAfterLast(':', "").toIntOrNull() ?: DEFAULT_PORT
+            return host to port
+        }
+    }
+}
+
+/** Picks the real provider per upload by probing the server (see [PasteDetector]). */
+class AutoPasteProvider(
+    private val baseUrl: String,
+    private val providerFor: (String) -> PasteProvider
+) : PasteProvider {
+    override suspend fun upload(title: String, content: String): String =
+        providerFor(PasteDetector.detect(baseUrl)).upload(title, content)
+}
+
 object PasteProviderFactory {
     fun create(prefs: io.github.tabssh.storage.preferences.PreferenceManager): PasteProvider =
         createForService(prefs.getPasteService(), prefs)
 
-    /** Build a provider for an explicit [serviceId] (one of "microbin", "lenpaste", "stikked", "pastebin"). */
+    /**
+     * Build a provider for [serviceId] (any id in [PasteServices.ALL]). A specific type
+     * always wins and uses its own configured server URL; only [PasteServices.AUTO]
+     * probes the server to learn the type.
+     */
     fun createForService(
         serviceId: String,
         prefs: io.github.tabssh.storage.preferences.PreferenceManager
-    ): PasteProvider = when (serviceId) {
-        "lenpaste" -> LenpasteProvider(prefs.getPasteLenpasteUrl())
-        "stikked"  -> StikkedProvider(prefs.getPasteStikkedUrl())
-        "pastebin" -> PastebinProvider(prefs.getPastebinApiKey(), prefs.getPastebinUrl())
-        "microbin" -> MicroBinProvider(prefs.getPasteMicrobinUrl())
-        else       -> StikkedProvider(prefs.getPasteStikkedUrl())
+    ): PasteProvider {
+        val id = PasteServices.normalise(serviceId)
+        val url = prefs.getPasteUrl(id)
+        return if (id == PasteServices.AUTO) {
+            AutoPasteProvider(url) { detected -> build(detected, url, prefs) }
+        } else {
+            build(id, url, prefs)
+        }
+    }
+
+    internal fun build(
+        type: String,
+        url: String,
+        prefs: io.github.tabssh.storage.preferences.PreferenceManager
+    ): PasteProvider = when (type) {
+        PasteServices.CAIRNBIN    -> CairnbinProvider(url)
+        PasteServices.MICROBIN    -> MicroBinProvider(url)
+        PasteServices.LENPASTE    -> LenpasteProvider(url)
+        PasteServices.STIKKED     -> StikkedProvider(url)
+        PasteServices.PASTEBIN    -> PastebinProvider(prefs.getPastebinApiKey().ifBlank { "anonymous" }, url)
+        PasteServices.HASTEBIN    -> HastebinProvider(url)
+        PasteServices.DPASTE      -> DpasteProvider(url)
+        PasteServices.NULLPOINTER -> NullPointerProvider(url)
+        PasteServices.TERMBIN     -> TermbinProvider(url)
+        else                      -> throw IllegalArgumentException("Unknown paste service: $type")
     }
 
     /** Human-readable label shown in the service picker. */
     fun labelForService(
         serviceId: String,
         prefs: io.github.tabssh.storage.preferences.PreferenceManager
-    ): String = when (serviceId) {
-        "microbin" -> "MicroBin  —  ${prefs.getPasteMicrobinUrl()}"
-        "lenpaste" -> "Lenpaste  —  ${prefs.getPasteLenpasteUrl()}"
-        "stikked"  -> "Stikked  —  ${prefs.getPasteStikkedUrl()}"
-        "pastebin" -> "Pastebin  —  ${prefs.getPastebinUrl()} (API key required)"
-        else       -> "Stikked  —  ${prefs.getPasteStikkedUrl()}"
+    ): String {
+        val id = PasteServices.normalise(serviceId)
+        val label = PasteServices.byId(id)?.label ?: id
+        val suffix = if (id == PasteServices.PASTEBIN) " (API key required on pastebin.com)" else ""
+        return "$label  —  ${prefs.getPasteUrl(id)}$suffix"
     }
 }

@@ -996,10 +996,18 @@ class BackupImporter(
             preferenceManager.setScreenReaderEnabled(a.optBoolean("screenReader", false))
         }
         root.optJSONObject("paste")?.let { p ->
-            preferenceManager.setPasteService(p.optString("service", "stikked"))
+            preferenceManager.setPasteService(p.optString("service", "auto"))
             preferenceManager.setPasteMicrobinUrl(p.optString("microbinUrl", "https://mb.pste.us"))
             preferenceManager.setPasteLenpasteUrl(p.optString("lenpasteUrl", "https://lp.pste.us"))
             preferenceManager.setPasteStikkedUrl(p.optString("stikkedUrl", "https://pste.us"))
+            // Newer services: absent in older backups, so only write what is present
+            for ((id, key) in listOf(
+                "pastebin" to "pastebinUrl", "auto" to "autoUrl", "cairnbin" to "cairnbinUrl",
+                "hastebin" to "hastebinUrl", "dpaste" to "dpasteUrl",
+                "nullpointer" to "nullpointerUrl", "termbin" to "termbinUrl"
+            )) {
+                p.optString(key, "").takeIf { it.isNotEmpty() }?.let { preferenceManager.setPasteUrl(id, it) }
+            }
             // Legacy backups only — current exports carry the key in the
             // encrypted secrets.json (alias pastebin_api_key). Never write
             // the empty default: it would wipe a locally stored key when

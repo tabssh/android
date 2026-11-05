@@ -52,7 +52,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
         // 100 KB
         private const val MAX_CONTENT_BYTES = 100 * 1024
 
-        private val SERVICE_IDS     = listOf("stikked", "microbin", "lenpaste", "pastebin")
+        private val SERVICE_IDS     = io.github.tabssh.utils.paste.PasteServices.IDS
 
         /**
          * Open the dialog pre-loaded with [logContent] (typically a debug or app log).
@@ -116,7 +116,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
 
         // ── service picker ───────────────────────────────────────────────────
         var selectedServiceId = prefs.getPasteService().let {
-            if (it in SERVICE_IDS) it else "stikked"
+            io.github.tabssh.utils.paste.PasteServices.normalise(it)
         }
 
         val serviceLabels = SERVICE_IDS.map { PasteProviderFactory.labelForService(it, prefs) }

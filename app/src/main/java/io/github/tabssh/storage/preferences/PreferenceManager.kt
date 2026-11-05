@@ -744,7 +744,7 @@ class PreferenceManager(private val context: Context) {
         preferences.edit().putLong("preferences_last_modified", timestamp).apply()
 
     // Issue reporting — paste service
-    fun getPasteService(): String = getString("paste_service", "stikked")
+    fun getPasteService(): String = getString("paste_service", io.github.tabssh.utils.paste.PasteServices.AUTO)
     fun setPasteService(service: String) = setString("paste_service", service)
 
     fun getPasteMicrobinUrl(): String = getString("paste_microbin_url", "https://mb.pste.us").trimEnd('/')
@@ -758,6 +758,23 @@ class PreferenceManager(private val context: Context) {
 
     fun getPastebinUrl(): String = getString("paste_pastebin_url", "https://pastebin.com").trimEnd('/')
     fun setPastebinUrl(url: String) = setString("paste_pastebin_url", url)
+
+    // Per-service server URL. The four original services keep their historic keys;
+    // newer services use paste_<id>_url. Blank values fall back to the service default.
+    private fun pasteUrlKey(serviceId: String): String = when (serviceId) {
+        "microbin" -> "paste_microbin_url"
+        "lenpaste" -> "paste_lenpaste_url"
+        "stikked"  -> "paste_stikked_url"
+        "pastebin" -> "paste_pastebin_url"
+        else       -> "paste_${serviceId}_url"
+    }
+
+    fun getPasteUrl(serviceId: String): String =
+        getString(pasteUrlKey(serviceId), "").trim().ifBlank {
+            io.github.tabssh.utils.paste.PasteServices.defaultUrl(serviceId)
+        }.trimEnd('/')
+
+    fun setPasteUrl(serviceId: String, url: String) = setString(pasteUrlKey(serviceId), url)
 
     // The Pastebin API key is a secret — it lives in the Keystore-backed
     // SecurePasswordManager (alias pastebin_api_key), never plaintext prefs.

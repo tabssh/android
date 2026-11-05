@@ -797,6 +797,13 @@ class BackupExporter(
             put("microbinUrl",   preferenceManager.getPasteMicrobinUrl())
             put("lenpasteUrl",   preferenceManager.getPasteLenpasteUrl())
             put("stikkedUrl",    preferenceManager.getPasteStikkedUrl())
+            put("pastebinUrl",   preferenceManager.getPastebinUrl())
+            put("autoUrl",        preferenceManager.getPasteUrl("auto"))
+            put("cairnbinUrl",    preferenceManager.getPasteUrl("cairnbin"))
+            put("hastebinUrl",    preferenceManager.getPasteUrl("hastebin"))
+            put("dpasteUrl",      preferenceManager.getPasteUrl("dpaste"))
+            put("nullpointerUrl", preferenceManager.getPasteUrl("nullpointer"))
+            put("termbinUrl",     preferenceManager.getPasteUrl("termbin"))
             // pastebinApiKey is a secret — it travels in the encrypted
             // secrets.json payload (alias pastebin_api_key), never here
         })

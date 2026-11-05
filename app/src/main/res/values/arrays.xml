@@ -445,16 +445,28 @@
 
     <!-- Paste service options for issue reporting -->
     <string-array name="paste_service_labels">
-        <item>@string/arr_paste_service_microbin_default</item>
+        <item>@string/arr_paste_service_auto</item>
+        <item>@string/arr_paste_service_cairnbin</item>
+        <item>@string/arr_paste_service_microbin</item>
         <item>@string/arr_paste_service_lenpaste</item>
         <item>@string/arr_paste_service_stikked</item>
-        <item>@string/arr_paste_service_pastebin_com</item>
+        <item>@string/arr_paste_service_pastebin</item>
+        <item>@string/arr_paste_service_hastebin</item>
+        <item>@string/arr_paste_service_dpaste</item>
+        <item>@string/arr_paste_service_nullpointer</item>
+        <item>@string/arr_paste_service_termbin</item>
     </string-array>
     <string-array name="paste_service_values">
+        <item>auto</item>
+        <item>cairnbin</item>
         <item>microbin</item>
         <item>lenpaste</item>
         <item>stikked</item>
         <item>pastebin</item>
+        <item>hastebin</item>
+        <item>dpaste</item>
+        <item>nullpointer</item>
+        <item>termbin</item>
     </string-array>
 
     <!-- Hypervisor API Type Override -->

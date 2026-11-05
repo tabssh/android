@@ -1650,6 +1650,13 @@ class SyncDataApplier {
                     "microbinUrl"    -> preferenceManager.setPasteMicrobinUrl(value as String)
                     "lenpasteUrl"    -> preferenceManager.setPasteLenpasteUrl(value as String)
                     "stikkedUrl"     -> preferenceManager.setPasteStikkedUrl(value as String)
+                    "pastebinUrl"    -> preferenceManager.setPastebinUrl(value as String)
+                    "autoUrl"        -> preferenceManager.setPasteUrl("auto", value as String)
+                    "cairnbinUrl"    -> preferenceManager.setPasteUrl("cairnbin", value as String)
+                    "hastebinUrl"    -> preferenceManager.setPasteUrl("hastebin", value as String)
+                    "dpasteUrl"      -> preferenceManager.setPasteUrl("dpaste", value as String)
+                    "nullpointerUrl" -> preferenceManager.setPasteUrl("nullpointer", value as String)
+                    "termbinUrl"     -> preferenceManager.setPasteUrl("termbin", value as String)
                     "pastebinApiKey" -> preferenceManager.setPastebinApiKey(value as String)
                 }
                 count++
