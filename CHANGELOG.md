@@ -17,6 +17,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Error reports show the route actually used.** The "Proxy" line in connection error reports now names the resolved jump host or proxy (type, host and port) instead of the profile's legacy proxy field, which printed "None" for route-based jump hosts.
+- **Cairnbin uploads use the REST API.** Pastes post to `/api/v1/pastes`, which needs no CSRF token, instead of the browser form route `/pastes`.
 - **Long press on plain text no longer opens a link.** On screens where full-width lines are joined into one block, any long press used to return the first link in the block. Only a press directly on a link opens the link dialog now.
 - **Link detection handles quotes and parentheses.** A link in quotes runs to its closing quote, so an inner `'` or `)` no longer cuts it short, and a `)` that closes a `(` inside the link (e.g. `Foo_(bar)`) stays part of it. Plain links, encoded characters and links wrapped in parentheses behave as before.
 - **More paste services, with autodetect.** Issue reporting can now upload to Cairnbin, Hastebin, dpaste, 0x0.st and termbin in addition to MicroBin, Lenpaste, Stikked and pastebin.com. The default is Autodetect with https://pste.us: known hosts (cb., lp., mb., pb.pste.us, pastebin.com, 0x0.st, termbin.com, dpaste.org) are matched by name and any other server is probed. Choosing a specific type always overrides autodetect and uses that type's own server URL, so a termbin or MicroBin server on any host works. New server URLs are included in sync and backups.

@@ -1243,6 +1243,13 @@ class SSHConnection(
             }
         }
 
+    /** Human-readable resolved route for error reports ("None" when connecting directly). */
+    private fun describeEffectiveRoute(): String {
+        val type = effectiveProxyType ?: return profile.proxyType ?: "None"
+        val host = effectiveProxyHost ?: return type
+        return "$type via $host:${effectiveProxyPort ?: ""}"
+    }
+
     private val effectiveProxyHost: String?
         get() = resolvedRoute?.let { if (it.builtInTor) "127.0.0.1" else it.host }
 
@@ -2384,7 +2391,7 @@ class SSHConnection(
                     appendLine("Exception: ${effective.javaClass.simpleName}")
                     appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
                     appendLine("Timeout: ${profile.connectTimeout}s")
-                    appendLine("Proxy: ${profile.proxyType ?: "None"}")
+                    appendLine("Proxy: ${describeEffectiveRoute()}")
                     if (profile.portKnockEnabled == true) {
                         // The knock sequence is the shared secret that opens the
                         // firewall — report only that knocking is configured.
@@ -2736,7 +2743,7 @@ class SSHConnection(
                         technicalDetails = buildString {
                             appendLine("Exception: ${effective.javaClass.simpleName}")
                             appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
-                            appendLine("Proxy: ${profile.proxyType ?: "None"}")
+                            appendLine("Proxy: ${describeEffectiveRoute()}")
                             appendLine("Message: ${effective.message}")
                             appendLine("\nCaused by:")
                             effective.cause?.let {

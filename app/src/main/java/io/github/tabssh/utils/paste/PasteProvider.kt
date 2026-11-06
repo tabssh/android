@@ -138,13 +138,7 @@ class PastebinProvider(private val apiKey: String, private val baseUrl: String) 
 class CairnbinProvider(private val baseUrl: String) : PasteProvider {
     override suspend fun upload(title: String, content: String): String = withContext(Dispatchers.IO) {
         val base = baseUrl.trimEnd('/')
-        // Cairnbin's native API requires the double-submit CSRF token: the csrf_token
-        // cookie from any page must be echoed in the X-CSRF-Token header.
-        val csrf = sharedHttpClient.newCall(Request.Builder().url("$base/").get().build()).execute().use { response ->
-            response.headers("Set-Cookie")
-                .firstOrNull { it.startsWith("csrf_token=") }
-                ?.substringAfter("csrf_token=")?.substringBefore(';')
-        } ?: throw Exception("Cairnbin did not issue a CSRF token")
+        // The REST API lives under /api/v1 and takes no CSRF token; /pastes is the browser form route.
         val payload = JSONObject()
             .put("content", content)
             .put("title", title)
@@ -152,10 +146,8 @@ class CairnbinProvider(private val baseUrl: String) : PasteProvider {
             .put("expires_in", "never")
             .toString()
         val request = Request.Builder()
-            .url("$base/pastes")
+            .url("$base/api/v1/pastes")
             .header("Accept", "application/json")
-            .header("Cookie", "csrf_token=$csrf")
-            .header("X-CSRF-Token", csrf)
             .post(payload.toRequestBody("application/json".toMediaType()))
             .build()
         val body = sharedHttpClient.newCall(request).execute().use { response ->
