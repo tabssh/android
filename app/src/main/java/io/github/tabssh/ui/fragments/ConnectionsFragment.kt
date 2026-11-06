@@ -26,10 +26,14 @@ import io.github.tabssh.storage.database.entities.TelnetHost
 import io.github.tabssh.storage.database.entities.VncHost
 import io.github.tabssh.ui.tabs.Tab
 import io.github.tabssh.ui.tabs.connectionState
+import io.github.tabssh.ui.tabs.isLive
 import io.github.tabssh.ui.tabs.shortTitle
 import io.github.tabssh.ui.utils.ConnectionLauncher
 import io.github.tabssh.ui.utils.HostContextActions
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import io.github.tabssh.utils.tabSSHApp
 
@@ -38,7 +42,7 @@ import io.github.tabssh.utils.tabSSHApp
  * Telnet) behind a ViewPager2, plus a single unified [SearchView] that
  * queries across all three host stores and the live tab list at once.
  *
- * The Active sub-tab only exists in the pager while at least one [Tab] is
+ * The Active sub-tab only exists in the pager while at least one live [Tab] is
  * open app-wide; [HostsPagerAdapter] tracks that with a stable-id scheme so
  * ViewPager2/FragmentStateAdapter can add or remove it without losing the
  * other sub-tabs' fragment instances.
@@ -86,7 +90,7 @@ class ConnectionsFragment : Fragment() {
     }
 
     private fun setupPager() {
-        val hasActiveTabs = app.tabManager.allTabsFlow.value.isNotEmpty()
+        val hasActiveTabs = app.tabManager.allTabsFlow.value.any { it.isLive() }
 
         pagerAdapter = HostsPagerAdapter(this, hasActiveTabs)
         viewPager.adapter = pagerAdapter
@@ -123,8 +127,16 @@ class ConnectionsFragment : Fragment() {
         // without waiting for the user to leave and return to this fragment.
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                app.tabManager.allTabsFlow.collect { tabs ->
-                    val nowHasActive = tabs.isNotEmpty()
+                // The 1s ticker catches state changes (a tab dropping or
+                // connecting) that never re-emit the tab list itself.
+                val ticker = flow {
+                    while (true) {
+                        emit(Unit)
+                        delay(1000)
+                    }
+                }
+                combine(app.tabManager.allTabsFlow, ticker) { tabs, _ -> tabs }.collect { tabs ->
+                    val nowHasActive = tabs.any { it.isLive() }
                     if (nowHasActive != pagerAdapter.hasActive) {
                         val wasOnActive = pagerAdapter.currentLabels().getOrNull(viewPager.currentItem) == TAB_ACTIVE
                         pagerAdapter.hasActive = nowHasActive
@@ -220,6 +232,7 @@ class ConnectionsFragment : Fragment() {
             }
 
         app.tabManager.getAllTabsSealed()
+            .filter { it.isLive() }
             .filter { it.shortTitle().lowercase().contains(needle) }
             .forEach { tab ->
                 results += SearchResult.ActiveResult(

@@ -26,6 +26,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Active list shows only live sessions.** Hosts > Active listed every open tab, including restored, dropped and failed ones marked "Disconnected". It now lists only tabs that are connecting, authenticating or connected, and the Active sub-tab hides when none are. Disconnected tabs stay in the terminal tab strip.
 - **Exiting an SSH or mosh session no longer hangs.** Closing the channel, streams, SFTP channel and session now run off the main thread, and the 5-second teardown bound is real (a blocking JSch call could not be interrupted by the old timeout). Closing all connections runs in parallel with a bounded wait on the crash and terminate paths.
 - **Full-screen apps (vim, nvim, tmux) get the right size on connect.** The remote PTY opened at 80x24 and was only corrected on the next keyboard toggle; the current grid size is now sent as soon as the session is wired.
 - **Sync no longer errors on keys present on both devices, and deleted items stay deleted.** Keys added on both sides are upserted instead of aborting, a connection present on both sides keeps its row instead of being replaced, and local tombstones are honoured for connections, keys, themes and host keys. A row deleted on one side and untouched on the other is now a clean delete instead of a conflict.

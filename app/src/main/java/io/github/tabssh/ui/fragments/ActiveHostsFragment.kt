@@ -27,10 +27,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import io.github.tabssh.ui.tabs.isLive
 import io.github.tabssh.utils.tabSSHApp
 
 /**
- * Hosts tab's Active sub-tab — every currently-open [Tab] (SSH, VNC,
+ * Hosts tab's Active sub-tab — every live [Tab] (SSH, VNC,
  * console, or panes group) app-wide, with a live connected-since timer.
  * This sub-tab is only inserted into the outer Hosts pager while at least
  * one tab is open; see `ConnectionsFragment`'s pager adapter for that.
@@ -95,7 +96,7 @@ class ActiveHostsFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                combine(app.tabManager.allTabsFlow, ticker) { tabs, _ -> tabs }
+                combine(app.tabManager.allTabsFlow, ticker) { tabs, _ -> tabs.filter { it.isLive() } }
                     .collect { tabs ->
                         adapter.submitList(tabs)
                         if (tabs.isEmpty()) {

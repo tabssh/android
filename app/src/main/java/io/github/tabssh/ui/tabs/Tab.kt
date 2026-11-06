@@ -105,6 +105,12 @@ fun Tab.connectionDetail(): String? = when (this) {
  * [Tab.Panes] has no single connection of its own; see
  * [PanesTab.aggregateConnectionState] for how it's summarized.
  */
+/**
+ * True while the tab is connecting, authenticating or connected. Restored,
+ * dropped and failed tabs stay open in the tab strip but are not live sessions.
+ */
+fun Tab.isLive(): Boolean = connectionState().isActive()
+
 fun Tab.connectionState(): ConnectionState = when (this) {
     is Tab.Ssh -> sshTab.connectionState.value
     is Tab.Vnc -> vncTab.connectionState.value
