@@ -1,3 +1,4 @@
+[] fix the host output block in cluster commands to show everything.
 [x] fix the logout bug(exit hang from ssh/mosh).
 [x] fix sync errors and deduplicate/merge(newest wins).
 [x] fix group renaming bugs.
