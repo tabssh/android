@@ -39,12 +39,8 @@ import io.github.tabssh.utils.tabSSHApp
  * List screen for the Domain Tracker: tracked domain registrations,
  * expirations, and renewal status, mirroring [VncHostsActivity]'s pattern.
  *
- * The detail line no longer wraps — it lives inside a `HorizontalScrollView`
- * so long rows scroll horizontally instead. Because a `HorizontalScrollView`
- * intercepts the touch stream for taps landing on it, the row's click/
- * long-click listeners are duplicated onto it (see `onBindViewHolder`) so
- * opening/deleting a domain still works no matter where in the row the
- * user taps.
+ * Each row shows its details as labelled key/value lines rather than one
+ * long string.
  */
 class DomainTrackerActivity : TabSSHActivity() {
 
@@ -124,6 +120,15 @@ class DomainTrackerActivity : TabSSHActivity() {
         }
 
         binding.fabAdd.setOnClickListener { launchAddDomain() }
+        binding.buttonEmptyAction.setOnClickListener {
+            if (currentFilterOption != FilterOption.ALL) {
+                currentFilterOption = FilterOption.ALL
+                saveFilterPreference(currentFilterOption)
+                applyFilterAndSort()
+            } else {
+                launchAddDomain()
+            }
+        }
 
         lifecycleScope.launch(Dispatchers.IO) {
             val cutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
@@ -200,7 +205,36 @@ class DomainTrackerActivity : TabSSHActivity() {
             SortOption.EXPIRATION_DESC -> filtered.sortedByDescending { it.expirationDate ?: Long.MIN_VALUE }
         }
         adapter.submitList(sorted)
+        updateSummary()
         updateEmptyState(sorted.isEmpty())
+    }
+
+    /** Counts across the unfiltered list so the header stays stable while a filter is applied. */
+    private fun updateSummary() {
+        if (allDomains.isEmpty()) {
+            binding.textSummary.visibility = View.GONE
+            return
+        }
+        var overdue = 0
+        var expiring = 0
+        var canceled = 0
+        allDomains.forEach { item ->
+            if (item.canceledAt != null) {
+                canceled++
+            } else {
+                when (RenewalUrgency.of(item.expirationDate)) {
+                    RenewalUrgency.OVERDUE -> overdue++
+                    in EXPIRING_SOON_TIERS -> expiring++
+                    else -> Unit
+                }
+            }
+        }
+        val parts = mutableListOf(getString(R.string.tracker_summary_total_fmt, allDomains.size))
+        if (overdue > 0) parts.add(getString(R.string.tracker_summary_overdue_fmt, overdue))
+        if (expiring > 0) parts.add(getString(R.string.tracker_summary_expiring_fmt, expiring))
+        if (canceled > 0) parts.add(getString(R.string.tracker_summary_canceled_fmt, canceled))
+        binding.textSummary.text = parts.joinToString(getString(R.string.tracker_summary_separator))
+        binding.textSummary.visibility = View.VISIBLE
     }
 
     private fun matchesFilter(domain: Domain): Boolean {
@@ -225,6 +259,9 @@ class DomainTrackerActivity : TabSSHActivity() {
         )
         binding.textEmptySubtitle.setText(
             if (filterHidEverything) R.string.tracker_filter_empty_subtitle else R.string.domain_tracker_empty_subtitle
+        )
+        binding.buttonEmptyAction.setText(
+            if (filterHidEverything) R.string.tracker_filter_clear else R.string.domain_edit_title_new
         )
         binding.recyclerDomains.visibility = View.GONE
         binding.emptyState.visibility = View.VISIBLE
@@ -615,11 +652,21 @@ class DomainTrackerActivity : TabSSHActivity() {
         fun setOnRenewalPillClickListener(listener: (Domain) -> Unit) { onRenewalPillClick = listener }
 
         inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-            val name: TextView = view.findViewById(R.id.text_domain_name)
+            val title: TextView = view.findViewById(R.id.text_domain_name)
             val renewalPill: TextView = view.findViewById(R.id.text_domain_renewal_pill)
-            val detail: TextView = view.findViewById(R.id.text_domain_detail)
-            val detailScroll: View = view.findViewById(R.id.scroll_domain_detail)
+            val detail: ViewGroup = view.findViewById(R.id.container_domain_detail)
+            val content: View = view.findViewById(R.id.container_domain_content)
+            val selectedIcon: View = view.findViewById(R.id.icon_domain_selected)
             val statusAccent: View = view.findViewById(R.id.view_domain_status_accent)
+        }
+
+        private fun addDetailRow(container: android.view.ViewGroup, @StringRes labelRes: Int, value: String?) {
+            if (value.isNullOrBlank()) return
+            val row = LayoutInflater.from(container.context)
+                .inflate(R.layout.item_tracker_detail_row, container, false)
+            row.findViewById<TextView>(R.id.text_detail_label).setText(labelRes)
+            row.findViewById<TextView>(R.id.text_detail_value).text = value
+            container.addView(row)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -630,7 +677,7 @@ class DomainTrackerActivity : TabSSHActivity() {
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val domain = getItem(position)
-            holder.name.text = domain.domainName
+            holder.title.text = domain.domainName
             val expiration = domain.expirationDate?.let { android.text.format.DateFormat.getMediumDateFormat(this@DomainTrackerActivity).format(it) }
                 ?: getString(R.string.domain_edit_expiration_unset)
 
@@ -653,20 +700,42 @@ class DomainTrackerActivity : TabSSHActivity() {
             // pill so renewal status is readable without parsing the label.
             holder.statusAccent.setBackgroundColor(pillTextColor)
 
-            holder.detail.text = listOf(
-                getString(R.string.domain_tracker_col_privacy) + ": " + domain.privacyProtection,
-                getString(R.string.domain_tracker_col_status) + ": " + domain.statusAtRegistrar,
-                getString(R.string.domain_edit_switch_auto_renew) + ": " + domain.autoRenew,
-                getString(R.string.domain_tracker_col_expires) + ": " + expiration
-            ).joinToString("  ·  ")
+            holder.detail.removeAllViews()
+            addDetailRow(holder.detail, R.string.domain_tracker_col_expires, expiration)
+            addDetailRow(holder.detail, R.string.domain_edit_switch_auto_renew, domain.autoRenew)
+            addDetailRow(holder.detail, R.string.domain_tracker_col_status, domain.statusAtRegistrar)
+            addDetailRow(holder.detail, R.string.domain_tracker_col_privacy, domain.privacyProtection)
+            holder.detail.visibility = if (holder.detail.childCount == 0) View.GONE else View.VISIBLE
 
-            // The HorizontalScrollView wrapping the detail text intercepts the
-            // touch stream for any tap that lands on it, so the same click/
-            // long-click listeners must be attached there too — relying solely
-            // on itemView's listener silently swallows taps in that region
-            // (matches the pattern established in VpsTrackerActivity).
+            // Selected rows get a leading check, the primary stroke, and a
+            // state description so TalkBack announces selection, not just colour.
+            val selected = domain.id in selectedIds
+            holder.selectedIcon.visibility = if (selected) View.VISIBLE else View.GONE
+            androidx.core.view.ViewCompat.setStateDescription(
+                holder.itemView,
+                getString(if (selected) R.string.tracker_row_selected else R.string.tracker_row_not_selected)
+            )
+            // Canceled rows are dimmed and struck through: they are only waiting out the 30-day grace window.
+            val canceled = domain.canceledAt != null
+            holder.content.alpha = if (canceled) 0.6f else 1f
+            holder.title.paintFlags = if (canceled) {
+                holder.title.paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
+            } else {
+                holder.title.paintFlags and android.graphics.Paint.STRIKE_THRU_TEXT_FLAG.inv()
+            }
+            val pillActionable = actionMode == null && (canceled || urgency == RenewalUrgency.OVERDUE)
+            holder.renewalPill.isClickable = pillActionable
+            holder.renewalPill.importantForAccessibility = if (pillActionable) {
+                View.IMPORTANT_FOR_ACCESSIBILITY_YES
+            } else {
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }
+            if (pillActionable) holder.renewalPill.contentDescription =
+                holder.renewalPill.text.toString() + ", " + getString(R.string.tracker_row_renewal_action_description)
+            else holder.renewalPill.contentDescription = null
+
             (holder.itemView as com.google.android.material.card.MaterialCardView).apply {
-                strokeWidth = if (domain.id in selectedIds) resources.getDimensionPixelSize(R.dimen.space_xs) else 0
+                strokeWidth = if (selected) resources.getDimensionPixelSize(R.dimen.space_xs) else 0
                 strokeColor = com.google.android.material.color.MaterialColors.getColor(
                     this, androidx.appcompat.R.attr.colorPrimary
                 )
@@ -678,8 +747,6 @@ class DomainTrackerActivity : TabSSHActivity() {
             }
             holder.itemView.setOnClickListener(clickListener)
             holder.itemView.setOnLongClickListener(longClickListener)
-            holder.detailScroll.setOnClickListener(clickListener)
-            holder.detailScroll.setOnLongClickListener(longClickListener)
         }
     }
 

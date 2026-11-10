@@ -25,6 +25,16 @@
             android:layout_marginTop="@dimen/space_md"
             android:layout_marginEnd="@dimen/space_md" />
 
+        <TextView
+            android:id="@+id/text_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_md"
+            android:layout_marginEnd="@dimen/space_md"
+            android:textSize="@dimen/text_size_small_body"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone" />
+
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recycler_domains"
             android:layout_width="match_parent"
@@ -32,6 +42,7 @@
             android:layout_weight="1"
             android:clipToPadding="false"
             android:paddingTop="@dimen/space_md"
+            android:paddingBottom="@dimen/space_88dp"
             android:scrollbars="vertical" />
 
         <LinearLayout
@@ -49,6 +60,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/domain_tracker_header_emoji"
                 android:textSize="@dimen/text_size_64sp"
+                android:importantForAccessibility="no"
                 android:paddingBottom="@dimen/space_md" />
 
             <TextView
@@ -71,6 +83,13 @@
                 android:gravity="center"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:paddingBottom="@dimen/space_lg" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_empty_action"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minHeight="@dimen/min_touch_target"
+                android:text="@string/domain_edit_title_new" />
 
         </LinearLayout>
 

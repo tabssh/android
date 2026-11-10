@@ -38,12 +38,8 @@ import io.github.tabssh.utils.tabSSHApp
 /**
  * List screen for the VPS Hosting Tracker: tracked VPS/hosting instances
  * grouped by tenant, mirroring [VncHostsActivity]'s pattern and the row
- * conventions established by [DomainTrackerActivity]. The detail line no
- * longer wraps — it lives inside a `HorizontalScrollView` so long rows
- * scroll horizontally instead. Because a `HorizontalScrollView` intercepts
- * the touch stream for taps landing on it, the row's click/long-click
- * listeners are duplicated onto it (see `onBindViewHolder`) so opening/
- * deleting a host still works no matter where in the row the user taps.
+ * conventions established by [DomainTrackerActivity]. Each row shows its
+ * details as labelled key/value lines rather than one long string.
  */
 class VpsTrackerActivity : TabSSHActivity() {
 
@@ -129,6 +125,15 @@ class VpsTrackerActivity : TabSSHActivity() {
         }
 
         binding.fabAdd.setOnClickListener { launchAddHost() }
+        binding.buttonEmptyAction.setOnClickListener {
+            if (currentFilterOption != FilterOption.ALL) {
+                currentFilterOption = FilterOption.ALL
+                saveFilterPreference(currentFilterOption)
+                applyFilterAndSort()
+            } else {
+                launchAddHost()
+            }
+        }
 
         // Grace-window purge: a host the user confirmed "not renewed" 30+
         // days ago is now removed. Confirming "renewed" (clears canceled_at)
@@ -220,7 +225,36 @@ class VpsTrackerActivity : TabSSHActivity() {
             )
         }
         adapter.submitList(sorted)
+        updateSummary()
         updateEmptyState(sorted.isEmpty())
+    }
+
+    /** Counts across the unfiltered list so the header stays stable while a filter is applied. */
+    private fun updateSummary() {
+        if (allHosts.isEmpty()) {
+            binding.textSummary.visibility = View.GONE
+            return
+        }
+        var overdue = 0
+        var expiring = 0
+        var canceled = 0
+        allHosts.forEach { item ->
+            if (item.canceledAt != null) {
+                canceled++
+            } else {
+                when (RenewalUrgency.of(RenewalUrgency.effectiveDate(item.renewalDate, item.billingCycle))) {
+                    RenewalUrgency.OVERDUE -> overdue++
+                    in EXPIRING_SOON_TIERS -> expiring++
+                    else -> Unit
+                }
+            }
+        }
+        val parts = mutableListOf(getString(R.string.tracker_summary_total_fmt, allHosts.size))
+        if (overdue > 0) parts.add(getString(R.string.tracker_summary_overdue_fmt, overdue))
+        if (expiring > 0) parts.add(getString(R.string.tracker_summary_expiring_fmt, expiring))
+        if (canceled > 0) parts.add(getString(R.string.tracker_summary_canceled_fmt, canceled))
+        binding.textSummary.text = parts.joinToString(getString(R.string.tracker_summary_separator))
+        binding.textSummary.visibility = View.VISIBLE
     }
 
     private fun priceAmount(price: String?): Double? {
@@ -251,6 +285,9 @@ class VpsTrackerActivity : TabSSHActivity() {
         )
         binding.textEmptySubtitle.setText(
             if (filterHidEverything) R.string.tracker_filter_empty_subtitle else R.string.vps_tracker_empty_subtitle
+        )
+        binding.buttonEmptyAction.setText(
+            if (filterHidEverything) R.string.tracker_filter_clear else R.string.vps_host_edit_title_new
         )
         binding.recyclerVpsHosts.visibility = View.GONE
         binding.emptyState.visibility = View.VISIBLE
@@ -648,11 +685,22 @@ class VpsTrackerActivity : TabSSHActivity() {
         fun setOnRenewalPillClickListener(listener: (VpsHost) -> Unit) { onRenewalPillClick = listener }
 
         inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-            val hostname: TextView = view.findViewById(R.id.text_vps_hostname)
+            val title: TextView = view.findViewById(R.id.text_vps_hostname)
+            val tenant: TextView = view.findViewById(R.id.text_vps_tenant)
             val renewalPill: TextView = view.findViewById(R.id.text_vps_renewal_pill)
-            val detail: TextView = view.findViewById(R.id.text_vps_detail)
-            val detailScroll: View = view.findViewById(R.id.scroll_vps_detail)
+            val detail: ViewGroup = view.findViewById(R.id.container_vps_detail)
+            val content: View = view.findViewById(R.id.container_vps_content)
+            val selectedIcon: View = view.findViewById(R.id.icon_vps_selected)
             val statusAccent: View = view.findViewById(R.id.view_vps_status_accent)
+        }
+
+        private fun addDetailRow(container: android.view.ViewGroup, @StringRes labelRes: Int, value: String?) {
+            if (value.isNullOrBlank()) return
+            val row = LayoutInflater.from(container.context)
+                .inflate(R.layout.item_tracker_detail_row, container, false)
+            row.findViewById<TextView>(R.id.text_detail_label).setText(labelRes)
+            row.findViewById<TextView>(R.id.text_detail_value).text = value
+            container.addView(row)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -663,7 +711,9 @@ class VpsTrackerActivity : TabSSHActivity() {
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val host = getItem(position)
-            holder.hostname.text = "${host.tenant} · ${host.hostname}"
+            holder.title.text = host.hostname
+            holder.tenant.text = host.tenant
+            holder.tenant.visibility = if (host.tenant.isBlank()) View.GONE else View.VISIBLE
             // A recurring host's stored date may be a stale past occurrence
             // (see RenewalUrgency.effectiveDate) — project it forward to the
             // actual next due date before showing it or coloring the pill.
@@ -692,24 +742,48 @@ class VpsTrackerActivity : TabSSHActivity() {
             // pill so renewal status is readable without parsing the label.
             holder.statusAccent.setBackgroundColor(pillTextColor)
 
-            holder.detail.text = listOf(
-                getString(R.string.vps_tracker_col_ipv4) + ": " + (host.ipv4 ?: "—"),
-                getString(R.string.vps_tracker_col_ipv6) + ": " + (host.ipv6 ?: "—"),
-                getString(R.string.vps_tracker_col_specs) + ": " + (host.specs ?: "—"),
-                getString(R.string.vps_tracker_col_domain) + ": " + (host.linkedDomain ?: "—"),
-                getString(R.string.vps_tracker_col_renewal) + ": " + renewal,
-                getString(R.string.vps_tracker_col_cycle) + ": " +
-                    (io.github.tabssh.tracker.BillingCycleText.label(this@VpsTrackerActivity, host.billingCycle) ?: "—"),
-                getString(R.string.vps_tracker_col_price) + ": " + (host.price ?: "—")
-            ).joinToString("  ·  ")
+            holder.detail.removeAllViews()
+            addDetailRow(holder.detail, R.string.vps_tracker_col_ipv4, host.ipv4)
+            addDetailRow(holder.detail, R.string.vps_tracker_col_ipv6, host.ipv6)
+            addDetailRow(holder.detail, R.string.vps_tracker_col_specs, host.specs)
+            addDetailRow(holder.detail, R.string.vps_tracker_col_domain, host.linkedDomain)
+            addDetailRow(holder.detail, R.string.vps_tracker_col_renewal, renewal)
+            addDetailRow(
+                holder.detail, R.string.vps_tracker_col_cycle,
+                io.github.tabssh.tracker.BillingCycleText.label(this@VpsTrackerActivity, host.billingCycle)
+            )
+            addDetailRow(holder.detail, R.string.vps_tracker_col_price, host.price)
+            holder.detail.visibility = if (holder.detail.childCount == 0) View.GONE else View.VISIBLE
 
-            // The HorizontalScrollView wrapping the detail text intercepts the
-            // touch stream for any tap that lands on it, so the same click/
-            // long-click listeners must be attached there too — relying solely
-            // on itemView's listener silently swallows taps in that region
-            // (see the `VpsTrackerActivity` class doc for context).
+            // Selected rows get a leading check, the primary stroke, and a
+            // state description so TalkBack announces selection, not just colour.
+            val selected = host.id in selectedIds
+            holder.selectedIcon.visibility = if (selected) View.VISIBLE else View.GONE
+            androidx.core.view.ViewCompat.setStateDescription(
+                holder.itemView,
+                getString(if (selected) R.string.tracker_row_selected else R.string.tracker_row_not_selected)
+            )
+            // Canceled rows are dimmed and struck through: they are only waiting out the 30-day grace window.
+            val canceled = host.canceledAt != null
+            holder.content.alpha = if (canceled) 0.6f else 1f
+            holder.title.paintFlags = if (canceled) {
+                holder.title.paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
+            } else {
+                holder.title.paintFlags and android.graphics.Paint.STRIKE_THRU_TEXT_FLAG.inv()
+            }
+            val pillActionable = actionMode == null && (canceled || urgency == RenewalUrgency.OVERDUE)
+            holder.renewalPill.isClickable = pillActionable
+            holder.renewalPill.importantForAccessibility = if (pillActionable) {
+                View.IMPORTANT_FOR_ACCESSIBILITY_YES
+            } else {
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }
+            if (pillActionable) holder.renewalPill.contentDescription =
+                holder.renewalPill.text.toString() + ", " + getString(R.string.tracker_row_renewal_action_description)
+            else holder.renewalPill.contentDescription = null
+
             (holder.itemView as com.google.android.material.card.MaterialCardView).apply {
-                strokeWidth = if (host.id in selectedIds) resources.getDimensionPixelSize(R.dimen.space_xs) else 0
+                strokeWidth = if (selected) resources.getDimensionPixelSize(R.dimen.space_xs) else 0
                 strokeColor = com.google.android.material.color.MaterialColors.getColor(
                     this, androidx.appcompat.R.attr.colorPrimary
                 )
@@ -721,8 +795,6 @@ class VpsTrackerActivity : TabSSHActivity() {
             }
             holder.itemView.setOnClickListener(clickListener)
             holder.itemView.setOnLongClickListener(longClickListener)
-            holder.detailScroll.setOnClickListener(clickListener)
-            holder.detailScroll.setOnLongClickListener(longClickListener)
         }
     }
 

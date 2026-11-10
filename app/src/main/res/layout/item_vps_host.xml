@@ -4,11 +4,13 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="@dimen/space_sm"
+    android:layout_marginStart="@dimen/space_md"
+    android:layout_marginEnd="@dimen/space_md"
+    android:layout_marginBottom="@dimen/space_sm"
     android:clickable="true"
     android:focusable="true"
     app:cardElevation="@dimen/elevation_low"
-    app:cardCornerRadius="@dimen/card_corner_radius_small">
+    app:cardCornerRadius="@dimen/card_corner_radius">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -17,7 +19,7 @@
 
         <!-- Urgency accent stripe: tinted from RenewalUrgency so the row's -->
         <!-- renewal status reads at a glance; purely decorative, the pill -->
-        <!-- beside the hostname carries the same state as real text. -->
+        <!-- beside the title carries the same state as real text. -->
         <View
             android:id="@+id/view_vps_status_accent"
             android:layout_width="@dimen/tracker_status_accent_width"
@@ -25,8 +27,10 @@
             android:importantForAccessibility="no" />
 
         <LinearLayout
-            android:layout_width="match_parent"
+            android:id="@+id/container_vps_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:orientation="vertical"
             android:padding="@dimen/space_md">
 
@@ -36,15 +40,38 @@
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
 
-                <TextView
-                    android:id="@+id/text_vps_hostname"
+                <ImageView
+                    android:id="@+id/icon_vps_selected"
+                    android:layout_width="@dimen/tracker_selected_icon_size"
+                    android:layout_height="@dimen/tracker_selected_icon_size"
+                    android:layout_marginEnd="@dimen/space_sm"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_tracker_selected"
+                    android:visibility="gone" />
+
+                <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:typeface="monospace"
-                    android:textSize="@dimen/text_size_subtitle"
-                    android:textStyle="bold"
-                    android:textColor="?attr/colorOnSurface" />
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/text_vps_tenant"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textSize="@dimen/text_size_caption"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+
+                    <TextView
+                        android:id="@+id/text_vps_hostname"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:typeface="monospace"
+                        android:textSize="@dimen/text_size_subtitle"
+                        android:textStyle="bold"
+                        android:textColor="?attr/colorOnSurface" />
+
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/text_vps_renewal_pill"
@@ -52,8 +79,10 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="@dimen/space_sm"
                     android:background="@drawable/bg_renewal_pill"
-                    android:paddingStart="@dimen/space_sm"
-                    android:paddingEnd="@dimen/space_sm"
+                    android:gravity="center"
+                    android:minHeight="@dimen/tracker_pill_min_height"
+                    android:paddingStart="@dimen/space_12dp"
+                    android:paddingEnd="@dimen/space_12dp"
                     android:paddingTop="@dimen/space_xs"
                     android:paddingBottom="@dimen/space_xs"
                     android:textSize="@dimen/text_size_small_body"
@@ -61,25 +90,12 @@
 
             </LinearLayout>
 
-            <HorizontalScrollView
-                android:id="@+id/scroll_vps_detail"
+            <LinearLayout
+                android:id="@+id/container_vps_detail"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_xs"
-                android:scrollbars="horizontal"
-                android:overScrollMode="ifContentScrolls">
-
-                <TextView
-                    android:id="@+id/text_vps_detail"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:singleLine="true"
-                    android:ellipsize="none"
-                    android:typeface="monospace"
-                    android:textSize="@dimen/text_size_small_body"
-                    android:textColor="?attr/colorOnSurfaceVariant" />
-
-            </HorizontalScrollView>
+                android:layout_marginTop="@dimen/space_sm"
+                android:orientation="vertical" />
 
         </LinearLayout>
 

@@ -2414,6 +2414,15 @@
     <string name="tracker_filter_overdue">Overdue</string>
     <string name="tracker_filter_expiring_soon">Expiring soon</string>
     <string name="tracker_filter_canceled">Canceled</string>
+    <string name="tracker_filter_clear">Clear filter</string>
+    <string name="tracker_summary_total_fmt">%1$d tracked</string>
+    <string name="tracker_summary_overdue_fmt">%1$d overdue</string>
+    <string name="tracker_summary_expiring_fmt">%1$d expiring soon</string>
+    <string name="tracker_summary_canceled_fmt">%1$d canceled</string>
+    <string name="tracker_summary_separator"> · </string>
+    <string name="tracker_row_selected">Selected</string>
+    <string name="tracker_row_not_selected">Not selected</string>
+    <string name="tracker_row_renewal_action_description">Review renewal status</string>
     <string name="tracker_filter_empty_title">Nothing Matches This Filter</string>
     <string name="tracker_filter_empty_subtitle">Choose a different filter from the toolbar to see more entries</string>
 

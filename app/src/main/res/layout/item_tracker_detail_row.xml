@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One label/value line inside a tracker card's detail block. Shared by the
+  VPS and Domain tracker rows so both screens read identically.
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:paddingTop="@dimen/space_2dp"
+    android:paddingBottom="@dimen/space_2dp">
+
+    <TextView
+        android:id="@+id/text_detail_label"
+        android:layout_width="@dimen/tracker_detail_label_width"
+        android:layout_height="wrap_content"
+        android:textSize="@dimen/text_size_caption"
+        android:textColor="?attr/colorOnSurfaceVariant" />
+
+    <TextView
+        android:id="@+id/text_detail_value"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:typeface="monospace"
+        android:textSize="@dimen/text_size_small_body"
+        android:textColor="?attr/colorOnSurface" />
+
+</LinearLayout>
