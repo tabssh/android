@@ -100,6 +100,26 @@ enum class RenewalUrgency {
         }
 
         /**
+         * The due date after the user confirms a renewal: the next due date
+         * ([effectiveDate]) advanced by one billing-cycle step, repeated until
+         * it lands on or after [now]. A null or unrecognized cycle (every
+         * domain, and hosts without a parsable cycle) advances by one year.
+         * Returns null when no date is tracked, since there is nothing to roll.
+         */
+        fun renewedDate(date: Long?, billingCycle: String?, now: Long = System.currentTimeMillis()): Long? {
+            val base = effectiveDate(date, billingCycle, now) ?: return null
+            val (field, amount) = (BillingCycle.parse(billingCycle) ?: BillingCycle.ANNUALLY).step()
+            val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+            var steps = 0
+            do {
+                steps++
+                calendar.timeInMillis = base
+                calendar.add(field, amount * steps)
+            } while (calendar.timeInMillis < now && steps < MAX_ROLL_STEPS)
+            return calendar.timeInMillis
+        }
+
+        /**
          * Human-readable pill label for a renewal/expiration date, shared by
          * the VPS Tracker and Domain Tracker row adapters so the wording
          * never drifts between the two screens.

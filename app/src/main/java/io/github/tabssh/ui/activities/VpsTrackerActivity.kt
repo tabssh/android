@@ -14,6 +14,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.view.ActionMode
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -88,6 +89,8 @@ class VpsTrackerActivity : TabSSHActivity() {
     private var allHosts: List<VpsHost> = emptyList()
     private var currentSortOption: SortOption = SortOption.NAME_ASC
     private var currentFilterOption: FilterOption = FilterOption.ALL
+    private var actionMode: ActionMode? = null
+    private val selectedIds = mutableSetOf<String>()
 
     private val isAlive: Boolean
         get() = !isFinishing && !isDestroyed
@@ -117,11 +120,13 @@ class VpsTrackerActivity : TabSSHActivity() {
         currentSortOption = loadSortPreference()
         currentFilterOption = loadFilterPreference()
 
-        adapter = VpsHostAdapter(onLongPress = { host -> showHostMenu(host) })
+        adapter = VpsHostAdapter(onLongPress = { host -> onRowLongPress(host) })
         binding.recyclerVpsHosts.layoutManager = LinearLayoutManager(this)
         binding.recyclerVpsHosts.adapter = adapter
-        adapter.setOnItemClickListener { host -> launchEditHost(host) }
-        adapter.setOnRenewalPillClickListener { host -> maybeShowRenewalConfirm(host) }
+        adapter.setOnItemClickListener { host -> onRowClick(host) }
+        adapter.setOnRenewalPillClickListener { host ->
+            if (actionMode != null) toggleSelection(host.id) else maybeShowRenewalConfirm(host)
+        }
 
         binding.fabAdd.setOnClickListener { launchAddHost() }
 
@@ -141,6 +146,7 @@ class VpsTrackerActivity : TabSSHActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 app.database.vpsHostDao().getAll().collect { hosts ->
                     allHosts = hosts
+                    if (selectedIds.retainAll(hosts.map { it.id }.toSet())) refreshSelection()
                     applyFilterAndSort()
                 }
             }
@@ -330,14 +336,15 @@ class VpsTrackerActivity : TabSSHActivity() {
 
     // ── Overdue-renewal confirmation ────────────────────────────────────────
 
-    /** Only overdue hosts prompt — tapping the pill on a non-overdue row is a no-op. */
+    /** Overdue and canceled hosts prompt (renewed / canceled) — tapping the pill on any other row is a no-op. */
     private fun maybeShowRenewalConfirm(host: VpsHost) {
         val effectiveRenewalDate = RenewalUrgency.effectiveDate(host.renewalDate, host.billingCycle)
-        if (RenewalUrgency.of(effectiveRenewalDate) != RenewalUrgency.OVERDUE) return
+        val canceled = host.canceledAt != null
+        if (!canceled && RenewalUrgency.of(effectiveRenewalDate) != RenewalUrgency.OVERDUE) return
 
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.renewal_confirm_title)
-            .setMessage(getString(R.string.renewal_confirm_message_fmt, "${host.tenant} · ${host.hostname}"))
+            .setMessage(getString(if (canceled) R.string.renewal_restore_message_fmt else R.string.renewal_confirm_message_fmt, "${host.tenant} · ${host.hostname}"))
             .setPositiveButton(R.string.renewal_confirm_yes) { _, _ ->
                 lifecycleScope.launch {
                     withContext(Dispatchers.IO) {
@@ -345,8 +352,8 @@ class VpsTrackerActivity : TabSSHActivity() {
                         // Roll the due date forward one cycle from where it
                         // actually stood (not just "now") — the same
                         // projection used for display, applied for real.
-                        val nextDate = RenewalUrgency.effectiveDate(host.renewalDate, host.billingCycle, System.currentTimeMillis() + 1)
-                        dao.update(host.copy(renewalDate = nextDate ?: host.renewalDate, canceledAt = null, modifiedAt = System.currentTimeMillis()))
+                        val nextDate = RenewalUrgency.renewedDate(host.renewalDate, host.billingCycle)
+                        dao.update(host.copy(renewalDate = nextDate ?: host.renewalDate, canceledAt = null, lastReminderSentAt = null, modifiedAt = System.currentTimeMillis()))
                     }
                     if (!isAlive) return@launch
                     Toast.makeText(this@VpsTrackerActivity, getString(R.string.renewal_confirm_marked_renewed_fmt, host.hostname), Toast.LENGTH_SHORT).show()
@@ -355,7 +362,8 @@ class VpsTrackerActivity : TabSSHActivity() {
             .setNegativeButton(R.string.renewal_confirm_no) { _, _ ->
                 lifecycleScope.launch {
                     withContext(Dispatchers.IO) {
-                        app.database.vpsHostDao().setCanceledAt(host.id, System.currentTimeMillis())
+                        val now = System.currentTimeMillis()
+                        app.database.vpsHostDao().update(host.copy(canceledAt = now, modifiedAt = now))
                     }
                     if (!isAlive) return@launch
                     Toast.makeText(this@VpsTrackerActivity, getString(R.string.renewal_confirm_marked_canceled_fmt, host.hostname), Toast.LENGTH_LONG).show()
@@ -485,42 +493,145 @@ class VpsTrackerActivity : TabSSHActivity() {
         }
     }
 
-    // ── Long-press menu ───────────────────────────────────────────────────────
+    // ── Multi-select (renew / cancel / delete) ───────────────────────────────
 
-    private fun showHostMenu(host: VpsHost) {
-        MaterialAlertDialogBuilder(this)
-            .setTitle(host.hostname)
-            .setItems(arrayOf(getString(R.string.edit), getString(R.string.delete))) { _, which ->
-                when (which) {
-                    0 -> launchEditHost(host)
-                    1 -> confirmDelete(host)
+    private fun onRowClick(item: VpsHost) {
+        if (actionMode != null) toggleSelection(item.id) else launchEditHost(item)
+    }
+
+    private fun onRowLongPress(item: VpsHost) {
+        if (actionMode == null) {
+            actionMode = startSupportActionMode(selectionCallback)
+        }
+        toggleSelection(item.id)
+    }
+
+    private fun toggleSelection(id: String) {
+        if (!selectedIds.add(id)) selectedIds.remove(id)
+        refreshSelection()
+    }
+
+    private fun refreshSelection() {
+        if (selectedIds.isEmpty()) {
+            actionMode?.finish()
+        } else {
+            actionMode?.title = getString(R.string.tracker_selected_count_fmt, selectedIds.size)
+        }
+        adapter.notifyDataSetChanged()
+    }
+
+    private val selectionCallback = object : ActionMode.Callback {
+        override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+            mode.menuInflater.inflate(R.menu.menu_tracker_selection, menu)
+            return true
+        }
+
+        override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean = false
+
+        override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+            when (item.itemId) {
+                R.id.action_select_all -> {
+                    selectedIds.addAll(adapter.currentList.map { it.id })
+                    refreshSelection()
+                }
+                R.id.action_renew -> renewSelected()
+                R.id.action_cancel_service -> confirmCancelSelected()
+                R.id.action_delete -> confirmDeleteSelected()
+                else -> return false
+            }
+            return true
+        }
+
+        override fun onDestroyActionMode(mode: ActionMode) {
+            actionMode = null
+            selectedIds.clear()
+            adapter.notifyDataSetChanged()
+        }
+    }
+
+    private fun selectedItems(): List<VpsHost> = allHosts.filter { it.id in selectedIds }
+
+    private fun renewSelected() {
+        val items = selectedItems()
+        lifecycleScope.launch {
+            var skipped = 0
+            withContext(Dispatchers.IO) {
+                val dao = app.database.vpsHostDao()
+                val now = System.currentTimeMillis()
+                items.forEach { item ->
+                    val next = RenewalUrgency.renewedDate(item.renewalDate, item.billingCycle, now)
+                    if (next == null) {
+                        skipped++
+                    } else {
+                        dao.update(item.copy(renewalDate = next, canceledAt = null, lastReminderSentAt = null, modifiedAt = now))
+                    }
                 }
             }
+            actionMode?.finish()
+            if (!isAlive) return@launch
+            val renewed = items.size - skipped
+            Toast.makeText(
+                this@VpsTrackerActivity,
+                if (skipped == 0) getString(R.string.tracker_bulk_renewed_fmt, renewed)
+                else getString(R.string.tracker_bulk_renewed_skipped_fmt, renewed, skipped),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    private fun confirmCancelSelected() {
+        val items = selectedItems().filter { it.canceledAt == null }
+        if (items.isEmpty()) {
+            actionMode?.finish()
+            return
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.tracker_bulk_cancel_title_fmt, items.size))
+            .setMessage(R.string.tracker_bulk_cancel_message)
+            .setPositiveButton(R.string.tracker_action_cancel_service) { _, _ ->
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) {
+                        val dao = app.database.vpsHostDao()
+                        val now = System.currentTimeMillis()
+                        items.forEach { dao.update(it.copy(canceledAt = now, modifiedAt = now)) }
+                    }
+                    actionMode?.finish()
+                    if (!isAlive) return@launch
+                    Toast.makeText(this@VpsTrackerActivity, getString(R.string.tracker_bulk_canceled_fmt, items.size), Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
-    private fun confirmDelete(host: VpsHost) {
+    private fun confirmDeleteSelected() {
+        val items = selectedItems()
+        if (items.isEmpty()) return
         MaterialAlertDialogBuilder(this)
-            .setTitle(getString(R.string.domain_delete_title, host.hostname))
-            .setMessage(getString(R.string.vps_host_delete_confirm_message))
-            .setPositiveButton(getString(R.string.delete)) { _, _ ->
+            .setTitle(getString(R.string.tracker_bulk_delete_title_fmt, items.size))
+            .setMessage(R.string.tracker_bulk_delete_message)
+            .setPositiveButton(R.string.delete) { _, _ ->
                 lifecycleScope.launch {
                     try {
                         withContext(Dispatchers.IO) {
-                            app.database.vpsHostDao().deleteById(host.id)
-                            TombstoneRecorder.record(app, TombstoneRecorder.VPS_HOST, host.id)
+                            items.forEach {
+                                app.database.vpsHostDao().deleteById(it.id)
+                                TombstoneRecorder.record(app, TombstoneRecorder.VPS_HOST, it.id)
+                            }
                         }
-                        Logger.d(TAG, "Deleted VPS host: ${host.hostname}")
+                        actionMode?.finish()
+                        if (!isAlive) return@launch
+                        Toast.makeText(this@VpsTrackerActivity, getString(R.string.tracker_bulk_deleted_fmt, items.size), Toast.LENGTH_SHORT).show()
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        Logger.e(TAG, "Failed to delete VPS host", e)
+                        Logger.e(TAG, "Bulk delete failed", e)
                         if (!isAlive) return@launch
                         Toast.makeText(this@VpsTrackerActivity, getString(R.string.domain_delete_failed_fmt, e.message), Toast.LENGTH_LONG).show()
                     }
                 }
             }
-            .setNegativeButton(getString(R.string.cancel), null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -597,6 +708,12 @@ class VpsTrackerActivity : TabSSHActivity() {
             // long-click listeners must be attached there too — relying solely
             // on itemView's listener silently swallows taps in that region
             // (see the `VpsTrackerActivity` class doc for context).
+            (holder.itemView as com.google.android.material.card.MaterialCardView).apply {
+                strokeWidth = if (host.id in selectedIds) resources.getDimensionPixelSize(R.dimen.space_xs) else 0
+                strokeColor = com.google.android.material.color.MaterialColors.getColor(
+                    this, androidx.appcompat.R.attr.colorPrimary
+                )
+            }
             val clickListener = View.OnClickListener { onClick?.invoke(host) }
             val longClickListener = View.OnLongClickListener {
                 onLongPress(host)

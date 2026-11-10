@@ -81,9 +81,7 @@
             android:fontFamily="monospace"
             android:background="?attr/colorSurface"
             android:padding="@dimen/space_sm"
-            android:maxLines="10"
-            android:scrollbars="vertical"
-            android:visibility="gone"
+            android:textIsSelectable="true"
             android:text="@string/item_cluster_result_placeholder_output" />
 
     </LinearLayout>

@@ -14,6 +14,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.view.ActionMode
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -83,6 +84,8 @@ class DomainTrackerActivity : TabSSHActivity() {
     private var allDomains: List<Domain> = emptyList()
     private var currentSortOption: SortOption = SortOption.NAME_ASC
     private var currentFilterOption: FilterOption = FilterOption.ALL
+    private var actionMode: ActionMode? = null
+    private val selectedIds = mutableSetOf<String>()
 
     private val isAlive: Boolean
         get() = !isFinishing && !isDestroyed
@@ -112,11 +115,13 @@ class DomainTrackerActivity : TabSSHActivity() {
         currentSortOption = loadSortPreference()
         currentFilterOption = loadFilterPreference()
 
-        adapter = DomainAdapter(onLongPress = { domain -> showDomainMenu(domain) })
+        adapter = DomainAdapter(onLongPress = { domain -> onRowLongPress(domain) })
         binding.recyclerDomains.layoutManager = LinearLayoutManager(this)
         binding.recyclerDomains.adapter = adapter
-        adapter.setOnItemClickListener { domain -> launchEditDomain(domain) }
-        adapter.setOnRenewalPillClickListener { domain -> maybeShowRenewalConfirm(domain) }
+        adapter.setOnItemClickListener { domain -> onRowClick(domain) }
+        adapter.setOnRenewalPillClickListener { domain ->
+            if (actionMode != null) toggleSelection(domain.id) else maybeShowRenewalConfirm(domain)
+        }
 
         binding.fabAdd.setOnClickListener { launchAddDomain() }
 
@@ -133,6 +138,7 @@ class DomainTrackerActivity : TabSSHActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 app.database.domainDao().getAll().collect { domains ->
                     allDomains = domains
+                    if (selectedIds.retainAll(domains.map { it.id }.toSet())) refreshSelection()
                     applyFilterAndSort()
                 }
             }
@@ -304,13 +310,14 @@ class DomainTrackerActivity : TabSSHActivity() {
 
     // ── Overdue-renewal confirmation ────────────────────────────────────────
 
-    /** Only overdue domains prompt — tapping the pill on a non-overdue row is a no-op. */
+    /** Overdue and canceled domains prompt (renewed / canceled) — tapping the pill on any other row is a no-op. */
     private fun maybeShowRenewalConfirm(domain: Domain) {
-        if (RenewalUrgency.of(domain.expirationDate) != RenewalUrgency.OVERDUE) return
+        val canceled = domain.canceledAt != null
+        if (!canceled && RenewalUrgency.of(domain.expirationDate) != RenewalUrgency.OVERDUE) return
 
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.renewal_confirm_title)
-            .setMessage(getString(R.string.renewal_confirm_message_fmt, domain.domainName))
+            .setMessage(getString(if (canceled) R.string.renewal_restore_message_fmt else R.string.renewal_confirm_message_fmt, domain.domainName))
             .setPositiveButton(R.string.renewal_confirm_yes) { _, _ ->
                 lifecycleScope.launch {
                     withContext(Dispatchers.IO) {
@@ -319,12 +326,8 @@ class DomainTrackerActivity : TabSSHActivity() {
                         // default to rolling the expiration forward exactly one
                         // year from where it actually stood, mirroring the VPS
                         // side's "advance from the real due date, not now" rule.
-                        val calendar = java.util.Calendar.getInstance()
-                        calendar.timeInMillis = domain.expirationDate ?: System.currentTimeMillis()
-                        while (calendar.timeInMillis < System.currentTimeMillis()) {
-                            calendar.add(java.util.Calendar.YEAR, 1)
-                        }
-                        dao.update(domain.copy(expirationDate = calendar.timeInMillis, canceledAt = null, modifiedAt = System.currentTimeMillis()))
+                        val nextDate = RenewalUrgency.renewedDate(domain.expirationDate, null)
+                        dao.update(domain.copy(expirationDate = nextDate ?: domain.expirationDate, canceledAt = null, lastReminderSentAt = null, modifiedAt = System.currentTimeMillis()))
                     }
                     if (!isAlive) return@launch
                     Toast.makeText(this@DomainTrackerActivity, getString(R.string.renewal_confirm_marked_renewed_fmt, domain.domainName), Toast.LENGTH_SHORT).show()
@@ -333,7 +336,8 @@ class DomainTrackerActivity : TabSSHActivity() {
             .setNegativeButton(R.string.renewal_confirm_no) { _, _ ->
                 lifecycleScope.launch {
                     withContext(Dispatchers.IO) {
-                        app.database.domainDao().setCanceledAt(domain.id, System.currentTimeMillis())
+                        val now = System.currentTimeMillis()
+                        app.database.domainDao().update(domain.copy(canceledAt = now, modifiedAt = now))
                     }
                     if (!isAlive) return@launch
                     Toast.makeText(this@DomainTrackerActivity, getString(R.string.renewal_confirm_marked_canceled_fmt, domain.domainName), Toast.LENGTH_LONG).show()
@@ -456,42 +460,145 @@ class DomainTrackerActivity : TabSSHActivity() {
         }
     }
 
-    // ── Long-press menu ───────────────────────────────────────────────────────
+    // ── Multi-select (renew / cancel / delete) ───────────────────────────────
 
-    private fun showDomainMenu(domain: Domain) {
-        MaterialAlertDialogBuilder(this)
-            .setTitle(domain.domainName)
-            .setItems(arrayOf(getString(R.string.edit), getString(R.string.delete))) { _, which ->
-                when (which) {
-                    0 -> launchEditDomain(domain)
-                    1 -> confirmDelete(domain)
+    private fun onRowClick(item: Domain) {
+        if (actionMode != null) toggleSelection(item.id) else launchEditDomain(item)
+    }
+
+    private fun onRowLongPress(item: Domain) {
+        if (actionMode == null) {
+            actionMode = startSupportActionMode(selectionCallback)
+        }
+        toggleSelection(item.id)
+    }
+
+    private fun toggleSelection(id: String) {
+        if (!selectedIds.add(id)) selectedIds.remove(id)
+        refreshSelection()
+    }
+
+    private fun refreshSelection() {
+        if (selectedIds.isEmpty()) {
+            actionMode?.finish()
+        } else {
+            actionMode?.title = getString(R.string.tracker_selected_count_fmt, selectedIds.size)
+        }
+        adapter.notifyDataSetChanged()
+    }
+
+    private val selectionCallback = object : ActionMode.Callback {
+        override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+            mode.menuInflater.inflate(R.menu.menu_tracker_selection, menu)
+            return true
+        }
+
+        override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean = false
+
+        override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+            when (item.itemId) {
+                R.id.action_select_all -> {
+                    selectedIds.addAll(adapter.currentList.map { it.id })
+                    refreshSelection()
+                }
+                R.id.action_renew -> renewSelected()
+                R.id.action_cancel_service -> confirmCancelSelected()
+                R.id.action_delete -> confirmDeleteSelected()
+                else -> return false
+            }
+            return true
+        }
+
+        override fun onDestroyActionMode(mode: ActionMode) {
+            actionMode = null
+            selectedIds.clear()
+            adapter.notifyDataSetChanged()
+        }
+    }
+
+    private fun selectedItems(): List<Domain> = allDomains.filter { it.id in selectedIds }
+
+    private fun renewSelected() {
+        val items = selectedItems()
+        lifecycleScope.launch {
+            var skipped = 0
+            withContext(Dispatchers.IO) {
+                val dao = app.database.domainDao()
+                val now = System.currentTimeMillis()
+                items.forEach { item ->
+                    val next = RenewalUrgency.renewedDate(item.expirationDate, null, now)
+                    if (next == null) {
+                        skipped++
+                    } else {
+                        dao.update(item.copy(expirationDate = next, canceledAt = null, lastReminderSentAt = null, modifiedAt = now))
+                    }
                 }
             }
+            actionMode?.finish()
+            if (!isAlive) return@launch
+            val renewed = items.size - skipped
+            Toast.makeText(
+                this@DomainTrackerActivity,
+                if (skipped == 0) getString(R.string.tracker_bulk_renewed_fmt, renewed)
+                else getString(R.string.tracker_bulk_renewed_skipped_fmt, renewed, skipped),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    private fun confirmCancelSelected() {
+        val items = selectedItems().filter { it.canceledAt == null }
+        if (items.isEmpty()) {
+            actionMode?.finish()
+            return
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.tracker_bulk_cancel_title_fmt, items.size))
+            .setMessage(R.string.tracker_bulk_cancel_message)
+            .setPositiveButton(R.string.tracker_action_cancel_service) { _, _ ->
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) {
+                        val dao = app.database.domainDao()
+                        val now = System.currentTimeMillis()
+                        items.forEach { dao.update(it.copy(canceledAt = now, modifiedAt = now)) }
+                    }
+                    actionMode?.finish()
+                    if (!isAlive) return@launch
+                    Toast.makeText(this@DomainTrackerActivity, getString(R.string.tracker_bulk_canceled_fmt, items.size), Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
-    private fun confirmDelete(domain: Domain) {
+    private fun confirmDeleteSelected() {
+        val items = selectedItems()
+        if (items.isEmpty()) return
         MaterialAlertDialogBuilder(this)
-            .setTitle(getString(R.string.domain_delete_title, domain.domainName))
-            .setMessage(getString(R.string.domain_delete_confirm_message))
-            .setPositiveButton(getString(R.string.delete)) { _, _ ->
+            .setTitle(getString(R.string.tracker_bulk_delete_title_fmt, items.size))
+            .setMessage(R.string.tracker_bulk_delete_message)
+            .setPositiveButton(R.string.delete) { _, _ ->
                 lifecycleScope.launch {
                     try {
                         withContext(Dispatchers.IO) {
-                            app.database.domainDao().deleteById(domain.id)
-                            TombstoneRecorder.record(app, TombstoneRecorder.DOMAIN, domain.id)
+                            items.forEach {
+                                app.database.domainDao().deleteById(it.id)
+                                TombstoneRecorder.record(app, TombstoneRecorder.DOMAIN, it.id)
+                            }
                         }
-                        Logger.d(TAG, "Deleted domain: ${domain.domainName}")
+                        actionMode?.finish()
+                        if (!isAlive) return@launch
+                        Toast.makeText(this@DomainTrackerActivity, getString(R.string.tracker_bulk_deleted_fmt, items.size), Toast.LENGTH_SHORT).show()
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        Logger.e(TAG, "Failed to delete domain", e)
+                        Logger.e(TAG, "Bulk delete failed", e)
                         if (!isAlive) return@launch
                         Toast.makeText(this@DomainTrackerActivity, getString(R.string.domain_delete_failed_fmt, e.message), Toast.LENGTH_LONG).show()
                     }
                 }
             }
-            .setNegativeButton(getString(R.string.cancel), null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -558,6 +665,12 @@ class DomainTrackerActivity : TabSSHActivity() {
             // long-click listeners must be attached there too — relying solely
             // on itemView's listener silently swallows taps in that region
             // (matches the pattern established in VpsTrackerActivity).
+            (holder.itemView as com.google.android.material.card.MaterialCardView).apply {
+                strokeWidth = if (domain.id in selectedIds) resources.getDimensionPixelSize(R.dimen.space_xs) else 0
+                strokeColor = com.google.android.material.color.MaterialColors.getColor(
+                    this, androidx.appcompat.R.attr.colorPrimary
+                )
+            }
             val clickListener = View.OnClickListener { onClick?.invoke(domain) }
             val longClickListener = View.OnLongClickListener {
                 onLongPress(domain)

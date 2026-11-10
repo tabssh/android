@@ -479,8 +479,8 @@ class ClusterCommandActivity : TabSSHActivity() {
         private val onCopyOutput: (String) -> Unit
     ) : RecyclerView.Adapter<ClusterResultsAdapter.ViewHolder>() {
 
-        // Track expanded state for each item
-        private val expandedItems = mutableSetOf<Int>()
+        // Output starts expanded so every host's full output is visible; tracks the ones the user collapsed
+        private val collapsedItems = mutableSetOf<Int>()
 
         class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val name: TextView = view.findViewById(R.id.result_name)
@@ -499,7 +499,9 @@ class ClusterCommandActivity : TabSSHActivity() {
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val result = results[position]
-            val outputText = result.output.ifEmpty { result.error ?: holder.itemView.context.getString(R.string.cluster_no_output) }
+            val outputText = listOfNotNull(result.output.ifEmpty { null }, result.error?.ifEmpty { null })
+                .joinToString("\n")
+                .ifEmpty { holder.itemView.context.getString(R.string.cluster_no_output) }
 
             holder.name.text = result.profile.name
             holder.status.text = if (result.success) holder.itemView.context.getString(R.string.cluster_status_success) else holder.itemView.context.getString(R.string.cluster_status_failed)
@@ -511,7 +513,7 @@ class ClusterCommandActivity : TabSSHActivity() {
             )
 
             // Handle expanded state
-            val isExpanded = expandedItems.contains(position)
+            val isExpanded = !collapsedItems.contains(position)
             holder.output.visibility = if (isExpanded) View.VISIBLE else View.GONE
             holder.toggleButton.setImageResource(
                 if (isExpanded) R.drawable.ic_expand_less else R.drawable.ic_expand_more
@@ -519,11 +521,7 @@ class ClusterCommandActivity : TabSSHActivity() {
 
             // Toggle button click
             holder.toggleButton.setOnClickListener {
-                if (expandedItems.contains(position)) {
-                    expandedItems.remove(position)
-                } else {
-                    expandedItems.add(position)
-                }
+                if (!collapsedItems.remove(position)) collapsedItems.add(position)
                 notifyItemChanged(position)
             }
 
@@ -534,11 +532,7 @@ class ClusterCommandActivity : TabSSHActivity() {
 
             // Click on card header to toggle
             holder.itemView.setOnClickListener {
-                if (expandedItems.contains(position)) {
-                    expandedItems.remove(position)
-                } else {
-                    expandedItems.add(position)
-                }
+                if (!collapsedItems.remove(position)) collapsedItems.add(position)
                 notifyItemChanged(position)
             }
         }

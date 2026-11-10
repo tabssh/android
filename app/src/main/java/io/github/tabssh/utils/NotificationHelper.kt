@@ -1173,7 +1173,9 @@ object NotificationHelper {
     fun notifyDomainRenewal(context: Context, domainId: String, domainName: String, daysRemaining: Long) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val pi = trackerPendingIntent(context, isVps = false)
-        val text = if (daysRemaining <= 0) {
+        val text = if (daysRemaining < 0) {
+            context.resources.getQuantityString(R.plurals.renewal_reminder_days_overdue, (-daysRemaining).toInt(), (-daysRemaining).toInt(), domainName)
+        } else if (daysRemaining == 0L) {
             "$domainName expires today"
         } else {
             context.resources.getQuantityString(R.plurals.renewal_reminder_days_remaining, daysRemaining.toInt(), daysRemaining.toInt(), domainName)
@@ -1201,7 +1203,9 @@ object NotificationHelper {
     fun notifyVpsRenewal(context: Context, hostId: String, hostname: String, daysRemaining: Long) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val pi = trackerPendingIntent(context, isVps = true)
-        val text = if (daysRemaining <= 0) {
+        val text = if (daysRemaining < 0) {
+            context.resources.getQuantityString(R.plurals.renewal_reminder_days_overdue, (-daysRemaining).toInt(), (-daysRemaining).toInt(), hostname)
+        } else if (daysRemaining == 0L) {
             "$hostname renews today"
         } else {
             context.resources.getQuantityString(R.plurals.renewal_reminder_days_remaining, daysRemaining.toInt(), daysRemaining.toInt(), hostname)

@@ -2435,6 +2435,18 @@
     <string name="renewal_confirm_no">No, canceled</string>
     <string name="renewal_confirm_marked_canceled_fmt">%1$s marked canceled — it will be removed automatically after 30 days unless confirmed renewed</string>
     <string name="renewal_confirm_marked_renewed_fmt">%1$s marked renewed</string>
+    <string name="tracker_action_renew">Renew</string>
+    <string name="tracker_action_cancel_service">Cancel service</string>
+    <string name="tracker_action_select_all">Select all</string>
+    <string name="tracker_selected_count_fmt">%1$d selected</string>
+    <string name="tracker_bulk_renewed_fmt">Renewed %1$d</string>
+    <string name="tracker_bulk_renewed_skipped_fmt">Renewed %1$d, skipped %2$d with no date</string>
+    <string name="tracker_bulk_canceled_fmt">Marked %1$d canceled — removed automatically after 30 days unless renewed</string>
+    <string name="tracker_bulk_deleted_fmt">Deleted %1$d</string>
+    <string name="tracker_bulk_cancel_title_fmt">Cancel %1$d selected?</string>
+    <string name="tracker_bulk_cancel_message">They stay listed as canceled for 30 days, then are removed. Renewing one restores it.</string>
+    <string name="tracker_bulk_delete_title_fmt">Delete %1$d selected?</string>
+    <string name="tracker_bulk_delete_message">This permanently removes them.</string>
 
     <string name="vps_host_edit_title_new">Add VPS Host</string>
     <string name="vps_host_edit_title_edit">Edit VPS Host</string>
@@ -2511,6 +2523,11 @@
         <item quantity="one">%2$s renews in %1$d day</item>
         <item quantity="other">%2$s renews in %1$d days</item>
     </plurals>
+    <plurals name="renewal_reminder_days_overdue">
+        <item quantity="one">%2$s is %1$d day overdue — renewed or canceled?</item>
+        <item quantity="other">%2$s is %1$d days overdue — renewed or canceled?</item>
+    </plurals>
+    <string name="renewal_restore_message_fmt">%1$s is marked canceled. Mark it renewed to restore it?</string>
     <string name="renewal_reminders_category_title">Renewal Reminders</string>
     <string name="renewal_reminders_check_title">Domain &amp; VPS renewal reminders</string>
     <string name="renewal_reminders_check_summary">Notify when a tracked domain or VPS renewal date is approaching</string>

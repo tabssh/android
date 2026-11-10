@@ -256,4 +256,34 @@ class RenewalUrgencyTest {
         val text = RenewalUrgency.pillText(context, daysFromNow(5), now)
         assertEquals(true, text.contains("5"))
     }
+
+    private fun utc(year: Int, month: Int, day: Int): Long =
+        Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+            clear()
+            set(year, month, day)
+        }.timeInMillis
+
+    @Test
+    fun `renewedDate advances an upcoming monthly date by one cycle`() {
+        val nowAt = utc(2026, Calendar.AUGUST, 5)
+        assertEquals(utc(2026, Calendar.OCTOBER, 10), RenewalUrgency.renewedDate(utc(2026, Calendar.SEPTEMBER, 10), "1 month", nowAt))
+    }
+
+    @Test
+    fun `renewedDate rolls a stale recurring date past now plus one cycle`() {
+        val nowAt = utc(2026, Calendar.AUGUST, 5)
+        assertEquals(utc(2026, Calendar.SEPTEMBER, 10), RenewalUrgency.renewedDate(utc(2026, Calendar.JANUARY, 10), "1 month", nowAt))
+    }
+
+    @Test
+    fun `renewedDate defaults to one year when there is no cycle`() {
+        val nowAt = utc(2026, Calendar.NOVEMBER, 10)
+        assertEquals(utc(2027, Calendar.JANUARY, 15), RenewalUrgency.renewedDate(utc(2026, Calendar.JANUARY, 15), null, nowAt))
+        assertEquals(utc(2027, Calendar.DECEMBER, 1), RenewalUrgency.renewedDate(utc(2026, Calendar.DECEMBER, 1), null, nowAt))
+    }
+
+    @Test
+    fun `renewedDate is null when no date is tracked`() {
+        assertNull(RenewalUrgency.renewedDate(null, "1 year", now))
+    }
 }

@@ -1,4 +1,9 @@
-[] fix the host output block in cluster commands to show everything.
+[x] fix the renewal notifications not working.
+[x] fix past due items as there is no way to mark it as renewed or canceled
+[x] fix/add renewed to the VPS and Domain trackers
+[x] fix the VPS and domain tracking UI/UX
+[x] allow multi select and allow to cancel/renew 
+[x] fix the host output block in cluster commands to show everything.
 [x] fix the logout bug(exit hang from ssh/mosh).
 [x] fix sync errors and deduplicate/merge(newest wins).
 [x] fix group renaming bugs.

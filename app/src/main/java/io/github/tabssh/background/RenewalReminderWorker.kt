@@ -2,7 +2,6 @@ package io.github.tabssh.background
 
 import android.content.Context
 import androidx.work.BackoffPolicy
-import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -42,25 +41,19 @@ class RenewalReminderWorker(
     companion object {
         private const val TAG = "RenewalReminderWorker"
 
-        /** Unique work name used with [ExistingPeriodicWorkPolicy.KEEP]. */
+        /** Unique work name used with [ExistingPeriodicWorkPolicy.UPDATE]. */
         const val WORK_NAME = "renewal_reminder_check"
 
         /**
          * Enqueue (or keep) the periodic worker. Safe to call multiple times —
-         * [ExistingPeriodicWorkPolicy.KEEP] is idempotent. Runs once a day;
-         * purely local DB reads and local notifications, so no network
-         * constraint is required — only battery-not-low, matching the other
-         * background-monitoring workers' posture.
+         * [ExistingPeriodicWorkPolicy.UPDATE] swaps in the current definition without resetting the schedule. Runs once a day;
+         * purely local DB reads and local notifications, so no constraints
+         * (a battery-not-low constraint could defer reminders for days).
          */
         fun schedule(context: Context) {
-            val constraints = Constraints.Builder()
-                .setRequiresBatteryNotLow(true)
-                .build()
-
             val request = PeriodicWorkRequestBuilder<RenewalReminderWorker>(
                 1, TimeUnit.DAYS
             )
-                .setConstraints(constraints)
                 .setBackoffCriteria(
                     BackoffPolicy.EXPONENTIAL,
                     WorkRequest.MIN_BACKOFF_MILLIS,
@@ -70,10 +63,10 @@ class RenewalReminderWorker(
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 request
             )
-            Logger.d(TAG, "Periodic renewal reminder check scheduled (1 day, not-low-battery)")
+            Logger.d(TAG, "Periodic renewal reminder check scheduled (1 day)")
         }
 
         /** Cancel the periodic worker (e.g., when the renewal reminders toggle is off). */
@@ -99,14 +92,14 @@ class RenewalReminderWorker(
         val domains = db.domainDao().getAllWithExpiration()
         for (domain in domains) {
             val expiration = domain.expirationDate ?: continue
-            val daysRemaining = (expiration - now) / dayMs
+            // A canceled row is awaiting its 30-day sweep; nothing to remind about.
+            if (domain.canceledAt != null) continue
+            // floorDiv so a date a few hours past reports -1 (overdue), not 0 (today).
+            val daysRemaining = Math.floorDiv(expiration - now, dayMs)
             if (daysRemaining > domain.reminderDaysBefore) continue
+            // One reminder per due date (past-due included): the dedupe below
+            // stops re-firing, and renewing/editing the date resets it.
             if (domain.lastReminderSentAt == expiration) continue
-            // Renewal already passed by more than the reminder window without
-            // being updated (e.g. auto-renew handled it elsewhere) — still
-            // worth one reminder, but don't let stale expired rows re-fire
-            // every single day forever once past due.
-            if (daysRemaining < -domain.reminderDaysBefore) continue
 
             Logger.i(TAG, "Domain '${domain.domainName}' renewal reminder: $daysRemaining day(s) remaining")
             NotificationHelper.notifyDomainRenewal(appContext, domain.id, domain.domainName, daysRemaining)
@@ -122,10 +115,10 @@ class RenewalReminderWorker(
             // gets reminded for its actual next due date instead of being
             // silently skipped as "too far overdue" below.
             val renewal = RenewalUrgency.effectiveDate(host.renewalDate, host.billingCycle, now) ?: continue
-            val daysRemaining = (renewal - now) / dayMs
+            if (host.canceledAt != null) continue
+            val daysRemaining = Math.floorDiv(renewal - now, dayMs)
             if (daysRemaining > host.reminderDaysBefore) continue
             if (host.lastReminderSentAt == renewal) continue
-            if (daysRemaining < -host.reminderDaysBefore) continue
 
             Logger.i(TAG, "VPS host '${host.hostname}' renewal reminder: $daysRemaining day(s) remaining")
             NotificationHelper.notifyVpsRenewal(appContext, host.id, host.hostname, daysRemaining)
