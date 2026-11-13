@@ -57,8 +57,8 @@ TabSSH is a comprehensive, open-source SSH client for Android that provides a tr
   one terminal tab
 • Session video recorder — capture any tab (SSH, VNC, Panes) to mp4, with
   optional asciinema `.cast` recording alongside it for SSH tabs
-• Domain & VPS renewal tracking — CSV/Markdown import-export and reminder
-  notifications as expiry approaches
+• Domain & VPS renewal tracking — CSV/Markdown import-export, reminders as
+  expiry approaches, and multi-select renew, cancel or delete
 • Snippet library with placeholder substitution, and a macro library for
   recording and replaying raw byte sequences
 • Tasker/Locale plugin, quick-connect home-screen widgets, and QR pairing

@@ -101,7 +101,7 @@ created, synced, or paired on any one of the three works unmodified on the other
 - ⏺️ **Macros** — Capture and replay raw byte sequences (escape codes, modifier-composed Ctrl/Alt)
 - 🎮 **Automation** — Tasker integration, intent-based actions, deep links
 - 📊 **Multi-Host Dashboard** — Side-by-side CPU/memory/disk metrics across hosts; dashboard groups independent from connection groups
-- 🗓️ **Domain & VPS Renewal Tracking** — Track domain/VPS renewal dates with CSV/Markdown import-export and reminder notifications as expiry approaches; card rows with a renewal-urgency color stripe, plus per-tracker sort (name, renewal date, price) and filter (all, overdue, expiring soon, canceled) that persist across restarts
+- 🗓️ **Domain & VPS Renewal Tracking** — Track domain/VPS renewal dates with CSV/Markdown import-export and reminder notifications as expiry approaches; card rows with labeled details and a renewal-urgency color stripe, a summary of overdue and expiring entries, long-press multi-select to renew, cancel or delete several at once (past-due or canceled entries can be marked renewed from the renewal pill), plus per-tracker sort (name, renewal date, price) and filter (all, overdue, expiring soon, canceled) that persist across restarts
 
 ### Hypervisor Management
 
@@ -136,7 +136,7 @@ Portainer-class container management over the SSH connections you already have �
 - **Images / Volumes / Networks** — list, inspect, create, remove, prune; image pull with per-layer progress
 - **Compose stacks, paste-first** — paste a complete `compose.yaml` and it's saved to a configurable remote directory (default `/srv/$USER/compose/{name}`, created automatically) with up/down/pull/restart and per-service status
 - **Single-container run configs** — form-based `run.yml` editor mirroring `docker run` flags, with a raw-YAML advanced toggle
-- **Watchtower-style updates** — a background worker checks registry digests twice a day (per-host toggle and interval override, at most 2 hosts at a time) and flags stale containers (notification + badge); opt-in per-container auto-recreate updates them unattended with automatic rollback on failure
+- **Watchtower-style updates** — a background worker checks registry digests and flags stale containers (notification + badge). Settings resolve in three tiers, most specific winning: global (Settings > Monitoring), per host, and per image or compose stack, each able to inherit; a per-host **Updates** tab shows available updates and edits every level. Opt-in auto-apply updates unattended: standalone containers are recreated with automatic rollback, compose containers are updated through compose as a whole project (`composemgr --dir {dir} down; pull; up` when installed, otherwise `docker compose` / `docker-compose`) and never with `docker run`
 - **Registry support** — Docker Hub (anonymous token flow) and private registries (Basic/Bearer); credentials stored in the Android Keystore only
 - **Hybrid transport** — engine API over an SSH unix-socket forward when sshd allows it (`AllowTcpForwarding` + `AllowStreamLocalForwarding`), automatic fallback to the CLI over SSH exec with actionable hints — works either way
 - **Socket auto-discovery** — leave the socket field blank to probe the engine's standard locations and remember what's found, or pin an exact path / `tcp://host:port` / `ssh://user@host` for unusual setups

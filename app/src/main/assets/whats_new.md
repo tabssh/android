@@ -1,5 +1,15 @@
 # What's New
 
+## Wave 80 — container updates, trackers, and polish
+
+- Container update settings work at three levels: global, per host, and per image or compose stack, with the most specific winning. A new Updates tab on Docker and Podman hosts shows available updates and lets you change each level.
+- Compose containers update through compose as a whole project (using composemgr when installed) and standalone containers through recreate; the two are never mixed.
+- Update checks now run in the background on their own schedule and can connect to saved hosts themselves.
+- VPS and Domain trackers can renew, cancel, or delete several entries at once. Rows are easier to read, and past-due items can be marked renewed or canceled. Renewal reminders now fire for past-due items.
+- Selecting terminal text shows its Copy bar next to the selection, and double tap and link long-press work with mouse support on.
+- Cluster command output shows everything for each host.
+- Cleaner, more consistent screens, icons, and dialogs across the app.
+
 ## Wave 79 — Container host list refresh
 
 - The Containers page reloads its host list when it becomes active, so saved hosts appear without navigating away and back.
