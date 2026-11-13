@@ -1342,17 +1342,6 @@ class TerminalView @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Show context menu at position (called on long press of non-URL text)
-     */
-    private fun showCustomContextMenu(x: Float, y: Float) {
-        // Haptic feedback for long press
-        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-        
-        // Notify parent activity to show context menu
-        onContextMenuRequested?.invoke(x, y)
-    }
-
     /** Multiplier from `terminal_line_spacing` pref (100–200%, stored as Int). */
     private var lineSpacingMultiplier: Float = 1.2f
 

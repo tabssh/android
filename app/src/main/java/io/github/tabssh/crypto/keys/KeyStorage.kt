@@ -26,7 +26,6 @@ import javax.crypto.spec.GCMParameterSpec
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo
 import org.bouncycastle.asn1.ASN1OctetString
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo
-import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.bouncycastle.openssl.PEMParser
 import org.bouncycastle.openssl.PEMKeyPair
 import org.bouncycastle.openssl.PEMEncryptedKeyPair

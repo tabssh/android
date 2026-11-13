@@ -2393,47 +2393,6 @@ class ConnectionEditActivity : TabSSHActivity() {
         return if (name.isBlank()) getString(R.string.identity_default_imported_key_name) else name
     }
 
-    private fun importKeyWithPassphrase(keyContent: String, filename: String, passphrase: String) {
-        lifecycleScope.launch {
-            try {
-                showToast(getString(R.string.conn_edit_importing_encrypted_key))
-                val result = app.keyStorage.importKeyFromText(
-                    keyContent = keyContent,
-                    passphrase = passphrase,
-                    keyName = extractKeyNameFromFilename(filename)
-                )
-                when (result) {
-                    is io.github.tabssh.crypto.keys.ImportResult.Success -> {
-                        Logger.i("ConnectionEditActivity", "Encrypted key imported: ${result.keyId}")
-                        showToast(getString(R.string.conn_edit_encrypted_key_imported_toast))
-                        announceAccessibility(getString(R.string.conn_edit_encrypted_key_imported_toast))
-                        // bug-20: load keys inline so availableKeys is up-to-date before auto-select.
-                        availableKeys = withContext(Dispatchers.IO) { app.keyStorage.listStoredKeys() }
-                        val keyNames = listOf(getString(R.string.conn_edit_select_ssh_key_placeholder)) + availableKeys.map { it.getDisplayName() }
-                        val adapter = ArrayAdapter(this@ConnectionEditActivity, android.R.layout.simple_dropdown_item_1line, keyNames)
-                        binding.spinnerSshKey.setAdapter(adapter)
-                        val importedKeyIndex = availableKeys.indexOfFirst { it.keyId == result.keyId }
-                        if (importedKeyIndex >= 0) {
-                            selectedKeyIndex = importedKeyIndex + 1
-                            if (selectedKeyIndex < keyNames.size) {
-                                binding.spinnerSshKey.setText(keyNames[selectedKeyIndex], false)
-                            }
-                        }
-                    }
-                    is io.github.tabssh.crypto.keys.ImportResult.Error -> {
-                        Logger.e("ConnectionEditActivity", "Encrypted key import failed: ${result.errorType} (${result.technicalDetail})")
-                        showKeyImportErrorDialog(result.errorType, result.technicalDetail)
-                    }
-                }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                val mapped = io.github.tabssh.utils.ThrowableMapper.map(this@ConnectionEditActivity, "ConnectionEditActivity", e, "Encrypted key import failed")
-                showError(getString(R.string.conn_edit_encrypted_key_import_failed, mapped.message), getString(R.string.status_error), copyText = mapped.technicalDetail)
-            }
-        }
-    }
-
     private fun showKeyImportErrorDialog(errorType: io.github.tabssh.crypto.keys.KeyImportErrorType, technicalDetail: String?) {
         io.github.tabssh.ui.utils.DialogUtils.showErrorDialog(
             context = this,

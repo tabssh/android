@@ -16,7 +16,6 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.Domain
 import io.github.tabssh.utils.ThrowableMapper
-import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

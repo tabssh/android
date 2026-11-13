@@ -51,8 +51,6 @@ class VncView @JvmOverloads constructor(
         private const val MAX_SCALE = 4.0f
         // pointer events per scroll fling step
         private const val SCROLL_STEPS = 3
-        // tap → click if released within
-        private const val CLICK_TIMEOUT_MS = 200L
         // Longer than GestureDetector's own long-press timeout so the existing
         // hold-to-right-click gesture fires first; only a hold past this point
         // opens the shared session context menu (same menu TerminalView opens).
@@ -518,6 +516,12 @@ class VncView @JvmOverloads constructor(
     private fun cancelContextMenuTimer() {
         contextMenuRunnable?.let { contextMenuHandler.removeCallbacks(it) }
         contextMenuRunnable = null
+    }
+
+    // Drop a queued long-press callback so it cannot fire on a detached view.
+    override fun onDetachedFromWindow() {
+        cancelContextMenuTimer()
+        super.onDetachedFromWindow()
     }
 
     private fun screenToBitmap(sx: Float, sy: Float): Pair<Int, Int> {

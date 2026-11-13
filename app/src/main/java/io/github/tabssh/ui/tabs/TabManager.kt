@@ -5,7 +5,6 @@ import io.github.tabssh.hypervisor.vnc.VncBackgroundSessionStore
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.terminal.TermuxBridge
-import io.github.tabssh.ui.views.TerminalView
 import io.github.tabssh.ssh.connection.ConnectionState
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.utils.logging.Logger

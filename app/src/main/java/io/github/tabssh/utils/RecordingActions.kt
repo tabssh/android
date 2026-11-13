@@ -101,7 +101,7 @@ object RecordingActions {
                 withContext(Dispatchers.IO) {
                     AsciinemaUploader.uploadByFilename(activity, filename, legacyFileFor(filename), serverUrl)
                 }
-            }
+            }.onFailure { e -> if (e is kotlinx.coroutines.CancellationException) throw e }
             if (activity.isFinishing || activity.isDestroyed) return@launch
             result.onSuccess { url ->
                 ClipboardHelper.copy(activity, "Asciinema URL", url, sensitive = false)

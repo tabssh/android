@@ -5,7 +5,6 @@ import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
 import okio.Buffer
 import java.security.MessageDigest
 import java.security.Signature

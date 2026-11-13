@@ -2,7 +2,6 @@ package io.github.tabssh.terminal.renderer
 
 import android.graphics.*
 import io.github.tabssh.terminal.emulator.TerminalBuffer
-import io.github.tabssh.terminal.emulator.TerminalChar
 
 /**
  * Terminal text rendering engine with color and formatting support

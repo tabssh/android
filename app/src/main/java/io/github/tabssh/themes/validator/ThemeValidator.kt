@@ -14,7 +14,6 @@ class ThemeValidator {
         // WCAG 2.1 contrast ratio requirements
         private const val MIN_CONTRAST_AA = 4.5
         private const val MIN_CONTRAST_AAA = 7.0
-        private const val MIN_CONTRAST_LARGE_TEXT_AA = 3.0
         
         // Color difference thresholds
         private const val MIN_COLOR_DIFFERENCE = 500

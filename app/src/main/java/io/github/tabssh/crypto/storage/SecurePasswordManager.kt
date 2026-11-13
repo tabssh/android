@@ -23,7 +23,6 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 /**
  * Manages secure password storage using Android Keystore with multiple security levels
@@ -36,7 +35,6 @@ class SecurePasswordManager(private val context: Context) {
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val KEY_ALIAS_PREFIX = "tabssh_password_"
         private const val BIOMETRIC_KEY_ALIAS_PREFIX = "tabssh_bio_password_"
-        private const val GCM_IV_LENGTH = 12
         private const val GCM_TAG_LENGTH = 16
         
         private const val SHARED_PREFS_NAME = "tabssh_secure_storage"

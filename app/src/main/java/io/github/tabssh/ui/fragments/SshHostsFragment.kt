@@ -24,14 +24,12 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.switchmaterial.SwitchMaterial
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.storage.database.entities.Identity
 import io.github.tabssh.ui.activities.ConnectionEditActivity
-import io.github.tabssh.ui.activities.TabTerminalActivity
 import io.github.tabssh.ui.adapters.ConnectionAdapter
 import io.github.tabssh.ui.adapters.GroupedConnectionAdapter
 import io.github.tabssh.ui.models.ConnectionListItem

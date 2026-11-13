@@ -250,53 +250,6 @@ class MainActivity : TabSSHActivity() {
     }
 
     /**
-     * Open hypervisor manager by type
-     * Queries database for hypervisors of the given type and opens the appropriate manager
-     */
-    private fun openHypervisorManagerByType(type: HypervisorType) {
-        lifecycleScope.launch {
-            try {
-                val hypervisors = app.database.hypervisorDao().getByType(type)
-
-                when {
-                    hypervisors.isEmpty() -> {
-                        // No hypervisors of this type, show helpful message
-                        val typeName = when (type) {
-                            HypervisorType.PROXMOX -> getString(R.string.hypervisor_type_proxmox)
-                            HypervisorType.XCPNG -> getString(R.string.hypervisor_type_xcpng)
-                            HypervisorType.VMWARE -> getString(R.string.hypervisor_type_vmware)
-                            HypervisorType.OCI -> getString(R.string.oci_manager_title)
-                            HypervisorType.LIBVIRT -> getString(R.string.hypervisor_type_libvirt)
-                        }
-                        android.widget.Toast.makeText(
-                            this@MainActivity,
-                            getString(R.string.main_no_hosts_configured, typeName),
-                            android.widget.Toast.LENGTH_LONG
-                        ).show()
-                        // Switch to Infra tab (Hypervisors sub-tab)
-                        viewPager.currentItem = MainTab.INFRA
-                    }
-                    hypervisors.size == 1 -> {
-                        // Only one hypervisor, open it directly
-                        openHypervisorManager(hypervisors[0])
-                    }
-                    else -> {
-                        // Multiple hypervisors, show selection dialog
-                        showHypervisorSelectionDialog(hypervisors)
-                    }
-                }
-            } catch (e: Exception) {
-                val mapped = ThrowableMapper.map(this@MainActivity, "MainActivity", e, "Failed to get hypervisors by type")
-                android.widget.Toast.makeText(
-                    this@MainActivity,
-                    getString(R.string.hypervisor_load_failed_fmt, mapped.message),
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
-            }
-        }
-    }
-
-    /**
      * Open the appropriate hypervisor manager activity
      */
     private fun openHypervisorManager(hypervisor: HypervisorProfile) {

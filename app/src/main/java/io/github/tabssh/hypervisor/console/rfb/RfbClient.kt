@@ -76,7 +76,6 @@ class RfbClient(
 ) {
     companion object {
         private const val TAG = "RfbClient"
-        private const val RFB_VERSION = "RFB 003.008\n"
 
         /**
          * Values of `VncHost.securityType`, written by the security-type

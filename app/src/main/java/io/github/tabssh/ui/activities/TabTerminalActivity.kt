@@ -36,7 +36,6 @@ import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.AutoCompleteTextView
 import android.widget.Button
-import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -73,8 +72,6 @@ import io.github.tabssh.ui.views.VncView
 import io.github.tabssh.ui.views.SpiceView
 import io.github.tabssh.ui.tabs.ConsoleTab
 import io.github.tabssh.ui.tabs.ConsoleDisplayMode
-import io.github.tabssh.hypervisor.console.rfb.RfbConstants
-import io.github.tabssh.hypervisor.spice.SpiceConstants
 import io.github.tabssh.ui.keyboard.ConsoleKeyMapper
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
@@ -2201,22 +2198,6 @@ class TabTerminalActivity : TabSSHActivity() {
      * teardown).
      */
     private var selectionActionMode: ActionMode? = null
-
-    private fun beginSelection(x: Float, y: Float) {
-        val view = getActiveTerminalView() ?: run {
-            Toast.makeText(this, getString(R.string.terminal_no_active_session), Toast.LENGTH_SHORT).show()
-            return
-        }
-        // beginWordSelectionAtTouch: expands to the word under the finger,
-        // pre-grabs the focus handle so the user can drag immediately (the
-        // long-press gesture leaves an active touch stream — without pre-grab
-        // the first MOVE event would fall through to GestureDetector and scroll
-        // instead of extending the selection). Also fires onSelectionStarted →
-        // startTerminalSelectionActionMode. Do NOT call startTerminalSelectionActionMode
-        // directly here — a second call finishes the ActionMode just created by
-        // the callback, resetting selectionActive and leaving the bar broken.
-        view.beginWordSelectionAtTouch(x, y)
-    }
 
     private fun startTerminalSelectionActionMode(view: TerminalView) {
         // Dismiss any stale bar first — guards against the user

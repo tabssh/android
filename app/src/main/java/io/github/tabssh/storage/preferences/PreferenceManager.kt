@@ -606,10 +606,6 @@ class PreferenceManager(private val context: Context) {
         return preferences.getLong(key, defaultValue)
     }
 
-    private fun setLong(key: String, value: Long) {
-        preferences.edit().putLong(key, value).apply()
-    }
-
     fun getStringSet(key: String, defaultValue: Set<String> = emptySet()): Set<String> {
         return preferences.getStringSet(key, defaultValue) ?: defaultValue
     }

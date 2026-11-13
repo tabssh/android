@@ -1,8 +1,5 @@
 package io.github.tabssh.ui.dialogs
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.content.Intent
 import android.graphics.Typeface
 import android.net.Uri

@@ -367,6 +367,7 @@ class HostAvailabilityWorker(
         if (!ssh.isConnected()) return
 
         val result = runCatching { MetricsCollector(ssh).collectMetrics() }
+            .onFailure { e -> if (e is kotlinx.coroutines.CancellationException) throw e }
             .onFailure { e -> Logger.w(TAG, "Metrics collection threw for ${profile.name} — skipping threshold check", e) }
         val metrics = result.getOrNull()?.getOrNull() ?: return
 

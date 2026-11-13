@@ -938,6 +938,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
                     break
                 }
                 val r = runCatching { collector.collectMetrics() }
+                    .onFailure { e -> if (e is kotlinx.coroutines.CancellationException) throw e }
                     .onFailure { e -> Logger.w("MultiHostDashboard", "Metrics collection threw for ${profile.name}", e) }
                 withContext(Dispatchers.Main) {
                     if (r.isSuccess) {

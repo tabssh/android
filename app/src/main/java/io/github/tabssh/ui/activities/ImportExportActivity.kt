@@ -300,13 +300,6 @@ class ImportExportActivity : TabSSHActivity() {
     }
 
     /**
-     * Launch the SSH config file picker.
-     */
-    private fun importSSHConfig() {
-        importSSHConfigLauncher.launch(arrayOf("*/*"))
-    }
-
-    /**
      * Export all current connections to an OpenSSH config text file at [uri].
      * Passwords are never written — they live in the Android Keystore.
      */

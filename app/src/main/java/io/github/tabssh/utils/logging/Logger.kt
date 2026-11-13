@@ -839,14 +839,6 @@ object Logger {
     }
 
     /**
-     * Sanitize stack trace for public sharing
-     */
-    private fun sanitizeStackTrace(throwable: Throwable): String {
-        val stackTrace = Log.getStackTraceString(throwable)
-        return sanitizeForPublic(stackTrace)
-    }
-
-    /**
      * Write crash report SYNCHRONOUSLY
      * Called from UncaughtExceptionHandler - must complete before process dies
      */

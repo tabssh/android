@@ -554,6 +554,12 @@ class SpiceView @JvmOverloads constructor(
         contextMenuRunnable = null
     }
 
+    // Drop a queued long-press callback so it cannot fire on a detached view.
+    override fun onDetachedFromWindow() {
+        cancelContextMenuTimer()
+        super.onDetachedFromWindow()
+    }
+
     private fun screenToBitmap(sx: Float, sy: Float): Pair<Int, Int> {
         val scale = currentScale()
         val originX = (width - fbWidth * scale) / 2f - panX * scale

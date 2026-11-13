@@ -1703,33 +1703,6 @@ class SSHConnection(
     }
     
     /**
-     * Get private key for authentication from secure storage  
-     */
-    private suspend fun getPrivateKeyForAuthentication(keyId: String): java.security.PrivateKey? = withContext(Dispatchers.IO) {
-        return@withContext try {
-            // Get application instance to access key storage
-            val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
-            if (app != null) {
-                val privateKey = app.keyStorage.retrievePrivateKey(keyId)
-                if (privateKey != null) {
-                    Logger.d("SSHConnection", "Retrieved private key for keyId: $keyId")
-                    return@withContext privateKey
-                } else {
-                    Logger.w("SSHConnection", "Private key not found for keyId: $keyId")
-                }
-            } else {
-                Logger.e("SSHConnection", "Could not access application context for key storage")
-            }
-            
-            null
-            
-        } catch (e: Exception) {
-            Logger.e("SSHConnection", "Error retrieving private key", e)
-            null
-        }
-    }
-    
-    /**
      * Retrieve JSch-native bytes for a keyId.
      * Delegates to [KeyStorage.getJSchBytesWithFallback] which handles both
      * the fast-path (bytes cached at import/generate time) and the fallback

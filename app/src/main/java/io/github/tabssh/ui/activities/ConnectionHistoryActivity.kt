@@ -14,7 +14,6 @@ import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import io.github.tabssh.R
 import io.github.tabssh.utils.ThrowableMapper
-import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

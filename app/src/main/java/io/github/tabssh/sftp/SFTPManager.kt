@@ -4,7 +4,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 import com.jcraft.jsch.ChannelSftp
-import com.jcraft.jsch.SftpATTRS
 import com.jcraft.jsch.SftpException
 import io.github.tabssh.ssh.connection.SSHConnection
 import io.github.tabssh.utils.logging.Logger

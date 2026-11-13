@@ -225,14 +225,6 @@ class MultiRowKeyboardView @JvmOverloads constructor(
     }
 
     /**
-     * Setup default 3-row layout
-     */
-    private fun setupDefaultLayout() {
-        rebuildRows()
-        applyDefaultKeys()
-    }
-
-    /**
      * Rebuild row views based on numberOfRows
      */
     private fun rebuildRows() {
