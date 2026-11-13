@@ -545,6 +545,7 @@
     <string name="container_dashboard_inventory">Inventory</string>
     <string name="container_dashboard_engine_fmt">%1$s · %2$s</string>
     <string name="container_dashboard_count_unavailable">—</string>
+    <string name="container_dashboard_updates">Updates</string>
     <string name="container_dashboard_count_desc_fmt">%1$s: %2$s</string>
     <string name="container_dashboard_count_desc_unavailable_fmt">%1$s: not available</string>
     <string name="container_dashboard_partial">Some values could not be read from this host. Tap Refresh to try again.</string>

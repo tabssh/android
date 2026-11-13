@@ -16,16 +16,20 @@ import io.github.tabssh.R
 import io.github.tabssh.containers.ContainerEngine
 import io.github.tabssh.containers.ContainerSessionManager
 import io.github.tabssh.containers.EngineCapability
+import io.github.tabssh.containers.registry.HostUpdateScanner
+import io.github.tabssh.containers.registry.UpdateApplier
 import io.github.tabssh.containers.transport.ContainerDiskUsage
 import io.github.tabssh.containers.transport.ContainerEngineInfo
 import io.github.tabssh.containers.transport.ContainerEngineVersion
 import io.github.tabssh.containers.transport.ContainerResult
+import io.github.tabssh.containers.transport.ContainerSummary
 import io.github.tabssh.ui.utils.ContainerEngineLabels
 import io.github.tabssh.ui.utils.ContainerText
 import io.github.tabssh.utils.Format
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Cap for a single daemon-reported field inside a formatted dashboard line. */
@@ -91,6 +95,7 @@ class ContainerDashboardFragment : ContainerPageFragment() {
         val networks: Int?,
         val volumes: Int?,
         val images: Int?,
+        val updates: Int?,
         val disk: ContainerDiskUsage?
     )
 
@@ -170,7 +175,7 @@ class ContainerDashboardFragment : ContainerPageFragment() {
         coroutineScope {
             val info = async { session.transport.engineInfo() }
             val version = async { session.transport.engineVersion() }
-            val containers = async { session.transport.listContainers(all = true).valueOrNull()?.size }
+            val containerList = async { session.transport.listContainers(all = true).valueOrNull() }
             val stacks = async { if (engine.supports(EngineCapability.COMPOSE_STACKS)) stackCount(session) else null }
             val networks = async {
                 if (engine.supports(EngineCapability.NETWORKS)) {
@@ -193,6 +198,13 @@ class ContainerDashboardFragment : ContainerPageFragment() {
                     null
                 }
             }
+            val updates = async {
+                if (engine.supports(EngineCapability.IMAGE_UPDATES)) {
+                    updateCount(session, containerList.await())
+                } else {
+                    null
+                }
+            }
             val disk = async {
                 if (engine.supports(EngineCapability.DISK_USAGE)) {
                     session.transport.diskUsage().valueOrNull()
@@ -204,13 +216,40 @@ class ContainerDashboardFragment : ContainerPageFragment() {
                 info = info.await(),
                 version = version.await(),
                 stacks = stacks.await(),
-                containers = containers.await(),
+                containers = containerList.await()?.size,
                 networks = networks.await(),
                 volumes = volumes.await(),
                 images = images.await(),
+                updates = updates.await(),
                 disk = disk.await()
             )
         }
+    }
+
+    /**
+     * Containers with a newer image waiting, from the scanner's pending flags. A compose project
+     * counts once, matching how the Updates tab groups them; flags for containers that no longer
+     * exist are ignored. Null when the container list could not be read.
+     */
+    private suspend fun updateCount(
+        session: ContainerSessionManager.ContainerSession,
+        containers: List<ContainerSummary>?
+    ): Int? {
+        containers ?: return null
+        val byName = containers.associateBy { it.names.firstOrNull()?.trimStart('/') ?: it.id.take(12) }
+        val policies = app.database.containerAutoUpdatePolicyDao()
+            .getPoliciesForHost(session.host.id).first()
+        return policies
+            .filter {
+                it.scope != HostUpdateScanner.SCOPE_STACK && it.pendingUpdateDigest != null &&
+                    byName.containsKey(it.containerNameOrStackName)
+            }
+            .map { policy ->
+                byName[policy.containerNameOrStackName]
+                    ?.labels?.get(UpdateApplier.COMPOSE_PROJECT_LABEL)?.takeIf { it.isNotEmpty() }
+                    ?: "container:${policy.containerNameOrStackName}"
+            }
+            .toSet().size
     }
 
     /**
@@ -265,6 +304,11 @@ class ContainerDashboardFragment : ContainerPageFragment() {
         if (engine.supports(EngineCapability.IMAGES)) {
             rows += CountRow(
                 R.drawable.ic_container_image, R.string.container_manager_tab_images, loaded.images
+            )
+        }
+        if (engine.supports(EngineCapability.IMAGE_UPDATES)) {
+            rows += CountRow(
+                R.drawable.ic_download, R.string.container_dashboard_updates, loaded.updates
             )
         }
 
@@ -361,7 +405,7 @@ class ContainerDashboardFragment : ContainerPageFragment() {
      */
     private fun bindNotice(loaded: DashboardLoad, engineInfoOk: Boolean) {
         val missing = listOf(
-            loaded.containers, loaded.networks, loaded.volumes, loaded.images
+            loaded.containers, loaded.networks, loaded.volumes, loaded.images, loaded.updates
         ).any { it == null } || !engineInfoOk
         if (missing) {
             showNotice(getString(R.string.container_dashboard_partial))
