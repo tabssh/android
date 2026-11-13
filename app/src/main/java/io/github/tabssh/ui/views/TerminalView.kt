@@ -2405,6 +2405,8 @@ class TerminalView @JvmOverloads constructor(
     private var tpDragging = false
     private var tpTapDragArmed = false
     private var tpLastTapUpTime = 0L
+    private var tpLastTapUpX = 0f
+    private var tpLastTapUpY = 0f
     private var tpLongPressFired = false
     private var tpMultiTouch = false
     private var tpMultiScrolled = false
@@ -2575,11 +2577,19 @@ class TerminalView @JvmOverloads constructor(
                 requestFocus()
                 val fire = Runnable {
                     tpLongPressRunnable = null
-                    if (tpActive && !tpMoved && !tpMultiTouch) {
+                    // Holding the second tap of a double tap is not a long press (same guard as the non-mouse path).
+                    if (tpActive && !tpMoved && !tpMultiTouch && !tpTapDragArmed) {
                         tpLongPressFired = true
                         performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-                        Logger.d("TerminalView.Mouse", "long press -> terminal menu")
-                        onContextMenuRequested?.invoke(tpDownX, tpDownY)
+                        // Same as the non-mouse path: a link under the finger opens the URL dialog, anything else the terminal menu.
+                        val url = detectUrlAtPosition(tpDownX, tpDownY)
+                        if (url != null) {
+                            Logger.d("TerminalView.Mouse", "long press on URL: xxxxx (${url.length} chars)")
+                            onUrlDetected?.invoke(url)
+                        } else {
+                            Logger.d("TerminalView.Mouse", "long press -> terminal menu")
+                            onContextMenuRequested?.invoke(tpDownX, tpDownY)
+                        }
                     }
                 }
                 tpLongPressRunnable = fire
@@ -2681,8 +2691,20 @@ class TerminalView @JvmOverloads constructor(
                     endTrackpadDrag()
                     tpLastTapUpTime = 0L
                 } else if (!tpMoved && !tpLongPressFired && !tpMultiTouch) {
-                    trackpadClick(com.termux.terminal.TerminalEmulator.MOUSE_LEFT_BUTTON)
-                    tpLastTapUpTime = event.eventTime
+                    val doubleTapSlop = android.view.ViewConfiguration.get(context).scaledDoubleTapSlop
+                    val dx = event.x - tpLastTapUpX
+                    val dy = event.y - tpLastTapUpY
+                    if (tpTapDragArmed && dx * dx + dy * dy <= doubleTapSlop * doubleTapSlop) {
+                        // Second tap of a double tap at the same spot: select the word under the finger
+                        // (same as with the mouse off) instead of sending another click.
+                        selectWordAtPosition(event.x, event.y)
+                        tpLastTapUpTime = 0L
+                    } else {
+                        trackpadClick(com.termux.terminal.TerminalEmulator.MOUSE_LEFT_BUTTON)
+                        tpLastTapUpTime = event.eventTime
+                        tpLastTapUpX = event.x
+                        tpLastTapUpY = event.y
+                    }
                 } else {
                     tpLastTapUpTime = 0L
                 }
