@@ -149,7 +149,8 @@ class ContainerStacksFragment : ContainerPageFragment() {
         for (stack in dao.getStacksForHostList(manager.hostId)) {
             val output = session.transport.composePs(stack.remotePath).valueOrNull()?.trim()
             if (output != null) {
-                val services = output.lines().drop(1).count { it.isNotBlank() }
+                val services = io.github.tabssh.containers.transport.DockerCliParsers
+                    .parseComposePsServices(output).size
                 dao.updateLastKnownStatus(
                     stack.id,
                     res.getQuantityString(

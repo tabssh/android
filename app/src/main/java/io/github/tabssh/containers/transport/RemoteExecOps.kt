@@ -45,6 +45,9 @@ class RemoteExecOps(
     @Volatile private var remoteUser: String? = null
     @Volatile private var remoteHome: String? = null
 
+    /** Whether composemgr is installed on the remote, probed once per instance. */
+    @Volatile private var composemgrAvailable: Boolean? = null
+
     /** Compose invocation, detected once per instance. */
     @Volatile private var composeInvocation: ComposeInvocation? = null
 
@@ -217,63 +220,69 @@ class RemoteExecOps(
     }
 
     suspend fun composeUp(stackDir: String): ContainerResult<String> =
-        composeCommand(stackDir, "up -d")
+        composeLifecycle(stackDir, "up", "up -d")
 
     suspend fun composeDown(stackDir: String): ContainerResult<String> =
-        composeCommand(stackDir, "down")
+        composeLifecycle(stackDir, "down", "down")
 
     suspend fun composePull(stackDir: String): ContainerResult<String> =
-        composeCommand(stackDir, "pull")
+        composeLifecycle(stackDir, "pull", "pull")
 
     suspend fun composeRestart(stackDir: String): ContainerResult<String> =
-        composeCommand(stackDir, "restart")
+        composeLifecycle(stackDir, "restart", "restart")
 
-    /** True when the `composemgr` helper is on the remote PATH. */
-    private suspend fun hasComposemgr(): Boolean = try {
-        runner.run("command -v composemgr", FILE_TIMEOUT_MS).isSuccess
-    } catch (e: kotlinx.coroutines.CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        false
+    /** True when the `composemgr` helper is on the remote PATH; probed once per instance. */
+    private suspend fun hasComposemgr(): Boolean {
+        composemgrAvailable?.let { return it }
+        val found = try {
+            runner.run("command -v composemgr", FILE_TIMEOUT_MS).isSuccess
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        }
+        composemgrAvailable = found
+        return found
     }
 
     /**
-     * Update a compose project in place: down, pull, up. With `composemgr` on the host that is
-     * `composemgr --dir {dir} down; … pull; … up`, otherwise compose's own `down`, `pull`, `up -d`.
-     * `up` always runs after `down`, so a failed pull brings the stack back on its current image
-     * and is then reported as the failure.
+     * Run a stack lifecycle verb: `composemgr --dir {dir} {mgrVerb}` when composemgr is installed,
+     * otherwise compose's own [composeArgs] inside the stack directory (plugin, then standalone).
+     */
+    private suspend fun composeLifecycle(
+        stackDir: String,
+        mgrVerb: String,
+        composeArgs: String
+    ): ContainerResult<String> {
+        gate.reject(EngineCapability.COMPOSE_STACKS)?.let { return it }
+        if (!hasComposemgr()) return composeCommand(stackDir, composeArgs)
+        val env = cliContext.envPrefix()
+        return withExpanded(stackDir) { real ->
+            val result = runner.run(
+                "${env}composemgr --dir ${SshExecRunner.shQuote(real)} $mgrVerb", COMPOSE_TIMEOUT_MS
+            )
+            if (result.isSuccess) {
+                ContainerResult.Success(result.stdout.ifEmpty { result.stderr })
+            } else {
+                DockerCliParsers.classifyFailure(
+                    "composemgr $mgrVerb failed", result.stderr, result.stdout, engine
+                )
+            }
+        }
+    }
+
+    /**
+     * Update a compose project in place: down, pull, up, through composemgr when installed and
+     * compose otherwise. `up` always runs after `down`, so a failed pull brings the stack back on
+     * its current image and is then reported as the failure.
      */
     suspend fun composeUpdate(stackDir: String): ContainerResult<String> {
         gate.reject(EngineCapability.COMPOSE_STACKS)?.let { return it }
-        val steps: List<Triple<String, Boolean, suspend () -> ContainerResult<String>>> =
-            if (hasComposemgr()) {
-                val env = cliContext.envPrefix()
-                fun mgr(verb: String): suspend () -> ContainerResult<String> = {
-                    withExpanded(stackDir) { real ->
-                        val result = runner.run(
-                            "${env}composemgr --dir ${SshExecRunner.shQuote(real)} $verb", COMPOSE_TIMEOUT_MS
-                        )
-                        if (result.isSuccess) {
-                            ContainerResult.Success(result.stdout.ifEmpty { result.stderr })
-                        } else {
-                            DockerCliParsers.classifyFailure(
-                                "composemgr $verb failed", result.stderr, result.stdout, engine
-                            )
-                        }
-                    }
-                }
-                listOf(
-                    Triple("down", true, mgr("down")),
-                    Triple("pull", false, mgr("pull")),
-                    Triple("up", true, mgr("up"))
-                )
-            } else {
-                listOf(
-                    Triple("down", true, { composeDown(stackDir) }),
-                    Triple("pull", false, { composePull(stackDir) }),
-                    Triple("up", true, { composeUp(stackDir) })
-                )
-            }
+        val steps: List<Triple<String, Boolean, suspend () -> ContainerResult<String>>> = listOf(
+            Triple("down", true, { composeDown(stackDir) }),
+            Triple("pull", false, { composePull(stackDir) }),
+            Triple("up", true, { composeUp(stackDir) })
+        )
         val log = StringBuilder()
         var pullFailure: ContainerResult<String>? = null
         for ((name, fatal, run) in steps) {
@@ -331,7 +340,8 @@ class RemoteExecOps(
                     "compose ls failed", result.stderr, result.stdout, engine
                 )
             }
-            ContainerResult.Success(DockerCliParsers.parseComposeLs(result.stdout))
+            val listed = DockerCliParsers.parseComposeLs(result.stdout)
+            ContainerResult.Success(listed + scanDownStacks(listed.map { it.name }.toSet()))
         } catch (e: TransportUnavailableException) {
             ContainerResult.TransportUnavailable(e.message.orEmpty(), e.detail)
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -341,17 +351,65 @@ class RemoteExecOps(
         }
     }
 
+    /**
+     * Stacks that are down have no containers, so `compose ls` forgets them. Look for
+     * `{composeBasePath}/{name}/(compose|docker-compose).(yml|yaml)` and report every directory not
+     * in [known] as a "down" project, so a stack stays listed (and can be started again) while the
+     * user edits it. Best effort: any failure just means no extra entries.
+     */
+    private suspend fun scanDownStacks(known: Set<String>): List<ComposeLsEntry> = try {
+        when (val base = expandRemotePath(host.composeBasePath.trimEnd('/'))) {
+            is ContainerResult.Success -> {
+                val names = listOf("compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml")
+                    .joinToString(" -o ") { "-name '$it'" }
+                val result = runner.run(
+                    "find ${SshExecRunner.shQuote(base.value)} -mindepth 2 -maxdepth 2 -type f " +
+                        "\\( $names \\) 2>/dev/null",
+                    FILE_TIMEOUT_MS
+                )
+                result.stdout.lines().map { it.trim() }.filter { it.contains('/') }
+                    .groupBy { it.substringBeforeLast('/').substringAfterLast('/') }
+                    .filterKeys { it.isNotEmpty() && it !in known }
+                    .map { (name, files) -> ComposeLsEntry(name, "down", listOf(files.sorted().first())) }
+                    .sortedBy { it.name }
+            }
+            else -> emptyList()
+        }
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        emptyList()
+    }
+
     suspend fun composeUpByProject(name: String, configFile: String): ContainerResult<String> =
-        composeCommandByProject(name, configFile, "up -d")
+        composeLifecycleByProject(name, configFile, "up", "up -d")
 
     suspend fun composeDownByProject(name: String, configFile: String): ContainerResult<String> =
-        composeCommandByProject(name, configFile, "down")
+        composeLifecycleByProject(name, configFile, "down", "down")
 
     suspend fun composePullByProject(name: String, configFile: String): ContainerResult<String> =
-        composeCommandByProject(name, configFile, "pull")
+        composeLifecycleByProject(name, configFile, "pull", "pull")
 
     suspend fun composeRestartByProject(name: String, configFile: String): ContainerResult<String> =
-        composeCommandByProject(name, configFile, "restart")
+        composeLifecycleByProject(name, configFile, "restart", "restart")
+
+    /**
+     * Lifecycle verb for a discovered project. composemgr names the project after its directory, so
+     * it is used only when the config file's directory is called [name]; otherwise compose runs
+     * with an explicit `-f`/`-p` pair so the right project is addressed.
+     */
+    private suspend fun composeLifecycleByProject(
+        name: String,
+        configFile: String,
+        mgrVerb: String,
+        composeArgs: String
+    ): ContainerResult<String> {
+        val dir = configFile.substringBefore(',').trim().substringBeforeLast('/', "")
+        if (dir.isNotEmpty() && dir.substringAfterLast('/') == name && hasComposemgr()) {
+            return composeLifecycle(dir, mgrVerb, composeArgs)
+        }
+        return composeCommandByProject(name, configFile, composeArgs)
+    }
 
     suspend fun composePsByProject(name: String, configFile: String): ContainerResult<String> =
         composeCommandByProject(name, configFile, "ps --format json")

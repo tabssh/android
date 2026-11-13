@@ -4,6 +4,7 @@
 
 - Container update settings work at three levels: global, per host, and per image or compose stack, with the most specific winning. A new Updates tab on Docker and Podman hosts shows available updates and lets you change each level.
 - Compose containers update through compose as a whole project (using composemgr when installed) and standalone containers through recreate; the two are never mixed.
+- Every compose stack action (start, stop, pull, restart) uses composemgr when the host has it, and stacks that are down stay in the Stacks list so you can edit them and bring them back up.
 - Update checks now run in the background on their own schedule and can connect to saved hosts themselves.
 - VPS and Domain trackers can renew, cancel, or delete several entries at once. Rows are easier to read, and past-due items can be marked renewed or canceled. Renewal reminders now fire for past-due items.
 - Selecting terminal text shows its Copy bar next to the selection, and double tap and link long-press work with mouse support on.
