@@ -595,7 +595,7 @@
     <string name="container_update_auto_apply_title">Apply updates automatically</string>
     <string name="container_update_auto_apply_summary">Pull and recreate (or update the compose project) when a newer image is found. Hosts and individual images can override this</string>
     <string name="container_update_check_title">Container image update checks</string>
-    <string name="container_update_check_summary">Periodically compare watched containers against their registry and alert when a newer image is available</string>
+    <string name="container_update_check_summary">Periodically compare watched containers against their registry and alert when a newer image is available. Does nothing until a container host is added</string>
     <string name="container_image_dangling">(dangling)</string>
     <string name="container_new_container_config_desc">New container config</string>
     <string name="container_create_volume_title">Create volume</string>

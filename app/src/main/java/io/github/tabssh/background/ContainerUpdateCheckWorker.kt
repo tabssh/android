@@ -138,6 +138,14 @@ class ContainerUpdateCheckWorker(
     }
 
     override suspend fun doWork(): Result {
+        // No container hosts means nothing to check: not an error, no notification, and no need to
+        // probe the network or battery state.
+        val hosts = TabSSHApplication.get().database.containerHostDao().getAllList()
+        if (hosts.isEmpty()) {
+            Logger.d(TAG, "Skipping run: no container hosts")
+            return Result.success()
+        }
+
         // Gate 0: validated internet — registry HTTPS calls need a real route.
         if (!isInternetAvailable()) {
             Logger.d(TAG, "Skipping run: no validated internet connection")
@@ -174,7 +182,7 @@ class ContainerUpdateCheckWorker(
         val hostSemaphore = Semaphore(MAX_CONCURRENT_HOSTS)
         val now = System.currentTimeMillis()
         coroutineScope {
-            for (host in db.containerHostDao().getAllList()) {
+            for (host in hosts) {
                 val hostPolicies = allPolicies[host.id].orEmpty()
                 // A host is worth a pass when checks are on for it, or when one of its
                 // images/stacks switches them back on over a host/global "off".
