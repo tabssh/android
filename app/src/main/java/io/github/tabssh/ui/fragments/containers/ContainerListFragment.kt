@@ -20,6 +20,7 @@ import io.github.tabssh.R
 import io.github.tabssh.containers.ComposeMembership
 import io.github.tabssh.containers.ContainerSessionManager
 import io.github.tabssh.containers.EngineCapability
+import io.github.tabssh.containers.registry.UpdateApplier
 import io.github.tabssh.containers.transport.ContainerAction
 import io.github.tabssh.containers.transport.ContainerSummary
 import io.github.tabssh.containers.transport.ContainerResult
@@ -305,7 +306,10 @@ class ContainerListFragment : ContainerPageFragment() {
             }
         }
         actions += ContainerActionSheet.Action(R.drawable.ic_download, getString(R.string.container_action_auto_update)) {
-            AutoUpdatePolicyDialog.show(requireContext(), app, manager.hostId, name)
+            AutoUpdatePolicyDialog.show(
+                requireContext(), app, manager.hostId, name,
+                container.labels[UpdateApplier.COMPOSE_PROJECT_LABEL]?.takeIf { it.isNotEmpty() }
+            )
         }
         actions += ContainerActionSheet.Action(R.drawable.ic_info, getString(R.string.container_action_details)) {
             openContainerDetail(container, ContainerDetailActivity.TAB_INSPECT)

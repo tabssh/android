@@ -228,6 +228,68 @@ class RemoteExecOps(
     suspend fun composeRestart(stackDir: String): ContainerResult<String> =
         composeCommand(stackDir, "restart")
 
+    /** True when the `composemgr` helper is on the remote PATH. */
+    private suspend fun hasComposemgr(): Boolean = try {
+        runner.run("command -v composemgr", FILE_TIMEOUT_MS).isSuccess
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        false
+    }
+
+    /**
+     * Update a compose project in place: down, pull, up. With `composemgr` on the host that is
+     * `composemgr --dir {dir} down; … pull; … up`, otherwise compose's own `down`, `pull`, `up -d`.
+     * `up` always runs after `down`, so a failed pull brings the stack back on its current image
+     * and is then reported as the failure.
+     */
+    suspend fun composeUpdate(stackDir: String): ContainerResult<String> {
+        gate.reject(EngineCapability.COMPOSE_STACKS)?.let { return it }
+        val steps: List<Triple<String, Boolean, suspend () -> ContainerResult<String>>> =
+            if (hasComposemgr()) {
+                val env = cliContext.envPrefix()
+                fun mgr(verb: String): suspend () -> ContainerResult<String> = {
+                    withExpanded(stackDir) { real ->
+                        val result = runner.run(
+                            "${env}composemgr --dir ${SshExecRunner.shQuote(real)} $verb", COMPOSE_TIMEOUT_MS
+                        )
+                        if (result.isSuccess) {
+                            ContainerResult.Success(result.stdout.ifEmpty { result.stderr })
+                        } else {
+                            DockerCliParsers.classifyFailure(
+                                "composemgr $verb failed", result.stderr, result.stdout, engine
+                            )
+                        }
+                    }
+                }
+                listOf(
+                    Triple("down", true, mgr("down")),
+                    Triple("pull", false, mgr("pull")),
+                    Triple("up", true, mgr("up"))
+                )
+            } else {
+                listOf(
+                    Triple("down", true, { composeDown(stackDir) }),
+                    Triple("pull", false, { composePull(stackDir) }),
+                    Triple("up", true, { composeUp(stackDir) })
+                )
+            }
+        val log = StringBuilder()
+        var pullFailure: ContainerResult<String>? = null
+        for ((name, fatal, run) in steps) {
+            val result = run()
+            if (result is ContainerResult.Success) {
+                log.append(result.value)
+            } else if (fatal) {
+                return result
+            } else {
+                Logger.w(TAG, "compose $name failed; continuing so the stack comes back up")
+                pullFailure = result
+            }
+        }
+        return pullFailure ?: ContainerResult.Success(log.toString())
+    }
+
     suspend fun composePs(stackDir: String): ContainerResult<String> =
         composeCommand(stackDir, "ps --format json")
 

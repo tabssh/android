@@ -10,8 +10,8 @@ interface ContainerAutoUpdatePolicyDao {
     @Query("SELECT * FROM container_auto_update_policies WHERE container_host_id = :hostId ORDER BY container_name_or_stack_name ASC")
     fun getPoliciesForHost(hostId: Long): Flow<List<ContainerAutoUpdatePolicy>>
 
-    /** Enabled policies across all hosts — the periodic update-check worker's work list. */
-    @Query("SELECT * FROM container_auto_update_policies WHERE enabled = 1")
+    /** Policies whose own override does not switch checks off (NULL inherits, 1 forces on). */
+    @Query("SELECT * FROM container_auto_update_policies WHERE enabled_override IS NOT 0")
     suspend fun getEnabledList(): List<ContainerAutoUpdatePolicy>
 
     /** Every policy regardless of [ContainerAutoUpdatePolicy.enabled] — backup export and sync collection. */

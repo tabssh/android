@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:app="http://schemas.android.com/apk/res-auto"
   xmlns:tools="http://schemas.android.com/tools">
 
   <PreferenceCategory
@@ -111,6 +112,22 @@
       android:title="@string/container_update_check_title"
       android:summary="@string/container_update_check_summary"
       android:defaultValue="true" />
+
+    <!-- Global default check interval; a host can override it on its Updates tab. -->
+    <ListPreference
+      android:key="container_update_interval_hours"
+      android:title="@string/container_update_interval_title"
+      android:entries="@array/container_update_interval_entries"
+      android:entryValues="@array/container_update_interval_values"
+      android:defaultValue="12"
+      app:useSimpleSummaryProvider="true" />
+
+    <!-- Global default for applying found updates unattended; hosts and images can override it. -->
+    <SwitchPreferenceCompat
+      android:key="container_update_auto_apply"
+      android:title="@string/container_update_auto_apply_title"
+      android:summary="@string/container_update_auto_apply_summary"
+      android:defaultValue="false" />
 
   </PreferenceCategory>
 

@@ -25,7 +25,8 @@ data class ContainerTabSpec(
 object ContainerTabs {
 
     /**
-     * Declaration order IS tab order: Dashboard, Containers, Stacks, Images,
+     * Declaration order IS tab order: Dashboard, Updates (Docker and Podman only, the engines the registry
+     * digest flow works for), Containers, Stacks, Images,
      * Volumes, Networks, then the destinations only Incus and LXC/LXD have —
      * Snapshots, Profiles, Projects. Each is gated on its capability, so an
      * engine without the concept gets no tab rather than an empty one.
@@ -35,6 +36,10 @@ object ContainerTabs {
             EngineCapability.CONTAINERS,
             R.string.container_manager_tab_dashboard
         ) { ContainerDashboardFragment() },
+        ContainerTabSpec(
+            EngineCapability.IMAGE_UPDATES,
+            R.string.container_manager_tab_updates
+        ) { ContainerUpdatesFragment() },
         ContainerTabSpec(
             EngineCapability.CONTAINERS,
             R.string.container_manager_tab_containers

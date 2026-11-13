@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.button.MaterialButtonToggleGroup
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    app:selectionRequired="true"
+    app:singleSelection="true"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <!-- Inherit / On / Off; ids are assigned in TriStateToggle.prepare because this layout is included more than once -->
+    <com.google.android.material.button.MaterialButton
+        style="?attr/materialButtonOutlinedStyle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:minHeight="@dimen/min_touch_target"
+        android:text="@string/container_updates_choice_inherit" />
+
+    <com.google.android.material.button.MaterialButton
+        style="?attr/materialButtonOutlinedStyle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:minHeight="@dimen/min_touch_target"
+        android:text="@string/container_updates_choice_on" />
+
+    <com.google.android.material.button.MaterialButton
+        style="?attr/materialButtonOutlinedStyle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:minHeight="@dimen/min_touch_target"
+        android:text="@string/container_updates_choice_off" />
+
+</com.google.android.material.button.MaterialButtonToggleGroup>

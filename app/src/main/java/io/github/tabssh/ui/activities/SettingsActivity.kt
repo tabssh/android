@@ -1336,16 +1336,13 @@ class MonitoringSettingsFragment : androidx.preference.PreferenceFragmentCompat(
                 true
             }
 
-        // Container update-check toggle — schedule or cancel the 12 h worker.
+        // Container update-check toggle — the global tier only: per-host and per-image overrides
+        // may still enable checks, so the worker keeps running and resolves each container itself.
         findPreference<androidx.preference.SwitchPreferenceCompat>("container_update_check_enabled")
             ?.setOnPreferenceChangeListener { _, newValue ->
                 val enabled = newValue as? Boolean ?: false
                 val ctx = requireContext()
-                if (enabled) {
-                    io.github.tabssh.background.ContainerUpdateCheckWorker.schedule(ctx)
-                } else {
-                    io.github.tabssh.background.ContainerUpdateCheckWorker.cancel(ctx)
-                }
+                io.github.tabssh.background.ContainerUpdateCheckWorker.schedule(ctx)
                 // Persist immediately so Application.onCreate reads the same
                 // key on cold start.
                 androidx.preference.PreferenceManager

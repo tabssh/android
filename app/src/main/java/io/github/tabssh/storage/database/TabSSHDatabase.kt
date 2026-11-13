@@ -60,7 +60,7 @@ import io.github.tabssh.utils.logging.Logger
         TelnetHost::class,
         HypervisorPasswordCarryover::class
     ],
-    version = 29,
+    version = 30,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -1265,6 +1265,20 @@ abstract class TabSSHDatabase : RoomDatabase() {
             }
         }
 
+        // Three-tier update settings: nullable per-host and per-image/stack overrides (NULL = inherit).
+        // Rows that opted out or opted into auto-apply under the old flags keep that behavior.
+        val MIGRATION_29_30 = object : Migration(29, 30) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE container_hosts ADD COLUMN update_enabled_override INTEGER")
+                db.execSQL("ALTER TABLE container_hosts ADD COLUMN update_auto_apply INTEGER")
+                db.execSQL("UPDATE container_hosts SET update_enabled_override = 0 WHERE update_check_enabled = 0")
+                db.execSQL("ALTER TABLE container_auto_update_policies ADD COLUMN enabled_override INTEGER")
+                db.execSQL("ALTER TABLE container_auto_update_policies ADD COLUMN auto_apply_override INTEGER")
+                db.execSQL("UPDATE container_auto_update_policies SET enabled_override = 0 WHERE enabled = 0")
+                db.execSQL("UPDATE container_auto_update_policies SET auto_apply_override = 1 WHERE auto_recreate_on_update = 1")
+            }
+        }
+
         fun getDatabase(context: Context): TabSSHDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -1274,7 +1288,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
                 )
                 .addCallback(DatabaseCallback())
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29, MIGRATION_29_30)
                 .build()
                 INSTANCE = instance
                 instance

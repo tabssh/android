@@ -30,6 +30,7 @@ enum class ContainerEngine(
             EngineCapability.VOLUMES,
             EngineCapability.NETWORKS,
             EngineCapability.COMPOSE_STACKS,
+            EngineCapability.IMAGE_UPDATES,
             EngineCapability.EXEC,
             EngineCapability.LOGS,
             EngineCapability.STATS,
@@ -80,6 +81,7 @@ enum class ContainerEngine(
             EngineCapability.VOLUMES,
             EngineCapability.NETWORKS,
             EngineCapability.COMPOSE_STACKS,
+            EngineCapability.IMAGE_UPDATES,
             EngineCapability.EXEC,
             EngineCapability.LOGS,
             EngineCapability.STATS,
@@ -145,6 +147,7 @@ enum class EngineCapability {
     LOGS,
     STATS,
     DISK_USAGE,
+    IMAGE_UPDATES,
     SNAPSHOTS,
     PROFILES,
     PROJECTS

@@ -12,7 +12,6 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.R
@@ -173,9 +172,6 @@ class ContainerHostEditActivity : TabSSHActivity() {
     private lateinit var editRunBase: TextInputEditText
     private lateinit var layoutCliPath: TextInputLayout
     private lateinit var editCliPath: TextInputEditText
-    private lateinit var switchUpdateCheck: SwitchMaterial
-    private lateinit var layoutUpdateInterval: TextInputLayout
-    private lateinit var editUpdateInterval: TextInputEditText
     private lateinit var editNotes: TextInputEditText
     private lateinit var buttonTestTransport: MaterialButton
     private lateinit var progressTest: ProgressBar
@@ -230,17 +226,12 @@ class ContainerHostEditActivity : TabSSHActivity() {
         editComposeBase.addTextChangedListener(watcher)
         editRunBase.addTextChangedListener(watcher)
         editCliPath.addTextChangedListener(watcher)
-        editUpdateInterval.addTextChangedListener(watcher)
         editNotes.addTextChangedListener(watcher)
         radioMode.setOnCheckedChangeListener { _, checkedId ->
             hasUnsavedChanges = true
             val custom = checkedId == R.id.radio_mode_custom
             sectionSaved.visibility = if (custom) View.GONE else View.VISIBLE
             sectionCustom.visibility = if (custom) View.VISIBLE else View.GONE
-        }
-        switchUpdateCheck.setOnCheckedChangeListener { _, checked ->
-            hasUnsavedChanges = true
-            layoutUpdateInterval.visibility = if (checked) View.VISIBLE else View.GONE
         }
         spinnerEngine.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
@@ -308,11 +299,6 @@ class ContainerHostEditActivity : TabSSHActivity() {
         editRunBase = findViewById(R.id.edit_run_base)
         layoutCliPath = findViewById(R.id.layout_cli_path)
         editCliPath = findViewById(R.id.edit_cli_path)
-        switchUpdateCheck = findViewById(R.id.switch_update_check)
-        layoutUpdateInterval = findViewById(R.id.layout_update_interval)
-        editUpdateInterval = findViewById(R.id.edit_update_interval)
-        // switchUpdateCheck's checked-change listener (visibility toggle plus
-        // the dirty-flag flip) is installed in setupUnsavedChangesGuard().
         editNotes = findViewById(R.id.edit_notes)
         buttonTestTransport = findViewById(R.id.button_test_transport)
         progressTest = findViewById(R.id.progress_test)
@@ -458,10 +444,6 @@ class ContainerHostEditActivity : TabSSHActivity() {
 
             editName.setText(host.name)
             editCliPath.setText(host.engineCliPath ?: "")
-            switchUpdateCheck.isChecked = host.updateCheckEnabled
-            layoutUpdateInterval.visibility =
-                if (host.updateCheckEnabled) View.VISIBLE else View.GONE
-            editUpdateInterval.setText(host.updateCheckIntervalHours?.toString() ?: "")
             editNotes.setText(host.notes ?: "")
             if (host.usesCustomEndpoint()) {
                 radioMode.check(R.id.radio_mode_custom)
@@ -601,9 +583,6 @@ class ContainerHostEditActivity : TabSSHActivity() {
             composeBasePath = composeBase,
             runConfigBasePath = runBase,
             engineCliPath = cliPath,
-            updateCheckEnabled = switchUpdateCheck.isChecked,
-            updateCheckIntervalHours = editUpdateInterval.text?.toString()?.trim()
-                ?.toIntOrNull()?.takeIf { it > 0 },
             notes = editNotes.text?.toString()?.trim()?.takeIf { it.isNotEmpty() },
             modifiedAt = System.currentTimeMillis()
         )

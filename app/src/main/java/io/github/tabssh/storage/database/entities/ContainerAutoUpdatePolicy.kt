@@ -31,18 +31,27 @@ data class ContainerAutoUpdatePolicy(
     @ColumnInfo(name = "container_name_or_stack_name")
     val containerNameOrStackName: String,
 
-    /** "container" (standalone container) or "stack_service" (compose stack service). */
+    /**
+     * "container" (standalone container), "stack_service" (compose stack service) or "stack"
+     * (an override-only row for a whole compose project; it is never checked itself, its
+     * overrides apply to every container of the project).
+     */
     @ColumnInfo(name = "scope")
     val scope: String,
 
+    /** Legacy flag, superseded by [enabledOverride] (migration 29→30). Never read. */
     @ColumnInfo(name = "enabled")
     val enabled: Boolean = true,
 
-    /**
-     * Second per-policy gate: when true, the background
-     * worker not only flags a pending update but pulls + recreates the
-     * container unattended. Default OFF — flag-and-notify only.
-     */
+    /** Image/stack tier of the update settings: checks on/off. NULL = inherit host/global. */
+    @ColumnInfo(name = "enabled_override")
+    val enabledOverride: Boolean? = null,
+
+    /** Image/stack tier of the update settings: apply unattended. NULL = inherit host/global. */
+    @ColumnInfo(name = "auto_apply_override")
+    val autoApplyOverride: Boolean? = null,
+
+    /** Legacy flag, superseded by [autoApplyOverride] (migration 29→30). Never read. */
     @ColumnInfo(name = "auto_recreate_on_update")
     val autoRecreateOnUpdate: Boolean = false,
 

@@ -105,9 +105,20 @@ data class ContainerHost(
     @ColumnInfo(name = "run_config_base_path")
     val runConfigBasePath: String = "/srv/\$USER/docker",
 
-    /** Per-host image-update-check opt-out — false skips this host entirely. */
+    /**
+     * Legacy per-host opt-out, superseded by [updateEnabledOverride] (migration 29→30 copied
+     * a false here into the override). Kept only so the column stays mapped; never read.
+     */
     @ColumnInfo(name = "update_check_enabled", defaultValue = "1")
     val updateCheckEnabled: Boolean = true,
+
+    /** Host tier of the update settings: checks on/off for this host. NULL = inherit the global setting. */
+    @ColumnInfo(name = "update_enabled_override")
+    val updateEnabledOverride: Boolean? = null,
+
+    /** Host tier of the update settings: apply found updates unattended. NULL = inherit the global setting. */
+    @ColumnInfo(name = "update_auto_apply")
+    val updateAutoApply: Boolean? = null,
 
     /** Per-host check interval override in hours. NULL = global default (twice daily). */
     @ColumnInfo(name = "update_check_interval_hours")

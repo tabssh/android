@@ -11,6 +11,7 @@ import io.github.tabssh.containers.ContainerSessionManager
 import io.github.tabssh.containers.registry.RegistryClient
 import io.github.tabssh.containers.registry.UpdateApplier
 import io.github.tabssh.containers.registry.UpdateChecker
+import io.github.tabssh.containers.registry.HostUpdateScanner
 import io.github.tabssh.containers.transport.ContainerResult
 import io.github.tabssh.containers.transport.ContainerTransport
 import io.github.tabssh.containers.transport.SshExecRunner
@@ -24,41 +25,40 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Periodic app-driven container image update checker.
  *
- * Every cycle (default 12 h — twice daily) the worker walks all enabled
- * [ContainerAutoUpdatePolicy] rows grouped by container host and, for each host
- * it can reach WITHOUT opening a new SSH session, runs an
- * [UpdateChecker.checkAll] pass: running digest (inspect RepoDigests) vs the
- * registry's current manifest digest. Each host carries its own override
- * (ContainerHost.updateCheckEnabled / updateCheckIntervalHours, gated by
- * [UpdateCheckGate]), and at most [MAX_CONCURRENT_HOSTS] hosts are checked
- * concurrently — fan-out is semaphore-bounded, never unbounded.
+ * The worker wakes hourly; each container host is only checked when its own
+ * resolved interval has elapsed ([UpdateCheckGate]). Settings come from three
+ * tiers, most specific wins ([UpdateSettingsResolver]): global preferences,
+ * per-host overrides on [ContainerHost], and per-image / per-compose-stack
+ * overrides on [ContainerAutoUpdatePolicy]. Containers without an override row
+ * are checked under the inherited settings; the worker creates the row it needs
+ * to track their pending-update state.
  *
- * ## Piggyback-only SSH
+ * ## Connections
  *
- * Like [HostAvailabilityWorker]'s metrics tier, this worker never dials out
- * from the background: a host is only checked when its linked SSH connection
- * is already live (app open or [io.github.tabssh.services.SSHConnectionService]
- * running). Hosts without a live session are skipped silently and picked up
- * on a later cycle. Registry HTTPS calls are direct (no SSH needed).
+ * A host is reached through the UI's cached session, an already-live SSH
+ * connection, or — for hosts linked to a saved connection — a monitoring
+ * connection the worker dials itself and closes afterwards. Hosts it cannot
+ * reach (custom endpoint or cloud-linked hosts with no live session) are
+ * skipped and retried on a later wake. Registry HTTPS calls are direct.
  *
  * ## Outcomes
  *
  * - New pending update → [NotificationHelper.notifyContainerUpdateAvailable]
- *   plus the DB badge state (`pending_update_digest`, written by the
- *   checker). Deduped: an already-known pending digest never re-alerts.
- * - Policy has `autoRecreateOnUpdate` → [UpdateApplier] runs the unattended
- *   pull-and-recreate and the result is posted via
- *   [NotificationHelper.notifyContainerUpdateApplied].
+ *   (once per standalone container or compose project) plus the DB badge state.
+ * - Resolved auto-apply on → [UpdateApplier] updates it unattended and the result
+ *   is posted via [NotificationHelper.notifyContainerUpdateApplied]. Compose
+ *   containers are updated through compose as a whole project, never with
+ *   `docker run`; standalone containers never through compose.
  *
- * ## Battery gating
+ * ## Gating
  *
- * Mirrors [HostAvailabilityWorker]: CONNECTED + not-low-battery constraints,
- * a validated-internet gate, the battery-saver opt-in pref, and the master
- * `container_update_check_enabled` switch.
+ * Network required (no battery-not-low constraint — it can defer checks for
+ * days), a validated-internet gate and the battery-saver opt-in pref.
  */
 class ContainerUpdateCheckWorker(
     private val appContext: Context,
@@ -68,7 +68,7 @@ class ContainerUpdateCheckWorker(
     companion object {
         private const val TAG = "ContainerUpdateCheckWorker"
 
-        /** Unique work name used with [ExistingPeriodicWorkPolicy.KEEP]. */
+        /** Unique work name used with [ExistingPeriodicWorkPolicy.UPDATE]. */
         const val WORK_NAME = "container_update_check"
 
         /**
@@ -84,18 +84,24 @@ class ContainerUpdateCheckWorker(
         /** Hard cap on hosts checked concurrently per cycle — never unbounded fan-out. */
         private const val MAX_CONCURRENT_HOSTS = 2
 
+        /** How long to wait for a background SSH connect (an unknown host key can never be accepted here). */
+        private const val CONNECT_TIMEOUT_MS = 45_000L
+
+        /** How often the worker wakes; each host's own interval decides whether it is actually checked. */
+        private const val WAKE_INTERVAL_HOURS = 1L
+
         /**
-         * Enqueue (or keep) the periodic worker. Safe to call multiple times —
-         * [ExistingPeriodicWorkPolicy.KEEP] is idempotent.
+         * Enqueue the periodic worker. Safe to call multiple times —
+         * [ExistingPeriodicWorkPolicy.UPDATE] swaps in the current definition without
+         * resetting the schedule.
          */
         fun schedule(context: Context) {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
-                .setRequiresBatteryNotLow(true)
                 .build()
 
             val request = PeriodicWorkRequestBuilder<ContainerUpdateCheckWorker>(
-                INTERVAL_HOURS, TimeUnit.HOURS
+                WAKE_INTERVAL_HOURS, TimeUnit.HOURS
             )
                 .setConstraints(constraints)
                 .setBackoffCriteria(
@@ -107,10 +113,10 @@ class ContainerUpdateCheckWorker(
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 request
             )
-            Logger.d(TAG, "Periodic container update check scheduled ($INTERVAL_HOURS h, network + not-low-battery)")
+            Logger.d(TAG, "Periodic container update check scheduled (wakes every $WAKE_INTERVAL_HOURS h, network required)")
         }
 
         /** Cancel the periodic worker (master toggle switched off). */
@@ -148,18 +154,13 @@ class ContainerUpdateCheckWorker(
             return Result.success()
         }
 
-        // Gate 2: master update-check switch.
-        if (!preferencesManager.isContainerUpdateCheckEnabled()) {
-            Logger.d(TAG, "Skipping run: container_update_check_enabled = false")
-            return Result.success()
-        }
-
         val db = app.database
-        val policies = db.containerAutoUpdatePolicyDao().getEnabledList()
-        if (policies.isEmpty()) {
-            Logger.d(TAG, "No enabled auto-update policies — nothing to check")
-            return Result.success()
-        }
+        val global = HostUpdateScanner.GlobalSettings(
+            enabled = preferencesManager.isContainerUpdateCheckEnabled(),
+            autoApply = preferencesManager.isContainerAutoApplyEnabled(),
+            intervalHours = preferencesManager.getContainerUpdateIntervalHours().toLong()
+        )
+        val allPolicies = db.containerAutoUpdatePolicyDao().getAllList().groupBy { it.containerHostId }
 
         val checker = UpdateChecker(
             db.containerAutoUpdatePolicyDao(),
@@ -169,29 +170,31 @@ class ContainerUpdateCheckWorker(
         val applier = UpdateApplier(db.containerAutoUpdatePolicyDao())
 
         // Bounded fan-out: at most MAX_CONCURRENT_HOSTS hosts in flight at
-        // once; each host is gated by its per-host enable/interval override.
+        // once; each host is gated by its resolved enable/interval settings.
         val hostSemaphore = Semaphore(MAX_CONCURRENT_HOSTS)
         val now = System.currentTimeMillis()
         coroutineScope {
-            for ((hostId, hostPolicies) in policies.groupBy { it.containerHostId }) {
-                val host = db.containerHostDao().getById(hostId)
-                if (host == null) {
-                    Logger.w(TAG, "Policies reference missing container host $hostId — skipping")
+            for (host in db.containerHostDao().getAllList()) {
+                val hostPolicies = allPolicies[host.id].orEmpty()
+                // A host is worth a pass when checks are on for it, or when one of its
+                // images/stacks switches them back on over a host/global "off".
+                val hostEnabled = host.updateEnabledOverride ?: global.enabled
+                if (!hostEnabled && hostPolicies.none { it.enabledOverride == true }) {
                     continue
                 }
                 if (!UpdateCheckGate.isHostDue(
-                        host.updateCheckEnabled, host.lastUpdateCheck,
-                        host.updateCheckIntervalHours, INTERVAL_HOURS, now
+                        true, host.lastUpdateCheck, host.updateCheckIntervalHours,
+                        global.intervalHours, now
                     )
                 ) {
-                    Logger.d(TAG, "Host ${host.name} not due (enabled=${host.updateCheckEnabled}) — skipping")
+                    Logger.d(TAG, "Host ${host.name} not due — skipping")
                     continue
                 }
                 launch {
                     hostSemaphore.withPermit {
-                        val checked = checkHost(app, host, hostPolicies, checker, applier)
+                        val checked = checkHost(app, host, hostPolicies, global, checker, applier)
                         // Only a completed pass advances the per-host clock —
-                        // a piggyback skip retries on the next cycle.
+                        // a skipped host retries on the next hourly run.
                         if (checked) {
                             db.containerHostDao().updateLastUpdateCheck(host.id, System.currentTimeMillis())
                         }
@@ -205,69 +208,74 @@ class ContainerUpdateCheckWorker(
     }
 
     /**
-     * Check all [hostPolicies] on [host] over a piggybacked transport.
-     * Reuses a cached UI ContainerSession when one is live; otherwise builds a
-     * private transport on the existing SSH connection and closes it after.
-     * Returns true when a check pass actually ran (advances the per-host
-     * clock); false when the host was skipped this cycle.
+     * Get a transport for [host]: the UI's cached session, then an already-live SSH
+     * connection, then (saved-connection hosts only) a connection this worker dials
+     * itself. [onOwnedConnection] receives the profile id of a connection the worker
+     * opened so the caller can close it afterwards; null means skip this host.
+     */
+    private suspend fun acquireTransport(
+        app: TabSSHApplication,
+        host: ContainerHost,
+        onOwnedConnection: (String) -> Unit,
+        onOwnedTransport: (ContainerTransport) -> Unit
+    ): ContainerTransport? {
+        ContainerSessionManager.cached(host.id)?.let { return it.transport }
+
+        val sessionKey = host.linkedConnectionId
+            ?: host.takeIf { it.usesCustomEndpoint() }?.ephemeralProfileId()
+            ?: run {
+                Logger.w(TAG, "Host ${host.name} has no linked SSH connection — skipping")
+                return null
+            }
+        var connection = app.sshSessionManager.getConnection(sessionKey)?.takeIf { it.isConnected() }
+        if (connection == null && host.linkedConnectionId != null && !host.linksCloudInstance()) {
+            val profile = app.database.connectionDao().getConnectionById(host.linkedConnectionId)
+            if (profile != null) {
+                connection = withTimeoutOrNull(CONNECT_TIMEOUT_MS) {
+                    app.sshSessionManager.connectForMonitoring(profile)
+                }
+                if (connection != null) onOwnedConnection(profile.id)
+            }
+        }
+        if (connection == null) {
+            Logger.d(TAG, "No SSH session available for ${host.name} — skipping this cycle")
+            return null
+        }
+        val runner = SshExecRunner { connection.jschSession() }
+        val detector = TransportCapabilityDetector(app.database.containerHostDao())
+        return when (val detected = detector.detect(host, runner)) {
+            is ContainerResult.Success -> detected.value.transport.also(onOwnedTransport)
+            else -> {
+                Logger.w(TAG, "Transport detection failed for ${host.name} — skipping")
+                null
+            }
+        }
+    }
+
+    /**
+     * Check every container on [host] whose resolved settings enable checks, then notify
+     * and (where resolved auto-apply is on) update. Returns true when a pass ran (advances
+     * the per-host clock); false when the host was skipped this cycle.
      */
     private suspend fun checkHost(
         app: TabSSHApplication,
         host: ContainerHost,
         hostPolicies: List<ContainerAutoUpdatePolicy>,
+        global: HostUpdateScanner.GlobalSettings,
         checker: UpdateChecker,
         applier: UpdateApplier
     ): Boolean {
-        // Prefer the UI's cached session — same relay, zero extra setup.
-        val cached = ContainerSessionManager.cached(host.id)
+        var ownedConnectionId: String? = null
         var ownTransport: ContainerTransport? = null
-        val transport: ContainerTransport = cached?.transport ?: run {
-            // Custom-endpoint hosts key their session on the ephemeral
-            // profile id; the piggyback-only rule below applies unchanged.
-            val sessionKey = host.linkedConnectionId
-                ?: host.takeIf { it.usesCustomEndpoint() }?.ephemeralProfileId()
-                ?: run {
-                    Logger.w(TAG, "Host ${host.name} has no linked SSH connection — skipping")
-                    return false
-                }
-            // Piggyback-only: never open a new SSH session from the background.
-            val connection = app.sshSessionManager.getConnection(sessionKey)
-                ?.takeIf { it.isConnected() }
-                ?: run {
-                    Logger.d(TAG, "No live SSH session for ${host.name} — skipping this cycle")
-                    return false
-                }
-            val runner = SshExecRunner { connection.jschSession() }
-            val detector = TransportCapabilityDetector(app.database.containerHostDao())
-            when (val detected = detector.detect(host, runner)) {
-                is ContainerResult.Success -> detected.value.transport.also { ownTransport = it }
-                else -> {
-                    Logger.w(TAG, "Transport detection failed for ${host.name} — skipping")
-                    return false
-                }
-            }
-        }
+        val transport = acquireTransport(
+            app, host, { ownedConnectionId = it }, { ownTransport = it }
+        ) ?: return false
 
         try {
-            for (policy in hostPolicies) {
-                val result = checker.checkOne(policy, transport)
-                if (result.status != UpdateChecker.Status.UPDATE_AVAILABLE) continue
-
-                // Dedup: the stored pending digest is the one we already
-                // alerted on — only a digest we have not seen pending re-alerts.
-                val isNew = policy.pendingUpdateDigest != result.registryDigest
-                if (isNew) {
-                    NotificationHelper.notifyContainerUpdateAvailable(
-                        appContext, policy.id, host.name,
-                        policy.containerNameOrStackName,
-                        result.imageRef ?: policy.containerNameOrStackName
-                    )
-                }
-
-                if (policy.autoRecreateOnUpdate) {
-                    applyUnattended(host, policy, applier, transport)
-                }
-            }
+            val found = HostUpdateScanner(app.database.containerAutoUpdatePolicyDao(), checker)
+                .scan(host, hostPolicies, global, transport)
+                ?: return false
+            notifyAndApply(host, found, applier, transport)
         } finally {
             // Only close what this worker opened — never the UI's session.
             try {
@@ -275,18 +283,49 @@ class ContainerUpdateCheckWorker(
             } catch (e: Exception) {
                 Logger.w(TAG, "transport close failed for ${host.name}: ${e.message}")
             }
+            ownedConnectionId?.let { app.sshSessionManager.closeConnection(it) }
         }
         return true
     }
 
-    /** Run the unattended pull-and-recreate for one policy and notify. */
-    private suspend fun applyUnattended(
+    /**
+     * Notify once per standalone container / compose project, then apply: a standalone
+     * container on its own, a compose project as one unit — and only when every updated
+     * container in it resolves to auto-apply, since compose recreates the whole project.
+     */
+    private suspend fun notifyAndApply(
         host: ContainerHost,
-        policy: ContainerAutoUpdatePolicy,
+        found: List<HostUpdateScanner.FoundUpdate>,
         applier: UpdateApplier,
         transport: ContainerTransport
     ) {
-        Logger.i(TAG, "Auto-recreating ${policy.containerNameOrStackName} on ${host.name}")
+        val units = found.groupBy { it.project ?: "container:${it.policy.containerNameOrStackName}" }
+        for ((_, members) in units) {
+            val first = members.first()
+            val label = first.project ?: first.policy.containerNameOrStackName
+            // Dedup: the stored pending digest is the one already alerted on.
+            if (members.any { it.policy.pendingUpdateDigest != it.result.registryDigest }) {
+                NotificationHelper.notifyContainerUpdateAvailable(
+                    appContext, first.policy.id, host.name, label,
+                    if (members.size == 1) first.result.imageRef ?: label
+                    else "${members.size} images"
+                )
+            }
+            if (members.all { it.autoApply }) {
+                applyUnattended(host, first.policy, label, applier, transport)
+            }
+        }
+    }
+
+    /** Run the unattended update for one unit and notify the outcome. */
+    private suspend fun applyUnattended(
+        host: ContainerHost,
+        policy: ContainerAutoUpdatePolicy,
+        label: String,
+        applier: UpdateApplier,
+        transport: ContainerTransport
+    ) {
+        Logger.i(TAG, "Auto-updating $label on ${host.name}")
         var failure: UpdateApplier.ApplyEvent.Failed? = null
         var completed = false
         try {
@@ -298,11 +337,11 @@ class ContainerUpdateCheckWorker(
                 }
             }
         } catch (e: Exception) {
-            Logger.e(TAG, "Unattended recreate threw for policy ${policy.id}", e)
+            Logger.e(TAG, "Unattended update threw for policy ${policy.id}", e)
         }
         val f = failure
         NotificationHelper.notifyContainerUpdateApplied(
-            appContext, policy.id, host.name, policy.containerNameOrStackName,
+            appContext, policy.id, host.name, label,
             success = completed,
             detail = f?.let {
                 "${it.message} (at ${it.step}${if (it.rolledBack) ", rolled back" else ""})"

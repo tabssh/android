@@ -1,43 +1,97 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="@dimen/space_lg">
+    android:layout_height="wrap_content">
 
-    <com.google.android.material.switchmaterial.SwitchMaterial
-        android:id="@+id/switch_enabled"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/container_policy_enabled" />
+        android:orientation="vertical"
+        android:padding="@dimen/space_lg">
 
-    <com.google.android.material.switchmaterial.SwitchMaterial
-        android:id="@+id/switch_auto_recreate"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_sm"
-        android:text="@string/container_policy_auto_recreate" />
+        <TextView
+            android:id="@+id/text_subject"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="@dimen/text_size_body"
+            android:textColor="?attr/colorOnSurface" />
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_xs"
-        android:text="@string/container_policy_auto_recreate_desc"
-        android:textSize="@dimen/text_size_caption"
-        android:textColor="?attr/colorOnSurfaceVariant" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_md"
+            android:text="@string/container_policy_enabled_label"
+            android:textSize="@dimen/text_size_small_body"
+            android:textColor="?attr/colorOnSurfaceVariant" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_md"
-        android:text="@string/container_policy_credential_hint"
-        android:textSize="@dimen/text_size_small_body"
-        android:textColor="?attr/colorOnSurfaceVariant" />
+        <include
+            android:id="@+id/toggle_enabled"
+            layout="@layout/view_tri_state_toggle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_xs" />
 
-    <Spinner
-        android:id="@+id/spinner_credential"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/min_touch_target"
-        android:layout_marginTop="@dimen/space_xs"
-        android:background="@drawable/spinner_background" />
-</LinearLayout>
+        <TextView
+            android:id="@+id/text_enabled_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_xs"
+            android:textSize="@dimen/text_size_caption"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_md"
+            android:text="@string/container_policy_auto_apply_label"
+            android:textSize="@dimen/text_size_small_body"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <include
+            android:id="@+id/toggle_auto_apply"
+            layout="@layout/view_tri_state_toggle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_xs" />
+
+        <TextView
+            android:id="@+id/text_auto_apply_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_xs"
+            android:textSize="@dimen/text_size_caption"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <LinearLayout
+            android:id="@+id/group_credential"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_md"
+                android:text="@string/container_policy_credential_hint"
+                android:textSize="@dimen/text_size_small_body"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <Spinner
+                android:id="@+id/spinner_credential"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/min_touch_target"
+                android:layout_marginTop="@dimen/space_xs"
+                android:background="@drawable/spinner_background" />
+
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_md"
+            android:text="@string/container_updates_precedence"
+            android:textSize="@dimen/text_size_caption"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+    </LinearLayout>
+</ScrollView>

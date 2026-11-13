@@ -258,6 +258,9 @@ interface ContainerTransport {
 
     suspend fun composeRestart(stackDir: String): ContainerResult<String>
 
+    /** Update a compose project: composemgr (when installed) or compose `down`, `pull`, `up -d` in [stackDir]. */
+    suspend fun composeUpdate(stackDir: String): ContainerResult<String>
+
     /** `compose ps --format json` raw output for the stack status view. */
     suspend fun composePs(stackDir: String): ContainerResult<String>
 

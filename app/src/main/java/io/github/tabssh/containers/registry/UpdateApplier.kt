@@ -12,6 +12,7 @@ import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.NonCancellable
@@ -53,8 +54,22 @@ class UpdateApplier(
         ) : ApplyEvent()
     }
 
-    private companion object {
+    companion object {
         private const val TAG = "UpdateApplier"
+
+        /** Label compose stamps on every container it creates. */
+        const val COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
+        private const val COMPOSE_WORKDIR_LABEL = "com.docker.compose.project.working_dir"
+
+        /** True when the inspected container was created by compose (carries the project label). */
+        fun isComposeManaged(inspect: JSONObject): Boolean =
+            inspect.optJSONObject("Config")?.optJSONObject("Labels")
+                ?.optString(COMPOSE_PROJECT_LABEL).orEmpty().isNotEmpty()
+
+        /** The compose project directory of an inspected compose container, or null when absent. */
+        fun composeWorkingDir(inspect: JSONObject): String? =
+            inspect.optJSONObject("Config")?.optJSONObject("Labels")
+                ?.optString(COMPOSE_WORKDIR_LABEL).orEmpty().takeIf { it.isNotEmpty() }
 
         /** Poll cadence while verifying the replacement container. */
         private const val VERIFY_POLL_MS = 2_000L
@@ -86,6 +101,16 @@ class UpdateApplier(
             is ContainerResult.Success -> UpdateChecker.normalizeInspect(r.value)
                 ?: return@flow emit(failNoRollback("Unparseable inspect output"))
             else -> return@flow emit(failNoRollback(failureMessage(r)))
+        }
+        // A container created by compose is only ever updated through compose, and a
+        // standalone container only through the recreate flow below — never mixed.
+        if (isComposeManaged(inspect)) {
+            val composeDir = composeWorkingDir(inspect)
+                ?: return@flow emit(failNoRollback(
+                    "$name belongs to a compose project with no known working directory — update it manually"
+                ))
+            applyCompose(policyId, name, composeDir, transport)
+            return@flow
         }
         val image = inspect.optJSONObject("Config")?.optString("Image").orEmpty()
         if (image.isEmpty()) {
@@ -235,6 +260,42 @@ class UpdateApplier(
 
         policyDao.updatePendingUpdateDigest(policyId, null)
         emit(ApplyEvent.Completed(name))
+    }
+
+    /**
+     * Compose-created containers: update the whole project in its working directory
+     * (composemgr when installed, otherwise compose down/pull/up). Pending flags are cleared
+     * for every container of the project, since compose recreates all of them.
+     */
+    private suspend fun FlowCollector<ApplyEvent>.applyCompose(
+        policyId: Long,
+        name: String,
+        dir: String,
+        transport: ContainerTransport
+    ) {
+        Logger.i(TAG, "updating compose project in $dir for $name")
+        emit(ApplyEvent.StepStarted(RecreateStep.PULL_IMAGE))
+        when (val r = transport.composeUpdate(dir)) {
+            is ContainerResult.Success -> {
+                clearProjectPending(policyId, dir, transport)
+                emit(ApplyEvent.Completed(name))
+            }
+            else -> emit(ApplyEvent.Failed(RecreateStep.PULL_IMAGE, failureMessage(r), false))
+        }
+    }
+
+    /** Clear the pending digest on [policyId] and on every sibling container sharing [dir]. */
+    private suspend fun clearProjectPending(policyId: Long, dir: String, transport: ContainerTransport) {
+        policyDao.updatePendingUpdateDigest(policyId, null)
+        val policy = policyDao.getById(policyId) ?: return
+        val siblings = (transport.listContainers(all = true) as? ContainerResult.Success)?.value ?: return
+        val project = siblings.firstOrNull { it.names.any { n -> n.trimStart('/') == policy.containerNameOrStackName } }
+            ?.labels?.get(COMPOSE_PROJECT_LABEL) ?: return
+        val names = siblings.filter { it.labels[COMPOSE_PROJECT_LABEL] == project }
+            .flatMap { it.names.map { n -> n.trimStart('/') } }.toSet()
+        policyDao.getAllList()
+            .filter { it.containerHostId == policy.containerHostId && it.containerNameOrStackName in names }
+            .forEach { policyDao.updatePendingUpdateDigest(it.id, null) }
     }
 
     /**

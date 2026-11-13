@@ -3,6 +3,20 @@
     <!-- Tab swipe edge-zone width (dp) for TabTerminalActivity. Value "0"
          means swipe from anywhere (legacy). Keep entries/values in lockstep
          and aligned with tabSwipeEdgePx handling. -->
+    <string-array name="container_update_interval_entries">
+        <item>Every 1 hour</item>
+        <item>Every 6 hours</item>
+        <item>Every 12 hours</item>
+        <item>Every day</item>
+        <item>Every week</item>
+    </string-array>
+    <string-array name="container_update_interval_values">
+        <item>1</item>
+        <item>6</item>
+        <item>12</item>
+        <item>24</item>
+        <item>168</item>
+    </string-array>
     <string-array name="tab_swipe_edge_entries">
         <item>@string/arr_tab_swipe_edge_anywhere_on_tab</item>
         <item>@string/arr_tab_swipe_edge_narrow_24_dp</item>

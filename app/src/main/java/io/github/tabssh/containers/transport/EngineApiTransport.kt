@@ -474,6 +474,9 @@ class EngineApiTransport(
     override suspend fun composeRestart(stackDir: String): ContainerResult<String> =
         remoteOps.composeRestart(stackDir)
 
+    override suspend fun composeUpdate(stackDir: String): ContainerResult<String> =
+        remoteOps.composeUpdate(stackDir)
+
     override suspend fun composePs(stackDir: String): ContainerResult<String> =
         remoteOps.composePs(stackDir)
 

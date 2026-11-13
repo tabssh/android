@@ -178,6 +178,8 @@ class PreferenceManager(private val context: Context) {
 
         // Container update-check preferences — keys MUST match preferences_monitoring.xml.
         private const val KEY_CONTAINER_UPDATE_CHECK_ENABLED = "container_update_check_enabled"
+        private const val KEY_CONTAINER_UPDATE_INTERVAL_HOURS = "container_update_interval_hours"
+        private const val KEY_CONTAINER_UPDATE_AUTO_APPLY = "container_update_auto_apply"
         private const val KEY_RENEWAL_REMINDERS_ENABLED = "renewal_reminders_enabled"
 
         // Tasker preferences — keys MUST match preferences_tasker.xml.
@@ -865,6 +867,16 @@ class PreferenceManager(private val context: Context) {
     fun isContainerUpdateCheckEnabled(): Boolean = getBoolean(KEY_CONTAINER_UPDATE_CHECK_ENABLED, true)
     fun setContainerUpdateCheckEnabled(enabled: Boolean) =
         setBoolean(KEY_CONTAINER_UPDATE_CHECK_ENABLED, enabled)
+
+    // Global tier of the container update settings (per-host and per-image/stack overrides sit on top).
+    // Stored as a string because the settings screen edits it through a ListPreference.
+    fun getContainerUpdateIntervalHours(): Int =
+        (getString(KEY_CONTAINER_UPDATE_INTERVAL_HOURS, "12").toIntOrNull() ?: 12).coerceAtLeast(1)
+    fun setContainerUpdateIntervalHours(hours: Int) =
+        setString(KEY_CONTAINER_UPDATE_INTERVAL_HOURS, hours.coerceAtLeast(1).toString())
+    fun isContainerAutoApplyEnabled(): Boolean = getBoolean(KEY_CONTAINER_UPDATE_AUTO_APPLY, false)
+    fun setContainerAutoApplyEnabled(enabled: Boolean) =
+        setBoolean(KEY_CONTAINER_UPDATE_AUTO_APPLY, enabled)
 
     // --- Renewal reminders (Domain Tracker / VPS Tracker) ---
 
