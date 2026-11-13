@@ -527,6 +527,30 @@ class TerminalView @JvmOverloads constructor(
      */
     var onSelectionEnded: (() -> Unit)? = null
 
+    /** Fired when a drag, tap or select-all moves the selection, so the floating action bar can follow it. */
+    var onSelectionBoundsChanged: (() -> Unit)? = null
+
+    /**
+     * Bounding box of the highlighted selection in this view's coordinates, clipped to the
+     * view. Returns false when nothing is selected or the grid is not measured yet.
+     */
+    fun getSelectionBounds(out: Rect): Boolean {
+        if (!selectionActive || cellWidth <= 0f || cellHeight <= 0f) return false
+        val (startRow, startCol, endRow, endCol) = normalisedSelection()
+        val singleRow = startRow == endRow
+        val left = paddingLeft + (if (singleRow) startCol else 0) * cellWidth
+        val right = paddingLeft + (if (singleRow) endCol + 1 else terminalCols) * cellWidth
+        val top = gridTop + startRow * cellHeight
+        val bottom = gridTop + (endRow + 1) * cellHeight
+        out.set(
+            left.toInt().coerceAtLeast(0),
+            top.toInt().coerceAtLeast(0),
+            right.toInt().coerceAtMost(width),
+            bottom.toInt().coerceAtMost(height)
+        )
+        return true
+    }
+
     init {
         // Enable focus and touch
         isFocusable = true
@@ -3566,6 +3590,7 @@ class TerminalView @JvmOverloads constructor(
         selectionDragHandle = -1
         requestFocus()
         invalidate()
+        onSelectionBoundsChanged?.invoke()
     }
 
     /**
@@ -3865,6 +3890,7 @@ class TerminalView @JvmOverloads constructor(
                 selectionFocusCol = col
                 selectionFocusRow = row
                 invalidate()
+                onSelectionBoundsChanged?.invoke()
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
@@ -3882,8 +3908,10 @@ class TerminalView @JvmOverloads constructor(
                 return true
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                val wasDragging = selectionDragHandle >= 0
                 selectionDragHandle = -1
                 selectionMagnifier?.dismiss()
+                if (wasDragging) onSelectionBoundsChanged?.invoke()
                 return true
             }
         }

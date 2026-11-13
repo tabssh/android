@@ -2205,7 +2205,13 @@ class TabTerminalActivity : TabSSHActivity() {
         // (e.g. switching tabs while a bar is still up).
         selectionActionMode?.finish()
 
-        val callback = object : ActionMode.Callback {
+        // Callback2 lets the floating bar anchor to the selected text; a plain Callback makes
+        // Android place it against the whole view, on top of the key bar.
+        val callback = object : ActionMode.Callback2() {
+            override fun onGetContentRect(mode: ActionMode, v: View, outRect: android.graphics.Rect) {
+                if (!view.getSelectionBounds(outRect)) super.onGetContentRect(mode, v, outRect)
+            }
+
             override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
                 mode.title = null
                 menu.add(0, 1, 0, getString(R.string.copy_button))
@@ -2270,6 +2276,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 // Nulling first makes that a no-op instead of a re-entrant
                 // finish() on the mode currently being destroyed.
                 if (selectionActionMode === mode) selectionActionMode = null
+                view.onSelectionBoundsChanged = null
                 view.exitSelectionMode()
                 // Re-enable swipe now that text selection is done.
                 swipeSuspendedForSelection = false
@@ -2277,12 +2284,9 @@ class TabTerminalActivity : TabSSHActivity() {
                 Logger.d("TabTerminalActivity", "onDestroyActionMode — swipeSuspendedForSelection=false, isUserInputEnabled=true")
             }
         }
-        selectionActionMode = if (Build.VERSION.SDK_INT >= 23) {
-            view.startActionMode(callback, ActionMode.TYPE_FLOATING)
-        } else {
-            view.startActionMode(callback)
-        }
+        selectionActionMode = view.startActionMode(callback, ActionMode.TYPE_FLOATING)
         if (selectionActionMode != null) {
+            view.onSelectionBoundsChanged = { selectionActionMode?.invalidateContentRect() }
             // Disable swipe while the user is selecting text so a horizontal
             // drag does not accidentally switch tabs mid-selection.
             swipeSuspendedForSelection = true
