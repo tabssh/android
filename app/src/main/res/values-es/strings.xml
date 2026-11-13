@@ -2,40 +2,26 @@
 <resources>
     <!-- App name -->
     <string name="app_name">TabSSH</string>
-    <string name="app_name_debug">TabSSH Debug 🐛</string>
 
     <!-- Main activity -->
-    <string name="main_activity_title">📱 TabSSH</string>
     <string name="quick_connect_title">⚡ Conexión Rápida</string>
-    <string name="frequently_used_title">⭐ Usados Frecuentemente</string>
-    <string name="connections_title">🌐 Mis Servidores</string>
     <string name="host_hint">🌐 Nombre de host o IP</string>
-    <string name="port_hint">🔌 Puerto (por defecto: 22)</string>
     <string name="username_hint">👤 Nombre de usuario</string>
     <string name="connect_button">🚀 Conectar</string>
     <string name="add_connection">➕ Añadir Servidor</string>
     <string name="search_connections">🔍 Buscar servidores…</string>
     <string name="no_connections_title">📭 Aún No Hay Servidores</string>
-    <string name="no_connections_message">✨ ¡Añade tu primer servidor SSH para empezar!\n\nToca el botón ➕ para crear una conexión.</string>
 
     <!-- Connection management -->
     <string name="connection_name_hint">✏️ Nombre de la conexión (ej., "Mi VPS")</string>
     <string name="connection_port_hint">22</string>
-    <string name="duplicate_connection">📋 Duplicar Conexión</string>
-    <string name="connection_saved">✅ ¡Conexión guardada correctamente!</string>
-    <string name="connection_deleted">🗑️ Conexión eliminada</string>
     
     <!-- Authentication -->
-    <string name="auth_type_public_key">🔐 Clave Pública (Clave SSH)</string>
     <string name="password_hint">🔒 Contraseña</string>
     <string name="select_key">🔑 Seleccionar Clave SSH</string>
     <string name="generate_key">✨ Generar Nueva Clave</string>
-    <string name="import_key">📥 Importar Clave</string>
     
     <!-- Terminal activity -->
-    <string name="tab_menu">📑 Menú de Pestañas</string>
-    <string name="show_keyboard">⌨️ Mostrar Teclado</string>
-    <string name="hide_keyboard">⌨️ Ocultar Teclado</string>
     <string name="paste">📋 Pegar</string>
     <string name="copy_button">📋 Copiar</string>
     <string name="select_all">🔲 Seleccionar Todo</string>
@@ -43,103 +29,44 @@
 
     <!-- Accessibility strings -->
     <string name="accessibility_terminal">Terminal SSH</string>
-    <string name="accessibility_read_screen">Leer toda la pantalla</string>
-    <string name="accessibility_read_line">Leer línea actual</string>
-    <string name="accessibility_scroll_up">Desplazar hacia arriba</string>
-    <string name="accessibility_scroll_down">Desplazar hacia abajo</string>
     
     <!-- Connection status -->
     <string name="status_connecting">🔄 Conectando…</string>
     <string name="status_connected">✅ Conectado</string>
     <string name="status_disconnected">⚪ Desconectado</string>
     <string name="status_error">❌ Error</string>
-    <string name="status_authenticating">🔐 Autenticando…</string>
     
     <!-- Errors -->
-    <string name="error_connection_failed">❌ Conexión fallida</string>
-    <string name="error_authentication_failed">🔐 Autenticación fallida - comprueba tus credenciales</string>
-    <string name="error_host_key_changed">⚠️ ¡La clave del host ha cambiado!</string>
-    <string name="error_host_key_unknown">❓ Clave de host desconocida - primera conexión</string>
-    <string name="error_network_unreachable">📡 Red inaccesible - comprueba tu conexión a internet</string>
     <string name="error_connection_timeout">⏱️ Tiempo de conexión agotado - el servidor no respondió</string>
-    <string name="error_invalid_host">❌ Nombre de host o dirección IP inválida</string>
     <string name="error_invalid_port">❌ Puerto inválido (debe ser entre 1-65535)</string>
-    <string name="error_permission_denied">🚫 Permiso denegado - comprueba tus credenciales</string>
     
     <!-- Settings -->
     <string name="settings_title">⚙️ Ajustes</string>
     <string name="settings_general">🎛️ General</string>
     <string name="settings_terminal">💻 Terminal</string>
-    <string name="settings_security">🔐 Seguridad y Privacidad</string>
-    <string name="settings_interface">🎨 Interfaz</string>
     
     <!-- General settings -->
-    <string name="pref_startup_behavior">Comportamiento al Iniciar</string>
-    <string name="pref_startup_behavior_summary">Qué hacer cuando la aplicación inicia</string>
-    <string name="pref_auto_backup">Copia de Seguridad Automática</string>
-    <string name="pref_auto_backup_summary">Hacer copias automáticas de conexiones y claves</string>
-    <string name="pref_language_summary">Idioma de la aplicación</string>
     
     <!-- Security settings -->
-    <string name="pref_password_storage">Almacenamiento de Contraseñas</string>
-    <string name="pref_password_storage_summary">Cómo almacenar las contraseñas</string>
-    <string name="pref_biometric_auth_summary">Usar huella dactilar/desbloqueo facial</string>
-    <string name="pref_host_key_checking">Verificación de Clave de Host</string>
-    <string name="pref_host_key_checking_summary">Verificar identidad del host</string>
-    <string name="pref_auto_lock">Bloqueo Automático</string>
-    <string name="pref_auto_lock_summary">Bloquear la aplicación al pasar a segundo plano</string>
-    <string name="pref_screenshot_protection">Protección de Capturas de Pantalla</string>
-    <string name="pref_screenshot_protection_summary">Prevenir capturas de pantalla</string>
     
     <!-- Terminal settings -->
-    <string name="pref_theme">Tema</string>
-    <string name="pref_font_family">Familia de Fuente</string>
-    <string name="pref_font_family_summary">Fuente del terminal</string>
-    <string name="pref_font_size">Tamaño de Fuente</string>
-    <string name="pref_scrollback_lines">Líneas de Historial</string>
-    <string name="pref_scrollback_lines_summary">Líneas a mantener en el historial</string>
     
     <!-- Interface settings -->
-    <string name="pref_max_tabs">Pestañas Máximas</string>
-    <string name="pref_max_tabs_summary">Número máximo de pestañas abiertas</string>
-    <string name="pref_show_function_keys">Mostrar Teclas de Función</string>
-    <string name="pref_show_function_keys_summary">Mostrar fila de teclas de función</string>
-    <string name="pref_fullscreen_mode">Modo Pantalla Completa</string>
-    <string name="pref_fullscreen_mode_summary">Ocultar barra de estado</string>
-    <string name="pref_keep_screen_on">Mantener Pantalla Encendida</string>
-    <string name="pref_keep_screen_on_summary">Prevenir apagado automático de la pantalla</string>
-    <string name="accessibility_connection_list">Lista de Conexiones</string>
-    <string name="accessibility_tab_list">Lista de Pestañas</string>
-    <string name="accessibility_function_keys">Teclas de Función</string>
     <string name="accessibility_connecting">Conectando</string>
     
     <!-- File operations -->
     <string name="file_browser_title">📁 Explorador de Archivos</string>
-    <string name="local_files">📱 Archivos Locales</string>
-    <string name="remote_files">🌐 Archivos Remotos</string>
     <string name="upload_file">⬆️ Subir</string>
     <string name="download_file">⬇️ Descargar</string>
     <string name="new_folder">📁 Nueva Carpeta</string>
     <string name="rename_file">✏️ Renombrar</string>
     <string name="file_properties">ℹ️ Propiedades</string>
     <string name="transfer_progress">📊 Progreso de Transferencia</string>
-    <string name="transfer_complete">✅ ¡Transferencia completada!</string>
-    <string name="transfer_failed">❌ Transferencia fallida</string>
     
     <!-- Biometric authentication -->
-    <string name="biometric_title">🔐 Autenticar</string>
-    <string name="biometric_subtitle">👆 Usa tu huella dactilar o rostro para desbloquear</string>
-    <string name="biometric_description">🔒 Acceso seguro a tus contraseñas almacenadas</string>
-    <string name="biometric_error">❌ Autenticación fallida - por favor, inténtalo de nuevo</string>
-    <string name="biometric_not_available">⚠️ Autenticación biométrica no disponible en este dispositivo</string>
     
     <!-- About -->
     <string name="about_build">🔨 Compilación</string>
-    <string name="about_license">📜 Licencia (MIT)</string>
-    <string name="about_source_code">💻 Código Fuente</string>
-    <string name="about_website">🌐 Sitio Web</string>
-    <string name="about_privacy_policy">🔒 Política de Privacidad</string>
-    <string name="about_open_source_licenses">📚 Licencias de Código Abierto</string>
     
     <!-- Common actions -->
     <string name="ok">Aceptar</string>
@@ -157,19 +84,9 @@
     <string name="dismiss">👋 Descartar</string>
 
     <!-- Additional beautiful strings -->
-    <string name="welcome_message">👋 ¡Bienvenido a TabSSH!</string>
-    <string name="first_launch_hint">💡 Consejo: Crea tu primera conexión para empezar</string>
     <string name="connecting_to">🔄 Conectando a %s…</string>
-    <string name="connected_to">✅ Conectado a %s</string>
-    <string name="disconnected_from">⚪ Desconectado de %s</string>
-    <string name="tab_count">📑 %d pestañas abiertas</string>
-    <string name="bytes_transferred">📊 Transferido: %s</string>
-    <string name="session_duration">⏱️ Sesión: %s</string>
-    <string name="fingerprint_verified">✅ Clave de host verificada</string>
-    <string name="secure_connection">🔐 Conexión segura establecida</string>
 
     <!-- Widget -->
-    <string name="widget_description">🚀 Conexión rápida a tu servidor SSH favorito</string>
     <string name="widget_1x1_description">Icono de conexión rápida</string>
     <string name="widget_2x1_description">Información de conexión con botón</string>
     <string name="widget_4x2_description">Lista de conexiones favoritas</string>
@@ -180,7 +97,6 @@
 
     <!-- Navigation -->
     <string name="navigation_drawer_open">Abrir menú de navegación</string>
-    <string name="navigation_drawer_close">Cerrar menú de navegación</string>
     <string name="select_connection">Seleccionar conexión</string>
 
     <!-- Sync -->

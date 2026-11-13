@@ -31,10 +31,10 @@
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_add_pane_group"
                     style="@style/Widget.Material3.Button.IconButton"
-                    android:layout_width="@dimen/icon_size_40dp"
-                    android:layout_height="@dimen/icon_size_40dp"
+                    android:layout_width="@dimen/min_touch_target"
+                    android:layout_height="@dimen/min_touch_target"
                     android:contentDescription="@string/pane_groups_add_content_description"
-                    app:icon="@android:drawable/ic_input_add" />
+                    app:icon="@drawable/ic_add" />
 
             </LinearLayout>
 

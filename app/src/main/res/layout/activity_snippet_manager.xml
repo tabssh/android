@@ -45,10 +45,12 @@
         <!-- RecyclerView for snippets -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recycler_view_snippets"
+            android:paddingBottom="@dimen/space_88dp"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:padding="@dimen/space_md"
+            android:paddingHorizontal="@dimen/space_sm"
+            android:paddingTop="@dimen/space_sm"
             android:clipToPadding="false" />
 
     </LinearLayout>
@@ -76,14 +78,15 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/snippet_mgr_empty_title"
-            android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
+            android:textSize="@dimen/text_size_headline"
+            android:textStyle="bold"
             android:layout_marginBottom="@dimen/space_sm" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/snippet_mgr_empty_message"
-            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
             android:textColor="?android:attr/textColorSecondary"
             android:gravity="center"
             android:layout_marginBottom="@dimen/space_lg" />
@@ -99,7 +102,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_margin="@dimen/space_md"
+        android:layout_margin="@dimen/space_lg"
         android:contentDescription="@string/snippet_mgr_fab_content_description"
         app:srcCompat="@drawable/ic_add" />
 

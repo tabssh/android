@@ -55,14 +55,15 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/no_connections_title"
-            android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
+            android:textSize="@dimen/text_size_headline"
+            android:textStyle="bold"
             android:layout_marginBottom="@dimen/space_sm" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/widget_config_empty_message"
-            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:gravity="center"
             android:layout_marginBottom="@dimen/space_lg" />

@@ -22,6 +22,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.SimpleItemAnimator
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
@@ -46,6 +47,7 @@ class DomainTrackerActivity : TabSSHActivity() {
 
     private companion object {
         private const val TAG = "DomainTrackerActivity"
+        private const val PAYLOAD_SELECTION = "selection"
         private const val PREFS_NAME = "TabSSH"
         private const val PREF_SORT_OPTION = "domain_tracker_sort"
         private const val PREF_FILTER_OPTION = "domain_tracker_filter"
@@ -114,6 +116,7 @@ class DomainTrackerActivity : TabSSHActivity() {
         adapter = DomainAdapter(onLongPress = { domain -> onRowLongPress(domain) })
         binding.recyclerDomains.layoutManager = LinearLayoutManager(this)
         binding.recyclerDomains.adapter = adapter
+        (binding.recyclerDomains.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
         adapter.setOnItemClickListener { domain -> onRowClick(domain) }
         adapter.setOnRenewalPillClickListener { domain ->
             if (actionMode != null) toggleSelection(domain.id) else maybeShowRenewalConfirm(domain)
@@ -521,7 +524,7 @@ class DomainTrackerActivity : TabSSHActivity() {
         } else {
             actionMode?.title = getString(R.string.tracker_selected_count_fmt, selectedIds.size)
         }
-        adapter.notifyDataSetChanged()
+        adapter.notifyItemRangeChanged(0, adapter.itemCount, PAYLOAD_SELECTION)
     }
 
     private val selectionCallback = object : ActionMode.Callback {
@@ -549,7 +552,7 @@ class DomainTrackerActivity : TabSSHActivity() {
         override fun onDestroyActionMode(mode: ActionMode) {
             actionMode = null
             selectedIds.clear()
-            adapter.notifyDataSetChanged()
+            adapter.notifyItemRangeChanged(0, adapter.itemCount, PAYLOAD_SELECTION)
         }
     }
 

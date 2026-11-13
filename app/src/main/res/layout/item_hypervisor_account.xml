@@ -6,7 +6,7 @@
     android:layout_height="wrap_content"
     android:layout_margin="@dimen/space_sm"
     app:cardElevation="@dimen/elevation_low"
-    app:cardCornerRadius="@dimen/card_corner_radius_small">
+    app:cardCornerRadius="@dimen/card_corner_radius">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -35,7 +35,7 @@
                 android:layout_width="@dimen/min_touch_target"
                 android:layout_height="@dimen/min_touch_target"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_menu_edit"
+                android:src="@drawable/ic_edit"
                 android:contentDescription="@string/edit" />
 
             <ImageButton
@@ -43,7 +43,7 @@
                 android:layout_width="@dimen/min_touch_target"
                 android:layout_height="@dimen/min_touch_target"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_menu_delete"
+                android:src="@drawable/ic_delete"
                 android:contentDescription="@string/delete" />
 
         </LinearLayout>

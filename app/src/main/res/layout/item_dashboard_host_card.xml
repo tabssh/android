@@ -40,7 +40,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                android:textAppearance="?attr/textAppearanceTitleMedium"
                 android:textColor="?attr/colorOnSurface"
                 android:ellipsize="end"
                 android:maxLines="1" />
@@ -70,7 +70,7 @@
             android:id="@+id/tv_subtitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
+            android:textAppearance="?attr/textAppearanceLabelSmall"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:paddingStart="@dimen/space_18dp"
             android:layout_marginBottom="@dimen/space_sm"
@@ -89,7 +89,7 @@
                 android:layout_width="@dimen/dashboard_stat_label_width"
                 android:layout_height="wrap_content"
                 android:text="@string/host_detail_label_cpu"
-                android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
             <com.google.android.material.progressindicator.LinearProgressIndicator
@@ -110,7 +110,7 @@
                 android:layout_width="@dimen/dashboard_stat_value_width"
                 android:layout_height="wrap_content"
                 android:text="@string/host_detail_value_unavailable"
-                android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
                 android:textColor="?attr/colorOnSurface"
                 android:gravity="end" />
 
@@ -128,7 +128,7 @@
                 android:layout_width="@dimen/dashboard_stat_label_width"
                 android:layout_height="wrap_content"
                 android:text="@string/dashboard_host_card_mem_label"
-                android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
             <com.google.android.material.progressindicator.LinearProgressIndicator
@@ -149,7 +149,7 @@
                 android:layout_width="@dimen/dashboard_stat_value_width"
                 android:layout_height="wrap_content"
                 android:text="@string/host_detail_value_unavailable"
-                android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
                 android:textColor="?attr/colorOnSurface"
                 android:gravity="end" />
 
@@ -167,7 +167,7 @@
                 android:layout_width="@dimen/dashboard_stat_label_width"
                 android:layout_height="wrap_content"
                 android:text="@string/dashboard_host_card_disk_label"
-                android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
             <com.google.android.material.progressindicator.LinearProgressIndicator
@@ -188,7 +188,7 @@
                 android:layout_width="@dimen/dashboard_stat_value_width"
                 android:layout_height="wrap_content"
                 android:text="@string/host_detail_value_unavailable"
-                android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
                 android:textColor="?attr/colorOnSurface"
                 android:gravity="end" />
 
@@ -207,7 +207,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/dashboard_host_card_load_placeholder"
-                android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
             <TextView
@@ -215,7 +215,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/dashboard_host_card_uptime_placeholder"
-                android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
         </LinearLayout>
@@ -232,7 +232,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/dashboard_host_card_net_placeholder"
-                android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
             <TextView
@@ -240,7 +240,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/dashboard_host_card_procs_placeholder"
-                android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
         </LinearLayout>

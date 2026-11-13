@@ -58,7 +58,7 @@
                         android:id="@+id/text_host_name"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:textAppearance="?attr/textAppearanceTitleMedium"
                         android:textColor="?attr/colorOnSurface" />
 
                     <TextView
@@ -66,7 +66,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_xs"
-                        android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
+                        android:textAppearance="?attr/textAppearanceLabelSmall"
                         android:textColor="?attr/colorOnSurfaceVariant" />
 
                 </LinearLayout>
@@ -97,7 +97,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/container_dashboard_inventory"
-                    android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
+                    android:textAppearance="?attr/textAppearanceTitleSmall"
                     android:textColor="?attr/colorOnSurface" />
 
                 <!-- One count row per concept, added programmatically so a
@@ -134,7 +134,7 @@
                     android:id="@+id/text_engine_name"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
+                    android:textAppearance="?attr/textAppearanceTitleSmall"
                     android:textColor="?attr/colorOnSurface" />
 
                 <TextView
@@ -194,7 +194,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/container_dashboard_disk_usage"
-                    android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
+                    android:textAppearance="?attr/textAppearanceTitleSmall"
                     android:textColor="?attr/colorOnSurface" />
 
                 <!-- One TextView per DiskUsageRow, added programmatically -->

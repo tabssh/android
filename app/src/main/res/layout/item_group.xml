@@ -6,7 +6,7 @@
     android:layout_height="wrap_content"
     android:layout_margin="@dimen/space_sm"
     app:cardElevation="@dimen/elevation_low"
-    app:cardCornerRadius="@dimen/card_corner_radius_small">
+    app:cardCornerRadius="@dimen/card_corner_radius">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -35,7 +35,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/group_mgmt_edit_name_hint"
-                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                android:textAppearance="?attr/textAppearanceTitleMedium"
                 android:textStyle="bold" />
 
             <TextView
@@ -44,7 +44,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_xs"
                 android:text="@string/item_group_connections_placeholder"
-                android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                android:textAppearance="?attr/textAppearanceBodySmall"
                 android:textColor="?android:attr/textColorSecondary" />
 
         </LinearLayout>
@@ -55,7 +55,7 @@
             android:layout_width="@dimen/icon_size_medium"
             android:layout_height="@dimen/icon_size_medium"
             android:layout_marginStart="@dimen/space_sm"
-            android:src="@android:drawable/ic_menu_sort_by_size"
+            android:src="@drawable/ic_sort"
             android:contentDescription="@string/item_group_drag_content_description"
             android:alpha="0.5" />
 

@@ -48,7 +48,7 @@
             android:layout_width="@dimen/min_touch_target"
             android:layout_height="@dimen/min_touch_target"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_delete"
+            android:src="@drawable/ic_delete"
             android:contentDescription="@string/delete" />
 
     </LinearLayout>

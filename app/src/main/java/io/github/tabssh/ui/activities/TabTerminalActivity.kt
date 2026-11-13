@@ -4270,7 +4270,7 @@ class TabTerminalActivity : TabSSHActivity() {
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_workspace_delete_confirm_title)
             .setMessage(getString(R.string.terminal_workspace_delete_confirm_message_fmt, ws.name))
-            .setNegativeButton(R.string.terminal_delete_workspace_title) { _, _ ->
+            .setPositiveButton(R.string.terminal_delete_workspace_title) { _, _ ->
                 lifecycleScope.launch {
                     try {
                         withContext(Dispatchers.IO) {
@@ -4286,9 +4286,9 @@ class TabTerminalActivity : TabSSHActivity() {
                     }
                 }
             }
-            .setPositiveButton(R.string.cancel, null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
-        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)
             ?.setTextColor(MaterialColors.getColor(dialog.context, com.google.android.material.R.attr.colorError, Color.RED))
     }
 
@@ -6500,10 +6500,10 @@ class TabTerminalActivity : TabSSHActivity() {
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_close_live_tab_confirm_title)
             .setMessage(R.string.terminal_close_live_tab_confirm_message)
-            .setNegativeButton(R.string.terminal_close_tab) { _, _ -> onConfirmed() }
-            .setPositiveButton(R.string.cancel, null)
+            .setPositiveButton(R.string.terminal_close_tab) { _, _ -> onConfirmed() }
+            .setNegativeButton(R.string.cancel, null)
             .show()
-        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)
             ?.setTextColor(MaterialColors.getColor(dialog.context, com.google.android.material.R.attr.colorError, Color.RED))
     }
 
@@ -6543,13 +6543,12 @@ class TabTerminalActivity : TabSSHActivity() {
             return
         }
         // Confirm with the live tab count before destroying every
-        // open session; the destructive choice is the negative button and
-        // carries the error-color danger cue, the safe "Cancel" choice stays
-        // the visually default action.
+        // open session; the destructive choice is the positive (right) button
+        // and carries the error-color danger cue, "Cancel" sits on the left.
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_disconnect_all_confirm_title)
             .setMessage(getString(R.string.terminal_disconnect_all_confirm_message_fmt, tabCount))
-            .setNegativeButton(R.string.terminal_menu_disconnect_all) { _, _ ->
+            .setPositiveButton(R.string.terminal_menu_disconnect_all) { _, _ ->
                 // Left on Main: closeAllTabs() only mutates the tab list and
                 // fires listener callbacks (which post to Main themselves);
                 // the blocking per-tab teardown it used to run inline now
@@ -6558,9 +6557,9 @@ class TabTerminalActivity : TabSSHActivity() {
                     tabManager.closeAllTabs()
                 }
             }
-            .setPositiveButton(R.string.cancel, null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
-        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)
             ?.setTextColor(MaterialColors.getColor(dialog.context, com.google.android.material.R.attr.colorError, Color.RED))
     }
     

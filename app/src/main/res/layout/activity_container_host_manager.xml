@@ -107,7 +107,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:accessibilityLiveRegion="polite"
-                            android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                            android:textAppearance="?attr/textAppearanceTitleMedium"
                             android:textColor="?attr/colorOnSurface" />
 
                     </LinearLayout>

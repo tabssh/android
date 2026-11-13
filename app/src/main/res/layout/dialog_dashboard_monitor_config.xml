@@ -47,7 +47,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_12dp"
             android:text="@string/dashboard_check_interval_label"
-            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
         <Spinner
@@ -61,7 +61,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_12dp"
             android:text="@string/dashboard_alert_cooldown_label"
-            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
         <Spinner
@@ -84,14 +84,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_12dp"
-            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
         <TextView
             android:id="@+id/tv_cpu_value"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
             android:textColor="?attr/colorOnSurface" />
 
         <SeekBar
@@ -107,14 +107,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_12dp"
-            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
         <TextView
             android:id="@+id/tv_mem_value"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
             android:textColor="?attr/colorOnSurface" />
 
         <SeekBar
@@ -130,14 +130,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_12dp"
-            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
         <TextView
             android:id="@+id/tv_disk_value"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
             android:textColor="?attr/colorOnSurface" />
 
         <SeekBar

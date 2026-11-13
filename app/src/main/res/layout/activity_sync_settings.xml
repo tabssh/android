@@ -83,7 +83,7 @@
                             android:text="@string/sync_settings_sync_now"
                             android:visibility="gone"
                             style="@style/Widget.Material3.Button.TonalButton"
-                            app:icon="@android:drawable/ic_menu_rotate" />
+                            app:icon="@drawable/ic_refresh" />
 
                     </LinearLayout>
 
@@ -179,7 +179,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/common_icon_check"
-                            android:textColor="@android:color/holo_green_dark"
+                            android:textColor="@color/status_success"
                             android:textSize="@dimen/text_size_title"
                             android:visibility="gone" />
 
@@ -238,7 +238,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/common_icon_check"
-                            android:textColor="@android:color/holo_green_dark"
+                            android:textColor="@color/status_success"
                             android:textSize="@dimen/text_size_title"
                             android:visibility="gone" />
 
@@ -664,7 +664,7 @@
                             android:padding="@dimen/space_md"
                             android:text="@string/sync_settings_clear_config_title"
                             android:textAppearance="?attr/textAppearanceBodyLarge"
-                            android:textColor="@android:color/holo_red_dark"
+                            android:textColor="@color/status_error"
                             android:background="?attr/selectableItemBackground"
                             android:clickable="true"
                             android:focusable="true" />

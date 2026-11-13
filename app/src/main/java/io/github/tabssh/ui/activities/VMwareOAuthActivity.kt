@@ -4,7 +4,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import androidx.appcompat.app.AlertDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import io.github.tabssh.R
@@ -166,7 +166,7 @@ class VMwareOAuthActivity : AppCompatActivity() {
 
     private fun fail(message: String) {
         if (isFinishing || isDestroyed) return
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.status_error)
             .setMessage(message)
             .setPositiveButton(android.R.string.ok) { _, _ ->

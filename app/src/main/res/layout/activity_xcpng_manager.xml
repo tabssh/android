@@ -106,7 +106,7 @@
                 android:id="@+id/live_indicator"
                 android:layout_width="@dimen/space_sm"
                 android:layout_height="@dimen/space_sm"
-                android:background="@android:color/holo_green_light"
+                android:background="@color/status_success"
                 android:visibility="gone" />
             
             <TextView

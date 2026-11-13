@@ -24,7 +24,7 @@
         android:layout_height="wrap_content"
         android:layout_marginEnd="@dimen/space_sm"
         app:cardBackgroundColor="?attr/colorSecondaryContainer"
-        app:cardCornerRadius="@dimen/space_xs"
+        app:cardCornerRadius="@dimen/card_corner_radius_small"
         app:cardElevation="@dimen/elevation_none">
 
         <TextView

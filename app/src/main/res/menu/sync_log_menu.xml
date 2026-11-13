@@ -5,19 +5,19 @@
     <item
         android:id="@+id/action_copy"
         android:title="@string/sync_log_action_copy"
-        android:icon="@android:drawable/ic_menu_edit"
+        android:icon="@drawable/ic_edit"
         app:showAsAction="ifRoom" />
 
     <item
         android:id="@+id/action_refresh"
         android:title="@string/container_refresh"
-        android:icon="@android:drawable/ic_menu_rotate"
+        android:icon="@drawable/ic_refresh"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_clear"
         android:title="@string/sync_log_action_clear"
-        android:icon="@android:drawable/ic_menu_delete"
+        android:icon="@drawable/ic_delete"
         app:showAsAction="never" />
 
 </menu>

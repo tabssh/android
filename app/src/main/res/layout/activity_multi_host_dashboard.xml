@@ -39,9 +39,9 @@
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler"
+        android:paddingBottom="@dimen/space_88dp"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:paddingBottom="@dimen/space_80dp"
         android:clipToPadding="false"
         app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
@@ -50,7 +50,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_margin="@dimen/space_md"
+        android:layout_margin="@dimen/space_lg"
         app:tint="?attr/colorOnPrimaryContainer"
         android:text="@string/dashboard_new_group_button"
         android:contentDescription="@string/dashboard_new_group_description"

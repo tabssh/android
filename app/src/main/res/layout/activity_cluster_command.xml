@@ -34,14 +34,14 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/cluster_command_select_title"
-                    android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
+                    android:textAppearance="?attr/textAppearanceTitleMedium" />
 
                 <TextView
                     android:id="@+id/selected_count"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/cluster_command_selected_count_zero"
-                    android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+                    android:textAppearance="?attr/textAppearanceLabelMedium"
                     android:textColor="?attr/colorPrimary" />
 
             </LinearLayout>
@@ -115,7 +115,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/cluster_command_label"
-                    android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
+                    android:textAppearance="?attr/textAppearanceTitleMedium" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/button_from_snippet"
@@ -199,7 +199,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/cluster_command_progress_initial"
                 android:textAlignment="center"
-                android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                android:textAppearance="?attr/textAppearanceBodySmall"
                 android:paddingTop="@dimen/space_sm" />
 
             <!-- Results -->
@@ -207,7 +207,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/cluster_command_results_label"
-                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                android:textAppearance="?attr/textAppearanceTitleMedium"
                 android:paddingTop="@dimen/space_lg"
                 android:paddingBottom="@dimen/space_sm" />
 
@@ -247,14 +247,15 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/cluster_command_empty_title"
-            android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
+            android:textSize="@dimen/text_size_headline"
+            android:textStyle="bold"
             android:layout_marginBottom="@dimen/space_sm" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/cluster_command_empty_hint"
-            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
             android:textColor="?android:attr/textColorSecondary"
             android:gravity="center"
             android:layout_marginBottom="@dimen/space_lg" />

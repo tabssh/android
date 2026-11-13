@@ -48,7 +48,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/backup_job_item_status_enabled_placeholder"
                 android:textSize="@dimen/text_size_caption"
-                android:textColor="@android:color/holo_green_dark" />
+                android:textColor="@color/status_success" />
 
         </LinearLayout>
 

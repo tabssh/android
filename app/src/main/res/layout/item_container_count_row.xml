@@ -29,7 +29,7 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:importantForAccessibility="no"
-        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+        android:textAppearance="?attr/textAppearanceBodyMedium"
         android:textColor="?attr/colorOnSurfaceVariant" />
 
     <TextView
@@ -39,7 +39,7 @@
         android:layout_marginStart="@dimen/space_sm"
         android:gravity="end"
         android:importantForAccessibility="no"
-        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+        android:textAppearance="?attr/textAppearanceTitleMedium"
         android:textColor="?attr/colorOnSurface" />
 
 </LinearLayout>

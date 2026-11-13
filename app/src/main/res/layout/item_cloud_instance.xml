@@ -7,7 +7,7 @@
     android:layout_marginStart="@dimen/space_md"
     android:layout_marginEnd="@dimen/space_md"
     android:layout_marginBottom="@dimen/space_sm"
-    app:cardCornerRadius="@dimen/card_corner_radius_small"
+    app:cardCornerRadius="@dimen/card_corner_radius"
     app:cardElevation="@dimen/elevation_low">
 
     <LinearLayout

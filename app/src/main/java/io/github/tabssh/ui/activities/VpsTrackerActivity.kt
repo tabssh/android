@@ -22,6 +22,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.SimpleItemAnimator
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
@@ -45,6 +46,7 @@ class VpsTrackerActivity : TabSSHActivity() {
 
     private companion object {
         private const val TAG = "VpsTrackerActivity"
+        private const val PAYLOAD_SELECTION = "selection"
         private const val PREFS_NAME = "TabSSH"
         private const val PREF_SORT_OPTION = "vps_tracker_sort"
         private const val PREF_FILTER_OPTION = "vps_tracker_filter"
@@ -119,6 +121,7 @@ class VpsTrackerActivity : TabSSHActivity() {
         adapter = VpsHostAdapter(onLongPress = { host -> onRowLongPress(host) })
         binding.recyclerVpsHosts.layoutManager = LinearLayoutManager(this)
         binding.recyclerVpsHosts.adapter = adapter
+        (binding.recyclerVpsHosts.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
         adapter.setOnItemClickListener { host -> onRowClick(host) }
         adapter.setOnRenewalPillClickListener { host ->
             if (actionMode != null) toggleSelection(host.id) else maybeShowRenewalConfirm(host)
@@ -554,7 +557,7 @@ class VpsTrackerActivity : TabSSHActivity() {
         } else {
             actionMode?.title = getString(R.string.tracker_selected_count_fmt, selectedIds.size)
         }
-        adapter.notifyDataSetChanged()
+        adapter.notifyItemRangeChanged(0, adapter.itemCount, PAYLOAD_SELECTION)
     }
 
     private val selectionCallback = object : ActionMode.Callback {
@@ -582,7 +585,7 @@ class VpsTrackerActivity : TabSSHActivity() {
         override fun onDestroyActionMode(mode: ActionMode) {
             actionMode = null
             selectedIds.clear()
-            adapter.notifyDataSetChanged()
+            adapter.notifyItemRangeChanged(0, adapter.itemCount, PAYLOAD_SELECTION)
         }
     }
 
