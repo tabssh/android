@@ -488,6 +488,13 @@
             android:label="@string/main_tab_stats"
             android:parentActivityName=".ui.activities.MainActivity" />
 
+        <!-- Container Updates page: pending image updates across hosts; the update notification opens it -->
+        <activity
+            android:name=".ui.activities.UpdatesOverviewActivity"
+            android:exported="false"
+            android:label="@string/nav_item_container_updates"
+            android:parentActivityName=".ui.activities.MainActivity" />
+
         <!-- Wave 4.g — Multi-host performance dashboard -->
         <activity
             android:name=".ui.activities.MultiHostDashboardActivity"

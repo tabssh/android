@@ -14,6 +14,14 @@ interface ContainerAutoUpdatePolicyDao {
     @Query("SELECT * FROM container_auto_update_policies WHERE enabled_override IS NOT 0")
     suspend fun getEnabledList(): List<ContainerAutoUpdatePolicy>
 
+    /** Containers with a newer image waiting, on every host (stack-scope rows hold settings only). */
+    @Query("SELECT * FROM container_auto_update_policies WHERE pending_update_digest IS NOT NULL AND scope != 'stack'")
+    fun observePending(): Flow<List<ContainerAutoUpdatePolicy>>
+
+    /** One-shot form of [observePending]. */
+    @Query("SELECT * FROM container_auto_update_policies WHERE pending_update_digest IS NOT NULL AND scope != 'stack'")
+    suspend fun getPendingList(): List<ContainerAutoUpdatePolicy>
+
     /** Every policy regardless of [ContainerAutoUpdatePolicy.enabled] — backup export and sync collection. */
     @Query("SELECT * FROM container_auto_update_policies")
     suspend fun getAllList(): List<ContainerAutoUpdatePolicy>

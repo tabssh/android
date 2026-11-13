@@ -53,6 +53,9 @@ class ContainerHostManagerActivity : TabSSHActivity(), io.github.tabssh.ui.utils
 
     companion object {
         const val EXTRA_HOST_ID = "container_host_id"
+
+        /** When true the host opens on its Updates tab (used by the Container Updates page). */
+        const val EXTRA_OPEN_UPDATES = "open_updates_tab"
     }
 
     private lateinit var app: TabSSHApplication
@@ -139,6 +142,10 @@ class ContainerHostManagerActivity : TabSSHActivity(), io.github.tabssh.ui.utils
         TabLayoutMediator(tabLayout, viewPager) { tab, position ->
             tab.setText(tabs[position].titleRes)
         }.attach()
+        if (intent.getBooleanExtra(EXTRA_OPEN_UPDATES, false)) {
+            val index = tabs.indexOfFirst { it.titleRes == R.string.container_manager_tab_updates }
+            if (index >= 0) viewPager.setCurrentItem(index, false)
+        }
     }
 
     private fun acquireSession(force: Boolean) {

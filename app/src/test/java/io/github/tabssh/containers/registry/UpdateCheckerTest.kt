@@ -305,6 +305,12 @@ private class FakePolicyDao(
 
     override suspend fun getAllList(): List<ContainerAutoUpdatePolicy> = listOf(stored)
 
+    override fun observePending(): Flow<List<ContainerAutoUpdatePolicy>> =
+        flowOf(listOf(stored).filter { it.pendingUpdateDigest != null })
+
+    override suspend fun getPendingList(): List<ContainerAutoUpdatePolicy> =
+        listOf(stored).filter { it.pendingUpdateDigest != null }
+
     override suspend fun getById(id: Long): ContainerAutoUpdatePolicy? =
         stored.takeIf { it.id == id }
 

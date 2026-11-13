@@ -48,10 +48,10 @@ import kotlinx.coroutines.withTimeoutOrNull
  *
  * ## Outcomes
  *
- * - New pending update → [NotificationHelper.notifyContainerUpdateAvailable]
- *   (once per standalone container or compose project) plus the DB badge state.
- * - Resolved auto-apply on → [UpdateApplier] updates it unattended and the result
- *   is posted via [NotificationHelper.notifyContainerUpdateApplied]. Compose
+ * - New pending update → one [NotificationHelper.notifyContainerUpdatesAvailable] per cycle
+ *   covering every host (removed again once nothing is pending), plus the DB badge state.
+ * - Resolved auto-apply on → [UpdateApplier] updates it unattended and the cycle's results
+ *   are posted as one [NotificationHelper.notifyContainerUpdatesApplied]. Compose
  *   containers are updated through compose as a whole project, never with
  *   `docker run`; standalone containers never through compose.
  *
@@ -119,6 +119,24 @@ class ContainerUpdateCheckWorker(
             Logger.d(TAG, "Periodic container update check scheduled (wakes every $WAKE_INTERVAL_HOURS h, network required)")
         }
 
+        /** Input key: run every host now, ignoring each host's interval (the Check all now button). */
+        private const val KEY_FORCE = "force"
+
+        /** Unique name of the one-shot manual run. */
+        private const val CHECK_NOW_WORK_NAME = "container_update_check_now"
+
+        /** Run one full check cycle right away, regardless of each host's interval. */
+        fun checkNow(context: Context) {
+            val request = OneTimeWorkRequestBuilder<ContainerUpdateCheckWorker>()
+                .setConstraints(
+                    Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+                )
+                .setInputData(workDataOf(KEY_FORCE to true))
+                .build()
+            WorkManager.getInstance(context)
+                .enqueueUniqueWork(CHECK_NOW_WORK_NAME, ExistingWorkPolicy.KEEP, request)
+        }
+
         /** Cancel the periodic worker (master toggle switched off). */
         fun cancel(context: Context) {
             WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
@@ -181,6 +199,8 @@ class ContainerUpdateCheckWorker(
         // once; each host is gated by its resolved enable/interval settings.
         val hostSemaphore = Semaphore(MAX_CONCURRENT_HOSTS)
         val now = System.currentTimeMillis()
+        val force = inputData.getBoolean(KEY_FORCE, false)
+        val outcome = CycleOutcome()
         coroutineScope {
             for (host in hosts) {
                 val hostPolicies = allPolicies[host.id].orEmpty()
@@ -190,7 +210,7 @@ class ContainerUpdateCheckWorker(
                 if (!hostEnabled && hostPolicies.none { it.enabledOverride == true }) {
                     continue
                 }
-                if (!UpdateCheckGate.isHostDue(
+                if (!force && !UpdateCheckGate.isHostDue(
                         true, host.lastUpdateCheck, host.updateCheckIntervalHours,
                         global.intervalHours, now
                     )
@@ -200,7 +220,7 @@ class ContainerUpdateCheckWorker(
                 }
                 launch {
                     hostSemaphore.withPermit {
-                        val checked = checkHost(app, host, hostPolicies, global, checker, applier)
+                        val checked = checkHost(app, host, hostPolicies, global, checker, applier, outcome)
                         // Only a completed pass advances the per-host clock —
                         // a skipped host retries on the next hourly run.
                         if (checked) {
@@ -211,8 +231,38 @@ class ContainerUpdateCheckWorker(
             }
         }
 
+        postCycleNotifications(db.containerAutoUpdatePolicyDao().getPendingList(), outcome)
         Logger.d(TAG, "Container update check complete")
         return Result.success()
+    }
+
+    /** What one check cycle did, gathered across concurrently checked hosts. */
+    private class CycleOutcome {
+        @Volatile var foundNew = false
+        val updated = java.util.concurrent.atomic.AtomicInteger()
+        val failed = java.util.concurrent.atomic.AtomicInteger()
+        val firstFailure = java.util.concurrent.atomic.AtomicReference<String?>(null)
+    }
+
+    /**
+     * One alert for everything pending across all hosts (only when the cycle found something new,
+     * so a known update never re-alerts), none when nothing is pending, and one summary for the
+     * unattended updates the cycle ran.
+     */
+    private fun postCycleNotifications(
+        pending: List<ContainerAutoUpdatePolicy>,
+        outcome: CycleOutcome
+    ) {
+        if (pending.isEmpty()) {
+            NotificationHelper.cancelContainerUpdatesAvailable(appContext)
+        } else if (outcome.foundNew) {
+            NotificationHelper.notifyContainerUpdatesAvailable(
+                appContext, pending.size, pending.map { it.containerHostId }.toSet().size
+            )
+        }
+        NotificationHelper.notifyContainerUpdatesApplied(
+            appContext, outcome.updated.get(), outcome.failed.get(), outcome.firstFailure.get()
+        )
     }
 
     /**
@@ -271,7 +321,8 @@ class ContainerUpdateCheckWorker(
         hostPolicies: List<ContainerAutoUpdatePolicy>,
         global: HostUpdateScanner.GlobalSettings,
         checker: UpdateChecker,
-        applier: UpdateApplier
+        applier: UpdateApplier,
+        outcome: CycleOutcome
     ): Boolean {
         var ownedConnectionId: String? = null
         var ownTransport: ContainerTransport? = null
@@ -283,7 +334,7 @@ class ContainerUpdateCheckWorker(
             val found = HostUpdateScanner(app.database.containerAutoUpdatePolicyDao(), checker)
                 .scan(host, hostPolicies, global, transport)
                 ?: return false
-            notifyAndApply(host, found, applier, transport)
+            collectAndApply(host, found, applier, transport, outcome)
         } finally {
             // Only close what this worker opened — never the UI's session.
             try {
@@ -297,15 +348,16 @@ class ContainerUpdateCheckWorker(
     }
 
     /**
-     * Notify once per standalone container / compose project, then apply: a standalone
-     * container on its own, a compose project as one unit — and only when every updated
-     * container in it resolves to auto-apply, since compose recreates the whole project.
+     * Record new pending updates for the cycle's single alert, then apply: a standalone container
+     * on its own, a compose project as one unit — and only when every updated container in it
+     * resolves to auto-apply, since compose recreates the whole project.
      */
-    private suspend fun notifyAndApply(
+    private suspend fun collectAndApply(
         host: ContainerHost,
         found: List<HostUpdateScanner.FoundUpdate>,
         applier: UpdateApplier,
-        transport: ContainerTransport
+        transport: ContainerTransport,
+        outcome: CycleOutcome
     ) {
         val units = found.groupBy { it.project ?: "container:${it.policy.containerNameOrStackName}" }
         for ((_, members) in units) {
@@ -313,25 +365,22 @@ class ContainerUpdateCheckWorker(
             val label = first.project ?: first.policy.containerNameOrStackName
             // Dedup: the stored pending digest is the one already alerted on.
             if (members.any { it.policy.pendingUpdateDigest != it.result.registryDigest }) {
-                NotificationHelper.notifyContainerUpdateAvailable(
-                    appContext, first.policy.id, host.name, label,
-                    if (members.size == 1) first.result.imageRef ?: label
-                    else "${members.size} images"
-                )
+                outcome.foundNew = true
             }
             if (members.all { it.autoApply }) {
-                applyUnattended(host, first.policy, label, applier, transport)
+                applyUnattended(host, first.policy, label, applier, transport, outcome)
             }
         }
     }
 
-    /** Run the unattended update for one unit and notify the outcome. */
+    /** Run the unattended update for one unit and add its result to the cycle's tally. */
     private suspend fun applyUnattended(
         host: ContainerHost,
         policy: ContainerAutoUpdatePolicy,
         label: String,
         applier: UpdateApplier,
-        transport: ContainerTransport
+        transport: ContainerTransport,
+        outcome: CycleOutcome
     ) {
         Logger.i(TAG, "Auto-updating $label on ${host.name}")
         var failure: UpdateApplier.ApplyEvent.Failed? = null
@@ -344,16 +393,20 @@ class ContainerUpdateCheckWorker(
                     else -> Unit
                 }
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e(TAG, "Unattended update threw for policy ${policy.id}", e)
         }
-        val f = failure
-        NotificationHelper.notifyContainerUpdateApplied(
-            appContext, policy.id, host.name, label,
-            success = completed,
-            detail = f?.let {
-                "${it.message} (at ${it.step}${if (it.rolledBack) ", rolled back" else ""})"
-            }
-        )
+        if (completed) {
+            outcome.updated.incrementAndGet()
+        } else {
+            outcome.failed.incrementAndGet()
+            val f = failure
+            val detail = f?.let {
+                "$label on ${host.name}: ${it.message} (at ${it.step}${if (it.rolledBack) ", rolled back" else ""})"
+            } ?: "$label on ${host.name}: update failed"
+            outcome.firstFailure.compareAndSet(null, detail)
+        }
     }
 }

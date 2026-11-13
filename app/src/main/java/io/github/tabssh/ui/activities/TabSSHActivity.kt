@@ -342,6 +342,7 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
             R.id.nav_manage_groups -> startDestination(GroupManagementActivity::class.java)
             R.id.nav_port_forwarding -> startDestination(PortForwardingActivity::class.java)
             R.id.nav_cluster_commands -> startDestination(ClusterCommandActivity::class.java)
+            R.id.nav_container_updates -> startDestination(UpdatesOverviewActivity::class.java)
             R.id.nav_stats -> startDestination(StatsActivity::class.java)
             R.id.nav_multi_dashboard -> startDestination(MultiHostDashboardActivity::class.java)
             R.id.nav_connection_history -> startDestination(ConnectionHistoryActivity::class.java)

@@ -17,7 +17,6 @@ import io.github.tabssh.containers.ContainerEngine
 import io.github.tabssh.containers.ContainerSessionManager
 import io.github.tabssh.containers.EngineCapability
 import io.github.tabssh.containers.registry.HostUpdateScanner
-import io.github.tabssh.containers.registry.UpdateApplier
 import io.github.tabssh.containers.transport.ContainerDiskUsage
 import io.github.tabssh.containers.transport.ContainerEngineInfo
 import io.github.tabssh.containers.transport.ContainerEngineVersion
@@ -227,9 +226,9 @@ class ContainerDashboardFragment : ContainerPageFragment() {
     }
 
     /**
-     * Containers with a newer image waiting, from the scanner's pending flags. A compose project
-     * counts once, matching how the Updates tab groups them; flags for containers that no longer
-     * exist are ignored. Null when the container list could not be read.
+     * Containers with a newer image waiting, from the scanner's pending flags: the same count the
+     * Container Updates page and the notification use. Flags for containers that no longer exist
+     * are ignored. Null when the container list could not be read.
      */
     private suspend fun updateCount(
         session: ContainerSessionManager.ContainerSession,
@@ -244,12 +243,7 @@ class ContainerDashboardFragment : ContainerPageFragment() {
                 it.scope != HostUpdateScanner.SCOPE_STACK && it.pendingUpdateDigest != null &&
                     byName.containsKey(it.containerNameOrStackName)
             }
-            .map { policy ->
-                byName[policy.containerNameOrStackName]
-                    ?.labels?.get(UpdateApplier.COMPOSE_PROJECT_LABEL)?.takeIf { it.isNotEmpty() }
-                    ?: "container:${policy.containerNameOrStackName}"
-            }
-            .toSet().size
+            .size
     }
 
     /**

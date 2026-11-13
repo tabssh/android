@@ -901,6 +901,39 @@
     <string name="container_updates_available_empty">Everything checked is up to date.</string>
     <string name="container_updates_available_members">%1$d containers: %2$s</string>
     <string name="container_updates_update_action">Update</string>
+    <string name="nav_item_container_updates">Container Updates</string>
+    <string name="container_updates_check_all">Check all now</string>
+    <string name="container_updates_check_all_started">Checking all hosts</string>
+    <string name="container_updates_overview_none">Everything is up to date.</string>
+    <string name="container_updates_overview_no_hosts">No container hosts yet, so there is nothing to check.</string>
+    <string name="container_updates_overview_row_subtitle">A newer image is available</string>
+    <string name="container_updates_overview_open">Open</string>
+    <string name="container_updates_overview_open_desc">Open the Updates tab of %1$s</string>
+    <string name="container_updates_applied_mixed_title">%1$d containers updated, %2$d failed</string>
+    <plurals name="container_updates_overview_summary">
+        <item quantity="one">%1$d container has an update, on %2$d host</item>
+        <item quantity="other">%1$d containers have updates, on %2$d hosts</item>
+    </plurals>
+    <plurals name="container_updates_overview_host_count">
+        <item quantity="one">%1$d update</item>
+        <item quantity="other">%1$d updates</item>
+    </plurals>
+    <plurals name="container_updates_notification_title">
+        <item quantity="one">%1$d container update available</item>
+        <item quantity="other">%1$d container updates available</item>
+    </plurals>
+    <plurals name="container_updates_notification_text">
+        <item quantity="one">On %1$d host. Tap to review.</item>
+        <item quantity="other">On %1$d hosts. Tap to review.</item>
+    </plurals>
+    <plurals name="container_updates_applied_title">
+        <item quantity="one">%1$d container updated</item>
+        <item quantity="other">%1$d containers updated</item>
+    </plurals>
+    <plurals name="container_updates_failed_title">
+        <item quantity="one">%1$d container update failed</item>
+        <item quantity="other">%1$d container updates failed</item>
+    </plurals>
     <string name="container_updates_update_desc">Update %1$s</string>
     <string name="container_updates_section_all">All images and stacks</string>
     <string name="container_updates_all_empty">No running containers on this host.</string>

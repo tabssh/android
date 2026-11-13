@@ -60,6 +60,10 @@
     <item android:title="@string/nav_group_insights">
         <menu>
             <item
+                android:id="@+id/nav_container_updates"
+                android:icon="@drawable/ic_download"
+                android:title="@string/nav_item_container_updates" />
+            <item
                 android:id="@+id/nav_stats"
                 android:icon="@drawable/ic_sort"
                 android:title="@string/main_tab_stats" />

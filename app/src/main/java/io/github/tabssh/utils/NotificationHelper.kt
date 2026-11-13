@@ -44,7 +44,8 @@ object NotificationHelper {
     // monitoring (200_000–289_999) ranges so they never collide.
     private const val NOTIFICATION_ID_SSH_GROUP = 1000
     private const val NOTIFICATION_ID_MONITORING_GROUP = 199_999
-    private const val NOTIFICATION_ID_CONTAINER_UPDATES_GROUP = 299_999
+    private const val NOTIFICATION_ID_CONTAINER_UPDATES_AVAILABLE = 299_998
+    private const val NOTIFICATION_ID_CONTAINER_UPDATES_APPLIED = 299_999
     private const val NOTIFICATION_ID_RENEWAL_REMINDERS_GROUP = 399_999
 
     // Per-tab notifications occupy a dedicated id range. The id is
@@ -65,7 +66,6 @@ object NotificationHelper {
     // when there are 4+ children (behaviour varies by launcher).
     private const val GROUP_SSH_SESSIONS = "tabssh_ssh_sessions"
     private const val GROUP_MONITORING   = "tabssh_monitoring"
-    private const val GROUP_CONTAINER_UPDATES = "tabssh_container_updates"
     private const val GROUP_RENEWAL_REMINDERS = "tabssh_renewal_reminders"
 
     // ── Notification channel IDs ──────────────────────────────────────────────
@@ -1078,90 +1078,70 @@ object NotificationHelper {
     // ── Container update notifications ───────────────────────────────────────────
 
     /**
-     * Post an "image update available" alert for a watched container.
-     * Fired by ContainerUpdateCheckWorker when the registry digest moved past
-     * the running container's digest (deduped against the stored pending
-     * digest, so the same update never re-alerts every check cycle).
+     * One notification for every pending container update across all hosts: a single alert,
+     * replaced in place each cycle, that opens the Container Updates page.
      */
-    fun notifyContainerUpdateAvailable(
-        context: Context,
-        policyId: Long,
-        hostName: String,
-        containerName: String,
-        imageRef: String
-    ) {
+    fun notifyContainerUpdatesAvailable(context: Context, containers: Int, hosts: Int) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val pi = mainActivityPendingIntent(context)
         val n = NotificationCompat.Builder(context, CHANNEL_CONTAINER_UPDATES)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Update available: $containerName")
-            .setContentText("$imageRef has a newer image on $hostName")
-            .setContentIntent(pi)
+            .setContentTitle(context.resources.getQuantityString(
+                R.plurals.container_updates_notification_title, containers, containers
+            ))
+            .setContentText(context.resources.getQuantityString(
+                R.plurals.container_updates_notification_text, hosts, hosts
+            ))
+            .setContentIntent(containerUpdatesPendingIntent(context))
             .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .setGroup(GROUP_CONTAINER_UPDATES)
             .build()
-        nm.notify(containerUpdateNotificationId(policyId, "available"), n)
-        postContainerUpdatesGroupSummary(context, nm)
+        nm.notify(NOTIFICATION_ID_CONTAINER_UPDATES_AVAILABLE, n)
+    }
+
+    /** Remove the update-available alert once nothing is pending any more. */
+    fun cancelContainerUpdatesAvailable(context: Context) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancel(NOTIFICATION_ID_CONTAINER_UPDATES_AVAILABLE)
     }
 
     /**
-     * Post the outcome of an unattended pull-and-recreate run
-     * (ContainerAutoUpdatePolicy.autoRecreateOnUpdate).
+     * One notification for the unattended updates of a whole check cycle: how many containers
+     * were updated and how many failed, with the first failure's detail when there was one.
      */
-    fun notifyContainerUpdateApplied(
-        context: Context,
-        policyId: Long,
-        hostName: String,
-        containerName: String,
-        success: Boolean,
-        detail: String? = null
-    ) {
+    fun notifyContainerUpdatesApplied(context: Context, updated: Int, failed: Int, failure: String?) {
+        if (updated == 0 && failed == 0) return
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        // The "available" alert is resolved either way — replace it.
-        nm.cancel(containerUpdateNotificationId(policyId, "available"))
-        val pi = mainActivityPendingIntent(context)
-        val title = if (success) "Updated: $containerName" else "Update failed: $containerName"
-        val text = if (success) {
-            "Recreated on the new image on $hostName"
-        } else {
-            detail ?: "Pull-and-recreate failed on $hostName"
+        val res = context.resources
+        val title = when {
+            failed == 0 -> res.getQuantityString(R.plurals.container_updates_applied_title, updated, updated)
+            updated == 0 -> res.getQuantityString(R.plurals.container_updates_failed_title, failed, failed)
+            else -> context.getString(R.string.container_updates_applied_mixed_title, updated, failed)
         }
         val n = NotificationCompat.Builder(context, CHANNEL_CONTAINER_UPDATES)
-            .setSmallIcon(if (success) R.drawable.ic_connected else R.drawable.ic_error)
+            .setSmallIcon(if (failed == 0) R.drawable.ic_connected else R.drawable.ic_error)
             .setContentTitle(title)
-            .setContentText(text)
-            .setContentIntent(pi)
+            .apply { failure?.let { setContentText(it) } }
+            .setContentIntent(containerUpdatesPendingIntent(context))
             .setAutoCancel(true)
-            .setPriority(if (success) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH)
-            .setCategory(if (success) NotificationCompat.CATEGORY_STATUS else NotificationCompat.CATEGORY_ERROR)
-            .setGroup(GROUP_CONTAINER_UPDATES)
+            .setPriority(
+                if (failed == 0) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH
+            )
+            .setCategory(
+                if (failed == 0) NotificationCompat.CATEGORY_STATUS else NotificationCompat.CATEGORY_ERROR
+            )
             .build()
-        nm.notify(containerUpdateNotificationId(policyId, "applied"), n)
-        postContainerUpdatesGroupSummary(context, nm)
+        nm.notify(NOTIFICATION_ID_CONTAINER_UPDATES_APPLIED, n)
     }
 
-    /** Stable notification ID for a given policy + alert type pair. */
-    private fun containerUpdateNotificationId(policyId: Long, type: String): Int {
-        val base = 300_000
-        return base + ((("$policyId$type").hashCode().toLong() and 0x7FFFFFFFL) % 90_000).toInt()
-    }
-
-    /** Post (or refresh) the container updates notification group summary. */
-    private fun postContainerUpdatesGroupSummary(context: Context, nm: NotificationManager) {
-        val pi = mainActivityPendingIntent(context)
-        val summary = NotificationCompat.Builder(context, CHANNEL_CONTAINER_UPDATES)
-            .setContentTitle("TabSSH Container Updates")
-            .setContentText("Container image update alerts")
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentIntent(pi)
-            .setGroup(GROUP_CONTAINER_UPDATES)
-            .setGroupSummary(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setAutoCancel(true)
-            .build()
-        nm.notify(NOTIFICATION_ID_CONTAINER_UPDATES_GROUP, summary)
+    private fun containerUpdatesPendingIntent(context: Context): PendingIntent {
+        val intent = Intent(context, io.github.tabssh.ui.activities.UpdatesOverviewActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        return PendingIntent.getActivity(
+            context, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     /**
