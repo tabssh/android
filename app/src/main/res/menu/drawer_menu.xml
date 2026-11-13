@@ -23,7 +23,7 @@
     <group android:id="@+id/group_quick">
         <item
             android:id="@+id/nav_home"
-            android:icon="@android:drawable/ic_menu_myplaces"
+            android:icon="@drawable/ic_computer"
             android:title="@string/nav_item_home" />
         <item
             android:id="@+id/nav_quick_connect"
@@ -39,7 +39,7 @@
                 android:title="@string/nav_item_snippets" />
             <item
                 android:id="@+id/nav_manage_groups"
-                android:icon="@android:drawable/ic_menu_agenda"
+                android:icon="@drawable/ic_folder"
                 android:title="@string/nav_item_groups" />
         </menu>
     </item>
@@ -52,7 +52,7 @@
                 android:title="@string/port_forwarding_title" />
             <item
                 android:id="@+id/nav_cluster_commands"
-                android:icon="@android:drawable/ic_menu_share"
+                android:icon="@drawable/ic_share"
                 android:title="@string/nav_item_cluster_commands" />
         </menu>
     </item>
@@ -65,19 +65,19 @@
                 android:title="@string/main_tab_stats" />
             <item
                 android:id="@+id/nav_multi_dashboard"
-                android:icon="@android:drawable/ic_menu_view"
+                android:icon="@drawable/ic_dashboard"
                 android:title="@string/nav_item_multi_host_dashboard" />
             <item
                 android:id="@+id/nav_connection_history"
-                android:icon="@android:drawable/ic_menu_recent_history"
+                android:icon="@drawable/ic_history"
                 android:title="@string/nav_item_connection_history" />
             <item
                 android:id="@+id/nav_domain_tracker"
-                android:icon="@android:drawable/ic_menu_mapmode"
+                android:icon="@drawable/ic_language"
                 android:title="@string/nav_item_domain_tracker" />
             <item
                 android:id="@+id/nav_vps_tracker"
-                android:icon="@android:drawable/ic_menu_manage"
+                android:icon="@drawable/ic_dns"
                 android:title="@string/nav_item_vps_tracker" />
         </menu>
     </item>
@@ -93,11 +93,11 @@
         <menu>
             <item
                 android:id="@+id/nav_copy_app_log"
-                android:icon="@android:drawable/ic_menu_recent_history"
+                android:icon="@drawable/ic_logs"
                 android:title="@string/nav_item_copy_app_log" />
             <item
                 android:id="@+id/nav_copy_debug_logs"
-                android:icon="@android:drawable/ic_menu_info_details"
+                android:icon="@drawable/ic_bug_report"
                 android:title="@string/nav_item_copy_debug_logs" />
             <item
                 android:id="@+id/nav_whats_new"

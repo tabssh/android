@@ -205,7 +205,7 @@ class RemoteFileEditorActivity : TabSSHActivity() {
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.add(0, 1, 0, R.string.save).apply {
             setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-            setIcon(android.R.drawable.ic_menu_save)
+            setIcon(R.drawable.ic_save)
             isEnabled = dirty
         }
         return true

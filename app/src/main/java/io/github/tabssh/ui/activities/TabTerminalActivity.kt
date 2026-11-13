@@ -2215,12 +2215,10 @@ class TabTerminalActivity : TabSSHActivity() {
             override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
                 mode.title = null
                 menu.add(0, 1, 0, getString(R.string.copy_button))
-                    .setIcon(android.R.drawable.ic_menu_set_as)
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
                 menu.add(0, 2, 1, getString(R.string.select_all))
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
                 menu.add(0, 3, 2, getString(R.string.paste))
-                    .setIcon(android.R.drawable.ic_input_add)
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
                 menu.add(0, 4, 3, getString(R.string.cancel))
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)

@@ -50,7 +50,7 @@
         android:id="@+id/icon_expand"
         android:layout_width="@dimen/icon_size_medium"
         android:layout_height="@dimen/icon_size_medium"
-        android:src="@android:drawable/arrow_down_float"
+        android:src="@drawable/ic_expand_more"
         android:contentDescription="@string/item_group_expand_collapse_content_description" />
 
 </LinearLayout>
