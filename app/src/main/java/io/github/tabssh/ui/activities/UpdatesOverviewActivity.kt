@@ -13,7 +13,10 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.button.MaterialButton
 import io.github.tabssh.R
 import io.github.tabssh.background.ContainerUpdateCheckWorker
+import io.github.tabssh.containers.ContainerSessionManager
+import io.github.tabssh.containers.transport.ContainerResult
 import io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy
+import io.github.tabssh.ui.dialogs.UpdateApplyDialog
 import io.github.tabssh.ui.utils.ContainerText
 import io.github.tabssh.utils.tabSSHApp
 import kotlinx.coroutines.launch
@@ -83,14 +86,35 @@ class UpdatesOverviewActivity : TabSSHActivity() {
                     ContainerText.display(policy.containerNameOrStackName)
                 row.findViewById<TextView>(R.id.text_subtitle).text =
                     getString(R.string.container_updates_overview_row_subtitle)
-                val open = { openHost(hostId) }
-                row.setOnClickListener { open() }
+                row.setOnClickListener { openHost(hostId) }
+                val name = ContainerText.display(policy.containerNameOrStackName)
                 row.findViewById<MaterialButton>(R.id.button_update).apply {
-                    text = getString(R.string.container_updates_overview_open)
-                    contentDescription = getString(R.string.container_updates_overview_open_desc, hostName)
-                    setOnClickListener { open() }
+                    contentDescription = getString(R.string.container_updates_update_desc, name)
+                    setOnClickListener { applyUpdate(hostId, policy, name) }
                 }
                 listHosts.addView(row)
+            }
+        }
+    }
+
+    /** Connect to the host (or reuse its session), then run the confirmed update with progress. */
+    private fun applyUpdate(hostId: Long, policy: ContainerAutoUpdatePolicy, name: String) {
+        Toast.makeText(this, R.string.container_updates_overview_connecting, Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            when (val result = ContainerSessionManager.acquire(tabSSHApp, hostId)) {
+                is ContainerResult.Success -> UpdateApplyDialog.show(
+                    this@UpdatesOverviewActivity,
+                    this@UpdatesOverviewActivity,
+                    tabSSHApp.database.containerAutoUpdatePolicyDao(),
+                    policy.id,
+                    result.value.transport,
+                    name
+                ) { }
+                else -> Toast.makeText(
+                    this@UpdatesOverviewActivity,
+                    R.string.container_updates_overview_connect_failed,
+                    Toast.LENGTH_LONG
+                ).show()
             }
         }
     }

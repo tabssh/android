@@ -17,7 +17,8 @@
   TabSSHActivity hosts this menu on every screen, so every destination here
   is reachable from anywhere in the app.
 -->
-<menu xmlns:android="http://schemas.android.com/apk/res/android">
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <!-- Quick: one-shot actions that don't live in any tab -->
     <group android:id="@+id/group_quick">
@@ -62,7 +63,8 @@
             <item
                 android:id="@+id/nav_container_updates"
                 android:icon="@drawable/ic_download"
-                android:title="@string/nav_item_container_updates" />
+                android:title="@string/nav_item_container_updates"
+                app:actionLayout="@layout/drawer_item_badge" />
             <item
                 android:id="@+id/nav_stats"
                 android:icon="@drawable/ic_sort"

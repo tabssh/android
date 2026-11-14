@@ -11,12 +11,15 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.navigation.NavigationView
 import io.github.tabssh.BuildConfig
 import io.github.tabssh.R
 import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.utils.tabSSHApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -142,6 +145,7 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
         drawerLayout = scaffold
         navigationView = scaffold.findViewById(R.id.tabssh_nav_view)
         navigationView?.setNavigationItemSelectedListener(this)
+        observeUpdatesBadge()
 
         scaffold.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
             override fun onDrawerOpened(drawerView: View) {
@@ -154,6 +158,24 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
             }
         })
         applyDrawerMode()
+    }
+
+    /**
+     * Keeps the Container Updates drawer item's badge equal to the number of containers with a
+     * newer image waiting. Collected only while the screen is visible.
+     */
+    private fun observeUpdatesBadge() {
+        val badge = navigationView?.menu?.findItem(R.id.nav_container_updates)
+            ?.actionView as? android.widget.TextView ?: return
+        val dao = tabSSHApp.database.containerAutoUpdatePolicyDao()
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                dao.observePending().collect { pending ->
+                    badge.text = pending.size.toString()
+                    badge.visibility = if (pending.isEmpty()) View.GONE else View.VISIBLE
+                }
+            }
+        }
     }
 
     // Cached so the overlay is applied at most once per Activity instance —

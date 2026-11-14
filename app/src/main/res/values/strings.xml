@@ -907,8 +907,8 @@
     <string name="container_updates_overview_none">Everything is up to date.</string>
     <string name="container_updates_overview_no_hosts">No container hosts yet, so there is nothing to check.</string>
     <string name="container_updates_overview_row_subtitle">A newer image is available</string>
-    <string name="container_updates_overview_open">Open</string>
-    <string name="container_updates_overview_open_desc">Open the Updates tab of %1$s</string>
+    <string name="container_updates_overview_connecting">Connecting to the host</string>
+    <string name="container_updates_overview_connect_failed">Could not connect to the host. Open it to see why.</string>
     <string name="container_updates_applied_mixed_title">%1$d containers updated, %2$d failed</string>
     <plurals name="container_updates_overview_summary">
         <item quantity="one">%1$d container has an update, on %2$d host</item>

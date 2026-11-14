@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Count badge shown at the end of a navigation drawer item; hidden while the count is zero. -->
+<TextView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:gravity="center"
+    android:minWidth="@dimen/space_lg"
+    android:paddingStart="@dimen/space_sm"
+    android:paddingEnd="@dimen/space_sm"
+    android:paddingTop="@dimen/space_2dp"
+    android:paddingBottom="@dimen/space_2dp"
+    android:background="@drawable/bg_drawer_badge"
+    android:textAppearance="?attr/textAppearanceLabelMedium"
+    android:textColor="?attr/colorOnPrimary"
+    android:visibility="gone" />
