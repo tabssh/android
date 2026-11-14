@@ -90,7 +90,7 @@ class UpdatesOverviewActivity : TabSSHActivity() {
                 val name = ContainerText.display(policy.containerNameOrStackName)
                 row.findViewById<MaterialButton>(R.id.button_update).apply {
                     contentDescription = getString(R.string.container_updates_update_desc, name)
-                    setOnClickListener { applyUpdate(hostId, policy, name) }
+                    setOnClickListener { applyUpdate(this, hostId, policy, name) }
                 }
                 listHosts.addView(row)
             }
@@ -98,10 +98,23 @@ class UpdatesOverviewActivity : TabSSHActivity() {
     }
 
     /** Connect to the host (or reuse its session), then run the confirmed update with progress. */
-    private fun applyUpdate(hostId: Long, policy: ContainerAutoUpdatePolicy, name: String) {
-        Toast.makeText(this, R.string.container_updates_overview_connecting, Toast.LENGTH_SHORT).show()
+    private fun applyUpdate(
+        button: MaterialButton,
+        hostId: Long,
+        policy: ContainerAutoUpdatePolicy,
+        name: String
+    ) {
+        val label = button.text
+        button.isEnabled = false
+        button.setText(R.string.container_updates_overview_connecting)
         lifecycleScope.launch {
-            when (val result = ContainerSessionManager.acquire(tabSSHApp, hostId)) {
+            val result = try {
+                ContainerSessionManager.acquire(tabSSHApp, hostId)
+            } finally {
+                button.isEnabled = true
+                button.text = label
+            }
+            when (result) {
                 is ContainerResult.Success -> UpdateApplyDialog.show(
                     this@UpdatesOverviewActivity,
                     this@UpdatesOverviewActivity,
