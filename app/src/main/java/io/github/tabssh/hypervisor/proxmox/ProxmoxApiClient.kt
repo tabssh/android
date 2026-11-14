@@ -713,10 +713,9 @@ class ProxmoxApiClient(
      * @property title Human-readable session title (`title` field from the
      *   API — usually `"VM <vmid> - <name>"`).
      * @property proxy HTTP proxy URL for the SPICE session (the `proxy` field
-     *   from the API). libspice sends this over the main channel; on Android
-     *   we still forward the value even though the platform does not honour
-     *   HTTP_PROXY env vars — the SPICE server uses it internally to advertise
-     *   how remote-viewer should tunnel back.
+     *   from the API, e.g. `http://pve-host:3128`). [host] is a `pvespiceproxy:...`
+     *   token, not a resolvable name: the client must reach it by an HTTP CONNECT
+     *   through this proxy, so it is passed on to libspice's `proxy` property.
      */
     data class SPICEProxyResult(
         val host: String,
@@ -742,6 +741,7 @@ class ProxmoxApiClient(
             caCert = caCert,
             hostSubject = hostSubject,
             tlsVerify = false,
+            proxy = proxy,
         )
 
         override fun equals(other: Any?): Boolean {

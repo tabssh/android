@@ -9,6 +9,7 @@
 - Every compose stack action (start, stop, pull, restart) uses composemgr when the host has it, and stacks that are down stay in the Stacks list so you can edit them and bring them back up.
 - Update checks now run in the background on their own schedule and can connect to saved hosts themselves.
 - VPS and Domain trackers can renew, cancel, or delete several entries at once. Rows are easier to read, and past-due items can be marked renewed or canceled. Renewal reminders now fire for past-due items.
+- Proxmox SPICE consoles connect again (the proxy the cluster returns was being dropped), and terminal escape strings such as the kitty graphics probe no longer print stray text.
 - Selecting terminal text shows its Copy bar next to the selection, and double tap and link long-press work with mouse support on.
 - Cluster command output shows everything for each host.
 - Cleaner, more consistent screens, icons, and dialogs across the app.

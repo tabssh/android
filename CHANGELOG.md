@@ -37,6 +37,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Proxmox SPICE consoles connect again.** The SPICE ticket's host is a `pvespiceproxy:...` token reachable only through the HTTP proxy the API returns, but that proxy was dropped before the client was started, so every Proxmox SPICE console failed instantly with "connection refused or host unreachable". The proxy is now passed to the SPICE client.
+- **Hidden terminal strings are no longer printed.** APC, PM and SOS strings (`ESC _`, `ESC ^`, `ESC X`, such as the kitty graphics probe `ESC _ G i=31,a=q;AAAA ESC \\`) are swallowed up to their terminator instead of appearing as stray text like `Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA`.
 - **Stack service count was one too low.** The Stacks tab counted lines of `compose ps` after skipping the first, but JSON output has no header line, so every stack showed one service fewer than it was running.
 - **The terminal selection bar sits next to the selected text.** The floating Copy, Select All, Paste and Cancel bar was placed against the whole terminal view, on top of the key bar. It now anchors to the selection and follows it as handles are dragged.
 - **Double tap and link long-press work with Enable Mouse Support on.** A double tap now selects the word under the finger instead of sending two clicks, and a long press on a link opens the open/copy dialog like it does with the mouse off.

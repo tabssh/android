@@ -79,6 +79,10 @@ public final class TerminalEmulator {
     private static final int ESC_CSI_SINGLE_QUOTE = 18;
     /** Escape processing: CSI ! */
     private static final int ESC_CSI_EXCLAMATION = 19;
+    /** Escape processing: "ESC _" (APC), "ESC ^" (PM) or "ESC X" (SOS), a string that is read and ignored until ST. */
+    private static final int ESC_APC = 20;
+    /** Longest APC/PM/SOS string swallowed before the emulator gives up and resumes normal output. */
+    private static final int MAX_APC_LENGTH = 1 << 20;
 
     /** The number of parameter arguments. This name comes from the ANSI standard for terminal escape codes. */
     private static final int MAX_ESCAPE_PARAMETERS = 16;
@@ -556,7 +560,7 @@ public final class TerminalEmulator {
             case 7: // Bell (BEL, ^G, \a). If in an OSC sequence, BEL may terminate a string; otherwise signal bell.
                 if (mEscapeState == ESC_OSC)
                     doOsc(b);
-                else
+                else if (mEscapeState != ESC_APC)
                     mSession.onBell();
                 break;
             case 8: // Backspace (BS, ^H).
@@ -605,7 +609,7 @@ public final class TerminalEmulator {
                 break;
             case 27: // ESC
                 // Starts an escape sequence unless we're parsing a string
-                if (mEscapeState == ESC_P) {
+                if (mEscapeState == ESC_P || mEscapeState == ESC_APC) {
                     // XXX: Ignore escape when reading device control sequence, since it may be part of string terminator.
                     return;
                 } else if (mEscapeState != ESC_OSC) {
@@ -815,6 +819,9 @@ public final class TerminalEmulator {
                     case ESC_P:
                         doDeviceControl(b);
                         break;
+                    case ESC_APC:
+                        doApplicationProgramCommand(b);
+                        break;
                     case ESC_CSI_QUESTIONMARK_ARG_DOLLAR:
                         if (b == 'p') {
                             // Request DEC private mode (DECRQM).
@@ -884,6 +891,19 @@ public final class TerminalEmulator {
     }
 
     /** When in {@link #ESC_P} ("device control") sequence. */
+    /**
+     * APC, PM and SOS strings carry data meant for another terminal feature (for example the kitty
+     * graphics protocol's probe, {@code ESC _ G i=31,a=q;AAAA ESC \}). A terminal that does not
+     * implement it must swallow the string up to ST rather than print it as text.
+     */
+    private void doApplicationProgramCommand(int b) {
+        if (b == '\\' || ++mApcLength > MAX_APC_LENGTH) {
+            finishSequence();
+        } else {
+            continueSequence(ESC_APC);
+        }
+    }
+
     private void doDeviceControl(int b) {
         switch (b) {
             case (byte) '\\': // End of ESC \ string Terminator
@@ -1300,6 +1320,9 @@ public final class TerminalEmulator {
         }
     }
 
+    /** Characters swallowed so far by the current APC/PM/SOS string. */
+    private int mApcLength;
+
     private void continueSequence(int state) {
         mEscapeState = state;
         mContinueSequence = true;
@@ -1387,6 +1410,12 @@ public final class TerminalEmulator {
             case 'P': // Device control string
                 mOSCOrDeviceControlArgs.setLength(0);
                 continueSequence(ESC_P);
+                break;
+            case '_': // Application program command
+            case '^': // Privacy message
+            case 'X': // Start of string
+                mApcLength = 0;
+                continueSequence(ESC_APC);
                 break;
             case '[':
                 continueSequence(ESC_CSI);
