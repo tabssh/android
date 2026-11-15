@@ -227,13 +227,17 @@ class HypervisorConsoleManager {
                 return ProxmoxTicket.Ws(vnc, ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_VNC)
             }
         })
-        strategies.add(object : ConsoleStrategy<ProxmoxTicket> {
-            override val name = "proxmox-termproxy"
-            override suspend fun resolve(): ProxmoxTicket = ProxmoxTicket.Ws(
-                client.getTermProxy(node, vmid, type),
-                ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM
-            )
-        })
+        // Proxmox's termproxy checks its ticket by logging in as the ticket's user, which an API
+        // token cannot do (bugzilla 6079), so a token profile never gets a serial/text console.
+        if (!client.usesApiToken) {
+            strategies.add(object : ConsoleStrategy<ProxmoxTicket> {
+                override val name = "proxmox-termproxy"
+                override suspend fun resolve(): ProxmoxTicket = ProxmoxTicket.Ws(
+                    client.getTermProxy(node, vmid, type),
+                    ConsoleWebSocketClient.ConsoleProtocol.PROXMOX_TERM
+                )
+            })
+        }
         val chain = ConsoleStrategyChain(strategies) { listener?.onStrategyAttempt(it) }
         val resolved = try {
             chain.resolve()
@@ -249,7 +253,12 @@ class HypervisorConsoleManager {
             val isVncFinal = msg.contains("vncproxy", ignoreCase = true) ||
                              msg.contains("serial", ignoreCase = true)
             listener?.onError(
-                if (isVncFinal)
+                if (client.usesApiToken)
+                    "The console could not be opened with this API token.\n\n" +
+                    "The token needs the VM.Console permission on this VM (with Privilege " +
+                    "Separation on, grant it to the token itself). Serial/text consoles " +
+                    "are not available with API tokens; only graphical consoles are."
+                else if (isVncFinal)
                     "This VM has no serial console and the VNC fallback also failed.\n\n" +
                     "To enable serial console: open the VM in Proxmox → Hardware → " +
                     "Add → Serial Port → set to 'socket', then restart the VM."
@@ -306,7 +315,7 @@ class HypervisorConsoleManager {
             }
 
             // PVEAuthCookie is needed for the HTTP-upgrade leg on both paths.
-            val headers = mapOf("Cookie" to "PVEAuthCookie=${ticket.authCookie}")
+            val headers = client.consoleAuthHeaders()
 
             // termproxy also requires a `<userid>:<ticket>\n` first-frame
             // handshake. vncproxy authenticates via the vncticket URL param
@@ -755,7 +764,7 @@ class HypervisorConsoleManager {
         // Gate that completes when the WebSocket actually opens (or fails):
         // the UI must only switch to graphical mode once the transport is up.
         val opened = CompletableDeferred<Unit>()
-        val headers = mapOf("Cookie" to "PVEAuthCookie=${vnc.authCookie}")
+        val headers = client.consoleAuthHeaders()
         val wsListener = object : ConsoleConnectionListener {
             override fun onConnected() {
                 opened.complete(Unit)
@@ -900,7 +909,7 @@ class HypervisorConsoleManager {
         // Gate that completes when the WebSocket actually opens (or fails):
         // the UI must only re-enter graphical mode once the transport is up.
         val opened = CompletableDeferred<Unit>()
-        val headers = mapOf("Cookie" to "PVEAuthCookie=${vnc.authCookie}")
+        val headers = client.consoleAuthHeaders()
         val wsListener = object : ConsoleConnectionListener {
             override fun onConnected() {
                 opened.complete(Unit)

@@ -914,6 +914,19 @@ class ProxmoxApiClient(
         }
     }
 
+    /** True when this client authenticates with an API token rather than a login ticket. */
+    val usesApiToken: Boolean get() = authType == "proxmox_api_token"
+
+    /**
+     * Headers for a console WebSocket upgrade: the API token header for token auth, otherwise the
+     * ticket cookie. A token has no ticket, so an empty cookie would be rejected with 401.
+     */
+    fun consoleAuthHeaders(): Map<String, String> {
+        val tokenAuthorization = apiTokenAuthorization
+        return if (tokenAuthorization != null) mapOf("Authorization" to tokenAuthorization)
+        else mapOf("Cookie" to "PVEAuthCookie=${authTicket ?: ""}")
+    }
+
     private fun addAuth(builder: Request.Builder) {
         val tokenAuthorization = apiTokenAuthorization
         if (tokenAuthorization != null) {

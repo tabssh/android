@@ -37,6 +37,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Proxmox consoles work with API tokens.** The console WebSocket was opened with an empty ticket cookie, which Proxmox rejects for a token profile. It now sends the `PVEAPIToken` header. Proxmox cannot verify serial/text (termproxy) tickets for tokens, so a token profile uses the SPICE and VNC consoles only and says so when none can open.
 - **Proxmox accounts with only a passkey now say so.** A login whose only second factor is a passkey (WebAuthn) fails with a message explaining that the app cannot use it and to add a TOTP factor or use an API token, instead of a generic authentication error.
 - **Proxmox SPICE consoles connect again.** The SPICE ticket's host is a `pvespiceproxy:...` token reachable only through the HTTP proxy the API returns, but that proxy was dropped before the client was started, so every Proxmox SPICE console failed instantly with "connection refused or host unreachable". The proxy is now passed to the SPICE client.
 - **Hidden terminal strings are no longer printed.** APC, PM and SOS strings (`ESC _`, `ESC ^`, `ESC X`, such as the kitty graphics probe `ESC _ G i=31,a=q;AAAA ESC \\`) are swallowed up to their terminator instead of appearing as stray text like `Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA`.
