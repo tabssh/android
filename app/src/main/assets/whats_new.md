@@ -5,6 +5,9 @@
 - Container update settings work at three levels: global, per host, and per image or compose stack, with the most specific winning. A new Updates tab on Docker and Podman hosts shows available updates and lets you change each level.
 - Compose containers update through compose as a whole project (using composemgr when installed) and standalone containers through recreate; the two are never mixed.
 - A new Container Updates page (drawer, Insights, with a count badge) lists pending updates across hosts, each with an Update button, plus Check all now. Update alerts are now one notification for everything, and it opens that page.
+- With a linked identity, SSH errors now name the identity's username (the one actually used), the connection's User field says which one wins, and an identity without a username no longer vanishes when saved.
+- Proxmox login tickets are renewed silently, so long-open Proxmox screens no longer fail after 2 hours.
+- Settings sliders (font size, line spacing, thresholds) no longer allow values below their minimum.
 - Proxmox consoles now open with API-token profiles (graphical consoles only; Proxmox does not allow serial consoles for tokens).
 - A Proxmox account whose only second factor is a passkey now gets a clear message (add TOTP or use an API token) instead of a generic login failure.
 - With no container hosts the background update check does nothing: no error, no notification.

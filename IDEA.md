@@ -63,7 +63,7 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 - Full VT100/ANSI/xterm-256color terminal emulation
 - SSH authentication: password, SSH key (RSA, ECDSA, Ed25519, legacy DSA; OpenSSH, PEM, and PuTTY .ppk formats), keyboard-interactive
 - SSH key management: import (file / paste), generate (RSA, ECDSA, Ed25519), fingerprint display, passphrase protection, OpenSSH certificate attachment
-- Reusable credential identities (username + auth method) that can be attached to multiple connections
+- Reusable credential identities (username + auth method) that can be attached to multiple connections; when a connection links an identity, the identity's username is the one the server logs in as and the connection's own User field is not used, which that field says whenever the two differ
 - Jump host (ProxyJump) support
 - Port forwarding: local, remote, dynamic (SOCKS5)
 - Port knocking before connect
@@ -145,7 +145,9 @@ New entity checklist: decide sync inclusion, then update
 - Opens virt-viewer `.vv` files and honors their advertised SPICE HTTP CONNECT proxy
 - Proxmox VM console selection prefers SPICE, then VNC, then serial; unavailable console types fall through in that order
 - Reusable hypervisor credential accounts (passwords, Proxmox/Xen Orchestra API tokens, or OCI API keys) shared across compatible profiles; secrets remain Keystore-only
-- Proxmox supports API-token login and password login with a transient TOTP or recovery-key challenge. Proxmox WebAuthn/passkey login is not supported
+- Proxmox (7 and later) supports API-token login and password login with a transient TOTP or recovery-key challenge. A password login's 2-hour ticket is renewed silently after 90 minutes by posting it back to Proxmox, which needs no second factor. Proxmox WebAuthn/passkey login is not supported; an account whose only second factor is a passkey gets a message saying to add a TOTP factor or use an API token
+- A Proxmox API-token profile opens SPICE and VNC consoles with the `PVEAPIToken` header; serial (termproxy) consoles are unavailable for tokens because Proxmox cannot verify their ticket, and the token needs `VM.Console` on the guest (granted to the token itself when Privilege Separation is on)
+- A Proxmox SPICE console connects through the HTTP proxy the spiceproxy reply returns; the ticket's host is a `pvespiceproxy:` token that is reachable only through that proxy
 - Xen Orchestra supports a user-created API token for accounts protected by TOTP. Direct XCP-ng XAPI remains password-only; use Xen Orchestra when MFA is required
 - VMware vCenter supports browser-based OIDC authorization-code login with PKCE and vCenter token exchange for identity providers configured with MFA
 - QEMU/libvirt SSH connections support server-configured keyboard-interactive prompts, including PAM-backed OTP
@@ -169,7 +171,9 @@ New entity checklist: decide sync inclusion, then update
 - Per-host view, tabs in order: Dashboard, Containers, Stacks, Images, Volumes, Networks. The dashboard is per host, and counts stack members even though the Containers list hides them — 3 standalone containers plus 2 stacks of 2 shows 2 stacks and 7 containers
 - Containers: list, inspect, start/stop/restart/pause/kill/rename/remove, live-follow logs, live stats; enter any running container as a normal terminal tab via the engine's exec (shell auto-detected)
 - Images (pull with progress, remove, prune), volumes, and networks on every engine
+- The per-host dashboard shows an Updates count under Images (containers with a pending update) on engines that support image updates
 - Compose stacks are paste-first: paste a complete compose file and it is saved to a per-host configurable remote directory (default `/srv/$USER/compose/{name}`) and run; up/down/pull/restart with per-service status; remote directories are created on demand
+- Every stack action (up, down, pull, restart) runs as `composemgr --dir {dir} <verb>` when composemgr is installed on the host, otherwise through `docker compose` / `docker-compose`. A stack that is down stays listed, found by scanning the host's compose base directory (`/srv/$USER/compose/{name}/(compose|docker-compose).(yml|yaml)`), so it can be edited and brought back up
 - Single-container run configs: a form-based `run.yml` (mirroring `docker run` flags) per container under a second configurable remote directory (default `/srv/$USER/docker/{name}`), with a raw-YAML advanced toggle
 - Hybrid transport, identical for every engine: the engine's REST API over an SSH forward of its unix socket when the server permits it, automatic fallback to the engine's CLI over SSH exec — every feature works on CLI-only hosts, with documented degradation (stats become polled)
 - The socket path is auto-detected from the selected engine's known locations; a per-host override replaces it and also accepts `tcp://host:port` and `ssh://user@host`
@@ -240,6 +244,22 @@ Compatibility notes:
   credentials never expire (no TTL). Importers on all platforms must
   read-and-ignore the old TTL key from archives/blobs written before the
   removal; nothing may reintroduce an expiry timer on stored credentials
+
+### Notification channels
+All channels are created in one `NotificationHelper`; ids are versioned and never change once shipped.
+
+| Channel id | Importance | Purpose |
+|---|---|---|
+| `ssh_service_v2` | low | Transient foreground-service anchor while a session starts |
+| `file_transfer_v2` | low | Ongoing SFTP/SCP transfer progress |
+| `errors_v2` | high | Connection errors |
+| `ssh_silent_v3` | low | Ongoing per-tab session status, never beeps |
+| `ssh_alerts_v3` | high | Per-host connect/disconnect alert, only when the profile allows sound or vibration |
+| `host_monitoring_v1` | high | Monitored host down and recovery |
+| `host_metrics_v1` | default | CPU, memory, disk and load threshold alerts |
+| `docker_updates_v1` | default | One alert for all pending container updates and one summary of unattended updates; the id keeps its `docker_` prefix so users keep their channel settings |
+| `renewal_reminders_v1` | default | Domain and VPS renewal reminders |
+| `session_recording_v1` | low | Foreground anchor while a session recording runs |
 
 ### Trust boundaries
 - Remote SSH/telnet hosts, hypervisor and cloud APIs, clipboard contents, QR payloads, imported config/bulk files, and user-supplied sync storage are all untrusted input

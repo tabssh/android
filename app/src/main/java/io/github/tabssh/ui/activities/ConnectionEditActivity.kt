@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.ArrayAdapter
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.github.tabssh.R
@@ -524,6 +525,7 @@ class ConnectionEditActivity : TabSSHActivity() {
                 }
             }
         }
+        binding.editUsername.doAfterTextChanged { updateIdentityUserHint() }
         binding.spinnerIdentity.setOnItemClickListener { _, _, position, _ ->
             // Resolve current identity list (SSH or VNC) at click time so we
             // always operate on the latest loaded data.
@@ -565,6 +567,7 @@ class ConnectionEditActivity : TabSSHActivity() {
                 } else {
                     selectedIdentityId = null
                     selectedVncIdentityId = null
+                    updateIdentityUserHint()
                     binding.cardAuthentication.visibility = View.VISIBLE
                     val authTypes = AuthType.getAvailableTypes()
                     val pwIdx = authTypes.indexOf(AuthType.PASSWORD)
@@ -649,6 +652,19 @@ class ConnectionEditActivity : TabSSHActivity() {
         }
     }
 
+    /**
+     * A linked SSH identity's username is the one the server logs in as, so when it differs from the
+     * User typed here the field says which one wins instead of leaving the mismatch invisible.
+     */
+    private fun updateIdentityUserHint() {
+        val identityUser = if (currentProtocol == "vnc") null
+        else availableIdentities.firstOrNull { it.id == selectedIdentityId }?.username?.takeIf { it.isNotBlank() }
+        val typed = binding.editUsername.text?.toString()?.trim().orEmpty()
+        binding.layoutUsernameInput.helperText =
+            if (identityUser != null && identityUser != typed) getString(R.string.conn_edit_identity_user_hint, identityUser)
+            else null
+    }
+
     private fun restoreSshIdentitySpinner() {
         val id = selectedIdentityId
         if (id != null) {
@@ -660,11 +676,13 @@ class ConnectionEditActivity : TabSSHActivity() {
                 // identities still need a per-connection password from the user.
                 binding.cardAuthentication.visibility =
                     if (identity.authType == AuthType.PUBLIC_KEY) View.GONE else View.VISIBLE
+                updateIdentityUserHint()
                 return
             }
         }
         binding.spinnerIdentity.setText(getString(R.string.conn_edit_no_identity), false)
         binding.cardAuthentication.visibility = View.VISIBLE
+        updateIdentityUserHint()
     }
 
     private fun restoreVncIdentitySpinner() {

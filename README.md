@@ -107,7 +107,7 @@ created, synced, or paired on any one of the three works unmodified on the other
 
 Manage virtual machines directly from TabSSH — no separate app required.
 
-- **Proxmox VE** — Password login supports TOTP and recovery-code challenges; API-token login is also available (tokens cannot open VM or system consoles); list/start/stop/shutdown/reboot/reset VMs and LXC containers; serial console (termproxy) with automatic VNC fallback; `last_connected` tracking
+- **Proxmox VE** — Password login supports TOTP and recovery-code challenges; login tickets renew silently before they expire; API-token login is also available (tokens open SPICE and VNC consoles but not serial ones; a passkey-only account is not supported, add a TOTP factor or use a token); list/start/stop/shutdown/reboot/reset VMs and LXC containers; serial console (termproxy) with automatic VNC fallback; `last_connected` tracking
 - **XCP-ng / Xen Orchestra** — XML-RPC direct host or Xen Orchestra REST + WebSocket; real-time VM state; snapshot/backup operations; pool/host info; auto-detects XO vs. direct; use Xen Orchestra with an API token for accounts protected by MFA
 - **VMware vSphere / ESXi** — REST API; auto-detects ESXi vs. vCenter; password login or vCenter OIDC sign-in with PKCE and identity-provider MFA (OAuth supports REST operations; SOAP-based console, snapshot, and guest operations require password login)
 - **QEMU/libvirt (KVM)** — SSH tunnel to host with password, key, or keyboard-interactive MFA; `virsh list` domain enumeration; start/shutdown/reboot/hard-reset; VNC console tunnelled over SSH (no VNC port exposure required); SSH fallback via ProxyJump when VNC not configured
@@ -158,7 +158,7 @@ Pixel-perfect graphical console access to VMs — no separate VNC viewer require
 
 - Native SPICE client for VM consoles that opens as a swipeable tab, used when the APK ships the native SPICE library
 - Opens virt-viewer `.vv` console files, including Proxmox downloads that require an HTTP CONNECT proxy
-- **Proxmox VE** — QEMU VMs try `spiceproxy` after the serial console and before VNC
+- **Proxmox VE** — QEMU VMs try `spiceproxy` first, through the HTTP proxy it returns, then VNC, then the serial console
 - **QEMU/libvirt** — detects a SPICE display via `virsh domdisplay` and tunnels it over SSH
 - Falls back to VNC automatically when SPICE is unavailable
 

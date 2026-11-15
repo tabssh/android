@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
-  xmlns:app="http://schemas.android.com/apk/res-auto"
-  xmlns:tools="http://schemas.android.com/tools">
+  xmlns:app="http://schemas.android.com/apk/res-auto">
 
   <!-- The application log has no on/off switch; this row explains why. -->
   <PreferenceCategory
@@ -78,8 +77,7 @@
       android:title="@string/prefs_host_log_max_size_mb_title"
       android:summary="@string/prefs_host_log_max_size_mb_summary"
       android:defaultValue="1"
-      tools:targetApi="26"
-      android:min="1"
+      app:min="1"
       android:max="10"
       app:showSeekBarValue="true"
       android:dependency="host_logging_enabled" />

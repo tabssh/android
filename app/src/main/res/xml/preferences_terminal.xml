@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
-  xmlns:app="http://schemas.android.com/apk/res-auto"
-  xmlns:tools="http://schemas.android.com/tools">
+  xmlns:app="http://schemas.android.com/apk/res-auto">
 
   <PreferenceCategory
     android:key="category_terminal_appearance"
@@ -47,8 +46,7 @@
       android:summary="@string/prefs_terminal_font_size_summary"
       android:defaultValue="14"
       android:max="32"
-      tools:targetApi="26"
-      android:min="8"
+      app:min="8"
       app:showSeekBarValue="true" />
 
     <SeekBarPreference
@@ -57,8 +55,7 @@
       android:summary="@string/prefs_terminal_line_spacing_summary"
       android:defaultValue="120"
       android:max="200"
-      tools:targetApi="26"
-      android:min="100"
+      app:min="100"
       app:showSeekBarValue="true" />
 
   </PreferenceCategory>

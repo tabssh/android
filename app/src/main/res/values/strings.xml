@@ -3206,6 +3206,7 @@
     <string name="key_import_error_read_failed">Could not read the key file.</string>
     <string name="key_import_error_storage_failed">Failed to store the imported key on this device.</string>
     <string name="key_import_error_unknown">Key import failed.</string>
+    <string name="conn_edit_identity_user_hint">The linked identity logs in as %1$s; this User is not used</string>
     <string name="conn_edit_no_identity">No Identity</string>
     <string name="conn_edit_no_group">No Group</string>
     <string name="conn_edit_create_group_option">＋ Create group…</string>

@@ -47,8 +47,19 @@ class ProxmoxApiClient(
     private var csrfToken: String? = null
     @Volatile
     private var apiTokenAuthorization: String? = null
+    // Login name and issue time of the current ticket, kept so it can be renewed silently.
+    @Volatile
+    private var ticketUser: String? = null
+    @Volatile
+    private var ticketIssuedAtMs = 0L
 
     internal companion object {
+        // Proxmox tickets last 2 hours and may be renewed with themselves as the password until then.
+        private const val TICKET_RENEW_AFTER_MS = 90L * 60 * 1000
+
+        /** True once a ticket issued [ageMs] ago is old enough to renew before Proxmox expires it. */
+        fun ticketNeedsRenewal(ageMs: Long): Boolean = ageMs >= TICKET_RENEW_AFTER_MS
+
         /**
          * Ceiling on any Proxmox API response we buffer. A PVE JSON answer is
          * kilobytes; anything past 8 MiB is a broken or hostile endpoint and
@@ -165,6 +176,7 @@ class ProxmoxApiClient(
             }
 
             val loginName = if ('@' in username) username else "$username@$realm"
+            ticketUser = loginName
             val firstResponse = postTicket(
                 FormBody.Builder().add("username", loginName).add("password", password).build()
             ) ?: return@withContext false
@@ -225,6 +237,34 @@ class ProxmoxApiClient(
     private fun setSession(data: JSONObject) {
         authTicket = data.getString("ticket")
         csrfToken = data.getString("CSRFPreventionToken")
+        ticketIssuedAtMs = System.currentTimeMillis()
+    }
+
+    /**
+     * Renews an ageing login ticket by posting it back as the password, which Proxmox accepts
+     * without a second factor until it expires. Silent: a failure leaves the old ticket in place.
+     */
+    private fun renewTicketIfStale() {
+        val user = ticketUser ?: return
+        if (apiTokenAuthorization != null || authTicket == null) return
+        if (!ticketNeedsRenewal(System.currentTimeMillis() - ticketIssuedAtMs)) return
+        synchronized(this) {
+            val current = authTicket ?: return
+            if (!ticketNeedsRenewal(System.currentTimeMillis() - ticketIssuedAtMs)) return
+            try {
+                val data = postTicket(
+                    FormBody.Builder().add("username", user).add("password", current).build()
+                )?.optJSONObject("data")
+                if (data != null && !data.optBoolean("NeedTFA")) {
+                    setSession(data)
+                    Logger.i("ProxmoxAPI", "Login ticket renewed")
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.w("ProxmoxAPI", "Ticket renewal failed: ${e.javaClass.simpleName}")
+            }
+        }
     }
 
     suspend fun getNodes(): List<ProxmoxNode> = withContext(Dispatchers.IO) {
@@ -922,12 +962,14 @@ class ProxmoxApiClient(
      * ticket cookie. A token has no ticket, so an empty cookie would be rejected with 401.
      */
     fun consoleAuthHeaders(): Map<String, String> {
+        renewTicketIfStale()
         val tokenAuthorization = apiTokenAuthorization
         return if (tokenAuthorization != null) mapOf("Authorization" to tokenAuthorization)
         else mapOf("Cookie" to "PVEAuthCookie=${authTicket ?: ""}")
     }
 
     private fun addAuth(builder: Request.Builder) {
+        renewTicketIfStale()
         val tokenAuthorization = apiTokenAuthorization
         if (tokenAuthorization != null) {
             builder.addHeader("Authorization", tokenAuthorization)

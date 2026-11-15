@@ -2941,13 +2941,13 @@ class TabTerminalActivity : TabSSHActivity() {
                     )
                 } else {
                     // Fallback to simple toast if no detailed error available
-                    showError(getString(R.string.terminal_ssh_connection_failed_fmt, profile.username, profile.host, profile.port), getString(R.string.status_error))
+                    showError(getString(R.string.terminal_ssh_connection_failed_fmt, failedConnection?.loginUser ?: profile.username, profile.host, profile.port), getString(R.string.status_error))
 
                     // Show generic error notification
                     NotificationHelper.showConnectionError(
                         this,
                         profile.getDisplayName(),
-                        getString(R.string.terminal_ssh_connection_failed_fmt, profile.username, profile.host, profile.port)
+                        getString(R.string.terminal_ssh_connection_failed_fmt, failedConnection?.loginUser ?: profile.username, profile.host, profile.port)
                     )
 
                     // No tab, no session — close the activity so the user is not

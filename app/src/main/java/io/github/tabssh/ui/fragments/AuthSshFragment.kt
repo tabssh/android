@@ -14,6 +14,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.room.withTransaction
 import com.google.android.material.button.MaterialButton
+import androidx.appcompat.app.AlertDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import io.github.tabssh.R
@@ -207,51 +208,58 @@ class AuthSshFragment : Fragment() {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(if (existing == null) getString(R.string.identity_create_title) else getString(R.string.identity_edit_title))
             .setView(dialogView)
-            .setPositiveButton(if (existing == null) getString(R.string.container_create) else getString(R.string.save)) { _, _ ->
-                val name = nameInput.text.toString().trim()
-                val username = usernameInput.text.toString().trim()
-                val description = descriptionInput.text.toString().trim()
-                val passwordText = passwordInput.text.toString()
-                val authTypePos = authTypes.indexOf(authTypeSpinner.text.toString())
-                val authType = when (authTypePos) {
-                    1 -> AuthType.PUBLIC_KEY
-                    2 -> AuthType.KEYBOARD_INTERACTIVE
-                    else -> AuthType.PASSWORD
-                }
-                val selectedKeyId: String? = if (authType == AuthType.PUBLIC_KEY) {
-                    val sel = sshKeySpinner.text.toString()
-                    if (sel == getString(R.string.identity_no_key)) null
-                    else allKeysList.find { "${it.name} (${it.keyType})" == sel }?.keyId
-                } else null
-
-                if (name.isBlank() || username.isBlank()) {
-                    Toast.makeText(requireContext(), getString(R.string.identity_name_username_required), Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-
-                if (existing == null) {
-                    val password = passwordText.ifBlank { null }
-                    createIdentity(name, username, authType, password, selectedKeyId, description.ifBlank { null })
-                } else {
-                    val passwordWasEdited = passwordText != PASSWORD_MASK
-                    val newPassword = when {
-                        !passwordWasEdited -> existing.password
-                        passwordText.isBlank() -> null
-                        else -> passwordText
-                    }
-                    updateIdentity(existing.copy(
-                        name = name,
-                        username = username,
-                        authType = authType,
-                        password = newPassword,
-                        keyId = selectedKeyId,
-                        description = description.ifBlank { null },
-                        modifiedAt = System.currentTimeMillis()
-                    ), passwordWasEdited)
-                }
-            }
+            .setPositiveButton(if (existing == null) getString(R.string.container_create) else getString(R.string.save), null)
             .setNegativeButton(getString(R.string.cancel), null)
             .showSecurely()
+            .also { dialog ->
+                // Wired here, not in setPositiveButton, so a missing name or username keeps the dialog open
+                // with what was typed instead of dismissing it and silently discarding the identity.
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    val name = nameInput.text.toString().trim()
+                    val username = usernameInput.text.toString().trim()
+                    val description = descriptionInput.text.toString().trim()
+                    val passwordText = passwordInput.text.toString()
+                    val authTypePos = authTypes.indexOf(authTypeSpinner.text.toString())
+                    val authType = when (authTypePos) {
+                        1 -> AuthType.PUBLIC_KEY
+                        2 -> AuthType.KEYBOARD_INTERACTIVE
+                        else -> AuthType.PASSWORD
+                    }
+                    val selectedKeyId: String? = if (authType == AuthType.PUBLIC_KEY) {
+                        val sel = sshKeySpinner.text.toString()
+                        if (sel == getString(R.string.identity_no_key)) null
+                        else allKeysList.find { "${it.name} (${it.keyType})" == sel }?.keyId
+                    } else null
+
+                    if (name.isBlank() || username.isBlank()) {
+                        Toast.makeText(requireContext(), getString(R.string.identity_name_username_required), Toast.LENGTH_SHORT).show()
+                        if (username.isBlank()) usernameInput.error = getString(R.string.identity_name_username_required)
+                        return@setOnClickListener
+                    }
+
+                    if (existing == null) {
+                        val password = passwordText.ifBlank { null }
+                        createIdentity(name, username, authType, password, selectedKeyId, description.ifBlank { null })
+                    } else {
+                        val passwordWasEdited = passwordText != PASSWORD_MASK
+                        val newPassword = when {
+                            !passwordWasEdited -> existing.password
+                            passwordText.isBlank() -> null
+                            else -> passwordText
+                        }
+                        updateIdentity(existing.copy(
+                            name = name,
+                            username = username,
+                            authType = authType,
+                            password = newPassword,
+                            keyId = selectedKeyId,
+                            description = description.ifBlank { null },
+                            modifiedAt = System.currentTimeMillis()
+                        ), passwordWasEdited)
+                    }
+                    dialog.dismiss()
+                }
+            }
     }
 
     private fun showApplyToConnectionsDialog(identity: Identity) {

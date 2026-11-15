@@ -234,6 +234,11 @@ class SSHConnection(
     @Volatile
     private var resolvedIdentity: io.github.tabssh.storage.database.entities.Identity? = null
 
+    // The user the server is actually logged in as: a linked identity's non-blank username wins over the
+    // connection's own User. Every diagnostic names this user so the log matches what the host sees.
+    val loginUser: String
+        get() = resolvedIdentity?.username?.takeIf { it.isNotBlank() } ?: profile.username
+
     // Cached password for UserInfo callbacks (set during setupAuthentication).
     // @Volatile: written on the connect coroutine (IO), read by JSch's
     // UserInfo callbacks on JSch's worker thread, cleared from disconnect()
@@ -316,7 +321,7 @@ class SSHConnection(
                 }
 
                 // Use identity username if available and non-blank, otherwise profile username
-                val effectiveUsername = resolvedIdentity?.username?.takeIf { it.isNotBlank() } ?: profile.username
+                val effectiveUsername = loginUser
 
                 // Issue #12 — wall-clock timing so a slow-connect report shows
                 // exactly which phase ate the seconds (DNS, kex, auth, etc.).
@@ -2174,7 +2179,7 @@ class SSHConnection(
 
     suspend fun disconnect() = withContext(Dispatchers.IO) {
         Logger.i("SSHConnection", "Disconnecting from ${profile.host}")
-        val effectiveUser = resolvedIdentity?.username?.takeIf { it.isNotBlank() } ?: profile.username
+        val effectiveUser = loginUser
         val duration = if (sessionStartMs > 0) {
             val secs = (System.currentTimeMillis() - sessionStartMs) / 1000
             when {
@@ -2269,7 +2274,7 @@ class SSHConnection(
         val errorInfo = buildDetailedErrorInfo(error)
 
         Logger.e("SSHConnection", "Connection failed: ${errorInfo.userMessage}", error)
-        val effectiveUser = resolvedIdentity?.username?.takeIf { it.isNotBlank() } ?: profile.username
+        val effectiveUser = loginUser
         val hostLogLevel = if (errorInfo.errorType.contains("AUTH", ignoreCase = true)) "WARN" else "ERROR"
         Logger.logHostEvent(profile.id, effectiveUser, profile.host, profile.port, hostLogLevel, "Connection failed: ${errorInfo.userMessage}")
         sessionStartMs = 0
@@ -2362,7 +2367,7 @@ class SSHConnection(
                 userMessage = "Connection to ${profile.host}:${profile.port} timed out after ${profile.connectTimeout}s",
                 technicalDetails = buildString {
                     appendLine("Exception: ${effective.javaClass.simpleName}")
-                    appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                    appendLine("Target: ${loginUser}@${profile.host}:${profile.port}")
                     appendLine("Timeout: ${profile.connectTimeout}s")
                     appendLine("Proxy: ${describeEffectiveRoute()}")
                     if (profile.portKnockEnabled == true) {
@@ -2410,7 +2415,7 @@ class SSHConnection(
                 userMessage = "Server at ${profile.host}:${profile.port} refused connection",
                 technicalDetails = buildString {
                     appendLine("Exception: ${effective.javaClass.simpleName}")
-                    appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                    appendLine("Target: ${loginUser}@${profile.host}:${profile.port}")
                     appendLine("Message: ${effective.message}")
                     appendLine("\nStack Trace:")
                     appendLine(original.stackTraceToString())
@@ -2430,7 +2435,7 @@ class SSHConnection(
                 userMessage = "No route to ${profile.host}:${profile.port} — the network can't reach this host",
                 technicalDetails = buildString {
                     appendLine("Exception: ${effective.javaClass.simpleName}")
-                    appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                    appendLine("Target: ${loginUser}@${profile.host}:${profile.port}")
                     appendLine("Message: ${effective.message}")
                     appendLine("\nStack Trace:")
                     appendLine(original.stackTraceToString())
@@ -2449,7 +2454,7 @@ class SSHConnection(
                 userMessage = "Network error: ${effective.message}",
                 technicalDetails = buildString {
                     appendLine("Exception: ${effective.javaClass.simpleName}")
-                    appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                    appendLine("Target: ${loginUser}@${profile.host}:${profile.port}")
                     appendLine("Message: ${effective.message}")
                     appendLine("\nStack Trace:")
                     appendLine(original.stackTraceToString())
@@ -2474,7 +2479,7 @@ class SSHConnection(
                         userMessage = "The host key for ${profile.host}:${profile.port} does not match the saved key",
                         technicalDetails = buildString {
                             appendLine("Exception: ${effective.javaClass.simpleName}")
-                            appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                            appendLine("Target: ${loginUser}@${profile.host}:${profile.port}")
                             appendLine("Message: ${effective.message}")
                             appendLine("\nStack Trace:")
                             appendLine(original.stackTraceToString())
@@ -2493,7 +2498,7 @@ class SSHConnection(
                         userMessage = "Server closed the connection after too many failed authentication attempts",
                         technicalDetails = buildString {
                             appendLine("Exception: ${effective.javaClass.simpleName}")
-                            appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                            appendLine("Target: ${loginUser}@${profile.host}:${profile.port}")
                             appendLine("Auth Type: ${profile.authType}")
                             appendLine("Message: ${effective.message}")
                             appendLine("\nStack Trace:")
@@ -2515,7 +2520,7 @@ class SSHConnection(
                         userMessage = "The server closed the SSH session",
                         technicalDetails = buildString {
                             appendLine("Exception: ${effective.javaClass.simpleName}")
-                            appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                            appendLine("Target: ${loginUser}@${profile.host}:${profile.port}")
                             appendLine("Message: ${effective.message}")
                             appendLine("\nStack Trace:")
                             appendLine(original.stackTraceToString())
@@ -2534,7 +2539,7 @@ class SSHConnection(
                         userMessage = "The passphrase for this SSH key appears to be incorrect",
                         technicalDetails = buildString {
                             appendLine("Exception: ${effective.javaClass.simpleName}")
-                            appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                            appendLine("Target: ${loginUser}@${profile.host}:${profile.port}")
                             appendLine("SSH Key ID: ${profile.keyId ?: "None"}")
                             appendLine("Message: ${effective.message}")
                             appendLine("\nStack Trace:")
@@ -2554,7 +2559,7 @@ class SSHConnection(
                         userMessage = "The server does not accept any authentication method this app offered",
                         technicalDetails = buildString {
                             appendLine("Exception: ${effective.javaClass.simpleName}")
-                            appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                            appendLine("Target: ${loginUser}@${profile.host}:${profile.port}")
                             appendLine("Auth Type: ${profile.authType}")
                             appendLine("Message: ${effective.message}")
                             appendLine("\nStack Trace:")
@@ -2570,10 +2575,10 @@ class SSHConnection(
 
                     msg.contains("Auth fail", ignoreCase = true) -> SSHConnectionErrorInfo(
                         errorType = "Authentication Failed",
-                        userMessage = "Authentication failed for ${profile.username}@${profile.host}",
+                        userMessage = "Authentication failed for ${loginUser}@${profile.host}",
                         technicalDetails = buildString {
                             appendLine("Exception: ${effective.javaClass.simpleName}")
-                            appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                            appendLine("Target: ${loginUser}@${profile.host}:${profile.port}")
                             appendLine("Auth Type: ${profile.authType}")
                             appendLine("Message: ${effective.message}")
                             if (profile.authType == AuthType.PUBLIC_KEY.name) {
@@ -2609,7 +2614,7 @@ class SSHConnection(
                         userMessage = "Server at ${profile.host}:${profile.port} refused connection",
                         technicalDetails = buildString {
                             appendLine("Exception: ${effective.javaClass.simpleName}")
-                            appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                            appendLine("Target: ${loginUser}@${profile.host}:${profile.port}")
                             appendLine("Message: ${effective.message}")
                             appendLine("\nStack Trace:")
                             appendLine(original.stackTraceToString())
@@ -2657,7 +2662,7 @@ class SSHConnection(
                         userMessage = "Server and client don't have compatible algorithms",
                         technicalDetails = buildString {
                             appendLine("Exception: ${effective.javaClass.simpleName}")
-                            appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                            appendLine("Target: ${loginUser}@${profile.host}:${profile.port}")
                             appendLine("Message: ${effective.message}")
                             appendLine("\nStack Trace:")
                             appendLine(original.stackTraceToString())
@@ -2688,7 +2693,7 @@ class SSHConnection(
                                 userMessage = msg,
                                 technicalDetails = buildString {
                                     appendLine("Exception: ${effective.javaClass.simpleName}")
-                                    appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                                    appendLine("Target: ${loginUser}@${profile.host}:${profile.port}")
                                     appendLine("Message: ${effective.message}")
                                     appendLine("\nStack Trace:")
                                     appendLine(original.stackTraceToString())
@@ -2715,7 +2720,7 @@ class SSHConnection(
                         userMessage = msg,
                         technicalDetails = buildString {
                             appendLine("Exception: ${effective.javaClass.simpleName}")
-                            appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                            appendLine("Target: ${loginUser}@${profile.host}:${profile.port}")
                             appendLine("Proxy: ${describeEffectiveRoute()}")
                             appendLine("Message: ${effective.message}")
                             appendLine("\nCaused by:")
@@ -2739,7 +2744,7 @@ class SSHConnection(
                         userMessage = msg,
                         technicalDetails = buildString {
                             appendLine("Exception: ${effective.javaClass.simpleName}")
-                            appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                            appendLine("Target: ${loginUser}@${profile.host}:${profile.port}")
                             appendLine("Message: ${effective.message}")
                             appendLine("\nCaused by:")
                             effective.cause?.let {
@@ -2777,7 +2782,7 @@ class SSHConnection(
                         userMessage = effective.message ?: "An unexpected error occurred",
                         technicalDetails = buildString {
                             appendLine("Exception: ${effective.javaClass.simpleName}")
-                            appendLine("Target: ${profile.username}@${profile.host}:${profile.port}")
+                            appendLine("Target: ${loginUser}@${profile.host}:${profile.port}")
                             appendLine("Message: ${effective.message}")
                             appendLine("\nStack Trace:")
                             appendLine(original.stackTraceToString())
