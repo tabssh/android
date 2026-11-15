@@ -3512,6 +3512,7 @@
     <!-- ProxmoxManagerActivity -->
     <string name="proxmox_vm_ip_fmt">IP: %1$s</string>
     <string name="proxmox_snapshot_name_invalid">Name must start with a letter and contain only letters, digits, - or _</string>
+    <string name="proxmox_connect_passkey_unsupported">This account only has a passkey (WebAuthn) second factor, which the app cannot use. Add a TOTP factor to the user in Proxmox, or switch this profile to an API token.</string>
     <string name="proxmox_connect_auth_failed">Authentication failed — check credentials</string>
     <string name="proxmox_connect_failed_fmt">Connection failed: proxmox %1$s: %2$s</string>
     <string name="proxmox_could_not_load_vms_fmt">Could not load VMs: %1$s</string>

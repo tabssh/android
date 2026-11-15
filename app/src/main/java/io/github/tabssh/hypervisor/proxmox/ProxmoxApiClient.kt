@@ -172,6 +172,7 @@ class ProxmoxApiClient(
             if (firstData.optBoolean("NeedTFA")) {
                 val challengeTicket = firstData.optString("ticket").takeIf { it.isNotBlank() }
                     ?: return@withContext false
+                if (isPasskeyOnlyChallenge(challengeTicket)) throw PasskeyNotSupportedException()
                 val response = requestSecondFactor() ?: return@withContext false
                 val kind = response.substringBefore(':')
                 val code = response.substringAfter(':', "")
@@ -193,10 +194,21 @@ class ProxmoxApiClient(
             true
         } catch (e: CancellationException) {
             throw e
+        } catch (e: PasskeyNotSupportedException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("ProxmoxAPI", "Authentication error", e)
             false
         }
+    }
+
+    /**
+     * True when the TFA challenge offers WebAuthn but neither TOTP nor a recovery key, so the
+     * only way in is a passkey, which a native app cannot use for a third-party hostname.
+     */
+    internal fun isPasskeyOnlyChallenge(challengeTicket: String): Boolean {
+        val text = challengeTicket.lowercase()
+        return "webauthn" in text && "totp" !in text && "recovery" !in text
     }
 
     private fun postTicket(body: RequestBody): JSONObject? {
@@ -975,3 +987,6 @@ class ProxmoxApiClient(
         }
     }
 }
+
+/** Thrown by [ProxmoxApiClient.authenticate] when the account's only second factor is a passkey. */
+class PasskeyNotSupportedException : Exception("Passkey (WebAuthn) second factor is not supported")

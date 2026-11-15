@@ -927,6 +927,8 @@ class HypervisorEditActivity : TabSSHActivity() {
                 }
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: io.github.tabssh.hypervisor.proxmox.PasskeyNotSupportedException) {
+                showError(getString(R.string.proxmox_connect_passkey_unsupported), getString(R.string.status_error))
             } catch (e: Exception) {
                 Logger.w("HypervisorEditActivity", "Test connection failed", e)
                 // e.message can be a raw server error body (vSphere/XO echo the

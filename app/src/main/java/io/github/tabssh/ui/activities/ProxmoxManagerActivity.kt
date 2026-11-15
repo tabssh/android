@@ -234,6 +234,8 @@ class ProxmoxManagerActivity : TabSSHActivity() {
             } catch (e: CancellationException) {
                 // Activity scope cancelled — not a connection failure.
                 throw e
+            } catch (e: io.github.tabssh.hypervisor.proxmox.PasskeyNotSupportedException) {
+                showError(getString(R.string.proxmox_connect_passkey_unsupported))
             } catch (e: Exception) {
                 Logger.e(TAG, "Connect failed", e)
                 // e.message can be a raw server error body; Proxmox echoes the
