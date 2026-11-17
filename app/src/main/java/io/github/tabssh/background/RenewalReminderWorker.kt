@@ -9,6 +9,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkRequest
 import androidx.work.WorkerParameters
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.tracker.HostLinkResolver
 import io.github.tabssh.utils.NotificationHelper
 import io.github.tabssh.utils.RenewalUrgency
 import io.github.tabssh.utils.logging.Logger
@@ -89,6 +90,11 @@ class RenewalReminderWorker(
         val now = System.currentTimeMillis()
         val dayMs = TimeUnit.DAYS.toMillis(1)
 
+        // Saved connections that belong to a domain or VPS host, so a reminder says which servers are affected.
+        val allConnections = db.connectionDao().getAllConnectionsList()
+        val allVps = db.vpsHostDao().getAllList()
+        val allDomains = db.domainDao().getAllList()
+
         val domains = db.domainDao().getAllWithExpiration()
         for (domain in domains) {
             val expiration = domain.expirationDate ?: continue
@@ -102,7 +108,8 @@ class RenewalReminderWorker(
             if (domain.lastReminderSentAt == expiration) continue
 
             Logger.i(TAG, "Domain '${domain.domainName}' renewal reminder: $daysRemaining day(s) remaining")
-            NotificationHelper.notifyDomainRenewal(appContext, domain.id, domain.domainName, daysRemaining)
+            val sshNames = HostLinkResolver.connectionsForDomain(domain, allConnections, allVps, allDomains).map { it.getDisplayName() }
+            NotificationHelper.notifyDomainRenewal(appContext, domain.id, domain.domainName, daysRemaining, sshNames)
             db.domainDao().update(domain.copy(lastReminderSentAt = expiration, modifiedAt = now))
         }
 
@@ -121,7 +128,8 @@ class RenewalReminderWorker(
             if (host.lastReminderSentAt == renewal) continue
 
             Logger.i(TAG, "VPS host '${host.hostname}' renewal reminder: $daysRemaining day(s) remaining")
-            NotificationHelper.notifyVpsRenewal(appContext, host.id, host.hostname, daysRemaining)
+            val sshNames = HostLinkResolver.connectionsForVps(host, allConnections, allVps, allDomains).map { it.getDisplayName() }
+            NotificationHelper.notifyVpsRenewal(appContext, host.id, host.hostname, daysRemaining, sshNames)
             db.vpsHostDao().update(host.copy(lastReminderSentAt = renewal, modifiedAt = now))
         }
 

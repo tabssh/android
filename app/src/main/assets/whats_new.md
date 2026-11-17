@@ -5,6 +5,7 @@
 - Container update settings work at three levels: global, per host, and per image or compose stack, with the most specific winning. A new Updates tab on Docker and Podman hosts shows available updates and lets you change each level.
 - Compose containers update through compose as a whole project (using composemgr when installed) and standalone containers through recreate; the two are never mixed.
 - A new Container Updates page (drawer, Insights, with a count badge) lists pending updates across hosts, each with an Update button, plus Check all now. Update alerts are now one notification for everything, and it opens that page.
+- SSH connections now link to their tracked VPS and domain automatically (by IP address and domain name). The connection screen shows the match and lets you change it, the trackers list the connections with a tap-to-connect row, and renewal reminders say which servers are affected.
 - Re-importing a domain list or VPS file now updates what you already track (domains by name, VPS hosts by IPv4 or IPv6) instead of adding duplicates, and keeps your reminders and notes.
 - With a linked identity, SSH errors now name the identity's username (the one actually used), the connection's User field says which one wins, and an identity without a username no longer vanishes when saved.
 - Proxmox login tickets are renewed silently, so long-open Proxmox screens no longer fail after 2 hours.

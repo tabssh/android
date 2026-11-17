@@ -90,6 +90,7 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 - Performance dashboard with configurable monitor slots per host and metric graphs
 - Multi-Host Dashboard — side-by-side CPU/memory/disk metric graphs across hosts, grouped independently from connection groups
 - Domain & VPS Renewal Tracking — two trackers (Domain Tracker, VPS Hosting Tracker) for upcoming renewal dates, with CSV/Markdown import-export (re-importing updates tracked rows instead of duplicating: a domain is matched by its name, a VPS host by its IPv4 then IPv6 address, or by tenant and hostname when it has no address; reminder settings, notes and canceled state are kept, and a changed expiry or renewal date restarts the reminder), reminder notifications as expiry approaches (and once when past due), long-press multi-select to renew, cancel or delete, and a renewed-or-canceled prompt for past-due or canceled entries
+- Tracker links: an SSH connection belongs to the tracked VPS host whose IPv4 or IPv6 address (or linked domain, or fully qualified hostname) it uses, and to the tracked domain it equals or sits under (longest match wins; an address-only host takes its VPS's linked domain). Links are computed from the connection's host each time and stored only as an optional override on the connection (`vps_link`, `domain_link`: null automatic, empty none, otherwise a row id). The connection screen shows the match with its renewal date and offers the override; each tracker entry lists its connections with a tap-to-connect row; renewal reminders name them
 - Touchpad-emulating terminal surface with three distinct zones: a left-edge wheel zone (mouse-wheel-notch scrolling — a quick flick fires one notch, a sustained drag repeats one notch per line of travel; notch size is user-configurable, default 3 lines), a right-edge desktop-terminal scrollbar (konsole/xfce4-terminal style) — a persistent track and draggable thumb that scrolls the terminal's own scrollback, the thumb fills the track when there is nothing to scroll back through — and everywhere else acting as a 1:1 touchpad (proportional drag/swipe scrolling, no gearing); swipe left/right still changes tabs; none of the three zones may interfere with each other or with left/right tab-switch swipes
 - Per-session status notifications — every open tab gets its own shade entry (even when tabs share one host), tapping jumps to that exact tab, a Disconnect action closes just that session, and entries clear as soon as their tab closes
 
@@ -222,7 +223,7 @@ compatibility note here (and a heads-up to the sibling repos) is incomplete:
   `manifest.json`, then one `{"v":4,"items":[...]}` file per entity (version 3
   single-JSON archives still restore); a backup made by any sibling must
   restore cleanly on the others
-- Room schema (currently v29) — Desktop's SQLite and Web's schema track
+- Room schema (currently v31) — Desktop's SQLite and Web's schema track
   Android's entity shapes and field set; schema version numbers are
   independent per platform but the fields must line up
 - Built-in terminal theme catalogue (23 themes) — byte-identical theme

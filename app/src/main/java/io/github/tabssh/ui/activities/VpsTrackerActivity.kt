@@ -86,6 +86,10 @@ class VpsTrackerActivity : TabSSHActivity() {
     private lateinit var app: TabSSHApplication
     private lateinit var adapter: VpsHostAdapter
     private var allHosts: List<VpsHost> = emptyList()
+    // Saved SSH connections that belong to each VPS host, by host id (see HostLinkResolver).
+    private var sshByHost: Map<String, List<io.github.tabssh.storage.database.entities.ConnectionProfile>> = emptyMap()
+    private var linkConnections: List<io.github.tabssh.storage.database.entities.ConnectionProfile> = emptyList()
+    private var linkDomains: List<io.github.tabssh.storage.database.entities.Domain> = emptyList()
     private var currentSortOption: SortOption = SortOption.NAME_ASC
     private var currentFilterOption: FilterOption = FilterOption.ALL
     private var actionMode: ActionMode? = null
@@ -156,7 +160,26 @@ class VpsTrackerActivity : TabSSHActivity() {
                 app.database.vpsHostDao().getAll().collect { hosts ->
                     allHosts = hosts
                     if (selectedIds.retainAll(hosts.map { it.id }.toSet())) refreshSelection()
+                    recomputeSshLinks()
                     applyFilterAndSort()
+                }
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                app.database.connectionDao().getAllConnections().collect { connections ->
+                    linkConnections = connections
+                    recomputeSshLinks()
+                    adapter.notifyItemRangeChanged(0, adapter.itemCount)
+                }
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                app.database.domainDao().getAll().collect { domains ->
+                    linkDomains = domains
+                    recomputeSshLinks()
+                    adapter.notifyItemRangeChanged(0, adapter.itemCount)
                 }
             }
         }
@@ -198,6 +221,12 @@ class VpsTrackerActivity : TabSSHActivity() {
                 true
             }
             else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    private fun recomputeSshLinks() {
+        sshByHost = allHosts.associate { h ->
+            h.id to io.github.tabssh.tracker.HostLinkResolver.connectionsForVps(h, linkConnections, allHosts, linkDomains)
         }
     }
 
@@ -740,6 +769,7 @@ class VpsTrackerActivity : TabSSHActivity() {
                 io.github.tabssh.tracker.BillingCycleText.label(this@VpsTrackerActivity, host.billingCycle)
             )
             addDetailRow(holder.detail, R.string.vps_tracker_col_price, host.price)
+            io.github.tabssh.ui.utils.TrackerSshLinks.addRow(holder.detail, sshByHost[host.id].orEmpty())
             holder.detail.visibility = if (holder.detail.childCount == 0) View.GONE else View.VISIBLE
 
             // Selected rows get a leading check, the primary stroke, and a

@@ -3207,6 +3207,17 @@
     <string name="key_import_error_storage_failed">Failed to store the imported key on this device.</string>
     <string name="key_import_error_unknown">Key import failed.</string>
     <string name="conn_edit_identity_user_hint">The linked identity logs in as %1$s; this User is not used</string>
+    <string name="renewal_reminder_ssh_suffix_fmt">" · SSH: %1$s"</string>
+    <string name="tracker_col_ssh">SSH</string>
+    <string name="tracker_ssh_row_fmt">%1$s · tap to connect</string>
+    <string name="tracker_ssh_choose_title">Connect to</string>
+    <string name="conn_edit_links_title">Renewals</string>
+    <string name="conn_edit_link_vps_hint">VPS host</string>
+    <string name="conn_edit_link_domain_hint">Domain</string>
+    <string name="conn_edit_link_auto_match">Automatic (%1$s)</string>
+    <string name="conn_edit_link_auto_none">Automatic (no match)</string>
+    <string name="conn_edit_link_none">None</string>
+    <string name="conn_edit_link_renews_fmt">Renews %1$s</string>
     <string name="conn_edit_no_identity">No Identity</string>
     <string name="conn_edit_no_group">No Group</string>
     <string name="conn_edit_create_group_option">＋ Create group…</string>

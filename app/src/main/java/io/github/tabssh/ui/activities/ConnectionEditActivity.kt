@@ -19,6 +19,7 @@ import io.github.tabssh.storage.database.entities.TelnetHost
 import io.github.tabssh.storage.database.entities.VncHost
 import io.github.tabssh.storage.database.entities.VncIdentity
 import io.github.tabssh.ssh.auth.AuthType
+import io.github.tabssh.tracker.HostLinkResolver
 import io.github.tabssh.utils.ThrowableMapper
 import io.github.tabssh.utils.logging.Logger
 import io.github.tabssh.crypto.keys.KeyType
@@ -215,6 +216,12 @@ class ConnectionEditActivity : TabSSHActivity() {
     // SSH identities (Identity table)
     private var availableIdentities: List<io.github.tabssh.storage.database.entities.Identity> = emptyList()
     private var selectedIdentityId: String? = null
+
+    // Renewal links to the VPS and domain trackers: null = automatic, "" = none, otherwise a tracker row id.
+    private var vpsLinkChoice: String? = null
+    private var domainLinkChoice: String? = null
+    private var linkVpsHosts: List<io.github.tabssh.storage.database.entities.VpsHost> = emptyList()
+    private var linkDomains: List<io.github.tabssh.storage.database.entities.Domain> = emptyList()
     // True only when an existing per-connection password was actually decrypted
     // into this form. A locked/unavailable biometric secret must not be erased
     // just because the password field is blank while editing another auth mode.
@@ -273,6 +280,7 @@ class ConnectionEditActivity : TabSSHActivity() {
         setupConnectionThemeSpinner()
         setupRemoteCommandSpinner()
         setupValidation()
+        setupRenewalLinks()
         setupButtons()
         setupPortKnockUI()
         setupMoshCommandDropdown()
@@ -408,6 +416,7 @@ class ConnectionEditActivity : TabSSHActivity() {
         if (currentProtocol == proto) return
         val previousProtocol = currentProtocol
         currentProtocol = proto
+        refreshRenewalLinks()
 
         // Reset identity / key selections when switching protocols so a previously
         // chosen SSH identity does not leak into a Telnet save (bug-06). The new
@@ -960,6 +969,76 @@ class ConnectionEditActivity : TabSSHActivity() {
     // Validation
     // -------------------------------------------------------------------------
 
+    /**
+     * The Renewals card: which tracked VPS host and domain this connection belongs to. Automatic by default
+     * (matched on the host as typed), with None or a specific row as an override. Hidden when nothing is
+     * tracked or for non-SSH protocols.
+     */
+    private fun setupRenewalLinks() {
+        binding.spinnerLinkVps.setOnItemClickListener { _, _, position, _ ->
+            vpsLinkChoice = when (position) { 0 -> null; 1 -> ""; else -> linkVpsHosts.getOrNull(position - 2)?.id }
+            hasUnsavedChanges = true
+            refreshRenewalLinks()
+        }
+        binding.spinnerLinkDomain.setOnItemClickListener { _, _, position, _ ->
+            domainLinkChoice = when (position) { 0 -> null; 1 -> ""; else -> linkDomains.getOrNull(position - 2)?.id }
+            hasUnsavedChanges = true
+            refreshRenewalLinks()
+        }
+        binding.editHost.doAfterTextChanged { refreshRenewalLinks() }
+        lifecycleScope.launch {
+            try {
+                val (vps, domains) = withContext(Dispatchers.IO) {
+                    app.database.vpsHostDao().getAllList() to app.database.domainDao().getAllList()
+                }
+                linkVpsHosts = vps
+                linkDomains = domains
+                refreshRenewalLinks()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.w("ConnectionEditActivity", "Renewal link lists unavailable: ${e.message}")
+            }
+        }
+    }
+
+    private fun refreshRenewalLinks() {
+        val showCard = currentProtocol == "ssh" && (linkVpsHosts.isNotEmpty() || linkDomains.isNotEmpty())
+        binding.cardRenewals.visibility = if (showCard) View.VISIBLE else View.GONE
+        if (!showCard) return
+        val host = binding.editHost.text?.toString()?.trim().orEmpty()
+        val probe = ConnectionProfile(name = "", host = host, username = "", vpsLink = vpsLinkChoice, domainLink = domainLinkChoice)
+        val auto = HostLinkResolver.resolve(probe.copy(vpsLink = null, domainLink = null), linkVpsHosts, linkDomains)
+        val chosen = HostLinkResolver.resolve(probe, linkVpsHosts, linkDomains)
+        val vpsName = { v: io.github.tabssh.storage.database.entities.VpsHost -> "${v.tenant} / ${v.hostname}" }
+        val autoVpsLabel = auto.vps?.let { getString(R.string.conn_edit_link_auto_match, vpsName(it)) } ?: getString(R.string.conn_edit_link_auto_none)
+        val autoDomainLabel = auto.domain?.let { getString(R.string.conn_edit_link_auto_match, it.domainName) } ?: getString(R.string.conn_edit_link_auto_none)
+        val none = getString(R.string.conn_edit_link_none)
+        val vpsItems = listOf(autoVpsLabel, none) + linkVpsHosts.map(vpsName)
+        val domainItems = listOf(autoDomainLabel, none) + linkDomains.map { it.domainName }
+        binding.spinnerLinkVps.setAdapter(ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, vpsItems))
+        binding.spinnerLinkDomain.setAdapter(ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, domainItems))
+        val vpsSelection = when (vpsLinkChoice) {
+            null -> 0
+            "" -> 1
+            else -> linkVpsHosts.indexOfFirst { it.id == vpsLinkChoice }.let { if (it >= 0) it + 2 else 0 }
+        }
+        val domainSelection = when (domainLinkChoice) {
+            null -> 0
+            "" -> 1
+            else -> linkDomains.indexOfFirst { it.id == domainLinkChoice }.let { if (it >= 0) it + 2 else 0 }
+        }
+        binding.spinnerLinkVps.setText(vpsItems[vpsSelection], false)
+        binding.spinnerLinkDomain.setText(domainItems[domainSelection], false)
+        val dates = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM)
+        binding.layoutLinkVps.helperText = chosen.vps?.let { v ->
+            (v.renewalDate?.let { dates.format(java.util.Date(it)) } ?: v.renewalRaw)
+                ?.takeIf { it.isNotBlank() }?.let { getString(R.string.conn_edit_link_renews_fmt, it) }
+        }
+        binding.layoutLinkDomain.helperText = chosen.domain?.expirationDate
+            ?.let { getString(R.string.conn_edit_link_renews_fmt, dates.format(java.util.Date(it))) }
+    }
+
     private fun setupValidation() {
         binding.editHost.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) validateHost() }
         binding.editPort.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) validatePort() }
@@ -1147,6 +1226,9 @@ class ConnectionEditActivity : TabSSHActivity() {
 
         // Set identity before restoring, so restoreSshIdentitySpinner() can use it.
         selectedIdentityId = profile.identityId
+        vpsLinkChoice = profile.vpsLink
+        domainLinkChoice = profile.domainLink
+        refreshRenewalLinks()
         // Synchronously fetch SSH identities BEFORE calling restore — the prior
         // version ran restore immediately while loadSshIdentities() was still
         // pending on Dispatchers.IO, causing the spinner to silently show
@@ -1797,6 +1879,7 @@ class ConnectionEditActivity : TabSSHActivity() {
             proxyType = null, proxyHost = null, proxyPort = null,
             proxyUsername = null, proxyAuthType = null, proxyKeyId = null,
             routeId = routeId,
+            vpsLink = vpsLinkChoice, domainLink = domainLinkChoice,
             colorTag = colorTag, notifSoundMode = notifSoundMode, notifVibrateMode = notifVibrateMode,
             portKnockEnabled = knockEnabled, portKnockSequence = knockSequence, portKnockDelayMs = portKnockDelayMs,
             encoding = encoding, connectTimeout = connectTimeout, readTimeout = readTimeout, serverAliveInterval = serverAliveInterval,
@@ -1817,6 +1900,7 @@ class ConnectionEditActivity : TabSSHActivity() {
             agentForwarding = agentForwarding, remoteCommand = remoteCommand,
             ipMode = ipMode, groupId = selectedGroupId,
             routeId = routeId,
+            vpsLink = vpsLinkChoice, domainLink = domainLinkChoice,
             notifSoundMode = notifSoundMode, notifVibrateMode = notifVibrateMode,
             portKnockEnabled = knockEnabled, portKnockSequence = knockSequence, portKnockDelayMs = portKnockDelayMs,
             encoding = encoding, connectTimeout = connectTimeout, readTimeout = readTimeout, serverAliveInterval = serverAliveInterval,

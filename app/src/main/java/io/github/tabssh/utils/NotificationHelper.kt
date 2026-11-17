@@ -1150,7 +1150,7 @@ object NotificationHelper {
      * [io.github.tabssh.storage.database.entities.Domain.lastReminderSentAt]
      * so this only fires once per renewal date, not once per worker run.
      */
-    fun notifyDomainRenewal(context: Context, domainId: String, domainName: String, daysRemaining: Long) {
+    fun notifyDomainRenewal(context: Context, domainId: String, domainName: String, daysRemaining: Long, sshNames: List<String> = emptyList()) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val pi = trackerPendingIntent(context, isVps = false)
         val text = if (daysRemaining < 0) {
@@ -1163,7 +1163,8 @@ object NotificationHelper {
         val n = NotificationCompat.Builder(context, CHANNEL_RENEWAL_REMINDERS)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Domain renewal reminder")
-            .setContentText(text)
+            .setContentText(withSshNames(context, text, sshNames))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(withSshNames(context, text, sshNames)))
             .setContentIntent(pi)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -1180,7 +1181,7 @@ object NotificationHelper {
      * [io.github.tabssh.storage.database.entities.VpsHost.lastReminderSentAt]
      * so this only fires once per renewal date, not once per worker run.
      */
-    fun notifyVpsRenewal(context: Context, hostId: String, hostname: String, daysRemaining: Long) {
+    fun notifyVpsRenewal(context: Context, hostId: String, hostname: String, daysRemaining: Long, sshNames: List<String> = emptyList()) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val pi = trackerPendingIntent(context, isVps = true)
         val text = if (daysRemaining < 0) {
@@ -1193,7 +1194,8 @@ object NotificationHelper {
         val n = NotificationCompat.Builder(context, CHANNEL_RENEWAL_REMINDERS)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("VPS renewal reminder")
-            .setContentText(text)
+            .setContentText(withSshNames(context, text, sshNames))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(withSshNames(context, text, sshNames)))
             .setContentIntent(pi)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -1203,6 +1205,10 @@ object NotificationHelper {
         nm.notify(renewalReminderNotificationId("vps", hostId), n)
         postRenewalRemindersGroupSummary(context, nm)
     }
+
+    /** A reminder names the saved SSH connections that belong to the domain or VPS, so it says which servers are affected. */
+    private fun withSshNames(context: Context, text: String, sshNames: List<String>): String =
+        if (sshNames.isEmpty()) text else text + context.getString(R.string.renewal_reminder_ssh_suffix_fmt, sshNames.joinToString(", "))
 
     /** Stable notification ID for a given entity type + id pair. */
     private fun renewalReminderNotificationId(type: String, id: String): Int {
