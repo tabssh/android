@@ -29,6 +29,7 @@ import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.databinding.ActivityDomainTrackerBinding
 import io.github.tabssh.storage.database.entities.Domain
 import io.github.tabssh.tracker.DomainCsvImportExport
+import io.github.tabssh.tracker.TrackerImportMerge
 import io.github.tabssh.utils.RenewalUrgency
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
@@ -418,28 +419,14 @@ class DomainTrackerActivity : TabSSHActivity() {
                     Toast.makeText(this@DomainTrackerActivity, getString(R.string.domain_tracker_import_empty), Toast.LENGTH_LONG).show()
                     return@launch
                 }
-                var added = 0
-                var updated = 0
-                withContext(Dispatchers.IO) {
+                val outcome = withContext(Dispatchers.IO) {
                     val dao = app.database.domainDao()
-                    val merged = result.domains.map { parsed ->
-                        val existing = dao.getByDomainName(parsed.domainName)
-                        if (existing != null) {
-                            updated++
-                            parsed.copy(
-                                id = existing.id,
-                                reminderDaysBefore = existing.reminderDaysBefore,
-                                lastReminderSentAt = existing.lastReminderSentAt,
-                                notes = existing.notes,
-                                createdAt = existing.createdAt
-                            )
-                        } else {
-                            added++
-                            parsed
-                        }
-                    }
-                    dao.insertAll(merged)
+                    val merged = TrackerImportMerge.mergeDomains(result.domains, dao.getAllList())
+                    dao.insertAll(merged.rows)
+                    merged
                 }
+                val added = outcome.added
+                val updated = outcome.updated
                 for (warning in result.warnings) Logger.w(TAG, "CSV import: $warning")
                 if (!isAlive) return@launch
                 Toast.makeText(this@DomainTrackerActivity, getString(R.string.domain_tracker_import_success_fmt, added, updated), Toast.LENGTH_LONG).show()

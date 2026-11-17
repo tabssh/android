@@ -21,16 +21,6 @@ interface VpsHostDao {
     @Query("SELECT * FROM vps_hosts WHERE id = :id")
     suspend fun getById(id: String): VpsHost?
 
-    @Query("SELECT * FROM vps_hosts WHERE tenant = :tenant COLLATE NOCASE AND hostname = :hostname COLLATE NOCASE")
-    suspend fun getByTenantAndHostname(tenant: String, hostname: String): VpsHost?
-
-    // ipv4 is the preferred import-merge key: a host's tenant label or
-    // hostname alias can be renamed in a later export, but its IPv4 address
-    // is effectively stable — matching on it avoids spuriously creating a
-    // duplicate row when only the name changed.
-    @Query("SELECT * FROM vps_hosts WHERE ipv4 = :ipv4 COLLATE NOCASE")
-    suspend fun getByIpv4(ipv4: String): VpsHost?
-
     @Query("SELECT * FROM vps_hosts WHERE renewal_date IS NOT NULL")
     suspend fun getAllWithRenewal(): List<VpsHost>
 

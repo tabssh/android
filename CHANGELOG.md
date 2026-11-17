@@ -37,6 +37,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Re-importing the Domain and VPS trackers updates instead of duplicating.** A domain is matched by its name, a VPS host by its IPv4 and then its IPv6 address (tenant and hostname only for a host with no address), so a renamed host or an updated domain file changes the existing row. The same entry twice in one file is added once, and a new expiry or renewal date restarts that row's reminder. Reminder settings, notes and canceled state are kept.
 - **SSH login user is shown consistently.** When a connection links an identity, the identity's username is what the server logs in as, but connection errors and diagnostics named the connection's own User, so a failed login looked like it was for a different account than the host saw. Every message now names the user actually used, and the connection's User field says which one wins when they differ.
 - **Saving an identity without a username no longer discards it.** Leaving the username (or name) empty closed the dialog with only a brief toast and lost what was typed; the dialog now stays open with an error on the field.
 - **Proxmox login tickets renew themselves.** A ticket lasts 2 hours and the app never renewed it, so a long-open Proxmox screen on a password or 2FA account started failing. It is now renewed silently after 90 minutes by sending the ticket back to Proxmox, which needs no second factor.

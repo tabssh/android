@@ -21,7 +21,7 @@ class MergeEngineDeletionTest {
     }
 
     private fun conn(id: String, host: String = "example.com", modifiedAt: Long = 1_000L) =
-        ConnectionProfile(id = id, name = "server", host = host, username = "root", modifiedAt = modifiedAt)
+        ConnectionProfile(id = id, name = "server", host = host, username = "root", createdAt = 1_000L, modifiedAt = modifiedAt)
 
     @Test
     fun `local delete with unchanged remote is not a conflict`() {

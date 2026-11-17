@@ -36,6 +36,7 @@ class MergeEngineThreeWayTest {
         name = name,
         host = host,
         username = username,
+        createdAt = 1_000L,
         modifiedAt = modifiedAt
     )
 

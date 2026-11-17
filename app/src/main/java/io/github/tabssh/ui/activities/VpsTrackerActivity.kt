@@ -28,6 +28,7 @@ import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.databinding.ActivityVpsTrackerBinding
 import io.github.tabssh.storage.database.entities.VpsHost
+import io.github.tabssh.tracker.TrackerImportMerge
 import io.github.tabssh.tracker.VpsMarkdownImportExport
 import io.github.tabssh.utils.RenewalUrgency
 import io.github.tabssh.utils.logging.Logger
@@ -434,12 +435,9 @@ class VpsTrackerActivity : TabSSHActivity() {
     }
 
     /**
-     * Parse [text] (from a file or pasted directly) and merge into the
-     * database. Matched by ipv4 first when the parsed row has one — a
-     * host's tenant label or hostname alias can be renamed between exports
-     * but its IPv4 address is effectively stable — falling back to
-     * (tenant, hostname) for rows with no ipv4 (e.g. a still-provisioning
-     * host).
+     * Parse [text] (from a file or pasted directly) and merge into the database by IPv4, then IPv6,
+     * so a renamed host still updates its row; a host with no address falls back to tenant and hostname.
+     * See [TrackerImportMerge].
      */
     private fun importText(text: String) {
         lifecycleScope.launch {
@@ -451,28 +449,14 @@ class VpsTrackerActivity : TabSSHActivity() {
                     Toast.makeText(this@VpsTrackerActivity, getString(R.string.vps_tracker_import_empty), Toast.LENGTH_LONG).show()
                     return@launch
                 }
-                var added = 0
-                var updated = 0
-                withContext(Dispatchers.IO) {
+                val outcome = withContext(Dispatchers.IO) {
                     val dao = app.database.vpsHostDao()
-                    val merged = result.hosts.map { parsed ->
-                        val existing = parsed.ipv4?.takeIf { it.isNotBlank() }?.let { dao.getByIpv4(it) }
-                            ?: dao.getByTenantAndHostname(parsed.tenant, parsed.hostname)
-                        if (existing != null) {
-                            updated++
-                            parsed.copy(
-                                id = existing.id,
-                                reminderDaysBefore = existing.reminderDaysBefore,
-                                lastReminderSentAt = existing.lastReminderSentAt,
-                                createdAt = existing.createdAt
-                            )
-                        } else {
-                            added++
-                            parsed
-                        }
-                    }
-                    dao.insertAll(merged)
+                    val merged = TrackerImportMerge.mergeVps(result.hosts, dao.getAllList())
+                    dao.insertAll(merged.rows)
+                    merged
                 }
+                val added = outcome.added
+                val updated = outcome.updated
                 for (warning in result.warnings) Logger.w(TAG, "Markdown import: $warning")
                 if (!isAlive) return@launch
                 Toast.makeText(this@VpsTrackerActivity, getString(R.string.vps_tracker_import_success_fmt, added, updated), Toast.LENGTH_LONG).show()
