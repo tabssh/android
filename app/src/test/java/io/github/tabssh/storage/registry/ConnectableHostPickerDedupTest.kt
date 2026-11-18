@@ -106,4 +106,19 @@ class ConnectableHostPickerDedupTest {
         )
         assertEquals(listOf("profile-1", arm.id), unrelated.map { it.id })
     }
+
+    @Test
+    fun `a saved connection that absorbs a cloud instance is the one to badge`() {
+        val arm = cloudRow("i-arm", "arm.arm64.us", "141.148.37.55 (iad)")
+        val byName = cloudRow("i-cb", "cb.pste.us", "132.226.33.75 (iad)")
+        val unrelated = cloudRow("i-x", "other", "203.0.113.9 (iad)")
+        val connections = listOf(
+            "c-arm" to "141.148.37.55", "c-cb" to "CB.pste.us", "c-none" to "somewhere.else"
+        )
+        assertEquals(
+            setOf("c-arm", "c-cb"),
+            ConnectableHostRegistry.cloudBackedConnectionIds(listOf(profile, arm, byName, unrelated), connections)
+        )
+        assertEquals(emptySet(), ConnectableHostRegistry.cloudBackedConnectionIds(listOf(profile), connections))
+    }
 }

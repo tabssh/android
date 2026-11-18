@@ -35,7 +35,11 @@ object ConnectableHostLabels {
      * `Name — preview · Badge` for cloud/telnet/container-host rows.
      */
     fun pickerLabel(context: Context, host: ConnectableHost): String {
+        // A saved connection that absorbed a cloud instance carries the Cloud badge, so the merged row says so.
         val badge = sourceBadge(host.sourceType)
+            ?: if (host.sourceType == ConnectableHost.SOURCE_CONNECTION_PROFILE &&
+                io.github.tabssh.storage.registry.ConnectableHostRegistry.isAlsoCloud(host.id)
+            ) R.string.connectable_host_badge_cloud else null
         return if (badge == null) {
             context.getString(R.string.connectable_host_label_fmt, host.name, host.hostPreview)
         } else {

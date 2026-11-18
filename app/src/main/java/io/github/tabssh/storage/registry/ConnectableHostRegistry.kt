@@ -262,16 +262,44 @@ object ConnectableHostRegistry {
      * [keepIds] (a saved selection such as an existing pane window or port
      * forward) are never dropped, so editing an older record keeps its value.
      */
-    suspend fun pickerHosts(db: TabSSHDatabase, keepIds: Set<String> = emptySet()): List<ConnectableHost> =
-        withoutSavedConnectionCloudDuplicates(
+    suspend fun pickerHosts(db: TabSSHDatabase, keepIds: Set<String> = emptySet()): List<ConnectableHost> {
+        val all = db.connectableHostDao().getAllList()
+        val connections = db.connectionDao().getAllConnectionsList()
+        // Remembered for the labels built from this list, which badge a saved connection that absorbed a cloud instance.
+        cloudBackedConnectionIds = cloudBackedConnectionIds(all, connections.map { it.id to it.host })
+        return withoutSavedConnectionCloudDuplicates(
             hosts = withoutLinkedContainerDuplicates(
-                hosts = db.connectableHostDao().getAllList(),
+                hosts = all,
                 containerHosts = db.containerHostDao().getAllList(),
                 keepIds = keepIds
             ),
-            connectionHosts = db.connectionDao().getAllConnectionsList().map { it.host },
+            connectionHosts = connections.map { it.host },
             keepIds = keepIds
         )
+    }
+
+    // Ids of saved connections that are also a cloud instance, as of the last pickerHosts call.
+    @Volatile
+    private var cloudBackedConnectionIds: Set<String> = emptySet()
+
+    /** True when saved connection [id] was merged with a cloud instance in the last host picker list. */
+    fun isAlsoCloud(id: String): Boolean = id in cloudBackedConnectionIds
+
+    /**
+     * The saved connections (id to host) that a cloud-instance row in [hosts] points at by address or name, i.e. the
+     * connections that absorb that instance in a picker.
+     */
+    fun cloudBackedConnectionIds(hosts: List<ConnectableHost>, connections: List<Pair<String, String>>): Set<String> {
+        val cloud = hosts.filter { it.sourceType == ConnectableHost.SOURCE_CLOUD_INSTANCE }
+        if (cloud.isEmpty()) return emptySet()
+        val keys = cloud.flatMap { listOf(hostKey(it.hostPreview.substringBefore(" (")), hostKey(it.name)) }.toHashSet()
+        return connections.filter { (_, host) -> hostKey(host).let { it.isNotEmpty() && it in keys } }.mapTo(HashSet()) { it.first }
+    }
+
+    private fun hostKey(value: String): String {
+        val v = value.trim().lowercase().trimEnd('.')
+        return if (':' in v) io.github.tabssh.tracker.TrackerImportMerge.normalizeIpv6(v) ?: v else v
+    }
 
     /**
      * Pure core of the cloud half of [pickerHosts]: a cloud-instance row is dropped when a saved connection
@@ -283,15 +311,11 @@ object ConnectableHostRegistry {
         connectionHosts: List<String>,
         keepIds: Set<String> = emptySet()
     ): List<ConnectableHost> {
-        fun key(value: String): String {
-            val v = value.trim().lowercase().trimEnd('.')
-            return if (':' in v) io.github.tabssh.tracker.TrackerImportMerge.normalizeIpv6(v) ?: v else v
-        }
-        val saved = connectionHosts.mapNotNull { key(it).takeIf { k -> k.isNotEmpty() } }.toHashSet()
+        val saved = connectionHosts.mapNotNull { hostKey(it).takeIf { k -> k.isNotEmpty() } }.toHashSet()
         return hosts.filter { host ->
             host.sourceType != ConnectableHost.SOURCE_CLOUD_INSTANCE ||
                 host.id in keepIds ||
-                (key(host.hostPreview.substringBefore(" (")) !in saved && key(host.name) !in saved)
+                (hostKey(host.hostPreview.substringBefore(" (")) !in saved && hostKey(host.name) !in saved)
         }
     }
 
