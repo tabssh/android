@@ -376,12 +376,16 @@ class TerminalView @JvmOverloads constructor(
     // ─────────────────────────────────────────────────────────────────
     private var selectionActive = false
     /**
-     * Rectangular selection: the columns between the two handles on every row between them, instead of a
-     * run of text from the first handle to the second. It is the default in a full-screen program (vim,
-     * neovim, tmux, herdr), where panes sit side by side and a run of text would take in the neighbouring
-     * pane, and the selection bar can switch it either way.
+     * Rectangular selection, chosen with the selection bar's Block button: the columns between the two handles on
+     * every row between them. Off by default; a normal selection reads like running text, limited to its pane.
      */
     private var blockSelection = false
+    /**
+     * Columns that are a pane border (a vertical-line glyph on at least half the screen rows), read when the
+     * selection starts. A normal selection stays inside the border-to-border pane it starts in, so a selection
+     * in vim, neovim, tmux or herdr never takes in the pane beside it. Empty on a plain terminal.
+     */
+    private var paneSeparators: List<Int> = emptyList()
     private var selectionAnchorCol = 0
     private var selectionAnchorRow = 0
     private var selectionFocusCol = 0
@@ -544,10 +548,10 @@ class TerminalView @JvmOverloads constructor(
     fun getSelectionBounds(out: Rect): Boolean {
         if (!selectionActive || cellWidth <= 0f || cellHeight <= 0f) return false
         val (startRow, startCol, endRow, endCol) = normalisedSelection()
-        val singleRow = startRow == endRow
-        val (blockLeft, blockRight) = blockColumns(selectionAnchorCol, selectionFocusCol)
-        val left = paddingLeft + (if (blockSelection) blockLeft else if (singleRow) startCol else 0) * cellWidth
-        val right = paddingLeft + (if (blockSelection) blockRight + 1 else if (singleRow) endCol + 1 else terminalCols) * cellWidth
+        val range = SelectionRange(startRow, startCol, endRow, endCol)
+        val spans = (startRow..endRow).mapNotNull { selectionColumns(it, range) }
+        val left = paddingLeft + (spans.minOfOrNull { it.first } ?: startCol) * cellWidth
+        val right = paddingLeft + ((spans.maxOfOrNull { it.last } ?: endCol) + 1) * cellWidth
         val top = gridTop + startRow * cellHeight
         val bottom = gridTop + (endRow + 1) * cellHeight
         out.set(
@@ -3491,7 +3495,7 @@ class TerminalView @JvmOverloads constructor(
      * floating ActionMode.
      */
     fun enterSelectionMode(x: Float, y: Float) {
-        blockSelection = defaultBlockSelection()
+        beginSelectionState()
         val (col, row) = pixelToCell(x, y)
         selectionAnchorCol = col
         selectionAnchorRow = row
@@ -3529,7 +3533,7 @@ class TerminalView @JvmOverloads constructor(
      * single-cell anchor so the user can still drag to select.
      */
     fun beginWordSelectionAtTouch(x: Float, y: Float) {
-        blockSelection = defaultBlockSelection()
+        beginSelectionState()
         val result = getTextAtPosition(x, y)
         if (result != null) {
             val (row, text) = result
@@ -3575,8 +3579,21 @@ class TerminalView @JvmOverloads constructor(
         onSelectionBoundsChanged?.invoke()
     }
 
-    // A full-screen program (alternate screen buffer) lays text out in panes and columns, so rectangular fits it.
-    private fun defaultBlockSelection(): Boolean = termuxBridge?.getEmulator()?.isAlternateBufferActive() == true
+    // Every selection starts as running text limited to the pane it begins in; Block is only ever chosen on purpose.
+    private fun beginSelectionState() {
+        blockSelection = false
+        val scrollRows = if (cellHeight > 0f) (scrollYInt / cellHeight).toInt() else 0
+        paneSeparators = paneSeparatorColumns((0 until terminalRows).map { getRowText(it - scrollRows) })
+    }
+
+    /** The columns [row] contributes to the selection, or null when it contributes none. */
+    private fun selectionColumns(row: Int, range: SelectionRange): IntRange? {
+        if (blockSelection) {
+            val (left, right) = blockColumns(selectionAnchorCol, selectionFocusCol)
+            return left..right
+        }
+        return selectionSpan(row, range.startRow, range.startCol, range.endRow, range.endCol, terminalCols, paneSeparators)
+    }
 
     /**
      * Clear the selection state and redraw. Called by the host activity
@@ -3606,6 +3623,8 @@ class TerminalView @JvmOverloads constructor(
      * onSelectionStarted so the host activity raises the ActionMode bar.
      */
     fun selectAll() {
+        // The whole screen, whatever panes it holds.
+        paneSeparators = emptyList()
         selectionAnchorRow = 0
         selectionAnchorCol = 0
         selectionFocusRow = (terminalRows - 1).coerceAtLeast(0)
@@ -3649,16 +3668,18 @@ class TerminalView @JvmOverloads constructor(
         // real mLineWrap flag is accurate, so joinFullLines stays false there
         // to avoid falsely joining a hard line that happens to fill the width.
         val joinFullLines = termuxBridge?.isMoshSessionAlive() == true
-        if (blockSelection) {
-            val (left, right) = blockColumns(selectionAnchorCol, selectionFocusCol)
+        val range = SelectionRange(startRow, startCol, endRow, endCol)
+        if (blockSelection || paneSeparators.isNotEmpty()) {
+            // Block, or running text inside a pane: each row is its own line, cut to the columns it contributes.
             return try {
-                (extStartRow..extEndRow).joinToString("\n") { row ->
-                    (buffer.getSelectedText(left, row, right, row, true, false) ?: "").trimEnd()
+                (startRow..endRow).joinToString("\n") { row ->
+                    val cols = selectionColumns(row, range) ?: return@joinToString ""
+                    (buffer.getSelectedText(cols.first, row - scrollRows, cols.last, row - scrollRows, true, false) ?: "").trimEnd()
                 }
             } catch (e: Exception) {
                 Logger.w("TerminalView", "getSelectedText failed: ${e.message}")
                 null
-            }?.trimEnd('\n')?.takeIf { it.isNotEmpty() }
+            }?.trim('\n')?.takeIf { it.isNotEmpty() }
         }
         return try {
             getWrapAwareSelectionText(buffer, startCol, extStartRow, endCol, extEndRow, joinFullLines)
@@ -3808,10 +3829,11 @@ class TerminalView @JvmOverloads constructor(
         val startX = paddingLeft.toFloat()
         val startY = gridTop
 
-        val (blockLeft, blockRight) = blockColumns(selectionAnchorCol, selectionFocusCol)
+        val range = SelectionRange(startRow, startCol, endRow, endCol)
         for (row in startRow..endRow) {
-            val colA = if (blockSelection) blockLeft else if (row == startRow) startCol else 0
-            val colB = if (blockSelection) blockRight else if (row == endRow) endCol else (terminalCols - 1)
+            val span = selectionColumns(row, range) ?: continue
+            val colA = span.first
+            val colB = span.last
             val left = startX + colA * cellWidth
             val right = startX + (colB + 1) * cellWidth
             val top = startY + row * cellHeight
@@ -4456,6 +4478,34 @@ class TerminalView @JvmOverloads constructor(
 
         /** A second touch-down within this window of a tap becomes a held-button drag. */
         private const val TAP_DRAG_WINDOW_MS = 300L
+        // Vertical-line glyphs that draw a pane border in vim, neovim, tmux, herdr and similar programs.
+        private const val PANE_BORDER_CHARS = "|\u00a6\u2502\u2503\u2506\u2507\u250a\u250b\u254e\u254f\u2551\u258f\u2595\u258e\u258c\u2590"
+
+        /** Columns holding a vertical-line glyph on at least half of [rowTexts] (and at least three rows): pane borders. */
+        internal fun paneSeparatorColumns(rowTexts: List<String>): List<Int> {
+            if (rowTexts.size < 3) return emptyList()
+            val counts = HashMap<Int, Int>()
+            for (text in rowTexts) {
+                text.forEachIndexed { col, ch -> if (ch in PANE_BORDER_CHARS) counts[col] = (counts[col] ?: 0) + 1 }
+            }
+            return counts.filterValues { it >= 3 && it * 2 >= rowTexts.size }.keys.sorted()
+        }
+
+        /**
+         * The columns row [row] contributes to a run-of-text selection from ([startRow], [startCol]) to ([endRow], [endCol]):
+         * the usual first-row-from-the-start, last-row-to-the-end shape, but confined to the border-to-border pane
+         * that holds the start. With no [separators] that pane is the whole width.
+         */
+        internal fun selectionSpan(
+            row: Int, startRow: Int, startCol: Int, endRow: Int, endCol: Int, cols: Int, separators: List<Int>
+        ): IntRange? {
+            val paneLeft = (separators.lastOrNull { it < startCol }?.plus(1)) ?: 0
+            val paneRight = (separators.firstOrNull { it > startCol }?.minus(1)) ?: (cols - 1)
+            val from = if (row == startRow) maxOf(startCol, paneLeft) else paneLeft
+            val to = if (row == endRow) minOf(endCol, paneRight) else paneRight
+            return if (from <= to) from..to else null
+        }
+
         /** The inclusive column span of a rectangular selection, whichever handle is further left. */
         internal fun blockColumns(anchorCol: Int, focusCol: Int): Pair<Int, Int> =
             minOf(anchorCol, focusCol) to maxOf(anchorCol, focusCol)
