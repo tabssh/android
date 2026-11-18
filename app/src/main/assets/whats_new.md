@@ -5,6 +5,7 @@
 - Container update settings work at three levels: global, per host, and per image or compose stack, with the most specific winning. A new Updates tab on Docker and Podman hosts shows available updates and lets you change each level.
 - Compose containers update through compose as a whole project (using composemgr when installed) and standalone containers through recreate; the two are never mixed.
 - A new Container Updates page (drawer, Insights, with a count badge) lists pending updates across hosts, each with an Update button, plus Check all now. Update alerts are now one notification for everything, and it opens that page.
+- A pane group that fails to open now shows why each host failed instead of "Connection not found", and a refused SSH key is reported as that, with what to do about it.
 - Links that herdr, tmux, vim and similar split-screen apps wrap at their pane edge are now detected as one link and tappable from every row.
 - Selecting text in vim, neovim, tmux, herdr and other split-pane apps now stays inside the pane you start in, for both the highlight and the copied text. Select All still takes the whole screen, and a Block button on the selection bar gives a plain rectangle.
 - SSH connections now link to their tracked VPS and domain automatically (by IP address and domain name). The connection screen shows the match and lets you change it, the trackers list the connections with a tap-to-connect row, and renewal reminders say which servers are affected.

@@ -3895,6 +3895,8 @@
     <string name="terminal_nothing_on_screen_to_copy">Nothing on screen to copy</string>
     <string name="terminal_screen_copied">Screen copied</string>
     <string name="terminal_nothing_selected">Nothing selected</string>
+    <string name="pane_group_member_failed_fmt">%1$s: %2$s</string>
+    <string name="pane_group_member_failed_unknown">could not connect</string>
     <string name="terminal_connection_not_found">Connection not found</string>
     <string name="terminal_connection_profile_not_found">Connection profile not found</string>
     <string name="terminal_connection_cancelled">Connection cancelled</string>

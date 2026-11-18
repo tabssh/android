@@ -4630,6 +4630,11 @@ class TabTerminalActivity : TabSSHActivity() {
      * mechanism already used for post-connect shell commands, transport
      * agnostic (SSH/Telnet/Mosh). NO changes to SSHTab.kt itself.
      */
+    // Why each member of the pane group being opened could not connect, shown to the user instead of "not found".
+    private val paneMemberFailures = mutableListOf<String>()
+
+    private fun paneFailureText(): String = paneMemberFailures.joinToString("\n")
+
     private suspend fun connectPaneMember(host: ConnectableHost, workingDir: String? = null): SSHTab? {
         var profile: ConnectionProfile = ConnectableHostResolver.resolveProfile(app, host)
             ?: run {
@@ -4662,7 +4667,14 @@ class TabTerminalActivity : TabSSHActivity() {
                     null
                 }
             } else {
-                val ssh = app.sshSessionManager.connectToServer(profile) ?: return null
+                val ssh = app.sshSessionManager.connectToServer(profile) ?: run {
+                    val reason = app.sshSessionManager.getConnection(profile.id)?.detailedError?.value?.userMessage
+                    paneMemberFailures += getString(
+                        R.string.pane_group_member_failed_fmt, profile.getDisplayName(),
+                        reason ?: getString(R.string.pane_group_member_failed_unknown)
+                    )
+                    return null
+                }
                 val newTab = SSHTab(
                     profile,
                     TermuxBridge(
@@ -4860,6 +4872,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 return@launch
             }
             val entries = mutableListOf<PaneWindow>()
+            paneMemberFailures.clear()
             windowConfigs.forEachIndexed { index, windowConfig ->
                 val host = hostsById[windowConfig.hostId]
                 if (host == null) {
@@ -4883,7 +4896,11 @@ class TabTerminalActivity : TabSSHActivity() {
                 }
             }
             if (entries.isEmpty()) {
-                Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_connection_not_found), Toast.LENGTH_SHORT).show()
+                if (paneMemberFailures.isNotEmpty()) {
+                    Toast.makeText(this@TabTerminalActivity, paneFailureText(), Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_connection_not_found), Toast.LENGTH_SHORT).show()
+                }
                 return@launch
             }
             val created = tabManager.createPanesTab(group.id, group.name, entries, group.splitDirection)
@@ -4899,6 +4916,10 @@ class TabTerminalActivity : TabSSHActivity() {
                     "with ${created.currentEntries().size} window(s)"
             )
             updateViewPagerAdapter()
+            // Some members opened and some did not: say which ones and why, rather than leaving a short grid unexplained.
+            if (paneMemberFailures.isNotEmpty()) {
+                Toast.makeText(this@TabTerminalActivity, paneFailureText(), Toast.LENGTH_LONG).show()
+            }
         }
     }
 

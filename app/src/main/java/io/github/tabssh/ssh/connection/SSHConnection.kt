@@ -245,6 +245,8 @@ class SSHConnection(
     // and clearCachedCredentials() which can race with the JSch reads.
     @Volatile
     private var cachedPassword: String? = null
+    // True once a stored key was handed to JSch for this attempt, so a failed login can say the key was the thing refused.
+    private var keyOfferedToServer = false
 
     // Cached passphrase for encrypted SSH keys. Same threading constraints
     // as cachedPassword.
@@ -1550,6 +1552,7 @@ class SSHConnection(
      */
     private suspend fun setupAuthentication(jsch: JSch, session: Session) = withContext(Dispatchers.IO) {
         val app = context.applicationContext as? io.github.tabssh.TabSSHApplication
+        keyOfferedToServer = false
 
         // Wave 1.5 runtime wiring — when agent forwarding is enabled we
         // populate JSch's identity repository up-front with every stored
@@ -1636,6 +1639,7 @@ class SSHConnection(
                     } else {
                         Logger.i("SSHConnection", "Auth: SSH key added to JSch (keyId=$effectiveKeyId)")
                     }
+                    keyOfferedToServer = true
                     return@withContext
                 } catch (e: Exception) {
                     Logger.e("SSHConnection", "Auth: Failed to add SSH key to JSch", e)
@@ -2554,9 +2558,17 @@ class SSHConnection(
                     )
 
                     msg.contains("Auth cancel", ignoreCase = true) ||
-                    msg.contains("no methods available", ignoreCase = true) -> SSHConnectionErrorInfo(
-                        errorType = "Unsupported Auth Method",
-                        userMessage = "The server does not accept any authentication method this app offered",
+                    msg.contains("no methods available", ignoreCase = true) -> {
+                    // The usual cause: the server refused the stored key and the connection has no saved password
+                    // to fall back on, so every other method the server offered had nothing to send.
+                    val keyRefused = keyOfferedToServer && cachedPassword == null
+                    SSHConnectionErrorInfo(
+                        errorType = if (keyRefused) "SSH Key Rejected" else "Unsupported Auth Method",
+                        userMessage = if (keyRefused) {
+                            "The server refused this connection's SSH key, and no password is saved to fall back on"
+                        } else {
+                            "The server does not accept any authentication method this app offered"
+                        },
                         technicalDetails = buildString {
                             appendLine("Exception: ${effective.javaClass.simpleName}")
                             appendLine("Target: ${loginUser}@${profile.host}:${profile.port}")
@@ -2565,13 +2577,18 @@ class SSHConnection(
                             appendLine("\nStack Trace:")
                             appendLine(original.stackTraceToString())
                         },
-                        possibleSolutions = listOf(
+                        possibleSolutions = if (keyRefused) listOf(
+                            "• Add this key's public half to ~/.ssh/authorized_keys for ${loginUser} on the server",
+                            "• Or pick the key the server already trusts in this connection's auth settings",
+                            "• Or save a password for this connection so it can fall back to it"
+                        ) else listOf(
                             "• Check server's sshd_config: AuthenticationMethods, PubkeyAuthentication, PasswordAuthentication",
                             "• Try a different auth type (key vs password vs keyboard-interactive)",
                             "• Verify the account allows the auth method configured here"
                         ),
                         exception = original
                     )
+                    }
 
                     msg.contains("Auth fail", ignoreCase = true) -> SSHConnectionErrorInfo(
                         errorType = "Authentication Failed",
