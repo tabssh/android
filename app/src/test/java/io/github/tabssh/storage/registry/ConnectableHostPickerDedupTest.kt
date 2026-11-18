@@ -64,4 +64,46 @@ class ConnectableHostPickerDedupTest {
         )
         assertEquals(listOf("profile-1", cloudId, "container_host_1", "container_host_3"), result.map { it.id })
     }
+
+    private fun cloudRow(id: String, name: String, preview: String) = ConnectableHost(
+        id = ConnectableHost.cloudInstanceId("acct", id),
+        sourceType = ConnectableHost.SOURCE_CLOUD_INSTANCE,
+        cloudAccountId = "acct",
+        instanceId = id,
+        name = name,
+        hostPreview = preview
+    )
+
+    @Test
+    fun `a cloud instance a saved connection already points at is listed once`() {
+        val arm = cloudRow("i-arm", "arm.arm64.us", "141.148.37.55 (iad)")
+        val other = cloudRow("i-other", "other", "203.0.113.9 (iad)")
+        val result = ConnectableHostRegistry.withoutSavedConnectionCloudDuplicates(
+            listOf(profile, arm, other), connectionHosts = listOf("141.148.37.55")
+        )
+        assertEquals(listOf("profile-1", other.id), result.map { it.id })
+    }
+
+    @Test
+    fun `a cloud instance is also matched by its name and by an ipv6 address in any form`() {
+        val byName = cloudRow("i-name", "cb.pste.us", "132.226.33.75 (iad)")
+        val byV6 = cloudRow("i-v6", "v6box", "2001:0DB8:0:0:0:0:0:5 (iad)")
+        val result = ConnectableHostRegistry.withoutSavedConnectionCloudDuplicates(
+            listOf(byName, byV6), connectionHosts = listOf("CB.pste.us", "2001:db8::5")
+        )
+        assertEquals(emptyList(), result.map { it.id })
+    }
+
+    @Test
+    fun `a cloud instance that is a saved selection stays and unrelated rows are untouched`() {
+        val arm = cloudRow("i-arm", "arm.arm64.us", "141.148.37.55 (iad)")
+        val kept = ConnectableHostRegistry.withoutSavedConnectionCloudDuplicates(
+            listOf(profile, arm), connectionHosts = listOf("141.148.37.55"), keepIds = setOf(arm.id)
+        )
+        assertEquals(listOf("profile-1", arm.id), kept.map { it.id })
+        val unrelated = ConnectableHostRegistry.withoutSavedConnectionCloudDuplicates(
+            listOf(profile, arm), connectionHosts = listOf("somewhere.else")
+        )
+        assertEquals(listOf("profile-1", arm.id), unrelated.map { it.id })
+    }
 }

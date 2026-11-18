@@ -14,7 +14,10 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.textfield.TextInputEditText
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
+import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.storage.database.entities.Domain
+import io.github.tabssh.storage.database.entities.VpsHost
+import io.github.tabssh.tracker.HostLinkResolver
 import io.github.tabssh.utils.ThrowableMapper
 import io.github.tabssh.utils.showError
 import kotlinx.coroutines.Dispatchers
@@ -60,6 +63,11 @@ class DomainEditActivity : TabSSHActivity() {
     private var editingDomainId: String? = null
     private var editingExisting: Domain? = null
     private var selectedExpirationMillis: Long? = null
+    // The saved SSH connection this domain points at: null = automatic, "" = none, otherwise a connection id.
+    private var linkedHostChoice: String? = null
+    private var sshConnections: List<ConnectionProfile> = emptyList()
+    private var trackedVps: List<VpsHost> = emptyList()
+    private var trackedDomains: List<Domain> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,6 +104,8 @@ class DomainEditActivity : TabSSHActivity() {
             populateFromDb(domainIdToEdit)
         }
 
+        setupLinkedHost()
+
         btnSave.setOnClickListener { saveDomain() }
         btnCancel.setOnClickListener { confirmDiscardIfNeeded { finish() } }
         btnDelete.setOnClickListener { confirmDelete() }
@@ -121,6 +131,58 @@ class DomainEditActivity : TabSSHActivity() {
         switchAutoRenew.setOnCheckedChangeListener { _, _ -> hasUnsavedChanges = true }
 
         enableUnsavedChangesGuard()
+    }
+
+    // ── Linked host ──────────────────────────────────────────────────────────
+
+    /** The Linked host field: the saved SSH connection this domain points at, automatic unless the user picks one or none. */
+    private fun setupLinkedHost() {
+        findViewById<com.google.android.material.textfield.MaterialAutoCompleteTextView>(R.id.spinner_linked_host)
+            .setOnItemClickListener { _, _, position, _ ->
+                linkedHostChoice = when (position) { 0 -> null; 1 -> ""; else -> sshConnections.getOrNull(position - 2)?.id }
+                hasUnsavedChanges = true
+                refreshLinkedHost()
+            }
+        editName.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) { refreshLinkedHost() }
+        })
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    sshConnections = app.database.connectionDao().getAllConnectionsList().filter { it.protocol == "ssh" }
+                    trackedVps = app.database.vpsHostDao().getAllList()
+                    trackedDomains = app.database.domainDao().getAllList()
+                }
+                refreshLinkedHost()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                io.github.tabssh.utils.logging.Logger.w("DomainEditActivity", "Host list unavailable: ${e.message}")
+            }
+        }
+    }
+
+    private fun refreshLinkedHost() {
+        val field = findViewById<com.google.android.material.textfield.MaterialAutoCompleteTextView>(R.id.spinner_linked_host)
+        val name = editName.text?.toString()?.trim().orEmpty()
+        val probe = Domain(
+            id = editingDomainId ?: "", domainName = name, privacyProtection = "", statusAtRegistrar = "", autoRenew = "",
+            createdAt = 0L, modifiedAt = 0L, linkedHost = null
+        )
+        val matched = HostLinkResolver.connectionsForDomain(probe, sshConnections, trackedVps, trackedDomains.filter { it.id != probe.id } + probe)
+        val autoLabel = if (matched.isEmpty()) getString(R.string.conn_edit_link_auto_none)
+        else getString(R.string.conn_edit_link_auto_match, matched.joinToString(", ") { it.getDisplayName() })
+        val items = listOf(autoLabel, getString(R.string.conn_edit_link_none)) +
+            sshConnections.map { "${it.getDisplayName()} — ${it.username}@${it.host}" }
+        field.setAdapter(android.widget.ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, items))
+        val selection = when (linkedHostChoice) {
+            null -> 0
+            "" -> 1
+            else -> sshConnections.indexOfFirst { it.id == linkedHostChoice }.let { if (it >= 0) it + 2 else 0 }
+        }
+        field.setText(items[selection], false)
     }
 
     // ── Setup ────────────────────────────────────────────────────────────────
@@ -170,6 +232,8 @@ class DomainEditActivity : TabSSHActivity() {
             )
             editReminderDays.setText(domain.reminderDaysBefore.toString())
             editNotes.setText(domain.notes ?: "")
+            linkedHostChoice = domain.linkedHost
+            refreshLinkedHost()
             hasUnsavedChanges = false
         }
     }
@@ -201,7 +265,8 @@ class DomainEditActivity : TabSSHActivity() {
             lastReminderSentAt = if (existing?.expirationDate == selectedExpirationMillis) existing?.lastReminderSentAt else null,
             notes = editNotes.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
             createdAt = existing?.createdAt ?: now,
-            modifiedAt = now
+            modifiedAt = now,
+            linkedHost = linkedHostChoice
         )
 
         lifecycleScope.launch {

@@ -216,6 +216,10 @@ class DomainTrackerActivity : TabSSHActivity() {
         }
     }
 
+    /** Saved connection id to its host address, for the CSV's Linked host column. */
+    private suspend fun hostAddressById(): Map<String, String> =
+        app.database.connectionDao().getAllConnectionsList().associate { it.id to it.host }
+
     private fun recomputeSshLinks() {
         sshByDomain = allDomains.associate { d ->
             d.id to io.github.tabssh.tracker.HostLinkResolver.connectionsForDomain(d, linkConnections, linkVpsHosts, allDomains)
@@ -450,7 +454,11 @@ class DomainTrackerActivity : TabSSHActivity() {
                 }
                 val outcome = withContext(Dispatchers.IO) {
                     val dao = app.database.domainDao()
-                    val merged = TrackerImportMerge.mergeDomains(result.domains, dao.getAllList())
+                    val (linkedDomains, hostWarnings) = DomainCsvImportExport.applyHostRefs(
+                        result.domains, result.hostRefs, app.database.connectionDao().getAllConnectionsList()
+                    )
+                    for (warning in hostWarnings) Logger.w(TAG, "CSV import: $warning")
+                    val merged = TrackerImportMerge.mergeDomains(linkedDomains, dao.getAllList())
                     dao.insertAll(merged.rows)
                     merged
                 }
@@ -476,7 +484,7 @@ class DomainTrackerActivity : TabSSHActivity() {
                 withContext(Dispatchers.IO) {
                     val domains = app.database.domainDao().getAllList()
                     isEmpty = domains.isEmpty()
-                    val csv = DomainCsvImportExport.export(domains)
+                    val csv = DomainCsvImportExport.export(domains, hostAddressById())
                     contentResolver.openOutputStream(uri)?.use { out -> out.write(csv.toByteArray()) }
                 }
                 if (!isAlive) return@launch
@@ -500,7 +508,7 @@ class DomainTrackerActivity : TabSSHActivity() {
         lifecycleScope.launch {
             try {
                 val csv = withContext(Dispatchers.IO) {
-                    DomainCsvImportExport.export(app.database.domainDao().getAllList())
+                    DomainCsvImportExport.export(app.database.domainDao().getAllList(), hostAddressById())
                 }
                 if (!isAlive) return@launch
                 io.github.tabssh.ui.dialogs.TextExportDialog.show(

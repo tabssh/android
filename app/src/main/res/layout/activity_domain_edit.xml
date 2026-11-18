@@ -110,6 +110,23 @@
 
             </com.google.android.material.textfield.TextInputLayout>
 
+            <!-- The saved SSH connection this domain points at (many domains may name the same one). -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_linked_host"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/space_sm"
+                android:hint="@string/domain_edit_hint_linked_host"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
+
+                <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                    android:id="@+id/spinner_linked_host"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
             <!-- Notes -->
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/layout_notes"

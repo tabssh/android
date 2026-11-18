@@ -717,7 +717,6 @@ class ImportExportActivity : TabSSHActivity() {
                             ociInstanceId = match.ociInstanceId,
                             routeId = match.routeId,
                             vpsLink = match.vpsLink,
-                            domainLink = match.domainLink,
                             modifiedAt = System.currentTimeMillis()
                         )
                         app.database.connectionDao().updateConnection(merged)

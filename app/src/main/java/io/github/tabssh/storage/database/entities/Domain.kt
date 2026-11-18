@@ -61,5 +61,13 @@ data class Domain(
     val createdAt: Long,
 
     @ColumnInfo(name = "modified_at")
-    val modifiedAt: Long
+    val modifiedAt: Long,
+
+    /**
+     * The saved SSH connection this domain points at, so the tracker can connect to it. null = automatic
+     * (matched on the domain's name, see HostLinkResolver), "" = deliberately none, anything else = a
+     * `connections.id`. Many domains may name the same connection.
+     */
+    @ColumnInfo(name = "linked_host")
+    val linkedHost: String? = null
 )

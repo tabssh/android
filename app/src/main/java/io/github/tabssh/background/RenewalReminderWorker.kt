@@ -128,7 +128,7 @@ class RenewalReminderWorker(
             if (host.lastReminderSentAt == renewal) continue
 
             Logger.i(TAG, "VPS host '${host.hostname}' renewal reminder: $daysRemaining day(s) remaining")
-            val sshNames = HostLinkResolver.connectionsForVps(host, allConnections, allVps, allDomains).map { it.getDisplayName() }
+            val sshNames = HostLinkResolver.connectionsForVps(host, allConnections, allVps).map { it.getDisplayName() }
             NotificationHelper.notifyVpsRenewal(appContext, host.id, host.hostname, daysRemaining, sshNames)
             db.vpsHostDao().update(host.copy(lastReminderSentAt = renewal, modifiedAt = now))
         }

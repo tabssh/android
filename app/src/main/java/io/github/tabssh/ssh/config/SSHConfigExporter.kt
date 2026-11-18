@@ -104,7 +104,9 @@ object SSHConfigExporter {
     internal fun sanitiseHostTag(name: String): String {
         // Double quotes would terminate the quoted form early, so drop them
         // along with the line breaks oneLine() already removes.
-        val cleaned = oneLine(name).replace("\"", "").trim().ifBlank { "host" }
+        // `*` and `?` would turn the alias into a wildcard pattern matching other hosts, and a leading `!` negates it.
+        val cleaned = oneLine(name).replace("\"", "").replace('*', '_').replace('?', '_')
+            .trim().trimStart('!').trim().ifBlank { "host" }
         return if (cleaned.any { it.isWhitespace() }) "\"$cleaned\"" else cleaned
     }
 

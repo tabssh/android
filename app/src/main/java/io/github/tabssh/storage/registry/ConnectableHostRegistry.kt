@@ -254,19 +254,46 @@ object ConnectableHostRegistry {
     }
 
     /**
-     * Registry rows for a host picker, minus container-host rows that merely
-     * duplicate the SSH host they link to. A container host linked to a saved
-     * connection or cloud instance SSHes to that same machine, so listing both
-     * shows one host twice; custom-endpoint container hosts stay. Ids in
+     * Registry rows for a host picker, minus rows that merely duplicate another
+     * row for the same machine: a container host linked to a saved connection
+     * or cloud instance SSHes to that same machine, and a cloud instance whose
+     * address (or name) is a saved connection's host is that connection. Listing
+     * both shows one host twice; custom-endpoint container hosts stay. Ids in
      * [keepIds] (a saved selection such as an existing pane window or port
      * forward) are never dropped, so editing an older record keeps its value.
      */
     suspend fun pickerHosts(db: TabSSHDatabase, keepIds: Set<String> = emptySet()): List<ConnectableHost> =
-        withoutLinkedContainerDuplicates(
-            hosts = db.connectableHostDao().getAllList(),
-            containerHosts = db.containerHostDao().getAllList(),
+        withoutSavedConnectionCloudDuplicates(
+            hosts = withoutLinkedContainerDuplicates(
+                hosts = db.connectableHostDao().getAllList(),
+                containerHosts = db.containerHostDao().getAllList(),
+                keepIds = keepIds
+            ),
+            connectionHosts = db.connectionDao().getAllConnectionsList().map { it.host },
             keepIds = keepIds
         )
+
+    /**
+     * Pure core of the cloud half of [pickerHosts]: a cloud-instance row is dropped when a saved connection
+     * already points at that instance, i.e. its host is the instance's address (IPv6 in any written form) or
+     * the instance's name. The saved connection stays, so the one machine is listed once.
+     */
+    fun withoutSavedConnectionCloudDuplicates(
+        hosts: List<ConnectableHost>,
+        connectionHosts: List<String>,
+        keepIds: Set<String> = emptySet()
+    ): List<ConnectableHost> {
+        fun key(value: String): String {
+            val v = value.trim().lowercase().trimEnd('.')
+            return if (':' in v) io.github.tabssh.tracker.TrackerImportMerge.normalizeIpv6(v) ?: v else v
+        }
+        val saved = connectionHosts.mapNotNull { key(it).takeIf { k -> k.isNotEmpty() } }.toHashSet()
+        return hosts.filter { host ->
+            host.sourceType != ConnectableHost.SOURCE_CLOUD_INSTANCE ||
+                host.id in keepIds ||
+                (key(host.hostPreview.substringBefore(" (")) !in saved && key(host.name) !in saved)
+        }
+    }
 
     /** Pure core of [pickerHosts]; see there for the rule. */
     fun withoutLinkedContainerDuplicates(

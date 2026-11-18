@@ -89,7 +89,6 @@ class VpsTrackerActivity : TabSSHActivity() {
     // Saved SSH connections that belong to each VPS host, by host id (see HostLinkResolver).
     private var sshByHost: Map<String, List<io.github.tabssh.storage.database.entities.ConnectionProfile>> = emptyMap()
     private var linkConnections: List<io.github.tabssh.storage.database.entities.ConnectionProfile> = emptyList()
-    private var linkDomains: List<io.github.tabssh.storage.database.entities.Domain> = emptyList()
     private var currentSortOption: SortOption = SortOption.NAME_ASC
     private var currentFilterOption: FilterOption = FilterOption.ALL
     private var actionMode: ActionMode? = null
@@ -174,15 +173,6 @@ class VpsTrackerActivity : TabSSHActivity() {
                 }
             }
         }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                app.database.domainDao().getAll().collect { domains ->
-                    linkDomains = domains
-                    recomputeSshLinks()
-                    adapter.notifyItemRangeChanged(0, adapter.itemCount)
-                }
-            }
-        }
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -226,7 +216,7 @@ class VpsTrackerActivity : TabSSHActivity() {
 
     private fun recomputeSshLinks() {
         sshByHost = allHosts.associate { h ->
-            h.id to io.github.tabssh.tracker.HostLinkResolver.connectionsForVps(h, linkConnections, allHosts, linkDomains)
+            h.id to io.github.tabssh.tracker.HostLinkResolver.connectionsForVps(h, linkConnections, allHosts)
         }
     }
 

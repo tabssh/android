@@ -40,6 +40,8 @@ object TrackerImportMerge {
                 createdAt = prior.createdAt,
                 canceledAt = prior.canceledAt,
                 notes = prior.notes,
+                // The file only changes the link when it carries one (a blank cell is not "unlink").
+                linkedHost = incoming.linkedHost ?: prior.linkedHost,
                 reminderDaysBefore = prior.reminderDaysBefore,
                 // A new expiry is a new reminder cycle, so the "already reminded" mark no longer applies.
                 lastReminderSentAt = if (incoming.expirationDate == prior.expirationDate) prior.lastReminderSentAt else null

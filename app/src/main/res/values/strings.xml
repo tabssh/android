@@ -3213,10 +3213,10 @@
     <string name="tracker_ssh_choose_title">Connect to</string>
     <string name="conn_edit_links_title">Renewals</string>
     <string name="conn_edit_link_vps_hint">VPS host</string>
-    <string name="conn_edit_link_domain_hint">Domain</string>
     <string name="conn_edit_link_auto_match">Automatic (%1$s)</string>
     <string name="conn_edit_link_auto_none">Automatic (no match)</string>
     <string name="conn_edit_link_none">None</string>
+    <string name="domain_edit_hint_linked_host">Linked host</string>
     <string name="conn_edit_link_renews_fmt">Renews %1$s</string>
     <string name="conn_edit_no_identity">No Identity</string>
     <string name="conn_edit_no_group">No Group</string>

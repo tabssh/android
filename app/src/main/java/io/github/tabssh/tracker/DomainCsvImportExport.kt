@@ -39,6 +39,12 @@ object DomainCsvImportExport {
 
     const val HEADER = "Domain Name,Domain privacy protection status,Domain status at NC,Domain auto-renew status,Domain expiration date"
 
+    /** Header of the optional sixth column, written only when some domain is linked to a host. */
+    const val LINKED_HOST_HEADER = "Linked host"
+
+    // Cell text for a domain deliberately linked to no host; a blank cell means automatic.
+    private const val LINKED_HOST_NONE = "none"
+
     // Registrar exports without a privacy-protection column (e.g. the
     // shorter "Domain Name,Domain status,Domain auto-renew status,Domain
     // expiration date" shape) leave the field genuinely unknown rather than
@@ -69,7 +75,8 @@ object DomainCsvImportExport {
         "expirationDate" to listOf(
             "domain expiration date", "expiration date", "expiry date", "expires", "expiration",
             "exp date", "renewal date", "valid until"
-        )
+        ),
+        "linkedHost" to listOf("linked host", "ssh host", "host")
     ).mapValues { (_, synonyms) -> synonyms.map { normalizeHeader(it) } }
 
     // Tried in order against each expiration-date cell — NameCheap uses
@@ -96,7 +103,16 @@ object DomainCsvImportExport {
     private fun ThreadLocal<SimpleDateFormat>.format(): SimpleDateFormat =
         checkNotNull(get()) { "ThreadLocal SimpleDateFormat initializer returned null" }
 
-    data class ParseResult(val domains: List<Domain>, val warnings: List<String>)
+    /**
+     * [hostRefs] holds each domain's raw "Linked host" cell by lowercase domain name (blank cells are absent):
+     * a host address or connection name, or "none". It cannot be turned into a connection id without the saved
+     * connections, so [applyHostRefs] does that.
+     */
+    data class ParseResult(
+        val domains: List<Domain>,
+        val warnings: List<String>,
+        val hostRefs: Map<String, String> = emptyMap()
+    )
 
     /** Lowercased, whitespace/punctuation-collapsed header text for synonym matching. */
     private fun normalizeHeader(value: String): String =
@@ -125,6 +141,7 @@ object DomainCsvImportExport {
     fun parse(text: String): ParseResult {
         val warnings = mutableListOf<String>()
         val domains = mutableListOf<Domain>()
+        val hostRefs = HashMap<String, String>()
         val now = System.currentTimeMillis()
 
         val records = scanCsvRecords(text)
@@ -160,6 +177,7 @@ object DomainCsvImportExport {
                 status = field("statusAtRegistrar")
                 autoRenew = field("autoRenew")
                 expirationText = field("expirationDate")
+                field("linkedHost").takeIf { it.isNotBlank() }?.let { hostRefs[domainName.lowercase()] = it }
             } else {
                 if (fields.size < 5) {
                     warnings.add("Line ${record.lineNumber}: expected 5 fields, found ${fields.size} — skipped")
@@ -196,20 +214,59 @@ object DomainCsvImportExport {
             )
         }
         Logger.d(TAG, "Parsed ${domains.size} domain(s), ${warnings.size} warning(s)")
-        return ParseResult(domains, warnings)
+        return ParseResult(domains, warnings, hostRefs)
     }
 
-    /** Write [domains] back out in the exact same header/column/date-format shape. */
-    fun export(domains: List<Domain>): String {
+    /**
+     * Turn the parsed "Linked host" cells into links to saved connections: a cell matches a connection whose host
+     * address, or failing that whose name, is the same (ignoring case), and "none" means deliberately none. A cell
+     * that matches nothing leaves the domain on automatic and adds a warning.
+     */
+    fun applyHostRefs(
+        parsed: List<Domain>,
+        hostRefs: Map<String, String>,
+        connections: List<io.github.tabssh.storage.database.entities.ConnectionProfile>
+    ): Pair<List<Domain>, List<String>> {
+        val warnings = mutableListOf<String>()
+        val linked = parsed.map { d ->
+            val ref = hostRefs[d.domainName.lowercase()] ?: return@map d
+            if (ref.equals(LINKED_HOST_NONE, ignoreCase = true)) return@map d.copy(linkedHost = "")
+            val match = connections.firstOrNull { it.host.equals(ref, ignoreCase = true) }
+                ?: connections.firstOrNull { it.name.equals(ref, ignoreCase = true) }
+            if (match == null) {
+                warnings.add("${d.domainName}: no saved connection matches linked host '$ref'")
+                d
+            } else {
+                d.copy(linkedHost = match.id)
+            }
+        }
+        return linked to warnings
+    }
+
+    /**
+     * Write [domains] back out in the NameCheap header/column/date-format shape. When any domain is linked to a
+     * host a sixth "Linked host" column is added, holding the connection's host address, "none" for a deliberate
+     * no-host and blank for automatic; [hostById] maps connection ids to those host addresses. With no links the
+     * file is exactly the five-column shape.
+     */
+    fun export(domains: List<Domain>, hostById: Map<String, String> = emptyMap()): String {
+        fun hostCell(d: Domain): String = when (val link = d.linkedHost) {
+            null -> ""
+            "" -> LINKED_HOST_NONE
+            else -> hostById[link].orEmpty()
+        }
+        val withHosts = domains.any { hostCell(it).isNotEmpty() }
         val sb = StringBuilder()
-        sb.append(HEADER).append('\n')
+        sb.append(HEADER).append(if (withHosts) ",$LINKED_HOST_HEADER" else "").append('\n')
         for (d in domains) {
             val expiration = d.expirationDate?.let { DATE_FORMAT.format().format(it) }.orEmpty()
             sb.append(escapeCsvField(d.domainName)).append(',')
                 .append(escapeCsvField(d.privacyProtection)).append(',')
                 .append(escapeCsvField(d.statusAtRegistrar)).append(',')
                 .append(escapeCsvField(d.autoRenew)).append(',')
-                .append(escapeCsvField(expiration)).append('\n')
+                .append(escapeCsvField(expiration))
+            if (withHosts) sb.append(',').append(escapeCsvField(hostCell(d)))
+            sb.append('\n')
         }
         return sb.toString()
     }

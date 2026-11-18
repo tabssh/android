@@ -326,14 +326,7 @@ data class ConnectionProfile(
      * `vps_hosts.id` chosen by the user.
      */
     @ColumnInfo(name = "vps_link")
-    val vpsLink: String? = null,
-
-    /**
-     * Which tracked domain this connection belongs to. null = automatic (the connection's host is
-     * the domain or one of its subdomains), "" = deliberately none, anything else = a `domains.id`.
-     */
-    @ColumnInfo(name = "domain_link")
-    val domainLink: String? = null
+    val vpsLink: String? = null
 ) {
     fun getAuthTypeEnum(): AuthType = AuthType.fromString(authType)
     
