@@ -2105,41 +2105,47 @@ class TerminalView @JvmOverloads constructor(
     private fun rebuildUrlUnderlines(rows: Int) {
         val urlUnderlineByRow = urlUnderlineCache
         urlUnderlineByRow.clear()
-        var r = 0
-        while (r < rows) {
-            var segEnd = r
-            while (segEnd < rows - 1 && isRowSoftWrapped(segEnd)) segEnd++
-            val combined = buildWrappedWindowText(r, segEnd) ?: ""
-            if (combined.isNotEmpty()) {
-                // Per-row char lengths inside `combined`, computed with the same
-                // joinRowText() that built it — the sum must equal combined.length
-                // (plus one per hard '\n') or the underline offsets drift. Wide
-                // glyphs make a full row's char count differ from `cols`, so the
-                // row text length is measured, never assumed.
-                val nRows = segEnd - r + 1
-                val perRowLen = IntArray(nRows)
-                for (i in 0 until nRows) {
-                    val rr = r + i
-                    perRowLen[i] = joinRowText(rr, rr == segEnd).length
-                }
-                for (urlRange in findUrlRanges(combined, urlPattern)) {
-                    val mStart = urlRange.first
-                    val mEnd = urlRange.last
-                    var acc = 0
+        val separators = if (paneDetectionActive()) paneSeparatorColumns((0 until rows).map { getRowText(it) }) else emptyList()
+        val panes = paneRanges(separators, terminalCols)
+        // A program that splits the screen wraps a long link at its own pane edge, so each pane is joined on its own.
+        for (pane in panes) {
+            val subPane = separators.isNotEmpty()
+            var r = 0
+            while (r < rows) {
+                var segEnd = r
+                while (segEnd < rows - 1 && isRowSoftWrapped(segEnd, pane, subPane)) segEnd++
+                val combined = buildWrappedWindowText(r, segEnd, pane, subPane) ?: ""
+                if (combined.isNotEmpty()) {
+                    // Per-row char lengths inside `combined`, computed with the same
+                    // joinRowText() that built it — the sum must equal combined.length
+                    // (plus one per hard '\n') or the underline offsets drift. Wide
+                    // glyphs make a full row's char count differ from `cols`, so the
+                    // row text length is measured, never assumed.
+                    val nRows = segEnd - r + 1
+                    val perRowLen = IntArray(nRows)
                     for (i in 0 until nRows) {
-                        val rowStart = acc
-                        val rowEnd = acc + perRowLen[i] - 1
-                        if (perRowLen[i] > 0 && mEnd >= rowStart && mStart <= rowEnd) {
-                            val colStart = maxOf(mStart, rowStart) - rowStart
-                            val colEnd = minOf(mEnd, rowEnd) - rowStart
-                            urlUnderlineByRow.getOrPut(r + i) { mutableListOf() }
-                                .add(colStart..colEnd)
+                        val rr = r + i
+                        perRowLen[i] = joinRowText(rr, rr == segEnd, pane, subPane).length
+                    }
+                    for (urlRange in findUrlRanges(combined, urlPattern)) {
+                        val mStart = urlRange.first
+                        val mEnd = urlRange.last
+                        var acc = 0
+                        for (i in 0 until nRows) {
+                            val rowStart = acc
+                            val rowEnd = acc + perRowLen[i] - 1
+                            if (perRowLen[i] > 0 && mEnd >= rowStart && mStart <= rowEnd) {
+                                val colStart = maxOf(mStart, rowStart) - rowStart + pane.first
+                                val colEnd = minOf(mEnd, rowEnd) - rowStart + pane.first
+                                urlUnderlineByRow.getOrPut(r + i) { mutableListOf() }
+                                    .add(colStart..colEnd)
+                            }
+                            acc += perRowLen[i]
                         }
-                        acc += perRowLen[i]
                     }
                 }
+                r = segEnd + 1
             }
-            r = segEnd + 1
         }
     }
 
@@ -2186,13 +2192,18 @@ class TerminalView @JvmOverloads constructor(
      * only consumer is the URL regex and a URL never contains a space — the worst
      * case is a longer candidate string, not a wrong link.
      */
-    private fun isRowSoftWrapped(r: Int): Boolean {
+    private fun isRowSoftWrapped(r: Int, pane: IntRange = 0 until terminalCols, subPane: Boolean = false): Boolean {
         terminalBuffer?.let { if (it.isRowWrapped(r)) return true }
         termuxBuffer?.let { buf ->
             val flagged = try { buf.getLineWrap(r) } catch (_: Exception) { false }
             if (flagged) return true
         }
-        return getRowText(r).trimEnd().length >= terminalCols
+        if (!subPane) return getRowText(r).trimEnd().length >= terminalCols
+        // A program that splits the screen wraps at its pane edge: this row's text reaches the pane's right edge and
+        // the next row picks up at the pane's left edge. (The URL regex is the only consumer, so a false join is harmless.)
+        val reachesRight = getRowText(r).getOrNull(pane.last)?.isWhitespace() == false
+        val resumesLeft = getRowText(r + 1).getOrNull(pane.first)?.isWhitespace() == false
+        return reachesRight && resumesLeft
     }
 
     /**
@@ -2204,9 +2215,10 @@ class TerminalView @JvmOverloads constructor(
      * string (tap-offset math in detectUrlAtPosition, per-row lengths in
      * rebuildUrlUnderlines) must use this function or the offsets drift.
      */
-    private fun joinRowText(r: Int, isLastRow: Boolean): String {
-        val text = getRowText(r)
-        return if (!isLastRow && isRowSoftWrapped(r)) text else text.trimEnd()
+    private fun joinRowText(r: Int, isLastRow: Boolean, pane: IntRange = 0 until terminalCols, subPane: Boolean = false): String {
+        val full = getRowText(r)
+        val text = if (subPane) full.substring(minOf(pane.first, full.length), minOf(pane.last + 1, full.length)) else full
+        return if (!isLastRow && isRowSoftWrapped(r, pane, subPane)) text else text.trimEnd()
     }
 
     /**
@@ -2219,12 +2231,12 @@ class TerminalView @JvmOverloads constructor(
      * the URL regex mid-link and desynchronises the per-row offset math that assumes
      * no separator between joined rows.
      */
-    private fun buildWrappedWindowText(startRow: Int, endRow: Int): String? {
+    private fun buildWrappedWindowText(startRow: Int, endRow: Int, pane: IntRange = 0 until terminalCols, subPane: Boolean = false): String? {
         if (termuxBuffer == null && terminalBuffer == null) return null
         val sb = StringBuilder()
         for (r in startRow..endRow) {
-            sb.append(joinRowText(r, r == endRow))
-            if (r < endRow && !isRowSoftWrapped(r)) sb.append('\n')
+            sb.append(joinRowText(r, r == endRow, pane, subPane))
+            if (r < endRow && !isRowSoftWrapped(r, pane, subPane)) sb.append('\n')
         }
         return sb.toString()
     }
@@ -2269,23 +2281,28 @@ class TerminalView @JvmOverloads constructor(
         // scheme is what's naturally tapped, and it sits on the first wrap
         // row). Falling through lets the wrap-aware reconstruction below
         // return the full URL instead of a cut-off fragment.
-        val rowText = getRowText(row)
+        // In a program that splits the screen, read only the pane the tap is in (see isRowSoftWrapped).
+        val separators = screenPaneSeparators(scrollRows)
+        val pane = paneRanges(separators, terminalCols).firstOrNull { col in it } ?: (0 until terminalCols)
+        val subPane = separators.isNotEmpty() && pane != (0 until terminalCols)
+        val paneCol = if (subPane) col - pane.first else col
+        val rowText = joinRowText(row, true, pane, subPane)
         val rowTrimmedLen = rowText.trimEnd().length
-        findUrlRanges(rowText, urlPattern).firstOrNull { col in it }?.let { urlRange ->
-            val touchesWrapBoundary = urlRange.last >= rowTrimmedLen - 1 && isRowSoftWrapped(row)
+        findUrlRanges(rowText, urlPattern).firstOrNull { paneCol in it }?.let { urlRange ->
+            val touchesWrapBoundary = urlRange.last >= rowTrimmedLen - 1 && isRowSoftWrapped(row, pane, subPane)
             if (!touchesWrapBoundary) return normaliseUrl(rowText.substring(urlRange))
         }
 
         // Walk backward to find the first row of the soft-wrap segment containing `row`.
         // A row r is part of this segment when row r-1 soft-wraps into r.
         var segStart = row
-        while (segStart > minRow && isRowSoftWrapped(segStart - 1)) {
+        while (segStart > minRow && isRowSoftWrapped(segStart - 1, pane, subPane)) {
             segStart--
         }
 
         // Walk forward to find the last row of the segment.
         var segEnd = row
-        while (segEnd < terminalRows - 1 && isRowSoftWrapped(segEnd)) {
+        while (segEnd < terminalRows - 1 && isRowSoftWrapped(segEnd, pane, subPane)) {
             segEnd++
         }
 
@@ -2302,15 +2319,15 @@ class TerminalView @JvmOverloads constructor(
         val winEnd   = segEnd
         if (winStart == row && winEnd == row) return null
 
-        val combined = buildWrappedWindowText(winStart, winEnd) ?: return null
+        val combined = buildWrappedWindowText(winStart, winEnd, pane, subPane) ?: return null
 
         // Compute the character offset of the tap position inside `combined`.
         // Each row before `row` contributes its trimmed text length.  Hard-newline rows
         // add 1 extra for the '\n' separator that appears in the combined string.
-        var tapOffset = col
+        var tapOffset = paneCol
         for (r in winStart until row) {
-            tapOffset += joinRowText(r, false).length
-            if (!isRowSoftWrapped(r)) tapOffset++
+            tapOffset += joinRowText(r, false, pane, subPane).length
+            if (!isRowSoftWrapped(r, pane, subPane)) tapOffset++
         }
         tapOffset = tapOffset.coerceIn(0, combined.length)
 
@@ -3583,8 +3600,20 @@ class TerminalView @JvmOverloads constructor(
     private fun beginSelectionState() {
         blockSelection = false
         val scrollRows = if (cellHeight > 0f) (scrollYInt / cellHeight).toInt() else 0
-        paneSeparators = paneSeparatorColumns((0 until terminalRows).map { getRowText(it - scrollRows) })
+        paneSeparators = screenPaneSeparators(scrollRows)
     }
+
+    /** Test seam: forces pane detection on or off instead of asking the emulator whether a full-screen program is running. */
+    internal var paneDetectionOverride: Boolean? = null
+
+    // Panes only exist in a full-screen program (alternate screen: vim, neovim, tmux, herdr); a table in a plain shell is not one.
+    private fun paneDetectionActive(): Boolean =
+        paneDetectionOverride ?: (termuxBridge?.getEmulator()?.isAlternateBufferActive() == true)
+
+    /** Pane border columns of the screen as drawn now, or none outside a full-screen program. [scrollRows] maps visual to buffer rows. */
+    private fun screenPaneSeparators(scrollRows: Int): List<Int> =
+        if (!paneDetectionActive()) emptyList()
+        else paneSeparatorColumns((0 until terminalRows).map { getRowText(it - scrollRows) })
 
     /** The columns [row] contributes to the selection, or null when it contributes none. */
     private fun selectionColumns(row: Int, range: SelectionRange): IntRange? {
@@ -4481,14 +4510,39 @@ class TerminalView @JvmOverloads constructor(
         // Vertical-line glyphs that draw a pane border in vim, neovim, tmux, herdr and similar programs.
         private const val PANE_BORDER_CHARS = "|\u00a6\u2502\u2503\u2506\u2507\u250a\u250b\u254e\u254f\u2551\u258f\u2595\u258e\u258c\u2590"
 
-        /** Columns holding a vertical-line glyph on at least half of [rowTexts] (and at least three rows): pane borders. */
+        /**
+         * Pane borders: columns holding a vertical-line glyph on an unbroken run of rows at least a sixth of the screen
+         * tall (and at least three). A run, not every row, because a program may draw a border only beside part of the
+         * screen (herdr's agents list) while the pane edge is the same column all the way down.
+         */
         internal fun paneSeparatorColumns(rowTexts: List<String>): List<Int> {
-            if (rowTexts.size < 3) return emptyList()
-            val counts = HashMap<Int, Int>()
+            val minRun = maxOf(3, rowTexts.size / 6)
+            if (rowTexts.size < minRun) return emptyList()
+            val run = HashMap<Int, Int>()
+            val best = HashMap<Int, Int>()
             for (text in rowTexts) {
-                text.forEachIndexed { col, ch -> if (ch in PANE_BORDER_CHARS) counts[col] = (counts[col] ?: 0) + 1 }
+                val hit = HashSet<Int>()
+                text.forEachIndexed { col, ch -> if (ch in PANE_BORDER_CHARS) hit += col }
+                for (col in run.keys.toList()) if (col !in hit) run[col] = 0
+                for (col in hit) {
+                    val n = (run[col] ?: 0) + 1
+                    run[col] = n
+                    if (n > (best[col] ?: 0)) best[col] = n
+                }
             }
-            return counts.filterValues { it >= 3 && it * 2 >= rowTexts.size }.keys.sorted()
+            return best.filterValues { it >= minRun }.keys.sorted()
+        }
+
+        /** The column ranges between pane borders (the whole width when there are none); a border column belongs to no pane. */
+        internal fun paneRanges(separators: List<Int>, cols: Int): List<IntRange> {
+            val out = ArrayList<IntRange>()
+            var start = 0
+            for (sep in separators) {
+                if (sep - 1 >= start) out += start..(sep - 1)
+                start = sep + 1
+            }
+            if (start <= cols - 1) out += start..(cols - 1)
+            return out
         }
 
         /**

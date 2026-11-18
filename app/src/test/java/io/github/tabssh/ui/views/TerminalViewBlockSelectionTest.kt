@@ -41,6 +41,8 @@ class TerminalViewBlockSelectionTest {
         val rows = 4
         val view = TerminalView(ApplicationProvider.getApplicationContext<Application>())
         view.initialize(rows, cols)
+        // These tests stand in for a full-screen program; the emulator is not wired up here.
+        view.paneDetectionOverride = true
         val emulator = TerminalEmulator(silentOutput(), cols, rows, 200, null)
         val divider = if (border) "|" else " "
         val screen = listOf("menu  $divider alpha beta", "agent $divider gamma delta", "new   $divider epsilon", "      $divider zeta")
@@ -115,11 +117,21 @@ class TerminalViewBlockSelectionTest {
     }
 
     @Test
-    fun `pane borders are the columns with a vertical line on at least half the rows`() {
-        val rows = listOf("ab | cd", "ef | gh", "ij   kl", "mn | op")
+    fun `pane borders are the columns with a vertical line on a long enough unbroken run of rows`() {
+        val rows = listOf("ab | cd", "ef | gh", "ij | kl", "mn   op", "qr | st", "uv | wx")
         assertEquals(listOf(3), TerminalView.paneSeparatorColumns(rows))
         assertEquals(emptyList(), TerminalView.paneSeparatorColumns(listOf("a|b", "cd", "ef")))
         assertEquals(emptyList(), TerminalView.paneSeparatorColumns(listOf("a|b", "c|d")))
+        // A border drawn beside only the lower part of a tall screen still counts.
+        val tall = List(24) { if (it >= 14) "side | main" else "side   main" }
+        assertEquals(listOf(5), TerminalView.paneSeparatorColumns(tall))
+    }
+
+    @Test
+    fun `pane ranges are the stretches between borders`() {
+        assertEquals(listOf(0..9), TerminalView.paneRanges(emptyList(), 10))
+        assertEquals(listOf(0..13, 15..52, 54..59), TerminalView.paneRanges(listOf(14, 53), 60))
+        assertEquals(listOf(15..59), TerminalView.paneRanges(listOf(14), 60).drop(1))
     }
 
     @Test
