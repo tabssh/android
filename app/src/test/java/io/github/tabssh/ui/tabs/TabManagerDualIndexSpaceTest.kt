@@ -3,9 +3,13 @@ package io.github.tabssh.ui.tabs
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import io.github.tabssh.ssh.connection.ConnectionState
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -49,8 +53,18 @@ class TabManagerDualIndexSpaceTest {
 
     @After
     fun tearDown() {
+        // closeTab() runs each tab's cleanup on a background scope. If that finishes after resetMain() it cancels
+        // a coroutine whose Main dispatch then fails, and the error surfaces in whichever coroutine test runs next.
+        awaitBackgroundCleanup()
         tabManager.cleanup()
+        awaitBackgroundCleanup()
         Dispatchers.resetMain()
+    }
+
+    private fun awaitBackgroundCleanup() {
+        val scope = TabManager::class.java.getDeclaredField("ioScope").apply { isAccessible = true }
+            .get(tabManager) as CoroutineScope
+        runBlocking { scope.coroutineContext[Job]?.children?.toList()?.joinAll() }
     }
 
     private fun profile(name: String) = ConnectionProfile(

@@ -3978,6 +3978,8 @@
     <string name="terminal_clip_label_ssh_error">SSH Error</string>
     <string name="terminal_clip_label_selection">Terminal selection</string>
     <string name="terminal_clip_label_mosh_handoff">mosh handoff</string>
+    <string name="terminal_select_block">Block</string>
+    <string name="terminal_select_lines">Lines</string>
     <string name="terminal_clipboard_menu_select_text">Select Text…</string>
     <string name="terminal_clipboard_menu_copy_screen">Copy Screen</string>
     <string name="terminal_multiplexer_attach_fmt">Attach: %1$s</string>

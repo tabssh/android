@@ -2199,6 +2199,10 @@ class TabTerminalActivity : TabSSHActivity() {
      */
     private var selectionActionMode: ActionMode? = null
 
+    // The selection bar's switch between rectangular and run-of-text selection names the mode it would change to.
+    private fun blockToggleTitle(view: TerminalView): String =
+        getString(if (view.isBlockSelection()) R.string.terminal_select_lines else R.string.terminal_select_block)
+
     private fun startTerminalSelectionActionMode(view: TerminalView) {
         // Dismiss any stale bar first — guards against the user
         // entering selection twice without finishing the previous one
@@ -2222,9 +2226,14 @@ class TabTerminalActivity : TabSSHActivity() {
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
                 menu.add(0, 4, 3, getString(R.string.cancel))
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                menu.add(0, 5, 4, blockToggleTitle(view))
+                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
                 return true
             }
-            override fun onPrepareActionMode(mode: ActionMode, menu: Menu) = false
+            override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
+                menu.findItem(5)?.title = blockToggleTitle(view)
+                return true
+            }
             override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
                 when (item.itemId) {
                     1 -> {
@@ -2263,6 +2272,11 @@ class TabTerminalActivity : TabSSHActivity() {
                     }
                     4 -> {
                         mode.finish()
+                        return true
+                    }
+                    5 -> {
+                        view.setBlockSelection(!view.isBlockSelection())
+                        mode.invalidate()
                         return true
                     }
                 }

@@ -375,6 +375,13 @@ class TerminalView @JvmOverloads constructor(
     // into view BEFORE entering selection mode.
     // ─────────────────────────────────────────────────────────────────
     private var selectionActive = false
+    /**
+     * Rectangular selection: the columns between the two handles on every row between them, instead of a
+     * run of text from the first handle to the second. It is the default in a full-screen program (vim,
+     * neovim, tmux, herdr), where panes sit side by side and a run of text would take in the neighbouring
+     * pane, and the selection bar can switch it either way.
+     */
+    private var blockSelection = false
     private var selectionAnchorCol = 0
     private var selectionAnchorRow = 0
     private var selectionFocusCol = 0
@@ -538,8 +545,9 @@ class TerminalView @JvmOverloads constructor(
         if (!selectionActive || cellWidth <= 0f || cellHeight <= 0f) return false
         val (startRow, startCol, endRow, endCol) = normalisedSelection()
         val singleRow = startRow == endRow
-        val left = paddingLeft + (if (singleRow) startCol else 0) * cellWidth
-        val right = paddingLeft + (if (singleRow) endCol + 1 else terminalCols) * cellWidth
+        val (blockLeft, blockRight) = blockColumns(selectionAnchorCol, selectionFocusCol)
+        val left = paddingLeft + (if (blockSelection) blockLeft else if (singleRow) startCol else 0) * cellWidth
+        val right = paddingLeft + (if (blockSelection) blockRight + 1 else if (singleRow) endCol + 1 else terminalCols) * cellWidth
         val top = gridTop + startRow * cellHeight
         val bottom = gridTop + (endRow + 1) * cellHeight
         out.set(
@@ -3483,6 +3491,7 @@ class TerminalView @JvmOverloads constructor(
      * floating ActionMode.
      */
     fun enterSelectionMode(x: Float, y: Float) {
+        blockSelection = defaultBlockSelection()
         val (col, row) = pixelToCell(x, y)
         selectionAnchorCol = col
         selectionAnchorRow = row
@@ -3520,6 +3529,7 @@ class TerminalView @JvmOverloads constructor(
      * single-cell anchor so the user can still drag to select.
      */
     fun beginWordSelectionAtTouch(x: Float, y: Float) {
+        blockSelection = defaultBlockSelection()
         val result = getTextAtPosition(x, y)
         if (result != null) {
             val (row, text) = result
@@ -3553,6 +3563,20 @@ class TerminalView @JvmOverloads constructor(
         invalidate()
         onSelectionStarted?.invoke()
     }
+
+    /** Whether the selection is rectangular (see [blockSelection]). */
+    fun isBlockSelection(): Boolean = blockSelection
+
+    /** Switch between rectangular and run-of-text selection, keeping the two handles where they are. */
+    fun setBlockSelection(block: Boolean) {
+        if (blockSelection == block) return
+        blockSelection = block
+        invalidate()
+        onSelectionBoundsChanged?.invoke()
+    }
+
+    // A full-screen program (alternate screen buffer) lays text out in panes and columns, so rectangular fits it.
+    private fun defaultBlockSelection(): Boolean = termuxBridge?.getEmulator()?.isAlternateBufferActive() == true
 
     /**
      * Clear the selection state and redraw. Called by the host activity
@@ -3625,6 +3649,17 @@ class TerminalView @JvmOverloads constructor(
         // real mLineWrap flag is accurate, so joinFullLines stays false there
         // to avoid falsely joining a hard line that happens to fill the width.
         val joinFullLines = termuxBridge?.isMoshSessionAlive() == true
+        if (blockSelection) {
+            val (left, right) = blockColumns(selectionAnchorCol, selectionFocusCol)
+            return try {
+                (extStartRow..extEndRow).joinToString("\n") { row ->
+                    (buffer.getSelectedText(left, row, right, row, true, false) ?: "").trimEnd()
+                }
+            } catch (e: Exception) {
+                Logger.w("TerminalView", "getSelectedText failed: ${e.message}")
+                null
+            }?.trimEnd('\n')?.takeIf { it.isNotEmpty() }
+        }
         return try {
             getWrapAwareSelectionText(buffer, startCol, extStartRow, endCol, extEndRow, joinFullLines)
         } catch (e: Exception) {
@@ -3773,9 +3808,10 @@ class TerminalView @JvmOverloads constructor(
         val startX = paddingLeft.toFloat()
         val startY = gridTop
 
+        val (blockLeft, blockRight) = blockColumns(selectionAnchorCol, selectionFocusCol)
         for (row in startRow..endRow) {
-            val colA = if (row == startRow) startCol else 0
-            val colB = if (row == endRow) endCol else (terminalCols - 1)
+            val colA = if (blockSelection) blockLeft else if (row == startRow) startCol else 0
+            val colB = if (blockSelection) blockRight else if (row == endRow) endCol else (terminalCols - 1)
             val left = startX + colA * cellWidth
             val right = startX + (colB + 1) * cellWidth
             val top = startY + row * cellHeight
@@ -4420,6 +4456,10 @@ class TerminalView @JvmOverloads constructor(
 
         /** A second touch-down within this window of a tap becomes a held-button drag. */
         private const val TAP_DRAG_WINDOW_MS = 300L
+        /** The inclusive column span of a rectangular selection, whichever handle is further left. */
+        internal fun blockColumns(anchorCol: Int, focusCol: Int): Pair<Int, Int> =
+            minOf(anchorCol, focusCol) to maxOf(anchorCol, focusCol)
+
         // Raw URL in [text] whose range contains [offset], or null when none does
         internal fun urlCoveringOffset(text: String, offset: Int, pattern: Regex): String? =
             findUrlRanges(text, pattern).firstOrNull { offset in it }?.let { text.substring(it) }
