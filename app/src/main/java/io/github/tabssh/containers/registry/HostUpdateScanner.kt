@@ -16,7 +16,8 @@ import io.github.tabssh.storage.database.entities.ContainerHost
  */
 class HostUpdateScanner(
     private val policyDao: ContainerAutoUpdatePolicyDao,
-    private val checker: UpdateChecker
+    private val checker: UpdateChecker,
+    private val stackPruner: StackPruner? = null
 ) {
 
     /** The global tier of the update settings. */
@@ -40,6 +41,7 @@ class HostUpdateScanner(
         global: GlobalSettings,
         transport: ContainerTransport
     ): List<FoundUpdate>? {
+        stackPruner?.prune(host, transport)
         val containers = (transport.listContainers(all = false) as? ContainerResult.Success)?.value
             ?: return null
         val byName = hostPolicies.filter { it.scope != SCOPE_STACK }
@@ -48,11 +50,20 @@ class HostUpdateScanner(
             .associateBy { it.containerNameOrStackName }
 
         val found = mutableListOf<FoundUpdate>()
+        val dirExists = mutableMapOf<String, Boolean>()
         for (container in containers) {
             val name = container.names.firstOrNull()?.trimStart('/') ?: continue
             if (name.endsWith(RecreateContainer.OLD_NAME_SUFFIX)) continue
             val project = container.labels[UpdateApplier.COMPOSE_PROJECT_LABEL]?.takeIf { it.isNotEmpty() }
             var policy = byName[name]
+            // A compose container whose project directory was deleted has nothing to update through.
+            val workDir = container.labels[UpdateApplier.COMPOSE_WORKDIR_LABEL]?.takeIf { it.isNotEmpty() }
+            if (project != null && workDir != null &&
+                !dirExists.getOrPut(workDir) { StackPruner.directoryExists(transport, workDir) }
+            ) {
+                policy?.let { policyDao.updatePendingUpdateDigest(it.id, null) }
+                continue
+            }
             val stack = project?.let { byProject[it] }
             val settings = UpdateSettingsResolver.resolve(
                 global.enabled, global.autoApply, global.intervalHours,

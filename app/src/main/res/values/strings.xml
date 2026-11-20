@@ -655,7 +655,7 @@
     <string name="container_stack_action_up">Up</string>
     <string name="container_stack_action_down">Down</string>
     <string name="container_stack_action_restart">Restart</string>
-    <string name="container_stack_delete_message">Delete stack %1$s? Its containers are stopped (compose down); the files on the host are kept.</string>
+    <string name="container_stack_delete_message">Permanently delete stack %1$s? Its containers are removed (compose down) and its files on the host are deleted: the whole stack directory when it is inside the host\u2019s compose directory, otherwise only the compose files. Volumes and bind-mounted data outside that directory are kept. This cannot be undone.</string>
     <string name="container_stack_action_output_title">%1$s output</string>
     <string name="container_stack_services">Services</string>
     <string name="container_action_logs">Logs</string>

@@ -31,6 +31,7 @@ class RemoteExecOps(
         private const val TAG = "RemoteExecOps"
         private const val COMPOSE_TIMEOUT_MS = 300_000L
         private const val FILE_TIMEOUT_MS = 60_000L
+        private val COMPOSE_FILE_NAMES = listOf("compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml")
         private const val COMPOSEMGR_DIRS = "/usr/local/bin /usr/local/sbin /usr/bin /usr/sbin /bin " +
             "/opt/bin /opt/local/bin /snap/bin \"\$HOME/.local/bin\" \"\$HOME/bin\" \"\$HOME/go/bin\""
     }
@@ -337,6 +338,51 @@ class RemoteExecOps(
             ?: ContainerResult.Success(log.toString().trimEnd())
     }
 
+    /**
+     * Permanently delete a stack: `down` (unless [runDown] is false because the caller already
+     * stopped it), then remove its files on the host. The whole directory goes only when it sits
+     * strictly inside the host's compose base path; elsewhere just the compose file(s) are removed
+     * so a directory the user keeps other data in is never wiped. A failed `down` aborts before
+     * anything is deleted, so running containers are never orphaned.
+     */
+    suspend fun composeDelete(stackDir: String, runDown: Boolean = true): ContainerResult<String> {
+        gate.reject(EngineCapability.COMPOSE_STACKS)?.let { return it }
+        return withExpanded(stackDir) { real ->
+            val dir = real.trimEnd('/')
+            if (!dir.startsWith("/") || dir.split('/').any { it == ".." || it == "." }) {
+                return@withExpanded ContainerResult.Error("Refusing to delete an unsafe stack path", dir)
+            }
+            val quoted = SshExecRunner.shQuote(dir)
+            if (!runner.run("[ -d $quoted ]", FILE_TIMEOUT_MS).isSuccess) {
+                return@withExpanded ContainerResult.Success("Stack directory is already gone: $dir")
+            }
+            val log = StringBuilder()
+            if (runDown) {
+                when (val down = composeDown(dir)) {
+                    is ContainerResult.Success -> log.append("\$ down\n").append(down.value.trimEnd()).append('\n')
+                    else -> return@withExpanded down
+                }
+            }
+            val base = (expandRemotePath(host.composeBasePath.trimEnd('/')) as? ContainerResult.Success)
+                ?.value?.trimEnd('/').orEmpty()
+            val wholeDir = base.isNotEmpty() && dir.startsWith("$base/")
+            val command = if (wholeDir) {
+                "rm -rf -- $quoted"
+            } else {
+                "rm -f -- " + COMPOSE_FILE_NAMES.joinToString(" ") { SshExecRunner.shQuote("$dir/$it") }
+            }
+            val result = runner.run(command, FILE_TIMEOUT_MS)
+            if (!result.isSuccess) {
+                return@withExpanded failureWithOutput("Deleting the stack files failed", result)
+            }
+            log.append(
+                if (wholeDir) "Deleted directory $dir"
+                else "Deleted the compose files in $dir (outside $base, so the directory was kept)"
+            )
+            ContainerResult.Success(log.toString())
+        }
+    }
+
     suspend fun composePs(stackDir: String): ContainerResult<String> =
         composeCommand(stackDir, "ps --format json")
 
@@ -398,8 +444,7 @@ class RemoteExecOps(
     private suspend fun scanDownStacks(known: Set<String>): List<ComposeLsEntry> = try {
         when (val base = expandRemotePath(host.composeBasePath.trimEnd('/'))) {
             is ContainerResult.Success -> {
-                val names = listOf("compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml")
-                    .joinToString(" -o ") { "-name '$it'" }
+                val names = COMPOSE_FILE_NAMES.joinToString(" -o ") { "-name '$it'" }
                 val result = runner.run(
                     "find ${SshExecRunner.shQuote(base.value)} -mindepth 2 -maxdepth 2 -type f " +
                         "\\( $names \\) 2>/dev/null",

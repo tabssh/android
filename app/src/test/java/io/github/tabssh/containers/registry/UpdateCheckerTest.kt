@@ -388,6 +388,7 @@ private open class FakeTransport : ContainerTransport {
     override suspend fun diskUsage(): ContainerResult<ContainerDiskUsage> = unsupported()
     override suspend fun composeUp(stackDir: String): ContainerResult<String> = unsupported()
     override suspend fun composeDown(stackDir: String): ContainerResult<String> = unsupported()
+    override suspend fun composeDelete(stackDir: String, runDown: Boolean): ContainerResult<String> = unsupported()
     override suspend fun composePull(stackDir: String): ContainerResult<String> = unsupported()
     override suspend fun composeRestart(stackDir: String): ContainerResult<String> = unsupported()
     override suspend fun composeUpdate(stackDir: String): ContainerResult<String> = unsupported()

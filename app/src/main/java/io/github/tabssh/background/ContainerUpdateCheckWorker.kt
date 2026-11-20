@@ -12,6 +12,7 @@ import io.github.tabssh.containers.registry.RegistryClient
 import io.github.tabssh.containers.registry.UpdateApplier
 import io.github.tabssh.containers.registry.UpdateChecker
 import io.github.tabssh.containers.registry.HostUpdateScanner
+import io.github.tabssh.containers.registry.StackPruner
 import io.github.tabssh.containers.transport.ContainerResult
 import io.github.tabssh.containers.transport.ContainerTransport
 import io.github.tabssh.containers.transport.SshExecRunner
@@ -331,7 +332,9 @@ class ContainerUpdateCheckWorker(
         ) ?: return false
 
         try {
-            val found = HostUpdateScanner(app.database.containerAutoUpdatePolicyDao(), checker)
+            val found = HostUpdateScanner(
+                app.database.containerAutoUpdatePolicyDao(), checker, StackPruner(app, app.database)
+            )
                 .scan(host, hostPolicies, global, transport)
                 ?: return false
             collectAndApply(host, found, applier, transport, outcome)

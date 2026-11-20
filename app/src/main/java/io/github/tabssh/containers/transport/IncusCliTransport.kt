@@ -526,6 +526,9 @@ class IncusCliTransport(
     override suspend fun composeDown(stackDir: String): ContainerResult<String> =
         remoteOps.composeDown(stackDir)
 
+    override suspend fun composeDelete(stackDir: String, runDown: Boolean): ContainerResult<String> =
+        remoteOps.composeDelete(stackDir, runDown)
+
     override suspend fun composePull(stackDir: String): ContainerResult<String> =
         remoteOps.composePull(stackDir)
 

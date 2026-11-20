@@ -262,13 +262,10 @@ class ContainerStacksFragment : ContainerPageFragment() {
                 )
             }
         }
-        // Deleting a Room row makes no sense for a stack that has none.
-        if (item is StackListItem.Tracked) {
-            actions += ContainerActionSheet.Action(
-                R.drawable.ic_clear, getString(R.string.delete), destructive = true
-            ) {
-                confirmDelete(item.stack)
-            }
+        actions += ContainerActionSheet.Action(
+            R.drawable.ic_clear, getString(R.string.delete), destructive = true
+        ) {
+            confirmDelete(item)
         }
         val subtitle = when (item) {
             is StackListItem.Tracked -> item.stack.remotePath
@@ -349,42 +346,46 @@ class ContainerStacksFragment : ContainerPageFragment() {
         startActivity(intent)
     }
 
-    private fun confirmDelete(stack: ComposeStack) {
+    private fun confirmDelete(item: StackListItem) {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle(stack.name)
-            .setMessage(getString(R.string.container_stack_delete_message, stack.name))
-            .setPositiveButton(R.string.delete) { _, _ -> deleteStack(stack) }
+            .setTitle(item.name)
+            .setMessage(getString(R.string.container_stack_delete_message, item.name))
+            .setPositiveButton(R.string.delete) { _, _ -> deleteStack(item) }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
-    /** Best-effort compose down, then remove the Room row (remote files kept). */
-    private fun deleteStack(stack: ComposeStack) {
-        progressBar.visibility = View.VISIBLE
-        // Captured before the app-scope launch — the fragment may detach
-        // while the delete is still running.
-        val currentSession = session
-        // Application scope + IO dispatcher: composeDown is a remote SSH
-        // round-trip and the DAO work is a DB write — neither belongs on
-        // Main, and the delete must survive the view being destroyed.
-        // The transaction keeps row delete + tombstone atomic (a partial
-        // commit could resurrect the stack on the next sync).
-        app.applicationScope.launch(Dispatchers.IO) {
-            try {
-                currentSession?.transport?.composeDown(stack.remotePath)
-                app.database.withTransaction {
-                    app.database.composeStackDao().delete(stack)
-                    io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
-                        app.applicationContext, io.github.tabssh.sync.tombstone.TombstoneRecorder.COMPOSE_STACK,
-                        io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(stack))
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } finally {
-                withContext(Dispatchers.Main) {
-                    if (isAdded) progressBar.visibility = View.GONE
+    /**
+     * Permanent delete: compose down, then the stack's files on the host, then (for a tracked
+     * stack) the Room row and its tombstone. A failure at any remote step keeps the row and is
+     * shown, so a stack that could not be stopped or removed is never silently forgotten.
+     */
+    private fun deleteStack(item: StackListItem) {
+        val current = session ?: return
+        runComposeAction(item) {
+            val transport = current.transport
+            val result = when (item) {
+                is StackListItem.Tracked -> transport.composeDelete(item.stack.remotePath)
+                is StackListItem.External -> {
+                    val dir = item.entry.primaryConfigFile.substringBefore(',').trim().substringBeforeLast('/', "")
+                    val down = transport.composeDownByProject(item.entry.name, item.entry.primaryConfigFile)
+                    if (dir.isEmpty() || down !is ContainerResult.Success) down
+                    else transport.composeDelete(dir, runDown = false)
                 }
             }
+            if (result is ContainerResult.Success && item is StackListItem.Tracked) {
+                withContext(Dispatchers.IO) {
+                    app.database.withTransaction {
+                        app.database.composeStackDao().delete(item.stack)
+                        io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
+                            app.applicationContext,
+                            io.github.tabssh.sync.tombstone.TombstoneRecorder.COMPOSE_STACK,
+                            io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(item.stack)
+                        )
+                    }
+                }
+            }
+            result
         }
     }
 }

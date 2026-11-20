@@ -60,7 +60,7 @@ class UpdateApplier(
 
         /** Label compose stamps on every container it creates. */
         const val COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
-        private const val COMPOSE_WORKDIR_LABEL = "com.docker.compose.project.working_dir"
+        const val COMPOSE_WORKDIR_LABEL = "com.docker.compose.project.working_dir"
 
         /** True when the inspected container was created by compose (carries the project label). */
         fun isComposeManaged(inspect: JSONObject): Boolean =

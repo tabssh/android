@@ -274,6 +274,9 @@ interface ContainerTransport {
 
     suspend fun composeDown(stackDir: String): ContainerResult<String>
 
+    /** Permanently delete a stack: `down`, then its files on the host (see RemoteExecOps.composeDelete). */
+    suspend fun composeDelete(stackDir: String, runDown: Boolean = true): ContainerResult<String>
+
     suspend fun composePull(stackDir: String): ContainerResult<String>
 
     suspend fun composeRestart(stackDir: String): ContainerResult<String>

@@ -18,6 +18,7 @@ import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.R
 import io.github.tabssh.containers.ContainerSessionManager
 import io.github.tabssh.containers.registry.HostUpdateScanner
+import io.github.tabssh.containers.registry.StackPruner
 import io.github.tabssh.containers.registry.RegistryClient
 import io.github.tabssh.containers.registry.Resolved
 import io.github.tabssh.containers.registry.UpdateApplier
@@ -428,7 +429,7 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
                     dao, app.database.registryCredentialDao(), RegistryClient()
                 ) { credentialId -> RegistryCredentialStore.retrieve(appContext, credentialId) }
                 val hostPolicies = dao.getPoliciesForHost(host.id).first()
-                val found = HostUpdateScanner(dao, checker)
+                val found = HostUpdateScanner(dao, checker, StackPruner(appContext, app.database))
                     .scan(host, hostPolicies, globalSettings(), current.transport)
                 if (found != null) {
                     app.database.containerHostDao().updateLastUpdateCheck(host.id, System.currentTimeMillis())

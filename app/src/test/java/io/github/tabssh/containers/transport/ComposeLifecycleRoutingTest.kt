@@ -126,4 +126,47 @@ class ComposeLifecycleRoutingTest {
         val out = (ops(rec).composeUpdate("/srv/me/compose/web") as ContainerResult.Success).value
         assertTrue(out.contains("\$ down") && out.contains("\$ pull") && out.contains("\$ up"))
     }
+
+    @Test
+    fun `delete stops the stack then removes its whole directory inside the base path`() = runBlocking {
+        val rec = Recorder(withComposemgr = true).also { it.install() }
+        val result = ops(rec).composeDelete("/srv/me/compose/web")
+        assertTrue(result is ContainerResult.Success)
+        val down = rec.commands.indexOfFirst { it.endsWith("--dir '/srv/me/compose/web' down") }
+        val rm = rec.commands.indexOfFirst { it == "rm -rf -- '/srv/me/compose/web'" }
+        assertTrue(down >= 0 && rm > down)
+    }
+
+    @Test
+    fun `delete outside the base path removes only the compose files`() = runBlocking {
+        val rec = Recorder(withComposemgr = true).also { it.install() }
+        ops(rec).composeDelete("/opt/apps/web")
+        assertTrue(rec.commands.none { it.startsWith("rm -rf") })
+        assertTrue(rec.commands.any { it.startsWith("rm -f -- ") && it.contains("'/opt/apps/web/compose.yaml'") })
+    }
+
+    @Test
+    fun `a failed down aborts the delete before anything is removed`() = runBlocking {
+        val rec = Recorder(withComposemgr = true)
+        whenever(rec.runner.run(any(), any())).thenAnswer { call ->
+            val cmd = call.getArgument<String>(0)
+            rec.commands += cmd
+            when {
+                cmd.startsWith("command -v composemgr") -> ExecResult("/usr/local/bin/composemgr\n", "", 0)
+                cmd.endsWith(" down") -> ExecResult("", "cannot stop", 1)
+                else -> ExecResult("ok", "", 0)
+            }
+        }
+        val result = ops(rec).composeDelete("/srv/me/compose/web")
+        assertTrue(result !is ContainerResult.Success)
+        assertTrue(rec.commands.none { it.startsWith("rm ") })
+    }
+
+    @Test
+    fun `an unsafe path is refused`() = runBlocking {
+        val rec = Recorder(withComposemgr = true).also { it.install() }
+        val result = ops(rec).composeDelete("/srv/me/compose/../../etc")
+        assertTrue(result is ContainerResult.Error)
+        assertTrue(rec.commands.none { it.startsWith("rm ") })
+    }
 }
