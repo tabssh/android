@@ -59,6 +59,26 @@ sealed class ContainerResult<out T> {
         is Error -> this
     }
 
+    /** Replace the detail of a failure (the full command output), passing success through unchanged. */
+    fun withDetail(detail: String?): ContainerResult<T> = when (this) {
+        is Success -> this
+        is PermissionDenied -> copy(detail = detail)
+        is NotFound -> copy(detail = detail)
+        is EngineNotInstalled -> copy(detail = detail)
+        is TransportUnavailable -> copy(detail = detail)
+        is Error -> copy(detail = detail)
+    }
+
+    /** The failure's detail text, or null for success or a failure without one. */
+    fun detailOrNull(): String? = when (this) {
+        is Success -> null
+        is PermissionDenied -> detail
+        is NotFound -> detail
+        is EngineNotInstalled -> detail
+        is TransportUnavailable -> detail
+        is Error -> detail
+    }
+
     /** The success value, or null for any failure. */
     fun valueOrNull(): T? = (this as? Success)?.value
 }

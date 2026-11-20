@@ -76,6 +76,8 @@ object UpdateApplyDialog {
         val view = LayoutInflater.from(context).inflate(R.layout.dialog_update_apply, null)
         val textStep = view.findViewById<TextView>(R.id.text_step)
         val textStatus = view.findViewById<TextView>(R.id.text_status)
+        val textOutput = view.findViewById<TextView>(R.id.text_output)
+        val scrollOutput = view.findViewById<View>(R.id.scroll_output)
 
         var applyJob: Job? = null
         val dialog = MaterialAlertDialogBuilder(context)
@@ -103,6 +105,7 @@ object UpdateApplyDialog {
                         is UpdateApplier.ApplyEvent.Completed -> {
                             textStep.setText(R.string.container_update_apply_done)
                             textStatus.visibility = View.GONE
+                            showOutput(scrollOutput, textOutput, event.output)
                             dialog.setCancelable(true)
                         }
                         is UpdateApplier.ApplyEvent.Failed -> {
@@ -116,6 +119,7 @@ object UpdateApplyDialog {
                             } else {
                                 context.getString(R.string.container_update_apply_failed, stepName, message)
                             }
+                            showOutput(scrollOutput, textOutput, event.output)
                             dialog.setCancelable(true)
                         }
                     }
@@ -134,5 +138,13 @@ object UpdateApplyDialog {
         }
 
         dialog.show()
+    }
+
+    /** Shows the complete command output (sanitised, nothing truncated short of the block cap). */
+    private fun showOutput(scroll: View, text: TextView, output: String) {
+        val clean = ContainerText.block(output).trim()
+        if (clean.isEmpty()) return
+        text.text = clean
+        scroll.visibility = View.VISIBLE
     }
 }

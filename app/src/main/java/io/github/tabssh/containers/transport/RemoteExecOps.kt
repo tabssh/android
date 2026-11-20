@@ -31,6 +31,8 @@ class RemoteExecOps(
         private const val TAG = "RemoteExecOps"
         private const val COMPOSE_TIMEOUT_MS = 300_000L
         private const val FILE_TIMEOUT_MS = 60_000L
+        private const val COMPOSEMGR_DIRS = "/usr/local/bin /usr/local/sbin /usr/bin /usr/sbin /bin " +
+            "/opt/bin /opt/local/bin /snap/bin \"\$HOME/.local/bin\" \"\$HOME/bin\" \"\$HOME/go/bin\""
     }
 
     private val engine: ContainerEngine = host.engineType()
@@ -45,8 +47,9 @@ class RemoteExecOps(
     @Volatile private var remoteUser: String? = null
     @Volatile private var remoteHome: String? = null
 
-    /** Whether composemgr is installed on the remote, probed once per instance. */
-    @Volatile private var composemgrAvailable: Boolean? = null
+    /** Absolute composemgr path on the remote (null when absent), set once [composemgrProbed] is true. */
+    @Volatile private var composemgrPath: String? = null
+    @Volatile private var composemgrProbed: Boolean = false
 
     /** Compose invocation, detected once per instance. */
     @Volatile private var composeInvocation: ComposeInvocation? = null
@@ -231,18 +234,51 @@ class RemoteExecOps(
     suspend fun composeRestart(stackDir: String): ContainerResult<String> =
         composeLifecycle(stackDir, "restart", "restart")
 
-    /** True when the `composemgr` helper is on the remote PATH; probed once per instance. */
-    private suspend fun hasComposemgr(): Boolean {
-        composemgrAvailable?.let { return it }
+    /**
+     * Absolute path of the `composemgr` helper on the remote, or null when it is not installed.
+     * A non-interactive SSH exec gets a minimal PATH that often lacks /usr/local/bin and the
+     * user's own bin directories, so PATH is tried first and then those directories directly.
+     * Only a definite answer is cached; a failed probe is retried on the next call.
+     */
+    private suspend fun composemgrBinary(): String? {
+        if (composemgrProbed) return composemgrPath
+        val probe = "command -v composemgr 2>/dev/null || for d in " + COMPOSEMGR_DIRS +
+            "; do [ -x \"\$d/composemgr\" ] && echo \"\$d/composemgr\" && break; done"
         val found = try {
-            runner.run("command -v composemgr", FILE_TIMEOUT_MS).isSuccess
+            val result = runner.run(probe, FILE_TIMEOUT_MS)
+            result.stdout.lineSequence().map { it.trim() }.firstOrNull { it.startsWith("/") }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            false
+            Logger.w(TAG, "composemgr probe failed: ${e.message}")
+            return null
         }
-        composemgrAvailable = found
+        composemgrPath = found
+        composemgrProbed = true
+        Logger.i(TAG, "composemgr probe: ${found ?: "not found"}")
         return found
+    }
+
+    /** Both streams of a finished command, stdout first, nothing dropped. */
+    private fun fullOutput(result: ExecResult): String = buildString {
+        append(result.stdout.trimEnd())
+        if (result.stderr.isNotBlank()) {
+            if (isNotEmpty()) append('\n')
+            append(result.stderr.trimEnd())
+        }
+    }
+
+    /** Failure for a non-zero [result]: classified as before, carrying the entire output and exit code. */
+    private fun failureWithOutput(context: String, result: ExecResult): ContainerResult<Nothing> {
+        val classified = DockerCliParsers.classifyFailure(context, result.stderr, result.stdout, engine)
+        val output = fullOutput(result)
+        val detail = (if (output.isEmpty()) "" else output + "\n") + "[exit ${result.exitStatus}]"
+        val withExit = if (classified is ContainerResult.Error) {
+            classified.copy(message = "$context (exit ${result.exitStatus})")
+        } else {
+            classified
+        }
+        return withExit.withDetail(detail)
     }
 
     /**
@@ -255,18 +291,17 @@ class RemoteExecOps(
         composeArgs: String
     ): ContainerResult<String> {
         gate.reject(EngineCapability.COMPOSE_STACKS)?.let { return it }
-        if (!hasComposemgr()) return composeCommand(stackDir, composeArgs)
+        val mgr = composemgrBinary() ?: return composeCommand(stackDir, composeArgs)
         val env = cliContext.envPrefix()
         return withExpanded(stackDir) { real ->
             val result = runner.run(
-                "${env}composemgr --dir ${SshExecRunner.shQuote(real)} $mgrVerb", COMPOSE_TIMEOUT_MS
+                "${env}${SshExecRunner.shQuote(mgr)} --dir ${SshExecRunner.shQuote(real)} $mgrVerb",
+                COMPOSE_TIMEOUT_MS
             )
             if (result.isSuccess) {
-                ContainerResult.Success(result.stdout.ifEmpty { result.stderr })
+                ContainerResult.Success(fullOutput(result))
             } else {
-                DockerCliParsers.classifyFailure(
-                    "composemgr $mgrVerb failed", result.stderr, result.stdout, engine
-                )
+                failureWithOutput("composemgr $mgrVerb failed", result)
             }
         }
     }
@@ -287,16 +322,19 @@ class RemoteExecOps(
         var pullFailure: ContainerResult<String>? = null
         for ((name, fatal, run) in steps) {
             val result = run()
+            log.append("\$ ").append(name).append('\n')
             if (result is ContainerResult.Success) {
-                log.append(result.value)
-            } else if (fatal) {
-                return result
+                if (result.value.isNotBlank()) log.append(result.value.trimEnd()).append('\n')
             } else {
+                result.detailOrNull()?.takeIf { it.isNotBlank() }?.let { log.append(it.trimEnd()).append('\n') }
+                log.append("[$name failed]\n")
+                if (fatal) return result.withDetail(log.toString().trimEnd())
                 Logger.w(TAG, "compose $name failed; continuing so the stack comes back up")
                 pullFailure = result
             }
         }
-        return pullFailure ?: ContainerResult.Success(log.toString())
+        return pullFailure?.withDetail(log.toString().trimEnd())
+            ?: ContainerResult.Success(log.toString().trimEnd())
     }
 
     suspend fun composePs(stackDir: String): ContainerResult<String> =
@@ -405,7 +443,7 @@ class RemoteExecOps(
         composeArgs: String
     ): ContainerResult<String> {
         val dir = configFile.substringBefore(',').trim().substringBeforeLast('/', "")
-        if (dir.isNotEmpty() && dir.substringAfterLast('/') == name && hasComposemgr()) {
+        if (dir.isNotEmpty() && dir.substringAfterLast('/') == name && composemgrBinary() != null) {
             return composeLifecycle(dir, mgrVerb, composeArgs)
         }
         return composeCommandByProject(name, configFile, composeArgs)
@@ -452,15 +490,10 @@ class RemoteExecOps(
             val cmd = "cd ${SshExecRunner.shQuote(real)} && $prefix $args"
             val result = runner.run(cmd, COMPOSE_TIMEOUT_MS)
             if (!result.isSuccess) {
-                return@withExpanded DockerCliParsers.classifyFailure(
-                    "compose $args failed",
-                    result.stderr,
-                    result.stdout,
-                    engine
-                )
+                return@withExpanded failureWithOutput("compose $args failed", result)
             }
-            // Compose writes human progress to stderr even on success.
-            ContainerResult.Success(result.stdout.ifEmpty { result.stderr })
+            // Compose writes human progress to stderr even on success; keep both streams.
+            ContainerResult.Success(fullOutput(result))
         }
     }
 

@@ -28,4 +28,21 @@
         android:textSize="@dimen/text_size_small_body"
         android:textColor="?attr/colorOnSurfaceVariant"
         android:visibility="gone" />
+
+    <ScrollView
+        android:id="@+id/scroll_output"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/space_300dp"
+        android:layout_marginTop="@dimen/space_sm"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/text_output"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:textIsSelectable="true"
+            android:textSize="@dimen/text_size_small_body"
+            android:textColor="?attr/colorOnSurface" />
+    </ScrollView>
 </LinearLayout>

@@ -44,13 +44,14 @@ class UpdateApplier(
         data class PullProgress(val event: PullProgressEvent) : ApplyEvent()
 
         /** The whole plan succeeded; the old container is gone. */
-        data class Completed(val containerName: String) : ApplyEvent()
+        data class Completed(val containerName: String, val output: String = "") : ApplyEvent()
 
         /** The plan failed at [step]; [rolledBack] reports recovery success. */
         data class Failed(
             val step: RecreateStep,
             val message: String,
-            val rolledBack: Boolean
+            val rolledBack: Boolean,
+            val output: String = ""
         ) : ApplyEvent()
     }
 
@@ -278,9 +279,11 @@ class UpdateApplier(
         when (val r = transport.composeUpdate(dir)) {
             is ContainerResult.Success -> {
                 clearProjectPending(policyId, dir, transport)
-                emit(ApplyEvent.Completed(name))
+                emit(ApplyEvent.Completed(name, r.value + "\n[exit 0]"))
             }
-            else -> emit(ApplyEvent.Failed(RecreateStep.PULL_IMAGE, failureMessage(r), false))
+            else -> emit(
+                ApplyEvent.Failed(RecreateStep.PULL_IMAGE, failureMessage(r), false, r.detailOrNull().orEmpty())
+            )
         }
     }
 
