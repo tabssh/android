@@ -17,6 +17,12 @@ interface SnippetDao {
     fun getAllSnippets(): Flow<List<Snippet>>
 
     /**
+     * One-shot snapshot of every snippet (used by startup dedupe)
+     */
+    @Query("SELECT * FROM snippets ORDER BY created_at ASC, id ASC")
+    suspend fun getAllSnippetsOnce(): List<Snippet>
+
+    /**
      * Get snippets by category
      */
     @Query("SELECT * FROM snippets WHERE category = :category ORDER BY sort_order ASC, name ASC")

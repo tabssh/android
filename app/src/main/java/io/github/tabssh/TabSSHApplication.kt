@@ -56,6 +56,37 @@ class TabSSHApplication : Application() {
         private const val KEY_LEGACY_CONTAINER_WORK_CANCELLED = "legacy_docker_update_work_cancelled"
         private const val LEGACY_KEY_PREFIX_KEY_ENABLED = "terminal_prefix_key_enabled"
         private const val KEY_DEFAULT_SNIPPETS_SEEDED = "default_snippets_seeded"
+        private const val KEY_DEFAULT_SNIPPETS_VERSION = "default_snippets_version"
+        private const val DEFAULT_SNIPPETS_VERSION = 2
+        // Brace-free on purpose: the snippet engine treats any {text} as a placeholder, so this script must never contain braces.
+        private val SYSTEM_UPDATE_COMMAND = listOf(
+            "SUDO=\"\"",
+            "if [ \"\$(id -u)\" -eq 0 ]; then",
+            "  SUDO=\"\"",
+            "elif command -v sudo >/dev/null 2>&1; then",
+            "  SUDO=\"sudo\"",
+            "fi",
+            "if command -v apt >/dev/null 2>&1; then",
+            "  \$SUDO apt update && \$SUDO apt upgrade -y && \$SUDO apt dist-upgrade -y",
+            "elif command -v dnf >/dev/null 2>&1; then",
+            "  \$SUDO dnf makecache && \$SUDO dnf upgrade -y",
+            "elif command -v yum >/dev/null 2>&1; then",
+            "  \$SUDO yum makecache && \$SUDO yum update -y",
+            "elif command -v zypper >/dev/null 2>&1; then",
+            "  \$SUDO zypper refresh && \$SUDO zypper update -y",
+            "elif command -v pacman >/dev/null 2>&1; then",
+            "  \$SUDO pacman -Syyu --noconfirm",
+            "elif command -v apk >/dev/null 2>&1; then",
+            "  \$SUDO apk update && \$SUDO apk upgrade",
+            "elif command -v xbps-install >/dev/null 2>&1; then",
+            "  \$SUDO xbps-install -Syu",
+            "elif command -v pkg >/dev/null 2>&1; then",
+            "  \$SUDO pkg update && \$SUDO pkg upgrade -y",
+            "else",
+            "  echo \"No supported package manager found\" >&2",
+            "fi",
+            "unset SUDO"
+        ).joinToString("\n")
 
         // Docker-only identifiers replaced by the engine-agnostic container
         // naming — see migrateDockerNamingToContainer().
@@ -333,6 +364,7 @@ class TabSSHApplication : Application() {
             migrateContainerHostAliases()
             migrateDockerNamingToContainer()
             migrateVpsRenewalCycles()
+            dedupeSnippets()
             seedDefaultSnippets()
             // Re-register periodic sync work on every cold start. WorkManager's
             // DB survives process death but can be wiped by reinstall or system
@@ -490,30 +522,87 @@ class TabSSHApplication : Application() {
     }
 
     /**
-     * One-time seed of a starter set of common command snippets, spread
-     * across a handful of categories, so the Snippets manager isn't a blank
-     * empty state on first launch. Runs only once (guarded by
-     * KEY_DEFAULT_SNIPPETS_SEEDED) and only when the table is still empty —
-     * a user who deletes every seeded snippet, or who already had snippets
-     * before this migration shipped, never has them silently reappear.
+     * Collapses snippets that share the same name and command (typically one
+     * starter set seeded per device, then merged by sync under different random
+     * ids). The keeper is the fixed-id starter row when present, otherwise the
+     * oldest row; usage counts are summed, favorite is kept, and each removed
+     * row is tombstoned so the deletion propagates instead of resurrecting.
+     */
+    private suspend fun dedupeSnippets() {
+        try {
+            val dao = database.snippetDao()
+            val starterIds = defaultSnippets().map { it.second.id }.toSet()
+            val groups = dao.getAllSnippetsOnce()
+                .groupBy { it.name.trim() to it.command.trim() }
+                .values
+                .filter { it.size > 1 }
+            for (group in groups) {
+                val keeper = group.firstOrNull { it.id in starterIds } ?: group.first()
+                val description = keeper.description.ifBlank {
+                    group.map { it.description }.firstOrNull { it.isNotBlank() }.orEmpty()
+                }
+                dao.updateSnippet(
+                    keeper.copy(
+                        description = description,
+                        usageCount = group.sumOf { it.usageCount },
+                        isFavorite = group.any { it.isFavorite },
+                        modifiedAt = System.currentTimeMillis()
+                    )
+                )
+                for (dupe in group) {
+                    if (dupe.id == keeper.id) continue
+                    dao.deleteSnippetById(dupe.id)
+                    io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
+                        this, io.github.tabssh.sync.tombstone.TombstoneRecorder.SNIPPET, dupe.id
+                    )
+                }
+                Logger.i("TabSSHApplication", "Merged ${group.size} duplicate snippets: ${keeper.name}")
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Logger.e("TabSSHApplication", "Snippet dedupe failed", e)
+        }
+    }
+
+    /**
+     * Seeds the starter snippet set, spread across a handful of categories so
+     * the Snippets manager isn't a blank empty state on first launch. A fresh
+     * install gets everything only while the table is still empty; an install
+     * that already seeded (or had its own snippets) only receives starters
+     * added in a later DEFAULT_SNIPPETS_VERSION, and never one it already has
+     * or one a user deleted from an earlier version.
      */
     private suspend fun seedDefaultSnippets() {
         val prefs = getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE)
-        if (prefs.getBoolean(KEY_DEFAULT_SNIPPETS_SEEDED, false)) return
+        val legacySeeded = prefs.getBoolean(KEY_DEFAULT_SNIPPETS_SEEDED, false)
+        val stored = prefs.getInt(KEY_DEFAULT_SNIPPETS_VERSION, if (legacySeeded) 1 else 0)
+        if (stored >= DEFAULT_SNIPPETS_VERSION) return
         try {
             val dao = database.snippetDao()
-            if (dao.getSnippetCount() == 0) {
-                dao.insertSnippets(defaultSnippets())
+            val existing = dao.getAllSnippetsOnce()
+            if (stored > 0 || existing.isEmpty()) {
+                val existingIds = existing.map { it.id }.toSet()
+                val existingKeys = existing.map { it.name.trim() to it.command.trim() }.toSet()
+                val fresh = defaultSnippets()
+                    .filter { (since, s) ->
+                        since > stored && s.id !in existingIds && (s.name to s.command) !in existingKeys
+                    }
+                    .map { it.second }
+                if (fresh.isNotEmpty()) dao.insertSnippets(fresh)
             }
-            prefs.edit().putBoolean(KEY_DEFAULT_SNIPPETS_SEEDED, true).apply()
+            prefs.edit().putInt(KEY_DEFAULT_SNIPPETS_VERSION, DEFAULT_SNIPPETS_VERSION).apply()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.e("TabSSHApplication", "Default snippet seed failed", e)
         }
     }
 
-    private fun defaultSnippets(): List<io.github.tabssh.storage.database.entities.Snippet> {
-        fun snippet(name: String, command: String, description: String, category: String, order: Int) =
-            io.github.tabssh.storage.database.entities.Snippet(
+    private fun defaultSnippets(): List<Pair<Int, io.github.tabssh.storage.database.entities.Snippet>> {
+        fun snippet(name: String, command: String, description: String, category: String, order: Int, since: Int = 1) =
+            since to io.github.tabssh.storage.database.entities.Snippet(
+                id = java.util.UUID.nameUUIDFromBytes("tabssh-default-snippet:$name".toByteArray()).toString(),
                 name = name,
                 command = command,
                 description = description,
@@ -526,6 +615,7 @@ class TabSSHApplication : Application() {
             snippet("Top processes", "top -o %CPU", "Live process list sorted by CPU usage", "System", 2),
             snippet("System info", "uname -a", "Kernel, hostname, and architecture in one line", "System", 3),
             snippet("Uptime", "uptime", "How long the system has been running plus load average", "System", 4),
+            snippet("System update", SYSTEM_UPDATE_COMMAND, "Update packages with whichever package manager is installed, using root or sudo as available", "System", 5, since = 2),
             snippet("Listening ports", "ss -tulnp", "TCP/UDP sockets currently listening, with owning process", "Networking", 0),
             snippet("Ping host", "ping -c 4 {host}", "Send 4 ICMP echo requests to a host", "Networking", 1),
             snippet("Public IP", "curl -s ifconfig.me", "Print this machine's public-facing IP address", "Networking", 2),
