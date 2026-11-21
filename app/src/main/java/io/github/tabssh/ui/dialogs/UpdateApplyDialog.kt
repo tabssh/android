@@ -77,6 +77,7 @@ object UpdateApplyDialog {
         val view = LayoutInflater.from(context).inflate(R.layout.dialog_update_apply, null)
         val textStep = view.findViewById<TextView>(R.id.text_step)
         val textStatus = view.findViewById<TextView>(R.id.text_status)
+        val progressBar = view.findViewById<android.widget.ProgressBar>(R.id.progress_bar)
         val textOutput = view.findViewById<TextView>(R.id.text_output)
         val scrollOutput = view.findViewById<View>(R.id.scroll_output)
 
@@ -112,7 +113,7 @@ object UpdateApplyDialog {
                             textStep.setText(R.string.container_update_apply_done)
                             textStatus.visibility = View.GONE
                             showOutput(scrollOutput, textOutput, event.output)
-                            dialog.setCancelable(true)
+                            finishProgress(dialog, progressBar)
                         }
                         is UpdateApplier.ApplyEvent.Failed -> {
                             textStatus.visibility = View.VISIBLE
@@ -126,7 +127,7 @@ object UpdateApplyDialog {
                                 context.getString(R.string.container_update_apply_failed, stepName, message)
                             }
                             showOutput(scrollOutput, textOutput, event.output)
-                            dialog.setCancelable(true)
+                            finishProgress(dialog, progressBar)
                         }
                     }
                 }
@@ -140,7 +141,7 @@ object UpdateApplyDialog {
                     "",
                     ContainerText.display(e.message, MAX_STATUS)
                 )
-                dialog.setCancelable(true)
+                finishProgress(dialog, progressBar)
             }
         }
 
@@ -153,5 +154,12 @@ object UpdateApplyDialog {
         if (clean.isEmpty()) return
         text.text = clean
         scroll.visibility = View.VISIBLE
+    }
+
+    /** The run is over: stop the progress animation and turn Cancel into Close. */
+    private fun finishProgress(dialog: androidx.appcompat.app.AlertDialog, progressBar: android.widget.ProgressBar?) {
+        progressBar?.visibility = View.GONE
+        dialog.setCancelable(true)
+        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE)?.setText(R.string.close)
     }
 }
