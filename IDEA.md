@@ -14,11 +14,11 @@ shared format is a breaking change for both siblings until they catch up — see
 
 project_name: tabssh
 project_org: tabssh
-# FROZEN — set once at first-time setup, never edit
+# STABLE — set at first-time setup; change only on an explicit rename or fork reset
 internal_name: tabssh
-# FROZEN — set once at first-time setup, never edit
+# STABLE — set at first-time setup; change only on an explicit rename or fork reset
 internal_org: tabssh
-# FROZEN forever — shipped applicationId
+# FROZEN across renames — shipped applicationId; reset on a fork
 app_id: io.github.tabssh
 min_sdk: 24
 license: MIT
@@ -324,7 +324,7 @@ All channels are created in one `NotificationHelper`; ids are versioned and neve
 ### Release
 
 - Keystore escrow: no production keystore file exists in the repo or on any dev machine (AI.md PART 13). It is escrowed as the `KEYSTORE_BASE64` + `KEYSTORE_PASSWORD` (and optional `KEY_PASSWORD`) repo secrets under Settings > Secrets and Variables > Actions; every release channel hard-fails with an actionable error if either required secret is missing, with no ephemeral/generated fallback keystore ever produced.
-- Release cadence: `stable` and `beta` are on-demand, triggered by pushing a `vX.Y.Z` / `*beta` tag; `development` runs daily on a schedule plus on every push to `main`, with its rolling `development` tag/release deleted and recreated each run.
+- Release cadence: `stable` and `beta` are on-demand, triggered by pushing a `vX.Y.Z` / `*beta` tag; `devel` runs daily on a schedule plus on every push to `main`, with its rolling `devel` tag/release deleted and recreated each run.
 - No ACRA-style crash-reporting endpoint is configured — crash reporting stays the AI.md PART 2 default (on-device log + user-triggered export) per the "no analytics/crash-reporting SDK without opt-in" constraint above.
 
 ### Accepted design decisions

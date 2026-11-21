@@ -191,7 +191,7 @@ android {
         
         devel {
             initWith release
-            // Development channel (AI.md PART 4/13): release configuration —
+            // Devel channel (AI.md PART 4/13): release configuration —
             // R8, shrinkResources, signed, NOT debuggable — with the Debug
             // Log force-enabled via BuildConfig.DEBUG_LOG; BuildConfig.BUILD_TYPE
             // ("devel") identifies the channel itself, so no separate DEVEL

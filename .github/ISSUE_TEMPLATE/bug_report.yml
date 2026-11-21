@@ -70,7 +70,7 @@ body:
       description: Which version are you using?
       options:
         - 0.0.9 (latest)
-        - Development build
+        - Devel build
         - Custom build
         - Other (specify in additional context)
     validations:

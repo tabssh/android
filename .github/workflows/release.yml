@@ -10,7 +10,7 @@ name: Production Release
 # identical across channels — channel identity lives in the tag, the
 # release object, and version.txt, never in mutated filenames.
 #
-# The other channels: development.yml (rolling `development` prerelease)
+# The other channels: devel.yml (rolling `devel` prerelease)
 # and beta.yml (tag *beta, prerelease).
 #
 # `mosh-binaries.yml` and `spice-libs.yml` produce build-infra-only channels:

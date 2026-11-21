@@ -318,7 +318,6 @@ make check      # Compile + lint + JVM unit tests (Docker)
 make install    # Install to connected device
 make logs       # Tail logcat
 make test       # check + instrumented/UI tests when a device is reachable
-make instrumented  # androidTest suite on a connected device
 make clean      # Remove build artifacts
 ```
 
@@ -343,7 +342,7 @@ android/
 │   └── ui/             # Activities, Fragments, Adapters, ViewModels
 ├── app/src/main/res/   # Layouts, strings, themes, drawables
 ├── app/schemas/        # Room migration JSON schemas
-├── .github/workflows/  # CI/CD (ci, security, development, beta, release,
+├── .github/workflows/  # CI/CD (ci, security, devel, beta, release,
 │                       #        mosh-binaries, spice-libs, tor-binaries)
 ├── docker/             # docker-compose.yml (build/test services)
 ├── scripts/            # Build and automation scripts

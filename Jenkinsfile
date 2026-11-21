@@ -1,6 +1,6 @@
-// Jenkins mirror of .github/workflows/{ci,security,beta,release,development}.yml
+// Jenkins mirror of .github/workflows/{ci,security,beta,release,devel}.yml
 // (AI.md PART 12). Same gates, Declarative Pipeline syntax: Build/Test run
-// in parallel with Security; the release-channel stages (Development/Beta/
+// in parallel with Security; the release-channel stages (Devel/Beta/
 // Release) run the canonical skeleton (AI.md PART 13) when their trigger
 // condition matches. All stages run in casjaysdev/android — digest-pinned,
 // never :latest — no inline tool install.
@@ -9,7 +9,7 @@ pipeline {
     agent none
 
     triggers {
-        // Mirrors development.yml's daily schedule; push/tag triggers are
+        // Mirrors devel.yml's daily schedule; push/tag triggers are
         // configured on the Jenkins job itself (SCM webhook), not here.
         cron('17 4 * * *')
     }
@@ -68,13 +68,19 @@ pipeline {
                         }
                     }
                     steps {
-                        sh 'trufflehog git file://. --results=verified,unknown --fail'
+                        sh '''
+                            if [ -z "${GIT_PREVIOUS_COMMIT:-}" ]; then
+                                trufflehog git file://. --results=verified --exclude-paths=.github/trufflehog-exclude.txt --fail
+                            else
+                                trufflehog git file://. --since-commit HEAD~1 --results=verified,unknown --exclude-paths=.github/trufflehog-exclude.txt --fail
+                            fi
+                        '''
                     }
                 }
             }
         }
 
-        stage('Development') {
+        stage('Devel') {
             when {
                 anyOf {
                     triggeredBy 'TimerTrigger'

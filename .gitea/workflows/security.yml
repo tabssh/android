@@ -1,5 +1,7 @@
 # Secret scanning on every push and PR (AI.md PART 12).
-# TruffleHog scans the diff range (base..HEAD) for verified credentials.
+# Range scan (PR base..head, push before..after) fails on verified and unknown
+# results; a new-branch push or manual run scans the full history and fails on
+# verified only. Host-runner job (no container:), SHA-pinned actions.
 # Gitea Actions uses the GitHub Actions runner (act) — same syntax as
 # .github/workflows/security.yml.
 name: Security Scan
@@ -7,6 +9,7 @@ name: Security Scan
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,13 +23,23 @@ jobs:
     name: TruffleHog secret scan
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (full history for diff scan)
+      - name: Checkout (full history for the scan)
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
 
-      - name: TruffleHog scan
+      - name: TruffleHog range scan
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000')
         uses: trufflesecurity/trufflehog@bcfcf73aaf4759d4dadc2783177c245a02792318 # v3.97.0
         with:
           path: ./
-          extra_args: --results=verified,unknown
+          base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          head: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event.after }}
+          extra_args: --results=verified,unknown --exclude-paths=.github/trufflehog-exclude.txt
+
+      - name: TruffleHog full-history scan
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.event.before == '0000000000000000000000000000000000000000')
+        uses: trufflesecurity/trufflehog@bcfcf73aaf4759d4dadc2783177c245a02792318 # v3.97.0
+        with:
+          path: ./
+          extra_args: --results=verified --exclude-paths=.github/trufflehog-exclude.txt

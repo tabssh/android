@@ -48,9 +48,9 @@ Example:
 
     project_name:  notes
     project_org:   casjay
-    # FROZEN — set once at first-time setup, never edit
+    # STABLE — set at first-time setup; change only on an explicit rename or fork reset
     internal_name: notes
-    # FROZEN — set once at first-time setup, never edit
+    # STABLE — set at first-time setup; change only on an explicit rename or fork reset
     internal_org:  casjay
     app_name:      Notes
     app_id:        io.github.casjay.notes
@@ -96,9 +96,9 @@ and any exceptions.)
 1. Read existing `CLAUDE.md` and `.claude/CLAUDE.md` first - never overwrite blindly
 2. Extract valid project-specific content and reorganize it into the required `IDEA.md` layout
 3. Normalize discovered variables into lower_snake_case `key: value` entries
-4. If `internal_name` cannot be proven, initialize it to `project_name` on first migration and treat it as frozen after that. Do the same for `internal_org` ← `project_org`.
+4. If `internal_name` cannot be proven, initialize it to `project_name` on first migration and treat it as stable after that. Do the same for `internal_org` ← `project_org`.
 5. If statements from `CLAUDE.md` or `.claude/CLAUDE.md` conflict with `AI.md`, `AI.md` wins
-6. After migration, keep root `CLAUDE.md` and/or `.claude/CLAUDE.md` only as short efficient loaders and keep the real plan/spec in `IDEA.md`
+6. After migration, keep root `CLAUDE.md` and/or `.claude/CLAUDE.md` only as short efficient loaders and keep the real plan/spec in `IDEA.md`, and mirror the final root `CLAUDE.md` content into `AGENTS.md` as a real file copy (never a symlink)
 7. Never silently discard meaningful project-specific content; migrate it, trim it, or explicitly ask where it belongs
 
 ---
@@ -127,8 +127,8 @@ have_internal=$(grep -cE '^internal_name:[[:space:]]*.+$' IDEA.md 2>/dev/null ||
 |-------|----------------|----------|
 | `{project_name}` | IDEA.md `## Project variables` | Existing long-form `CLAUDE.md` / `.claude/CLAUDE.md` project details, then `basename "$PWD"` |
 | `{project_org}` | IDEA.md `## Project variables` | Existing long-form `CLAUDE.md` / `.claude/CLAUDE.md` project details, then `basename "$(dirname "$PWD")"` |
-| `{internal_name}` | IDEA.md `## Project variables` (set once at first run, never edited after) | First-time setup: copy from `{project_name}` |
-| `{internal_org}` | IDEA.md `## Project variables` (set once at first run, never edited after) | First-time setup: copy from `{project_org}` |
+| `{internal_name}` | IDEA.md `## Project variables` (set at first run; reset only on an explicit rename or fork) | First-time setup: copy from `{project_name}` |
+| `{internal_org}` | IDEA.md `## Project variables` (set at first run; reset only on an explicit rename or fork) | First-time setup: copy from `{project_org}` |
 | `{app_id}` | **Derived (not stored)**: `io.github.{internal_org}.{internal_name}` | Existing app: read `applicationId` from `app/build.gradle` and freeze it in IDEA.md |
 | `{app_id_path}` | **Derived (not stored)**: `{app_id}` with dots replaced by slashes, e.g. `com/example/app` | Recompute whenever `{app_id}` changes; never store separately |
 
@@ -141,7 +141,7 @@ internal_org="$project_org"
 app_id="io.github.${internal_org}.${internal_name}"
 ```
 
-**Why a separate `{internal_name}`:** if a project renames itself later, the new name applies to user-visible places (app label, docs, repo). But `{internal_name}` — and therefore `{app_id}` — stays fixed forever. **An Android `applicationId` can NEVER change after first release**: changing it publishes a different app, orphans every install, and breaks updates. `{app_id}` is the single most immutable value in an Android project.
+**Why a separate `{internal_name}`:** if a project renames itself later, the new name applies to user-visible places (app label, docs, repo). But `{internal_name}` — and therefore `{app_id}` — stays fixed across a rename. **An Android `applicationId` can NEVER change after first release**: changing it publishes a different app, orphans every install, and breaks updates. `{app_id}` is the single most immutable value in an Android project. On a fork, reset `{app_id}` (and `{internal_*}`) at first setup so the fork installs as its own app instead of colliding with the upstream.
 
 **Existing-app rule:** when this spec is dropped into an app that already shipped, the real `applicationId` from `app/build.gradle` WINS over the derived value — record it in IDEA.md as `app_id:` and never derive again.
 
@@ -210,6 +210,7 @@ Load PARTs on demand with `grep -n "^# PART N" AI.md` — never read this file e
 - `AI.md` is read-only during routine work
 - `IDEA.md` is where project-specific values and product rules live
 - Loader files (`CLAUDE.md`, `.claude/CLAUDE.md`) stay short and point back to `AI.md`
+- `AGENTS.md` at the project root is a real-file copy of `CLAUDE.md`'s exact content, kept in sync whenever `CLAUDE.md` changes — never a symlink (not portable across all platforms/filesystems)
 - If a loader file and `AI.md` disagree, `AI.md` wins
 - `.claude/memory/` holds durable, project-specific knowledge discovered during
   development — decisions, gotchas, conventions unique to this codebase — distinct
@@ -276,7 +277,7 @@ Update these when their subject changes:
 - **ALWAYS resolve placeholders from `IDEA.md ## Project variables`** — `AI.md` is read-only; never edit placeholders in place
 - **ALWAYS load PARTs by slice** — `grep -n "^# PART N" AI.md`, read only that slice; cross-refs inside a slice: finish the slice first, then follow
 - **ALWAYS check the IDEA.md `## Applicability` matrix before applying a conditional PART** (5 database, 8 notifications/services/background, 9 network, 10 backup/sync) — an app that doesn't use the capability skips the PART entirely
-- **ALWAYS treat `{app_id}` as immutable** — never change `applicationId` in an app that has shipped
+- **ALWAYS treat `{app_id}` as immutable** — never change `applicationId` in an app that has shipped (a fork is a different app: it resets `{app_id}` at first setup)
 - **ALWAYS build inside Docker** using `casjaysdev/android:latest` (PART 4) — never install the Android SDK, Gradle, or a JDK on the host
 - **ALWAYS ship a Room migration with any schema change** (PART 5) — never destructive-migrate
 - **ALWAYS keep credentials out of the database** — Android Keystore–backed storage only (PART 6)
@@ -398,8 +399,9 @@ Getting code correct on the first try is much harder than iterating with feedbac
 | Tool | Primary Loader | Alternate Loader | Personal Override |
 |------|----------------|------------------|------------------|
 | Claude Code | `CLAUDE.md` | `.claude/CLAUDE.md` | `CLAUDE.local.md` |
+| Other agents (Codex, Copilot, etc.) | `AGENTS.md` | - | - |
 
-**Loader rule:** loader files stay short. Long-form product content belongs in `IDEA.md`; long-form implementation policy belongs in `AI.md`.
+**Loader rule:** loader files stay short. Long-form product content belongs in `IDEA.md`; long-form implementation policy belongs in `AI.md`. `AGENTS.md` is always generated/reconciled as an exact real-file copy of root `CLAUDE.md` — never a symlink (not portable across all platforms/filesystems).
 
 ## Build commands
 
@@ -408,8 +410,7 @@ Getting code correct on the first try is much harder than iterating with feedbac
 | Compile + lint + JVM unit-test gate | `make check` |
 | Debug APKs → `./binaries/` | `make build` |
 | Release APKs → `./releases/` (local verification only) | `make release` |
-| Unit tests + instrumented + UI tests (device/emulator reachable) | `make test` |
-| Instrumented tests only (`app/src/androidTest/`) | `make instrumented` |
+| Unit tests | `make test` |
 | Install universal APK to device | `make install` |
 | Clean | `make clean` |
 
@@ -426,12 +427,12 @@ Getting code correct on the first try is much harder than iterating with feedbac
 7. **Keep `minSdk` working**; guard newer APIs with `Build.VERSION.SDK_INT`.
 8. **F-Droid flavor stays reproducible** (PART 13).
 9. **`Flow`/`StateFlow` only** for new reactive code.
-10. **AI.md is architecture, CLAUDE.md is a loader** — architecture changes update AI.md/IDEA.md; never add spec content to CLAUDE.md.
+10. **AI.md is architecture, CLAUDE.md is a loader** — architecture changes update AI.md/IDEA.md; never add spec content to CLAUDE.md. `AGENTS.md` mirrors `CLAUDE.md` exactly (real file copy, never a symlink).
 
 ## Commit workflow (required on every commit)
 
 1. `git status --porcelain` + `git diff --stat` — see exactly what changed.
-2. **Run `make check`** — compile + `ktlint`/`detekt` lint (PART 0 → Kotlin Style & Idioms) + device-free JVM unit tests; the mandatory pre-commit gate (instrumented tests need a device/emulator the build host generally lacks — that is why the gate is `check`, not `test`). Run `make test` when an emulator/device is reachable and the change touches security-critical code (crypto, storage, transport, exported components) — and always before tagging a release; `make test` runs `make instrumented` (`connectedDebugAndroidTest`) plus the UI-driver suite whenever a device is reachable, and `make instrumented` runs the instrumented suite on its own.
+2. **Run `make check`** — compile + `ktlint`/`detekt` lint (PART 0 → Kotlin Style & Idioms) + device-free JVM unit tests; the mandatory pre-commit gate (instrumented tests need a device/emulator the build host generally lacks — that is why the gate is `check`, not `test`). Run `make test` when an emulator/device is reachable and the change touches security-critical code (crypto, storage, transport, exported components) — and always before tagging a release.
 3. **Changelog gate** — user-visible change ⇒ `CHANGELOG.md` (and the in-app what's-new asset if present) staged in the same commit.
 4. Write `.git/COMMIT_MESS` from the diff — every changed file described; never from memory.
 5. Re-read `COMMIT_MESS` against the diff; rewrite if anything is missing.
@@ -536,11 +537,13 @@ Every non-trivial user flow (onboarding, primary task, import/export) is documen
 ├── binaries/                     # debug APK output (gitignored)
 ├── releases/                     # release APK output (gitignored)
 ├── Makefile
+├── release.txt                   # optional local-build version (Makefile only; empty = devel rule)
 ├── .gitignore                    # required; must cover binaries/, releases/, .gradle/, keystore.jks, .env*
 ├── AI.md                         # this spec (read-only)
 ├── IDEA.md                       # project variables + business decisions
 ├── SPEC.md                       # optional rule overrides; may be empty
 ├── CLAUDE.md                     # short loader
+├── AGENTS.md                     # identical copy of CLAUDE.md, for non-Claude agents
 ├── CHANGELOG.md                  # Keep-a-Changelog format
 ├── README.md
 └── LICENSE.md
@@ -611,7 +614,7 @@ This picks the toolchain image only; any runtime/service image the project ships
 |---|---|
 | `debug` | Local dev; debuggable; `.debug` applicationId suffix optional |
 | `release` | Shipped build; R8 minify + shrinkResources; signed |
-| `devel` | Development-channel build (PART 13): `release` configuration plus devel/debug features and the Debug Log enabled via `BuildConfig` flags (`DEVEL`, `DEBUG_LOG`); not debuggable; signed; Logger sanitation (PART 6) applies here too — the Debug Log is never exempt |
+| `devel` | Devel-channel build (PART 13): `release` configuration plus devel/debug features and the Debug Log enabled via `BuildConfig` flags (`DEVEL`, `DEBUG_LOG`); not debuggable; signed; Logger sanitation (PART 6) applies here too — the Debug Log is never exempt |
 | `fdroidRelease` | Reproducible flavor for F-Droid (PART 13) — only if the app targets F-Droid |
 
 ## APK splits and naming
@@ -1075,7 +1078,7 @@ Include only if the IDEA.md `## Applicability` matrix declares `backup_sync: yes
 
 - New behavior ships with a test that fails before and passes after.
 - Room migrations are tested with `MigrationTestHelper` against the committed schema JSON.
-- Instrumented tests are **required** — not best-effort — before tagging a release and for changes touching crypto, storage, transport, or exported components whenever an emulator/device is reachable (PART 1 commit workflow). Run them with `make instrumented` (or `make test`, which includes it); start an emulator first with `scripts/android-emulator.sh start` — the target fails loudly when no device is reachable rather than silently reporting success on a suite it never ran.
+- Instrumented tests are **required** — not best-effort — before tagging a release and for changes touching crypto, storage, transport, or exported components whenever an emulator/device is reachable (PART 1 commit workflow).
 
 ## Emulator management
 
@@ -1110,13 +1113,13 @@ Every project targets all five CI/CD providers — same gates, different syntax,
 | Gate | GitHub | GitLab | Gitea / Forgejo | Jenkins | Trigger | Job |
 |---|---|---|---|---|---|---|
 | CI | `ci.yml` | `build` + `test` + `security` stages | `ci.yml` | `Build` + `Test` + `Security` stages | push + PR to main + `workflow_dispatch` | `make check`-equivalent: compile, lint, unit tests, structure/security validation |
-| Development | `development.yml` | `development` stage (schedule + push-triggered) | `development.yml` | `Development` stage (schedule + push-triggered) | daily schedule + push to main + `workflow_dispatch` | canonical release flow (PART 13) on the `devel` variant → rolling `development` prerelease |
+| Devel | `devel.yml` | `devel` stage (schedule + push-triggered) | `devel.yml` | `Devel` stage (schedule + push-triggered) | daily schedule + push to main + `workflow_dispatch` | canonical release flow (PART 13) on the `devel` variant → rolling `devel` prerelease |
 | Beta | `beta.yml` | `beta` stage (tag-triggered) | `beta.yml` | `Beta` stage (tag-triggered) | tag `*beta` + `workflow_dispatch` | canonical release flow (PART 13) on the `release` variant → prerelease |
 | Release | `release.yml` | `release` stage (tag-triggered) | `release.yml` | `Release` stage (tag-triggered) | tag `v*` + `workflow_dispatch` | tests + DependencyCheck + coverage → canonical release flow (PART 13) on the `release` variant (+ `assembleFdroidRelease` smoke build if F-Droid flavor exists; + `bundleRelease` AAB only if `store_targets` includes `play`) → provider release |
 
 **Container-job user rule:** every GitHub Actions-syntax `container:` job (e.g. `container: image: casjaysdev/android:latest`) MUST set `options: "--user 0:0"`. The runner (and actions/checkout's post-job cleanup) execs into the job container — e.g. `cat /etc/*release` for OS diagnostics — as a user the image's `/etc/passwd` may not define, which fails or flakes the job after all real work already passed. Numeric `0:0` needs no `/etc/passwd` lookup, so it is immune regardless of the image's user table.
 
-Creation order: security-only workflows first, `ci.yml` and the channel workflows (`release.yml`, `beta.yml`, `development.yml`) last; every staged workflow passes `act --list -W {file}` before commit (GitHub Actions-syntax providers only — GitLab and Jenkins have no `act` equivalent, validate those with their own native lint: `gitlab-ci-lint` / Jenkins `Pipeline Linter`).
+Creation order: security-only workflows first, `ci.yml` and the channel workflows (`release.yml`, `beta.yml`, `devel.yml`) last; every staged workflow passes `act --list -W {file}` before commit (GitHub Actions-syntax providers only — GitLab and Jenkins have no `act` equivalent, validate those with their own native lint: `gitlab-ci-lint` / Jenkins `Pipeline Linter`).
 
 ## Rules
 
@@ -1124,11 +1127,11 @@ Creation order: security-only workflows first, `ci.yml` and the channel workflow
 - Third-party actions pinned to full commit SHAs, never tags.
 - Signing keystore decoded from a `KEYSTORE_BASE64` secret at job time — never committed.
 - Gradle cache keyed on `hashFiles('**/*.gradle*', '**/gradle-wrapper.properties')`.
-- TruffleHog secret scan on every push/PR.
+- TruffleHog secret scan on every push and PR: a host-runner job (no `container:`), SHA-pinned, with `fetch-depth: 0`. Range scans (PR `base.sha` to `head.sha`; push `event.before` to `event.after`) fail on `verified` and `unknown` results; a new-branch push (`before` all zeros) or manual run scans the full history and fails on `verified` only. `base` is never `default_branch` (after a push it equals HEAD and the scan is skipped). Always pass `--exclude-paths=.github/trufflehog-exclude.txt` (same path on every provider; one regex per line, no comments); it lists only non-production files: `^AI\.md$`, `^gradle/verification-metadata\.xml$` when dependency verification is on, and the fixtures directory `(^|/)app/src/test/resources/fixtures/` only when the project has one; adding a path needs a reason in the commit message. Documentation examples never hold a credential-shaped string (connection strings use `{user}:{password}` placeholders); fixture values are obviously fake, and a test that needs a credential-shaped string builds it at run time; a reviewed true false positive is allowlisted with truffleHog's inline `trufflehog:ignore` comment. GitLab and Jenkins run the same contract in Docker: `trufflehog git file://. --since-commit HEAD~1 --results=verified,unknown --exclude-paths=.github/trufflehog-exclude.txt --fail` for a range, `trufflehog git file://. --results=verified --exclude-paths=.github/trufflehog-exclude.txt --fail` for the full history.
 - Public repos ship `.github/SECURITY.md`: supported versions, private vulnerability reporting as the primary channel (never a public issue tracker), and the disclosure timeline. `CODEOWNERS` lists explicit owners for workflows, signing/release files, and crypto/Keystore code.
 - OWASP DependencyCheck in `release.yml`; CVSS ≥ 7.0 fails; suppressions live in `.github/dependency-check-suppressions.xml` (shared by every provider's workflow) with a reason comment per entry — never a root-level `config/` directory, which is globally forbidden.
 - Custom security greps (e.g. hardcoded-password patterns) maintain their exclusion list in the workflow with a documented reason per exclusion — never delete an exclusion without checking why it exists.
-- Release-managing jobs that run inside the toolchain container (the `development.yml` rolling delete + recreate, asset uploads) use the provider CLI (`gh`/`glab`/`tea`) shipped in the image — never inline-installed in a step.
+- Release-managing jobs that run inside the toolchain container (the `devel.yml` rolling delete + recreate, asset uploads) use the provider CLI (`gh`/`glab`/`tea`) shipped in the image — never inline-installed in a step.
 - Renovate for dependency updates — never Dependabot.
 
 ## Post-Push CI Verification
@@ -1165,7 +1168,7 @@ build (`BUILD_EPOCH` captured once) → stage APK splits (PART 4 naming) + `mapp
 |---|---|---|---|---|---|---|
 | stable | `release.yml` | tag push | `vX.Y.Z` | tag without `v` | `release` | no |
 | beta | `beta.yml` | tag push | `*beta` | tag as-is | `release` | yes |
-| development | `development.yml` | daily schedule + push to main | rolling `development` — release and tag deleted + recreated on every run | short commit id | `devel` | yes |
+| devel | `devel.yml` | daily schedule + push to main | rolling `devel` — release and tag deleted + recreated on every run | short commit id | `devel` | yes |
 
 - **No docker-image publishing in any channel** — this is an Android app; there is no runtime image to release. Builds still execute inside `casjaysdev/android:latest` (PART 4): that is the toolchain, not a release artifact.
 - The `devel` variant (PART 4) enables devel/debug features and the Debug Log; Logger sanitation (PART 6) applies in every variant.
@@ -1173,9 +1176,21 @@ build (`BUILD_EPOCH` captured once) → stage APK splits (PART 4 naming) + `mapp
 
 ## Versioning
 
+- `release.txt` is optional and read only by the Makefile for local builds (`make release`, the local `version.txt`): `VERSION` env (user override, AI never sets it) > non-empty `release.txt` > devel rule (short commit id, `devel` outside git); empty or missing means the devel rule. CI never reads it: stable = tag without `v`, beta = tag as-is, devel = short commit id. `versionName`/`versionCode` stay in-tree in every case.
 - Semver tags `vX.Y.Z`; `versionCode` monotonically increases (derive from semver: `X*10000 + Y*100 + Z` or maintain manually — pick once, record in IDEA.md).
-- Beta and development builds keep the in-tree `versionCode`/`versionName` — channel identity lives in the tag and `version.txt`, never in a mutated `versionCode`.
-- **Short commit id** (development channel's version identity, `version.txt`): `git rev-parse --short=7 HEAD` — pin the explicit 7-char length; git's unpinned `--short HEAD` auto-abbreviates and grows past 7 chars as the repo's commit count increases, producing inconsistent-length ids across builds.
+- Beta and devel builds keep the in-tree `versionCode`/`versionName` — channel identity lives in the tag and `version.txt`, never in a mutated `versionCode`.
+
+### APK updates
+
+Users update by installing a newer APK over the installed one (sideload, an APK-tracking updater, `adb install -r`), across channels. Android accepts that only when all of these hold:
+
+- Same `applicationId` and same signing key in every channel (see Signing); a different key forces an uninstall and loses all app data.
+- `versionCode` never decreases between installs. An equal `versionCode` installs as an in-place update; a lower one is rejected as a downgrade and needs an uninstall.
+- `versionCode` is bumped only in the commit that prepares a stable release, before it is tagged. Beta and devel builds share the in-tree value, so no beta or devel APK is ever newer than the stable release that follows it, and moving from devel or beta to stable is always an upgrade.
+- Beta and devel never change `versionCode` or `versionName` (above), so installed devel builds look identical to the installer and to the user. A new devel build is recognised by its commit id: the release name `Devel Build {commit id}`, `version.txt`, and the asset checksums. Updaters follow the stable `vX.Y.Z` releases by tag, beta by the `*beta` tag, and devel by the rolling `devel` release.
+- The rolling `devel` release is deleted and recreated on every run, so asset names and the release's download URLs stay identical across channels and runs; never rename assets, the release or the tag per run, or updaters pointed at them stop finding new builds.
+- Moving to a lower `versionCode` is only possible by uninstalling first; tell the user to export a backup (PART 10) before doing so.
+- **Short commit id** (devel channel's version identity, `version.txt`): `git rev-parse --short=7 HEAD` — pin the explicit 7-char length; git's unpinned `--short HEAD` auto-abbreviates and grows past 7 chars as the repo's commit count increases, producing inconsistent-length ids across builds.
 - **`BUILD_EPOCH` is embedded in every build, local and CI** — captured once per build (`date -u +%s`) and exposed as a `BuildConfig` field; the `fdroidRelease` flavor pins it to the last-commit epoch (`git log -1 --format=%ct`) to stay reproducible.
 - Release notes generated from `CHANGELOG.md [Unreleased]`, which moves to a versioned section at tag time.
 
@@ -1187,14 +1202,14 @@ build (`BUILD_EPOCH` captured once) → stage APK splits (PART 4 naming) + `mapp
 
 ### `KEYSTORE_PASSWORD` / `KEY_PASSWORD` resolution
 
-Always use the CI secret / env var — never a hardcoded fallback, and never an ephemeral/generated fallback. This applies uniformly to **all three channels** (`development.yml`, `beta.yml`, `release.yml`): every channel is a release, every APK it produces must chain to the one escrowed production key, so every channel hard-fails the same way when the secrets aren't configured.
+Always use the CI secret / env var — never a hardcoded fallback, and never an ephemeral/generated fallback. This applies uniformly to **all three channels** (`devel.yml`, `beta.yml`, `release.yml`): every channel is a release, every APK it produces must chain to the one escrowed production key, so every channel hard-fails the same way when the secrets aren't configured.
 
 | Context | Value |
 |---|---|
 | Local (dev keystore) | `password` — set as a `Makefile` `?=` default (`KEYSTORE_PASSWORD ?= password`, `KEY_PASSWORD ?= password`, both `export`ed), never overridden by CI since `?=` skips already-exported vars; fixed because `keystore.jks` is a throwaway dev artifact regenerated by `scripts/generate-keystore.sh` |
-| CI/CD, all channels (`development.yml`, `beta.yml`, `release.yml`) | `secrets.KEYSTORE_BASE64` and `secrets.KEYSTORE_PASSWORD` are **required** — the step hard-fails (`exit 1`) with an actionable `::error::` message naming the exact missing secret and where to set it (repo Settings > Secrets and Variables > Actions) if either is absent. `secrets.KEY_PASSWORD` is optional and falls back to `KEYSTORE_PASSWORD` itself (`${KEY_PW:-$KEYSTORE_PW}`) — never a hardcoded literal — matching how the project's release keystore was generated (key shares the store password when no separate key password was set) |
+| CI/CD, all channels (`devel.yml`, `beta.yml`, `release.yml`) | `secrets.KEYSTORE_BASE64` and `secrets.KEYSTORE_PASSWORD` are **required** — the step hard-fails (`exit 1`) with an actionable `::error::` message naming the exact missing secret and where to set it (repo Settings > Secrets and Variables > Actions) if either is absent. `secrets.KEY_PASSWORD` is optional and falls back to `KEYSTORE_PASSWORD` itself (`${KEY_PW:-$KEYSTORE_PW}`) — never a hardcoded literal — matching how the project's release keystore was generated (key shares the store password when no separate key password was set) |
 
-No channel — including `development.yml` on a fork or before secrets are provisioned — ever falls back to a generated/ephemeral keystore. A fallback build would be update-compatible with nothing and silently misleading; failing loudly with setup instructions is preferred over shipping a broken artifact.
+No channel — including `devel.yml` on a fork or before secrets are provisioned — ever falls back to a generated/ephemeral keystore. A fallback build would be update-compatible with nothing and silently misleading; failing loudly with setup instructions is preferred over shipping a broken artifact.
 
 Sample resolution step (applies identically to all three workflows):
 
@@ -1225,7 +1240,7 @@ Sample resolution step (applies identically to all three workflows):
     echo "Keystore decoded and ready"
 ```
 
-Never commit a fixed fallback password (the `Makefile`'s dev-keystore default excepted, since that keystore is itself a throwaway, gitignored, never-committed dev artifact regenerated on demand). Reference implementation: `/root/Projects/github/tabssh/android/.github/workflows/{beta,release,development}.yml` — all three already hard-fail identically with no ephemeral/generated fallback.
+Never commit a fixed fallback password (the `Makefile`'s dev-keystore default excepted, since that keystore is itself a throwaway, gitignored, never-committed dev artifact regenerated on demand). Reference implementation: `/root/Projects/github/tabssh/android/.github/workflows/{devel,beta,release}.yml`.
 
 ## R8 / ProGuard
 
@@ -1265,11 +1280,11 @@ solves. Free-form prose, 1–3 paragraphs.}
 ## Project variables
 project_name: ...
 project_org: ...
-# FROZEN — set once at first-time setup, never edit
+# STABLE — set at first-time setup; change only on an explicit rename or fork reset
 internal_name: ...
-# FROZEN — set once at first-time setup, never edit
+# STABLE — set at first-time setup; change only on an explicit rename or fork reset
 internal_org: ...
-# FROZEN forever — from the shipped applicationId if the app already exists
+# FROZEN across renames — from the shipped applicationId if the app already exists; reset on a fork
 app_id: ...
 # Default 24, or the shipped value for an existing app
 min_sdk: 24

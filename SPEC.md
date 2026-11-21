@@ -13,7 +13,7 @@
 
 ## 1. Infra TLS does not use leaf-certificate pinning
 
-**Overrides:** AI.md:755, 1017 and 1020 — the general TOFU, trust-all, and
+**Overrides:** AI.md:757, 1019 and 1022 — the general TOFU, trust-all, and
 certificate-pinning rules.
 
 **Project behaviour:** `HypervisorTrustManagerFactory` does not capture or enforce
@@ -53,9 +53,9 @@ verification without pinning an individual leaf certificate.
 
 ## 3. Cleartext traffic is permitted by wildcard, not scoped to private ranges
 
-**Overrides:** AI.md:1019 — the local-network exception permits a cleartext exception
+**Overrides:** AI.md:1021 — the local-network exception permits a cleartext exception
 *"scoped to private/link-local IP ranges only (RFC 1918 + link-local, never a
-wildcard, never a public-internet domain)"* — and AI.md:1017's
+wildcard, never a public-internet domain)"* — and AI.md:1020's
 `cleartextTrafficPermitted="false"` default.
 
 **Project behaviour:** `app/src/main/res/xml/network_security_config.xml` sets
@@ -88,9 +88,9 @@ from the PART 9 ban. Neither addresses the scoping clause; this entry does.
 
 ## 4. `make check` runs Android Lint, not `ktlint`/`detekt`
 
-**Overrides:** AI.md:265 — *"`ktlint` … formats every file; `detekt` runs in `make
-check` for static analysis … both gate every commit"* — repeated at AI.md:286,
-AI.md:434, and the `check` row of the PART 4 Make-target table (AI.md:643).
+**Overrides:** AI.md:266 — *"`ktlint` … formats every file; `detekt` runs in `make
+check` for static analysis … both gate every commit"* — repeated at AI.md:287,
+AI.md:435, and the `check` row of the PART 4 Make-target table (AI.md:645).
 
 **Project behaviour:** neither `ktlint` nor `detekt` appears anywhere in the
 repository — not in `app/build.gradle`, not in any `.kts`, not in the `Makefile`.
@@ -153,24 +153,24 @@ not re-open them:
 
 | Area | Rule | Evidence |
 |---|---|---|
-| Docker image | `casjaysdev/android:latest` (AI.md:596) | `Makefile:11`, IDEA.md:47 |
+| Docker image | `casjaysdev/android:latest` (AI.md:598) | `Makefile:11`, IDEA.md:47 |
 | SDK levels | minSdk 24 / targetSdk 34 / compileSdk 35 | `app/build.gradle:76,100,101` |
 | App identity | `io.github.tabssh`, frozen | `app/build.gradle:93` |
-| DI | manual DI on the `Application` (AI.md:475) | no Hilt/Koin in `build.gradle`; no service locators |
+| DI | manual DI on the `Application` (AI.md:476) | no Hilt/Koin in `build.gradle`; no service locators |
 | HTTP client | one client app-wide (AI.md:1010) | OkHttp only, 26 files, zero Ktor/Retrofit |
-| Clipboard clear | ownership-checked, never blind (AI.md:741) | `ClipboardHelper.kt:117-133`, label-matched |
-| Logger masking | credential patterns sanitized (AI.md:757) | `Logger.kt:147-152` |
-| Storage permission | file-manager-class exception, lazy + justified (AI.md:486) | manifest + IDEA.md:243 |
+| Clipboard clear | ownership-checked, never blind (AI.md:743) | `ClipboardHelper.kt:117-133`, label-matched |
+| Logger masking | credential patterns sanitized (AI.md:759) | `Logger.kt:147-152` |
+| Storage permission | file-manager-class exception, lazy + justified (AI.md:487) | manifest + IDEA.md:243 |
 | No Play Services | never a dependency (AI.md) | `build.gradle:522` |
 | Exported components | individually justified, extras validated | `LinkHandlerActivity.kt:54` |
 | Licensing | attribution for borrowed code | `LICENSE.md:222,226,346` |
-| Host toolchain | never install SDK/Gradle/JDK on host (AI.md:280) | enforced by PreToolUse hook |
+| Host toolchain | never install SDK/Gradle/JDK on host (AI.md:281) | enforced by PreToolUse hook |
 
 ---
 
 ## 6. R8 is pinned separately to match Kotlin metadata
 
-**Overrides:** AI.md:586-588 — the Kotlin/AGP/Gradle toolchain follows the
+**Overrides:** AI.md:588-590 — the Kotlin/AGP/Gradle toolchain follows the
 maintained image's compatible versions.
 
 **Project behaviour:** Kotlin remains 2.4.10, AGP 8.13.2, and Gradle 8.14.5 as

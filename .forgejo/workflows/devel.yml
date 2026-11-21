@@ -1,9 +1,9 @@
-name: Development Build
+name: Devel Build
 
 # ─────────────────────────────────────────────────────────────────────────
-# RELEASE CHANNEL: development (AI.md PART 12/13)
+# RELEASE CHANNEL: devel (AI.md PART 12/13)
 #
-# Ported from .github/workflows/development.yml — see beta.yml's header
+# Ported from .github/workflows/devel.yml — see beta.yml's header
 # comment for the GitHub-only pieces that differ here (attest-build-
 # provenance skipped; `tea` used to publish/delete the rolling release
 # instead of gh).
@@ -41,7 +41,7 @@ jobs:
         echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
   build-devel:
-    name: Build Development APKs
+    name: Build Devel APKs
     needs: ensure-build-image
     runs-on: ubuntu-latest
     container:
@@ -78,7 +78,7 @@ jobs:
         KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
         KEYSTORE_PW: ${{ secrets.KEYSTORE_PASSWORD }}
       run: |
-        # Every channel — development, beta, release — is a release: every
+        # Every channel — devel, beta, release — is a release: every
         # APK it produces must chain to the one escrowed production key, so
         # missing KEYSTORE_BASE64/KEYSTORE_PASSWORD hard-fail here exactly
         # as they do in beta.yml/release.yml (AI.md PART 13). No
@@ -105,7 +105,7 @@ jobs:
         echo "COMMIT_HASH=${COMMIT_HASH}" >> "$GITHUB_OUTPUT"
         echo "BUILD_EPOCH=${BUILD_EPOCH}" >> "$GITHUB_OUTPUT"
         echo "RELEASE_TITLE=devel-${COMMIT_HASH}" >> "$GITHUB_OUTPUT"
-        echo "Building development release: devel-${COMMIT_HASH}"
+        echo "Building devel release: devel-${COMMIT_HASH}"
 
     - name: Fetch latest mosh-client binaries
       env:
@@ -195,9 +195,9 @@ jobs:
         BUILD_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
 
         cat > RELEASE_NOTES_DEV.md << EOF
-        # TabSSH Development Build
+        # TabSSH Devel Build
 
-        **This is a development/testing build - Not for production use**
+        **This is a devel/testing build - Not for production use**
 
         ## Build Information
 
@@ -228,9 +228,9 @@ jobs:
 
         ## Important Notes
 
-        - This is a **development build** for testing purposes
+        - This is a **devel build** for testing purposes
         - May contain bugs or unfinished features
-        - Replaces the previous development build
+        - Replaces the previous devel build
         - Use official releases for stable versions
 
         ## Reporting Issues
@@ -238,28 +238,28 @@ jobs:
         Found a bug? Report it: https://github.com/tabssh/android/issues
         EOF
 
-    - name: Delete existing development release
+    - name: Delete existing devel release
       continue-on-error: true
       env:
         FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
         FORGEJO_REPOSITORY: ${{ github.repository }}
       run: |
         # Rolling release: delete + recreate on every run (AI.md PART 13)
-        tea release delete --repo "$FORGEJO_REPOSITORY" --token "$FORGEJO_TOKEN" development || echo "No existing development release found"
-        git push origin :refs/tags/development || echo "No development tag to delete"
+        tea release delete --repo "$FORGEJO_REPOSITORY" --token "$FORGEJO_TOKEN" devel || echo "No existing devel release found"
+        git push origin :refs/tags/devel || echo "No devel tag to delete"
 
-    - name: Create development release
+    - name: Create devel release
       env:
         FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
         FORGEJO_REPOSITORY: ${{ github.repository }}
         RELEASE_TITLE: ${{ steps.version.outputs.RELEASE_TITLE }}
       run: |
         for attempt in 1 2 3; do
-          git tag -d development >/dev/null 2>&1 || true
+          git tag -d devel >/dev/null 2>&1 || true
           if tea release create \
             --repo "$FORGEJO_REPOSITORY" \
             --token "$FORGEJO_TOKEN" \
-            --tag development \
+            --tag devel \
             --commit "$(git rev-parse HEAD)" \
             --title "$RELEASE_TITLE" \
             --note "$(cat RELEASE_NOTES_DEV.md)" \
@@ -269,8 +269,8 @@ jobs:
             exit 0
           fi
           echo "Release attempt $attempt failed"
-          tea release delete --repo "$FORGEJO_REPOSITORY" --token "$FORGEJO_TOKEN" development || true
-          git push origin :refs/tags/development || true
+          tea release delete --repo "$FORGEJO_REPOSITORY" --token "$FORGEJO_TOKEN" devel || true
+          git push origin :refs/tags/devel || true
           sleep 15
         done
         echo "::error::Release creation failed after 3 attempts"
@@ -282,7 +282,7 @@ jobs:
         COMMIT_HASH: ${{ steps.version.outputs.COMMIT_HASH }}
       run: |
         {
-          echo "## Development Build Complete!"
+          echo "## Devel Build Complete!"
           echo ""
           echo "**Build:** ${RELEASE_TITLE}"
           echo "**Commit:** ${COMMIT_HASH}"
@@ -296,7 +296,7 @@ jobs:
           echo ""
           echo "### Download:"
           echo ""
-          echo "https://${{ github.server_url }}/${{ github.repository }}/releases/tag/development"
+          echo "https://${{ github.server_url }}/${{ github.repository }}/releases/tag/devel"
         } >> "$GITHUB_STEP_SUMMARY"
 
     - name: Fix workspace permissions for host post-steps

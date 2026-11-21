@@ -9,7 +9,7 @@ name: Beta Release
 # identical across channels — channel identity lives in the tag, the
 # release object, and version.txt, never in mutated filenames.
 #
-# The other channels: development.yml (rolling `development` prerelease)
+# The other channels: devel.yml (rolling `devel` prerelease)
 # and release.yml (tag v*, stable).
 # ─────────────────────────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
-name: Development Build
+name: Devel Build
 
 # ─────────────────────────────────────────────────────────────────────────
-# RELEASE CHANNEL: development (AI.md PART 12/13)
+# RELEASE CHANNEL: devel (AI.md PART 12/13)
 #
 # Daily schedule + every push to main. Builds the `devel` variant —
 # release configuration (R8, shrinkResources, signed, NOT debuggable —
@@ -9,7 +9,7 @@ name: Development Build
 # Android's security protections" heuristic) with devel/debug features
 # and the Debug Log force-enabled via BuildConfig flags (DEVEL,
 # DEBUG_LOG). Publishes the canonical asset set to the rolling
-# `development` prerelease: release and tag are deleted and recreated
+# `devel` prerelease: release and tag are deleted and recreated
 # on every run. Version identity is the short commit id; asset names
 # are identical across channels — channel identity lives in the tag,
 # the release object, and version.txt, never in mutated filenames.
@@ -24,8 +24,8 @@ on:
     branches: [ main ]
   workflow_dispatch: {}
 
-# Only one development build at a time — cancel any in-flight run when a
-# newer push arrives so we don't race on the rolling `development` tag.
+# Only one devel build at a time — cancel any in-flight run when a
+# newer push arrives so we don't race on the rolling `devel` tag.
 concurrency:
   group: dev-build-${{ github.ref }}
   cancel-in-progress: true
@@ -53,7 +53,7 @@ jobs:
         echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
   build-devel:
-    name: Build Development APKs
+    name: Build Devel APKs
     needs: ensure-build-image
     runs-on: ubuntu-latest
     permissions:
@@ -107,7 +107,7 @@ jobs:
         # value into the generated shell text, where a newline or quote in
         # the secret becomes executable script.
         #
-        # Every channel — development, beta, release — is a release: every
+        # Every channel — devel, beta, release — is a release: every
         # APK it produces must chain to the one escrowed production key, so
         # missing KEYSTORE_BASE64/KEYSTORE_PASSWORD hard-fail here exactly
         # as they do in beta.yml/release.yml (AI.md PART 13). No
@@ -127,7 +127,7 @@ jobs:
     - name: Capture build identity
       id: version
       run: |
-        # Development-channel version identity is the short commit id
+        # Devel-channel version identity is the short commit id
         # (AI.md PART 13) — real semver versions are reserved for tags.
         # BUILD_EPOCH is captured exactly once here and exported as
         # SOURCE_DATE_EPOCH so BuildConfig.BUILD_EPOCH matches version.txt.
@@ -140,7 +140,7 @@ jobs:
         echo "COMMIT_HASH=${COMMIT_HASH}" >> "$GITHUB_OUTPUT"
         echo "BUILD_EPOCH=${BUILD_EPOCH}" >> "$GITHUB_OUTPUT"
         echo "RELEASE_TITLE=devel-${COMMIT_HASH}" >> "$GITHUB_OUTPUT"
-        echo "📦 Building development release: devel-${COMMIT_HASH}"
+        echo "📦 Building devel release: devel-${COMMIT_HASH}"
 
     - name: Fetch latest mosh-client binaries
       env:
@@ -260,9 +260,9 @@ jobs:
         BUILD_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
 
         cat > RELEASE_NOTES_DEV.md << EOF
-        # TabSSH Development Build
+        # TabSSH Devel Build
 
-        **⚠️ This is a development/testing build - Not for production use**
+        **⚠️ This is a devel/testing build - Not for production use**
 
         ## Build Information
 
@@ -295,9 +295,9 @@ jobs:
 
         ## ⚠️ Important Notes
 
-        - This is a **development build** for testing purposes
+        - This is a **devel build** for testing purposes
         - May contain bugs or unfinished features
-        - Replaces the previous development build
+        - Replaces the previous devel build
         - Use official releases for stable versions
 
         ## Reporting Issues
@@ -305,16 +305,16 @@ jobs:
         Found a bug? Report it: https://github.com/tabssh/android/issues
         EOF
 
-    - name: Delete existing development release
+    - name: Delete existing devel release
       continue-on-error: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         # Rolling release: delete + recreate on every run (AI.md PART 13)
-        gh release delete development --yes || echo "No existing development release found"
-        git push origin :refs/tags/development || echo "No development tag to delete"
+        gh release delete devel --yes || echo "No existing devel release found"
+        git push origin :refs/tags/devel || echo "No devel tag to delete"
 
-    - name: Create development release
+    - name: Create devel release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         RELEASE_TITLE: ${{ steps.version.outputs.RELEASE_TITLE }}
@@ -325,12 +325,12 @@ jobs:
         # share that failure mode, so it drives release creation directly,
         # deleting any partial release and retrying on failure.
         for attempt in 1 2 3; do
-          # A local "development" tag ref (left over from actions/checkout's
+          # A local "devel" tag ref (left over from actions/checkout's
           # tag fetch, or a prior failed attempt) makes gh refuse to create
           # the release — it won't push a local tag it didn't just make.
           # Drop it so gh creates a fresh tag straight at HEAD.
-          git tag -d development >/dev/null 2>&1 || true
-          if gh release create development dist/* \
+          git tag -d devel >/dev/null 2>&1 || true
+          if gh release create devel dist/* \
             --title "$RELEASE_TITLE" \
             --notes-file RELEASE_NOTES_DEV.md \
             --target "$(git rev-parse HEAD)" \
@@ -339,8 +339,8 @@ jobs:
             exit 0
           fi
           echo "⚠️ Release attempt $attempt failed"
-          gh release delete development --yes || true
-          git push origin :refs/tags/development || true
+          gh release delete devel --yes || true
+          git push origin :refs/tags/devel || true
           sleep 15
         done
         echo "##[error]Release creation failed after 3 attempts"
@@ -352,7 +352,7 @@ jobs:
         COMMIT_HASH: ${{ steps.version.outputs.COMMIT_HASH }}
       run: |
         {
-          echo "## 🎉 Development Build Complete!"
+          echo "## 🎉 Devel Build Complete!"
           echo ""
           echo "**Build:** ${RELEASE_TITLE}"
           echo "**Commit:** ${COMMIT_HASH}"
@@ -366,7 +366,7 @@ jobs:
           echo ""
           echo "### 🔗 Download:"
           echo ""
-          echo "https://github.com/${{ github.repository }}/releases/tag/development"
+          echo "https://github.com/${{ github.repository }}/releases/tag/devel"
         } >> "$GITHUB_STEP_SUMMARY"
 
     # Gradle creates .gradle/configuration-cache and daemon dirs mode 700.

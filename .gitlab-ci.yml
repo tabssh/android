@@ -1,6 +1,6 @@
-# GitLab CI mirror of .github/workflows/{ci,security,beta,release,development}.yml
+# GitLab CI mirror of .github/workflows/{ci,security,beta,release,devel}.yml
 # (AI.md PART 12). Same gates, GitLab syntax: build/test/security stages
-# cover ci.yml; development/beta/release each get their own stage, tag- or
+# cover ci.yml; devel/beta/release each get their own stage, tag- or
 # schedule-triggered, running the canonical release skeleton (AI.md
 # PART 13). All jobs run in casjaysdev/android:latest — no inline tool
 # install.
@@ -9,7 +9,7 @@ stages:
   - build
   - test
   - security
-  - development
+  - devel
   - beta
   - release
 
@@ -135,9 +135,14 @@ secret-scan:
   variables:
     GIT_DEPTH: 0
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "web"'
   script:
-    - trufflehog git file://. --since-commit "$CI_COMMIT_BEFORE_SHA" --branch "$CI_COMMIT_REF_NAME" --results=verified,unknown --fail
+    - |
+      if [ "$CI_PIPELINE_SOURCE" = "web" ] || [ "$CI_COMMIT_BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+        trufflehog git file://. --results=verified --exclude-paths=.github/trufflehog-exclude.txt --fail
+      else
+        trufflehog git file://. --since-commit HEAD~1 --results=verified,unknown --exclude-paths=.github/trufflehog-exclude.txt --fail
+      fi
 
 workflow-policy:
   stage: security
@@ -162,10 +167,10 @@ workflow-policy:
       fi
       echo "OK: all pinned images use a digest"
 
-# ── development stage (development.yml equivalent) ─────────────────────
+# ── devel stage (devel.yml equivalent) ─────────────────────
 
-development:
-  stage: development
+devel:
+  stage: devel
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
@@ -189,11 +194,11 @@ development:
     - !reference [.stage_release_assets, script]
     - |
       # Rolling release: delete + recreate on every run (AI.md PART 13).
-      glab release delete development --yes || echo "No existing development release found"
-      git push origin :refs/tags/development || echo "No development tag to delete"
-      glab release create development dist/* \
+      glab release delete devel --yes || echo "No existing devel release found"
+      git push origin :refs/tags/devel || echo "No devel tag to delete"
+      glab release create devel dist/* \
         --name "devel-${COMMIT_HASH}" \
-        --notes "Development build devel-${COMMIT_HASH} — rolling prerelease, not for production use." \
+        --notes "Devel build devel-${COMMIT_HASH} — rolling prerelease, not for production use." \
         --ref "$(git rev-parse HEAD)"
   artifacts:
     paths:
