@@ -208,7 +208,10 @@ class ContainerUpdateCheckWorker(
                 // A host is worth a pass when checks are on for it, or when one of its
                 // images/stacks switches them back on over a host/global "off".
                 val hostEnabled = host.updateEnabledOverride ?: global.enabled
-                if (!hostEnabled && hostPolicies.none { it.enabledOverride == true }) {
+                // A manual check also visits a disabled host that still lists pending updates, so
+                // those entries are confirmed against the host (or dropped) instead of lingering.
+                val hasPending = hostPolicies.any { it.pendingUpdateDigest != null }
+                if (!hostEnabled && hostPolicies.none { it.enabledOverride == true } && !(force && hasPending)) {
                     continue
                 }
                 if (!force && !UpdateCheckGate.isHostDue(
@@ -297,7 +300,7 @@ class ContainerUpdateCheckWorker(
             }
         }
         if (connection == null) {
-            Logger.d(TAG, "No SSH session available for ${host.name} — skipping this cycle")
+            Logger.w(TAG, "No SSH session available for ${host.name} — its pending updates could not be confirmed this cycle")
             return null
         }
         val runner = SshExecRunner { connection.jschSession() }
