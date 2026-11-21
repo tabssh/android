@@ -59,7 +59,7 @@ class PasteDetectorTest {
         assertEquals(PasteServices.IDS.size, PasteServices.IDS.toSet().size)
         assertEquals(PasteServices.AUTO, PasteServices.normalise("retired"))
         assertEquals(PasteServices.TERMBIN, PasteServices.normalise("termbin"))
-        assertEquals("https://cb.pste.us", PasteServices.defaultUrl(PasteServices.CAIRNBIN))
+        assertEquals("https://pste.us", PasteServices.defaultUrl(PasteServices.CAIRNBIN))
         assertEquals("https://pste.us", PasteServices.defaultUrl(PasteServices.AUTO))
         assertTrue(PasteServices.IDS.containsAll(listOf("cairnbin", "termbin", "hastebin", "nullpointer", "dpaste")))
     }
@@ -69,5 +69,12 @@ class PasteDetectorTest {
         assertEquals("termbin.com" to 9999, TermbinProvider.parseHostPort("termbin.com"))
         assertEquals("mybin.example.org" to 4000, TermbinProvider.parseHostPort("mybin.example.org:4000"))
         assertEquals("mybin.example.org" to 9999, TermbinProvider.parseHostPort("tcp://mybin.example.org/"))
+    }
+
+    @Test
+    fun `the cairnbin help page is recognised without the repository name`() {
+        val help = "HelpCairnbin ... Create a paste ... GET /server/healthz Health status"
+        assertEquals(PasteServices.CAIRNBIN, PasteDetector.classify(help, null, null))
+        assertNull(PasteDetector.classify("Cairnbin only", null, null))
     }
 }

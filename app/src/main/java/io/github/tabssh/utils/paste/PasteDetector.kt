@@ -40,13 +40,17 @@ object PasteDetector {
 
     /** Pure classification of probe responses; null when none identifies a type. */
     internal fun classify(helpPage: String?, serverInfo: String?, homePage: String?): String? = when {
-        helpPage != null && helpPage.contains("apimgr/cairnbin") -> PasteServices.CAIRNBIN
+        helpPage != null && (helpPage.contains("apimgr/cairnbin") || isCairnbinHelp(helpPage)) -> PasteServices.CAIRNBIN
         serverInfo != null && serverInfo.contains("\"bodyMaxlength\"") -> PasteServices.LENPASTE
         homePage != null && homePage.contains("MicroBin") -> PasteServices.MICROBIN
         homePage != null && homePage.contains("Stikked", ignoreCase = true) -> PasteServices.STIKKED
         homePage != null && homePage.contains("haste", ignoreCase = true) -> PasteServices.HASTEBIN
         else -> null
     }
+
+    /** The Cairnbin help page names the product and documents its REST create endpoint. */
+    private fun isCairnbinHelp(page: String): Boolean =
+        page.contains("Cairnbin") && page.contains("Create a paste") && page.contains("/server/healthz")
 
     /** Detects the service type at [baseUrl]; result is remembered per URL. */
     suspend fun detect(baseUrl: String): String {

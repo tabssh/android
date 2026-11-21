@@ -1,6 +1,7 @@
 package io.github.tabssh.utils.paste
 
 import io.github.tabssh.network.readBoundedText
+import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
@@ -135,7 +136,24 @@ class PastebinProvider(private val apiKey: String, private val baseUrl: String) 
     }
 }
 
-class CairnbinProvider(private val baseUrl: String) : PasteProvider {
+/** Where a Cairnbin owner token is kept between uploads, one per server base URL. */
+interface CairnbinTokenStore {
+    fun get(baseUrl: String): String?
+    fun set(baseUrl: String, token: String?)
+}
+
+/**
+ * Cairnbin REST upload. A token is never required to create a paste: the server answers a
+ * request without a valid token by issuing a new owner token in the response, which is kept
+ * and reused (it also authorises deleting the paste). A rejected stored token is dropped and
+ * the upload is repeated once without it so the server can issue a fresh one.
+ */
+class CairnbinProvider(
+    private val baseUrl: String,
+    private val tokens: CairnbinTokenStore? = null,
+    private val client: OkHttpClient = sharedHttpClient
+) : PasteProvider {
+
     override suspend fun upload(title: String, content: String): String = withContext(Dispatchers.IO) {
         val base = baseUrl.trimEnd('/')
         // The REST API lives under /api/v1 and takes no CSRF token; /pastes is the browser form route.
@@ -145,19 +163,46 @@ class CairnbinProvider(private val baseUrl: String) : PasteProvider {
             .put("language", "text")
             .put("expires_in", "never")
             .toString()
-        val request = Request.Builder()
+        val stored = tokens?.get(base)?.takeIf { it.isNotBlank() }
+        var reply = post(base, payload, stored)
+        if (stored != null && reply.tokenRejected()) {
+            Logger.w(TAG, "upload: stored owner token was rejected (HTTP ${reply.code}); retrying without it")
+            tokens?.set(base, null)
+            reply = post(base, payload, null)
+        }
+        if (reply.code !in 200..299) {
+            throw Exception("Cairnbin upload failed: HTTP ${reply.code}")
+        }
+        val data = JSONObject(reply.body).optJSONObject("data")
+        val link = data?.optString("link").orEmpty()
+        if (!link.startsWith("http")) throw Exception("Cairnbin returned unexpected response")
+        // Present only when the server issued a new token; a still-valid one is kept as is.
+        data?.optString("owner_token")?.takeIf { it.isNotBlank() }?.let {
+            tokens?.set(base, it)
+            Logger.i(TAG, "upload: stored a new owner token")
+        }
+        link
+    }
+
+    private class Reply(val code: Int, val body: String) {
+        /** 401/403, or an error body naming the token, means the token sent was not accepted. */
+        fun tokenRejected(): Boolean =
+            code == 401 || code == 403 || (code !in 200..299 && body.contains("token", ignoreCase = true))
+    }
+
+    private fun post(base: String, payload: String, token: String?): Reply {
+        val builder = Request.Builder()
             .url("$base/api/v1/pastes")
             .header("Accept", "application/json")
             .post(payload.toRequestBody("application/json".toMediaType()))
-            .build()
-        val body = sharedHttpClient.newCall(request).execute().use { response ->
-            val text = response.body?.readBoundedText(1024 * 1024L).orEmpty()
-            if (!response.isSuccessful) throw Exception("Cairnbin upload failed: HTTP ${response.code}")
-            text
+        if (token != null) builder.header("Authorization", "Bearer $token")
+        return client.newCall(builder.build()).execute().use { response ->
+            Reply(response.code, response.body?.readBoundedText(1024 * 1024L).orEmpty())
         }
-        val link = JSONObject(body).optJSONObject("data")?.optString("link").orEmpty()
-        if (!link.startsWith("http")) throw Exception("Cairnbin returned unexpected response")
-        link
+    }
+
+    private companion object {
+        const val TAG = "CairnbinProvider"
     }
 }
 
@@ -266,6 +311,14 @@ class AutoPasteProvider(
         providerFor(PasteDetector.detect(baseUrl)).upload(title, content)
 }
 
+/** Keystore-backed token store; one owner token per server URL. */
+internal class PreferenceCairnbinTokens(
+    private val prefs: io.github.tabssh.storage.preferences.PreferenceManager
+) : CairnbinTokenStore {
+    override fun get(baseUrl: String): String? = prefs.getCairnbinToken(baseUrl)
+    override fun set(baseUrl: String, token: String?) = prefs.setCairnbinToken(baseUrl, token)
+}
+
 object PasteProviderFactory {
     fun create(prefs: io.github.tabssh.storage.preferences.PreferenceManager): PasteProvider =
         createForService(prefs.getPasteService(), prefs)
@@ -293,7 +346,7 @@ object PasteProviderFactory {
         url: String,
         prefs: io.github.tabssh.storage.preferences.PreferenceManager
     ): PasteProvider = when (type) {
-        PasteServices.CAIRNBIN    -> CairnbinProvider(url)
+        PasteServices.CAIRNBIN    -> CairnbinProvider(url, PreferenceCairnbinTokens(prefs))
         PasteServices.MICROBIN    -> MicroBinProvider(url)
         PasteServices.LENPASTE    -> LenpasteProvider(url)
         PasteServices.STIKKED     -> StikkedProvider(url)

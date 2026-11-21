@@ -807,6 +807,31 @@ class PreferenceManager(private val context: Context) {
         }
     }
 
+    // The Cairnbin owner token authorises deleting the pastes it created, so it is a secret:
+    // Keystore-backed like the Pastebin key, one alias per server URL, kept on this device only.
+    private fun cairnbinTokenAlias(baseUrl: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(baseUrl.trim().trimEnd('/').lowercase().toByteArray())
+        return "cairnbin_token_" + digest.take(8).joinToString("") { "%02x".format(it) }
+    }
+
+    fun getCairnbinToken(baseUrl: String): String? =
+        runBlocking { securePasswordManager.retrievePassword(cairnbinTokenAlias(baseUrl)) }?.takeIf { it.isNotBlank() }
+
+    fun setCairnbinToken(baseUrl: String, token: String?) {
+        runBlocking {
+            if (token.isNullOrBlank()) {
+                securePasswordManager.clearPassword(cairnbinTokenAlias(baseUrl))
+            } else {
+                securePasswordManager.storePassword(
+                    cairnbinTokenAlias(baseUrl),
+                    token,
+                    SecurePasswordManager.StorageLevel.ENCRYPTED
+                )
+            }
+        }
+    }
+
     // --- Audit log ---
 
     fun isAuditLogEnabled(): Boolean = getBoolean(KEY_AUDIT_LOG_ENABLED, false)

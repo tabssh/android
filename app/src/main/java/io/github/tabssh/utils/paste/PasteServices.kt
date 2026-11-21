@@ -20,7 +20,7 @@ object PasteServices {
 
     val ALL: List<Info> = listOf(
         Info(AUTO, "Autodetect", "https://pste.us"),
-        Info(CAIRNBIN, "Cairnbin", "https://cb.pste.us"),
+        Info(CAIRNBIN, "Cairnbin", "https://pste.us"),
         Info(MICROBIN, "MicroBin", "https://mb.pste.us"),
         Info(LENPASTE, "Lenpaste", "https://lp.pste.us"),
         Info(STIKKED, "Stikked", "https://pste.us"),
