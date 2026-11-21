@@ -105,10 +105,7 @@ pipeline {
 
         stage('Devel') {
             when {
-                anyOf {
-                    triggeredBy 'TimerTrigger'
-                    branch 'main'
-                }
+                branch 'main'
             }
             agent {
                 docker {

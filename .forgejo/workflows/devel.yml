@@ -43,6 +43,8 @@ jobs:
   build-devel:
     name: Build Devel APKs
     needs: ensure-build-image
+    # The devel channel builds and publishes only main, whatever started the run
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
       PROJECT_NAME: ${{ github.event.repository.name }}
