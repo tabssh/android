@@ -46,8 +46,6 @@ jobs:
     # The devel channel builds and publishes only main, whatever started the run
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    env:
-      PROJECT_NAME: ${{ github.event.repository.name }}
     container:
       image: ${{ needs.ensure-build-image.outputs.image }}
       options: "--user 0:0"
@@ -175,6 +173,8 @@ jobs:
       run: |
         mkdir -p dist
         cp app/build/outputs/apk/devel/*-android-*.apk dist/
+        PROJECT_NAME="$(basename "$(ls dist/*-android-universal.apk | head -1)" -android-universal.apk)"
+        echo "PROJECT_NAME=${PROJECT_NAME}" >> "$GITHUB_ENV"
         cp app/build/outputs/mapping/devel/mapping.txt dist/mapping.txt
 
         printf 'version: %s\ncommit: %s\nbuild_epoch: %s\n' \
@@ -217,7 +217,7 @@ jobs:
 
         EOF
 
-        cat >> RELEASE_NOTES_DEV.md << 'EOF'
+        cat >> RELEASE_NOTES_DEV.md << EOF
         ## Downloads
 
         - **${PROJECT_NAME}-android-universal.apk** - Recommended (works on all devices)

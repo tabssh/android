@@ -52,8 +52,6 @@ jobs:
     name: Build Beta Release
     needs: ensure-build-image
     runs-on: ubuntu-latest
-    env:
-      PROJECT_NAME: ${{ github.event.repository.name }}
     container:
       image: ${{ needs.ensure-build-image.outputs.image }}
       # Numeric 0:0 needs no /etc/passwd lookup — the runner and
@@ -180,6 +178,8 @@ jobs:
       run: |
         mkdir -p dist
         cp app/build/outputs/apk/release/*-android-*.apk dist/
+        PROJECT_NAME="$(basename "$(ls dist/*-android-universal.apk | head -1)" -android-universal.apk)"
+        echo "PROJECT_NAME=${PROJECT_NAME}" >> "$GITHUB_ENV"
         cp app/build/outputs/mapping/release/mapping.txt dist/mapping.txt
 
         printf 'version: %s\ncommit: %s\nbuild_epoch: %s\n' \

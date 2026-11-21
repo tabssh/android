@@ -84,16 +84,17 @@ variables:
     - |
       mkdir -p dist
       cp app/build/outputs/apk/${BUILD_FLAVOR}/*-android-*.apk dist/
+      PROJECT_NAME="$(basename "$(ls dist/*-android-universal.apk | head -1)" -android-universal.apk)"
       cp app/build/outputs/mapping/${BUILD_FLAVOR}/mapping.txt dist/mapping.txt
       printf 'version: %s\ncommit: %s\nbuild_epoch: %s\n' \
         "${VERSION_IDENTITY}" "$(git rev-parse HEAD)" "${BUILD_EPOCH}" > dist/version.txt
-      git archive --format=tar.gz -o "dist/${CI_PROJECT_NAME}-${VERSION_IDENTITY}-source.tar.gz" HEAD
+      git archive --format=tar.gz -o "dist/${PROJECT_NAME}-${VERSION_IDENTITY}-source.tar.gz" HEAD
       SBOM=$(find app/build \( -name '*.json' -a -path '*cyclonedx*' \) -o -name 'bom.json' | head -1)
       if [ -z "$SBOM" ]; then
         echo "ERROR: CycloneDX SBOM not found under app/build" >&2
         exit 1
       fi
-      cp "$SBOM" dist/${CI_PROJECT_NAME}-sbom.cdx.json
+      cp "$SBOM" dist/${PROJECT_NAME}-sbom.cdx.json
       cd dist
       sha256sum -- * > sha256.txt.tmp && mv sha256.txt.tmp sha256.txt
       sha512sum -- * | grep -v -- ' sha256.txt$' > sha512.txt.tmp && mv sha512.txt.tmp sha512.txt

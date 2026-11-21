@@ -23,7 +23,6 @@ pipeline {
         TRUFFLEHOG_IMAGE = 'trufflesecurity/trufflehog@sha256:1cec88f18ca39e26e04e61fe9d886c9c4e5f2fc0ba4f2ed185cac0722bd8a076'
         // Captured once per run (AI.md PART 13); Gradle derives versionCode from it
         BUILD_EPOCH = "${(long) (System.currentTimeMillis() / 1000)}"
-        PROJECT_NAME = "${env.JOB_NAME.tokenize('/')[0]}"
     }
 
     stages {
@@ -162,6 +161,7 @@ pipeline {
                 sh '''
                     mkdir -p dist
                     cp app/build/outputs/apk/devel/*-android-*.apk dist/
+                    PROJECT_NAME="$(basename "$(ls dist/*-android-universal.apk | head -1)" -android-universal.apk)"
                     cp app/build/outputs/mapping/devel/mapping.txt dist/mapping.txt
                     COMMIT_HASH=$(git rev-parse --short=7 HEAD)
                     printf 'version: %s\\ncommit: %s\\nbuild_epoch: %s\\n' \
@@ -220,6 +220,7 @@ pipeline {
                     mkdir -p dist
                     TAG_NAME="${TAG_NAME:-$(git describe --tags --exact-match)}"
                     cp app/build/outputs/apk/release/*-android-*.apk dist/
+                    PROJECT_NAME="$(basename "$(ls dist/*-android-universal.apk | head -1)" -android-universal.apk)"
                     cp app/build/outputs/mapping/release/mapping.txt dist/mapping.txt
                     printf 'version: %s\\ncommit: %s\\nbuild_epoch: %s\\n' \
                       "$TAG_NAME" "$(git rev-parse HEAD)" "$BUILD_EPOCH" > dist/version.txt
@@ -285,6 +286,7 @@ pipeline {
                     TAG_NAME="${TAG_NAME:-$(git describe --tags --exact-match)}"
                     VERSION="${TAG_NAME#v}"
                     cp app/build/outputs/apk/release/*-android-*.apk dist/
+                    PROJECT_NAME="$(basename "$(ls dist/*-android-universal.apk | head -1)" -android-universal.apk)"
                     cp app/build/outputs/mapping/release/mapping.txt dist/mapping.txt
                     printf 'version: %s\\ncommit: %s\\nbuild_epoch: %s\\n' \
                       "$VERSION" "$(git rev-parse HEAD)" "$BUILD_EPOCH" > dist/version.txt
