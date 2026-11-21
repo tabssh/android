@@ -61,7 +61,7 @@ object MoshNativeClient {
         if (!candidate.canExecute()) {
             // Should never happen — Android marks jniLibs entries executable —
             // but defensively chmod in case the user is on a quirky device.
-            try { candidate.setExecutable(true) } catch (_: Exception) {}
+            try { candidate.setExecutable(true) } catch (e: Exception) { Logger.d("MoshNativeClient", "resolveBinary failed: ${e.javaClass.simpleName}: ${e.message}") }
             if (!candidate.canExecute()) {
                 Logger.w(TAG, "mosh-client at ${candidate.absolutePath} is not executable")
                 return null

@@ -16,6 +16,7 @@ import io.github.tabssh.ui.utils.ContainerText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import io.github.tabssh.utils.logging.Logger
 
 /**
  * Manual "apply this pending update now" dialog — the UI-driven counterpart
@@ -86,11 +87,16 @@ object UpdateApplyDialog {
             .setCancelable(false)
             .setNegativeButton(R.string.cancel, null)
             .setOnDismissListener {
+                if (applyJob?.isActive == true) {
+                    Logger.w("UpdateApplyDialog", "policy $policyId: dialog dismissed while the update was still running; cancelling")
+                }
                 applyJob?.cancel()
                 onDone()
             }
             .create()
 
+        Logger.event("UpdateApplyDialog", "policy $policyId: update started by the user")
+        Logger.event("UpdateApplyDialog", "policy $policyId: update started by the user")
         applyJob = lifecycleOwner.lifecycleScope.launch {
             try {
                 UpdateApplier(policyDao).apply(policyId, transport).collect { event ->
@@ -127,6 +133,7 @@ object UpdateApplyDialog {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                Logger.e("UpdateApplyDialog", "policy $policyId: update flow threw", e)
                 textStatus.visibility = View.VISIBLE
                 textStatus.text = context.getString(
                     R.string.container_update_apply_failed,

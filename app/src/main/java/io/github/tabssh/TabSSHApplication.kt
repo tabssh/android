@@ -1082,6 +1082,7 @@ class TabSSHApplication : Application() {
                         }
                     )
                 } catch (e: Exception) {
+                    Logger.w("TabSSHApplication", "setupExceptionHandler failed: ${e.javaClass.simpleName}: ${e.message}")
                     // Crash reporter itself failed — fall through to default handler below
                     defaultHandler?.uncaughtException(thread, throwable)
                 }

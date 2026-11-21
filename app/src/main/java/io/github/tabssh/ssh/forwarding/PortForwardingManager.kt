@@ -345,6 +345,7 @@ class PortForwardingManager(private val sshConnection: SSHConnection) {
                 true
             }
         } catch (e: Exception) {
+            Logger.w("PortForwardingManager", "isPortAvailable failed: ${e.javaClass.simpleName}: ${e.message}")
             // Port is in use
             false
         }

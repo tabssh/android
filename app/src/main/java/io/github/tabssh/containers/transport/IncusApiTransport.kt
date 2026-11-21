@@ -150,7 +150,8 @@ class IncusApiTransport(
     private fun classifyHttp(context: String, response: Response): ContainerResult<Nothing> {
         val body = try {
             readBoundedBody(response)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Logger.w("IncusApiTransport", "classifyHttp failed: ${e.javaClass.simpleName}: ${e.message}")
             ""
         }
         val detail = (IncusApiParsers.parseError(body)?.message ?: body).trim().take(500)
@@ -197,9 +198,10 @@ class IncusApiTransport(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            Logger.w("IncusApiTransport", "call failed: ${e.javaClass.simpleName}: ${e.message}")
             ContainerResult.Error(context, e.message)
         }
-    }
+    }.logFailure(TAG, context)
 
     private suspend fun <T> get(context: String, path: String, parse: (String) -> T): ContainerResult<T> =
         call(context, { base -> Request.Builder().url("$base$path").get().build() }, parse)

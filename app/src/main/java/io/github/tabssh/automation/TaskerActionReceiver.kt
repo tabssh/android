@@ -40,7 +40,8 @@ class TaskerActionReceiver : BroadcastReceiver() {
                     intent.getLongExtra(TaskerWorker.KEY_TIMEOUT_MS, TaskerWorker.DEFAULT_TIMEOUT_MS)
                 } else null
             )
-        } catch (_: RuntimeException) {
+        } catch (e: RuntimeException) {
+            Logger.w("TaskerActionReceiver", "onReceive failed: ${e.javaClass.simpleName}: ${e.message}")
             null
         }
         if (data == null) {

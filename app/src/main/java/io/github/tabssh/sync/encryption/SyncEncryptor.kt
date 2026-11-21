@@ -256,6 +256,7 @@ class SyncEncryptor(
             decryptSyncFile(encrypted, password, params)
             true
         } catch (e: Exception) {
+            Logger.w("SyncEncryptor", "validatePassword failed: ${e.javaClass.simpleName}: ${e.message}")
             false
         }
     }

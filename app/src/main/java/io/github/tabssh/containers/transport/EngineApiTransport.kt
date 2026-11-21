@@ -146,12 +146,14 @@ class EngineApiTransport(
     private fun classifyHttp(context: String, response: Response): ContainerResult<Nothing> {
         val body = try {
             readBoundedBody(response)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Logger.w("EngineApiTransport", "classifyHttp failed: ${e.javaClass.simpleName}: ${e.message}")
             ""
         }
         val detail = try {
             JSONObject(body).optString("message").ifEmpty { body }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Logger.w("EngineApiTransport", "classifyHttp failed: ${e.javaClass.simpleName}: ${e.message}")
             body
         }.trim().take(500)
         return when (response.code) {
@@ -185,9 +187,10 @@ class EngineApiTransport(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            Logger.w("EngineApiTransport", "call failed: ${e.javaClass.simpleName}: ${e.message}")
             ContainerResult.Error(context, e.message)
         }
-    }
+    }.logFailure(TAG, context)
 
     private suspend fun <T> get(context: String, path: String, parse: (String) -> T): ContainerResult<T> =
         call(context, { base -> Request.Builder().url("$base$path").get().build() }, parse)
@@ -218,6 +221,7 @@ class EngineApiTransport(
     private fun <T> streamingFlow(
         path: String,
         post: Boolean = false,
+        onFailure: ((String) -> T)? = null,
         consume: (Response, kotlinx.coroutines.channels.SendChannel<T>) -> Unit
     ): Flow<T> = channelFlow {
         val prefix = versionPrefix()
@@ -232,17 +236,26 @@ class EngineApiTransport(
         val response = try {
             call.execute()
         } catch (e: java.io.IOException) {
-            Logger.d(TAG, "stream failed to open: ${e.message}")
+            val message = "stream to $path failed to open: ${e.message}"
+            Logger.w(TAG, message)
+            onFailure?.let { channel.trySend(it(message)) }
             return@channelFlow
         }
         try {
             if (!response.isSuccessful) {
+                // The daemon refused the request (unknown image, auth, bad name): report it
+                // instead of ending the stream as if nothing went wrong.
+                val failure = classifyHttp("Request to $path", response)
+                Logger.w(TAG, "stream to $path rejected: ${failure.failureSummary()}")
+                onFailure?.let { channel.trySend(it(failure.failureSummary())) }
                 return@channelFlow
             }
             consume(response, channel)
         } catch (e: java.io.IOException) {
-            // Normal teardown path when the collector cancels mid-read.
+            // Normal teardown when the collector cancels mid-read; a consumer that asked for
+            // failures (an image pull) must also learn that the stream broke.
             Logger.d(TAG, "stream ended: ${e.message}")
+            onFailure?.let { channel.trySend(it("stream interrupted: ${e.message}")) }
         } finally {
             response.close()
             call.cancel()
@@ -335,7 +348,11 @@ class EngineApiTransport(
     override fun pullImage(ref: String): Flow<PullProgressEvent> {
         val (image, tag) = DockerApiParsers.splitImageRef(ref)
         val path = "/images/create?fromImage=${urlEncode(image)}&tag=${urlEncode(tag)}"
-        return streamingFlow(path, post = true) { response, channel ->
+        return streamingFlow(
+            path,
+            post = true,
+            onFailure = { message -> PullProgressEvent(status = message, error = message) }
+        ) { response, channel ->
             val reader = response.body?.charStream()?.let { BufferedReader(it) } ?: return@streamingFlow
             // NDJSON progress stream — one JSON object per line.
             var line = DockerApiParsers.readBoundedLine(reader)
@@ -452,6 +469,7 @@ class EngineApiTransport(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            Logger.w("EngineApiTransport", "engineVersion failed: ${e.javaClass.simpleName}: ${e.message}")
             ContainerResult.Error("Failed to read engine version", e.message)
         }
     }

@@ -6,6 +6,8 @@ import io.github.tabssh.containers.transport.ContainerTransport
 import io.github.tabssh.storage.database.dao.ContainerAutoUpdatePolicyDao
 import io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy
 import io.github.tabssh.storage.database.entities.ContainerHost
+import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.containers.transport.failureSummary
 
 /**
  * One update pass over a single container host: enumerate the running containers,
@@ -42,8 +44,13 @@ class HostUpdateScanner(
         transport: ContainerTransport
     ): List<FoundUpdate>? {
         stackPruner?.prune(host, transport)
-        val containers = (transport.listContainers(all = false) as? ContainerResult.Success)?.value
-            ?: return null
+        val listed = transport.listContainers(all = false)
+        val containers = (listed as? ContainerResult.Success)?.value
+        if (containers == null) {
+            Logger.w(TAG, "scan ${host.name}: could not list containers: ${listed.failureSummary()}")
+            return null
+        }
+        Logger.i(TAG, "scan ${host.name}: ${containers.size} running container(s), ${hostPolicies.size} polic(ies)")
         val byName = hostPolicies.filter { it.scope != SCOPE_STACK }
             .associateBy { it.containerNameOrStackName }
         val byProject = hostPolicies.filter { it.scope == SCOPE_STACK }
@@ -53,7 +60,10 @@ class HostUpdateScanner(
         val dirExists = mutableMapOf<String, Boolean>()
         for (container in containers) {
             val name = container.names.firstOrNull()?.trimStart('/') ?: continue
-            if (name.endsWith(RecreateContainer.OLD_NAME_SUFFIX)) continue
+            if (name.endsWith(RecreateContainer.OLD_NAME_SUFFIX)) {
+                Logger.d(TAG, "scan ${host.name}: skipping leftover $name")
+                continue
+            }
             val project = container.labels[UpdateApplier.COMPOSE_PROJECT_LABEL]?.takeIf { it.isNotEmpty() }
             var policy = byName[name]
             // A compose container whose project directory was deleted has nothing to update through.
@@ -62,6 +72,7 @@ class HostUpdateScanner(
                 !dirExists.getOrPut(workDir) { StackPruner.directoryExists(transport, workDir) }
             ) {
                 policy?.let { policyDao.updatePendingUpdateDigest(it.id, null) }
+                Logger.i(TAG, "scan ${host.name}: skipping $name, compose directory $workDir no longer exists")
                 continue
             }
             val stack = project?.let { byProject[it] }
@@ -71,7 +82,10 @@ class HostUpdateScanner(
                 stack?.enabledOverride, stack?.autoApplyOverride,
                 policy?.enabledOverride, policy?.autoApplyOverride
             )
-            if (!settings.enabled.value) continue
+            if (!settings.enabled.value) {
+                Logger.d(TAG, "scan ${host.name}: skipping $name, update checks are disabled for it")
+                continue
+            }
             if (policy == null) {
                 val fresh = ContainerAutoUpdatePolicy(
                     containerHostId = host.id,
@@ -80,16 +94,20 @@ class HostUpdateScanner(
                     modifiedAt = System.currentTimeMillis()
                 )
                 policy = fresh.copy(id = policyDao.insert(fresh))
+                Logger.d(TAG, "scan ${host.name}: created policy ${policy.id} for $name")
             }
             val result = checker.checkOne(policy, transport)
             if (result.status == UpdateChecker.Status.UPDATE_AVAILABLE) {
+                Logger.i(TAG, "scan ${host.name}: update available for $name (autoApply=${settings.autoApply.value})")
                 found += FoundUpdate(policy, result, settings.autoApply.value, project)
             }
         }
+        Logger.i(TAG, "scan ${host.name}: ${found.size} update(s) found")
         return found
     }
 
     companion object {
+        private const val TAG = "HostUpdateScanner"
         const val SCOPE_CONTAINER = "container"
         const val SCOPE_STACK_SERVICE = "stack_service"
         const val SCOPE_STACK = "stack"

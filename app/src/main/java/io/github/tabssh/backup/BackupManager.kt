@@ -413,6 +413,7 @@ class BackupManager(private val context: Context) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            Logger.w("BackupManager", "validateBackup failed: ${e.javaClass.simpleName}: ${e.message}")
             BackupResult(false, "Invalid backup: ${e.message}")
         }
     }
@@ -475,6 +476,7 @@ class BackupManager(private val context: Context) {
                             val plain = try {
                                 encryptor.decrypt(bytes, password)
                             } catch (e: Exception) {
+                                Logger.w("BackupManager", "restoreBackup failed: ${e.javaClass.simpleName}: ${e.message}")
                                 return@withContext RestoreResult(
                                     success = false,
                                     message = "Incorrect backup password",
@@ -497,6 +499,7 @@ class BackupManager(private val context: Context) {
                     val plainBytes = try {
                         encryptor.decrypt(allBytes, password)
                     } catch (e: Exception) {
+                        Logger.w("BackupManager", "restoreBackup failed: ${e.javaClass.simpleName}: ${e.message}")
                         return@withContext RestoreResult(
                             success = false,
                             message = "Incorrect backup password",
@@ -602,7 +605,7 @@ class BackupManager(private val context: Context) {
             val key = filename.removeSuffix(".json")
             val count = try {
                 JSONObject(data).optJSONArray("items")?.length() ?: 0
-            } catch (_: Exception) { 0 }
+            } catch (e: Exception) { Logger.d("BackupManager", "createBackupMetadata failed: ${e.javaClass.simpleName}: ${e.message}"); 0 }
             itemCounts[key] = count
         }
 
@@ -622,6 +625,7 @@ class BackupManager(private val context: Context) {
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
             "${packageInfo.versionName} (${PackageInfoCompat.getLongVersionCode(packageInfo)})"
         } catch (e: Exception) {
+            Logger.w("BackupManager", "getAppVersion failed: ${e.javaClass.simpleName}: ${e.message}")
             "Unknown"
         }
     }

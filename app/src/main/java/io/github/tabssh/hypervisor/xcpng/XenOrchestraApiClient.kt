@@ -70,7 +70,7 @@ class XenOrchestraApiClient(
          * has no legitimate use here: XO always proxies consoles itself.
          */
         internal fun isAcceptableConsoleUrl(url: String, expectedHost: String): Boolean {
-            val parsed = try { java.net.URI(url) } catch (_: Exception) { return false }
+            val parsed = try { java.net.URI(url) } catch (e: Exception) { Logger.d("XenOrchestraAPI", "isAcceptableConsoleUrl failed: ${e.javaClass.simpleName}: ${e.message}"); return false }
             val scheme = parsed.scheme?.lowercase() ?: return false
             if (scheme != "ws" && scheme != "wss") return false
             val urlHost = parsed.host ?: return false
@@ -296,6 +296,7 @@ class XenOrchestraApiClient(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            Logger.w("XenOrchestraAPI", "authenticateWithToken failed: ${e.javaClass.simpleName}: ${e.message}")
             false
         }
     }

@@ -161,7 +161,7 @@ object SSHKeyParser {
                 // key material instead, producing binary garbage.
                 if (raw.all { it.code in 32..126 || it.code > 160 }) raw else ""
             } else ""
-        } catch (_: Exception) { "" }
+        } catch (e: Exception) { Logger.d("SSHKeyParser", "parseOpenSSHPrivateKey failed: ${e.javaClass.simpleName}: ${e.message}"); "" }
 
         return if (comment.isNotBlank()) parsed.copy(comment = comment) else parsed
     }

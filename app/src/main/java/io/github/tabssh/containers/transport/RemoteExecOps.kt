@@ -107,6 +107,7 @@ class RemoteExecOps(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            Logger.w("RemoteExecOps", "expandRemotePath failed: ${e.javaClass.simpleName}: ${e.message}")
             return ContainerResult.Error("Failed to expand remote path", e.message)
         }
     }
@@ -131,6 +132,7 @@ class RemoteExecOps(
             // DEFAULT tolerates the line wrapping remote base64 emits.
             Base64.decode(result.stdout, Base64.DEFAULT)
         } catch (e: IllegalArgumentException) {
+            Logger.w("RemoteExecOps", "readRemoteFile failed: ${e.javaClass.simpleName}: ${e.message}")
             return@withExpanded ContainerResult.Error("Remote file transfer corrupted", e.message)
         }
         ContainerResult.Success(String(decoded, Charsets.UTF_8))
@@ -219,6 +221,7 @@ class RemoteExecOps(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            Logger.w("RemoteExecOps", "detectComposeInvocation failed: ${e.javaClass.simpleName}: ${e.message}")
             ContainerResult.Error("Compose detection failed", e.message)
         }
     }
@@ -273,6 +276,7 @@ class RemoteExecOps(
     private fun failureWithOutput(context: String, result: ExecResult): ContainerResult<Nothing> {
         val classified = DockerCliParsers.classifyFailure(context, result.stderr, result.stdout, engine)
         val output = fullOutput(result)
+        Logger.w(TAG, "$context: exit=${result.exitStatus} output=${output.take(300)}")
         val detail = (if (output.isEmpty()) "" else output + "\n") + "[exit ${result.exitStatus}]"
         val withExit = if (classified is ContainerResult.Error) {
             classified.copy(message = "$context (exit ${result.exitStatus})")
@@ -431,6 +435,7 @@ class RemoteExecOps(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            Logger.w("RemoteExecOps", "composeLs failed: ${e.javaClass.simpleName}: ${e.message}")
             ContainerResult.Error("compose ls failed", e.message)
         }
     }
@@ -461,6 +466,7 @@ class RemoteExecOps(
     } catch (e: kotlinx.coroutines.CancellationException) {
         throw e
     } catch (e: Exception) {
+        Logger.w("RemoteExecOps", "scanDownStacks failed: ${e.javaClass.simpleName}: ${e.message}")
         emptyList()
     }
 
@@ -620,6 +626,7 @@ class RemoteExecOps(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            Logger.w("RemoteExecOps", "withExpanded failed: ${e.javaClass.simpleName}: ${e.message}")
             ContainerResult.Error("Remote operation failed", e.message)
         }
     }

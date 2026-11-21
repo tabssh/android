@@ -291,6 +291,7 @@ class TransportCapabilityDetector(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            Logger.w("TransportCapabilityDetector", "openApiTier failed: ${e.javaClass.simpleName}: ${e.message}")
             relay.close()
             ContainerResult.Error("Transport $mode failed", e.message)
         }

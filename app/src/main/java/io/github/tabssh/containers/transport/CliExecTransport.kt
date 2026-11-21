@@ -39,6 +39,9 @@ class CliExecTransport(
         private const val EXEC_TIMEOUT_MS = 60_000L
         private const val ACTION_TIMEOUT_MS = 120_000L
         private const val STATS_POLL_INTERVAL_MS = 2_000L
+
+        /** Printed after a CLI pull so its exit status reaches the collector. */
+        private const val PULL_EXIT_MARKER = "__tabssh_pull_exit__:"
     }
 
     private val engine: ContainerEngine = host.engineType()
@@ -162,13 +165,30 @@ class CliExecTransport(
     override suspend fun inspectImage(ref: String): ContainerResult<String> =
         cli("Failed to inspect image", "image inspect ${q(ref)}") { it.trim() }
 
-    override fun pullImage(ref: String): Flow<PullProgressEvent> =
-        // CLI pull has no NDJSON progress; each output line becomes a
-        // status-only event. The endpoint env prefix keeps the pull on the
-        // same daemon every other command targets.
-        flow {
-            emitAll(runner.stream("${cliContext.envPrefix()}$docker pull ${q(ref)} 2>&1"))
-        }.map { line -> PullProgressEvent(status = line) }
+    override fun pullImage(ref: String): Flow<PullProgressEvent> = flow {
+        // CLI pull has no NDJSON progress; each output line becomes a status-only event.
+        // The exit status is echoed after the pull so a failed pull (denied, unknown image,
+        // unreachable registry) becomes an error event instead of an empty success. The
+        // endpoint env prefix keeps the pull on the same daemon every other command targets.
+        val tail = ArrayDeque<String>()
+        val command = "${cliContext.envPrefix()}$docker pull ${q(ref)} 2>&1; echo \"$PULL_EXIT_MARKER\$?\""
+        runner.stream(command).collect { line ->
+            if (line.startsWith(PULL_EXIT_MARKER)) {
+                val code = line.removePrefix(PULL_EXIT_MARKER).trim().toIntOrNull() ?: -1
+                if (code == 0) {
+                    emit(PullProgressEvent(status = "pull finished"))
+                } else {
+                    val message = "$docker pull exited $code: ${tail.joinToString(" | ").take(300)}"
+                    Logger.w(TAG, "pullImage: $message")
+                    emit(PullProgressEvent(status = message, error = message))
+                }
+            } else {
+                tail.addLast(line)
+                if (tail.size > 3) tail.removeFirst()
+                emit(PullProgressEvent(status = line))
+            }
+        }
+    }
 
     override suspend fun removeImage(ref: String, force: Boolean): ContainerResult<Unit> =
         cli("Failed to remove image", "rmi${if (force) " -f" else ""} ${q(ref)}", ACTION_TIMEOUT_MS) { }

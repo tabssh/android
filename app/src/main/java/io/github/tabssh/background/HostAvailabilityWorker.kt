@@ -345,7 +345,8 @@ class HostAvailabilityWorker(
                 socket.connect(InetSocketAddress(host, port), TCP_TIMEOUT_MS)
                 true
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Logger.w("HostAvailabilityWorker", "tcpProbe failed: ${e.javaClass.simpleName}: ${e.message}")
             false
         }
     }

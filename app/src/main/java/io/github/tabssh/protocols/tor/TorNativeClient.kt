@@ -58,7 +58,7 @@ object TorNativeClient {
             return null
         }
         if (!candidate.canExecute()) {
-            try { candidate.setExecutable(true) } catch (_: Exception) {}
+            try { candidate.setExecutable(true) } catch (e: Exception) { Logger.d("TorNativeClient", "resolveBinary failed: ${e.javaClass.simpleName}: ${e.message}") }
             if (!candidate.canExecute()) {
                 Logger.w(TAG, "tor at ${candidate.absolutePath} is not executable")
                 return null

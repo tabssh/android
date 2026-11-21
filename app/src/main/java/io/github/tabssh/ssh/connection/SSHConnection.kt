@@ -80,7 +80,7 @@ class SSHConnection(
      * `terminalTitle`.
      */
     fun notifyMetadataChanged() {
-        try { metadataChangedCallback?.invoke() } catch (_: Exception) {}
+        try { metadataChangedCallback?.invoke() } catch (e: Exception) { Logger.d("SSHConnection", "notifyMetadataChanged failed: ${e.javaClass.simpleName}: ${e.message}") }
     }
     // The JSch session and every channel/proxy hung off it are created on the
     // connect coroutine (Dispatchers.IO) and read/torn down from the UI thread,
@@ -653,7 +653,8 @@ class SSHConnection(
             return try {
                 val addr = java.net.InetAddress.getByName(stripped)
                 if (addr is java.net.Inet6Address) "ipv6" else null
-            } catch (_: java.net.UnknownHostException) {
+            } catch (e: java.net.UnknownHostException) {
+                Logger.w("SSHConnection", "literalIpMode failed: ${e.javaClass.simpleName}: ${e.message}")
                 null
             }
         }
@@ -1821,7 +1822,7 @@ class SSHConnection(
                         ?.takeIf { it.isNotBlank() }
                         ?.let { org.json.JSONObject(it).optString("requestTTY", "auto") }
                         ?: "auto"
-                } catch (_: Exception) { "auto" }
+                } catch (e: Exception) { Logger.d("SSHConnection", "openShellChannel failed: ${e.javaClass.simpleName}: ${e.message}"); "auto" }
                 if (requestTTY == "yes" || requestTTY == "force") {
                     exec.setPty(true)
                     exec.setPtyType(profile.terminalType)
@@ -2917,7 +2918,7 @@ class SSHConnection(
      */
     fun getShellExitStatus(): Int {
         if (intentionalClose) return 0
-        val live = try { shellChannel?.exitStatus ?: -1 } catch (_: Exception) { -1 }
+        val live = try { shellChannel?.exitStatus ?: -1 } catch (e: Exception) { Logger.d("SSHConnection", "getShellExitStatus failed: ${e.javaClass.simpleName}: ${e.message}"); -1 }
         return if (live >= 0) live else lastShellExitStatus
     }
 

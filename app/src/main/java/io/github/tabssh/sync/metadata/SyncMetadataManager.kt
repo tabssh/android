@@ -185,6 +185,7 @@ class SyncMetadataManager(private val context: Context) {
         return try {
             BuildConfig.VERSION_NAME
         } catch (e: Exception) {
+            Logger.w("SyncMetadataManager", "getAppVersion failed: ${e.javaClass.simpleName}: ${e.message}")
             "1.0.0"
         }
     }

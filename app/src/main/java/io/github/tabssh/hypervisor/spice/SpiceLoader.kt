@@ -48,6 +48,7 @@ object SpiceLoader {
         try {
             File(TabSSHApplication.get().filesDir, NATIVE_CRASH_FILE_NAME)
         } catch (e: IllegalStateException) {
+            Logger.w("SpiceLoader", "nativeCrashMarkerFile failed: ${e.javaClass.simpleName}: ${e.message}")
             null
         }
 

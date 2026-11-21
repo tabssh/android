@@ -14,9 +14,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.NonCancellable
 import org.json.JSONObject
+import io.github.tabssh.containers.transport.failureSummary
 
 /**
  * Execution half of the pull-and-recreate flow — walks
@@ -87,7 +89,25 @@ class UpdateApplier(
      * in the policy on the current registry image. Runs the plan when
      * collected; safe to collect exactly once.
      */
-    fun apply(policyId: Long, transport: ContainerTransport): Flow<ApplyEvent> = flow {
+    fun apply(policyId: Long, transport: ContainerTransport): Flow<ApplyEvent> =
+        applyPlan(policyId, transport).onEach { logEvent(policyId, it) }
+
+    /** Writes every step, pull error, failure and completion of an apply run to the log. */
+    private fun logEvent(policyId: Long, event: ApplyEvent) {
+        when (event) {
+            is ApplyEvent.StepStarted -> Logger.i(TAG, "policy $policyId: step ${event.step}")
+            is ApplyEvent.PullProgress ->
+                event.event.error?.let { Logger.w(TAG, "policy $policyId: pull error: $it") }
+            is ApplyEvent.Completed -> Logger.event(TAG, "container update completed: ${event.containerName}")
+            is ApplyEvent.Failed -> Logger.e(
+                TAG,
+                "policy $policyId: update failed at ${event.step} (rolledBack=${event.rolledBack}): " +
+                    "${event.message}${event.output.takeIf { it.isNotBlank() }?.let { " | " + it.take(500) }.orEmpty()}"
+            )
+        }
+    }
+
+    private fun applyPlan(policyId: Long, transport: ContainerTransport): Flow<ApplyEvent> = flow {
         val policy = policyDao.getById(policyId)
         if (policy == null) {
             emit(ApplyEvent.Failed(RecreateStep.PULL_IMAGE, "Policy $policyId no longer exists", false))
@@ -236,6 +256,7 @@ class UpdateApplier(
             }
             throw e
         } catch (e: Exception) {
+            Logger.e(TAG, "policy $policyId: update threw at $currentStep", e)
             val rolledBack = if (stopAttempted) {
                 withContext(NonCancellable) {
                     try {
@@ -387,8 +408,13 @@ class UpdateApplier(
     private fun failNoRollback(message: String): ApplyEvent.Failed =
         ApplyEvent.Failed(RecreateStep.PULL_IMAGE, message, false)
 
-    /** Human-readable message for any ContainerResult failure. */
-    private fun failureMessage(result: ContainerResult<*>): String = when (result) {
+    /** Human-readable message for any ContainerResult failure; the full summary goes to the log. */
+    private fun failureMessage(result: ContainerResult<*>): String {
+        Logger.w(TAG, "container operation failed: ${result.failureSummary()}")
+        return failureText(result)
+    }
+
+    private fun failureText(result: ContainerResult<*>): String = when (result) {
         is ContainerResult.Success -> "unexpected success"
         is ContainerResult.PermissionDenied -> result.message
         is ContainerResult.NotFound -> result.message

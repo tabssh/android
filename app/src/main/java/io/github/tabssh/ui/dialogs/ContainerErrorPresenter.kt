@@ -6,6 +6,8 @@ import io.github.tabssh.R
 import io.github.tabssh.containers.transport.ContainerResult
 import io.github.tabssh.containers.transport.ContainerTransportMessages
 import io.github.tabssh.ui.utils.ContainerText
+import io.github.tabssh.containers.transport.failureSummary
+import io.github.tabssh.utils.logging.Logger
 
 /** Upper bound on the remote stderr appended to a failure dialog. */
 private const val MAX_DETAIL_LENGTH = 2048
@@ -105,6 +107,7 @@ object ContainerErrorPresenter {
     /** Show the failure in a modal dialog (no-op for Success). */
     fun present(context: Context, result: ContainerResult<*>) {
         if (result is ContainerResult.Success) return
+        Logger.w("ContainerErrorPresenter", "failure shown to the user: ${result.failureSummary()}")
         val title = if (result is ContainerResult.PermissionDenied) {
             R.string.container_permission_title
         } else {

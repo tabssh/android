@@ -3,6 +3,7 @@ package io.github.tabssh.tracker
 import io.github.tabssh.storage.database.entities.Domain
 import io.github.tabssh.storage.database.entities.VpsHost
 import java.net.InetAddress
+import io.github.tabssh.utils.logging.Logger
 
 /**
  * Merge rules for re-importing the Domain and VPS trackers: a row in the file that is already
@@ -113,6 +114,7 @@ object TrackerImportMerge {
         return try {
             InetAddress.getByName(text).hostAddress?.lowercase() ?: text
         } catch (e: Exception) {
+            Logger.w("TrackerImportMerge", "normalizeIpv6 failed: ${e.javaClass.simpleName}: ${e.message}")
             text
         }
     }

@@ -2,6 +2,7 @@ package io.github.tabssh.hypervisor.viewer
 
 import java.io.UnsupportedEncodingException
 import java.net.URLDecoder
+import io.github.tabssh.utils.logging.Logger
 
 /**
  * Shared, framework-free pieces of the display-URI parsers ([SpiceUri] and
@@ -141,6 +142,7 @@ internal object UriParsing {
         try {
             URLDecoder.decode(value, "UTF-8")
         } catch (e: IllegalArgumentException) {
+            Logger.w("UriParsing", "decode failed: ${e.javaClass.simpleName}: ${e.message}")
             value
         } catch (e: UnsupportedEncodingException) {
             value

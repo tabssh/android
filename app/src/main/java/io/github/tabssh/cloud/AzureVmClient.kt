@@ -258,7 +258,7 @@ class AzureVmClient : CloudProvider {
             throw e
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
-        } catch (_: Exception) { return@withContext false }
+        } catch (e: Exception) { Logger.d("AzureVmClient", "azureVmAction failed: ${e.javaClass.simpleName}: ${e.message}"); return@withContext false }
 
         val url = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Compute/virtualMachines/$vmName/$action?api-version=2023-03-01"
         val body = "{}".toRequestBody("application/json".toMediaTypeOrNull())
@@ -398,5 +398,5 @@ class AzureVmClient : CloudProvider {
 
     private fun tryAzureError(body: String): String? = try {
         JSONObject(body).optJSONObject("error")?.let { "${it.optString("code")}: ${it.optString("message")}" }
-    } catch (_: Exception) { null }
+    } catch (e: Exception) { Logger.d("AzureVmClient", "tryAzureError failed: ${e.javaClass.simpleName}: ${e.message}"); null }
 }

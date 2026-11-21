@@ -4,6 +4,7 @@ import io.github.tabssh.containers.ContainerEngine
 import io.github.tabssh.storage.database.entities.ContainerHost
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import io.github.tabssh.utils.logging.Logger
 
 /**
  * The seam between the transport ladder and one engine's REST dialect.
@@ -80,6 +81,7 @@ class DockerRestDialect(override val engine: ContainerEngine) : EngineRestDialec
             }
         }
     } catch (e: java.io.IOException) {
+        Logger.w("EngineRestDialect", "probeVersion failed: ${e.javaClass.simpleName}: ${e.message}")
         ContainerResult.TransportUnavailable("GET /version failed", e.message)
     }
 
@@ -128,6 +130,7 @@ class IncusRestDialect(override val engine: ContainerEngine) : EngineRestDialect
             }
         }
     } catch (e: java.io.IOException) {
+        Logger.w("EngineRestDialect", "probeVersion failed: ${e.javaClass.simpleName}: ${e.message}")
         ContainerResult.TransportUnavailable("GET /1.0 failed", e.message)
     }
 

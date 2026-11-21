@@ -6,6 +6,7 @@ import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
+import io.github.tabssh.utils.logging.Logger
 
 /**
  * Argon2id KDF + AES-256-GCM decryption for QR pairing payloads.
@@ -94,6 +95,7 @@ object PairingDecryptor {
         } catch (e: QrPayloadCodec.UnsupportedVersionException) {
             return PairingResult.Failure(FailureReason.UNSUPPORTED_VERSION, e.message ?: "unsupported envelope version")
         } catch (e: Exception) {
+            Logger.w("PairingDecryptor", "decryptAndDecode failed: ${e.javaClass.simpleName}: ${e.message}")
             return PairingResult.Failure(FailureReason.BAD_ENVELOPE, e.message ?: "couldn't read pairing data")
         }
 
@@ -110,6 +112,7 @@ object PairingDecryptor {
         } catch (e: AEADBadTagException) {
             return PairingResult.Failure(FailureReason.WRONG_CODE, "wrong code")
         } catch (e: Exception) {
+            Logger.w("PairingDecryptor", "decryptAndDecode failed: ${e.javaClass.simpleName}: ${e.message}")
             return PairingResult.Failure(FailureReason.INTERNAL_ERROR, e.message ?: "decryption failed")
         }
 
@@ -122,6 +125,7 @@ object PairingDecryptor {
                 e.message ?: "unsupported payload version",
             )
         } catch (e: Exception) {
+            Logger.w("PairingDecryptor", "decryptAndDecode failed: ${e.javaClass.simpleName}: ${e.message}")
             return PairingResult.Failure(FailureReason.BAD_PAYLOAD, e.message ?: "couldn't read pairing payload")
         }
 

@@ -17,6 +17,7 @@ import org.json.JSONObject
 import java.io.IOException
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
+import io.github.tabssh.containers.transport.logFailure
 
 /**
  * Registry HTTP API v2 client for update digest checks.
@@ -193,9 +194,10 @@ open class RegistryClient(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            Logger.w("RegistryClient", "fetchManifestDigest failed: ${e.javaClass.simpleName}: ${e.message}")
             ContainerResult.Error("Registry check failed for ${ref.canonicalRepository}", e.message)
         }
-    }
+    }.logFailure(TAG, "manifest digest for ${ref.canonicalRepository}")
 
     /**
      * Read a response body as bytes, refusing anything over [MAX_BODY_BYTES].

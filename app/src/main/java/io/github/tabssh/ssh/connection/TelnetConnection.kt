@@ -382,7 +382,7 @@ class TelnetConnection(
         pkt[i] = SE.toByte()
         try {
             synchronized(writeLock) { out.write(pkt); out.flush() }
-        } catch (_: IOException) {}
+        } catch (e: IOException) { Logger.d("TelnetConnection", "sendTerminalType failed: ${e.javaClass.simpleName}: ${e.message}") }
     }
 
     private fun sendNaws(cols: Int, rows: Int) {

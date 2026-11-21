@@ -24,7 +24,8 @@ class LocaleFireReceiver : BroadcastReceiver() {
         if (intent.action != LocalePlugin.ACTION_FIRE_SETTING) return
         val data = try {
             LocalePlugin.toWorkerData(intent.getBundleExtra(LocalePlugin.EXTRA_BUNDLE))
-        } catch (_: RuntimeException) {
+        } catch (e: RuntimeException) {
+            Logger.w("LocaleFireReceiver", "onReceive failed: ${e.javaClass.simpleName}: ${e.message}")
             null
         }
         if (data == null) {

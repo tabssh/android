@@ -246,6 +246,7 @@ object JnlpFile {
         try {
             java.net.URI(url).host?.takeIf { it.isNotBlank() }
         } catch (e: Exception) {
+            Logger.w("JnlpFile", "hostFromUrl failed: ${e.javaClass.simpleName}: ${e.message}")
             null
         }
 

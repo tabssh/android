@@ -162,6 +162,6 @@ object TermuxMoshLauncher {
             Intent.ACTION_VIEW,
             android.net.Uri.parse("https://f-droid.org/en/packages/$TERMUX_PKG/")
         ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-        try { context.startActivity(webIntent) } catch (_: Exception) {}
+        try { context.startActivity(webIntent) } catch (e: Exception) { Logger.d("TermuxMoshLauncher", "openTermuxListing failed: ${e.javaClass.simpleName}: ${e.message}") }
     }
 }

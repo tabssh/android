@@ -1,5 +1,7 @@
 package io.github.tabssh.pairing
 
+import io.github.tabssh.utils.logging.Logger
+
 /**
  * Minimal CBOR decoder for the fixed schemas in AI.md §18.4.
  *
@@ -319,6 +321,7 @@ object QrPayloadCodec {
         return try {
             android.util.Base64.decode(s.replace("\\s+".toRegex(), ""), flags)
         } catch (e: IllegalArgumentException) {
+            Logger.w("QrPayloadCodec", "base64Decode failed: ${e.javaClass.simpleName}: ${e.message}")
             android.util.Base64.decode(
                 s.replace("\\s+".toRegex(), ""),
                 android.util.Base64.DEFAULT or android.util.Base64.NO_WRAP,

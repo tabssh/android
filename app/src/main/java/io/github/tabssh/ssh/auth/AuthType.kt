@@ -1,6 +1,7 @@
 package io.github.tabssh.ssh.auth
 
 import kotlinx.serialization.Serializable
+import io.github.tabssh.utils.logging.Logger
 
 /**
  * SSH authentication types supported by TabSSH
@@ -23,7 +24,7 @@ enum class AuthType(val displayName: String, val description: String) {
                 "public_key", "publickey", "public-key", "key" -> PUBLIC_KEY
                 "password" -> PASSWORD
                 "keyboard_interactive", "keyboard-interactive", "keyboard" -> KEYBOARD_INTERACTIVE
-                else -> try { valueOf(name) } catch (_: IllegalArgumentException) { PASSWORD }
+                else -> try { valueOf(name) } catch (e: IllegalArgumentException) { Logger.d("AuthType", "fromString failed: ${e.javaClass.simpleName}: ${e.message}"); PASSWORD }
             }
         }
 

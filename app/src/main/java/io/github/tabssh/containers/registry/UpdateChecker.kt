@@ -8,6 +8,7 @@ import io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy
 import io.github.tabssh.utils.logging.Logger
 import org.json.JSONArray
 import org.json.JSONObject
+import io.github.tabssh.containers.transport.failureSummary
 
 /**
  * Per-policy registry update check.
@@ -91,6 +92,7 @@ class UpdateChecker(
                     else -> null
                 }
             } catch (e: Exception) {
+                Logger.w("UpdateChecker", "normalizeInspect failed: ${e.javaClass.simpleName}: ${e.message}")
                 null
             }
         }
@@ -175,6 +177,12 @@ class UpdateChecker(
                 is ContainerResult.Success -> r.value
                 else -> return error(policy, imageRefRaw, failureMessage(r))
             }
+        Logger.d(
+            TAG,
+            "policy ${policy.id} (${policy.containerNameOrStackName}): ref=$imageRefRaw " +
+                "running=${runningDigest?.take(19) ?: "unknown"} registry=${registryDigest.take(19)} " +
+                "credential=${credential?.authType ?: "none"}"
+        )
 
         // 4 — decide and persist.
         val pending = decide(
@@ -223,8 +231,13 @@ class UpdateChecker(
         return CheckResult(policy, Status.ERROR, imageRef = imageRef, message = message)
     }
 
-    /** Human-readable message for any ContainerResult failure. */
-    private fun failureMessage(result: ContainerResult<*>): String = when (result) {
+    /** Human-readable message for any ContainerResult failure; the full summary goes to the log. */
+    private fun failureMessage(result: ContainerResult<*>): String {
+        Logger.w(TAG, "container or registry request failed: ${result.failureSummary()}")
+        return failureText(result)
+    }
+
+    private fun failureText(result: ContainerResult<*>): String = when (result) {
         is ContainerResult.Success -> "unexpected success"
         is ContainerResult.PermissionDenied -> result.message
         is ContainerResult.NotFound -> result.message

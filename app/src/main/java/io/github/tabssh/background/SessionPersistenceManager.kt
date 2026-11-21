@@ -563,6 +563,7 @@ class SessionPersistenceManager(
         val compressedBytes = try {
             android.util.Base64.decode(compressedContent, android.util.Base64.NO_WRAP)
         } catch (e: Exception) {
+            Logger.w("SessionPersistenceManager", "decompressTerminalContent failed: ${e.javaClass.simpleName}: ${e.message}")
             return compressedContent.takeIf {
                 it.toByteArray(Charsets.UTF_8).size <= MAX_RESTORED_TERMINAL_BYTES
             }.orEmpty()

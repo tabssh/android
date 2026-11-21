@@ -327,7 +327,7 @@ class SSHConnectionService : Service() {
                 it.connectionState.value == ConnectionState.CONNECTED ||
                 it.connectionState.value == ConnectionState.CONNECTING
             }
-        } catch (_: Exception) { null }
+        } catch (e: Exception) { Logger.d("SSHConnectionService", "startForegroundService failed: ${e.javaClass.simpleName}: ${e.message}"); null }
 
         if (activeTab != null) {
             val notif = io.github.tabssh.utils.NotificationHelper.buildTabStatusNotification(
@@ -463,7 +463,7 @@ class SSHConnectionService : Service() {
                 is io.github.tabssh.ui.tabs.Tab.Panes -> false
             }
         }
-    } catch (_: Exception) { emptyList() }
+    } catch (e: Exception) { Logger.d("SSHConnectionService", "graphicalLiveTabs failed: ${e.javaClass.simpleName}: ${e.message}"); emptyList() }
 
     /** Display title + protocol label + current state for a graphical tab. */
     private fun graphicalTabInfo(
@@ -905,7 +905,7 @@ class SSHConnectionService : Service() {
         if (backgroundWakeCycleJob?.isActive == true) return
         val keepaliveMs = try {
             app.preferencesManager.getServerAliveIntervalMs()
-        } catch (_: Exception) { 60_000L }
+        } catch (e: Exception) { Logger.d("SSHConnectionService", "ensureBackgroundWakeCycleRunning failed: ${e.javaClass.simpleName}: ${e.message}"); 60_000L }
         // Sleep between wake windows. Floor at 30 s; keepalive interval minus
         // the window so the total cycle equals roughly the keepalive interval.
         val sleepMs = maxOf(keepaliveMs - BACKGROUND_WAKE_WINDOW_MS, 30_000L)
@@ -1047,7 +1047,7 @@ class SSHConnectionService : Service() {
         // Sealed list: graphical (VNC/console) tabs share the per-tab id
         // range, so an SSH-only live set would sweep their notifications
         // away on every heartbeat.
-        val tabs = try { app.tabManager.getAllTabsSealed() } catch (_: Exception) { emptyList() }
+        val tabs = try { app.tabManager.getAllTabsSealed() } catch (e: Exception) { Logger.d("SSHConnectionService", "sweepPerTabNotifications failed: ${e.javaClass.simpleName}: ${e.message}"); emptyList() }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val liveIds: Set<Int> = if (cancelAll) emptySet() else {
                 tabs.map { io.github.tabssh.utils.NotificationHelper.perTabNotificationId(it.tabId) }

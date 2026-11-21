@@ -101,7 +101,7 @@ class GcpComputeClient : CloudProvider {
                 if (!resp.isSuccessful) {
                     val msg = try {
                         JSONObject(raw).optJSONObject("error")?.optString("message") ?: resp.message
-                    } catch (_: Exception) { resp.message }
+                    } catch (e: Exception) { Logger.w("GcpComputeClient", "fetchInventory failed: ${e.javaClass.simpleName}: ${e.message}"); resp.message }
                     if (resp.code == 401 || resp.code == 403) {
                         throw CloudAuthException("GCP token rejected (HTTP ${resp.code}): $msg")
                     }
@@ -153,7 +153,7 @@ class GcpComputeClient : CloudProvider {
                     if (!resp.isSuccessful) {
                         val msg = try {
                             JSONObject(raw).optJSONObject("error")?.optString("message") ?: resp.message
-                        } catch (_: Exception) { resp.message }
+                        } catch (e: Exception) { Logger.w("GcpComputeClient", "fetchLiveInstances failed: ${e.javaClass.simpleName}: ${e.message}"); resp.message }
                         if (resp.code == 401 || resp.code == 403) {
                             throw CloudAuthException("GCP token rejected (HTTP ${resp.code}): $msg")
                         }

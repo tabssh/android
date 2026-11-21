@@ -1015,7 +1015,8 @@ class ProxmoxApiClient(
                         ?: errObj.toString().takeIf { it.isNotBlank() }
                 }
                 ?: responseBody
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Logger.w("ProxmoxApiClient", "proxmoxErrorDetail failed: ${e.javaClass.simpleName}: ${e.message}")
             responseBody
         }
     )

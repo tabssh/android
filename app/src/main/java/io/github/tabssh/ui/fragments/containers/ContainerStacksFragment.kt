@@ -33,6 +33,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.tabssh.utils.logging.Logger
+import io.github.tabssh.containers.transport.failureSummary
 
 /**
  * Compose stacks destination: Room-backed stack list, merged with projects
@@ -218,7 +220,7 @@ class ContainerStacksFragment : ContainerPageFragment() {
             openLogs(item)
         }
         actions += ContainerActionSheet.Action(R.drawable.ic_info, getString(R.string.container_stack_services)) {
-            runComposeAction(item) {
+            runComposeAction(item, "composePs") {
                 composeAction(
                     current, item,
                     { t, d -> t.composePs(d) },
@@ -227,7 +229,7 @@ class ContainerStacksFragment : ContainerPageFragment() {
             }
         }
         actions += ContainerActionSheet.Action(R.drawable.ic_arrow_up, getString(R.string.container_stack_action_up)) {
-            runComposeAction(item) {
+            runComposeAction(item, "composeUp") {
                 composeAction(
                     current, item,
                     { t, d -> t.composeUp(d) },
@@ -236,7 +238,7 @@ class ContainerStacksFragment : ContainerPageFragment() {
             }
         }
         actions += ContainerActionSheet.Action(R.drawable.ic_refresh, getString(R.string.container_stack_action_restart)) {
-            runComposeAction(item) {
+            runComposeAction(item, "composeRestart") {
                 composeAction(
                     current, item,
                     { t, d -> t.composeRestart(d) },
@@ -245,7 +247,7 @@ class ContainerStacksFragment : ContainerPageFragment() {
             }
         }
         actions += ContainerActionSheet.Action(R.drawable.ic_download, getString(R.string.container_pull_action)) {
-            runComposeAction(item) {
+            runComposeAction(item, "composePull") {
                 composeAction(
                     current, item,
                     { t, d -> t.composePull(d) },
@@ -254,7 +256,7 @@ class ContainerStacksFragment : ContainerPageFragment() {
             }
         }
         actions += ContainerActionSheet.Action(R.drawable.ic_arrow_down, getString(R.string.container_stack_action_down)) {
-            runComposeAction(item) {
+            runComposeAction(item, "composeDown") {
                 composeAction(
                     current, item,
                     { t, d -> t.composeDown(d) },
@@ -300,14 +302,31 @@ class ContainerStacksFragment : ContainerPageFragment() {
 
     private fun runComposeAction(
         item: StackListItem,
+        label: String,
         action: suspend () -> ContainerResult<String>
     ) {
-        if (composeActionInFlight) return
+        if (composeActionInFlight) {
+            Logger.d("ContainerStacksFragment", "stack ${item.name}: $label ignored, another action is running")
+            return
+        }
+        Logger.event("ContainerStacksFragment", "stack ${item.name}: $label started")
         composeActionInFlight = true
         progressBar.visibility = View.VISIBLE
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val result = action()
+                val result = try {
+                    action()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Logger.e("ContainerStacksFragment", "stack ${item.name}: $label threw", e)
+                    throw e
+                }
+                if (result is ContainerResult.Success) {
+                    Logger.event("ContainerStacksFragment", "stack ${item.name}: $label succeeded")
+                } else {
+                    Logger.w("ContainerStacksFragment", "stack ${item.name}: $label failed: ${result.failureSummary()}")
+                }
                 if (!isAdded) return@launch
                 when (result) {
                     is ContainerResult.Success -> {
@@ -362,7 +381,7 @@ class ContainerStacksFragment : ContainerPageFragment() {
      */
     private fun deleteStack(item: StackListItem) {
         val current = session ?: return
-        runComposeAction(item) {
+        runComposeAction(item, "composeDelete") {
             val transport = current.transport
             val result = when (item) {
                 is StackListItem.Tracked -> transport.composeDelete(item.stack.remotePath)

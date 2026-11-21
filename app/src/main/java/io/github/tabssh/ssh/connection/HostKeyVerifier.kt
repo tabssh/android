@@ -464,6 +464,7 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
             val name = String(key, 4, len, Charsets.US_ASCII)
             if (name in KNOWN_KEY_TYPES) name else "unknown"
         } catch (e: Exception) {
+            Logger.w("HostKeyVerifier", "detectKeyType failed: ${e.javaClass.simpleName}: ${e.message}")
             "unknown"
         }
     }

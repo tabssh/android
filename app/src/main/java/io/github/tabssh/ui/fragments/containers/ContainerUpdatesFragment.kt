@@ -39,6 +39,7 @@ import io.github.tabssh.ui.utils.ContainerText
 import io.github.tabssh.ui.utils.TriStateToggle
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import io.github.tabssh.utils.logging.Logger
 
 /**
  * Updates destination (Docker and Podman). Top to bottom: the host-tier update
@@ -421,6 +422,8 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
         checking = true
         buttonCheckNow.isEnabled = false
         buttonCheckNow.setText(R.string.container_updates_checking)
+        Logger.event(TAG, "update check on ${host.name} started")
+        Logger.event(TAG, "update check on ${host.name} started")
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val appContext = requireContext().applicationContext
@@ -433,6 +436,9 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
                     .scan(host, hostPolicies, globalSettings(), current.transport)
                 if (found != null) {
                     app.database.containerHostDao().updateLastUpdateCheck(host.id, System.currentTimeMillis())
+                    Logger.event(TAG, "update check on ${host.name} finished: ${found.size} update(s) available")
+                } else {
+                    Logger.w(TAG, "update check on ${host.name} could not read the container list")
                 }
                 if (!isAdded) return@launch
                 val message = when {
@@ -444,6 +450,13 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
                 }
                 Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
                 onSessionReady(current)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.e(TAG, "update check on ${host.name} failed", e)
+                if (isAdded) {
+                    Toast.makeText(requireContext(), R.string.container_updates_check_failed, Toast.LENGTH_SHORT).show()
+                }
             } finally {
                 checking = false
                 if (isAdded) {
@@ -455,6 +468,7 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
     }
 
     private companion object {
+        const val TAG = "ContainerUpdatesFragment"
         const val MIN_INTERVAL_HOURS = 1
         const val MAX_INTERVAL_HOURS = 8760
     }

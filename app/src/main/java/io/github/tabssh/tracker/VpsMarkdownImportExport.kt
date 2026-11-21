@@ -265,7 +265,8 @@ object VpsMarkdownImportExport {
             try {
                 val parsed = fmt.format().parse(cleaned)
                 if (parsed != null) return parsed.time
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Logger.w("VpsMarkdownImportExport", "parseBestEffortDate failed: ${e.javaClass.simpleName}: ${e.message}")
                 // Try the next format.
             }
         }
@@ -281,7 +282,8 @@ object VpsMarkdownImportExport {
             val now = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
             target.set(Calendar.YEAR, now.get(Calendar.YEAR))
             RenewalUrgency.effectiveDate(target.timeInMillis, billingCycle ?: "yearly", now.timeInMillis)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Logger.w("VpsMarkdownImportExport", "parseBestEffortDate failed: ${e.javaClass.simpleName}: ${e.message}")
             null
         }
     }

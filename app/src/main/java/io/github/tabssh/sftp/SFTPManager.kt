@@ -451,6 +451,7 @@ class SFTPManager(private val sshConnection: SSHConnection) {
             val alreadyExists = try {
                 channel.stat(remoteDir).isDir
             } catch (statError: SftpException) {
+                Logger.w("SFTPManager", "uploadDirectoryContents failed: ${statError.javaClass.simpleName}: ${statError.message}")
                 false
             }
             if (!alreadyExists) throw e
@@ -786,6 +787,7 @@ class SFTPManager(private val sshConnection: SSHConnection) {
                 channel.stat(task.remotePath)
                 true
             } catch (e: SftpException) {
+                Logger.w("SFTPManager", "performUpload failed: ${e.javaClass.simpleName}: ${e.message}")
                 false
             }
             
@@ -793,6 +795,7 @@ class SFTPManager(private val sshConnection: SSHConnection) {
                 try {
                     channel.stat(task.remotePath).size
                 } catch (e: Exception) {
+                    Logger.w("SFTPManager", "performUpload failed: ${e.javaClass.simpleName}: ${e.message}")
                     0L
                 }
             } else 0L
@@ -1197,6 +1200,7 @@ class SFTPManager(private val sshConnection: SSHConnection) {
                 channel.stat(path)
                 true
             } catch (e: SftpException) {
+                Logger.w("SFTPManager", "remoteFileExists failed: ${e.javaClass.simpleName}: ${e.message}")
                 false
             }
         }

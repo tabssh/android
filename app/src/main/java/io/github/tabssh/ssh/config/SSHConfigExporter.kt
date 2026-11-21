@@ -3,6 +3,7 @@ package io.github.tabssh.ssh.config
 import io.github.tabssh.storage.database.entities.ConnectionGroup
 import io.github.tabssh.storage.database.entities.ConnectionProfile
 import org.json.JSONObject
+import io.github.tabssh.utils.logging.Logger
 
 /**
  * Wave 6.1 — Export `ConnectionProfile` rows to OpenSSH `~/.ssh/config`
@@ -124,7 +125,8 @@ object SSHConfigExporter {
 
     private fun decodeAdvanced(json: String?): JSONObject = try {
         if (json.isNullOrBlank()) JSONObject() else JSONObject(json)
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        Logger.w("SSHConfigExporter", "decodeAdvanced failed: ${e.javaClass.simpleName}: ${e.message}")
         JSONObject()
     }
 }
