@@ -17,6 +17,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Paste uploads fall back to pste.us.** When a service's built-in public server is dead or unreachable, the upload is repeated once on the Cairnbin server at pste.us, which also answers the other services' protocols. A server you configured yourself never falls back.
 - **Cairnbin owner token for pastes.** Uploads to a Cairnbin server (pste.us) keep the owner token the server issues, in the Keystore, and reuse it. A rejected token is dropped and the upload is repeated without it so the server issues a new one. Cairnbin is now autodetected on pste.us and is its default server.
 - **Delete a stack for real.** Delete on a stack (tracked or discovered) now runs compose down and then removes its files on the host: the whole stack directory when it is inside the host's compose directory, otherwise only the compose files. A failed down stops the delete so nothing is orphaned. Volumes and data outside that directory are kept.
 - **System update snippet.** A new starter snippet in the System category updates the host with whichever package manager it has (apt, dnf, yum, zypper, pacman, apk, xbps, pkg), running directly as root, through sudo when it is available, or unprivileged otherwise. Existing installs receive it once on upgrade.

@@ -83,3 +83,40 @@ class CairnbinProviderTest {
         assertNull(tokens.token)
     }
 }
+
+/** A dead primary service falls back to the second provider; a working one is never duplicated. */
+class FallbackPasteProviderTest {
+
+    private class Stub(private val result: Result<String>) : PasteProvider {
+        var calls = 0
+        override suspend fun upload(title: String, content: String): String {
+            calls++
+            return result.getOrThrow()
+        }
+    }
+
+    @Test
+    fun `a failing primary is retried on the fallback`() = runBlocking {
+        val primary = Stub(Result.failure(Exception("down")))
+        val fallback = Stub(Result.success("https://pste.us/x"))
+        assertEquals("https://pste.us/x", FallbackPasteProvider(primary, fallback).upload("t", "c"))
+        assertEquals(1, primary.calls)
+        assertEquals(1, fallback.calls)
+    }
+
+    @Test
+    fun `a working primary never touches the fallback`() = runBlocking {
+        val primary = Stub(Result.success("https://a/x"))
+        val fallback = Stub(Result.success("https://pste.us/x"))
+        assertEquals("https://a/x", FallbackPasteProvider(primary, fallback).upload("t", "c"))
+        assertEquals(0, fallback.calls)
+    }
+
+    @Test
+    fun `when both fail the primary error is reported`() {
+        val primary = Stub(Result.failure(Exception("primary down")))
+        val fallback = Stub(Result.failure(Exception("fallback down")))
+        val e = assertFailsWith<Exception> { runBlocking { FallbackPasteProvider(primary, fallback).upload("t", "c") } }
+        assertEquals("primary down", e.message)
+    }
+}

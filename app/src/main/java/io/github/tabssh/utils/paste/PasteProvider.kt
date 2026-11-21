@@ -319,6 +319,32 @@ internal class PreferenceCairnbinTokens(
     override fun set(baseUrl: String, token: String?) = prefs.setCairnbinToken(baseUrl, token)
 }
 
+/**
+ * Uploads with [primary]; when it fails for any reason (dead service, network, server error)
+ * the same upload is repeated once on [fallback], so a paste still gets created while the
+ * fallback server is up. If both fail, the primary's error is reported.
+ */
+class FallbackPasteProvider(
+    private val primary: PasteProvider,
+    private val fallback: PasteProvider
+) : PasteProvider {
+    override suspend fun upload(title: String, content: String): String = try {
+        primary.upload(title, content)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Logger.w("FallbackPasteProvider", "upload failed (${e.message}); retrying on the fallback server")
+        try {
+            fallback.upload(title, content)
+        } catch (f: kotlinx.coroutines.CancellationException) {
+            throw f
+        } catch (f: Exception) {
+            Logger.w("FallbackPasteProvider", "fallback upload failed too: ${f.message}")
+            throw e
+        }
+    }
+}
+
 object PasteProviderFactory {
     fun create(prefs: io.github.tabssh.storage.preferences.PreferenceManager): PasteProvider =
         createForService(prefs.getPasteService(), prefs)
@@ -334,11 +360,17 @@ object PasteProviderFactory {
     ): PasteProvider {
         val id = PasteServices.normalise(serviceId)
         val url = prefs.getPasteUrl(id)
-        return if (id == PasteServices.AUTO) {
+        val primary = if (id == PasteServices.AUTO) {
             AutoPasteProvider(url) { detected -> build(detected, url, prefs) }
         } else {
             build(id, url, prefs)
         }
+        val fallbackUrl = PasteServices.defaultUrl(PasteServices.CAIRNBIN)
+        // Only the built-in public server of a service falls back. A server the user configured
+        // themselves never has its content resent to a third party, and pste.us itself has nothing to fall back to.
+        val isDefaultServer = url.trimEnd('/').equals(PasteServices.defaultUrl(id).trimEnd('/'), ignoreCase = true)
+        if (!isDefaultServer || PasteDetector.hostOf(url).equals(PasteDetector.hostOf(fallbackUrl), ignoreCase = true)) return primary
+        return FallbackPasteProvider(primary, CairnbinProvider(fallbackUrl, PreferenceCairnbinTokens(prefs)))
     }
 
     internal fun build(
