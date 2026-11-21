@@ -92,6 +92,23 @@ class UpdateApplier(
     fun apply(policyId: Long, transport: ContainerTransport): Flow<ApplyEvent> =
         applyPlan(policyId, transport).onEach { logEvent(policyId, it) }
 
+    /** Logs which containers the host really has, so a name mismatch can be told from a removed container. */
+    private suspend fun logContainersOnHost(policyId: Long, wanted: String, transport: ContainerTransport) {
+        val listed = transport.listContainers(all = true)
+        val names = (listed as? ContainerResult.Success)?.value
+            ?.flatMap { c -> c.names.map { it.trimStart('/') } }?.sorted()
+        if (names == null) {
+            Logger.w(TAG, "policy $policyId: could not list containers to explain the missing $wanted")
+            return
+        }
+        val similar = names.filter { it.contains(wanted, ignoreCase = true) || wanted.contains(it, ignoreCase = true) }
+        Logger.w(
+            TAG,
+            "policy $policyId: $wanted not found; ${names.size} container(s) on the host; " +
+                "similar names: ${similar.joinToString().ifEmpty { "none" }}; all: ${names.take(40).joinToString()}"
+        )
+    }
+
     /** Writes every step, pull error, failure and completion of an apply run to the log. */
     private fun logEvent(policyId: Long, event: ApplyEvent) {
         when (event) {
@@ -121,6 +138,14 @@ class UpdateApplier(
         val inspect = when (val r = transport.inspectContainer(name)) {
             is ContainerResult.Success -> UpdateChecker.normalizeInspect(r.value)
                 ?: return@flow emit(failNoRollback("Unparseable inspect output"))
+            is ContainerResult.NotFound -> {
+                failureMessage(r)
+                logContainersOnHost(policy.id, name, transport)
+                policyDao.updatePendingUpdateDigest(policyId, null)
+                return@flow emit(
+                    failNoRollback("Container $name no longer exists on this host; its pending update was cleared")
+                )
+            }
             else -> return@flow emit(failNoRollback(failureMessage(r)))
         }
         // A container created by compose is only ever updated through compose, and a

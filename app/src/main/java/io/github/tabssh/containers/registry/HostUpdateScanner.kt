@@ -51,6 +51,7 @@ class HostUpdateScanner(
             return null
         }
         Logger.i(TAG, "scan ${host.name}: ${containers.size} running container(s), ${hostPolicies.size} polic(ies)")
+        clearVanishedPending(host, hostPolicies, containers, transport)
         val byName = hostPolicies.filter { it.scope != SCOPE_STACK }
             .associateBy { it.containerNameOrStackName }
         val byProject = hostPolicies.filter { it.scope == SCOPE_STACK }
@@ -106,7 +107,38 @@ class HostUpdateScanner(
         return found
     }
 
+    /**
+     * A policy whose container no longer exists (stack recreated, renamed or removed) keeps its
+     * pending-update flag forever, because scans only visit running containers; it then shows up
+     * as an update that fails with "no such container". Clear the flag for every such policy.
+     * A stopped container still counts as existing.
+     */
+    private suspend fun clearVanishedPending(
+        host: ContainerHost,
+        hostPolicies: List<ContainerAutoUpdatePolicy>,
+        running: List<io.github.tabssh.containers.transport.ContainerSummary>,
+        transport: ContainerTransport
+    ) {
+        val runningNames = running.flatMap { c -> c.names.map { it.trimStart('/') } }.toSet()
+        val suspects = hostPolicies.filter {
+            it.scope != SCOPE_STACK && it.pendingUpdateDigest != null && it.containerNameOrStackName !in runningNames
+        }
+        if (suspects.isEmpty()) return
+        val all = (transport.listContainers(all = true) as? ContainerResult.Success)?.value ?: return
+        val existing = all.flatMap { c -> c.names.map { it.trimStart('/') } }.toSet()
+        for (policy in suspects) {
+            if (policy.containerNameOrStackName in existing) continue
+            policyDao.updatePendingUpdateDigest(policy.id, null)
+            Logger.i(
+                TAG,
+                "scan ${host.name}: container ${policy.containerNameOrStackName} no longer exists; " +
+                    "cleared its pending update (containers on the host: ${existing.sorted().take(MAX_LOGGED_NAMES).joinToString()})"
+            )
+        }
+    }
+
     companion object {
+        private const val MAX_LOGGED_NAMES = 40
         private const val TAG = "HostUpdateScanner"
         const val SCOPE_CONTAINER = "container"
         const val SCOPE_STACK_SERVICE = "stack_service"
