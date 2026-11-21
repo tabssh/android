@@ -39,13 +39,27 @@ object PasteDetector {
     }
 
     /** Pure classification of probe responses; null when none identifies a type. */
-    internal fun classify(helpPage: String?, serverInfo: String?, homePage: String?): String? = when {
+    internal fun classify(
+        helpPage: String?,
+        serverInfo: String?,
+        homePage: String?,
+        autodiscover: String? = null
+    ): String? = when {
+        // A white-labelled server may rename every page, but autodiscover always names the server software.
+        isCairnbinAutodiscover(autodiscover) -> PasteServices.CAIRNBIN
         helpPage != null && (helpPage.contains("apimgr/cairnbin") || isCairnbinHelp(helpPage)) -> PasteServices.CAIRNBIN
         serverInfo != null && serverInfo.contains("\"bodyMaxlength\"") -> PasteServices.LENPASTE
         homePage != null && homePage.contains("MicroBin") -> PasteServices.MICROBIN
         homePage != null && homePage.contains("Stikked", ignoreCase = true) -> PasteServices.STIKKED
         homePage != null && homePage.contains("haste", ignoreCase = true) -> PasteServices.HASTEBIN
         else -> null
+    }
+
+    /** `/api/autodiscover` answers `{"ok":true,"data":{"server":"cairnbin",...}}` on every Cairnbin instance. */
+    internal fun isCairnbinAutodiscover(body: String?): Boolean = body != null && try {
+        org.json.JSONObject(body).optJSONObject("data")?.optString("server").equals("cairnbin", ignoreCase = true)
+    } catch (_: Exception) {
+        false
     }
 
     /** The Cairnbin help page names the product and documents its REST create endpoint. */
@@ -61,6 +75,7 @@ object PasteDetector {
         if (byHost != null) return byHost.also { cache[base] = it }
         val type = withContext(Dispatchers.IO) {
             classify(
+                autodiscover = fetch("$base/api/autodiscover"),
                 helpPage = fetch("$base/server/help"),
                 serverInfo = fetch("$base/api/v1/getServerInfo"),
                 homePage = fetch("$base/")

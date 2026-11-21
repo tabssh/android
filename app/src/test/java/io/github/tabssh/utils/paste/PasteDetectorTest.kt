@@ -77,4 +77,12 @@ class PasteDetectorTest {
         assertEquals(PasteServices.CAIRNBIN, PasteDetector.classify(help, null, null))
         assertNull(PasteDetector.classify("Cairnbin only", null, null))
     }
+
+    @Test
+    fun `autodiscover identifies a white-labelled cairnbin`() {
+        val body = """{"ok":true,"data":{"api_version":"v1","server":"cairnbin","version":"1.0"}}"""
+        assertEquals(PasteServices.CAIRNBIN, PasteDetector.classify("Renamed Help", null, "<html>MyBin</html>", body))
+        assertNull(PasteDetector.classify(null, null, null, """{"ok":true,"data":{"server":"other"}}"""))
+        assertNull(PasteDetector.classify(null, null, null, "not json"))
+    }
 }
