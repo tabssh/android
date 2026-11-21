@@ -132,7 +132,8 @@ RequiresRoot: false
 # No Builds: entry yet: the first release tag has not been published. Each
 # released tag gets one entry (AI.md PART 13): versionName is the tag without
 # `v`, versionCode is `git log -1 --format=%ct {tag}` divided by 60 (integer
-# division), commit is the tag, and the build passes the version to Gradle:
+# division), commit is the tag, and the build passes the version and the tag
+# commit epoch to Gradle (the fdroidRelease flavor fails without BUILD_EPOCH):
 #
 #   Builds:
 #     - versionName: X.Y.Z
@@ -144,7 +145,7 @@ RequiresRoot: false
 #         - echo "sdk.dir=$$SDK$$" > local.properties
 #         - echo "org.gradle.project.fdroidBuild=true" >> gradle.properties
 #       build:
-#         - VERSION=$$VERSION$$ ./gradlew assembleFdroidRelease
+#         - BUILD_EPOCH=$(git log -1 --format=%ct) VERSION=$$VERSION$$ ./gradlew assembleFdroidRelease
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v?[0-9]+\.[0-9]+\.[0-9]+$

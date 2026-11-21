@@ -113,6 +113,7 @@ validate:
   before_script:
     - chmod +x gradlew
   script:
+    - export BUILD_EPOCH="$(date -u +%s)"
     - ./gradlew kspDebugKotlin compileDebugKotlin lintDebug testDebugUnitTest --no-daemon
     - |
       test -f "app/build.gradle" && echo "App build.gradle exists"

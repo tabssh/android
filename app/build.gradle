@@ -45,35 +45,26 @@ def resolveGitCommit = {
 }
 
 // Build timestamp (seconds since epoch) behind BuildConfig.BUILD_EPOCH and
-// versionCode (AI.md PART 13). Resolution order:
-//   1. fdroidBuild=true — the last commit's author timestamp, so the F-Droid
-//      build is reproducible and its versionCode matches the recipe's
-//      `git log -1 --format=%ct {tag}` / 60 (BUILD_EPOCH and
-//      SOURCE_DATE_EPOCH are ignored there).
-//   2. BUILD_EPOCH — captured once per CI or Makefile build and passed in as an
-//      environment variable so version.txt and the APK agree.
-//   3. SOURCE_DATE_EPOCH — the reproducible-builds standard.
-//   4. the last commit's author timestamp — deterministic for a given checkout.
-//   5. 0 (1970-01-01 UTC) — last resort for a git-less, env-less tarball build.
-// providers.exec keeps this configuration-cache compatible (same as resolveGitCommit).
-def isFdroidBuildProperty = (findProperty('fdroidBuild') ?: 'false').toString().toBoolean()
-def resolveBuildEpochSeconds = {
-    if (!isFdroidBuildProperty) {
-        def be = System.getenv("BUILD_EPOCH")
-        if (be != null && be.isLong()) return be.toLong()
-        def sde = System.getenv("SOURCE_DATE_EPOCH")
-        if (sde != null && sde.isLong()) return sde.toLong()
+// versionCode (AI.md PART 13). CI and the Makefile capture BUILD_EPOCH once per
+// build and pass it in as an environment variable. When it is unset, empty,
+// non-numeric or not positive (a plain IDE or ./gradlew run), the current time is
+// used so versionCode stays a positive integer. The fdroidRelease flavor has no
+// fallback and fails instead, because a wall clock would make it non-reproducible:
+// the F-Droid recipe passes the tag commit's epoch (git log -1 --format=%ct {tag}).
+def isFdroidFlavorBuild = (findProperty('fdroidBuild') ?: 'false').toString().toBoolean() ||
+        gradle.startParameter.taskNames.any { it.toLowerCase().contains('fdroidrelease') }
+def computeBuildEpochSeconds = {
+    def be = System.getenv("BUILD_EPOCH")
+    if (be != null && be.isLong() && be.toLong() > 0L) return be.toLong()
+    if (isFdroidFlavorBuild) {
+        throw new GradleException("BUILD_EPOCH is not set. The fdroidRelease flavor has no fallback; " +
+                "pass the tag commit's epoch: BUILD_EPOCH=\$(git log -1 --format=%ct {tag}).")
     }
-    try {
-        def execResult = providers.exec {
-            commandLine 'git', 'log', '-1', '--format=%ct'
-            ignoreExitValue = true
-        }
-        def s = execResult.standardOutput.asText.get().trim()
-        if (s && s.isLong()) return s.toLong()
-    } catch (Exception ignored) {}
-    return 0L
+    return System.currentTimeMillis().intdiv(1000L)
 }
+// Resolved once per configuration so versionCode, BUILD_DATE and BUILD_EPOCH agree
+final long buildEpochSecondsValue = computeBuildEpochSeconds()
+def resolveBuildEpochSeconds = { buildEpochSecondsValue }
 
 // versionName is the channel VERSION (AI.md PART 13): the stable tag without
 // `v`, the beta tag, or the short commit id. CI and the Makefile pass it as an
@@ -86,7 +77,7 @@ def resolveVersionName = {
 // versionCode is BUILD_EPOCH / 60 (integer minutes since the Unix epoch) in
 // every channel and flavor, so every later build is newer than every earlier one.
 def resolveVersionCode = {
-    return (resolveBuildEpochSeconds().intdiv(60L)) as int
+    return Math.max(1, resolveBuildEpochSeconds().intdiv(60L).intValue())
 }
 
 android {

@@ -70,6 +70,7 @@ jobs:
     - name: Compile, lint, unit tests (mirrors make check)
       run: |
         echo "🛠️  Compiling, linting, and unit-testing project..."
+        export BUILD_EPOCH="$(date -u +%s)"
         ./gradlew kspDebugKotlin compileDebugKotlin lintDebug testDebugUnitTest --no-daemon
         echo "✅ Compile + lint + unit tests succeeded"
 

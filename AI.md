@@ -1169,6 +1169,7 @@ Creation order: security-only workflows first, `ci.yml` and the channel workflow
 - **No Makefile in CI:** workflow steps run explicit commands (Gradle tasks inside the toolchain image) with all environment variables inlined — never `make {target}`. The Makefile is for local convenience only, so CI cannot drift with it.
 - **Portability:** no hardcoded org, project name, official site or registry in any workflow; use the provider's variables (`${{ github.repository_owner }}`, `${{ github.event.repository.name }}` and equivalents) so a fork works without edits.
 - **Fork PRs:** they receive no secrets and no publish permissions; PR runs never need the keystore. The keystore hard-fail applies to the three release channels only.
+- **Pull requests and merges:** a pull request runs `ci.yml` and `security.yml` only — it never publishes a release. Merging into `main` is a push to `main`, which triggers `ci.yml`, `security.yml` and `devel.yml` (the rolling `devel` release); merging into `beta` triggers `beta.yml`; a stable release is a tag push, never a merge. A PR and its target branch have different refs, so their concurrency groups never cancel each other.
 - **Weekly security run:** `security.yml` also runs on a weekly cron (`0 6 * * 1`); the scheduled secret scan covers the full history (`verified` results only) and DependencyCheck re-checks the pinned dependencies against current advisories.
 - **Structure validation** (in `ci.yml`): the required root files exist (`README.md`, `CHANGELOG.md`, `AI.md`, `IDEA.md`, `LICENSE.md`), no keystore or `.env*` file is committed (`*.jks`, `*.keystore`), and `applicationId` in `app/build.gradle` equals IDEA.md `app_id`.
 - **Workflow policy** (in `security.yml`): fails when any `uses:` line in `.github/`, `.gitea/` or `.forgejo/` is not pinned to a 40-character commit SHA.
@@ -1221,6 +1222,23 @@ build (`VERSION` per the channel rule and `BUILD_EPOCH` captured once, both pass
 - `release.txt` is optional and read only by the Makefile for local builds (`make build`, `make release`, the local `version.txt`); empty or missing means the devel rule.
 - `versionName` is that `VERSION` in every channel and flavor, exposed as `BuildConfig.VERSION_NAME`; Gradle reads the `VERSION` environment variable (falling back to `devel` for IDE builds) and it is never hand-edited in `app/build.gradle`.
 - `versionCode` is `BUILD_EPOCH / 60` (integer minutes since the Unix epoch) in every channel and flavor — never hand-maintained, so IDEA.md carries no version-code scheme. Stable tags are semver `vX.Y.Z`.
+- `versionCode` is never 0: Android requires a positive integer. When `BUILD_EPOCH` is unset, empty, non-numeric or not positive (a plain IDE or `./gradlew` run outside the Makefile), Gradle falls back to the current time, and the result is floored at 1. The `fdroidRelease` flavor has no fallback and fails the build when `BUILD_EPOCH` is missing, because a fallback would make it non-reproducible.
+
+```groovy
+// versionName and versionCode come from the build environment (PART 13 → Versioning); never hand-edited.
+def epochEnv = System.getenv('BUILD_EPOCH')
+def buildEpoch = (epochEnv != null && epochEnv.isLong() && epochEnv.toLong() > 0L) ? epochEnv.toLong() : (System.currentTimeMillis() / 1000L).toLong()
+def buildVersion = System.getenv('VERSION') ?: 'devel'
+
+android {
+    defaultConfig {
+        versionName buildVersion
+        versionCode Math.max(1, buildEpoch.intdiv(60L).intValue())
+        buildConfigField "String", "VERSION_NAME", "\"${buildVersion}\""
+        buildConfigField "long", "BUILD_EPOCH", "${buildEpoch}L"
+    }
+}
+```
 - **Short commit id** (devel channel's version identity, `version.txt`): `git rev-parse --short=7 HEAD` — pin the explicit 7-char length; git's unpinned `--short HEAD` auto-abbreviates and grows past 7 chars as the repo's commit count increases, producing inconsistent-length ids across builds.
 - **`BUILD_EPOCH` is embedded in every build, local and CI** — captured once per build (`date -u +%s`) and exposed as a `BuildConfig` field and the source of `versionCode`; the `fdroidRelease` flavor pins it to the tag commit's epoch (`git log -1 --format=%ct`) to stay reproducible.
 - Release notes generated from `CHANGELOG.md [Unreleased]`, which moves to a versioned section at tag time.
