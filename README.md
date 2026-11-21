@@ -348,7 +348,7 @@ android/
 ├── scripts/            # Build and automation scripts
 ├── metadata/           # F-Droid metadata
 ├── Makefile
-└── release.txt         # Version pin (1.0.0)
+└── release.txt         # Optional local-build version (empty = devel rule)
 ```
 
 ### 🐳 Docker Build

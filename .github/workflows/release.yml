@@ -23,6 +23,7 @@ on:
   push:
     tags:
       - 'v*'
+      - '*.*.*'
   workflow_dispatch: {}
 
 # Group by tag ref — re-pushing the same tag cancels any in-flight rebuild
@@ -33,7 +34,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   # Pull-only, fail-fast gate: the release runs inside this image, so if it is
@@ -62,6 +63,8 @@ jobs:
       contents: write
       id-token: write
       attestations: write
+    env:
+      PROJECT_NAME: ${{ github.event.repository.name }}
     container:
       image: ${{ needs.ensure-build-image.outputs.image }}
       # Numeric 0:0 needs no /etc/passwd lookup — the runner and
@@ -75,6 +78,21 @@ jobs:
         shell: bash
 
     steps:
+    - name: Validate release tag
+      run: |
+        case "$GITHUB_REF" in
+          refs/tags/*) ;;
+          *)
+            echo "::error::release.yml must run from a tag ref, got $GITHUB_REF. Push a vX.Y.Z tag, or start the workflow from a tag." >&2
+            exit 1
+            ;;
+        esac
+        TAG_CHECK="${GITHUB_REF#refs/tags/}"
+        if printf '%s' "$TAG_CHECK" | LC_ALL=C grep -q '[[:space:][:cntrl:]]'; then
+          echo "::error::The tag name contains whitespace or control characters. Delete the tag and push a clean vX.Y.Z tag." >&2
+          exit 1
+        fi
+
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Trust the checked-out workspace inside the container
@@ -208,6 +226,8 @@ jobs:
       env:
         RELEASE_BUILD: true
         SOURCE_DATE_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        VERSION: ${{ steps.version.outputs.VERSION }}
         # KEYSTORE_PASSWORD is required to sign. KEY_PASSWORD is optional —
         # when the secret is absent GitHub expands it to an empty string and
         # build.gradle uses the store password for the key, which is how this
@@ -227,6 +247,8 @@ jobs:
         echo "✅ F-Droid build succeeded — proguard-fdroid.pro is healthy"
         ls -lh app/build/outputs/apk/fdroidRelease/*.apk
       env:
+        BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        VERSION: ${{ steps.version.outputs.VERSION }}
         # Without -PfdroidBuild=true (which only the real F-Droid builder
         # sets), fdroidRelease keeps signingConfigs.release, so the
         # taskGraph keystore guard in app/build.gradle requires
@@ -237,6 +259,9 @@ jobs:
 
     - name: Generate SBOM
       run: ./gradlew :app:cyclonedxBom --no-daemon
+      env:
+        BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        VERSION: ${{ steps.version.outputs.VERSION }}
 
     - name: Stage release assets
       env:
@@ -248,13 +273,13 @@ jobs:
         # sha256.txt/sha512.txt computed LAST over every staged asset —
         # never per-artifact checksum sidecars.
         mkdir -p dist
-        cp app/build/outputs/apk/release/tabssh-android-*.apk dist/
+        cp app/build/outputs/apk/release/*-android-*.apk dist/
         cp app/build/outputs/mapping/release/mapping.txt dist/mapping.txt
 
         printf 'version: %s\ncommit: %s\nbuild_epoch: %s\n' \
           "${VERSION}" "$(git rev-parse HEAD)" "${BUILD_EPOCH}" > dist/version.txt
 
-        git archive --format=tar.gz -o "dist/tabssh-${VERSION}-source.tar.gz" HEAD
+        git archive --format=tar.gz -o "dist/${PROJECT_NAME}-${VERSION}-source.tar.gz" HEAD
 
         # Parenthesised: without them find parses this as
         # (-name '*.json' -a -path '*cyclonedx*') -o (-name 'bom.json'),
@@ -264,7 +289,7 @@ jobs:
           echo "::error::CycloneDX SBOM not found under app/build" >&2
           exit 1
         fi
-        cp "$SBOM" dist/tabssh-sbom.cdx.json
+        cp "$SBOM" dist/${PROJECT_NAME}-sbom.cdx.json
 
         cd dist
         sha256sum -- * > sha256.txt.tmp && mv sha256.txt.tmp sha256.txt
@@ -281,14 +306,14 @@ jobs:
         VERSION: ${{ steps.version.outputs.VERSION }}
       run: |
         {
-          echo "# TabSSH ${VERSION} - Complete Mobile SSH Client"
+          echo "# ${PROJECT_NAME} ${VERSION}"
           echo ""
           echo "## 📦 Downloads"
-          echo "- **tabssh-android-universal.apk** - Recommended (works on all devices)"
-          echo "- **tabssh-android-arm64.apk** - Modern ARM 64-bit devices"
-          echo "- **tabssh-android-arm.apk** - Older ARM 32-bit devices"
-          echo "- **tabssh-android-amd64.apk** - x86_64 (emulators, Chromebooks)"
-          echo "- **tabssh-android-x86.apk** - x86 32-bit (older emulators)"
+          echo "- **${PROJECT_NAME}-android-universal.apk** - Recommended (works on all devices)"
+          echo "- **${PROJECT_NAME}-android-arm64.apk** - Modern ARM 64-bit devices"
+          echo "- **${PROJECT_NAME}-android-arm.apk** - Older ARM 32-bit devices"
+          echo "- **${PROJECT_NAME}-android-amd64.apk** - x86_64 (emulators, Chromebooks)"
+          echo "- **${PROJECT_NAME}-android-x86.apk** - x86 32-bit (older emulators)"
           echo ""
           echo "Checksums: see \`sha256.txt\` / \`sha512.txt\` release assets."
           echo ""
@@ -319,7 +344,8 @@ jobs:
         # deleting any partial release and retrying on failure.
         for attempt in 1 2 3; do
           if gh release create "$TAG_NAME" dist/* \
-            --title "TabSSH $VERSION - Complete Mobile SSH Client" \
+            --latest \
+            --title "v$VERSION" \
             --notes-file RELEASE_NOTES.md; then
             echo "✅ Release created on attempt $attempt"
             exit 0

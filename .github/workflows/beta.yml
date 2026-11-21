@@ -3,9 +3,9 @@ name: Beta Release
 # ─────────────────────────────────────────────────────────────────────────
 # RELEASE CHANNEL: beta (AI.md PART 12/13)
 #
-# Fires on push of a `*beta` tag (e.g. 1.1.0beta, v1.1.0-beta1). Builds
-# the `release` variant and publishes the canonical asset set as a
-# prerelease. Version identity is the tag as-is; asset names are
+# Fires on a push to the `beta` branch. Builds the `release` variant,
+# creates the `YYYYMMDDHHMMSS-beta` tag at the current commit and publishes
+# the canonical asset set as a prerelease. Version identity is that tag; asset names are
 # identical across channels — channel identity lives in the tag, the
 # release object, and version.txt, never in mutated filenames.
 #
@@ -15,18 +15,16 @@ name: Beta Release
 
 on:
   push:
-    tags:
-      - '*beta*'
+    branches: [ beta ]
   workflow_dispatch: {}
 
-# Group by tag ref — re-pushing the same beta tag cancels any in-flight
-# rebuild for that tag; distinct beta tags each complete and publish.
+# A newer push to the beta branch cancels the in-flight beta build.
 concurrency:
-  group: beta-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   # Pull-only, fail-fast gate: the build runs inside this image, so if it is
@@ -55,6 +53,8 @@ jobs:
       contents: write
       id-token: write
       attestations: write
+    env:
+      PROJECT_NAME: ${{ github.event.repository.name }}
     container:
       image: ${{ needs.ensure-build-image.outputs.image }}
       # Numeric 0:0 needs no /etc/passwd lookup — the runner and
@@ -70,6 +70,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        fetch-depth: 0
 
     - name: Trust the checked-out workspace inside the container
       # The container runs as a different UID than whatever created
@@ -113,12 +115,14 @@ jobs:
     - name: Capture build identity
       id: version
       run: |
-        # Beta-channel version identity is the tag exactly as pushed
+        # Beta-channel version identity is the `YYYYMMDDHHMMSS-beta` timestamp computed
+        # once here; the same value is the tag this workflow creates
         # (AI.md PART 13). BUILD_EPOCH is captured exactly once here and
         # exported as SOURCE_DATE_EPOCH so BuildConfig.BUILD_EPOCH
         # matches version.txt.
-        TAG_NAME=${GITHUB_REF#refs/tags/}
         BUILD_EPOCH=$(date -u +%s)
+        BETA_TS=$(date -u -d "@${BUILD_EPOCH}" +%Y%m%d%H%M%S)
+        TAG_NAME="${BETA_TS}-beta"
         echo "TAG_NAME=${TAG_NAME}" >> "$GITHUB_OUTPUT"
         echo "BUILD_EPOCH=${BUILD_EPOCH}" >> "$GITHUB_OUTPUT"
         echo "📦 Building beta release: ${TAG_NAME}"
@@ -184,6 +188,8 @@ jobs:
       run: ./gradlew assembleRelease --no-daemon
       env:
         SOURCE_DATE_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        VERSION: ${{ steps.version.outputs.TAG_NAME }}
         # KEYSTORE_PASSWORD is required to sign. KEY_PASSWORD is optional —
         # when the secret is absent GitHub expands it to an empty string and
         # build.gradle uses the store password for the key, which is how this
@@ -193,6 +199,9 @@ jobs:
 
     - name: Generate SBOM
       run: ./gradlew :app:cyclonedxBom --no-daemon
+      env:
+        BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        VERSION: ${{ steps.version.outputs.TAG_NAME }}
 
     - name: Stage release assets
       env:
@@ -203,13 +212,13 @@ jobs:
         # mapping.txt -> version.txt -> source archive -> SBOM -> aggregate
         # sha256.txt/sha512.txt computed LAST over every staged asset.
         mkdir -p dist
-        cp app/build/outputs/apk/release/tabssh-android-*.apk dist/
+        cp app/build/outputs/apk/release/*-android-*.apk dist/
         cp app/build/outputs/mapping/release/mapping.txt dist/mapping.txt
 
         printf 'version: %s\ncommit: %s\nbuild_epoch: %s\n' \
           "${TAG_NAME}" "$(git rev-parse HEAD)" "${BUILD_EPOCH}" > dist/version.txt
 
-        git archive --format=tar.gz -o "dist/tabssh-${TAG_NAME}-source.tar.gz" HEAD
+        git archive --format=tar.gz -o "dist/${PROJECT_NAME}-${TAG_NAME}-source.tar.gz" HEAD
 
         # Parenthesised: without them find parses this as
         # (-name '*.json' -a -path '*cyclonedx*') -o (-name 'bom.json'),
@@ -219,7 +228,7 @@ jobs:
           echo "::error::CycloneDX SBOM not found under app/build" >&2
           exit 1
         fi
-        cp "$SBOM" dist/tabssh-sbom.cdx.json
+        cp "$SBOM" dist/${PROJECT_NAME}-sbom.cdx.json
 
         cd dist
         sha256sum -- * > sha256.txt.tmp && mv sha256.txt.tmp sha256.txt
@@ -236,16 +245,16 @@ jobs:
         TAG_NAME: ${{ steps.version.outputs.TAG_NAME }}
       run: |
         {
-          echo "# TabSSH ${TAG_NAME} — Beta Release"
+          echo "# ${PROJECT_NAME} ${TAG_NAME} — Beta Release"
           echo ""
           echo "**⚠️ Beta build for testing — expect rough edges. Use stable releases for production.**"
           echo ""
           echo "## 📦 Downloads"
-          echo "- **tabssh-android-universal.apk** - Recommended (works on all devices)"
-          echo "- **tabssh-android-arm64.apk** - Modern ARM 64-bit devices"
-          echo "- **tabssh-android-arm.apk** - Older ARM 32-bit devices"
-          echo "- **tabssh-android-amd64.apk** - x86_64 (emulators, Chromebooks)"
-          echo "- **tabssh-android-x86.apk** - x86 32-bit (older emulators)"
+          echo "- **${PROJECT_NAME}-android-universal.apk** - Recommended (works on all devices)"
+          echo "- **${PROJECT_NAME}-android-arm64.apk** - Modern ARM 64-bit devices"
+          echo "- **${PROJECT_NAME}-android-arm.apk** - Older ARM 32-bit devices"
+          echo "- **${PROJECT_NAME}-android-amd64.apk** - x86_64 (emulators, Chromebooks)"
+          echo "- **${PROJECT_NAME}-android-x86.apk** - x86 32-bit (older emulators)"
           echo ""
           echo "Checksums: see \`sha256.txt\` / \`sha512.txt\` release assets."
           echo ""
@@ -262,9 +271,14 @@ jobs:
         # runner (large APK assets); the gh CLI's own upload path doesn't
         # share that failure mode, so it drives release creation directly,
         # deleting any partial release and retrying on failure.
+        # This workflow owns the beta tag: create it at the commit being built
+        # (checkout is fetch-depth 0; contents: write covers the tag push).
+        git tag "$TAG_NAME" "$GITHUB_SHA"
+        git push origin "refs/tags/$TAG_NAME"
         for attempt in 1 2 3; do
           if gh release create "$TAG_NAME" dist/* \
-            --title "TabSSH $TAG_NAME (beta)" \
+            --verify-tag \
+            --title "$TAG_NAME" \
             --notes-file RELEASE_NOTES_BETA.md \
             --prerelease; then
             echo "✅ Release created on attempt $attempt"

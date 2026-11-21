@@ -9,7 +9,7 @@ on:
 
 # One validation run per ref/PR at a time; cancel older runs on new push.
 concurrency:
-  group: validate-${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -86,6 +86,29 @@ jobs:
         test -f "app/src/main/java/io/github/tabssh/ssh/connection/SSHSessionManager.kt" && echo "✅ SSH manager exists"
         test -f "app/src/main/java/io/github/tabssh/terminal/emulator/TerminalEmulator.kt" && echo "✅ Terminal emulator exists"
         test -f "app/src/main/java/io/github/tabssh/ui/activities/MainActivity.kt" && echo "✅ Main activity exists"
+
+
+        # Required root files
+        for f in README.md CHANGELOG.md AI.md IDEA.md LICENSE.md; do
+          if [ ! -f "$f" ]; then
+            echo "::error::Required root file $f is missing. Add it to the repository root." >&2
+            exit 1
+          fi
+        done
+
+        # No keystore or dotenv file may be committed
+        if git ls-files | grep -E '(\.jks|\.keystore)$|(^|/)\.env' | grep -v -- '\.env\.example$' | grep -q .; then
+          echo "::error::A keystore or .env file is tracked by git. Remove it from the index and add it to .gitignore." >&2
+          exit 1
+        fi
+
+        # applicationId must equal IDEA.md app_id
+        APP_ID="$(sed -n 's/^app_id:[[:space:]]*//p' IDEA.md | head -1)"
+        GRADLE_ID="$(sed -n 's/^[[:space:]]*applicationId[[:space:]]*["'"'"']\([^"'"'"']*\)["'"'"'].*/\1/p' app/build.gradle | head -1)"
+        if [ -z "$APP_ID" ] || [ "$APP_ID" != "$GRADLE_ID" ]; then
+          echo "::error::applicationId '$GRADLE_ID' in app/build.gradle does not match app_id '$APP_ID' in IDEA.md. Fix whichever is wrong; a shipped applicationId never changes." >&2
+          exit 1
+        fi
 
         echo "✅ Project structure validation passed"
 
@@ -208,9 +231,8 @@ jobs:
 
     - name: Final validation summary
       run: |
-        VERSION="$(tr -d '[:space:]' < release.txt)"
         echo ""
-        echo "🎊 TabSSH ${VERSION} - Validation Complete!"
+        echo "🎊 TabSSH - Validation Complete!"
         echo "====================================="
         echo ""
         echo "✅ Project structure validated"
@@ -219,7 +241,7 @@ jobs:
         echo "✅ Feature implementation verified"
         echo "✅ Documentation validated"
         echo ""
-        echo "🏆 TabSSH ${VERSION} is ready for release!"
+        echo "🏆 TabSSH is ready for release!"
         echo ""
         echo "📦 Release artifacts will include:"
         echo "   - tabssh-android-{arm64,arm,amd64,x86,universal}.apk"

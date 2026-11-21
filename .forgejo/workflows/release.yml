@@ -5,7 +5,7 @@ name: Production Release
 #
 # Ported from .github/workflows/release.yml — see beta.yml's header comment
 # for the two GitHub-only pieces that differ here (attest-build-provenance
-# skipped; `tea` used to publish instead of gh/softprops/action-gh-release).
+# skipped; scripts/provider-release.sh (REST) used to publish instead of gh/softprops/action-gh-release).
 # The community-notification step is also GitHub-issue-tracker-agnostic
 # (Matrix/Mastodon), so it ports unchanged.
 # ─────────────────────────────────────────────────────────────────────────
@@ -14,6 +14,7 @@ on:
   push:
     tags:
       - 'v*'
+      - '*.*.*'
   workflow_dispatch: {}
 
 concurrency:
@@ -21,7 +22,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   ensure-build-image:
@@ -44,6 +45,8 @@ jobs:
     name: Build & Publish Release
     needs: ensure-build-image
     runs-on: ubuntu-latest
+    env:
+      PROJECT_NAME: ${{ github.event.repository.name }}
     container:
       image: ${{ needs.ensure-build-image.outputs.image }}
       options: "--user 0:0"
@@ -52,6 +55,21 @@ jobs:
         shell: bash
 
     steps:
+    - name: Validate release tag
+      run: |
+        case "$GITHUB_REF" in
+          refs/tags/*) ;;
+          *)
+            echo "::error::release.yml must run from a tag ref, got $GITHUB_REF. Push a vX.Y.Z tag, or start the workflow from a tag." >&2
+            exit 1
+            ;;
+        esac
+        TAG_CHECK="${GITHUB_REF#refs/tags/}"
+        if printf '%s' "$TAG_CHECK" | LC_ALL=C grep -q '[[:space:][:cntrl:]]'; then
+          echo "::error::The tag name contains whitespace or control characters. Delete the tag and push a clean vX.Y.Z tag." >&2
+          exit 1
+        fi
+
     - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
     - name: Trust the checked-out workspace inside the container
@@ -162,6 +180,8 @@ jobs:
       env:
         RELEASE_BUILD: true
         SOURCE_DATE_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        VERSION: ${{ steps.version.outputs.VERSION }}
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
@@ -173,11 +193,16 @@ jobs:
         echo "F-Droid build succeeded — proguard-fdroid.pro is healthy"
         ls -lh app/build/outputs/apk/fdroidRelease/*.apk
       env:
+        BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        VERSION: ${{ steps.version.outputs.VERSION }}
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
     - name: Generate SBOM
       run: ./gradlew :app:cyclonedxBom --no-daemon
+      env:
+        BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        VERSION: ${{ steps.version.outputs.VERSION }}
 
     - name: Stage release assets
       env:
@@ -185,20 +210,20 @@ jobs:
         BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
       run: |
         mkdir -p dist
-        cp app/build/outputs/apk/release/tabssh-android-*.apk dist/
+        cp app/build/outputs/apk/release/*-android-*.apk dist/
         cp app/build/outputs/mapping/release/mapping.txt dist/mapping.txt
 
         printf 'version: %s\ncommit: %s\nbuild_epoch: %s\n' \
           "${VERSION}" "$(git rev-parse HEAD)" "${BUILD_EPOCH}" > dist/version.txt
 
-        git archive --format=tar.gz -o "dist/tabssh-${VERSION}-source.tar.gz" HEAD
+        git archive --format=tar.gz -o "dist/${PROJECT_NAME}-${VERSION}-source.tar.gz" HEAD
 
         SBOM=$(find app/build \( -name '*.json' -a -path '*cyclonedx*' \) -o -name 'bom.json' | head -1)
         if [ -z "$SBOM" ]; then
           echo "::error::CycloneDX SBOM not found under app/build" >&2
           exit 1
         fi
-        cp "$SBOM" dist/tabssh-sbom.cdx.json
+        cp "$SBOM" dist/${PROJECT_NAME}-sbom.cdx.json
 
         cd dist
         sha256sum -- * > sha256.txt.tmp && mv sha256.txt.tmp sha256.txt
@@ -212,55 +237,41 @@ jobs:
         VERSION: ${{ steps.version.outputs.VERSION }}
       run: |
         {
-          echo "# TabSSH ${VERSION} - Complete Mobile SSH Client"
+          echo "# ${PROJECT_NAME} ${VERSION}"
           echo ""
           echo "## Downloads"
-          echo "- **tabssh-android-universal.apk** - Recommended (works on all devices)"
-          echo "- **tabssh-android-arm64.apk** - Modern ARM 64-bit devices"
-          echo "- **tabssh-android-arm.apk** - Older ARM 32-bit devices"
-          echo "- **tabssh-android-amd64.apk** - x86_64 (emulators, Chromebooks)"
-          echo "- **tabssh-android-x86.apk** - x86 32-bit (older emulators)"
+          echo "- **${PROJECT_NAME}-android-universal.apk** - Recommended (works on all devices)"
+          echo "- **${PROJECT_NAME}-android-arm64.apk** - Modern ARM 64-bit devices"
+          echo "- **${PROJECT_NAME}-android-arm.apk** - Older ARM 32-bit devices"
+          echo "- **${PROJECT_NAME}-android-amd64.apk** - x86_64 (emulators, Chromebooks)"
+          echo "- **${PROJECT_NAME}-android-x86.apk** - x86 32-bit (older emulators)"
           echo ""
           echo "Checksums: see \`sha256.txt\` / \`sha512.txt\` release assets."
           echo ""
         } > RELEASE_NOTES.md
         cat CHANGELOG.md >> RELEASE_NOTES.md
 
-    - name: Delete existing release if exists
-      continue-on-error: true
+    - name: Publish release
       env:
-        FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
-        FORGEJO_REPOSITORY: ${{ github.repository }}
-        TAG_NAME: ${{ steps.version.outputs.TAG_NAME }}
-      run: |
-        # Re-pushing the same tag rebuilds and republishes it — delete the
-        # stale release object first so asset uploads can't collide.
-        tea release delete --repo "$FORGEJO_REPOSITORY" --token "$FORGEJO_TOKEN" "$TAG_NAME" || echo "Release $TAG_NAME not found"
-        echo "Cleanup complete, ready to create new release"
-
-    - name: Create release
-      env:
-        FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
-        FORGEJO_REPOSITORY: ${{ github.repository }}
+        PROVIDER: forgejo
+        API_URL: ${{ github.server_url }}/api/v1
+        REPO: ${{ github.repository }}
+        TOKEN: ${{ secrets.FORGEJO_TOKEN }}
         TAG_NAME: ${{ steps.version.outputs.TAG_NAME }}
         VERSION: ${{ steps.version.outputs.VERSION }}
       run: |
+        # Re-pushing the same tag rebuilds and republishes it: delete the stale
+        # release object first so asset uploads cannot collide.
         for attempt in 1 2 3; do
-          if tea release create \
-            --repo "$FORGEJO_REPOSITORY" \
-            --token "$FORGEJO_TOKEN" \
-            --tag "$TAG_NAME" \
-            --title "TabSSH $VERSION - Complete Mobile SSH Client" \
-            --note "$(cat RELEASE_NOTES.md)" \
-            dist/*; then
+          bash scripts/provider-release.sh delete "$TAG_NAME" || true
+          if bash scripts/provider-release.sh create "$TAG_NAME" "v$VERSION" RELEASE_NOTES.md false "$GITHUB_SHA" dist/*; then
             echo "Release created on attempt $attempt"
             exit 0
           fi
           echo "Release attempt $attempt failed"
-          tea release delete --repo "$FORGEJO_REPOSITORY" --token "$FORGEJO_TOKEN" "$TAG_NAME" || true
           sleep 15
         done
-        echo "::error::Release creation failed after 3 attempts"
+        echo "::error::Release creation failed after 3 attempts. Check the token secret and API access." >&2
         exit 1
 
     - name: Notify community

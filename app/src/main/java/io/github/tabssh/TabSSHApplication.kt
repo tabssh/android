@@ -207,13 +207,9 @@ class TabSSHApplication : Application() {
         // Logger init policy:
         //   - debug builds always have BuildConfig.DEBUG_LOG = true and
         //     auto-enable debug-file logging.
-        //   - release / fdroidRelease builds compute DEBUG_LOG from the
-        //     versionName at configure time: a clean "x.x.x" semver (e.g.
-        //     "1.0.0", "0.9.2") is treated as a production release and gets
-        //     DEBUG_LOG = false; anything else ("0.9.1-beta", "1.0.0-rc1",
-        //     "1.2.3-devel") is a pre-production build and gets DEBUG_LOG
-        //     = true so testers and beta users have logs ready when filing
-        //     issues. See app/build.gradle :: isProductionRelease.
+        //   - devel builds force BuildConfig.DEBUG_LOG = true so testers have logs
+        //     ready when filing issues; release / fdroidRelease builds keep it
+        //     false. See the buildTypes in app/build.gradle.
         //   - Production users can still opt in manually via Settings →
         //     Logging → "Enable Debug Logging" (pref key
         //     `debug_logging_enabled`).

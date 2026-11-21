@@ -27,7 +27,8 @@ for f in README.md CHANGELOG.md LICENSE.md; do
 done
 
 # Generate RFP stub
-APP_VERSION="$(grep -- versionName "$ROOT/app/build.gradle" | head -1 | sed 's/.*"\(.*\)".*/\1/')"
+APP_VERSION="${VERSION:-$(git -C "$ROOT" describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')}"
+APP_VERSION="${APP_VERSION:-devel}"
 
 cat > "$OUT/RFP_SUBMISSION.md" << EOF
 # F-Droid Request for Packaging (RFP)

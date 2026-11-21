@@ -3,10 +3,18 @@
 
 # === Configuration ===
 PROJECT := tabssh
-# Anchored to the declaration, not the bare word: an unanchored match hit the
-# explanatory comment above defaultConfig first, and the resulting string
-# carried backticks that every recipe then ran as command substitution.
-VERSION := $(shell grep -m1 -E -- '^[[:space:]]*versionName[[:space:]]+"' app/build.gradle | sed 's/.*"\(.*\)".*/\1/')
+# Local build version (AI.md PART 13): the VERSION environment variable (user
+# override) > a non-empty release.txt > the devel rule (short commit id, or
+# `devel` outside git). Gradle reads VERSION as versionName; CI never reads
+# release.txt. BUILD_EPOCH is captured once per make invocation and passed to
+# Gradle, which derives versionCode from it.
+VERSION_FILE := $(shell tr -d '[:space:]' < release.txt 2>/dev/null)
+VERSION_GIT := $(shell git rev-parse --short=7 HEAD 2>/dev/null)
+VERSION ?= $(or $(VERSION_FILE),$(VERSION_GIT),devel)
+ifndef BUILD_EPOCH
+BUILD_EPOCH := $(shell date -u +%s)
+endif
+export VERSION BUILD_EPOCH
 # Toolchain image declared in IDEA.md ## Toolchain (build_image)
 BUILD_IMAGE ?= casjaysdev/android:latest
 # 4g proved too small: the Gradle daemon (Xmx2048m) plus Kotlin/KSP daemons
@@ -38,13 +46,17 @@ RELEASE_DIR := app/build/outputs/apk/release
 # image's pre-warmed /root/.gradle so ./gradlew never re-downloads Gradle.
 # Recursively expanded (=) so the random container name regenerates on every
 # use; each container is --rm and named $(PROJECT)-XXXXXXXX per the naming rule.
+# --entrypoint "" skips the image's entrypoint script, which overwrites a passed
+# VERSION with its own build id; the image's ENV (JAVA_HOME, ANDROID_HOME) stays.
 DOCKER_RUN = docker run --rm \
+	--entrypoint "" \
 	--name $(PROJECT)-$(shell tr -dc 'a-z0-9' </dev/urandom | head -c8) \
 	--memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) \
 	-v $(PWD):/workspace \
 	-w /workspace \
 	-e GRADLE_USER_HOME=/workspace/.gradle \
-	-e KEYSTORE_PATH -e KEYSTORE_PASSWORD -e KEY_PASSWORD -e KEYSTORE_ALIAS
+	-e KEYSTORE_PATH -e KEYSTORE_PASSWORD -e KEY_PASSWORD -e KEYSTORE_ALIAS \
+	-e VERSION -e BUILD_EPOCH
 
 # Seed the Gradle wrapper distribution from the image's pre-warmed cache
 GRADLE_SEED = [ -d /workspace/.gradle/wrapper ] || { mkdir -p /workspace/.gradle && cp -a /root/.gradle/wrapper /workspace/.gradle/ 2>/dev/null || true; }

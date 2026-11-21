@@ -11,7 +11,7 @@ pipeline {
     triggers {
         // Mirrors devel.yml's daily schedule; push/tag triggers are
         // configured on the Jenkins job itself (SCM webhook), not here.
-        cron('17 4 * * *')
+        cron('17 4 * * *\n0 6 * * 1')
     }
 
     options {
@@ -21,6 +21,9 @@ pipeline {
     environment {
         BUILD_IMAGE = 'casjaysdev/android@sha256:40a926d7959f6bcaa635a6c4de2ede01f17071d8104af77723968522484b604e'
         TRUFFLEHOG_IMAGE = 'trufflesecurity/trufflehog@sha256:1cec88f18ca39e26e04e61fe9d886c9c4e5f2fc0ba4f2ed185cac0722bd8a076'
+        // Captured once per run (AI.md PART 13); Gradle derives versionCode from it
+        BUILD_EPOCH = "${(long) (System.currentTimeMillis() / 1000)}"
+        PROJECT_NAME = "${env.JOB_NAME.tokenize('/')[0]}"
     }
 
     stages {
@@ -57,6 +60,26 @@ pipeline {
                               fi
                             done
                         '''
+                    }
+                }
+
+                stage('Dependency Check') {
+                    when {
+                        triggeredBy 'TimerTrigger'
+                    }
+                    agent {
+                        docker {
+                            image "${env.BUILD_IMAGE}"
+                            args '-u 0:0'
+                        }
+                    }
+                    environment {
+                        NVD_API_KEY = credentials('NVD_API_KEY')
+                    }
+                    steps {
+                        sh 'git config --global --add safe.directory "$WORKSPACE"'
+                        sh 'chmod +x gradlew'
+                        sh './gradlew dependencyCheckAggregate --no-daemon'
                     }
                 }
 
@@ -119,9 +142,9 @@ pipeline {
                 '''
                 sh '''
                     chmod +x scripts/fetch-mosh-binaries.sh scripts/fetch-spice-libs.sh scripts/fetch-tor-binaries.sh scripts/fetch-fonts.sh
-                    TABSSH_REPO="tabssh/android" scripts/fetch-mosh-binaries.sh
-                    TABSSH_REPO="tabssh/android" scripts/fetch-spice-libs.sh
-                    TABSSH_REPO="tabssh/android" scripts/fetch-tor-binaries.sh
+                    TABSSH_REPO="$(git config --get remote.origin.url | sed -E 's#(\\.git)?$##; s#^.*[:/]([^/]+/[^/]+)$#\\1#')" scripts/fetch-mosh-binaries.sh
+                    TABSSH_REPO="$(git config --get remote.origin.url | sed -E 's#(\\.git)?$##; s#^.*[:/]([^/]+/[^/]+)$#\\1#')" scripts/fetch-spice-libs.sh
+                    TABSSH_REPO="$(git config --get remote.origin.url | sed -E 's#(\\.git)?$##; s#^.*[:/]([^/]+/[^/]+)$#\\1#')" scripts/fetch-tor-binaries.sh
                     scripts/fetch-fonts.sh
                 '''
                 sh '''
@@ -134,18 +157,21 @@ pipeline {
                       done
                     done
                 '''
-                sh 'COMMIT_HASH=$(git rev-parse --short=7 HEAD); ./gradlew assembleDevel --no-daemon'
-                sh './gradlew :app:cyclonedxBom --no-daemon'
+                sh '''
+                    export VERSION="$(git rev-parse --short=7 HEAD)" SOURCE_DATE_EPOCH="$BUILD_EPOCH"
+                    ./gradlew assembleDevel --no-daemon
+                    ./gradlew :app:cyclonedxBom --no-daemon
+                '''
                 sh '''
                     mkdir -p dist
-                    cp app/build/outputs/apk/devel/tabssh-android-*.apk dist/
+                    cp app/build/outputs/apk/devel/*-android-*.apk dist/
                     cp app/build/outputs/mapping/devel/mapping.txt dist/mapping.txt
                     COMMIT_HASH=$(git rev-parse --short=7 HEAD)
                     printf 'version: %s\\ncommit: %s\\nbuild_epoch: %s\\n' \
-                      "$COMMIT_HASH" "$(git rev-parse HEAD)" "$(date -u +%s)" > dist/version.txt
-                    git archive --format=tar.gz -o "dist/tabssh-${COMMIT_HASH}-source.tar.gz" HEAD
+                      "$COMMIT_HASH" "$(git rev-parse HEAD)" "$BUILD_EPOCH" > dist/version.txt
+                    git archive --format=tar.gz -o "dist/${PROJECT_NAME}-${COMMIT_HASH}-source.tar.gz" HEAD
                     SBOM=$(find app/build \\( -name '*.json' -a -path '*cyclonedx*' \\) -o -name 'bom.json' | head -1)
-                    cp "$SBOM" dist/tabssh-sbom.cdx.json
+                    cp "$SBOM" dist/${PROJECT_NAME}-sbom.cdx.json
                     cd dist
                     sha256sum -- * > sha256.txt.tmp && mv sha256.txt.tmp sha256.txt
                     sha512sum -- * | grep -v -- ' sha256.txt$' > sha512.txt.tmp && mv sha512.txt.tmp sha512.txt
@@ -157,7 +183,7 @@ pipeline {
 
         stage('Beta') {
             when {
-                tag pattern: '.*beta.*', comparator: 'REGEXP'
+                branch 'beta'
             }
             agent {
                 docker {
@@ -182,23 +208,27 @@ pipeline {
                 '''
                 sh '''
                     chmod +x scripts/fetch-mosh-binaries.sh scripts/fetch-spice-libs.sh scripts/fetch-tor-binaries.sh scripts/fetch-fonts.sh
-                    TABSSH_REPO="tabssh/android" scripts/fetch-mosh-binaries.sh
-                    TABSSH_REPO="tabssh/android" scripts/fetch-spice-libs.sh
-                    TABSSH_REPO="tabssh/android" scripts/fetch-tor-binaries.sh
+                    TABSSH_REPO="$(git config --get remote.origin.url | sed -E 's#(\\.git)?$##; s#^.*[:/]([^/]+/[^/]+)$#\\1#')" scripts/fetch-mosh-binaries.sh
+                    TABSSH_REPO="$(git config --get remote.origin.url | sed -E 's#(\\.git)?$##; s#^.*[:/]([^/]+/[^/]+)$#\\1#')" scripts/fetch-spice-libs.sh
+                    TABSSH_REPO="$(git config --get remote.origin.url | sed -E 's#(\\.git)?$##; s#^.*[:/]([^/]+/[^/]+)$#\\1#')" scripts/fetch-tor-binaries.sh
                     scripts/fetch-fonts.sh
                 '''
-                sh './gradlew assembleRelease --no-daemon'
-                sh './gradlew :app:cyclonedxBom --no-daemon'
+                sh '''
+                    TAG_NAME="$(date -u -d "@${BUILD_EPOCH}" +%Y%m%d%H%M%S)-beta"
+                    export VERSION="$TAG_NAME" SOURCE_DATE_EPOCH="$BUILD_EPOCH"
+                    ./gradlew assembleRelease --no-daemon
+                    ./gradlew :app:cyclonedxBom --no-daemon
+                '''
                 sh '''
                     mkdir -p dist
                     TAG_NAME="${TAG_NAME:-$(git describe --tags --exact-match)}"
-                    cp app/build/outputs/apk/release/tabssh-android-*.apk dist/
+                    cp app/build/outputs/apk/release/*-android-*.apk dist/
                     cp app/build/outputs/mapping/release/mapping.txt dist/mapping.txt
                     printf 'version: %s\\ncommit: %s\\nbuild_epoch: %s\\n' \
-                      "$TAG_NAME" "$(git rev-parse HEAD)" "$(date -u +%s)" > dist/version.txt
-                    git archive --format=tar.gz -o "dist/tabssh-${TAG_NAME}-source.tar.gz" HEAD
+                      "$TAG_NAME" "$(git rev-parse HEAD)" "$BUILD_EPOCH" > dist/version.txt
+                    git archive --format=tar.gz -o "dist/${PROJECT_NAME}-${TAG_NAME}-source.tar.gz" HEAD
                     SBOM=$(find app/build \\( -name '*.json' -a -path '*cyclonedx*' \\) -o -name 'bom.json' | head -1)
-                    cp "$SBOM" dist/tabssh-sbom.cdx.json
+                    cp "$SBOM" dist/${PROJECT_NAME}-sbom.cdx.json
                     cd dist
                     sha256sum -- * > sha256.txt.tmp && mv sha256.txt.tmp sha256.txt
                     sha512sum -- * | grep -v -- ' sha256.txt$' > sha512.txt.tmp && mv sha512.txt.tmp sha512.txt
@@ -209,7 +239,7 @@ pipeline {
 
         stage('Release') {
             when {
-                tag pattern: '^v[0-9].*', comparator: 'REGEXP'
+                tag pattern: '^(v.+|[^ ]+\\.[^ ]+\\.[^ ]+)$', comparator: 'REGEXP'
             }
             agent {
                 docker {
@@ -241,25 +271,29 @@ pipeline {
                 sh './gradlew jacocoTestReport jacocoTestCoverageVerification --no-daemon'
                 sh '''
                     chmod +x scripts/fetch-mosh-binaries.sh scripts/fetch-spice-libs.sh scripts/fetch-tor-binaries.sh scripts/fetch-fonts.sh
-                    TABSSH_REPO="tabssh/android" scripts/fetch-mosh-binaries.sh
-                    TABSSH_REPO="tabssh/android" scripts/fetch-spice-libs.sh
-                    TABSSH_REPO="tabssh/android" scripts/fetch-tor-binaries.sh
+                    TABSSH_REPO="$(git config --get remote.origin.url | sed -E 's#(\\.git)?$##; s#^.*[:/]([^/]+/[^/]+)$#\\1#')" scripts/fetch-mosh-binaries.sh
+                    TABSSH_REPO="$(git config --get remote.origin.url | sed -E 's#(\\.git)?$##; s#^.*[:/]([^/]+/[^/]+)$#\\1#')" scripts/fetch-spice-libs.sh
+                    TABSSH_REPO="$(git config --get remote.origin.url | sed -E 's#(\\.git)?$##; s#^.*[:/]([^/]+/[^/]+)$#\\1#')" scripts/fetch-tor-binaries.sh
                     scripts/fetch-fonts.sh
                 '''
-                sh './gradlew assembleRelease --no-daemon'
-                sh './gradlew assembleFdroidRelease --no-daemon'
-                sh './gradlew :app:cyclonedxBom --no-daemon'
+                sh '''
+                    TAG_NAME="${TAG_NAME:-$(git describe --tags --exact-match)}"
+                    export VERSION="${TAG_NAME#v}" SOURCE_DATE_EPOCH="$BUILD_EPOCH"
+                    ./gradlew assembleRelease --no-daemon
+                    ./gradlew assembleFdroidRelease --no-daemon
+                    ./gradlew :app:cyclonedxBom --no-daemon
+                '''
                 sh '''
                     mkdir -p dist
                     TAG_NAME="${TAG_NAME:-$(git describe --tags --exact-match)}"
                     VERSION="${TAG_NAME#v}"
-                    cp app/build/outputs/apk/release/tabssh-android-*.apk dist/
+                    cp app/build/outputs/apk/release/*-android-*.apk dist/
                     cp app/build/outputs/mapping/release/mapping.txt dist/mapping.txt
                     printf 'version: %s\\ncommit: %s\\nbuild_epoch: %s\\n' \
-                      "$VERSION" "$(git rev-parse HEAD)" "$(date -u +%s)" > dist/version.txt
-                    git archive --format=tar.gz -o "dist/tabssh-${VERSION}-source.tar.gz" HEAD
+                      "$VERSION" "$(git rev-parse HEAD)" "$BUILD_EPOCH" > dist/version.txt
+                    git archive --format=tar.gz -o "dist/${PROJECT_NAME}-${VERSION}-source.tar.gz" HEAD
                     SBOM=$(find app/build \\( -name '*.json' -a -path '*cyclonedx*' \\) -o -name 'bom.json' | head -1)
-                    cp "$SBOM" dist/tabssh-sbom.cdx.json
+                    cp "$SBOM" dist/${PROJECT_NAME}-sbom.cdx.json
                     cd dist
                     sha256sum -- * > sha256.txt.tmp && mv sha256.txt.tmp sha256.txt
                     sha512sum -- * | grep -v -- ' sha256.txt$' > sha512.txt.tmp && mv sha512.txt.tmp sha512.txt

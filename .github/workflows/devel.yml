@@ -27,11 +27,11 @@ on:
 # Only one devel build at a time — cancel any in-flight run when a
 # newer push arrives so we don't race on the rolling `devel` tag.
 concurrency:
-  group: dev-build-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   # Pull-only, fail-fast gate: the build runs inside this image, so if it is
@@ -60,6 +60,8 @@ jobs:
       contents: write
       id-token: write
       attestations: write
+    env:
+      PROJECT_NAME: ${{ github.event.repository.name }}
     container:
       image: ${{ needs.ensure-build-image.outputs.image }}
       # Numeric 0:0 needs no /etc/passwd lookup — the runner and
@@ -139,7 +141,7 @@ jobs:
         BUILD_EPOCH=$(date -u +%s)
         echo "COMMIT_HASH=${COMMIT_HASH}" >> "$GITHUB_OUTPUT"
         echo "BUILD_EPOCH=${BUILD_EPOCH}" >> "$GITHUB_OUTPUT"
-        echo "RELEASE_TITLE=devel-${COMMIT_HASH}" >> "$GITHUB_OUTPUT"
+        echo "RELEASE_TITLE=Devel Build ${COMMIT_HASH}" >> "$GITHUB_OUTPUT"
         echo "📦 Building devel release: devel-${COMMIT_HASH}"
 
     - name: Fetch latest mosh-client binaries
@@ -205,6 +207,8 @@ jobs:
       run: ./gradlew assembleDevel --no-daemon
       env:
         SOURCE_DATE_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        VERSION: ${{ steps.version.outputs.COMMIT_HASH }}
         # KEYSTORE_PASSWORD is required to sign. KEY_PASSWORD is optional —
         # when the secret is absent GitHub expands it to an empty string and
         # build.gradle uses the store password for the key, which is how
@@ -214,6 +218,9 @@ jobs:
 
     - name: Generate SBOM
       run: ./gradlew :app:cyclonedxBom --no-daemon
+      env:
+        BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        VERSION: ${{ steps.version.outputs.COMMIT_HASH }}
 
     - name: Stage release assets
       env:
@@ -224,13 +231,13 @@ jobs:
         # mapping.txt -> version.txt -> source archive -> SBOM -> aggregate
         # sha256.txt/sha512.txt computed LAST over every staged asset.
         mkdir -p dist
-        cp app/build/outputs/apk/devel/tabssh-android-*.apk dist/
+        cp app/build/outputs/apk/devel/*-android-*.apk dist/
         cp app/build/outputs/mapping/devel/mapping.txt dist/mapping.txt
 
         printf 'version: %s\ncommit: %s\nbuild_epoch: %s\n' \
           "${COMMIT_HASH}" "$(git rev-parse HEAD)" "${BUILD_EPOCH}" > dist/version.txt
 
-        git archive --format=tar.gz -o "dist/tabssh-${COMMIT_HASH}-source.tar.gz" HEAD
+        git archive --format=tar.gz -o "dist/${PROJECT_NAME}-${COMMIT_HASH}-source.tar.gz" HEAD
 
         # Parenthesised: without them find parses this as
         # (-name '*.json' -a -path '*cyclonedx*') -o (-name 'bom.json'),
@@ -240,7 +247,7 @@ jobs:
           echo "::error::CycloneDX SBOM not found under app/build" >&2
           exit 1
         fi
-        cp "$SBOM" dist/tabssh-sbom.cdx.json
+        cp "$SBOM" dist/${PROJECT_NAME}-sbom.cdx.json
 
         cd dist
         sha256sum -- * > sha256.txt.tmp && mv sha256.txt.tmp sha256.txt
@@ -260,7 +267,7 @@ jobs:
         BUILD_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
 
         cat > RELEASE_NOTES_DEV.md << EOF
-        # TabSSH Devel Build
+        # ${PROJECT_NAME} Devel Build
 
         **⚠️ This is a devel/testing build - Not for production use**
 
@@ -276,11 +283,11 @@ jobs:
         cat >> RELEASE_NOTES_DEV.md << 'EOF'
         ## Downloads
 
-        - **tabssh-android-universal.apk** - Recommended (works on all devices)
-        - **tabssh-android-arm64.apk** - Modern ARM 64-bit devices
-        - **tabssh-android-arm.apk** - Older ARM 32-bit devices
-        - **tabssh-android-amd64.apk** - x86_64 (emulators, Chromebooks)
-        - **tabssh-android-x86.apk** - x86 32-bit (older emulators)
+        - **${PROJECT_NAME}-android-universal.apk** - Recommended (works on all devices)
+        - **${PROJECT_NAME}-android-arm64.apk** - Modern ARM 64-bit devices
+        - **${PROJECT_NAME}-android-arm.apk** - Older ARM 32-bit devices
+        - **${PROJECT_NAME}-android-amd64.apk** - x86_64 (emulators, Chromebooks)
+        - **${PROJECT_NAME}-android-x86.apk** - x86 32-bit (older emulators)
 
         Checksums: see \`sha256.txt\` / \`sha512.txt\` release assets.
 
@@ -302,7 +309,7 @@ jobs:
 
         ## Reporting Issues
 
-        Found a bug? Report it: https://github.com/tabssh/android/issues
+        Found a bug? Report it: ${{ github.server_url }}/${{ github.repository }}/issues
         EOF
 
     - name: Delete existing devel release

@@ -2,6 +2,7 @@
 
 ## Wave 80 — container updates, trackers, and polish
 
+- The version shown in Settings and About is now each build's own identity (release number, timestamped beta, or commit id for devel builds), and a later build always installs over an earlier one.
 - A new System update snippet updates a server with whichever package manager it has (apt, dnf, yum, zypper, pacman, apk, xbps, pkg), using root or sudo as available. Duplicate snippets left by syncing starter sets between devices are merged.
 - Container update settings work at three levels: global, per host, and per image or compose stack, with the most specific winning. A new Updates tab on Docker and Podman hosts shows available updates and lets you change each level.
 - Compose containers update through compose as a whole project (using composemgr when installed) and standalone containers through recreate; the two are never mixed.

@@ -9,8 +9,6 @@ stages:
   - build
   - test
   - security
-  - devel
-  - beta
   - release
 
 default:
@@ -57,9 +55,9 @@ variables:
 .fetch_native_libs:
   script:
     - chmod +x scripts/fetch-mosh-binaries.sh scripts/fetch-spice-libs.sh scripts/fetch-tor-binaries.sh scripts/fetch-fonts.sh
-    - TABSSH_REPO="tabssh/android" GH_TOKEN="$GH_TOKEN" scripts/fetch-mosh-binaries.sh
-    - TABSSH_REPO="tabssh/android" GH_TOKEN="$GH_TOKEN" scripts/fetch-spice-libs.sh
-    - TABSSH_REPO="tabssh/android" GH_TOKEN="$GH_TOKEN" scripts/fetch-tor-binaries.sh
+    - TABSSH_REPO="$CI_PROJECT_PATH" GH_TOKEN="$GH_TOKEN" scripts/fetch-mosh-binaries.sh
+    - TABSSH_REPO="$CI_PROJECT_PATH" GH_TOKEN="$GH_TOKEN" scripts/fetch-spice-libs.sh
+    - TABSSH_REPO="$CI_PROJECT_PATH" GH_TOKEN="$GH_TOKEN" scripts/fetch-tor-binaries.sh
     - scripts/fetch-fonts.sh
 
 .verify_native_libs:
@@ -85,17 +83,17 @@ variables:
   script:
     - |
       mkdir -p dist
-      cp app/build/outputs/apk/${BUILD_FLAVOR}/tabssh-android-*.apk dist/
+      cp app/build/outputs/apk/${BUILD_FLAVOR}/*-android-*.apk dist/
       cp app/build/outputs/mapping/${BUILD_FLAVOR}/mapping.txt dist/mapping.txt
       printf 'version: %s\ncommit: %s\nbuild_epoch: %s\n' \
         "${VERSION_IDENTITY}" "$(git rev-parse HEAD)" "${BUILD_EPOCH}" > dist/version.txt
-      git archive --format=tar.gz -o "dist/tabssh-${VERSION_IDENTITY}-source.tar.gz" HEAD
+      git archive --format=tar.gz -o "dist/${CI_PROJECT_NAME}-${VERSION_IDENTITY}-source.tar.gz" HEAD
       SBOM=$(find app/build \( -name '*.json' -a -path '*cyclonedx*' \) -o -name 'bom.json' | head -1)
       if [ -z "$SBOM" ]; then
         echo "ERROR: CycloneDX SBOM not found under app/build" >&2
         exit 1
       fi
-      cp "$SBOM" dist/tabssh-sbom.cdx.json
+      cp "$SBOM" dist/${CI_PROJECT_NAME}-sbom.cdx.json
       cd dist
       sha256sum -- * > sha256.txt.tmp && mv sha256.txt.tmp sha256.txt
       sha512sum -- * | grep -v -- ' sha256.txt$' > sha512.txt.tmp && mv sha512.txt.tmp sha512.txt
@@ -121,12 +119,22 @@ validate:
       test -f "app/src/main/AndroidManifest.xml" && echo "AndroidManifest.xml exists"
       test -f "app/src/main/java/io/github/tabssh/TabSSHApplication.kt" && echo "Application class exists"
     - |
-      for f in README.md CHANGELOG.md AI.md IDEA.md; do
+      for f in README.md CHANGELOG.md AI.md IDEA.md LICENSE.md; do
         if [ ! -f "$f" ]; then
           echo "ERROR: $f missing" >&2
           exit 1
         fi
       done
+      if git ls-files | grep -E '(\.jks|\.keystore)$|(^|/)\.env' | grep -v -- '\.env\.example$' | grep -q .; then
+        echo "ERROR: a keystore or .env file is tracked by git" >&2
+        exit 1
+      fi
+      APP_ID="$(sed -n 's/^app_id:[[:space:]]*//p' IDEA.md | head -1)"
+      GRADLE_ID="$(sed -n 's/^[[:space:]]*applicationId[[:space:]]*["'"'"']\([^"'"'"']*\)["'"'"'].*/\1/p' app/build.gradle | head -1)"
+      if [ -z "$APP_ID" ] || [ "$APP_ID" != "$GRADLE_ID" ]; then
+        echo "ERROR: applicationId '$GRADLE_ID' does not match IDEA.md app_id '$APP_ID'" >&2
+        exit 1
+      fi
 
 secret-scan:
   stage: security
@@ -135,10 +143,10 @@ secret-scan:
   variables:
     GIT_DEPTH: 0
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "schedule"'
   script:
     - |
-      if [ "$CI_PIPELINE_SOURCE" = "web" ] || [ "$CI_COMMIT_BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+      if [ "$CI_PIPELINE_SOURCE" = "web" ] || [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "$CI_COMMIT_BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
         trufflehog git file://. --results=verified --exclude-paths=.github/trufflehog-exclude.txt --fail
       else
         trufflehog git file://. --since-commit HEAD~1 --results=verified,unknown --exclude-paths=.github/trufflehog-exclude.txt --fail
@@ -167,10 +175,24 @@ workflow-policy:
       fi
       echo "OK: all pinned images use a digest"
 
+dependency-check:
+  stage: security
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  cache:
+    <<: *gradle_cache
+  variables:
+    <<: *gradle_env
+  before_script:
+    - chmod +x gradlew
+  script:
+    # CVSS >= 7.0 fails the build; suppressions come from the shared file
+    - ./gradlew dependencyCheckAggregate --no-daemon
+
 # ── devel stage (devel.yml equivalent) ─────────────────────
 
 devel:
-  stage: devel
+  stage: release
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
@@ -186,20 +208,20 @@ devel:
   script:
     - COMMIT_HASH=$(git rev-parse --short=7 HEAD)
     - BUILD_EPOCH=$(date -u +%s)
-    - export VERSION_IDENTITY="$COMMIT_HASH" BUILD_EPOCH SOURCE_DATE_EPOCH="$BUILD_EPOCH"
+    - VERSION="$COMMIT_HASH"
+    - export VERSION VERSION_IDENTITY="$COMMIT_HASH" BUILD_EPOCH SOURCE_DATE_EPOCH="$BUILD_EPOCH"
     - !reference [.fetch_native_libs, script]
     - !reference [.verify_native_libs, script]
     - ./gradlew assembleDevel --no-daemon
     - ./gradlew :app:cyclonedxBom --no-daemon
     - !reference [.stage_release_assets, script]
     - |
-      # Rolling release: delete + recreate on every run (AI.md PART 13).
-      glab release delete devel --yes || echo "No existing devel release found"
-      git push origin :refs/tags/devel || echo "No devel tag to delete"
-      glab release create devel dist/* \
-        --name "devel-${COMMIT_HASH}" \
-        --notes "Devel build devel-${COMMIT_HASH} — rolling prerelease, not for production use." \
-        --ref "$(git rev-parse HEAD)"
+      # Rolling release: delete + recreate as the final step, after the build and staging
+      # succeeded (AI.md PART 13). The image ships only gh, curl and jq, so REST does the work.
+      export PROVIDER=gitlab API_URL="$CI_API_V4_URL" REPO="$CI_PROJECT_ID" TOKEN="${GITLAB_TOKEN:-$CI_JOB_TOKEN}" PACKAGE="$CI_PROJECT_NAME"
+      printf "Devel build %s: rolling prerelease, not for production use.\n" "$COMMIT_HASH" > dist-release-notes.md
+      bash scripts/provider-release.sh delete devel || true
+      bash scripts/provider-release.sh create devel "Devel Build ${COMMIT_HASH}" dist-release-notes.md true "$CI_COMMIT_SHA" dist/*
   artifacts:
     paths:
       - dist/
@@ -207,9 +229,9 @@ devel:
 # ── beta stage (beta.yml equivalent) ────────────────────────────────────
 
 beta:
-  stage: beta
+  stage: release
   rules:
-    - if: '$CI_COMMIT_TAG =~ /beta/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "beta"'
     - if: '$CI_PIPELINE_SOURCE == "web"'
   cache:
     <<: *gradle_cache
@@ -220,9 +242,10 @@ beta:
     - chmod +x gradlew
     - !reference [.decode_keystore, script]
   script:
-    - TAG_NAME="$CI_COMMIT_TAG"
     - BUILD_EPOCH=$(date -u +%s)
-    - export VERSION_IDENTITY="$TAG_NAME" BUILD_EPOCH SOURCE_DATE_EPOCH="$BUILD_EPOCH"
+    - TAG_NAME="$(date -u -d "@${BUILD_EPOCH}" +%Y%m%d%H%M%S)-beta"
+    - VERSION="$TAG_NAME"
+    - export VERSION VERSION_IDENTITY="$TAG_NAME" BUILD_EPOCH SOURCE_DATE_EPOCH="$BUILD_EPOCH"
     - !reference [.fetch_native_libs, script]
     - !reference [.verify_native_libs, script]
     - ./gradlew assembleRelease --no-daemon
@@ -230,9 +253,8 @@ beta:
     - !reference [.stage_release_assets, script]
     - cat CHANGELOG.md > dist-release-notes.md
     - |
-      glab release create "$TAG_NAME" dist/* \
-        --name "TabSSH $TAG_NAME (beta)" \
-        --notes-file dist-release-notes.md
+      export PROVIDER=gitlab API_URL="$CI_API_V4_URL" REPO="$CI_PROJECT_ID" TOKEN="${GITLAB_TOKEN:-$CI_JOB_TOKEN}" PACKAGE="$CI_PROJECT_NAME"
+      bash scripts/provider-release.sh create "$TAG_NAME" "$TAG_NAME" dist-release-notes.md true "$CI_COMMIT_SHA" dist/*
   artifacts:
     paths:
       - dist/
@@ -242,7 +264,8 @@ beta:
 release:
   stage: release
   rules:
-    - if: '$CI_COMMIT_TAG =~ /^v[0-9]/'
+    - if: '$CI_COMMIT_TAG =~ /^v/'
+    - if: '$CI_COMMIT_TAG =~ /^[^ ]+\.[^ ]+\.[^ ]+$/'
     - if: '$CI_PIPELINE_SOURCE == "web"'
   cache:
     <<: *gradle_cache
@@ -253,6 +276,15 @@ release:
     - chmod +x gradlew
     - !reference [.decode_keystore, script]
   script:
+    - |
+      if [ -z "${CI_COMMIT_TAG:-}" ]; then
+        echo "ERROR: the release job must run from a tag, got none. Push a vX.Y.Z tag, or start the pipeline from a tag." >&2
+        exit 1
+      fi
+      if printf '%s' "$CI_COMMIT_TAG" | LC_ALL=C grep -q '[[:space:][:cntrl:]]'; then
+        echo "ERROR: the tag name contains whitespace or control characters. Delete the tag and push a clean vX.Y.Z tag." >&2
+        exit 1
+      fi
     - ./gradlew test --no-daemon
     # Aggregate, not Analyze: the plugin is applied to the root project,
     # which declares no dependencies of its own — dependencyCheckAnalyze
@@ -264,7 +296,7 @@ release:
     - TAG_NAME="$CI_COMMIT_TAG"
     - VERSION="${TAG_NAME#v}"
     - BUILD_EPOCH=$(date -u +%s)
-    - export VERSION_IDENTITY="$VERSION" BUILD_EPOCH SOURCE_DATE_EPOCH="$BUILD_EPOCH" RELEASE_BUILD=true
+    - export VERSION VERSION_IDENTITY="$VERSION" BUILD_EPOCH SOURCE_DATE_EPOCH="$BUILD_EPOCH" RELEASE_BUILD=true
     - !reference [.fetch_native_libs, script]
     - !reference [.verify_native_libs, script]
     - ./gradlew assembleRelease --no-daemon
@@ -273,10 +305,9 @@ release:
     - !reference [.stage_release_assets, script]
     - cat CHANGELOG.md > dist-release-notes.md
     - |
-      glab release delete "$TAG_NAME" --yes || echo "Release $TAG_NAME not found"
-      glab release create "$TAG_NAME" dist/* \
-        --name "TabSSH $VERSION - Complete Mobile SSH Client" \
-        --notes-file dist-release-notes.md
+      export PROVIDER=gitlab API_URL="$CI_API_V4_URL" REPO="$CI_PROJECT_ID" TOKEN="${GITLAB_TOKEN:-$CI_JOB_TOKEN}" PACKAGE="$CI_PROJECT_NAME"
+      bash scripts/provider-release.sh delete "$TAG_NAME" || true
+      bash scripts/provider-release.sh create "$TAG_NAME" "v$VERSION" dist-release-notes.md false "$CI_COMMIT_SHA" dist/*
     - ./scripts/notify-release.sh "$TAG_NAME"
   artifacts:
     paths:

@@ -7,6 +7,8 @@ name: Security Scan
 on:
   push:
   pull_request:
+  schedule:
+    - cron: '0 6 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -36,8 +38,56 @@ jobs:
           extra_args: --results=verified,unknown --exclude-paths=.github/trufflehog-exclude.txt
 
       - name: TruffleHog full-history scan
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.event.before == '0000000000000000000000000000000000000000')
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.event.before == '0000000000000000000000000000000000000000')
         uses: trufflesecurity/trufflehog@e76dff8a7e57d6df0c60ad8cbf5d5cba505a8fc9 # v3.99.2
         with:
           path: ./
           extra_args: --results=verified --exclude-paths=.github/trufflehog-exclude.txt
+
+  workflow-policy:
+    name: Workflow policy (action SHA pins)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Fail on any action not pinned to a commit SHA
+        run: |
+          fail=0
+          while IFS= read -r hit; do
+            ref="${hit##*@}"
+            ref="${ref%%[[:space:]#]*}"
+            if ! printf '%s' "$ref" | grep -Eq '^[0-9a-f]{40}$'; then
+              echo "::error::'$hit' is not pinned to a 40-character commit SHA. Pin it to the full commit SHA." >&2
+              fail=1
+            fi
+          done < <(grep -rhE '^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*[^./[:space:]][^[:space:]]*@' .github .gitea .forgejo --include='*.yml' || true)
+          exit "$fail"
+
+  dependency-check:
+    name: OWASP DependencyCheck
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/android:latest
+      options: "--user 0:0"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Trust the checked-out workspace inside the container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: OWASP DependencyCheck (CVSS 7.0 and above fails)
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          chmod +x gradlew
+          ./gradlew dependencyCheckAggregate --no-daemon
+
+      - name: Fix workspace permissions for host post-steps
+        if: always()
+        run: chmod -R a+rX "$GITHUB_WORKSPACE"

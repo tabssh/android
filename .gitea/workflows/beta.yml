@@ -8,8 +8,8 @@ name: Beta Release
 # where GitHub-specific tooling has no Gitea equivalent:
 #   - `actions/attest-build-provenance` is skipped (GitHub only, AI.md
 #     PART 13 "Release channels" table).
-#   - Release publishing uses the `tea` CLI (shipped in
-#     casjaysdev/android:latest) instead of `gh`/softprops/action-gh-release.
+#   - Release publishing uses scripts/provider-release.sh (REST via curl and jq,
+#     both shipped in casjaysdev/android:latest) instead of gh/softprops/action-gh-release.
 #
 # The mosh/SPICE/Tor binaries fetched below are published as GitHub
 # releases regardless of which provider builds this repo (mosh-binaries.yml,
@@ -21,16 +21,15 @@ name: Beta Release
 
 on:
   push:
-    tags:
-      - '*beta*'
+    branches: [ beta ]
   workflow_dispatch: {}
 
 concurrency:
-  group: beta-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   ensure-build-image:
@@ -53,6 +52,8 @@ jobs:
     name: Build Beta Release
     needs: ensure-build-image
     runs-on: ubuntu-latest
+    env:
+      PROJECT_NAME: ${{ github.event.repository.name }}
     container:
       image: ${{ needs.ensure-build-image.outputs.image }}
       # Numeric 0:0 needs no /etc/passwd lookup — the runner and
@@ -66,6 +67,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      with:
+        fetch-depth: 0
 
     - name: Trust the checked-out workspace inside the container
       run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -106,8 +109,9 @@ jobs:
     - name: Capture build identity
       id: version
       run: |
-        TAG_NAME=${GITHUB_REF#refs/tags/}
         BUILD_EPOCH=$(date -u +%s)
+        BETA_TS=$(date -u -d "@${BUILD_EPOCH}" +%Y%m%d%H%M%S)
+        TAG_NAME="${BETA_TS}-beta"
         echo "TAG_NAME=${TAG_NAME}" >> "$GITHUB_OUTPUT"
         echo "BUILD_EPOCH=${BUILD_EPOCH}" >> "$GITHUB_OUTPUT"
         echo "Building beta release: ${TAG_NAME}"
@@ -158,11 +162,16 @@ jobs:
       run: ./gradlew assembleRelease --no-daemon
       env:
         SOURCE_DATE_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        VERSION: ${{ steps.version.outputs.TAG_NAME }}
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
     - name: Generate SBOM
       run: ./gradlew :app:cyclonedxBom --no-daemon
+      env:
+        BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
+        VERSION: ${{ steps.version.outputs.TAG_NAME }}
 
     - name: Stage release assets
       env:
@@ -170,20 +179,20 @@ jobs:
         BUILD_EPOCH: ${{ steps.version.outputs.BUILD_EPOCH }}
       run: |
         mkdir -p dist
-        cp app/build/outputs/apk/release/tabssh-android-*.apk dist/
+        cp app/build/outputs/apk/release/*-android-*.apk dist/
         cp app/build/outputs/mapping/release/mapping.txt dist/mapping.txt
 
         printf 'version: %s\ncommit: %s\nbuild_epoch: %s\n' \
           "${TAG_NAME}" "$(git rev-parse HEAD)" "${BUILD_EPOCH}" > dist/version.txt
 
-        git archive --format=tar.gz -o "dist/tabssh-${TAG_NAME}-source.tar.gz" HEAD
+        git archive --format=tar.gz -o "dist/${PROJECT_NAME}-${TAG_NAME}-source.tar.gz" HEAD
 
         SBOM=$(find app/build \( -name '*.json' -a -path '*cyclonedx*' \) -o -name 'bom.json' | head -1)
         if [ -z "$SBOM" ]; then
           echo "::error::CycloneDX SBOM not found under app/build" >&2
           exit 1
         fi
-        cp "$SBOM" dist/tabssh-sbom.cdx.json
+        cp "$SBOM" dist/${PROJECT_NAME}-sbom.cdx.json
 
         cd dist
         sha256sum -- * > sha256.txt.tmp && mv sha256.txt.tmp sha256.txt
@@ -199,16 +208,16 @@ jobs:
         TAG_NAME: ${{ steps.version.outputs.TAG_NAME }}
       run: |
         {
-          echo "# TabSSH ${TAG_NAME} — Beta Release"
+          echo "# ${PROJECT_NAME} ${TAG_NAME} — Beta Release"
           echo ""
           echo "**Beta build for testing — expect rough edges. Use stable releases for production.**"
           echo ""
           echo "## Downloads"
-          echo "- **tabssh-android-universal.apk** - Recommended (works on all devices)"
-          echo "- **tabssh-android-arm64.apk** - Modern ARM 64-bit devices"
-          echo "- **tabssh-android-arm.apk** - Older ARM 32-bit devices"
-          echo "- **tabssh-android-amd64.apk** - x86_64 (emulators, Chromebooks)"
-          echo "- **tabssh-android-x86.apk** - x86 32-bit (older emulators)"
+          echo "- **${PROJECT_NAME}-android-universal.apk** - Recommended (works on all devices)"
+          echo "- **${PROJECT_NAME}-android-arm64.apk** - Modern ARM 64-bit devices"
+          echo "- **${PROJECT_NAME}-android-arm.apk** - Older ARM 32-bit devices"
+          echo "- **${PROJECT_NAME}-android-amd64.apk** - x86_64 (emulators, Chromebooks)"
+          echo "- **${PROJECT_NAME}-android-x86.apk** - x86 32-bit (older emulators)"
           echo ""
           echo "Checksums: see \`sha256.txt\` / \`sha512.txt\` release assets."
           echo ""
@@ -217,31 +226,28 @@ jobs:
 
     - name: Create beta release
       env:
-        GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
-        GITEA_REPOSITORY: ${{ github.repository }}
+        PROVIDER: gitea
+        API_URL: ${{ github.server_url }}/api/v1
+        REPO: ${{ github.repository }}
+        TOKEN: ${{ secrets.GITEA_TOKEN }}
         TAG_NAME: ${{ steps.version.outputs.TAG_NAME }}
       run: |
-        # `tea` (shipped in casjaysdev/android:latest) is the provider CLI
-        # for Gitea, matching gh/glab on the other providers (AI.md
-        # PART 12 "Rules"). Auth is ephemeral per-invocation via --token so
-        # no persistent login state is written to the runner.
+        # This workflow owns the beta tag: create it at the commit being built
+        # (checkout is fetch-depth 0; contents: write covers the tag push).
+        git tag "$TAG_NAME" "$GITHUB_SHA"
+        git push origin "refs/tags/$TAG_NAME"
         for attempt in 1 2 3; do
-          if tea release create \
-            --repo "$GITEA_REPOSITORY" \
-            --token "$GITEA_TOKEN" \
-            --tag "$TAG_NAME" \
-            --title "TabSSH $TAG_NAME (beta)" \
-            --note "$(cat RELEASE_NOTES_BETA.md)" \
-            --prerelease \
-            dist/*; then
+          if bash scripts/provider-release.sh create "$TAG_NAME" "$TAG_NAME" RELEASE_NOTES_BETA.md true "$GITHUB_SHA" dist/*; then
             echo "Release created on attempt $attempt"
             exit 0
           fi
           echo "Release attempt $attempt failed"
-          tea release delete --repo "$GITEA_REPOSITORY" --token "$GITEA_TOKEN" "$TAG_NAME" || true
+          bash scripts/provider-release.sh delete "$TAG_NAME" || true
+          git tag "$TAG_NAME" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG_NAME" || true
           sleep 15
         done
-        echo "::error::Release creation failed after 3 attempts"
+        echo "::error::Release creation failed after 3 attempts. Check the token secret and API access." >&2
         exit 1
 
     - name: Fix workspace permissions for host post-steps

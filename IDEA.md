@@ -39,6 +39,7 @@ notifications: yes
 background_work: yes
 backup_sync: yes
 media: no
+dynamic_color: no
 
 ### Toolchain
 
@@ -51,7 +52,6 @@ r8: 9.1.31 # first published patch meeting Android's R8 9.1.29 minimum for Kotli
 gradle: 8.14.5
 compile_sdk: 35
 target_sdk: 34
-version_code_scheme: manual
 http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with Retrofit/Ktor
 
 ## Business logic
@@ -324,7 +324,7 @@ All channels are created in one `NotificationHelper`; ids are versioned and neve
 ### Release
 
 - Keystore escrow: no production keystore file exists in the repo or on any dev machine (AI.md PART 13). It is escrowed as the `KEYSTORE_BASE64` + `KEYSTORE_PASSWORD` (and optional `KEY_PASSWORD`) repo secrets under Settings > Secrets and Variables > Actions; every release channel hard-fails with an actionable error if either required secret is missing, with no ephemeral/generated fallback keystore ever produced.
-- Release cadence: `stable` and `beta` are on-demand, triggered by pushing a `vX.Y.Z` / `*beta` tag; `devel` runs daily on a schedule plus on every push to `main`, with its rolling `devel` tag/release deleted and recreated each run.
+- Release cadence: `stable` is on-demand, triggered by pushing a `vX.Y.Z` or `X.Y.Z` tag; `beta` is on-demand, triggered by a push to the `beta` branch (the workflow creates the `YYYYMMDDHHMMSS-beta` tag at that commit); `devel` runs daily on a schedule plus on every push to `main`, with its rolling `devel` tag/release deleted and recreated each run.
 - No ACRA-style crash-reporting endpoint is configured — crash reporting stays the AI.md PART 2 default (on-device log + user-triggered export) per the "no analytics/crash-reporting SDK without opt-in" constraint above.
 
 ### Accepted design decisions

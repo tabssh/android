@@ -23,9 +23,8 @@ def termuxTerminalVersion = 'v0.118.1'
 //   1. `git rev-parse --short=7 HEAD` — works on dev machines AND F-Droid's
 //      builder (fdroidserver clones via git and checks out the recipe's
 //      commit SHA, so HEAD is the exact commit being built).
-//   2. release.txt contents — fallback when .git is absent (source
+//   2. "unknown" — last-resort sentinel when .git is absent (source
 //      tarballs, IDE imports without git history).
-//   3. "unknown" — last-resort sentinel.
 // Short SHA only — avoid `--dirty` or timestamps which break F-Droid
 // reproducibility (a stray file in the build dir would diverge HEAD).
 // Length pinned to 7 (`--short=7`, GitHub's own standard short-SHA length;
@@ -42,24 +41,29 @@ def resolveGitCommit = {
         def s = execResult.standardOutput.asText.get().trim()
         if (s) return s
     } catch (Exception ignored) {}
-    try {
-        def f = file("${rootDir}/release.txt")
-        if (f.exists()) return f.text.trim()
-    } catch (Exception ignored) {}
     return "unknown"
 }
 
-// Deterministic build timestamp (seconds since epoch) for F-Droid reproducible
-// builds. A wall-clock `new Date()` makes bit-for-bit reproduction impossible,
-// so resolve a stable source instead:
-//   1. SOURCE_DATE_EPOCH — the reproducible-builds standard; F-Droid sets it.
-//   2. the last commit's author timestamp — deterministic for a given checkout.
-//   3. 0 (1970-01-01 UTC) — last resort for a git-less, env-less tarball build;
-//      still reproducible.
+// Build timestamp (seconds since epoch) behind BuildConfig.BUILD_EPOCH and
+// versionCode (AI.md PART 13). Resolution order:
+//   1. fdroidBuild=true — the last commit's author timestamp, so the F-Droid
+//      build is reproducible and its versionCode matches the recipe's
+//      `git log -1 --format=%ct {tag}` / 60 (BUILD_EPOCH and
+//      SOURCE_DATE_EPOCH are ignored there).
+//   2. BUILD_EPOCH — captured once per CI or Makefile build and passed in as an
+//      environment variable so version.txt and the APK agree.
+//   3. SOURCE_DATE_EPOCH — the reproducible-builds standard.
+//   4. the last commit's author timestamp — deterministic for a given checkout.
+//   5. 0 (1970-01-01 UTC) — last resort for a git-less, env-less tarball build.
 // providers.exec keeps this configuration-cache compatible (same as resolveGitCommit).
+def isFdroidBuildProperty = (findProperty('fdroidBuild') ?: 'false').toString().toBoolean()
 def resolveBuildEpochSeconds = {
-    def sde = System.getenv("SOURCE_DATE_EPOCH")
-    if (sde != null && sde.isLong()) return sde.toLong()
+    if (!isFdroidBuildProperty) {
+        def be = System.getenv("BUILD_EPOCH")
+        if (be != null && be.isLong()) return be.toLong()
+        def sde = System.getenv("SOURCE_DATE_EPOCH")
+        if (sde != null && sde.isLong()) return sde.toLong()
+    }
     try {
         def execResult = providers.exec {
             commandLine 'git', 'log', '-1', '--format=%ct'
@@ -69,6 +73,20 @@ def resolveBuildEpochSeconds = {
         if (s && s.isLong()) return s.toLong()
     } catch (Exception ignored) {}
     return 0L
+}
+
+// versionName is the channel VERSION (AI.md PART 13): the stable tag without
+// `v`, the beta tag, or the short commit id. CI and the Makefile pass it as an
+// environment variable; IDE builds fall back to `devel`. Never hand-edited here.
+def resolveVersionName = {
+    def v = System.getenv("VERSION")
+    return (v != null && v.trim()) ? v.trim() : "devel"
+}
+
+// versionCode is BUILD_EPOCH / 60 (integer minutes since the Unix epoch) in
+// every channel and flavor, so every later build is newer than every earlier one.
+def resolveVersionCode = {
+    return (resolveBuildEpochSeconds().intdiv(60L)) as int
 }
 
 android {
@@ -100,8 +118,8 @@ android {
         // Android 5.0-6.0. minSdk 24 still covers ~96% of active devices.
         minSdk 24
         targetSdk 34
-        versionCode 11
-        versionName "1.0.0"
+        versionCode resolveVersionCode()
+        versionName resolveVersionName()
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
