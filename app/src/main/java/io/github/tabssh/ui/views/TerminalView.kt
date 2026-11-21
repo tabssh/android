@@ -120,7 +120,6 @@ class TerminalView @JvmOverloads constructor(
 
     // Touch and input handling
     private val gestureDetector: GestureDetector
-    private val scaleGestureDetector: ScaleGestureDetector
     // GestureDetector schedules a long-press timer on every ACTION_DOWN,
     // including the second tap of a double-tap. If that second tap is held
     // past the long-press timeout before lifting, onLongPress fires for the
@@ -173,11 +172,6 @@ class TerminalView @JvmOverloads constructor(
     // added copy costs no allocations in steady state.
     private var rowChars = CharArray(256)
     private var rowStyles = LongArray(256)
-
-    // Pinch-to-zoom state
-    private var isScaling = false
-    private var minFontSize = 8f
-    private var maxFontSize = 32f
 
     // Terminal colors and theme
     private var currentTheme: Theme? = null
@@ -508,7 +502,7 @@ class TerminalView @JvmOverloads constructor(
      */
     private var selectionArmed = false
     // Pending runnable that defers entering selection mode until we confirm
-    // the touch is single-finger (not the first finger of a pinch gesture).
+    // the touch is single-finger (not the first finger of a multi-finger gesture).
     private var selectionArmRunnable: Runnable? = null
 
     /** Called by the host activity when "Select Text…" is chosen from the clipboard menu. */
@@ -572,7 +566,6 @@ class TerminalView @JvmOverloads constructor(
         // Configure scroller and gesture detectors
         scroller = OverScroller(context)
         gestureDetector = GestureDetector(context, TerminalGestureListener())
-        scaleGestureDetector = ScaleGestureDetector(context, PinchZoomListener())
 
         // Setup default text paint. Init with the bundled Hack Nerd Font
         // (the app default — matches the user-facing terminal_font default;
@@ -2350,9 +2343,9 @@ class TerminalView @JvmOverloads constructor(
 
     override fun onTouch(v: View, event: MotionEvent): Boolean {
         // SEL key armed → defer entering selection mode by one frame so we can
-        // cancel if a second finger arrives (i.e. the user is pinching, not
-        // dragging a selection). ACTION_DOWN always has pointerCount==1 even for
-        // pinch gestures — the second finger fires ACTION_POINTER_DOWN afterward.
+        // cancel if a second finger arrives (a two-finger gesture, not a
+        // selection drag). ACTION_DOWN always has pointerCount==1 even for
+        // multi-finger gestures — the second finger fires ACTION_POINTER_DOWN afterward.
         if (selectionArmed && event.actionMasked == MotionEvent.ACTION_DOWN) {
             selectionArmed = false
             val ex = event.x; val ey = event.y
@@ -2367,7 +2360,7 @@ class TerminalView @JvmOverloads constructor(
             return true
         }
         // Second finger arrived — cancel the pending selection entry so the
-        // pinch-to-zoom handler gets a clean slate.
+        // multi-finger gesture gets a clean slate.
         if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
             selectionArmRunnable?.let { removeCallbacks(it); selectionArmRunnable = null }
         }
@@ -2392,14 +2385,6 @@ class TerminalView @JvmOverloads constructor(
             return true
         }
 
-        // Handle pinch-to-zoom first (multi-touch)
-        if (event.pointerCount >= 2 && termuxBridge?.touchMouseMode != true) {
-            scaleGestureDetector.onTouchEvent(event)
-            if (isScaling) {
-                return true
-            }
-        }
-
         // Selection mode swallows single-finger taps + drags so the
         // gesture detector doesn't fire keyboard-toggle / double-tap-
         // word-select / URL-detect while the user is shaping a range.
@@ -2419,15 +2404,8 @@ class TerminalView @JvmOverloads constructor(
         // terminal body behaves like a laptop touchpad and never toggles the keyboard.
         if (handleTrackpadTouch(event)) return true
 
-        // Handle single-finger gestures (scroll, tap, long press)
-        if (!isScaling) {
-            gestureDetector.onTouchEvent(event)
-        }
-
-        // Reset scaling flag when touch ends
-        if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
-            isScaling = false
-        }
+        // Scroll, tap and long press
+        gestureDetector.onTouchEvent(event)
 
         return true
     }
@@ -2457,7 +2435,6 @@ class TerminalView @JvmOverloads constructor(
     private var tpScrollLastY = 0f
     private var tpScrollAccum = 0f
     private var tpMultiStartDist = 0f
-    private var tpPinchStartSize = 0f
     private var tpMultiMode = TP_MULTI_UNDECIDED
     private var tpDragCol = 0
     private var tpDragRow = 0
@@ -2526,25 +2503,9 @@ class TerminalView @JvmOverloads constructor(
     private fun twoFingerDistance(event: MotionEvent): Float =
         Math.hypot((event.getX(0) - event.getX(1)).toDouble(), (event.getY(0) - event.getY(1)).toDouble()).toFloat()
 
-    // Applies the pinch font scale, same as the non-mouse pinch path
-    private fun applyTrackpadPinch(event: MotionEvent) {
-        if (tpMultiStartDist <= 0f) return
-        val newSize = (tpPinchStartSize * twoFingerDistance(event) / tpMultiStartDist).coerceIn(minFontSize, maxFontSize)
-        textPaint.textSize = newSize * resources.displayMetrics.density
-        calculateCellDimensions()
-        invalidate()
-    }
-
-    private fun endTrackpadPinch() {
-        if (tpMultiMode != TP_MULTI_PINCH) return
-        tpMultiMode = TP_MULTI_DONE
-        onFontSizeChanged?.invoke(textPaint.textSize / resources.displayMetrics.density)
-    }
-
     private fun abortTrackpadGesture() {
         cancelTrackpadLongPress()
         endTrackpadDrag()
-        endTrackpadPinch()
         tpActive = false
         tpMultiTouch = false
     }
@@ -2590,8 +2551,8 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
-     * Drive the trackpad. Runs after the edge zones (wheel, scrollbar) and pinch
-     * zoom, so those keep working. While mouse mode is on every gesture that starts
+     * Drive the trackpad. Runs after the edge zones (wheel, scrollbar), so those
+     * keep working. While mouse mode is on every gesture that starts
      * in the terminal body is owned here, which is what keeps taps from toggling
      * the keyboard.
      */
@@ -2648,7 +2609,6 @@ class TerminalView @JvmOverloads constructor(
                     tpMultiScrolled = false
                     tpMultiMode = TP_MULTI_UNDECIDED
                     tpMultiStartDist = twoFingerDistance(event)
-                    tpPinchStartSize = textPaint.textSize / resources.displayMetrics.density
                     tpMultiStartTime = event.eventTime
                     tpMultiStartY = (event.getY(0) + event.getY(1)) / 2f
                     tpScrollLastY = tpMultiStartY
@@ -2667,17 +2627,12 @@ class TerminalView @JvmOverloads constructor(
                             val pan = Math.abs(avgY - tpMultiStartY)
                             if (spread > slop || pan > slop) {
                                 tpMultiScrolled = true
-                                tpMultiMode = if (spread > pan) TP_MULTI_PINCH else TP_MULTI_SCROLL
+                                tpMultiMode = TP_MULTI_SCROLL
                                 tpScrollLastY = avgY
                                 tpScrollAccum = 0f
                             }
                             return true
                         }
-                        if (tpMultiMode == TP_MULTI_PINCH) {
-                            applyTrackpadPinch(event)
-                            return true
-                        }
-                        if (tpMultiMode == TP_MULTI_DONE) return true
                         tpScrollAccum += tpScrollLastY - avgY
                         tpScrollLastY = avgY
                         val cellH = if (cellHeight > 0f) cellHeight else 20f
@@ -2716,8 +2671,7 @@ class TerminalView @JvmOverloads constructor(
             }
             MotionEvent.ACTION_POINTER_UP -> {
                 if (!tpActive) return false
-                endTrackpadPinch()
-                if (tpMultiTouch && event.pointerCount == 2 && !tpMultiScrolled &&
+                        if (tpMultiTouch && event.pointerCount == 2 && !tpMultiScrolled &&
                     event.eventTime - tpMultiStartTime <= android.view.ViewConfiguration.getLongPressTimeout()
                 ) {
                     tpMultiScrolled = true
@@ -2728,8 +2682,7 @@ class TerminalView @JvmOverloads constructor(
             MotionEvent.ACTION_UP -> {
                 if (!tpActive) return false
                 cancelTrackpadLongPress()
-                endTrackpadPinch()
-                if (tpDragging) {
+                        if (tpDragging) {
                     endTrackpadDrag()
                     tpLastTapUpTime = 0L
                 } else if (!tpMoved && !tpLongPressFired && !tpMultiTouch) {
@@ -3424,54 +3377,13 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
-     * Listener for pinch-to-zoom gestures (mobile-friendly font size control)
-     */
-    private inner class PinchZoomListener : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-        private var initialFontSize = 0f
-
-        override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
-            isScaling = true
-            initialFontSize = textPaint.textSize / resources.displayMetrics.density
-            Logger.d("TerminalView", "Pinch zoom started at font size: $initialFontSize")
-            return true
-        }
-
-        override fun onScale(detector: ScaleGestureDetector): Boolean {
-            val scaleFactor = detector.scaleFactor
-            val newSize = (initialFontSize * scaleFactor).coerceIn(minFontSize, maxFontSize)
-
-            // Update font size
-            textPaint.textSize = newSize * resources.displayMetrics.density
-            calculateCellDimensions()
-            invalidate()
-
-            Logger.d("TerminalView", "Pinch zoom: scale=$scaleFactor, newSize=$newSize")
-            return true
-        }
-
-        override fun onScaleEnd(detector: ScaleGestureDetector) {
-            val finalSize = textPaint.textSize / resources.displayMetrics.density
-            Logger.d("TerminalView", "Pinch zoom ended at font size: $finalSize")
-
-            // Notify listener of font size change
-            onFontSizeChanged?.invoke(finalSize)
-        }
-    }
-
-    /**
-     * Callback for font size changes (from pinch-to-zoom)
-     */
-    var onFontSizeChanged: ((Float) -> Unit)? = null
-
-    /**
      * Set only when this TerminalView is one tile of a Panes grid
      * (`TerminalPagerAdapter.PanesViewHolder`). When non-null, a single tap
      * routes to pane-focus selection instead of unconditionally running the
      * standalone-tab toggle-keyboard gesture below — a raw touch on a
      * `PanesGridView` tile never reaches `Tile`'s own `OnClickListener`
      * because this View's `dispatchTouchEvent`/`onTouchEvent` unconditionally
-     * consumes every touch event (needed for terminal scrolling/selection/
-     * zoom), so the pane grid's click-to-focus wiring was previously dead
+     * consumes every touch event (needed for terminal scrolling/selection), so the pane grid's click-to-focus wiring was previously dead
      * code — the only visible effects of a tap were this View's own
      * `requestFocus()` (ACTION_DOWN, below) and `toggleKeyboard()`
      * (single-tap, below), neither of which updates `PanesTab.
@@ -3902,15 +3814,15 @@ class TerminalView @JvmOverloads constructor(
 
     /**
      * Selection-aware portion of touch dispatch. Called from `onTouch`
-     * BEFORE the gestureDetector / scaleGestureDetector paths so we
+     * BEFORE the gestureDetector path so we
      * can swallow taps and drags while the user is shaping a
      * selection. Returns true if the event was handled here and
      * should not be forwarded to the gesture detectors.
      */
     private fun handleSelectionTouch(event: MotionEvent): Boolean {
         if (!selectionActive) return false
-        // Only react to single-finger touches; two-finger gestures
-        // (pinch/zoom) handled upstream.
+        // Only react to single-finger touches; multi-finger gestures are
+        // handled elsewhere.
         if (event.pointerCount > 1) return false
 
         when (event.actionMasked) {
@@ -4153,7 +4065,7 @@ class TerminalView @JvmOverloads constructor(
     }
 
     /**
-     * Thumb touch handling — runs BEFORE the pinch and gesture detectors.
+     * Thumb touch handling — runs BEFORE the gesture detector.
      *
      * ACTION_DOWN never claims (returns false) so the gestureDetector always
      * sees the full stream; the claim happens on the first ACTION_MOVE whose
@@ -4200,7 +4112,7 @@ class TerminalView @JvmOverloads constructor(
                 return false
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
-                // A second finger before the claim → pinch-to-zoom wins.
+                // A second finger before the claim → the thumb drag is not started.
                 if (!thumbDragging) thumbDragCandidate = false
                 // Extra fingers during an active drag are ignored — the drag
                 // keeps the pointer until the gesture ends.
@@ -4633,8 +4545,6 @@ class TerminalView @JvmOverloads constructor(
 
         private const val TP_MULTI_UNDECIDED = 0
         private const val TP_MULTI_SCROLL = 1
-        private const val TP_MULTI_PINCH = 2
-        private const val TP_MULTI_DONE = 3
 
         /** xterm button code for the right button. */
         private const val TRACKPAD_RIGHT_BUTTON = 2

@@ -11,7 +11,6 @@ import android.view.GestureDetector
 import android.view.KeyCharacterMap
 import android.view.KeyEvent
 import android.view.MotionEvent
-import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
@@ -33,8 +32,8 @@ import kotlin.math.min
  *
  * Scaling model:
  *  - "fit" scale: bitmap scaled uniformly to fill the view (initial state).
- *  - [userScale]: multiplier applied on top of fit scale via pinch gesture.
- *    Range [0.5 … 4.0].
+ *  - [userScale]: multiplier applied on top of fit scale by double-tap
+ *    (fit ↔ 2×) or the zoom-to-1:1 action.
  *  - [panX] / [panY]: viewport offset in bitmap pixels (clamped to edges).
  *
  * Rendering happens on the main thread triggered by [postInvalidate] from
@@ -47,50 +46,12 @@ class VncView @JvmOverloads constructor(
 
     companion object {
         private const val TAG = "VncView"
-        private const val MIN_SCALE = 0.5f
-        private const val MAX_SCALE = 4.0f
         // pointer events per scroll fling step
         private const val SCROLL_STEPS = 3
         // Longer than GestureDetector's own long-press timeout so the existing
         // hold-to-right-click gesture fires first; only a hold past this point
         // opens the shared session context menu (same menu TerminalView opens).
         private const val CONTEXT_MENU_TIMEOUT_MS = 900L
-
-        /**
-         * Compute the pan offset that keeps the bitmap point ([oldBitmapX],
-         * [oldBitmapY]) — the content under the pinch focal point before the
-         * scale changed — pinned under that same screen-space focal point
-         * ([focusX], [focusY]) at [newScale]. Without this, pinch-zoom
-         * scales around the bitmap centre and the content drifts out from
-         * under the fingers. Clamped to valid pan bounds (same bounds
-         * [onScroll] uses). Pure function — no View state — so the
-         * focal-anchoring math is unit-testable without Robolectric.
-         */
-        internal fun focalPan(
-            viewWidth: Int,
-            viewHeight: Int,
-            fbWidth: Int,
-            fbHeight: Int,
-            focusX: Float,
-            focusY: Float,
-            oldBitmapX: Float,
-            oldBitmapY: Float,
-            newScale: Float
-        ): Pair<Float, Float> {
-            if (newScale <= 0f) return Pair(0f, 0f)
-            // Rendering origin is centred ((view - fb*scale)/2 - pan*scale),
-            // so the valid pan range is symmetric around 0 — half the
-            // off-screen extent in each direction. An asymmetric [0, extent]
-            // clamp here would make the top/left edge unreachable and let
-            // the view scroll past the bottom/right edge.
-            val extentX = max(0f, (fbWidth - viewWidth / newScale) / 2f)
-            val extentY = max(0f, (fbHeight - viewHeight / newScale) / 2f)
-            val panX = (((viewWidth - fbWidth * newScale) / 2f - focusX) / newScale + oldBitmapX)
-                .coerceIn(-extentX, extentX)
-            val panY = (((viewHeight - fbHeight * newScale) / 2f - focusY) / newScale + oldBitmapY)
-                .coerceIn(-extentY, extentY)
-            return Pair(panX, panY)
-        }
     }
 
     // ── Framebuffer ──────────────────────────────────────────────────────
@@ -191,7 +152,6 @@ class VncView @JvmOverloads constructor(
             distX: Float,
             distY: Float
         ): Boolean {
-            // handled by ScaleGestureDetector
             if (e2.pointerCount > 1) return false
             if (userScale > 1.05f) {
                 // Pan the viewport
@@ -212,27 +172,6 @@ class VncView @JvmOverloads constructor(
                     firePointer(bx, by, 0)
                 }
             }
-            return true
-        }
-    })
-
-    private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-        override fun onScale(detector: ScaleGestureDetector): Boolean {
-            val oldScale = currentScale()
-            val originX = (width - fbWidth * oldScale) / 2f - panX * oldScale
-            val originY = (height - fbHeight * oldScale) / 2f - panY * oldScale
-            val oldBitmapX = (detector.focusX - originX) / oldScale
-            val oldBitmapY = (detector.focusY - originY) / oldScale
-            userScale = (userScale * detector.scaleFactor).coerceIn(MIN_SCALE, MAX_SCALE)
-            recomputeFitScale()
-            val (newPanX, newPanY) = focalPan(
-                width, height, fbWidth, fbHeight,
-                detector.focusX, detector.focusY,
-                oldBitmapX, oldBitmapY, currentScale()
-            )
-            panX = newPanX
-            panY = newPanY
-            postInvalidate()
             return true
         }
     })
@@ -388,7 +327,6 @@ class VncView @JvmOverloads constructor(
     // ── Touch ─────────────────────────────────────────────────────────────
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        scaleDetector.onTouchEvent(event)
         gestureDetector.onTouchEvent(event)
 
         // Track raw drag for click-and-hold (e.g. selection drag in VM)
@@ -410,9 +348,9 @@ class VncView @JvmOverloads constructor(
                 armContextMenuTimer(event.x, event.y)
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
-                // A second finger starts a pinch. ACTION_DOWN already sent a
+                // A second finger arrived. ACTION_DOWN already sent a
                 // button press, so release it at the original press position —
-                // otherwise every pinch leaks a click-drag into the VM.
+                // otherwise every two-finger touch leaks a click-drag into the VM.
                 if (lastButtonMask != 0) {
                     val (bx, by) = screenToBitmap(pressX, pressY)
                     firePointer(bx, by, 0)
@@ -421,7 +359,7 @@ class VncView @JvmOverloads constructor(
                 cancelContextMenuTimer()
             }
             MotionEvent.ACTION_MOVE -> {
-                if (event.pointerCount == 1 && !scaleDetector.isInProgress) {
+                if (event.pointerCount == 1) {
                     val (bx, by) = screenToBitmap(event.x, event.y)
                     firePointer(bx, by, lastButtonMask)
                     if (kotlin.math.abs(event.x - contextMenuDownX) > contextMenuTouchSlop ||

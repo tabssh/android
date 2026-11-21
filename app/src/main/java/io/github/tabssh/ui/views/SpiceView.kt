@@ -10,7 +10,6 @@ import android.util.AttributeSet
 import android.view.GestureDetector
 import android.view.KeyEvent
 import android.view.MotionEvent
-import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
@@ -32,14 +31,15 @@ import kotlin.math.min
  * Structural twin of [VncView], but drives the SPICE inputs channel
  * (PS/2 scancodes + numeric button IDs) instead of RFB (X11 keysyms +
  * pointer bitmask). Everything that is not protocol-specific — the
- * viewport transform, pinch/pan/scroll gestures, IME plumbing, and
+ * viewport transform, pan/scroll gestures, IME plumbing, and
  * bitmap access rules — is intentionally identical so a future refactor
  * can hoist the common parts into a shared base without a behaviour
  * change for either side.
  *
  * Scaling model:
  *  - "fit" scale: bitmap scaled uniformly to fill the view (initial state).
- *  - [userScale]: multiplier applied on top of fit scale via pinch gesture.
+ *  - [userScale]: multiplier applied on top of fit scale by double-tap
+ *    (fit ↔ 2×) or the zoom-to-1:1 action.
  *    Range [0.5 … 4.0].
  *  - [panX] / [panY]: viewport offset in bitmap pixels (clamped to edges).
  *
@@ -63,8 +63,6 @@ class SpiceView @JvmOverloads constructor(
 
     companion object {
         private const val TAG = "SpiceView"
-        private const val MIN_SCALE = 0.5f
-        private const val MAX_SCALE = 4.0f
         /* Wheel pointer events emitted per scroll fling step. */
         private const val SCROLL_STEPS = 3
         // Longer than GestureDetector's own long-press timeout so the existing
@@ -239,15 +237,6 @@ class SpiceView @JvmOverloads constructor(
         }
     })
 
-    private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-        override fun onScale(detector: ScaleGestureDetector): Boolean {
-            userScale = (userScale * detector.scaleFactor).coerceIn(MIN_SCALE, MAX_SCALE)
-            recomputeFitScale()
-            postInvalidate()
-            return true
-        }
-    })
-
     // ── SpiceListener adapter ────────────────────────────────────────────
 
     /**
@@ -410,7 +399,6 @@ class SpiceView @JvmOverloads constructor(
     // ── Touch ────────────────────────────────────────────────────────────
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        scaleDetector.onTouchEvent(event)
         gestureDetector.onTouchEvent(event)
 
         when (event.actionMasked) {
@@ -432,9 +420,9 @@ class SpiceView @JvmOverloads constructor(
                 armContextMenuTimer(event.x, event.y)
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
-                // A second finger starts a pinch. ACTION_DOWN already sent a
+                // A second finger arrived. ACTION_DOWN already sent a
                 // button press, so release it at the original press position —
-                // otherwise every pinch leaks a click-drag into the guest.
+                // otherwise every two-finger touch leaks a click-drag into the guest.
                 if (currentButtonMask != 0) {
                     val (bx, by) = screenToBitmap(contextMenuDownX, contextMenuDownY)
                     val button = pressedButton
@@ -446,7 +434,7 @@ class SpiceView @JvmOverloads constructor(
                 cancelContextMenuTimer()
             }
             MotionEvent.ACTION_MOVE -> {
-                if (event.pointerCount == 1 && !scaleDetector.isInProgress) {
+                if (event.pointerCount == 1) {
                     val (bx, by) = screenToBitmap(event.x, event.y)
                     onPointerMove?.invoke(bx, by, currentButtonMask)
                     if (abs(event.x - contextMenuDownX) > contextMenuTouchSlop ||

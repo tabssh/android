@@ -5435,8 +5435,8 @@ class TabTerminalActivity : TabSSHActivity() {
         }
         when (volumeAction) {
             "font_size" -> when (keyCode) {
-                KeyEvent.KEYCODE_VOLUME_UP   -> { adjustFontSize(+2); return true }
-                KeyEvent.KEYCODE_VOLUME_DOWN -> { adjustFontSize(-2); return true }
+                KeyEvent.KEYCODE_VOLUME_UP   -> { adjustFontSize(+2, persist = true); return true }
+                KeyEvent.KEYCODE_VOLUME_DOWN -> { adjustFontSize(-2, persist = true); return true }
             }
             "scroll" -> when (keyCode) {
                 // Volume Up = page toward older content; Down = page toward newest.
@@ -5936,17 +5936,21 @@ class TabTerminalActivity : TabSSHActivity() {
         }
     }
 
-    private fun adjustFontSize(delta: Int) {
+    /**
+     * Step the active terminal's font size. The volume keys pass [persist] = true so the new
+     * size is saved as the Settings font size and every new terminal starts at it; the
+     * Ctrl+= / Ctrl+- shortcuts stay session-only.
+     */
+    private fun adjustFontSize(delta: Int, persist: Boolean = false) {
         val view = getActiveTerminalView()
         view?.let {
             val currentSize = it.getFontSize()
             val newSize = (currentSize + delta).coerceIn(8, 32)
             it.setFontSize(newSize)
 
-            // Session-only zoom (like pinch): the terminal_font_size pref
-            // stays the user's Settings baseline so resetFontSize() has a
-            // real value to return to. Persisting here would silently
-            // redefine that baseline and make reset a no-op.
+            // Session-only unless asked to persist: a persisted change becomes the
+            // Settings baseline, which is also what resetFontSize() returns to.
+            if (persist) app.preferencesManager.setInt("terminal_font_size", newSize)
             Toast.makeText(this, getString(R.string.terminal_font_size_fmt, newSize), Toast.LENGTH_SHORT).show()
 
             Logger.d("TabTerminalActivity", "Font size adjusted: $currentSize → $newSize")
