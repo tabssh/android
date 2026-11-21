@@ -132,6 +132,8 @@ local.properties
 *.log
 *.txt
 !release.txt
+# TruffleHog exclude list shared by every CI provider (AI.md PART 12)
+!.github/trufflehog-exclude.txt
 # F-Droid / fastlane store listing files — keep tracked
 !metadata/en-US/full_description.txt
 !metadata/en-US/short_description.txt
