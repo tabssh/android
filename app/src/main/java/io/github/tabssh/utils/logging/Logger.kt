@@ -391,6 +391,11 @@ object Logger {
     }
 
     fun w(tag: String, message: String, throwable: Throwable? = null) {
+        if (throwable is kotlinx.coroutines.CancellationException) {
+            // A cancelled coroutine (screen closed mid-load) is normal control flow, not a warning.
+            d(tag, "$message (cancelled)")
+            return
+        }
         if (!shouldLog(LVL_WARNING)) return
         Log.w("$TAG_PREFIX:$tag", logcatMessage(message), throwable)
         if (logToFile) {
@@ -419,6 +424,11 @@ object Logger {
     }
 
     fun e(tag: String, message: String, throwable: Throwable? = null) {
+        if (throwable is kotlinx.coroutines.CancellationException) {
+            // A cancelled coroutine (screen closed mid-load) is normal control flow, not an error.
+            d(tag, "$message (cancelled)")
+            return
+        }
         if (!shouldLog(LVL_ERROR)) return
         Log.e("$TAG_PREFIX:$tag", logcatMessage(message), throwable)
         if (logToFile) {

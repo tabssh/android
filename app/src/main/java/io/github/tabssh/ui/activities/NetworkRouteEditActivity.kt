@@ -266,6 +266,8 @@ class NetworkRouteEditActivity : TabSSHActivity() {
         // Built-in Tor binds its own loopback SOCKS listener, so there is nothing
         // for the user to enter.
         val showEndpoint = !builtInTor
+        // Nothing to fill in for built-in Tor, so the whole card goes rather than showing an empty heading.
+        findViewById<View>(R.id.card_endpoint).visibility = if (showEndpoint) View.VISIBLE else View.GONE
         layoutHost.visibility = if (showEndpoint) View.VISIBLE else View.GONE
         layoutPort.visibility = if (showEndpoint) View.VISIBLE else View.GONE
         layoutUsername.visibility = if (showEndpoint) View.VISIBLE else View.GONE

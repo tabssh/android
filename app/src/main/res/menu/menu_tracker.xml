@@ -5,25 +5,21 @@
     <item
         android:id="@+id/action_sort"
         android:title="@string/menu_sort"
-        android:icon="@drawable/ic_toolbar_sort"
-        app:showAsAction="ifRoom" />
+        app:showAsAction="never" />
 
     <item
         android:id="@+id/action_filter"
         android:title="@string/menu_filter"
-        android:icon="@drawable/ic_toolbar_filter"
-        app:showAsAction="ifRoom" />
+        app:showAsAction="never" />
 
     <item
         android:id="@+id/action_import"
         android:title="@string/menu_import"
-        android:icon="@drawable/ic_toolbar_import"
-        app:showAsAction="ifRoom" />
+        app:showAsAction="never" />
 
     <item
         android:id="@+id/action_export"
         android:title="@string/menu_export"
-        android:icon="@drawable/ic_toolbar_export"
-        app:showAsAction="ifRoom" />
+        app:showAsAction="never" />
 
 </menu>

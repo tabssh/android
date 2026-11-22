@@ -8,7 +8,6 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.chip.Chip
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import io.github.tabssh.R
@@ -40,7 +39,6 @@ class NetworkRouteAdapter(
     inner class RouteViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
 
         private val textName: TextView = itemView.findViewById(R.id.text_name)
-        private val chipType: Chip = itemView.findViewById(R.id.chip_type)
         private val textSummary: TextView = itemView.findViewById(R.id.text_summary)
         private val textStatus: TextView = itemView.findViewById(R.id.text_status)
         private val switchEnabled: MaterialSwitch = itemView.findViewById(R.id.switch_enabled)
@@ -50,7 +48,6 @@ class NetworkRouteAdapter(
             val context = itemView.context
 
             textName.text = route.name.ifBlank { route.getSummary() }
-            chipType.text = context.getString(typeLabelRes(route))
             textSummary.text = route.getSummary()
 
             val torAlwaysEnabled = route.builtInTor && TorNativeClient.isAvailable(context)
@@ -79,20 +76,6 @@ class NetworkRouteAdapter(
 
             btnMore.setOnClickListener { showMenu(route) }
             itemView.setOnClickListener { onEdit(route) }
-        }
-
-        // Checks builtInTor first so a legacy row (saved before the dedicated
-        // TOR type existed, still typed PROXY_SOCKS5) still shows as Tor
-        // instead of a generic SOCKS5 proxy.
-        private fun typeLabelRes(route: NetworkRoute): Int = when {
-            route.builtInTor -> R.string.route_type_tor
-            else -> when (route.routeType) {
-                NetworkRouteType.PROXY_HTTP -> R.string.route_type_proxy_http
-                NetworkRouteType.PROXY_SOCKS4 -> R.string.route_type_proxy_socks4
-                NetworkRouteType.PROXY_SOCKS5 -> R.string.route_type_proxy_socks5
-                NetworkRouteType.JUMP_HOST -> R.string.route_type_jump_host
-                NetworkRouteType.TOR -> R.string.route_type_tor
-            }
         }
 
         private fun showMenu(route: NetworkRoute) {

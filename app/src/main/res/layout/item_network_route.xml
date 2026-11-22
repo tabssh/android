@@ -27,7 +27,7 @@
             android:layout_weight="1"
             android:orientation="vertical">
 
-            <!-- Name + type chip -->
+            <!-- Name -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -43,19 +43,6 @@
                     android:maxLines="1"
                     android:textAppearance="?attr/textAppearanceTitleMedium"
                     tools:text="Office proxy" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chip_type"
-                    style="@style/Widget.Material3.Chip.Assist"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="@dimen/space_sm"
-                    android:checkable="false"
-                    android:clickable="false"
-                    app:chipMinHeight="@dimen/icon_size_badge"
-                    app:ensureMinTouchTargetSize="false"
-                    tools:text="SOCKS5 proxy" />
-
             </LinearLayout>
 
             <!-- Route summary -->

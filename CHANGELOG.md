@@ -52,6 +52,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Domain and VPS trackers use a text menu.** Sort, Filter, Import and Export moved from four toolbar icons into the overflow menu with their names.
+- **Closing a screen mid-load no longer logs errors.** A cancelled load is logged as debug, not as "Failed to load groups/snippets".
+- **Route list and editor fit small screens.** The route type chip, which repeated the summary and squeezed the name on phones, is gone, and the empty Endpoint card is hidden for built-in Tor.
 - **Registries list matches the rest of the app.** Auth > Registries rows use the same card style as Container Updates, My pastes and Known hosts.
 - **Dialog buttons use the app's own translated OK and Cancel** instead of the platform strings.
 - **Proxmox API tokens stay token auth.** Editing a saved Proxmox host no longer resets it to password auth, and a token pasted in the form Proxmox shows it (`user@realm!tokenid:secret`) is split into user and secret.
