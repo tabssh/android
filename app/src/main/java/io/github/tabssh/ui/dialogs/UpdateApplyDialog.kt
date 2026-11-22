@@ -29,6 +29,7 @@ object UpdateApplyDialog {
 
     /** Status/error text is one line in a small dialog. */
     private const val MAX_STATUS = 200
+    private const val MAX_LIVE_LINES = 400
 
     private fun stepLabel(context: Context, step: RecreateStep): String = when (step) {
         RecreateStep.PULL_IMAGE -> context.getString(R.string.container_update_step_pull_image)
@@ -97,17 +98,45 @@ object UpdateApplyDialog {
             .create()
 
         Logger.event("UpdateApplyDialog", "policy $policyId: update started by the user")
-        Logger.event("UpdateApplyDialog", "policy $policyId: update started by the user")
+
+        // Live output: command lines as they arrive, and one line per image layer that is updated in
+        // place as the pull advances, so the dialog scrolls like a terminal instead of sitting still.
+        val live = ArrayList<String>()
+        val layerLine = HashMap<String, Int>()
+        fun showLive() {
+            textOutput.text = ContainerText.block(live.takeLast(MAX_LIVE_LINES).joinToString("\n"))
+            scrollOutput.visibility = View.VISIBLE
+            scrollOutput.post { (scrollOutput as? android.widget.ScrollView)?.fullScroll(View.FOCUS_DOWN) }
+        }
         applyJob = lifecycleOwner.lifecycleScope.launch {
             try {
                 UpdateApplier(policyDao).apply(policyId, transport).collect { event ->
                     when (event) {
                         is UpdateApplier.ApplyEvent.StepStarted ->
                             textStep.text = stepLabel(context, event.step)
+                        is UpdateApplier.ApplyEvent.Output -> {
+                            live += event.line
+                            showLive()
+                        }
                         is UpdateApplier.ApplyEvent.PullProgress -> {
-                            val status = ContainerText.display(event.event.status, MAX_STATUS)
+                            val e = event.event
+                            val status = ContainerText.display(e.status, MAX_STATUS)
                             textStatus.visibility = View.VISIBLE
                             textStatus.text = status
+                            val bytes = if (e.totalBytes > 0) {
+                                " " + android.text.format.Formatter.formatShortFileSize(context, e.currentBytes) +
+                                    " / " + android.text.format.Formatter.formatShortFileSize(context, e.totalBytes)
+                            } else ""
+                            val line = (e.layerId?.let { "$it: " } ?: "") + status + bytes
+                            val key = e.layerId
+                            val at = key?.let { layerLine[it] }
+                            if (at != null) {
+                                live[at] = line
+                            } else {
+                                if (key != null) layerLine[key] = live.size
+                                live += line
+                            }
+                            showLive()
                         }
                         is UpdateApplier.ApplyEvent.Completed -> {
                             textStep.setText(R.string.container_update_apply_done)

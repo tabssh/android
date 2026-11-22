@@ -30,7 +30,8 @@ object ExecOutputReader {
         input: InputStream,
         isClosed: () -> Boolean,
         output: StringBuilder,
-        timeoutMs: Long
+        timeoutMs: Long,
+        onChunk: ((String) -> Unit)? = null
     ): Boolean {
         val buffer = ByteArray(4096)
         val finished = withTimeoutOrNull(timeoutMs) {
@@ -44,7 +45,11 @@ object ExecOutputReader {
                         sawEof = true
                         break
                     }
-                    if (n > 0) output.append(String(buffer, 0, n, Charsets.UTF_8))
+                    if (n > 0) {
+                        val chunk = String(buffer, 0, n, Charsets.UTF_8)
+                        output.append(chunk)
+                        onChunk?.invoke(chunk)
+                    }
                 }
                 if (sawEof) break
                 // JSch sets isClosed on SSH_MSG_CHANNEL_CLOSE; checked only

@@ -287,6 +287,21 @@ class ClusterCommandActivity : TabSSHActivity() {
     }
 
     private fun observeProgress() {
+        // Running hosts show what they have printed so far; finished hosts show their result.
+        lifecycleScope.launch {
+            kotlinx.coroutines.flow.combine(executor.progress, executor.live) { progress, live -> progress to live }
+                .collectLatest { (progress, live) ->
+                    if (progress.total == 0) return@collectLatest
+                    val done = progress.results.map { it.profile.id }.toSet()
+                    val running = selectedConnections.filter { it.id !in done }.map { profile ->
+                        ClusterCommandExecutor.ExecutionResult(
+                            profile = profile, success = false, output = live[profile.id].orEmpty(),
+                            executionTimeMs = 0, running = true
+                        )
+                    }
+                    showResults(progress.results + running)
+                }
+        }
         lifecycleScope.launch {
             executor.progress.collectLatest { progress ->
                 runOnUiThread {
@@ -304,7 +319,6 @@ class ClusterCommandActivity : TabSSHActivity() {
                     if (progress.completed == progress.total && progress.total > 0) {
                         executeButton.visibility = View.VISIBLE
                         cancelButton.visibility = View.GONE
-                        showResults(progress.results)
                     }
                 }
             }
@@ -369,10 +383,18 @@ class ClusterCommandActivity : TabSSHActivity() {
         Toast.makeText(this, getString(R.string.cluster_toast_execution_cancelled), Toast.LENGTH_SHORT).show()
     }
 
+    private var resultsAdapter: ClusterResultsAdapter? = null
+
     private fun showResults(results: List<ClusterCommandExecutor.ExecutionResult>) {
+        val current = resultsAdapter
+        if (current != null && resultsView.adapter === current) {
+            current.submit(results)
+            return
+        }
         val adapter = ClusterResultsAdapter(results) { output ->
             copyToClipboard(output)
         }
+        resultsAdapter = adapter
         resultsView.adapter = adapter
     }
 
@@ -473,9 +495,15 @@ class ClusterCommandActivity : TabSSHActivity() {
     }
 
     private class ClusterResultsAdapter(
-        private val results: List<ClusterCommandExecutor.ExecutionResult>,
+        private var results: List<ClusterCommandExecutor.ExecutionResult>,
         private val onCopyOutput: (String) -> Unit
     ) : RecyclerView.Adapter<ClusterResultsAdapter.ViewHolder>() {
+
+        /** Replace the rows as hosts finish or print more; collapsed rows stay collapsed. */
+        fun submit(next: List<ClusterCommandExecutor.ExecutionResult>) {
+            results = next
+            notifyDataSetChanged()
+        }
 
         // Output starts expanded so every host's full output is visible; tracks the ones the user collapsed
         private val collapsedItems = mutableSetOf<Int>()
@@ -502,12 +530,18 @@ class ClusterCommandActivity : TabSSHActivity() {
                 .ifEmpty { holder.itemView.context.getString(R.string.cluster_no_output) }
 
             holder.name.text = result.profile.name
-            holder.status.text = if (result.success) holder.itemView.context.getString(R.string.cluster_status_success) else holder.itemView.context.getString(R.string.cluster_status_failed)
+            holder.status.text = holder.itemView.context.getString(
+                when {
+                    result.running -> R.string.cluster_status_running
+                    result.success -> R.string.cluster_status_success
+                    else -> R.string.cluster_status_failed
+                }
+            )
             holder.output.text = outputText
-            holder.time.text = holder.itemView.context.getString(R.string.cluster_execution_time_ms, result.executionTimeMs)
+            holder.time.text = if (result.running) "" else holder.itemView.context.getString(R.string.cluster_execution_time_ms, result.executionTimeMs)
 
             holder.status.setTextColor(
-                if (result.success) androidx.core.content.ContextCompat.getColor(holder.status.context, R.color.status_success) else androidx.core.content.ContextCompat.getColor(holder.status.context, R.color.status_error)
+                if (result.success || result.running) androidx.core.content.ContextCompat.getColor(holder.status.context, R.color.status_success) else androidx.core.content.ContextCompat.getColor(holder.status.context, R.color.status_error)
             )
 
             // Handle expanded state

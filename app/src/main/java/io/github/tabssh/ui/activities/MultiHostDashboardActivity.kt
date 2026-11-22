@@ -130,6 +130,10 @@ class MultiHostDashboardActivity : TabSSHActivity() {
         private const val KEY_GROUPS      = "dash_groups_json"
         private const val KEY_HOSTS_PFX   = "dash_hosts_"
         const val KEY_MODIFIED_AT = "dash_modified_at"
+        private const val MENU_ADD_HOSTS = 1
+        private const val MENU_MONITORING = 2
+        private const val MENU_RENAME = 3
+        private const val MENU_DELETE = 4
         private const val REFRESH_MS      = 5_000L
 
         /** Max simultaneous SSH handshakes. A full SSH connect (key exchange +
@@ -1133,6 +1137,27 @@ class MultiHostDashboardActivity : TabSSHActivity() {
 
     // ── View holders ──────────────────────────────────────────────────────────
 
+    /** The group actions as a text menu: add hosts, monitoring, and for a real group rename and delete. */
+    private fun showGroupMenu(anchor: View, groupId: String, groupName: String, group: DashboardGroup?) {
+        val popup = android.widget.PopupMenu(this, anchor)
+        popup.menu.add(0, MENU_ADD_HOSTS, 0, R.string.dashboard_group_menu_add_hosts)
+        popup.menu.add(0, MENU_MONITORING, 1, R.string.dashboard_group_menu_monitoring)
+        if (group != null) {
+            popup.menu.add(0, MENU_RENAME, 2, R.string.dashboard_rename_group_title)
+            popup.menu.add(0, MENU_DELETE, 3, R.string.dashboard_delete_group_title)
+        }
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                MENU_ADD_HOSTS -> showHostPicker(groupId)
+                MENU_MONITORING -> showBulkMonitorConfigDialog(groupId, groupName)
+                MENU_RENAME -> group?.let { showRenameGroupDialog(it) }
+                MENU_DELETE -> group?.let { confirmDeleteGroup(it) }
+            }
+            true
+        }
+        popup.show()
+    }
+
     inner class GroupHeaderHolder(
         private val b: ItemDashboardGroupHeaderBinding
     ) : RecyclerView.ViewHolder(b.root) {
@@ -1144,17 +1169,11 @@ class MultiHostDashboardActivity : TabSSHActivity() {
             b.btnToggle.setImageResource(
                 if (g.collapsed) R.drawable.ic_expand_more else R.drawable.ic_expand_less
             )
-            b.btnRename.visibility = View.VISIBLE
-            b.btnDelete.visibility = View.VISIBLE
-
             bindMetricsRow(item.aggMetrics)
 
             b.btnToggle.setOnClickListener       { toggleGroupCollapsed(g.id) }
             b.root.setOnClickListener            { toggleGroupCollapsed(g.id) }
-            b.btnAddHosts.setOnClickListener     { showHostPicker(g.id) }
-            b.btnBulkMonitor.setOnClickListener  { showBulkMonitorConfigDialog(g.id, g.name) }
-            b.btnRename.setOnClickListener       { showRenameGroupDialog(g) }
-            b.btnDelete.setOnClickListener       { confirmDeleteGroup(g) }
+            b.btnMore.setOnClickListener { showGroupMenu(it, g.id, g.name, g) }
         }
 
         fun bindUngrouped(item: DashboardItem.UngroupedHeader) {
@@ -1168,11 +1187,10 @@ class MultiHostDashboardActivity : TabSSHActivity() {
 
             b.btnToggle.setOnClickListener       { toggleGroupCollapsed(UNGROUPED_ID) }
             b.root.setOnClickListener            { toggleGroupCollapsed(UNGROUPED_ID) }
-            b.btnAddHosts.setOnClickListener     { showHostPicker(UNGROUPED_ID) }
-            b.btnBulkMonitor.setOnClickListener  { showBulkMonitorConfigDialog(UNGROUPED_ID, b.root.context.getString(R.string.import_export_ungrouped)) }
-            // Ungrouped cannot be renamed or deleted — hide those buttons
-            b.btnRename.visibility = View.GONE
-            b.btnDelete.visibility = View.GONE
+            // Ungrouped cannot be renamed or deleted, so its menu has no group to edit.
+            b.btnMore.setOnClickListener {
+                showGroupMenu(it, UNGROUPED_ID, b.root.context.getString(R.string.import_export_ungrouped), null)
+            }
         }
 
         /** Payload-only refresh — recomputes aggregates without rebinding click listeners. */

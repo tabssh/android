@@ -14,104 +14,82 @@
     app:strokeColor="?attr/colorPrimary"
     app:cardBackgroundColor="?attr/colorSurfaceVariant">
 
-    <!-- Single row: chevron + name | metrics (centered) | host count + action buttons -->
+    <!-- Row 1: chevron, name, host count, actions menu. Row 2: group metrics, full width so they wrap cleanly on a phone. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
+        android:orientation="vertical"
         android:paddingStart="@dimen/space_xs"
         android:paddingEnd="@dimen/space_xs"
         android:paddingTop="@dimen/space_6dp"
         android:paddingBottom="@dimen/space_6dp">
 
-        <!-- Expand/collapse chevron -->
-        <ImageButton
-            android:id="@+id/btn_toggle"
-            android:layout_width="@dimen/min_touch_target"
-            android:layout_height="@dimen/min_touch_target"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/dashboard_group_toggle_description"
-            app:srcCompat="@drawable/ic_expand_more"
-            app:tint="?attr/colorOnSurfaceVariant" />
-
-        <!-- Group name -->
-        <TextView
-            android:id="@+id/tv_group_name"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textAppearance="?attr/textAppearanceTitleSmall"
-            android:textColor="?attr/colorOnSurface"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:paddingStart="@dimen/space_xs"
-            android:paddingEnd="@dimen/space_xs" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-        <!-- Aggregated group metrics snapshot — centered in remaining space -->
+            <!-- Expand/collapse chevron -->
+            <ImageButton
+                android:id="@+id/btn_toggle"
+                android:layout_width="@dimen/min_touch_target"
+                android:layout_height="@dimen/min_touch_target"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/dashboard_group_toggle_description"
+                app:srcCompat="@drawable/ic_expand_more"
+                app:tint="?attr/colorOnSurfaceVariant" />
+
+            <!-- Group name -->
+            <TextView
+                android:id="@+id/tv_group_name"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textAppearance="?attr/textAppearanceTitleSmall"
+                android:textColor="?attr/colorOnSurface"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:paddingStart="@dimen/space_xs"
+                android:paddingEnd="@dimen/space_xs" />
+
+            <!-- Host count chip -->
+            <TextView
+                android:id="@+id/tv_host_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="@dimen/space_6dp"
+                android:paddingEnd="@dimen/space_6dp"
+                android:paddingTop="@dimen/space_2dp"
+                android:paddingBottom="@dimen/space_2dp"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:background="@drawable/bg_host_count_chip"
+                android:layout_marginEnd="@dimen/space_xs" />
+
+            <!-- Group actions, as a menu with text -->
+            <ImageButton
+                android:id="@+id/btn_more"
+                android:layout_width="@dimen/min_touch_target"
+                android:layout_height="@dimen/min_touch_target"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/route_more_actions"
+                app:srcCompat="@drawable/ic_more_vert"
+                app:tint="?attr/colorOnSurfaceVariant" />
+
+        </LinearLayout>
+
+        <!-- Aggregated group metrics snapshot -->
         <TextView
             android:id="@+id/tv_group_metrics"
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center"
+            android:paddingStart="@dimen/space_md"
+            android:paddingEnd="@dimen/space_md"
             android:textAppearance="?attr/textAppearanceLabelSmall"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:fontFamily="monospace"
             android:visibility="gone" />
-
-        <!-- Host count chip -->
-        <TextView
-            android:id="@+id/tv_host_count"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingStart="@dimen/space_6dp"
-            android:paddingEnd="@dimen/space_6dp"
-            android:paddingTop="@dimen/space_2dp"
-            android:paddingBottom="@dimen/space_2dp"
-            android:textAppearance="?attr/textAppearanceLabelSmall"
-            android:textColor="?attr/colorOnSurfaceVariant"
-            android:background="@drawable/bg_host_count_chip"
-            android:layout_marginEnd="@dimen/space_xs" />
-
-        <!-- Add hosts to this group -->
-        <ImageButton
-            android:id="@+id/btn_add_hosts"
-            android:layout_width="@dimen/min_touch_target"
-            android:layout_height="@dimen/min_touch_target"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/dashboard_group_add_hosts_description"
-            app:srcCompat="@drawable/ic_add"
-            app:tint="?attr/colorOnSurfaceVariant" />
-
-        <!-- Bulk monitor config for all hosts in this group -->
-        <ImageButton
-            android:id="@+id/btn_bulk_monitor"
-            android:layout_width="@dimen/min_touch_target"
-            android:layout_height="@dimen/min_touch_target"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/dashboard_group_bulk_monitor_description"
-            app:srcCompat="@drawable/ic_flash"
-            app:tint="?attr/colorOnSurfaceVariant" />
-
-        <!-- Rename group -->
-        <ImageButton
-            android:id="@+id/btn_rename"
-            android:layout_width="@dimen/min_touch_target"
-            android:layout_height="@dimen/min_touch_target"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/dashboard_rename_group_title"
-            app:srcCompat="@drawable/ic_edit"
-            app:tint="?attr/colorOnSurfaceVariant" />
-
-        <!-- Delete group -->
-        <ImageButton
-            android:id="@+id/btn_delete"
-            android:layout_width="@dimen/min_touch_target"
-            android:layout_height="@dimen/min_touch_target"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/dashboard_delete_group_title"
-            app:srcCompat="@drawable/ic_close"
-            app:tint="?attr/colorOnSurfaceVariant" />
 
     </LinearLayout>
 

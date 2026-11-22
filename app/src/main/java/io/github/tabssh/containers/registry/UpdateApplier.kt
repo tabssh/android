@@ -10,6 +10,7 @@ import io.github.tabssh.containers.transport.PullProgressEvent
 import io.github.tabssh.storage.database.dao.ContainerAutoUpdatePolicyDao
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
@@ -44,6 +45,9 @@ class UpdateApplier(
 
         /** A pull progress line/event during [RecreateStep.PULL_IMAGE]. */
         data class PullProgress(val event: PullProgressEvent) : ApplyEvent()
+
+        /** One line of live command output (compose update), as it arrives. */
+        data class Output(val line: String) : ApplyEvent()
 
         /** The whole plan succeeded; the old container is gone. */
         data class Completed(val containerName: String, val output: String = "") : ApplyEvent()
@@ -113,6 +117,7 @@ class UpdateApplier(
     private fun logEvent(policyId: Long, event: ApplyEvent) {
         when (event) {
             is ApplyEvent.StepStarted -> Logger.i(TAG, "policy $policyId: step ${event.step}")
+            is ApplyEvent.Output -> Logger.d(TAG, "policy $policyId: ${event.line.take(200)}")
             is ApplyEvent.PullProgress ->
                 event.event.error?.let { Logger.w(TAG, "policy $policyId: pull error: $it") }
             is ApplyEvent.Completed -> Logger.event(TAG, "container update completed: ${event.containerName}")
@@ -322,7 +327,21 @@ class UpdateApplier(
     ) {
         Logger.i(TAG, "updating compose project in $dir for $name")
         emit(ApplyEvent.StepStarted(RecreateStep.PULL_IMAGE))
-        when (val r = transport.composeUpdate(dir)) {
+        // The command's output reaches the dialog line by line while it runs: a channel carries it from
+        // the callback to this flow, which is the only place allowed to emit.
+        val result = kotlinx.coroutines.coroutineScope {
+            val lines = kotlinx.coroutines.channels.Channel<String>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+            val running = async {
+                try {
+                    transport.composeUpdate(dir) { lines.trySend(it) }
+                } finally {
+                    lines.close()
+                }
+            }
+            for (line in lines) emit(ApplyEvent.Output(line))
+            running.await()
+        }
+        when (val r = result) {
             is ContainerResult.Success -> {
                 clearProjectPending(policyId, dir, transport)
                 emit(ApplyEvent.Completed(name, r.value + "\n[exit 0]"))

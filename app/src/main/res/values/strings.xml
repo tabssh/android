@@ -4316,4 +4316,7 @@
     <string name="screenshot_mode_disabled">Disabled — never allow</string>
     <string name="screenshot_mode_limited">Limited — block secret screens</string>
     <string name="screenshot_mode_allow">Allow — except App Security</string>
+    <string name="cluster_status_running">Running…</string>
+    <string name="dashboard_group_menu_add_hosts">Add hosts</string>
+    <string name="dashboard_group_menu_monitoring">Monitoring settings</string>
 </resources>

@@ -226,14 +226,14 @@ class RemoteExecOps(
         }
     }
 
-    suspend fun composeUp(stackDir: String): ContainerResult<String> =
-        composeLifecycle(stackDir, "up", "up -d")
+    suspend fun composeUp(stackDir: String, onOutput: ((String) -> Unit)? = null): ContainerResult<String> =
+        composeLifecycle(stackDir, "up", "up -d", onOutput)
 
-    suspend fun composeDown(stackDir: String): ContainerResult<String> =
-        composeLifecycle(stackDir, "down", "down")
+    suspend fun composeDown(stackDir: String, onOutput: ((String) -> Unit)? = null): ContainerResult<String> =
+        composeLifecycle(stackDir, "down", "down", onOutput)
 
-    suspend fun composePull(stackDir: String): ContainerResult<String> =
-        composeLifecycle(stackDir, "pull", "pull")
+    suspend fun composePull(stackDir: String, onOutput: ((String) -> Unit)? = null): ContainerResult<String> =
+        composeLifecycle(stackDir, "pull", "pull", onOutput)
 
     suspend fun composeRestart(stackDir: String): ContainerResult<String> =
         composeLifecycle(stackDir, "restart", "restart")
@@ -293,16 +293,19 @@ class RemoteExecOps(
     private suspend fun composeLifecycle(
         stackDir: String,
         mgrVerb: String,
-        composeArgs: String
+        composeArgs: String,
+        onOutput: ((String) -> Unit)? = null
     ): ContainerResult<String> {
         gate.reject(EngineCapability.COMPOSE_STACKS)?.let { return it }
-        val mgr = composemgrBinary() ?: return composeCommand(stackDir, composeArgs)
+        val mgr = composemgrBinary() ?: return composeCommand(stackDir, composeArgs, onOutput)
         val env = cliContext.envPrefix()
         return withExpanded(stackDir) { real ->
-            val result = runner.run(
-                "${env}${SshExecRunner.shQuote(mgr)} --dir ${SshExecRunner.shQuote(real)} $mgrVerb",
-                COMPOSE_TIMEOUT_MS
-            )
+            val cmd = "${env}${SshExecRunner.shQuote(mgr)} --dir ${SshExecRunner.shQuote(real)} $mgrVerb"
+            val result = if (onOutput != null) {
+                runner.runLive(cmd, COMPOSE_TIMEOUT_MS, onOutput)
+            } else {
+                runner.run(cmd, COMPOSE_TIMEOUT_MS)
+            }
             if (result.isSuccess) {
                 ContainerResult.Success(fullOutput(result))
             } else {
@@ -316,16 +319,20 @@ class RemoteExecOps(
      * compose otherwise. `up` always runs after `down`, so a failed pull brings the stack back on
      * its current image and is then reported as the failure.
      */
-    suspend fun composeUpdate(stackDir: String): ContainerResult<String> {
+    suspend fun composeUpdate(
+        stackDir: String,
+        onOutput: ((String) -> Unit)? = null
+    ): ContainerResult<String> {
         gate.reject(EngineCapability.COMPOSE_STACKS)?.let { return it }
         val steps: List<Triple<String, Boolean, suspend () -> ContainerResult<String>>> = listOf(
-            Triple("down", true, { composeDown(stackDir) }),
-            Triple("pull", false, { composePull(stackDir) }),
-            Triple("up", true, { composeUp(stackDir) })
+            Triple("down", true, { composeDown(stackDir, onOutput) }),
+            Triple("pull", false, { composePull(stackDir, onOutput) }),
+            Triple("up", true, { composeUp(stackDir, onOutput) })
         )
         val log = StringBuilder()
         var pullFailure: ContainerResult<String>? = null
         for ((name, fatal, run) in steps) {
+            onOutput?.invoke("\$ $name")
             val result = run()
             log.append("\$ ").append(name).append('\n')
             if (result is ContainerResult.Success) {
@@ -527,7 +534,11 @@ class RemoteExecOps(
     }
 
     /** Run one compose subcommand inside the (expanded) stack directory. */
-    private suspend fun composeCommand(stackDir: String, args: String): ContainerResult<String> {
+    private suspend fun composeCommand(
+        stackDir: String,
+        args: String,
+        onOutput: ((String) -> Unit)? = null
+    ): ContainerResult<String> {
         val invocation = when (val detected = detectComposeInvocation()) {
             is ContainerResult.Success -> detected.value
             is ContainerResult.PermissionDenied -> return detected
@@ -539,7 +550,11 @@ class RemoteExecOps(
         val prefix = invocationPrefix(invocation)
         return withExpanded(stackDir) { real ->
             val cmd = "cd ${SshExecRunner.shQuote(real)} && $prefix $args"
-            val result = runner.run(cmd, COMPOSE_TIMEOUT_MS)
+            val result = if (onOutput != null) {
+                runner.runLive(cmd, COMPOSE_TIMEOUT_MS, onOutput)
+            } else {
+                runner.run(cmd, COMPOSE_TIMEOUT_MS)
+            }
             if (!result.isSuccess) {
                 return@withExpanded failureWithOutput("compose $args failed", result)
             }

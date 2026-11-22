@@ -391,7 +391,7 @@ private open class FakeTransport : ContainerTransport {
     override suspend fun composeDelete(stackDir: String, runDown: Boolean): ContainerResult<String> = unsupported()
     override suspend fun composePull(stackDir: String): ContainerResult<String> = unsupported()
     override suspend fun composeRestart(stackDir: String): ContainerResult<String> = unsupported()
-    override suspend fun composeUpdate(stackDir: String): ContainerResult<String> = unsupported()
+    override suspend fun composeUpdate(stackDir: String, onOutput: ((String) -> Unit)?): ContainerResult<String> = unsupported()
     override suspend fun composePs(stackDir: String): ContainerResult<String> = unsupported()
     override fun composeLogs(stackDir: String, service: String?, tail: Int): Flow<String> = emptyFlow()
     override suspend fun composeLs(): ContainerResult<List<ComposeLsEntry>> = unsupported()

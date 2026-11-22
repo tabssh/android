@@ -32,6 +32,7 @@ class SshExecRunner(
         private const val CHANNEL_CONNECT_TIMEOUT_MS = 15_000
         private const val DEFAULT_EXEC_TIMEOUT_MS = 30_000L
         private const val POLL_INTERVAL_MS = 50L
+        private const val EXIT_MARKER = "__tabssh_exit__:"
 
         /**
          * Cap on captured stdout (and, separately, stderr) for one exec.
@@ -164,6 +165,34 @@ class SshExecRunner(
             channel.disconnect()
         }
     }.flowOn(Dispatchers.IO)
+
+    /**
+     * Run [command] with its stdout and stderr merged, handing each line to [onLine] as it arrives,
+     * and return the whole output once the command exits. The exit status travels in a marker line
+     * after the command because a streamed channel does not report one. A timeout returns what was
+     * received with exit status -1.
+     */
+    suspend fun runLive(
+        command: String,
+        timeoutMs: Long = DEFAULT_EXEC_TIMEOUT_MS,
+        onLine: (String) -> Unit
+    ): ExecResult {
+        val out = StringBuilder()
+        var exit = -1
+        val finished = kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
+            stream("{ $command ; } 2>&1; echo \"$EXIT_MARKER\$?\"").collect { line ->
+                if (line.startsWith(EXIT_MARKER)) {
+                    exit = line.removePrefix(EXIT_MARKER).trim().toIntOrNull() ?: -1
+                } else {
+                    out.append(line).append('\n')
+                    onLine(line)
+                }
+            }
+            true
+        }
+        if (finished == null) Logger.w(TAG, "runLive: timeout after ${timeoutMs}ms cmdLen=${command.length}")
+        return ExecResult(stdout = out.toString().trimEnd('\n'), stderr = "", exitStatus = exit)
+    }
 
     /**
      * Append [count] bytes of [buf] to [sink], but never past

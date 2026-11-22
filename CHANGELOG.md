@@ -52,6 +52,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Live output while updating.** The update dialog now shows the command output as it arrives (compose down, pull and up line by line, and a line per image layer during a pull) instead of one status line until the end.
+- **Cluster commands stream.** Each host shows what it has printed so far while it runs, hosts appear as they finish rather than all at once at the end, and the run honours the configured timeout (it was fixed at 30 seconds).
+- **Multi-host dashboard group headers fit a phone.** The group actions are one menu with text (Add hosts, Monitoring settings, Rename, Delete) instead of four icons, and the metrics sit on their own full-width line instead of being squeezed into a narrow column.
 - **Hosts added to a Multi-host dashboard group stay.** A sync used to overwrite the dashboard groups with an older copy from another device before the new hosts were ever uploaded. The dashboard now carries an edit time: the newer copy wins, and an edit starts a sync.
 - **Far fewer sync conflicts.** Identical content on both devices is never a conflict, and Sync now, force upload and force download apply newest-wins first (logged as auto-merged in the Sync Log). The dialog only appears for what cannot be decided: an exact timestamp tie, an edit against a delete, or a host-key mismatch.
 - **No more duplicate in-page titles.** Domain Tracker, VPS Tracker, Manage Snippets and Frequent Connections no longer repeat the toolbar or tab title as a big in-page heading; the explanatory subtitle stays.

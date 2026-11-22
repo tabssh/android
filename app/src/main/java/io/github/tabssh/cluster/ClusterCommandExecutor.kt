@@ -8,6 +8,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -23,7 +24,9 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
         val success: Boolean,
         val output: String,
         val error: String? = null,
-        val executionTimeMs: Long
+        val executionTimeMs: Long,
+        /** True for a host that is still running; [output] is what it has printed so far. */
+        val running: Boolean = false
     )
 
     data class ExecutionProgress(
@@ -34,6 +37,11 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
         val failed: Int,
         val results: List<ExecutionResult> = emptyList()
     )
+
+    private val _live = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    /** What each still-running host has printed so far, by connection id. */
+    val live: StateFlow<Map<String, String>> = _live.asStateFlow()
 
     private val _progress = MutableStateFlow(ExecutionProgress(0, 0, 0, 0, 0))
     val progress: StateFlow<ExecutionProgress> = _progress.asStateFlow()
@@ -64,6 +72,7 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
         
         val results = mutableListOf<ExecutionResult>()
         
+        _live.value = emptyMap()
         _progress.value = ExecutionProgress(
             total = connections.size,
             completed = 0,
@@ -143,7 +152,11 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
                 c.hostKeyChangedCallback = app.sshSessionManager.hostKeyChangedCallback
                 c.newHostKeyCallback = app.sshSessionManager.newHostKeyCallback
                 c.connect()
-                val output = c.executeCommand(command)
+                val output = c.executeCommand(command, timeoutMs) { chunk ->
+                    _live.update { current ->
+                        current + (profile.id to ((current[profile.id].orEmpty() + chunk).takeLast(MAX_LIVE_CHARS)))
+                    }
+                }
 
                 val executionTime = System.currentTimeMillis() - startTime
 
@@ -184,6 +197,7 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
         } finally {
             // NonCancellable: guarantee JSch teardown even when the outer
             // coroutine is cancelled (e.g. cancelAll() fires mid-connect).
+            _live.update { it - profile.id }
             withContext(NonCancellable) {
                 try {
                     connection?.disconnect()
@@ -193,6 +207,11 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
             }
             scope.cancel()
         }
+    }
+
+    private companion object {
+        /** Live output kept per host; the end of a long stream is what matters. */
+        const val MAX_LIVE_CHARS = 20_000
     }
 
     fun cancelAll() {

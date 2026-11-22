@@ -2011,7 +2011,11 @@ class SSHConnection(
      * @param timeoutMs Timeout in milliseconds (default: 30 seconds)
      * @return Command output as string
      */
-    suspend fun executeCommand(command: String, timeoutMs: Long = 30000): String = withContext(Dispatchers.IO) {
+    suspend fun executeCommand(
+        command: String,
+        timeoutMs: Long = 30000,
+        onOutput: ((String) -> Unit)? = null
+    ): String = withContext(Dispatchers.IO) {
         if (!isConnected()) {
             throw IllegalStateException("Not connected to SSH server")
         }
@@ -2042,7 +2046,7 @@ class SSHConnection(
             // the timeout stays cancellable — a plain blocking read() has no
             // suspension point, so withTimeoutOrNull could never interrupt a
             // dead socket that stops delivering data mid-read.
-            val finished = ExecOutputReader.readUntilClosed(inputStream, { exec.isClosed }, output, timeoutMs)
+            val finished = ExecOutputReader.readUntilClosed(inputStream, { exec.isClosed }, output, timeoutMs, onOutput)
             if (!finished) {
                 Logger.w("SSHConnection", "executeCommand timed out after ${timeoutMs}ms: ${Logger.commandForLogging(command)}")
             }
