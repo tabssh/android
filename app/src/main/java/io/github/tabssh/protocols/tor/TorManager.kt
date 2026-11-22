@@ -64,11 +64,27 @@ class TorManager private constructor(private val appContext: Context) {
 
                 val port = findFreeLoopbackPort()
                 val dataDir = File(appContext.filesDir, TOR_DATA_DIR)
-                started = TorNativeClient.spawn(appContext, port, dataDir) { percent ->
+                started = TorNativeClient.spawn(appContext, port, dataDir, { percent ->
                     _status.value = TorStatus.Bootstrapping(percent)
+                })
+                var bootstrapped = started.awaitBootstrap(BOOTSTRAP_TIMEOUT_MS)
+                if (!bootstrapped && !started.isAlive()) {
+                    // Tor died right away: a battery tuning option this build does not accept is the
+                    // likely cause, so try once more with only the essential options.
+                    Logger.w(TAG, "tor exited during start (${started.recentLog().lines().lastOrNull().orEmpty()}); retrying without tuning")
+                    started.close()
+                    started = TorNativeClient.spawn(appContext, port, dataDir, { percent ->
+                        _status.value = TorStatus.Bootstrapping(percent)
+                    }, tuned = false)
+                    bootstrapped = started.awaitBootstrap(BOOTSTRAP_TIMEOUT_MS)
                 }
-                if (!started.awaitBootstrap(BOOTSTRAP_TIMEOUT_MS)) {
-                    throw IllegalStateException("Tor failed to bootstrap within ${BOOTSTRAP_TIMEOUT_MS}ms")
+                if (!bootstrapped) {
+                    val reason = if (started.isAlive()) {
+                        "Tor did not finish bootstrapping within ${BOOTSTRAP_TIMEOUT_MS / 1000}s"
+                    } else {
+                        "Tor exited during start: " + started.recentLog().lines().lastOrNull { it.isNotBlank() }.orEmpty()
+                    }
+                    throw IllegalStateException(reason)
                 }
                 session = started
                 socksPort = port

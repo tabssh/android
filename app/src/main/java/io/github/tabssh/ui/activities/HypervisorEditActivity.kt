@@ -1138,6 +1138,13 @@ class HypervisorEditActivity : TabSSHActivity() {
         // those fields are hidden and credentials resolve from the account.
         if (selectedAccountId == null) {
             val selectedType = hypervisorTypes.getOrNull(spinnerType.selectedItemPosition)
+            // A full Proxmox token (user@realm!id:secret) pasted into either field fills both.
+            if (selectedType == HypervisorType.PROXMOX && selectedAuthType == "proxmox_api_token") {
+                val (tokenUser, tokenSecret) = io.github.tabssh.hypervisor.proxmox.ProxmoxTokenParser
+                    .normalise(editUsername.text.toString(), editPassword.text.toString())
+                if (tokenUser != editUsername.text.toString()) editUsername.setText(tokenUser)
+                if (tokenSecret != editPassword.text.toString()) editPassword.setText(tokenSecret)
+            }
             val isOAuth = selectedType == HypervisorType.VMWARE && selectedAuthType == "vmware_oauth"
             val usernameOptional = selectedType == HypervisorType.XCPNG && selectedAuthType == "xo_api_token"
             if (isOAuth) {

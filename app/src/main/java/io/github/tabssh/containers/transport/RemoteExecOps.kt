@@ -490,9 +490,11 @@ class RemoteExecOps(
         composeLifecycleByProject(name, configFile, "restart", "restart")
 
     /**
-     * Lifecycle verb for a discovered project. composemgr names the project after its directory, so
-     * it is used only when the config file's directory is called [name]; otherwise compose runs
-     * with an explicit `-f`/`-p` pair so the right project is addressed.
+     * Lifecycle verb for a discovered project. composemgr is used whenever it is installed and the
+     * project has a single config file: it reads the project's own `.env` and compose file, so
+     * compose derives the same project name it always did (a `name:` key or COMPOSE_PROJECT_NAME
+     * included), and the project's directory need not carry its name. Only a project spread over
+     * several config files, or a host without composemgr, runs compose with an explicit `-f`/`-p`.
      */
     private suspend fun composeLifecycleByProject(
         name: String,
@@ -500,8 +502,9 @@ class RemoteExecOps(
         mgrVerb: String,
         composeArgs: String
     ): ContainerResult<String> {
+        val singleFile = !configFile.contains(',')
         val dir = configFile.substringBefore(',').trim().substringBeforeLast('/', "")
-        if (dir.isNotEmpty() && dir.substringAfterLast('/') == name && composemgrBinary() != null) {
+        if (singleFile && dir.isNotEmpty() && composemgrBinary() != null) {
             return composeLifecycle(dir, mgrVerb, composeArgs)
         }
         return composeCommandByProject(name, configFile, composeArgs)

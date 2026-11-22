@@ -243,6 +243,13 @@ object ConnectableHostRegistry {
      * before container hosts so a cloud-linked container host's preview
      * (read from the cached cloud rows) reflects the current instance data.
      */
+    /** The database-only part of [refreshAll]: no provider API calls, so a picker can open at once. */
+    suspend fun refreshLocal(db: TabSSHDatabase) {
+        refreshConnectionProfiles(db)
+        refreshTelnetHosts(db)
+        refreshContainerHosts(db)
+    }
+
     suspend fun refreshAll(db: TabSSHDatabase, app: TabSSHApplication) {
         refreshConnectionProfiles(db)
         refreshTelnetHosts(db)

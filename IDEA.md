@@ -81,7 +81,7 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 - Connection groups can be created and assigned in the host editor, use named or custom emoji icons, and support drag ordering for the Custom group sort.
 - Custom on-screen keyboard with configurable rows
 - Find-in-scrollback
-- Snippet library with `{var}` and `{?name:default|hint}` placeholder substitution — placeholders are filled through a prompt UI at run time
+- Snippet library (every snippet is pickable from the terminal, favorites first, including ones never run) with `{var}` and `{?name:default|hint}` placeholder substitution — placeholders are filled through a prompt UI at run time
 - Macro library — record raw byte sequences and replay them into any session
 - Mosh support — sessions must survive IP changes and network roaming
 - Telnet connections alongside SSH (plain-text legacy protocol, clearly separated from SSH profiles)
@@ -102,18 +102,21 @@ http_client: OkHttp   # sole HTTP client app-wide (PART 9) — never mixed with 
 - Credential storage with tiered access levels: never / session-only / encrypted / biometric — encrypted tiers are backed by hardware-backed device key storage
 - Biometric unlock for stored passwords — re-authentication gates every read; encrypted credentials persist until the user removes them, never expiring on a timer (no TTL)
 - App-lock PIN with a failed-attempt lockout — the PIN must never be stored in plaintext or in any recoverable form
-- Screenshot capture prevention (configurable); always enforced on PIN and auth screens
-- SSH host key verification on first connect (TOFU) with fingerprint display
+- Screenshot capture prevention at three levels in Settings > App Security: Disabled (every screen blocked), Limited (the default: screens and dialogs that show secrets such as container environment values and logs, the Compose and run-config editors and the registry and sync password dialogs are blocked), and Allow (everything may be captured). The PIN screen and Settings > App Security are blocked at every level. An older "prevent screenshots" setting becomes Disabled
+- SSH host key verification on first connect (TOFU) with fingerprint display; Settings > App Security lists every trusted host key with its details and lets individual hosts be deleted, as well as cleared all at once
 - Clipboard auto-clear after copying sensitive values (off by default; 30 s, 1 min, or 5 min) — never wipes clipboard content that another app put there
 - Audit log of SSH commands and session events — stays on-device, with user-configurable size (MB) and age (days) retention caps and separate command/output capture toggles
 
 ### Sync and backup
 - Cross-device sync via SAF — user supplies any DocumentsProvider (Google Drive, Dropbox, OneDrive, Nextcloud, local); app embeds no cloud SDKs
 - Sync can run manually, periodically, or after database edits when sync-on-change is enabled; edit-triggered runs are debounced.
-- Cross-device merge with per-entity conflict resolution — a conflicting row pauses sync and offers keep local / keep remote / keep both, with last-write-wins preselected
+- Cross-device merge with per-entity conflict handling: identical content on both devices is never a conflict, and when both sides changed the newest edit wins automatically (recorded as "auto-merged" in the Sync Log) in foreground and background syncs alike. Only what cannot be decided is put to the user (keep local / keep remote / keep both): an exact timestamp tie, an edit on one side against a delete on the other, or a host-key mismatch. A background sync that cannot decide a conflict stores it, posts a notification, and the app offers it for resolution when opened, without requiring a visit to the Sync screen
 - Every conflict and its resolution is recorded in a dedicated Sync Log, viewable in the app; conflicts never go to the application or debug log, which stay reserved for genuine app faults
 - Reusable network routes (proxies and SSH jump hosts) sync device-to-device like port-forward rules — full row, last-write-wins, and no secrets to keep Keystore-bound
-- Bundled Tor is shown only on devices whose build includes its native binary; it has no user-facing enable switch, starts when a route uses it, and stops after the last active route releases it. The Tor status check reports whether bootstrap and the SOCKS5 listener both work.
+- Bundled Tor is shown only on devices whose build includes its native binary, as a fixed, pinned "Tor (built-in)" entry in Routing & Forwarding with no toggle, edit or delete; it is not a route the user creates, and the Add route screen offers only custom SOCKS, HTTP and SSH jump routes. It stays pickable as a connection's route and as the default route. Tor starts when a connection uses it, stays up five minutes after the last one closes so short sessions reuse one process, goes dormant after ten idle minutes, and runs with reduced connection padding to save battery. Tapping the entry shows its status and a check that reports whether bootstrap and the SOCKS5 listener both work.
+- Dashboard configuration (Multi-Host Dashboard groups and their hosts) carries an edit time, so a sync keeps the newer copy and a local edit starts a sync
+- Remote commands run over SSH (cluster commands, compose actions, libvirt) and image pulls are limited by silence, not by total time: the limit counts from the last output, a command that keeps printing is never cut off, and only a stream that goes quiet for the whole limit ends. A hard ceiling stops a stream that never ends
+- Backup and restore intentionally leave out the paste records (see the matrix); everything else the app stores is covered
 - End-to-end encrypted sync — a user passphrase is required, there are no server-side keys, and sync data is never readable by the storage provider
 - Backup and restore as a portable archive covering everything the app stores — encrypted when the user sets a password, plaintext when they do not; backups made by older app versions must always import into newer versions
 - Stored secrets (SSH private keys and passphrases, connection, identity, hypervisor, VNC, telnet, container host and registry credentials, cloud API tokens, OCI private keys) are exported only in a password-encrypted backup, as a separate encrypted section; a backup made without a password contains no credentials at all, and choosing one shows a warning naming what is left out
@@ -130,11 +133,12 @@ per-device until the user opts in. What deliberately does not sync:
 | Connections, keys, identities, groups, workspaces, themes, snippets, macros | yes | yes | user-authored |
 | Host keys, trusted certificates | yes | yes | trust state is per-user, not per-device |
 | Hypervisors, hypervisor accounts, cloud accounts, container hosts, registry credentials, compose stacks, single-container configs, auto-update policies | yes | yes | user-authored |
-| VNC hosts/identities, telnet hosts, port forwards, network routes, pane groups, monitor slots, dashboard config | yes | yes | user-authored |
+| VNC hosts/identities, telnet hosts, port forwards, network routes (the built-in Tor entry is created on each device), pane groups, monitor slots, dashboard config | yes | yes | user-authored |
 | Domains, VPS hosts (trackers) | yes | yes | user-authored renewal data |
 | Secrets (passwords, passphrases) | yes, separately | only in a password-encrypted backup | Keystore-bound; travels in its own encrypted section |
 | Tab sessions | no | yes | restoring another device's open tabs is wrong |
 | Audit log | no | yes | a local-device record of what happened on *this* device |
+| Paste records (the My pastes list) | no | no | a device-local record of pastes this device created; the Cairnbin owner token and per-paste delete tokens are Keystore-bound and stay on the device |
 | Sync state, shadows, tombstones, pending conflicts, sync log | no | no | sync machinery, not user data |
 | Connectable hosts | no | no | derived lookup table, rebuilt from its source rows |
 
@@ -170,7 +174,7 @@ New entity checklist: decide sync inclusion, then update
 - Portainer-class management of container hosts reached over the user's existing SSH connections — no host agent, no exposed engine API port required
 - Four engines at full parity: Docker, Incus, Podman, and LXC/LXD. The engine is chosen from a dropdown when the host is added — order Docker (preselected default), Incus, Podman, LXC/LXD — and every screen adapts to the engine instead of hiding behind a Docker-only assumption
 - Capability-driven UI: a concept an engine does not have is hidden, never shown empty. Docker and Podman get compose stacks and disk usage; Incus and LXC/LXD get snapshots plus dedicated profiles and projects tabs
-- A Containers sub-tab, first under the Infra main tab ahead of Hypervisors and Cloud; adding a host mirrors the hypervisor add flow but authenticates over SSH only — link a saved SSH connection or enter a custom endpoint (address, port, username, auth via password/SSH key/saved identity); the host name is optional, defaulting to the connection name or endpoint hostname. Host pickers (new tab, pane group, port forward, dashboard add-hosts) hide a container host whose linked SSH connection or cloud instance is already in the list, so the same machine is not offered twice
+- A Containers sub-tab, first under the Infra main tab ahead of Hypervisors and Cloud; adding a host mirrors the hypervisor add flow but authenticates over SSH only — link a saved SSH connection or enter a custom endpoint (address, port, username, auth via password/SSH key/saved identity); the host name is optional, defaulting to the connection name or endpoint hostname. Host pickers (new tab, pane group, port forward, dashboard add-hosts) hide a container host whose linked SSH connection or cloud instance is already in the list, so the same machine is not offered twice, and the Docker host picker and the hypervisor "Import from Existing Host" list hide machines that are already added. Deleting a host that other things link to first lists them in the confirmation and removes the linked Docker hosts, port forwards, pane group and dashboard entries with it; linked hypervisors are unlinked and kept
 - Containers are a separate domain like hypervisors: custom-endpoint sessions and container exec tabs never appear in the active-sessions list, recents, connection stats, or session restore; custom-endpoint passwords are Keystore-only, never a database column
 - Per-host view, tabs in order: Dashboard, Containers, Stacks, Images, Volumes, Networks. The dashboard is per host, and counts stack members even though the Containers list hides them — 3 standalone containers plus 2 stacks of 2 shows 2 stacks and 7 containers
 - Containers: list, inspect, start/stop/restart/pause/kill/rename/remove, live-follow logs, live stats; enter any running container as a normal terminal tab via the engine's exec (shell auto-detected)
@@ -188,7 +192,9 @@ New entity checklist: decide sync inclusion, then update
 - The update worker wakes hourly and checks each host when its own interval (default 12 hours) has elapsed, at most 2 hosts concurrently; it reaches a host through the UI session, an already-live connection, or a monitoring connection it dials itself for hosts linked to a saved connection
 - A check cycle posts one notification for everything pending across all hosts (re-alerting only on something new, removed when nothing is pending) and one summary for unattended updates; both open the Container Updates page (drawer, Insights, above Stats), which lists pending updates by host with a live count badge, an Update button per row and Check all now. With no container hosts the worker does nothing.
 - Compose-created containers (compose project label) are updated only through compose, as a whole project in its working directory: `composemgr --dir {dir} down; pull; up` when composemgr exists on the host, otherwise `docker compose` / `docker-compose` down, pull, up -d, with up always run after down. Standalone containers are updated only through the recreate flow; the two are never mixed. A compose project with no known directory is reported for manual update
-- Docker Hub, image servers, and private registries (Basic/Bearer) supported; registry credentials are Keystore-only, never a database column
+- Docker Hub, image servers, and private registries (Basic/Bearer) supported; registry credentials are Keystore-only, never a database column, and can be verified against their registry from the editor and the entry menu
+- Check all now confirms every pending update against its host: a pending update whose container no longer exists, or whose compose directory has been deleted, is dropped and the deleted stack is removed from the list; a stopped stack that still exists is kept. A manual check always runs, including under Battery Saver; only the scheduled check is skipped there
+- The update dialog streams the command output as it arrives (compose down, pull and up line by line, one updating line per image layer during a pull) and ends with the full output and exit code
 
 ### Accessibility and UI
 - TalkBack support with content descriptions on all interactive elements
@@ -197,6 +203,12 @@ New entity checklist: decide sync inclusion, then update
 - 23 built-in terminal themes; user-created custom themes; dark/light/auto per OS preference
 - Mobile-responsive; supports both phone and tablet layouts
 - Supported locales: English (default), German, Spanish, French — additional `values-xx/` folders added as translations arrive
+
+### Issue reporting and pastes
+- Diagnostics can be uploaded to a paste service for sharing: Cairnbin (default https://pste.us, any Cairnbin server, recognised even when white-labelled), MicroBin, Lenpaste, Stikked, Pastebin, Hastebin, dpaste, 0x0.st-style and termbin services
+- Cairnbin uploads keep and reuse the owner token the server issues (Keystore-only, one per server); a rejected token is dropped and the upload repeated without it so the server issues a new one
+- When a service's built-in public server is down the upload falls back once to a Cairnbin fallback server (default pste.us, changeable or switched off in settings, and required to run Cairnbin); a server the user configured themselves never falls back unless the user saved a fallback explicitly
+- My pastes lists the pastes the device created with link, service, date and time; Cairnbin pastes, and Lenpaste-compatible pastes that return a delete token, can be deleted on the server from the list, and for every other service an entry only leaves the list. Refresh asks each Cairnbin server which pastes the owner token still lists. Server size limits are never hard-coded
 
 ### Automation and integrations
 - Tasker/Locale plugin for launching connections from external apps

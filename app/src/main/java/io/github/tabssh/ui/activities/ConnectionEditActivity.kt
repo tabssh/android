@@ -268,7 +268,8 @@ class ConnectionEditActivity : TabSSHActivity() {
         setContentView(binding.root)
 
         app = tabSSHApp
-        isEditMode = intent.getBooleanExtra(EXTRA_IS_EDIT_MODE, false)
+        // A launch that names an existing connection is an edit even when the caller forgot the flag.
+        isEditMode = intent.getBooleanExtra(EXTRA_IS_EDIT_MODE, false) || intent.hasExtra(EXTRA_CONNECTION_ID)
         pendingFormState = savedInstanceState
 
         setupToolbar()

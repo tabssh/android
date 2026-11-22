@@ -71,13 +71,21 @@ class ComposeLifecycleRoutingTest {
     }
 
     @Test
-    fun `a discovered project uses composemgr only when its directory carries its name`() = runBlocking {
+    fun `a discovered project uses composemgr whatever its directory is called`() = runBlocking {
         val rec = Recorder(withComposemgr = true).also { it.install() }
         val ops = ops(rec)
         ops.composeDownByProject("web", "/srv/me/compose/web/compose.yaml")
         ops.composeDownByProject("other", "/srv/me/compose/web/compose.yaml")
-        assertTrue(rec.commands.any { it == "'/usr/local/bin/composemgr' --dir '/srv/me/compose/web' down" })
-        assertTrue(rec.commands.any { it.contains("-p 'other' down") })
+        val mgr = rec.commands.count { it == "'/usr/local/bin/composemgr' --dir '/srv/me/compose/web' down" }
+        assertEquals(2, mgr)
+        assertTrue(rec.commands.none { it.contains(" -p ") })
+    }
+
+    @Test
+    fun `a discovered project with several config files falls back to compose with -f and -p`() = runBlocking {
+        val rec = Recorder(withComposemgr = true).also { it.install() }
+        ops(rec).composeDownByProject("web", "/srv/me/compose/web/a.yaml,/srv/me/compose/web/b.yaml")
+        assertTrue(rec.commands.any { it.contains("-p 'web' down") })
     }
 
     @Test

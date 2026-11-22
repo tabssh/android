@@ -348,15 +348,38 @@ class MainActivity : TabSSHActivity() {
         val switchSave = view.findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.switch_save_connection)
         val layoutSaveName = view.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_save_name)
         val inputSaveName = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.input_save_name)
+        val keyLayout = view.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.layout_key)
+        val keyDropdown = view.findViewById<com.google.android.material.textfield.MaterialAutoCompleteTextView>(R.id.dropdown_key)
+
+        // The key that signs in when the password is blank: pick one of the saved keys, or none (the
+        // server then asks for a password). A single saved key is preselected so it is never a guess.
+        var selectedKeyId: String? = null
+        lifecycleScope.launch {
+            val keys = withContext(Dispatchers.IO) {
+                try { app.database.keyDao().getAllKeysList() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { emptyList() }
+            }
+            val none = getString(R.string.main_quick_connect_key_none)
+            val labels = listOf(none) + keys.map { it.getDisplayName() }
+            keyDropdown.setAdapter(android.widget.ArrayAdapter(this@MainActivity, android.R.layout.simple_dropdown_item_1line, labels))
+            keyDropdown.setOnItemClickListener { _, _, position, _ ->
+                selectedKeyId = keys.getOrNull(position - 1)?.keyId
+            }
+            val initial = if (keys.size == 1) 1 else 0
+            keyDropdown.setText(labels[initial], false)
+            selectedKeyId = keys.getOrNull(initial - 1)?.keyId
+            if (keys.isEmpty()) keyLayout.visibility = View.GONE
+        }
 
         // Update hints when protocol selection changes.
         chipGroupProtocol.setOnCheckedStateChangeListener { _, checkedIds ->
             if (checkedIds.contains(R.id.chip_vnc)) {
                 hostLayout.hint = getString(R.string.main_quick_connect_hint_host_vnc)
+                keyLayout.visibility = View.GONE
                 portInput.setText("5900")
                 passwordLayout.hint = getString(R.string.main_quick_connect_hint_password_vnc)
             } else {
                 hostLayout.hint = getString(R.string.main_quick_connect_hint_host_ssh)
+                keyLayout.visibility = if ((keyDropdown.adapter?.count ?: 0) > 1) View.VISIBLE else View.GONE
                 portInput.setText("22")
                 passwordLayout.hint = getString(R.string.main_quick_connect_hint_password_ssh)
             }
@@ -492,10 +515,11 @@ class MainActivity : TabSSHActivity() {
                             username = username,
                             hostname = hostname,
                             port = port,
-                            password = password.takeIf { it.isNotEmpty() }
+                            password = password.takeIf { it.isNotEmpty() },
+                            keyId = selectedKeyId
                         )
                     } else {
-                        quickConnect(username, hostname, port, password.takeIf { it.isNotEmpty() })
+                        quickConnect(username, hostname, port, password.takeIf { it.isNotEmpty() }, selectedKeyId)
                     }
                 }
             }
@@ -517,17 +541,20 @@ class MainActivity : TabSSHActivity() {
         username: String,
         hostname: String,
         port: Int,
-        password: String?
+        password: String?,
+        keyId: String?
     ) {
         lifecycleScope.launch {
+            // A typed password wins; otherwise the chosen key; otherwise the server asks.
             val profile = ConnectionProfile(
                 id = java.util.UUID.randomUUID().toString(),
                 name = name,
                 host = hostname,
                 port = port,
                 username = username,
-                authType = if (password != null) AuthType.PASSWORD.name else AuthType.KEYBOARD_INTERACTIVE.name,
-                keyId = null,
+                authType = quickAuthType(password, keyId).name,
+                keyId = if (password == null) keyId else null,
+                savePassword = password != null,
                 groupId = null
             )
             try {
@@ -564,18 +591,25 @@ class MainActivity : TabSSHActivity() {
         }
     }
 
+    /** A typed password wins; otherwise the chosen key; otherwise keyboard-interactive so the server asks. */
+    private fun quickAuthType(password: String?, keyId: String?): AuthType = when {
+        password != null -> AuthType.PASSWORD
+        keyId != null -> AuthType.PUBLIC_KEY
+        else -> AuthType.KEYBOARD_INTERACTIVE
+    }
+
     /**
      * Quick connect to SSH server without saving profile
      */
-    private fun quickConnect(username: String, hostname: String, port: Int, password: String? = null) {
+    private fun quickConnect(username: String, hostname: String, port: Int, password: String? = null, keyId: String? = null) {
         val quickProfile = ConnectionProfile(
             id = java.util.UUID.randomUUID().toString(),
             name = getString(R.string.main_quick_connect_profile_name, username, hostname),
             host = hostname,
             port = port,
             username = username,
-            authType = if (password != null) AuthType.PASSWORD.name else AuthType.KEYBOARD_INTERACTIVE.name,
-            keyId = null,
+            authType = quickAuthType(password, keyId).name,
+            keyId = if (password == null) keyId else null,
             groupId = null
         )
 

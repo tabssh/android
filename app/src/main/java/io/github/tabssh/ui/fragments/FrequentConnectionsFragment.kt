@@ -131,10 +131,7 @@ class FrequentConnectionsFragment : Fragment() {
     }
 
     private fun editConnection(connection: ConnectionProfile) {
-        val intent = Intent(requireContext(), ConnectionEditActivity::class.java).apply {
-            putExtra(ConnectionEditActivity.EXTRA_CONNECTION_ID, connection.id)
-        }
-        startActivity(intent)
+        startActivity(ConnectionEditActivity.createIntent(requireContext(), connection.id))
     }
     
     private fun loadFrequentConnections() {

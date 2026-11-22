@@ -97,6 +97,23 @@
 
         </com.google.android.material.textfield.TextInputLayout>
 
+        <!-- Which saved key signs in when the password is left blank -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/layout_key"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/main_quick_connect_hint_key"
+            android:layout_marginBottom="@dimen/space_sm">
+
+            <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                android:id="@+id/dropdown_key"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="none" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
         <!--
             "Save this connection" toggle. When ON, the quick-connect path
             writes the host / port / user / password into a permanent

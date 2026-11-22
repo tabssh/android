@@ -35,6 +35,7 @@ object TorNativeClient {
     private const val TAG = "TorNativeClient"
     private const val BINARY_FILE_NAME = "libtor.so"
     private const val BOOTSTRAP_MARKER = "Bootstrapped 100%"
+    private const val RECENT_LINES = 12
     private val BOOTSTRAP_PERCENT_REGEX = Regex("""Bootstrapped (\d{1,3})%""")
 
     // Pinned versions of the statically-linked native stack. These MUST track
@@ -81,29 +82,34 @@ object TorNativeClient {
         context: Context,
         socksPort: Int,
         dataDir: File,
-        onBootstrapProgress: (Int) -> Unit = {}
+        onBootstrapProgress: (Int) -> Unit = {},
+        tuned: Boolean = true
     ): Session {
         val binary = resolveBinary(context)
             ?: throw IllegalStateException("tor native binary is not bundled in this APK build")
         require(socksPort in 1..65535) { "Invalid Tor SOCKS port: $socksPort" }
         if (!dataDir.exists()) dataDir.mkdirs()
 
-        val pb = ProcessBuilder(
+        // An empty regular file stands for "no config file": nothing is read from ~/.torrc, and
+        // everything tor needs is passed below.
+        val emptyConfig = File(dataDir.parentFile ?: dataDir, "torrc-empty").apply { if (!exists()) writeText("") }
+        val args = mutableListOf(
             binary.absolutePath,
+            "-f", emptyConfig.absolutePath,
             "--SocksPort", "127.0.0.1:$socksPort",
             "--DataDirectory", dataDir.absolutePath,
-            // An empty config file: no ~/.torrc lookup, everything below is the whole configuration.
-            "-f", "/dev/null",
             "--ClientOnly", "1",
             "--AvoidDiskWrites", "1",
-            // Battery: go dormant (no circuit building or keep-alives) after a while without use, and
-            // send less padding traffic, the same setting Tor uses for mobile clients.
-            "--DormantClientTimeout", "10 minutes",
-            "--ReducedConnectionPadding", "1",
             "--SafeSocks", "1",
             "--Log", "notice stderr",
             "--RunAsDaemon", "0"
-        ).apply {
+        )
+        if (tuned) {
+            // Battery: go dormant (no circuit building or keep-alives) after a while without use, and
+            // send less padding traffic, the same setting Tor uses for mobile clients.
+            args += listOf("--DormantClientTimeout", "10 minutes", "--ReducedConnectionPadding", "1")
+        }
+        val pb = ProcessBuilder(args).apply {
             redirectErrorStream(true)
             directory(File(context.filesDir.absolutePath))
         }
@@ -121,6 +127,11 @@ object TorNativeClient {
         private val onBootstrapProgress: (Int) -> Unit = {}
     ) {
 
+        private val recent = ArrayDeque<String>()
+
+        /** The last lines tor printed, for an error message when it exits or stalls. */
+        fun recentLog(): String = synchronized(recent) { recent.joinToString("\n") }
+
         private val bootstrapped = AtomicBoolean(false)
         private val bootstrapLatch = CountDownLatch(1)
         private val logScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -128,6 +139,10 @@ object TorNativeClient {
             try {
                 process.inputStream.bufferedReader().forEachLine { line ->
                     Logger.d(TAG, "tor: $line")
+                    synchronized(recent) {
+                        recent.addLast(line)
+                        while (recent.size > RECENT_LINES) recent.removeFirst()
+                    }
                     BOOTSTRAP_PERCENT_REGEX.find(line)?.let { match ->
                         onBootstrapProgress(match.groupValues[1].toInt())
                     }

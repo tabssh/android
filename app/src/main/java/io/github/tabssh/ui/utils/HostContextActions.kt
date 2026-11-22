@@ -68,10 +68,9 @@ object HostContextActions {
     }
 
     private fun editSshConnection(fragment: Fragment, connection: ConnectionProfile) {
-        val intent = Intent(fragment.requireContext(), ConnectionEditActivity::class.java).apply {
-            putExtra(ConnectionEditActivity.EXTRA_CONNECTION_ID, connection.id)
-        }
-        fragment.startActivity(intent)
+        // createIntent marks it as an edit; without that the editor saved the host as a new one,
+        // resetting its created time and usage stats.
+        fragment.startActivity(ConnectionEditActivity.createIntent(fragment.requireContext(), connection.id))
     }
 
     private fun duplicateSshConnection(fragment: Fragment, app: TabSSHApplication, connection: ConnectionProfile) {

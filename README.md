@@ -35,7 +35,7 @@ created, synced, or paired on any one of the three works unmodified on the other
 - 🖥️ **Full Terminal Emulation** — Termux TerminalEmulator (VT100/ANSI, 256 colors, vim/htop/tmux fully functional)
 - 📁 **Integrated SFTP** — File manager with upload/download progress, remote editor, chmod
 - 🧭 **Routing & Forwarding** — Reusable proxy / jump-host routes picked per-connection or set as a global default, plus local/remote/dynamic (SOCKS5) port forwards, all in one section
-- 🧅 **Tor** — On builds that bundle `tor`, route SSH through its loopback SOCKS proxy; it starts on demand and stops when no active route uses it. Builds without the binary hide the built-in Tor route. External SOCKS5 routes such as Orbot remain available.
+- 🧅 **Tor** — On builds that bundle `tor`, route SSH through its loopback SOCKS proxy; it is a fixed built-in entry (no setup, no route to create), starts on demand, stays up five minutes after the last connection so short sessions reuse it, and goes dormant when idle with reduced padding to save battery. Builds without the binary hide it. External SOCKS5 routes such as Orbot remain available.
 - 🖼️ **X11 Forwarding** — Run graphical apps remotely via Termux:X11 or XServer XSDL
 - 🌐 **SSH Config Import** — `~/.ssh/config` with RemoteCommand, SendEnv, RequestTTY, ProxyJump
 - ❤️ **Always-on Keepalive** — 60s serverAliveInterval; idle sessions survive carrier NAT and Wi-Fi sleep
@@ -56,7 +56,8 @@ created, synced, or paired on any one of the three works unmodified on the other
 - 👆 **Biometric Authentication** — Fingerprint and face unlock
 - 🔐 **No Plaintext Storage** — All credentials encrypted with AES-256-GCM
 - 🛡️ **Host Key Verification** — TOFU with SHA256 fingerprints and MITM detection
-- 🚫 **Screenshot Protection** — Prevents sensitive data from leaking to recents or screenshots
+- 🚫 **Screenshot Protection** — Three levels: Disabled (nothing can be captured), Limited (secret-bearing screens and dialogs are blocked, the default) and Allow; the PIN screen and App Security are always blocked
+- 📜 **Known Hosts** — View every trusted SSH host key, inspect its fingerprint, and delete individual hosts or clear all (Settings → App Security)
 - 🔐 **Auto-Lock** — Configurable timeout; session-only credentials zeroed on background
 - 📋 **Clipboard Auto-Clear** — Configurable TTL for pasted passwords
 
@@ -89,18 +90,19 @@ created, synced, or paired on any one of the three works unmodified on the other
 - 📡 **Background Monitoring** — Periodic TCP reachability probes; down/recovery notifications; CPU/memory/disk threshold alerts via SSH; configurable cooldown (15 min–12 h)
 - 📱 **Mosh Protocol** — Mobile shell for unstable connections with roaming support
 - 💾 **Backup & Restore** — Export/import everything as a ZIP, encrypted when you set a password
-- ☁️ **Cloud Sync** — Storage Access Framework (Google Drive, Dropbox, OneDrive, Nextcloud, local — no Google services dependency); AES-256-GCM + Argon2id + 3-way merge with conflict UI; manual, periodic, and debounced sync-on-change modes
+- ☁️ **Cloud Sync** — Storage Access Framework (Google Drive, Dropbox, OneDrive, Nextcloud, local — no Google services dependency); AES-256-GCM + Argon2id + 3-way merge where the newest edit wins and identical changes never conflict (every automatic choice is logged), asking you only about what cannot be decided; manual, periodic, and debounced sync-on-change modes
 - 🔗 **Cross-Platform Compatible** — sync blobs, encrypted backups, QR pairing payloads, and theme files are byte-compatible with [TabSSH Desktop](https://github.com/tabssh/desktop) and [TabSSH Web](https://github.com/tabssh/web); pair or restore on any of the three and pick up the exact same connections, keys, and settings
 - 🏠 **Home Screen Widgets** — Quick-connect from launcher
 - 📂 **Connection Groups** — Create groups from the host editor, choose emoji or named icons, expand/collapse folders, drag groups into custom order, and see group badges in search
 - 🔍 **Search & Sort** — Real-time search, 8 sort options
 - 📊 **Connection Statistics** — Visible "Connected N times • 2h ago" subtitle with relative last-connected time; connection counts are local-only per-device stats and never overwritten by sync; the Frequent list ranks hosts by a hybrid of usage count and recency decay; VNC hosts, Cloud Account instances, Hypervisor VMs, and Container hosts all track connection count and last-connected too, not just SSH/Telnet/Mosh hosts
 - 🕘 **Connection History** — Saved connections you have opened (up to the 500 most recent), newest first, with target, last-connected time, and connection count; tap a row to reconnect (drawer → Connection History)
-- 🛰️ **Cluster Commands** — Run one command (typed or picked from a snippet) over SSH on many selected saved connections in parallel (up to 10 at a time), with per-host success/failure, output, timing, cancel, and command history (drawer → Cluster Commands)
-- 📝 **Snippets** — Quick command library with `{?name:default|hint}` variable placeholders
+- 🛰️ **Cluster Commands** — Run one command (typed or picked from a snippet) over SSH on many selected saved connections in parallel (up to 10 at a time), with live per-host output, per-host success/failure, timing, cancel, and command history; a host is timed out only after it goes silent, never while it is still printing (drawer → Cluster Commands)
+- 📝 **Snippets** — Quick command library with `{?name:default|hint}` variable placeholders; every snippet is pickable in the terminal, favorites first
 - ⏺️ **Macros** — Capture and replay raw byte sequences (escape codes, modifier-composed Ctrl/Alt)
 - 🎮 **Automation** — Tasker integration, intent-based actions, deep links
-- 📊 **Multi-Host Dashboard** — Side-by-side CPU/memory/disk metrics across hosts; dashboard groups independent from connection groups
+- 📊 **Multi-Host Dashboard** — Side-by-side CPU/memory/disk metrics across hosts; dashboard groups independent from connection groups, with a text action menu per group and edits that survive sync
+- 📋 **Issue Reporting & My Pastes** — Upload diagnostics to Cairnbin (default pste.us, with a changeable fallback server) and other paste services, keep a list of your pastes, and delete them on the server where the service supports it
 - 🗓️ **Domain & VPS Renewal Tracking** — Track domain/VPS renewal dates with CSV/Markdown import-export and reminder notifications as expiry approaches; card rows with labeled details and a renewal-urgency color stripe, a summary of overdue and expiring entries, long-press multi-select to renew, cancel or delete several at once (past-due or canceled entries can be marked renewed from the renewal pill), plus per-tracker sort (name, renewal date, price) and filter (all, overdue, expiring soon, canceled) that persist across restarts
 
 ### Hypervisor Management
@@ -136,7 +138,7 @@ Portainer-class container management over the SSH connections you already have �
 - **Images / Volumes / Networks** — list, inspect, create, remove, prune; image pull with per-layer progress
 - **Compose stacks, paste-first** — paste a complete `compose.yaml` and it's saved to a configurable remote directory (default `/srv/$USER/compose/{name}`, created automatically) with up/down/pull/restart (through `composemgr` when the host has it) and per-service status; stacks that are down stay listed so you can edit and restart them
 - **Single-container run configs** — form-based `run.yml` editor mirroring `docker run` flags, with a raw-YAML advanced toggle
-- **Watchtower-style updates** — a background worker checks registry digests and flags stale containers (notification + badge). Settings resolve in three tiers, most specific winning: global (Settings > Monitoring), per host, and per image or compose stack, each able to inherit; a per-host **Updates** tab shows available updates and edits every level, and a **Container Updates** page (drawer, Insights) lists pending updates across all hosts with a count badge. One notification covers every pending update and opens that page. Opt-in auto-apply updates unattended: standalone containers are recreated with automatic rollback, compose containers are updated through compose as a whole project (`composemgr --dir {dir} down; pull; up` when installed, otherwise `docker compose` / `docker-compose`) and never with `docker run`
+- **Watchtower-style updates** — a background worker checks registry digests and flags stale containers (notification + badge); Check all now drops updates whose container or compose directory is gone, and the update dialog streams live output. Settings resolve in three tiers, most specific winning: global (Settings > Monitoring), per host, and per image or compose stack, each able to inherit; a per-host **Updates** tab shows available updates and edits every level, and a **Container Updates** page (drawer, Insights) lists pending updates across all hosts with a count badge. One notification covers every pending update and opens that page. Opt-in auto-apply updates unattended: standalone containers are recreated with automatic rollback, compose containers are updated through compose as a whole project (`composemgr --dir {dir} down; pull; up` when installed, otherwise `docker compose` / `docker-compose`) and never with `docker run`
 - **Registry support** — Docker Hub (anonymous token flow) and private registries (Basic/Bearer); credentials stored in the Android Keystore only
 - **Hybrid transport** — engine API over an SSH unix-socket forward when sshd allows it (`AllowTcpForwarding` + `AllowStreamLocalForwarding`), automatic fallback to the CLI over SSH exec with actionable hints — works either way
 - **Socket auto-discovery** — leave the socket field blank to probe the engine's standard locations and remember what's found, or pin an exact path / `tcp://host:port` / `ssh://user@host` for unusual setups

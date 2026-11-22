@@ -44,6 +44,8 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -779,7 +781,18 @@ class MultiHostDashboardActivity : TabSSHActivity() {
         lifecycleScope.launch {
             val all = withContext(Dispatchers.IO) {
                 try {
-                    io.github.tabssh.storage.registry.ConnectableHostRegistry.refreshAll(app.database, app)
+                    // Open from what is stored: asking every cloud provider first made the dialog wait on
+                    // the network. The provider refresh runs in the background for the next open.
+                    io.github.tabssh.storage.registry.ConnectableHostRegistry.refreshLocal(app.database)
+                    app.applicationScope.launch(Dispatchers.IO) {
+                        try {
+                            io.github.tabssh.storage.registry.ConnectableHostRegistry.refreshAll(app.database, app)
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Logger.w(TAG, "background host refresh failed: ${e.message}")
+                        }
+                    }
                     val keepIds = groupHosts[targetGroupId].orEmpty()
                     io.github.tabssh.storage.registry.ConnectableHostRegistry.pickerHosts(app.database, keepIds)
                         .filter { it.protocol.equals("ssh", ignoreCase = true) }
@@ -820,6 +833,8 @@ class MultiHostDashboardActivity : TabSSHActivity() {
         bucket.clear()
         bucket.addAll(newIds)
         saveGroupHosts(targetGroupId)
+        // Show the new membership straight away; profiles that still need resolving fill in below.
+        rebuildAndSubmit()
 
         // Stop pumps for removed hosts (only if they're not in another group)
         removed.filter { id -> allHostIds().none { it == id } || !bucket.contains(id) }.forEach { id ->
@@ -835,18 +850,23 @@ class MultiHostDashboardActivity : TabSSHActivity() {
         // monitorSlots, pumps, and metric maps all stay on one id space.
         val hostsById = allHosts.associateBy { it.id }
         val neededProfiles = newIds.filter { it !in profileCache }
-        for (id in neededProfiles) {
-            val host = hostsById[id] ?: continue
-            val profile = try {
-                io.github.tabssh.storage.registry.ConnectableHostResolver.resolveProfile(app, host)
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Logger.w(TAG, "resolveProfile failed for ${host.name}", e)
-                null
-            }
-            if (profile != null) profileCache[id] = profile
+        // Resolved side by side: one slow cloud lookup no longer holds up the others.
+        val resolved = kotlinx.coroutines.coroutineScope {
+            neededProfiles.mapNotNull { id -> hostsById[id]?.let { host -> id to host } }.map { (id, host) ->
+                async(Dispatchers.IO) {
+                    val profile = try {
+                        io.github.tabssh.storage.registry.ConnectableHostResolver.resolveProfile(app, host)
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "resolveProfile failed for ${host.name}", e)
+                        null
+                    }
+                    id to profile
+                }
+            }.awaitAll()
         }
+        resolved.forEach { (id, profile) -> if (profile != null) profileCache[id] = profile }
         withContext(Dispatchers.IO) {
             newIds.forEach { id ->
                 if (id !in monitorSlots) {

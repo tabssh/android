@@ -3325,7 +3325,7 @@
     <string name="main_quick_connect_hint_host_vnc">hostname or IP</string>
     <string name="main_quick_connect_hint_password_vnc">VNC password (optional)</string>
     <string name="main_quick_connect_hint_host_ssh">hostname or user@hostname</string>
-    <string name="main_quick_connect_hint_password_ssh">Password (leave blank to use SSH key)</string>
+    <string name="main_quick_connect_hint_password_ssh">Password (leave blank to use the key below)</string>
     <string name="main_quick_connect_error_enter_hostname">Enter a hostname</string>
     <string name="main_quick_connect_save_failed">Failed to save: %1$s</string>
     <string name="main_quick_connect_vnc_connection_failed">Connection failed: vnc %1$s:%2$d: %3$s</string>
@@ -4322,4 +4322,6 @@
     <string name="route_tor_builtin_summary">Built in · starts when a connection uses it</string>
     <string name="route_tor_info_message">Tor is part of the app, so there is nothing to set up. Pick it as a connection\'s route or as the default route.\n\nIt starts when a connection uses it and stops five minutes after the last one closes, to save battery.\n\nStatus: %1$s</string>
     <string name="port_forward_add_short">Add forward</string>
+    <string name="main_quick_connect_hint_key">Key to use when the password is blank</string>
+    <string name="main_quick_connect_key_none">No key — ask for a password</string>
 </resources>
