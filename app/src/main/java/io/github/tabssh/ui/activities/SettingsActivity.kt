@@ -966,6 +966,41 @@ class TaskerSettingsFragment : PreferenceFragmentCompat() {
  * Logging settings fragment
  */
 class LoggingSettingsFragment : PreferenceFragmentCompat() {
+
+    /**
+     * The fallback server must run Cairnbin (it provides the compatibility layers the fallback relies
+     * on), so a typed URL is checked before it is saved. Blank turns the fallback off; never saving
+     * it keeps the built-in default shown in the summary.
+     */
+    private fun setupPasteFallbackPreference() {
+        val pref = findPreference<androidx.preference.EditTextPreference>("paste_fallback_url") ?: return
+        val prefs = (requireActivity().application as io.github.tabssh.TabSSHApplication).preferencesManager
+        pref.setSummaryProvider {
+            val url = prefs.getPasteFallbackUrl()
+            if (url == null) getString(R.string.prefs_paste_fallback_off)
+            else getString(R.string.prefs_paste_fallback_summary_fmt, url)
+        }
+        pref.setOnBindEditTextListener { editText ->
+            editText.setText(prefs.getPasteFallbackUrl().orEmpty())
+            editText.setSelection(editText.text.length)
+        }
+        pref.setOnPreferenceChangeListener { _, newValue ->
+            val url = (newValue as? String).orEmpty().trim().trimEnd('/')
+            if (url.isEmpty()) return@setOnPreferenceChangeListener true
+            android.widget.Toast.makeText(requireContext(), R.string.prefs_paste_fallback_checking, android.widget.Toast.LENGTH_SHORT).show()
+            viewLifecycleOwner.lifecycleScope.launch {
+                val ok = io.github.tabssh.utils.paste.PasteDetector.isCairnbin(url)
+                if (ok) {
+                    pref.text = url
+                } else {
+                    android.widget.Toast.makeText(requireContext(), R.string.prefs_paste_fallback_not_cairnbin, android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+            // Saved only after the server proves to be Cairnbin.
+            false
+        }
+    }
+
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_logging, rootKey)
 
@@ -980,6 +1015,12 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
             if (!io.github.tabssh.BuildConfig.DEBUG_LOG) {
                 category.title = getString(R.string.pref_debug_logging_category_user)
             }
+        }
+
+        setupPasteFallbackPreference()
+        findPreference<androidx.preference.Preference>("paste_my_pastes")?.setOnPreferenceClickListener {
+            startActivity(android.content.Intent(requireContext(), MyPastesActivity::class.java))
+            true
         }
 
         // Live-toggle the Logger when the user flips the master switch.

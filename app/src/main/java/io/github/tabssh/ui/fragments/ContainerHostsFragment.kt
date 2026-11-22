@@ -271,10 +271,32 @@ class ContainerHostsFragment : Fragment() {
 
     private fun deleteContainerHost(host: ContainerHost) {
         if (!isAdded) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val links = withContext(Dispatchers.IO) {
+                try {
+                    io.github.tabssh.storage.registry.HostLinkInspector.describeContainerHost(app, host.id)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            }
+            if (isAdded) showDeleteContainerHostDialog(host, links)
+        }
+    }
 
+    private fun showDeleteContainerHostDialog(
+        host: ContainerHost,
+        links: List<io.github.tabssh.storage.registry.HostLinkInspector.Link>
+    ) {
+        var message = getString(R.string.container_delete_host_message, host.name)
+        if (links.isNotEmpty()) {
+            message += "\n\n" + getString(R.string.host_links_delete_header) + "\n" +
+                io.github.tabssh.storage.registry.HostLinkInspector.summary(requireContext(), links)
+        }
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.container_delete_host_title)
-            .setMessage(getString(R.string.container_delete_host_message, host.name))
+            .setMessage(message)
             .setPositiveButton(R.string.delete) { _, _ ->
                 // Captured at click time — the IO block below must not call
                 // requireContext() after a potential detach.
@@ -285,46 +307,7 @@ class ContainerHostsFragment : Fragment() {
                 // half-deleted docker_* child rows behind).
                 app.applicationScope.launch(Dispatchers.IO) {
                     try {
-                        // Non-DB teardown stays outside the transaction —
-                        // session release and Keystore clears must not hold
-                        // the DB transaction open.
-                        ContainerSessionManager.release(app, host.id)
-                        // Custom-endpoint password lives only in the
-                        // Keystore — clear it so a future row id reuse
-                        // can't inherit this host's secret.
-                        io.github.tabssh.crypto.storage.ContainerHostPasswordStore
-                            .clear(appContext, host.id)
-                        // Convention cascade — the docker_* child tables have
-                        // no real FKs, so clean them up alongside the host.
-                        app.database.withTransaction {
-                            // Tombstone every cascaded child before the bulk
-                            // delete removes it — deleteForHost() gives back
-                            // no rows, so the natural keys must be captured first.
-                            app.database.composeStackDao().getStacksForHostList(host.id).forEach { stack ->
-                                io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
-                                    appContext, io.github.tabssh.sync.tombstone.TombstoneRecorder.COMPOSE_STACK,
-                                    io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(stack))
-                            }
-                            app.database.singleContainerConfigDao().getConfigsForHostList(host.id).forEach { config ->
-                                io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
-                                    appContext, io.github.tabssh.sync.tombstone.TombstoneRecorder.SINGLE_CONTAINER_CONFIG,
-                                    io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(config))
-                            }
-                            app.database.containerAutoUpdatePolicyDao().getPoliciesForHost(host.id).first().forEach { policy ->
-                                io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
-                                    appContext, io.github.tabssh.sync.tombstone.TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY,
-                                    io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(policy))
-                            }
-                            app.database.composeStackDao().deleteForHost(host.id)
-                            app.database.singleContainerConfigDao().deleteForHost(host.id)
-                            app.database.containerAutoUpdatePolicyDao().deleteForHost(host.id)
-                            app.database.containerHostDao().delete(host)
-                            // Cascade: drop the connectable-hosts registry row and strip the id from saved pane groups
-                            io.github.tabssh.storage.registry.ConnectableHostRegistry.removeContainerHost(app.database, host.id)
-                            io.github.tabssh.sync.tombstone.TombstoneRecorder.record(
-                                appContext, io.github.tabssh.sync.tombstone.TombstoneRecorder.CONTAINER_HOST,
-                                io.github.tabssh.sync.tombstone.TombstoneRecorder.naturalKey(host))
-                        }
+                        io.github.tabssh.containers.ContainerHostRemover.remove(app, appContext, host)
                         withContext(Dispatchers.Main) {
                             if (!isAdded) return@withContext
                             Toast.makeText(

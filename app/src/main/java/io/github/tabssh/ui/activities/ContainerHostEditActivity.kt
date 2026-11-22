@@ -375,9 +375,16 @@ class ContainerHostEditActivity : TabSSHActivity() {
                 // same entry point TabTerminalActivity's New Tab picker and
                 // PaneGroupEditDialog use before listing connectable hosts.
                 ConnectableHostRegistry.refreshAll(app.database, app)
+                // A machine already added as a Docker host is not offered again; the host being
+                // edited keeps its own link so the spinner can still show it.
+                val alreadyLinked = app.database.containerHostDao().getAllList()
+                    .filter { it.id != hostId }
+                    .mapNotNull { it.linkedConnectionId }
+                    .toSet()
                 val linkable = app.database.connectableHostDao().getAllList().filter {
-                    it.sourceType == ConnectableHost.SOURCE_CONNECTION_PROFILE ||
-                        it.sourceType == ConnectableHost.SOURCE_CLOUD_INSTANCE
+                    (it.sourceType == ConnectableHost.SOURCE_CONNECTION_PROFILE ||
+                        it.sourceType == ConnectableHost.SOURCE_CLOUD_INSTANCE) &&
+                        it.id !in alreadyLinked
                 }
                 val keyList = app.database.keyDao().getAllKeysList()
                 val idList = app.database.identityDao().getAllIdentitiesList()

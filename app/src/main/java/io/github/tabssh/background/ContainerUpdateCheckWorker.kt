@@ -159,6 +159,7 @@ class ContainerUpdateCheckWorker(
     override suspend fun doWork(): Result {
         // No container hosts means nothing to check: not an error, no notification, and no need to
         // probe the network or battery state.
+        val force = inputData.getBoolean(KEY_FORCE, false)
         val hosts = TabSSHApplication.get().database.containerHostDao().getAllList()
         if (hosts.isEmpty()) {
             Logger.d(TAG, "Skipping run: no container hosts")
@@ -176,8 +177,14 @@ class ContainerUpdateCheckWorker(
 
         // Gate 1: battery saver mode (same opt-in pref as monitoring).
         val pm = appContext.getSystemService(Context.POWER_SERVICE) as PowerManager
-        if (pm.isPowerSaveMode && !preferencesManager.isMonitoringRunInBatterySaverEnabled()) {
-            Logger.d(TAG, "Skipping run: battery saver active and pref not set")
+        // Battery Saver is the system power-save mode, not the per-app battery optimization
+        // exemption; a manual "Check now" is the user asking explicitly, so it always runs.
+        if (!force && pm.isPowerSaveMode && !preferencesManager.isMonitoringRunInBatterySaverEnabled()) {
+            Logger.i(
+                TAG,
+                "Skipping scheduled run: system Battery Saver is on and monitoring in Battery Saver is off " +
+                    "(a manual check still runs)"
+            )
             return Result.success()
         }
 
@@ -200,7 +207,6 @@ class ContainerUpdateCheckWorker(
         // once; each host is gated by its resolved enable/interval settings.
         val hostSemaphore = Semaphore(MAX_CONCURRENT_HOSTS)
         val now = System.currentTimeMillis()
-        val force = inputData.getBoolean(KEY_FORCE, false)
         val outcome = CycleOutcome()
         coroutineScope {
             for (host in hosts) {

@@ -177,6 +177,7 @@ class SyncSettingsActivity : TabSSHActivity() {
                 pendingDao.deleteAll()
             }
             resolvingDeferredConflicts = false
+            io.github.tabssh.utils.NotificationHelper.cancelSyncConflicts(this@SyncSettingsActivity)
             toast(getString(R.string.sync_settings_toast_deferred_resolved))
         }
     }

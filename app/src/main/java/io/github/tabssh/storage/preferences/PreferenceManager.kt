@@ -59,6 +59,7 @@ class PreferenceManager(private val context: Context) {
     companion object {
         // Keystore alias + retired plaintext pref key for the Pastebin API key
         private const val ALIAS_PASTEBIN_API_KEY = "pastebin_api_key"
+        const val KEY_PASTE_FALLBACK_URL = "paste_fallback_url"
         private const val LEGACY_KEY_PASTEBIN_API_KEY = "paste_pastebin_api_key"
 
         // General preferences
@@ -831,6 +832,35 @@ class PreferenceManager(private val context: Context) {
             }
         }
     }
+
+    // A token issued for one paste (compat delete token) is a secret like the owner token above.
+    fun getPasteDeleteToken(recordId: Long): String? =
+        runBlocking { securePasswordManager.retrievePassword("paste_delete_token_$recordId") }?.takeIf { it.isNotBlank() }
+
+    fun setPasteDeleteToken(recordId: Long, token: String?) {
+        runBlocking {
+            if (token.isNullOrBlank()) {
+                securePasswordManager.clearPassword("paste_delete_token_$recordId")
+            } else {
+                securePasswordManager.storePassword(
+                    "paste_delete_token_$recordId",
+                    token,
+                    SecurePasswordManager.StorageLevel.ENCRYPTED
+                )
+            }
+        }
+    }
+
+    // Fallback paste server (must run Cairnbin). Never saved = the built-in default, which only the
+    // built-in public servers fall back to; saved blank = off; saved URL = used for every server.
+    fun getPasteFallbackUrl(): String? {
+        if (!preferences.contains(KEY_PASTE_FALLBACK_URL)) {
+            return io.github.tabssh.utils.paste.PasteServices.defaultUrl(io.github.tabssh.utils.paste.PasteServices.CAIRNBIN)
+        }
+        return getString(KEY_PASTE_FALLBACK_URL, "").trim().trimEnd('/').ifBlank { null }
+    }
+
+    fun isPasteFallbackExplicit(): Boolean = preferences.contains(KEY_PASTE_FALLBACK_URL)
 
     // --- Audit log ---
 

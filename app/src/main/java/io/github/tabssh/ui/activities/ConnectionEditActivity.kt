@@ -61,6 +61,9 @@ class ConnectionEditActivity : TabSSHActivity() {
     companion object {
         const val EXTRA_CONNECTION_ID = "connection_id"
         const val EXTRA_IS_EDIT_MODE = "is_edit_mode"
+
+        /** Set when the editor was opened from a failed connection: saving then connects again. */
+        const val EXTRA_RECONNECT_AFTER_SAVE = "reconnect_after_save"
         /** When present, load + save as [VncHost] regardless of protocol spinner. */
         const val EXTRA_VNC_HOST_ID = "vnc_host_id"
         /** New-connection only — pre-selects the protocol spinner ("ssh"/"vnc"/"telnet"). */
@@ -87,10 +90,15 @@ class ConnectionEditActivity : TabSSHActivity() {
         )
 
         /** Launch to create/edit an SSH or Telnet [ConnectionProfile]. */
-        fun createIntent(context: Context, connectionId: String? = null): Intent {
+        fun createIntent(
+            context: Context,
+            connectionId: String? = null,
+            reconnectAfterSave: Boolean = false
+        ): Intent {
             return Intent(context, ConnectionEditActivity::class.java).apply {
                 connectionId?.let { putExtra(EXTRA_CONNECTION_ID, it) }
                 putExtra(EXTRA_IS_EDIT_MODE, connectionId != null)
+                if (reconnectAfterSave) putExtra(EXTRA_RECONNECT_AFTER_SAVE, true)
             }
         }
 
@@ -1060,6 +1068,9 @@ class ConnectionEditActivity : TabSSHActivity() {
 
     private fun setupButtons() {
         binding.btnSave.setOnClickListener { saveConnection() }
+        if (intent.getBooleanExtra(EXTRA_RECONNECT_AFTER_SAVE, false)) {
+            binding.btnSave.setText(R.string.conn_edit_save_and_reconnect)
+        }
         binding.btnCancel.setOnClickListener { confirmDiscardIfNeeded { finish() } }
         binding.btnTest.setOnClickListener { testConnection() }
         binding.btnGenerateKey.setOnClickListener { showKeyManagementDialog() }
@@ -1710,6 +1721,9 @@ class ConnectionEditActivity : TabSSHActivity() {
             // prompt for discard on the way out.
             hasUnsavedChanges = false
             setResult(RESULT_OK)
+            if (intent.getBooleanExtra(EXTRA_RECONNECT_AFTER_SAVE, false)) {
+                startActivity(TabTerminalActivity.createIntent(this, profile, autoConnect = true, forceNew = true))
+            }
             finish()
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e

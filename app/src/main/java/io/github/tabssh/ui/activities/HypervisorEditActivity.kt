@@ -450,14 +450,23 @@ class HypervisorEditActivity : TabSSHActivity() {
         lifecycleScope.launch {
             try {
                 // app.database access can trigger lazy init — run on IO.
-                val connections = withContext(Dispatchers.IO) {
-                    app.database.connectionDao().getAllConnectionsList()
+                // Connections already added as a hypervisor (linked, or the same host) are not
+                // offered again; the hypervisor being edited does not count against itself.
+                val (connections, allCount) = withContext(Dispatchers.IO) {
+                    val all = app.database.connectionDao().getAllConnectionsList()
+                    val others = app.database.hypervisorDao().getAllList().filter { it.id != hypervisorId }
+                    val linkedIds = others.mapNotNull { it.linkedConnectionId }.toSet()
+                    val usedHosts = others.map { it.host.lowercase() }.toSet()
+                    all.filter { it.id !in linkedIds && it.host.lowercase() !in usedHosts } to all.size
                 }
 
                 if (connections.isEmpty()) {
                     Toast.makeText(
                         this@HypervisorEditActivity,
-                        getString(R.string.hypervisor_edit_no_connections_found),
+                        getString(
+                            if (allCount == 0) R.string.hypervisor_edit_no_connections_found
+                            else R.string.hypervisor_edit_all_connections_added
+                        ),
                         Toast.LENGTH_LONG
                     ).show()
                     return@launch
@@ -643,8 +652,10 @@ class HypervisorEditActivity : TabSSHActivity() {
         val hasAccount = selectedAccountId != null
         layoutAuthType.visibility = if (hasAccount) View.GONE else View.VISIBLE
         if (hasAccount) {
+            // Keep the current type while the accounts are still loading; resetting to password
+            // here is what turned a saved token host back into a password host.
             val account = availableAccounts.firstOrNull { it.id == selectedAccountId }
-            selectedAuthType = account?.authType ?: "password"
+            if (account != null) selectedAuthType = account.authType
         }
         applyAuthTypeUi()
     }
@@ -735,6 +746,8 @@ class HypervisorEditActivity : TabSSHActivity() {
 
                     editName.setText(hypervisor.name)
                     val typeIdx = hypervisorTypes.indexOf(hypervisor.type).takeIf { it >= 0 } ?: 0
+                    // Set before the spinner callback can rebuild the auth dropdown from it.
+                    selectedAuthType = hypervisor.authType
                     spinnerType.setSelection(typeIdx)
                     editHost.setText(hypervisor.host)
                     editPort.setText(hypervisor.port.toString())
@@ -746,7 +759,6 @@ class HypervisorEditActivity : TabSSHActivity() {
                     editPassword.setText(
                         HypervisorPasswordStore.retrieve(this@HypervisorEditActivity, hypervisor)
                     )
-                    selectedAuthType = hypervisor.authType
                     editRealm.setText(hypervisor.realm ?: "pam")
                     editOauthIssuer.setText(hypervisor.oauthIssuerUrl.orEmpty())
                     editOauthClientId.setText(hypervisor.oauthClientId.orEmpty())
@@ -768,6 +780,7 @@ class HypervisorEditActivity : TabSSHActivity() {
                     }
                     selectedAccountId = hypervisor.accountId
                     refreshAccountDropdown()
+                    refreshAuthTypeDropdown(hypervisor.type)
 
                     // Load API type override
                     val apiTypeEntries = resources.getStringArray(R.array.api_type_entries)
@@ -852,8 +865,8 @@ class HypervisorEditActivity : TabSSHActivity() {
                         catch (_: Exception) { null }
                     }
                 }
-                val username = account?.username ?: editUsername.text.toString()
-                val password = if (account != null) {
+                var username = account?.username ?: editUsername.text.toString()
+                var password = if (account != null) {
                     withContext(Dispatchers.IO) {
                         HypervisorPasswordStore.retrieveAccountPassword(
                             this@HypervisorEditActivity, account.id
@@ -864,6 +877,10 @@ class HypervisorEditActivity : TabSSHActivity() {
                 }
                 val realm = account?.realm ?: editRealm.text.toString()
                 val authType = account?.authType ?: selectedAuthType
+                if (account == null && authType == "proxmox_api_token") {
+                    io.github.tabssh.hypervisor.proxmox.ProxmoxTokenParser.normalise(username, password)
+                        .let { (u, pw) -> username = u; password = pw }
+                }
 
                 var success = false
                 when (type) {
@@ -995,14 +1012,18 @@ class HypervisorEditActivity : TabSSHActivity() {
                 val effectiveAuthType = if (accountId != null) {
                     availableAccounts.firstOrNull { it.id == accountId }?.authType ?: "password"
                 } else selectedAuthType
-                val plaintextPassword = editPassword.text.toString()
+                val rawPassword = editPassword.text.toString()
+                val rawUsername = editUsername.text.toString()
+                val (tokenUsername, plaintextPassword) = if (accountId == null && effectiveAuthType == "proxmox_api_token") {
+                    io.github.tabssh.hypervisor.proxmox.ProxmoxTokenParser.normalise(rawUsername, rawPassword)
+                } else rawUsername to rawPassword
                 val hypervisor = HypervisorProfile(
                     id = hypervisorId ?: 0,
                     name = editName.text.toString(),
                     type = type,
                     host = editHost.text.toString(),
                     port = editPort.text.toString().toInt(),
-                    username = if (accountId != null) "" else editUsername.text.toString(),
+                    username = if (accountId != null) "" else tokenUsername,
                     realm = if (accountId != null) {
                         // Account is the realm source-of-truth when set.
                         // Per-host realm override stays a future option.

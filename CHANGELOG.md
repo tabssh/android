@@ -17,6 +17,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **My pastes.** Pastes you create from the issue reporter are remembered (link, service, date and time). Cairnbin pastes, and Lenpaste-compatible pastes that return a delete token, can be deleted on the server from the list; for every other service the entry only leaves the list. Refresh asks each Cairnbin server which pastes your owner token still lists.
+- **Fallback paste server setting.** The server used when a paste upload fails defaults to pste.us, can be changed or cleared, and must be a Cairnbin server (checked when saved).
+- **Verify for registry credentials.** Auth > Registries can now check a credential against its registry, from the editor and from the entry menu.
+- **Sync conflicts are no longer hidden in the Sync screen.** A background sync that cannot decide a conflict posts a notification, and the app shows a Resolve prompt when you return to it.
+- **Deleting a host lists what goes with it.** The confirmation names the linked Docker hosts, port forwards, pane groups and dashboards, and hypervisors that will be unlinked; the linked Docker hosts, port forwards and dashboard entries are removed with it.
 - **White-labelled Cairnbin servers are recognised.** Autodetect asks `/api/autodiscover`, which names the server software even when the pages and branding are renamed.
 - **Paste uploads fall back to pste.us.** When a service's built-in public server is dead or unreachable, the upload is repeated once on the Cairnbin server at pste.us, which also answers the other services' protocols. A server you configured yourself never falls back.
 - **Cairnbin owner token for pastes.** Uploads to a Cairnbin server (pste.us) keep the owner token the server issues, in the Keystore, and reuse it. A rejected token is dropped and the upload is repeated without it so the server issues a new one. Cairnbin is now autodetected on pste.us and is its default server.
@@ -45,6 +50,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Proxmox API tokens stay token auth.** Editing a saved Proxmox host no longer resets it to password auth, and a token pasted in the form Proxmox shows it (`user@realm!tokenid:secret`) is split into user and secret.
+- **Add-from-existing lists skip hosts already added.** The Docker host and hypervisor pickers no longer offer a machine that is already a Docker host or hypervisor.
+- **Connection errors can be fixed and retried.** Editing a connection from a connection error now offers Save & reconnect.
+- **Manual update checks run under Battery Saver.** Only the scheduled check is skipped while the system Battery Saver is on; Check now always runs, and the skip is logged with its reason.
 - **Check all now confirms pending updates still exist.** A manual check now also visits hosts whose update checks are off but that still list pending updates, so entries for deleted containers and stacks are dropped. A host with no live SSH session is logged as unconfirmed instead of skipped quietly.
 - **The update dialog stops when the update is done.** After an update finished or failed the progress bar kept animating and the button still said Cancel. The bar is now hidden and the button reads Close.
 - **Updates for containers that no longer exist are dropped.** A container whose stack was recreated, renamed or removed kept its pending update forever (scans only visit running containers), so the Container Updates page listed it and every Update failed with "no such container". A scan now clears the pending update of any container the host no longer has (a stopped container still counts), and an update that finds its container missing clears the flag and says so instead of showing a generic failure. The log lists the containers the host really has, so a name mismatch can be told apart from a removed container.

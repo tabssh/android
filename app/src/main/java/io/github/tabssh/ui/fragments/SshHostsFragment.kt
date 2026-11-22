@@ -508,13 +508,38 @@ class SshHostsFragment : Fragment() {
      * one-by-one so the existing audit / cascade behaviour fires per row.
      */
     private fun confirmAndBulkDelete(selected: List<ConnectionProfile>) {
+        val linkApp = requireActivity().application as io.github.tabssh.TabSSHApplication
+        viewLifecycleOwner.lifecycleScope.launch {
+            val links = withContext(Dispatchers.IO) {
+                try {
+                    selected.flatMap { io.github.tabssh.storage.registry.HostLinkInspector.describe(linkApp, it.id) }
+                        .distinct()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            }
+            if (!isAdded) return@launch
+            showBulkDeleteDialog(selected, links)
+        }
+    }
+
+    private fun showBulkDeleteDialog(
+        selected: List<ConnectionProfile>,
+        links: List<io.github.tabssh.storage.registry.HostLinkInspector.Link>
+    ) {
+        val baseMessage = getString(R.string.connections_bulk_delete_message)
+        val message = if (links.isEmpty()) baseMessage else baseMessage + "\n\n" +
+            getString(R.string.host_links_delete_header) + "\n" +
+            io.github.tabssh.storage.registry.HostLinkInspector.summary(requireContext(), links)
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(
                 resources.getQuantityString(
                     R.plurals.connections_bulk_delete_title, selected.size, selected.size
                 )
             )
-            .setMessage(R.string.connections_bulk_delete_message)
+            .setMessage(message)
             .setPositiveButton(R.string.delete) { _, _ ->
                 val app = requireActivity().application as io.github.tabssh.TabSSHApplication
                 val appContext = requireContext().applicationContext
@@ -530,6 +555,11 @@ class SshHostsFragment : Fragment() {
                 app.applicationScope.launch(Dispatchers.IO) {
                     var deleted = 0
                     try {
+                        // Linked Docker hosts, port forwards and dashboard entries go first, outside the
+                        // transaction: removing a Docker host also releases its session and Keystore entry.
+                        for (c in selected) {
+                            io.github.tabssh.storage.registry.HostLinkInspector.removeLinks(app, c.id)
+                        }
                         app.database.withTransaction {
                             for (c in selected) {
                                 app.database.connectionDao().deleteConnection(c)

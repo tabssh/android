@@ -261,9 +261,14 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
                     val title = titleEdit.text.toString().trim().ifBlank { ctx.getString(io.github.tabssh.R.string.report_issue_default_title) }
                     val url = withContext(Dispatchers.IO) {
                         val content = preparedContent()
-                        PasteProviderFactory
+                        val result = PasteProviderFactory
                             .createForService(selectedServiceId, prefs)
-                            .upload(title, content)
+                            .create(title, content)
+                        // Remember the paste so it can be reviewed and deleted from My pastes.
+                        io.github.tabssh.utils.paste.PasteTracker
+                            .from(app.database, prefs)
+                            .record(result, title)
+                        result.url
                     }
                     setUploading(false)
                     showResult(url)

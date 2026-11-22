@@ -77,6 +77,12 @@ class SyncWorker(
                     val outcome = SyncMergeCoordinator(applicationContext)
                         .merge(remote.payload, syncManager.getEncryptionPassword(), resolveConflicts = null)
                     Logger.d(TAG, "Applied remote sync state (${outcome.totalConflicts} conflict(s), ${outcome.deferredConflicts} deferred)")
+                    if (outcome.deferredConflicts > 0) {
+                        // Nobody is looking at the Sync screen during a background run, so ask through a notification.
+                        val waiting = io.github.tabssh.storage.database.TabSSHDatabase.getDatabase(applicationContext)
+                            .pendingSyncConflictDao().getCount()
+                        io.github.tabssh.utils.NotificationHelper.notifySyncConflicts(applicationContext, waiting)
+                    }
                 }
             }
 

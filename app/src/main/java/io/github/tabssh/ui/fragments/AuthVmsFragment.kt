@@ -172,9 +172,14 @@ class AuthVmsFragment : Fragment() {
         editPassword: TextInputEditText,
         editRealm: TextInputEditText
     ) {
-        val username = editUsername.text?.toString()?.trim().orEmpty()
-        val password = editPassword.text?.toString().orEmpty()
+        var username = editUsername.text?.toString()?.trim().orEmpty()
+        var password = editPassword.text?.toString().orEmpty()
         val realm = editRealm.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
+        // Accept the token as Proxmox shows it: user@realm!tokenid:secret in either field.
+        if (authType == "proxmox_api_token" && password != PASSWORD_MASK) {
+            io.github.tabssh.hypervisor.proxmox.ProxmoxTokenParser.normalise(username, password)
+                .let { (u, pw) -> username = u; password = pw }
+        }
 
         if (username.isBlank() && authType != "xo_api_token") {
             Toast.makeText(requireContext(), getString(R.string.identity_username_required), Toast.LENGTH_SHORT).show()

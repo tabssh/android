@@ -92,35 +92,54 @@ object HostContextActions {
     }
 
     private fun confirmDeleteSshConnection(fragment: Fragment, app: TabSSHApplication, connection: ConnectionProfile) {
-        MaterialAlertDialogBuilder(fragment.requireContext())
-            .setTitle(R.string.connections_delete_title)
-            .setMessage(fragment.getString(R.string.connections_delete_message_fmt, connection.name))
-            .setPositiveButton(R.string.delete) { _, _ ->
-                fragment.lifecycleScope.launch {
-                    try {
-                        withContext(Dispatchers.IO) {
+        fragment.lifecycleScope.launch {
+            val links = withContext(Dispatchers.IO) {
+                try {
+                    io.github.tabssh.storage.registry.HostLinkInspector.describe(app, connection.id)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Logger.w(TAG_SSH, "Could not list links for ${connection.name}: ${e.message}")
+                    emptyList()
+                }
+            }
+            if (!fragment.isAdded) return@launch
+            val context = fragment.requireContext()
+            var message = fragment.getString(R.string.connections_delete_message_fmt, connection.name)
+            if (links.isNotEmpty()) {
+                message += "\n\n" + context.getString(R.string.host_links_delete_header) + "\n" +
+                    io.github.tabssh.storage.registry.HostLinkInspector.summary(context, links)
+            }
+            MaterialAlertDialogBuilder(context)
+                .setTitle(R.string.connections_delete_title)
+                .setMessage(message)
+                .setPositiveButton(R.string.delete) { _, _ ->
+                    app.applicationScope.launch(Dispatchers.IO) {
+                        try {
+                            io.github.tabssh.storage.registry.HostLinkInspector.removeLinks(app, connection.id)
                             app.database.connectionDao().deleteConnection(connection)
                             // H6 — record the deletion so it propagates and is not resurrected.
                             TombstoneRecorder.record(app, TombstoneRecorder.CONNECTION, connection.id)
                             // Clean up orphan soft-FK references left by this connection.
                             app.database.monitorSlotDao().deleteByConnectionId(connection.id)
-                            app.database.hypervisorDao().clearLinkedConnectionId(connection.id)
                             // Keep the Panes registry and any saved pane-group membership accurate.
                             io.github.tabssh.storage.registry.ConnectableHostRegistry
                                 .removeConnectionProfile(app.database, connection.id)
                             // clearPassword is suspend + IO-dispatched (KeyStore HAL round-trip).
                             try { app.securePasswordManager.clearPassword(connection.id) } catch (_: Exception) {}
+                            // Home-screen widgets pinned to this connection otherwise keep the stale label and dead tap target.
+                            io.github.tabssh.widget.ConnectionWidgetProvider.updateAllWidgets(app)
+                            Logger.d(TAG_SSH, "Connection deleted: ${connection.name}")
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Logger.e(TAG_SSH, "Failed to delete connection", e)
                         }
-                        // Home-screen widgets pinned to this connection otherwise keep the stale label and dead tap target.
-                        io.github.tabssh.widget.ConnectionWidgetProvider.updateAllWidgets(app)
-                        Logger.d(TAG_SSH, "Connection deleted: ${connection.name}")
-                    } catch (e: Exception) {
-                        Logger.e(TAG_SSH, "Failed to delete connection", e)
                     }
                 }
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+                .setNegativeButton(R.string.cancel, null)
+                .show()
+        }
     }
 
     // ── VNC ──────────────────────────────────────────────────────────

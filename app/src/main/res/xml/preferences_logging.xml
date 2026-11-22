@@ -150,6 +150,17 @@
       android:defaultValue="auto" />
 
     <EditTextPreference
+      android:key="paste_fallback_url"
+      android:title="@string/prefs_paste_fallback_title"
+      android:dialogMessage="@string/prefs_paste_fallback_hint"
+      android:inputType="textUri" />
+
+    <Preference
+      android:key="paste_my_pastes"
+      android:title="@string/prefs_paste_my_pastes_title"
+      android:summary="@string/prefs_paste_my_pastes_summary" />
+
+    <EditTextPreference
       android:key="paste_auto_url"
       android:title="@string/prefs_paste_auto_url_title"
       android:defaultValue="https://pste.us"
@@ -159,7 +170,7 @@
     <EditTextPreference
       android:key="paste_cairnbin_url"
       android:title="@string/prefs_paste_cairnbin_url_title"
-      android:defaultValue="https://cb.pste.us"
+      android:defaultValue="https://pste.us"
       android:inputType="textUri"
       app:useSimpleSummaryProvider="true" />
 

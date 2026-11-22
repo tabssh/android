@@ -1988,10 +1988,7 @@ class TabTerminalActivity : TabSSHActivity() {
         dialogView.findViewById<MaterialButton>(R.id.button_edit_connection)
             ?.setOnClickListener {
                 dialog.dismiss()
-                val intent = Intent(this, ConnectionEditActivity::class.java).apply {
-                    putExtra(ConnectionEditActivity.EXTRA_CONNECTION_ID, profile.id)
-                }
-                startActivity(intent)
+                startActivity(ConnectionEditActivity.createIntent(this, profile.id, reconnectAfterSave = true))
                 // Close TabTerminalActivity — unless other tabs are still open.
                 if (!isFinishing && !isDestroyed && tabManager.getTabCount() == 0) {
                     finish()

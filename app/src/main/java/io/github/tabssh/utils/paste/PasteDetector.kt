@@ -85,6 +85,17 @@ object PasteDetector {
         return type
     }
 
+    /** True when the server at [baseUrl] answers like Cairnbin (autodiscover, or the older help page). */
+    suspend fun isCairnbin(baseUrl: String): Boolean = withContext(Dispatchers.IO) {
+        val base = baseUrl.trim().trimEnd('/')
+        classify(
+            helpPage = fetch("$base/server/help"),
+            serverInfo = null,
+            homePage = null,
+            autodiscover = fetch("$base/api/autodiscover")
+        ) == PasteServices.CAIRNBIN
+    }
+
     internal fun hostOf(url: String): String =
         url.substringAfter("://").substringBefore('/').substringBefore(':').substringAfter('@')
 

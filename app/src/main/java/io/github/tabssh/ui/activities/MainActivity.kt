@@ -285,6 +285,31 @@ class MainActivity : TabSSHActivity() {
     override fun onResume() {
         super.onResume()
         // Fragments will handle their own data refreshing
+        offerPendingSyncConflicts()
+    }
+
+    /**
+     * Conflicts a background sync deferred used to surface only when the Sync screen was opened,
+     * which nobody does once sync is set up. Offer them here, on every return to the app.
+     */
+    private fun offerPendingSyncConflicts() {
+        lifecycleScope.launch {
+            val waiting = try {
+                withContext(Dispatchers.IO) { app.database.pendingSyncConflictDao().getCount() }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                0
+            }
+            if (waiting <= 0 || isFinishing || isDestroyed) return@launch
+            com.google.android.material.snackbar.Snackbar.make(
+                findViewById(android.R.id.content),
+                resources.getQuantityString(R.plurals.sync_conflicts_notification_title, waiting, waiting),
+                com.google.android.material.snackbar.Snackbar.LENGTH_INDEFINITE
+            ).setAction(R.string.sync_conflicts_resolve) {
+                startActivity(android.content.Intent(this@MainActivity, SyncSettingsActivity::class.java))
+            }.show()
+        }
     }
 
     /** Handle re-delivery of start_tab intent when activity is brought to front. */

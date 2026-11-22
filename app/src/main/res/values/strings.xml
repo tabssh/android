@@ -776,6 +776,7 @@
     <string name="conn_edit_duplicate_title">Duplicate connection</string>
     <string name="conn_edit_duplicate_message">A connection to %1$s@%2$s:%3$d already exists (\"%4$s\"). What would you like to do?</string>
     <string name="conn_edit_save_as_new">Save as New</string>
+    <string name="conn_edit_save_and_reconnect">Save &amp; reconnect</string>
     <string name="conn_edit_update_existing">Update Existing</string>
     <string name="conn_edit_key_management_title">SSH Key Management</string>
     <string name="conn_edit_key_option_import_file">Import SSH Key (File)</string>
@@ -2558,8 +2559,8 @@
     <string name="hypervisor_auth_password">Password (2FA prompt supported)</string>
     <string name="hypervisor_auth_proxmox_token">Proxmox API token</string>
     <string name="hypervisor_auth_xo_token">Xen Orchestra API token</string>
-    <string name="hypervisor_auth_proxmox_token_user_hint">Proxmox user@realm!token-id</string>
-    <string name="hypervisor_auth_token_secret_hint">API token secret</string>
+    <string name="hypervisor_auth_proxmox_token_user_hint">Proxmox user@realm!token-id (or the full token)</string>
+    <string name="hypervisor_auth_token_secret_hint">API token secret (or the full user@realm!id:secret)</string>
     <string name="hypervisor_auth_secret_required">Enter the password or API token secret.</string>
     <string name="hypervisor_auth_proxmox_token_console_note">Proxmox API tokens cannot open VM or system consoles. Token access also depends on token ACLs and the backing user permissions.</string>
     <string name="hypervisor_auth_xo_token_note">Create this token in Xen Orchestra after signing in with TOTP. It follows account permissions and expiry.</string>
@@ -4251,4 +4252,48 @@
 
     <string name="locale_toast_request_too_large">Automation action is too large. Shorten the command or keys and try again.</string>
     <string name="spice_connection_failed">SPICE connection failed. Check the connection details and debug log.</string>
+    <string name="container_registry_verify">Verify</string>
+    <string name="container_registry_verifying">Verifying…</string>
+    <string name="container_registry_verify_ok_fmt">%1$s: %2$s</string>
+    <string name="container_registry_verify_rejected_fmt">%1$s: %2$s</string>
+    <string name="container_registry_verify_failed_fmt">%1$s: could not verify (%2$s)</string>
+    <string name="host_links_delete_header">Deleting it also removes it from:</string>
+    <string name="host_links_docker">Docker host: %1$s</string>
+    <string name="host_links_hypervisor">Hypervisor (unlinked, kept): %1$s</string>
+    <string name="host_links_port_forward">Port forward (deleted): %1$s</string>
+    <string name="host_links_pane_group">Pane group: %1$s</string>
+    <string name="host_links_dashboard">Multi-host dashboard: %1$s</string>
+    <string name="host_links_dashboard_ungrouped">Multi-host dashboard</string>
+    <string name="hypervisor_edit_all_connections_added">Every saved connection is already added as a hypervisor.</string>
+    <plurals name="sync_conflicts_notification_title">
+        <item quantity="one">%d sync conflict needs your decision</item>
+        <item quantity="other">%d sync conflicts need your decision</item>
+    </plurals>
+    <string name="sync_conflicts_notification_text">The same item changed on two devices. Tap to choose which to keep.</string>
+    <string name="sync_conflicts_resolve">Resolve</string>
+    <string name="my_pastes_title">My pastes</string>
+    <string name="my_pastes_refresh">Refresh from server</string>
+    <string name="my_pastes_empty">No pastes yet. Pastes you create from the issue reporter show up here.</string>
+    <string name="my_pastes_open">Open</string>
+    <string name="my_pastes_copy">Copy link</string>
+    <string name="my_pastes_subtitle_fmt">%1$s · %2$s\n%3$s</string>
+    <string name="my_pastes_refreshed_fmt">Confirmed with %1$d of %2$d server(s)</string>
+    <string name="my_pastes_delete_title">Delete paste?</string>
+    <string name="my_pastes_delete_server_fmt">Deletes %1$s on the server and removes it from this list.</string>
+    <string name="my_pastes_delete_local_fmt">This service cannot delete pastes. %1$s is only removed from this list; the server copy stays.</string>
+    <string name="my_pastes_deleted">Paste deleted</string>
+    <string name="my_pastes_not_found">The server no longer has it (or does not accept the token). Removed from the list.</string>
+    <string name="my_pastes_removed_from_list">Removed from the list</string>
+    <string name="my_pastes_token_rejected">The server did not accept the delete token.</string>
+    <string name="my_pastes_delete_failed_title">Could not delete on the server</string>
+    <string name="my_pastes_delete_failed_fmt">%1$s\n\nThe paste is still on the server. Remove it from this list anyway?</string>
+    <string name="my_pastes_remove_from_list">Remove from list</string>
+    <string name="prefs_paste_my_pastes_title">My pastes</string>
+    <string name="prefs_paste_my_pastes_summary">Pastes you created, with delete where the server allows it</string>
+    <string name="prefs_paste_fallback_title">Fallback paste server</string>
+    <string name="prefs_paste_fallback_summary_fmt">%1$s — content is resent here when the first server fails</string>
+    <string name="prefs_paste_fallback_off">Off — no fallback</string>
+    <string name="prefs_paste_fallback_hint">A Cairnbin server URL. Leave blank to turn the fallback off.</string>
+    <string name="prefs_paste_fallback_not_cairnbin">That server is not running Cairnbin, which the fallback needs.</string>
+    <string name="prefs_paste_fallback_checking">Checking the server…</string>
 </resources>

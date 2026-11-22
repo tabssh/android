@@ -9,6 +9,7 @@ import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.R
+import io.github.tabssh.containers.transport.failureSummary
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.storage.RegistryCredentialStore
 import io.github.tabssh.storage.database.entities.RegistryCredential
@@ -79,6 +80,7 @@ object RegistryCredentialDialog {
     ) {
         val options = arrayOf(
             activity.getString(R.string.edit),
+            activity.getString(R.string.container_registry_verify),
             activity.getString(R.string.delete)
         )
         MaterialAlertDialogBuilder(activity)
@@ -86,7 +88,8 @@ object RegistryCredentialDialog {
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> showEditor(activity, app, credential)
-                    1 -> confirmDelete(activity, app, credential)
+                    1 -> verify(activity, credential.registryHost, credential.authType, credential.username, null, credential.id)
+                    2 -> confirmDelete(activity, app, credential)
                 }
             }
             .setNegativeButton(R.string.cancel, null)
@@ -146,12 +149,30 @@ object RegistryCredentialDialog {
             )
             .setView(view)
             .setPositiveButton(R.string.save, null)
+            .setNeutralButton(R.string.container_registry_verify, null)
             .setNegativeButton(R.string.cancel, null)
             .create()
         dialog.show()
         // Registry secret (token/password) field — always block screenshots,
         // regardless of the global "prevent screenshots" setting.
         dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+
+        // Verify with what is typed; a blank secret on an existing entry uses the stored one.
+        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL)
+            .setOnClickListener {
+                val host = editHost.text?.toString()?.trim().orEmpty()
+                if (host.isEmpty() || !isPlausibleRegistryHost(host)) {
+                    tilHost.error = activity.getString(R.string.container_registry_error_host_format)
+                    return@setOnClickListener
+                }
+                tilHost.error = null
+                verify(
+                    activity, host, AUTH_TYPES[selectedIndex],
+                    editUsername.text?.toString()?.trim().orEmpty(),
+                    editSecret.text?.toString()?.takeIf { it.isNotEmpty() },
+                    existing?.id
+                )
+            }
 
         // Validate on the button so a bad host keeps the dialog (and input) open.
         dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
@@ -177,6 +198,34 @@ object RegistryCredentialDialog {
                     AUTH_TYPES[selectedIndex]
                 )
             }
+    }
+
+    /** Check the credential against the registry and report the outcome in a toast. */
+    private fun verify(
+        activity: AppCompatActivity,
+        host: String,
+        authType: String,
+        username: String,
+        typedSecret: String?,
+        storedId: Long?
+    ) {
+        val appContext = activity.applicationContext
+        Toast.makeText(activity, R.string.container_registry_verifying, Toast.LENGTH_SHORT).show()
+        activity.lifecycleScope.launch {
+            val secret = typedSecret ?: storedId?.let {
+                withContext(Dispatchers.IO) { RegistryCredentialStore.retrieve(appContext, it) }
+            }
+            val result = io.github.tabssh.containers.registry.RegistryClient().verify(host, authType, username, secret)
+            if (activity.isFinishing || activity.isDestroyed) return@launch
+            val message = when (result) {
+                is io.github.tabssh.containers.transport.ContainerResult.Success ->
+                    activity.getString(R.string.container_registry_verify_ok_fmt, host, result.value)
+                is io.github.tabssh.containers.transport.ContainerResult.PermissionDenied ->
+                    activity.getString(R.string.container_registry_verify_rejected_fmt, host, result.message)
+                else -> activity.getString(R.string.container_registry_verify_failed_fmt, host, result.failureSummary())
+            }
+            Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun save(

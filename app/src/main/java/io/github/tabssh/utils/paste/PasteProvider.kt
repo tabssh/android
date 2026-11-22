@@ -15,9 +15,40 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.TimeUnit
 
+/**
+ * What an upload produced. [service] and [serverUrl] say where the paste lives (filled in by the
+ * provider, or by the wrapper that built it); [deleteToken] is a token issued for this one paste
+ * and [ownerToken] says the server's Cairnbin owner token covers it instead.
+ */
+data class PasteResult(
+    val url: String,
+    val service: String? = null,
+    val serverUrl: String? = null,
+    val remoteId: String? = null,
+    val deleteToken: String? = null,
+    val ownerToken: Boolean = false
+)
+
 interface PasteProvider {
     /** Upload [content] and return the public URL. Throws on failure. */
     suspend fun upload(title: String, content: String): String
+
+    /** Like [upload] but keeps what the server returned so the paste can be tracked and deleted. */
+    suspend fun create(title: String, content: String): PasteResult = PasteResult(upload(title, content))
+}
+
+/** Fills in the service and server of a result that the wrapped provider left blank. */
+internal class LabelledPasteProvider(
+    private val inner: PasteProvider,
+    private val service: String,
+    private val serverUrl: String
+) : PasteProvider {
+    override suspend fun upload(title: String, content: String): String = inner.upload(title, content)
+
+    override suspend fun create(title: String, content: String): PasteResult {
+        val result = inner.create(title, content)
+        return if (result.service != null) result else result.copy(service = service, serverUrl = serverUrl.trimEnd('/'))
+    }
 }
 
 internal val sharedHttpClient: OkHttpClient by lazy {
@@ -66,11 +97,14 @@ class MicroBinProvider(private val baseUrl: String) : PasteProvider {
 }
 
 class LenpasteProvider(private val baseUrl: String) : PasteProvider {
-    override suspend fun upload(title: String, content: String): String = withContext(Dispatchers.IO) {
+    override suspend fun upload(title: String, content: String): String = create(title, content).url
+
+    override suspend fun create(title: String, content: String): PasteResult = withContext(Dispatchers.IO) {
         val base = baseUrl.trimEnd('/')
         // Lenpaste API v1: POST /api/v1/new
-        // Returns JSON: {"id":"<pasteId>"} — NO url field.
-        // Paste view URL is constructed as ${base}/${id}.
+        // Returns JSON: {"id":"<pasteId>"} — NO url field on the original server.
+        // Paste view URL is constructed as ${base}/${id}. A Cairnbin server's Lenpaste layer also
+        // answers a "deleteToken", which authorises DELETE /api/remove for this paste.
         val requestBody = FormBody.Builder()
             .add("title", title)
             .add("body", content)
@@ -83,10 +117,17 @@ class LenpasteProvider(private val baseUrl: String) : PasteProvider {
             if (!response.isSuccessful) throw Exception("Lenpaste upload failed: HTTP ${response.code}")
             response.body?.readBoundedText(1024 * 1024L) ?: throw Exception("Lenpaste returned empty response")
         }
-        val id = JSONObject(responseBody).getString("id")
-        "$base/$id".also { url ->
-            if (!url.startsWith("http")) throw Exception("Lenpaste returned unexpected id: $id")
-        }
+        val json = JSONObject(responseBody)
+        val id = json.getString("id")
+        val url = "$base/$id"
+        if (!url.startsWith("http")) throw Exception("Lenpaste returned unexpected id: $id")
+        PasteResult(
+            url = url,
+            service = PasteServices.LENPASTE,
+            serverUrl = base,
+            remoteId = id,
+            deleteToken = json.optString("deleteToken").takeIf { it.isNotBlank() }
+        )
     }
 }
 
@@ -154,7 +195,9 @@ class CairnbinProvider(
     private val client: OkHttpClient = sharedHttpClient
 ) : PasteProvider {
 
-    override suspend fun upload(title: String, content: String): String = withContext(Dispatchers.IO) {
+    override suspend fun upload(title: String, content: String): String = create(title, content).url
+
+    override suspend fun create(title: String, content: String): PasteResult = withContext(Dispatchers.IO) {
         val base = baseUrl.trimEnd('/')
         // The REST API lives under /api/v1 and takes no CSRF token; /pastes is the browser form route.
         val payload = JSONObject()
@@ -181,7 +224,13 @@ class CairnbinProvider(
             tokens?.set(base, it)
             Logger.i(TAG, "upload: stored a new owner token")
         }
-        link
+        PasteResult(
+            url = link,
+            service = PasteServices.CAIRNBIN,
+            serverUrl = base,
+            remoteId = data?.optString("id")?.takeIf { it.isNotBlank() } ?: link.trimEnd('/').substringAfterLast('/'),
+            ownerToken = tokens?.get(base) != null
+        )
     }
 
     private class Reply(val code: Int, val body: String) {
@@ -309,6 +358,9 @@ class AutoPasteProvider(
 ) : PasteProvider {
     override suspend fun upload(title: String, content: String): String =
         providerFor(PasteDetector.detect(baseUrl)).upload(title, content)
+
+    override suspend fun create(title: String, content: String): PasteResult =
+        providerFor(PasteDetector.detect(baseUrl)).create(title, content)
 }
 
 /** Keystore-backed token store; one owner token per server URL. */
@@ -328,14 +380,16 @@ class FallbackPasteProvider(
     private val primary: PasteProvider,
     private val fallback: PasteProvider
 ) : PasteProvider {
-    override suspend fun upload(title: String, content: String): String = try {
-        primary.upload(title, content)
+    override suspend fun upload(title: String, content: String): String = create(title, content).url
+
+    override suspend fun create(title: String, content: String): PasteResult = try {
+        primary.create(title, content)
     } catch (e: kotlinx.coroutines.CancellationException) {
         throw e
     } catch (e: Exception) {
         Logger.w("FallbackPasteProvider", "upload failed (${e.message}); retrying on the fallback server")
         try {
-            fallback.upload(title, content)
+            fallback.create(title, content)
         } catch (f: kotlinx.coroutines.CancellationException) {
             throw f
         } catch (f: Exception) {
@@ -365,15 +419,23 @@ object PasteProviderFactory {
         } else {
             build(id, url, prefs)
         }
-        val fallbackUrl = PasteServices.defaultUrl(PasteServices.CAIRNBIN)
-        // Only the built-in public server of a service falls back. A server the user configured
-        // themselves never has its content resent to a third party, and pste.us itself has nothing to fall back to.
+        val fallbackUrl = prefs.getPasteFallbackUrl() ?: return primary
+        // An untouched fallback only serves the built-in public servers, so a server the user configured
+        // themselves never has its content resent to a third party; a fallback the user saved applies to all.
         val isDefaultServer = url.trimEnd('/').equals(PasteServices.defaultUrl(id).trimEnd('/'), ignoreCase = true)
-        if (!isDefaultServer || PasteDetector.hostOf(url).equals(PasteDetector.hostOf(fallbackUrl), ignoreCase = true)) return primary
+        if (!prefs.isPasteFallbackExplicit() && !isDefaultServer) return primary
+        // Nothing to fall back to when the chosen server already is the fallback server.
+        if (PasteDetector.hostOf(url).equals(PasteDetector.hostOf(fallbackUrl), ignoreCase = true)) return primary
         return FallbackPasteProvider(primary, CairnbinProvider(fallbackUrl, PreferenceCairnbinTokens(prefs)))
     }
 
     internal fun build(
+        type: String,
+        url: String,
+        prefs: io.github.tabssh.storage.preferences.PreferenceManager
+    ): PasteProvider = LabelledPasteProvider(buildRaw(type, url, prefs), type, url)
+
+    private fun buildRaw(
         type: String,
         url: String,
         prefs: io.github.tabssh.storage.preferences.PreferenceManager

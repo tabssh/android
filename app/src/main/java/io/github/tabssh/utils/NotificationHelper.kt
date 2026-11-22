@@ -45,6 +45,7 @@ object NotificationHelper {
     private const val NOTIFICATION_ID_SSH_GROUP = 1000
     private const val NOTIFICATION_ID_MONITORING_GROUP = 199_999
     private const val NOTIFICATION_ID_CONTAINER_UPDATES_AVAILABLE = 299_998
+    private const val NOTIFICATION_ID_SYNC_CONFLICTS = 299_997
     private const val NOTIFICATION_ID_CONTAINER_UPDATES_APPLIED = 299_999
     private const val NOTIFICATION_ID_RENEWAL_REMINDERS_GROUP = 399_999
 
@@ -101,6 +102,7 @@ object NotificationHelper {
     // registered, and changing it would delete the channel and discard the user's per-channel
     // sound, importance and badge settings. Only the user-visible name and description are reworded.
     internal const val CHANNEL_CONTAINER_UPDATES = "docker_updates_v1"
+    internal const val CHANNEL_SYNC_CONFLICTS = "sync_conflicts_v1"
 
     // Domain/VPS renewal reminders — fired by RenewalReminderWorker when a
     // tracked domain expiration or VPS renewal date falls within its
@@ -256,6 +258,17 @@ object NotificationHelper {
                 setSound(null, null)
             }
 
+            // A background sync that finds the same item changed on two devices cannot choose for
+            // the user, so it asks through this channel. Importance DEFAULT: needs a decision, not urgent.
+            val syncConflicts = NotificationChannel(
+                CHANNEL_SYNC_CONFLICTS,
+                "Sync Conflicts",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Asks you to choose when the same item changed on two devices"
+                setShowBadge(true)
+            }
+
             // ── Renewal Reminder Alerts ──────────────────────────────────────────────
             // Fired by RenewalReminderWorker when a tracked domain's expiration date
             // or a tracked VPS host's renewal date falls within its configured
@@ -305,6 +318,7 @@ object NotificationHelper {
                 hostMonitoring,
                 hostMetrics,
                 containerUpdates,
+                syncConflicts,
                 renewalReminders,
                 sessionRecording
             ))
@@ -1098,6 +1112,32 @@ object NotificationHelper {
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .build()
         nm.notify(NOTIFICATION_ID_CONTAINER_UPDATES_AVAILABLE, n)
+    }
+
+    /** Ask the user to settle sync conflicts a background sync could not decide. */
+    fun notifySyncConflicts(context: Context, count: Int) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val intent = Intent(context, io.github.tabssh.ui.activities.SyncSettingsActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val pending = PendingIntent.getActivity(
+            context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val n = NotificationCompat.Builder(context, CHANNEL_SYNC_CONFLICTS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(context.resources.getQuantityString(R.plurals.sync_conflicts_notification_title, count, count))
+            .setContentText(context.getString(R.string.sync_conflicts_notification_text))
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .build()
+        nm.notify(NOTIFICATION_ID_SYNC_CONFLICTS, n)
+    }
+
+    fun cancelSyncConflicts(context: Context) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancel(NOTIFICATION_ID_SYNC_CONFLICTS)
     }
 
     /** Remove the update-available alert once nothing is pending any more. */

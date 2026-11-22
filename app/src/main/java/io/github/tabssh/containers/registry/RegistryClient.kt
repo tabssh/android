@@ -200,6 +200,102 @@ open class RegistryClient(
     }.logFailure(TAG, "manifest digest for ${ref.canonicalRepository}")
 
     /**
+     * Check a registry credential against the registry's `/v2/` endpoint: reachability first, then
+     * the challenge it answers with, using [username] and [secret] the same way the update check
+     * would. Success means the registry accepted them; PermissionDenied means it rejected them.
+     * Never logs the secret.
+     */
+    open suspend fun verify(
+        registryHost: String,
+        authType: String,
+        username: String,
+        secret: String?
+    ): ContainerResult<String> = withContext(Dispatchers.IO) {
+        val apiHost = if (registryHost.equals(ImageRef.DOCKER_HUB_HOST, ignoreCase = true)) {
+            ImageRef.DOCKER_HUB_API_HOST
+        } else {
+            registryHost
+        }
+        val url = "https://$apiHost/v2/"
+        try {
+            var challengeHeader: String? = null
+            getRaw(url, null).use { response ->
+                if (response.isSuccessful) {
+                    return@withContext ContainerResult.Success(
+                        "Registry reachable; it did not ask for credentials, so none were tested"
+                    )
+                }
+                if (response.code != 401 && response.code != 403) {
+                    return@withContext ContainerResult.Error("Registry answered HTTP ${response.code}")
+                }
+                challengeHeader = response.header("WWW-Authenticate")
+            }
+            if (authType == "anonymous") {
+                return@withContext ContainerResult.PermissionDenied(
+                    "The registry requires sign-in but this entry is anonymous"
+                )
+            }
+            if (secret.isNullOrEmpty()) {
+                return@withContext ContainerResult.PermissionDenied("No secret is stored to verify")
+            }
+            val challenge = parseWwwAuthenticate(challengeHeader)
+            val authValue: String? = when {
+                authType == "token" -> "Bearer $secret"
+                challenge?.scheme.equals("bearer", ignoreCase = true) -> exchangeForVerify(challenge!!, apiHost, username, secret)
+                challenge?.scheme.equals("basic", ignoreCase = true) -> basicAuthValue(username, secret)
+                else -> null
+            }
+            if (authValue == null) {
+                return@withContext ContainerResult.PermissionDenied("The registry rejected the credentials")
+            }
+            getRaw(url, authValue).use { response ->
+                when {
+                    response.isSuccessful -> ContainerResult.Success("The registry accepted the credentials")
+                    response.code == 401 || response.code == 403 ->
+                        ContainerResult.PermissionDenied("The registry rejected the credentials")
+                    else -> ContainerResult.Error("Registry answered HTTP ${response.code}")
+                }
+            }
+        } catch (e: IOException) {
+            ContainerResult.Error("Registry $apiHost unreachable", e.message)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ContainerResult.Error("Registry check failed", e.message)
+        }
+    }.logFailure(TAG, "verify credentials for $registryHost")
+
+    private fun getRaw(url: String, authorization: String?): Response {
+        val builder = Request.Builder().url(url).get()
+        if (authorization != null) builder.header("Authorization", authorization)
+        return http.newCall(builder.build()).execute()
+    }
+
+    /** Token exchange for a Bearer challenge with Basic credentials; null when refused. */
+    private fun exchangeForVerify(
+        challenge: AuthChallenge,
+        apiHost: String,
+        username: String,
+        secret: String
+    ): String? {
+        val realmUrl = challenge.realm?.toHttpUrlOrNull() ?: return null
+        if (!realmAcceptsCredentials(realmUrl, apiHost)) {
+            Logger.w(TAG, "verify: token realm ${realmUrl.host} is not $apiHost; credentials withheld")
+            return null
+        }
+        val urlBuilder = realmUrl.newBuilder()
+        challenge.service?.let { urlBuilder.addQueryParameter("service", it) }
+        val request = Request.Builder().url(urlBuilder.build()).get()
+            .header("Authorization", basicAuthValue(username, secret)).build()
+        http.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return null
+            val body = JSONObject(readBounded(response).orEmpty())
+            val token = body.optString("token").ifEmpty { body.optString("access_token") }
+            return token.takeIf { it.isNotEmpty() }?.let { "Bearer $it" }
+        }
+    }
+
+    /**
      * Read a response body as bytes, refusing anything over [MAX_BODY_BYTES].
      *
      * A registry is an untrusted remote peer: a plain `body.bytes()` lets it

@@ -495,6 +495,13 @@
             android:label="@string/nav_item_container_updates"
             android:parentActivityName=".ui.activities.MainActivity" />
 
+        <!-- Pastes this device created, with delete where the server supports it -->
+        <activity
+            android:name=".ui.activities.MyPastesActivity"
+            android:exported="false"
+            android:label="@string/my_pastes_title"
+            android:parentActivityName=".ui.activities.MainActivity" />
+
         <!-- Wave 4.g — Multi-host performance dashboard -->
         <activity
             android:name=".ui.activities.MultiHostDashboardActivity"

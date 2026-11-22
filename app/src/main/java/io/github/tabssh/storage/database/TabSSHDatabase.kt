@@ -59,11 +59,15 @@ import io.github.tabssh.utils.logging.Logger
         PaneGroup::class,
         ConnectableHost::class,
         TelnetHost::class,
-        HypervisorPasswordCarryover::class
+        HypervisorPasswordCarryover::class,
+        PasteRecord::class
     ],
-    version = 32,
+    version = 33,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 31, to = 32, spec = TabSSHDatabase.Migration31To32::class)]
+    autoMigrations = [
+        AutoMigration(from = 31, to = 32, spec = TabSSHDatabase.Migration31To32::class),
+        AutoMigration(from = 32, to = 33)
+    ]
 )
 @TypeConverters(Converters::class)
 abstract class TabSSHDatabase : RoomDatabase() {
@@ -101,6 +105,7 @@ abstract class TabSSHDatabase : RoomDatabase() {
     abstract fun composeStackDao(): ComposeStackDao
     abstract fun singleContainerConfigDao(): SingleContainerConfigDao
     abstract fun containerAutoUpdatePolicyDao(): ContainerAutoUpdatePolicyDao
+    abstract fun pasteRecordDao(): PasteRecordDao
     abstract fun registryCredentialDao(): RegistryCredentialDao
     abstract fun networkRouteDao(): NetworkRouteDao
     abstract fun pendingSyncConflictDao(): PendingSyncConflictDao
