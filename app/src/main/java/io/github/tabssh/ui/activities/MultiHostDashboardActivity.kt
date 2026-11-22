@@ -129,6 +129,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
         private const val PREF_FILE       = "multi_host_dashboard"
         private const val KEY_GROUPS      = "dash_groups_json"
         private const val KEY_HOSTS_PFX   = "dash_hosts_"
+        const val KEY_MODIFIED_AT = "dash_modified_at"
         private const val REFRESH_MS      = 5_000L
 
         /** Max simultaneous SSH handshakes. A full SSH connect (key exchange +
@@ -445,6 +446,18 @@ class MultiHostDashboardActivity : TabSSHActivity() {
 
     private val prefs get() = getSharedPreferences(PREF_FILE, MODE_PRIVATE)
 
+    /**
+     * Stamps the dashboard config with the time of this edit. Sync compares the stamp so a stale copy
+     * from another device cannot overwrite a newer local edit, and a change here starts a sync, since
+     * these preferences are not in the database whose changes normally trigger one.
+     */
+    private fun markModified() {
+        prefs.edit().putLong(KEY_MODIFIED_AT, System.currentTimeMillis()).apply()
+        if (app.preferencesManager.isSyncDashboardEnabled()) {
+            io.github.tabssh.sync.worker.SyncWorkScheduler(this).scheduleImmediateSync()
+        }
+    }
+
     private fun saveGroups() {
         val arr = JSONArray()
         dashboardGroups.forEachIndexed { i, g ->
@@ -456,6 +469,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
             })
         }
         prefs.edit().putString(KEY_GROUPS, arr.toString()).apply()
+        markModified()
     }
 
     private fun loadGroups(): MutableList<DashboardGroup> {
@@ -480,6 +494,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
     private fun saveGroupHosts(groupId: String) {
         val csv = groupHosts[groupId]?.joinToString(",") ?: ""
         prefs.edit().putString(KEY_HOSTS_PFX + groupId, csv).apply()
+        markModified()
     }
 
     private fun loadGroupHosts(groupId: String): MutableSet<String> {
@@ -637,6 +652,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
                 ungrouped.addAll(hosts)
                 saveGroupHosts(UNGROUPED_ID)
                 prefs.edit().remove(KEY_HOSTS_PFX + group.id).apply()
+                markModified()
 
                 dashboardGroups.removeAll { it.id == group.id }
                 saveGroups()
@@ -730,6 +746,7 @@ class MultiHostDashboardActivity : TabSSHActivity() {
         if (groupId == UNGROUPED_ID) {
             ungroupedCollapsed = !ungroupedCollapsed
             prefs.edit().putBoolean("dash_ungrouped_collapsed", ungroupedCollapsed).apply()
+            markModified()
         } else {
             val idx = dashboardGroups.indexOfFirst { it.id == groupId }
             if (idx >= 0) {

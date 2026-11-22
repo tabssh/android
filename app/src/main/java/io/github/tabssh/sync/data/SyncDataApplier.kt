@@ -2113,6 +2113,15 @@ class SyncDataApplier {
     private fun applyDashboardConfig(config: Map<String, JsonObject>): Int {
         return try {
             val sp = context.getSharedPreferences("multi_host_dashboard", android.content.Context.MODE_PRIVATE)
+            // The newer edit wins. A copy older than the local dashboard (hosts just added here, not yet
+            // uploaded) must not overwrite it; the local one goes up on this sync instead.
+            val remoteAt = ((config["dash_modified_at"] as? JsonObject)?.get("v") as? kotlinx.serialization.json.JsonPrimitive)
+                ?.content?.toLongOrNull() ?: 0L
+            val localAt = try { sp.getLong("dash_modified_at", 0L) } catch (_: ClassCastException) { 0L }
+            if (localAt > remoteAt) {
+                Logger.d(TAG, "Kept the local dashboard config (edited after the remote copy)")
+                return 0
+            }
             val editor = sp.edit()
             var applied = 0
             config.forEach { (k, v) -> if (SharedPrefsCodec.decodeInto(editor, k, v)) applied++ }

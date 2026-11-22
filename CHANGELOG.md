@@ -52,6 +52,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Hosts added to a Multi-host dashboard group stay.** A sync used to overwrite the dashboard groups with an older copy from another device before the new hosts were ever uploaded. The dashboard now carries an edit time: the newer copy wins, and an edit starts a sync.
 - **Far fewer sync conflicts.** Identical content on both devices is never a conflict, and Sync now, force upload and force download apply newest-wins first (logged as auto-merged in the Sync Log). The dialog only appears for what cannot be decided: an exact timestamp tie, an edit against a delete, or a host-key mismatch.
 - **No more duplicate in-page titles.** Domain Tracker, VPS Tracker, Manage Snippets and Frequent Connections no longer repeat the toolbar or tab title as a big in-page heading; the explanatory subtitle stays.
 - **Domain and VPS trackers use a text menu.** Sort, Filter, Import and Export moved from four toolbar icons into the overflow menu with their names.
