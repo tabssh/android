@@ -52,6 +52,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Far fewer sync conflicts.** Identical content on both devices is never a conflict, and Sync now, force upload and force download apply newest-wins first (logged as auto-merged in the Sync Log). The dialog only appears for what cannot be decided: an exact timestamp tie, an edit against a delete, or a host-key mismatch.
 - **No more duplicate in-page titles.** Domain Tracker, VPS Tracker, Manage Snippets and Frequent Connections no longer repeat the toolbar or tab title as a big in-page heading; the explanatory subtitle stays.
 - **Domain and VPS trackers use a text menu.** Sort, Filter, Import and Export moved from four toolbar icons into the overflow menu with their names.
 - **Closing a screen mid-load no longer logs errors.** A cancelled load is logged as debug, not as "Failed to load groups/snippets".

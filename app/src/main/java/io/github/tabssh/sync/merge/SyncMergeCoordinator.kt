@@ -226,9 +226,23 @@ class SyncMergeCoordinator(private val context: Context) {
             when {
                 // Foreground: ask the user, then apply their explicit choices.
                 resolveConflicts != null -> {
-                    val resolutions = resolveConflicts(conflicts)
-                    if (resolutions.isNotEmpty()) {
-                        resolver.applyResolutions(resolutions)
+                    // Newest wins where it can be decided (recorded as auto-merged in the Sync Log);
+                    // the dialog only sees what cannot be: an exact timestamp tie,
+                    // an edit on one side against a delete on the other, or a host-key mismatch.
+                    val decided = if (preferenceManager.isAutoResolveConflictsEnabled()) {
+                        resolver.autoResolveConflicts(conflicts)
+                    } else {
+                        emptyList()
+                    }
+                    if (decided.isNotEmpty()) {
+                        resolver.applyResolutions(decided, auto = true)
+                    }
+                    val remaining = conflicts.filter { c -> decided.none { it.conflict === c } }
+                    if (remaining.isNotEmpty()) {
+                        val resolutions = resolveConflicts(remaining)
+                        if (resolutions.isNotEmpty()) {
+                            resolver.applyResolutions(resolutions)
+                        }
                     }
                 }
                 // Headless with auto-resolve on: timestamp-based auto resolution.

@@ -102,4 +102,28 @@ class MergeEngineThreeWayTest {
         assertEquals(1, result.conflicts.size)
         assertEquals(ConflictType.DELETED_MODIFIED, result.conflicts.single().conflictType)
     }
+
+    @Test
+    fun `identical content on both sides is not a conflict even when the base is stale`() {
+        val base = conn("c1", host = "old.example.com", modifiedAt = 1_000L)
+        val local = conn("c1", host = "new.example.com", modifiedAt = 2_000L)
+        val remote = conn("c1", host = "new.example.com", modifiedAt = 3_000L)
+
+        val result = engine.mergeConnections(mapOf("c1" to base), listOf(local), listOf(remote))
+
+        assertTrue(result.conflicts.isEmpty(), "same content must never be reported as a conflict")
+        assertEquals("new.example.com", result.merged.single().host)
+    }
+
+    @Test
+    fun `different edits on both sides still conflict`() {
+        val base = conn("c1", host = "old.example.com", modifiedAt = 1_000L)
+        val local = conn("c1", host = "a.example.com", modifiedAt = 2_000L)
+        val remote = conn("c1", host = "b.example.com", modifiedAt = 3_000L)
+
+        val result = engine.mergeConnections(mapOf("c1" to base), listOf(local), listOf(remote))
+
+        assertEquals(1, result.conflicts.size)
+        assertTrue(result.conflicts.single().autoResolvable, "different timestamps leave a newest-wins decision")
+    }
 }

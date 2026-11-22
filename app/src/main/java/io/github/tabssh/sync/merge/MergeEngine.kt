@@ -161,6 +161,12 @@ class MergeEngine {
 
         if (local == remote) return local
 
+        // Both sides hold the same content (a force upload on one device and a force download on the
+        // other, or the same edit made twice): nothing to choose, whatever the baseline says.
+        if (syncedView(local) == syncedView(remote)) {
+            return mergeConnectionFields(if (local.modifiedAt >= remote.modifiedAt) local else remote, local, remote)
+        }
+
         val decision = decide(
             localChanged = syncedView(local) != syncedView(base),
             remoteChanged = syncedView(remote) != syncedView(base)
@@ -357,6 +363,9 @@ class MergeEngine {
 
         if (local == remote) return local
 
+        // Same synced content on both sides is never a conflict.
+        if (syncedView(local) == syncedView(remote)) return if (local.modifiedAt >= remote.modifiedAt) local else remote
+
         if (local.fingerprint != remote.fingerprint) {
             conflicts.add(
                 Conflict(
@@ -468,6 +477,11 @@ class MergeEngine {
 
         if (local == remote) return local
 
+        // Same synced content on both sides is never a conflict.
+        if (syncedView(local) == syncedView(remote)) {
+            return (if (local.modifiedAt >= remote.modifiedAt) local else remote).copy(usageCount = local.usageCount)
+        }
+
         val decision = decide(
             localChanged = syncedView(local) != syncedView(base),
             remoteChanged = syncedView(remote) != syncedView(base)
@@ -570,6 +584,9 @@ class MergeEngine {
         }
 
         if (local == remote) return local
+
+        // Same synced content on both sides is never a conflict.
+        if (syncedView(local) == syncedView(remote)) return if (local.modifiedAt >= remote.modifiedAt) local else remote
 
         if (local.fingerprint != remote.fingerprint) {
             conflicts.add(
