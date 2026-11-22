@@ -52,6 +52,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Registries list matches the rest of the app.** Auth > Registries rows use the same card style as Container Updates, My pastes and Known hosts.
 - **Dialog buttons use the app's own translated OK and Cancel** instead of the platform strings.
 - **Proxmox API tokens stay token auth.** Editing a saved Proxmox host no longer resets it to password auth, and a token pasted in the form Proxmox shows it (`user@realm!tokenid:secret`) is split into user and secret.
 - **Add-from-existing lists skip hosts already added.** The Docker host and hypervisor pickers no longer offer a machine that is already a Docker host or hypervisor.

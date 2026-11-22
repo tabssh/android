@@ -95,9 +95,9 @@ class AuthRegistriesFragment : Fragment() {
             )
         }
         listView.adapter = SimpleAdapter(
-            activity, rows, android.R.layout.simple_list_item_2,
+            activity, rows, R.layout.item_list_card,
             arrayOf("host", "detail"),
-            intArrayOf(android.R.id.text1, android.R.id.text2)
+            intArrayOf(R.id.text_title, R.id.text_subtitle)
         )
         listView.setOnItemClickListener { _, _, position, _ ->
             RegistryCredentialDialog.showItemMenu(activity, app, credentials[position])
