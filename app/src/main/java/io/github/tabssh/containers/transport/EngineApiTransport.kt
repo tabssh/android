@@ -45,6 +45,9 @@ class EngineApiTransport(
         private const val CONNECT_TIMEOUT_S = 15L
         private const val READ_TIMEOUT_S = 60L
 
+        /** Longest an image pull may stay silent before it is treated as stalled. */
+        private const val PULL_IDLE_TIMEOUT_S = 180L
+
         /** Cap on a single non-streaming response body held in memory (8 MiB). */
         private const val MAX_BODY_BYTES = 8L * 1024 * 1024
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
@@ -79,6 +82,14 @@ class EngineApiTransport(
                 chain.request().newBuilder().header("Connection", "close").build()
             )
         }
+        .build()
+
+    /**
+     * Client for image pulls: the read timeout is the longest the stream may stay silent, so a pull
+     * that is downloading is never cut off but one that has stalled is no longer waited on forever.
+     */
+    private val pullClient = client.newBuilder()
+        .readTimeout(PULL_IDLE_TIMEOUT_S, TimeUnit.SECONDS)
         .build()
 
     /** Client for follow/stream endpoints — no read timeout. */
@@ -222,12 +233,13 @@ class EngineApiTransport(
         path: String,
         post: Boolean = false,
         onFailure: ((String) -> T)? = null,
+        streamClient: OkHttpClient = streamingClient,
         consume: (Response, kotlinx.coroutines.channels.SendChannel<T>) -> Unit
     ): Flow<T> = channelFlow {
         val prefix = versionPrefix()
         val builder = Request.Builder().url("${baseUrl()}$prefix$path")
         if (post) builder.post(EMPTY_BODY) else builder.get()
-        val call = streamingClient.newCall(builder.build())
+        val call = streamClient.newCall(builder.build())
         // Collector cancellation closes the channel; cancelling the call
         // closes the socket, which unblocks the blocking body reader below.
         channel.invokeOnClose { call.cancel() }
@@ -351,7 +363,8 @@ class EngineApiTransport(
         return streamingFlow(
             path,
             post = true,
-            onFailure = { message -> PullProgressEvent(status = message, error = message) }
+            onFailure = { message -> PullProgressEvent(status = message, error = message) },
+            streamClient = pullClient
         ) { response, channel ->
             val reader = response.body?.charStream()?.let { BufferedReader(it) } ?: return@streamingFlow
             // NDJSON progress stream — one JSON object per line.

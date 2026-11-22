@@ -41,6 +41,14 @@ interface SnippetDao {
     suspend fun getFrequentlyUsedSnippets(limit: Int = 10): List<Snippet>
 
     /**
+     * Every snippet for a picker: favorites first, then most used, then by name. Unlike
+     * [getFrequentlyUsedSnippets] this includes snippets that were never run, which is what lets a
+     * new snippet be picked at all.
+     */
+    @Query("SELECT * FROM snippets ORDER BY is_favorite DESC, usage_count DESC, name ASC LIMIT :limit")
+    suspend fun getSnippetsForPicker(limit: Int = Int.MAX_VALUE): List<Snippet>
+
+    /**
      * Search snippets by name, command, or tags.
      *
      * LIKE '%term%' requires a full table scan (no B-tree index can prefix a

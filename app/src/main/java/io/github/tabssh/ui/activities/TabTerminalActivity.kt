@@ -6218,7 +6218,7 @@ class TabTerminalActivity : TabSSHActivity() {
     private fun showSnippetsDialog() {
         lifecycleScope.launch {
             try {
-                val snippets = withContext(Dispatchers.IO) { app.database.snippetDao().getFrequentlyUsedSnippets(20) }
+                val snippets = withContext(Dispatchers.IO) { app.database.snippetDao().getSnippetsForPicker(30) }
 
                 if (snippets.isEmpty()) {
                     // Show create snippet dialog if no snippets exist
@@ -6245,6 +6245,9 @@ class TabTerminalActivity : TabSSHActivity() {
                         }
                         .setNeutralButton(R.string.activity_label_manage_snippets) { _, _ ->
                             showManageSnippetsMenu()
+                        }
+                        .setPositiveButton(R.string.terminal_all_snippets_title) { _, _ ->
+                            showAllSnippetsDialog()
                         }
                         .setNegativeButton(R.string.cancel, null)
                         .show()
@@ -6417,7 +6420,7 @@ class TabTerminalActivity : TabSSHActivity() {
      */
     private fun showAllSnippetsDialog() {
         lifecycleScope.launch {
-            val allSnippets = withContext(Dispatchers.IO) { app.database.snippetDao().getFrequentlyUsedSnippets(100) }
+            val allSnippets = withContext(Dispatchers.IO) { app.database.snippetDao().getSnippetsForPicker() }
 
             if (allSnippets.isEmpty()) {
                 showToast(getString(R.string.terminal_no_snippets_yet))

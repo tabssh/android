@@ -2014,7 +2014,8 @@ class SSHConnection(
     suspend fun executeCommand(
         command: String,
         timeoutMs: Long = 30000,
-        onOutput: ((String) -> Unit)? = null
+        onOutput: ((String) -> Unit)? = null,
+        failOnTimeout: Boolean = false
     ): String = withContext(Dispatchers.IO) {
         if (!isConnected()) {
             throw IllegalStateException("Not connected to SSH server")
@@ -2048,7 +2049,8 @@ class SSHConnection(
             // dead socket that stops delivering data mid-read.
             val finished = ExecOutputReader.readUntilClosed(inputStream, { exec.isClosed }, output, timeoutMs, onOutput)
             if (!finished) {
-                Logger.w("SSHConnection", "executeCommand timed out after ${timeoutMs}ms: ${Logger.commandForLogging(command)}")
+                Logger.w("SSHConnection", "executeCommand: no output for ${timeoutMs}ms: ${Logger.commandForLogging(command)}")
+                if (failOnTimeout) throw CommandIdleTimeoutException(output.toString(), timeoutMs)
             }
 
             // Drain stderr after stdout EOF (channel is closed by remote at this point)
@@ -3000,3 +3002,7 @@ interface ConnectionListener {
     fun onError(connectionId: String, error: Exception) {}
     fun onDataReceived(connectionId: String, data: ByteArray) {}
 }
+
+/** A command printed nothing for [idleMs]; [partialOutput] is what it had produced by then. */
+class CommandIdleTimeoutException(val partialOutput: String, val idleMs: Long) :
+    Exception("No output for ${idleMs / 1000}s")

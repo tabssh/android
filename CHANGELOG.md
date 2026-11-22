@@ -52,6 +52,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Commands are no longer timed out while they are working.** SSH commands, compose updates, cluster commands and libvirt commands now time out only after a period with no output at all, not after a fixed total time. Image pulls over the Docker API also get a stall limit instead of waiting forever. The cluster timeout setting now means "no output for" that long, and connecting has its own 45-second limit.
+- **Snippets you have never run now show up in the terminal.** The terminal's snippet dialogs only listed snippets with at least one use, so new ones could not be picked. The quick list is favorites first, then most used, then the rest, with an All Snippets button; All Snippets lists everything, no longer capped at 100.
 - **Live output while updating.** The update dialog now shows the command output as it arrives (compose down, pull and up line by line, and a line per image layer during a pull) instead of one status line until the end.
 - **Cluster commands stream.** Each host shows what it has printed so far while it runs, hosts appear as they finish rather than all at once at the end, and the run honours the configured timeout (it was fixed at 30 seconds).
 - **Multi-host dashboard group headers fit a phone.** The group actions are one menu with text (Add hosts, Monitoring settings, Rename, Delete) instead of four icons, and the metrics sit on their own full-width line instead of being squeezed into a narrow column.

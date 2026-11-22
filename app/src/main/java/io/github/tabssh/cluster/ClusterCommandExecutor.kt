@@ -138,7 +138,7 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
         var connection: SSHConnection? = null
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         return try {
-            withTimeout(timeoutMs) {
+            run {
                 val c = SSHConnection(profile, scope, app)
                 connection = c
                 // Inherit the app-wide host-key callbacks (set on
@@ -151,12 +151,14 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
                 // the spot — same UX as a normal connect.
                 c.hostKeyChangedCallback = app.sshSessionManager.hostKeyChangedCallback
                 c.newHostKeyCallback = app.sshSessionManager.newHostKeyCallback
-                c.connect()
-                val output = c.executeCommand(command, timeoutMs) { chunk ->
+                // Connecting has its own budget. The command is limited only by silence (timeoutMs),
+                // so a long command that keeps printing is never cut off while it is working.
+                withTimeout(CONNECT_BUDGET_MS) { c.connect() }
+                val output = c.executeCommand(command, timeoutMs, onOutput = { chunk ->
                     _live.update { current ->
                         current + (profile.id to ((current[profile.id].orEmpty() + chunk).takeLast(MAX_LIVE_CHARS)))
                     }
-                }
+                }, failOnTimeout = true)
 
                 val executionTime = System.currentTimeMillis() - startTime
 
@@ -167,15 +169,21 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
                     executionTimeMs = executionTime
                 )
             }
+        } catch (e: io.github.tabssh.ssh.connection.CommandIdleTimeoutException) {
+            ExecutionResult(
+                profile = profile,
+                success = false,
+                output = e.partialOutput,
+                error = "No output for ${timeoutMs / 1000}s",
+                executionTimeMs = System.currentTimeMillis() - startTime
+            )
         } catch (e: TimeoutCancellationException) {
-            val executionTime = System.currentTimeMillis() - startTime
-            
             ExecutionResult(
                 profile = profile,
                 success = false,
                 output = "",
-                error = "Timeout after ${timeoutMs}ms",
-                executionTimeMs = executionTime
+                error = "Could not connect within ${CONNECT_BUDGET_MS / 1000}s",
+                executionTimeMs = System.currentTimeMillis() - startTime
             )
         } catch (e: CancellationException) {
             // Structured cancellation (cancelAll()) must propagate. Swallowing it
@@ -212,6 +220,9 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
     private companion object {
         /** Live output kept per host; the end of a long stream is what matters. */
         const val MAX_LIVE_CHARS = 20_000
+
+        /** Time allowed to open the SSH session; the command itself is limited by silence, not by this. */
+        const val CONNECT_BUDGET_MS = 45_000L
     }
 
     fun cancelAll() {

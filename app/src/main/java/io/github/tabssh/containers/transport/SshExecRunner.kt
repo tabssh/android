@@ -8,6 +8,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -33,6 +34,8 @@ class SshExecRunner(
         private const val DEFAULT_EXEC_TIMEOUT_MS = 30_000L
         private const val POLL_INTERVAL_MS = 50L
         private const val EXIT_MARKER = "__tabssh_exit__:"
+        private const val WATCHDOG_POLL_MS = 500L
+        private const val HARD_CEILING_MS = 2 * 60 * 60 * 1000L
 
         /**
          * Cap on captured stdout (and, separately, stderr) for one exec.
@@ -84,12 +87,17 @@ class SshExecRunner(
             val outBuf = ByteArrayOutputStream()
             val errBuf = ByteArrayOutputStream()
             val buf = ByteArray(8192)
-            val deadline = System.currentTimeMillis() + timeoutMs
+            // timeoutMs is a SILENCE limit: output resets it, so a command that is still printing is
+            // never cut off while it works; the hard ceiling only stops a stream that never ends.
+            val started = System.currentTimeMillis()
+            var deadline = started + timeoutMs
             while (!channel.isClosed && System.currentTimeMillis() < deadline) {
                 val moved = drainAvailable(stdout, outBuf, buf) + drainAvailable(stderr, errBuf, buf)
                 if (moved == 0) {
                     // delay() honors coroutine cancellation; Thread.sleep() does not.
                     delay(POLL_INTERVAL_MS)
+                } else {
+                    deadline = minOf(System.currentTimeMillis() + timeoutMs, started + HARD_CEILING_MS)
                 }
             }
             if (channel.isClosed) {
@@ -100,7 +108,7 @@ class SshExecRunner(
                 // Timeout with the channel still open: never block-read it — on a
                 // dead (black-holed) connection the read would hang forever, and on
                 // a slow command it would defeat the timeout. Take what's buffered.
-                Logger.w(TAG, "run: timeout after ${timeoutMs}ms cmdLen=${command.length}")
+                Logger.w(TAG, "run: no output for ${timeoutMs}ms cmdLen=${command.length}")
                 drainAvailable(stdout, outBuf, buf)
                 drainAvailable(stderr, errBuf, buf)
             }
@@ -179,18 +187,32 @@ class SshExecRunner(
     ): ExecResult {
         val out = StringBuilder()
         var exit = -1
-        val finished = kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
-            stream("{ $command ; } 2>&1; echo \"$EXIT_MARKER\$?\"").collect { line ->
-                if (line.startsWith(EXIT_MARKER)) {
-                    exit = line.removePrefix(EXIT_MARKER).trim().toIntOrNull() ?: -1
-                } else {
-                    out.append(line).append('\n')
-                    onLine(line)
+        var timedOut = false
+        kotlinx.coroutines.coroutineScope {
+            var lastLine = System.currentTimeMillis()
+            val started = lastLine
+            val collector = launch {
+                stream("{ $command ; } 2>&1; echo \"$EXIT_MARKER\$?\"").collect { line ->
+                    lastLine = System.currentTimeMillis()
+                    if (line.startsWith(EXIT_MARKER)) {
+                        exit = line.removePrefix(EXIT_MARKER).trim().toIntOrNull() ?: -1
+                    } else {
+                        out.append(line).append('\n')
+                        onLine(line)
+                    }
                 }
             }
-            true
+            // timeoutMs is a silence limit: every line resets it.
+            while (collector.isActive) {
+                delay(WATCHDOG_POLL_MS)
+                val now = System.currentTimeMillis()
+                if (now - lastLine >= timeoutMs || now - started >= HARD_CEILING_MS) {
+                    timedOut = true
+                    collector.cancel()
+                }
+            }
         }
-        if (finished == null) Logger.w(TAG, "runLive: timeout after ${timeoutMs}ms cmdLen=${command.length}")
+        if (timedOut) Logger.w(TAG, "runLive: no output for ${timeoutMs}ms cmdLen=${command.length}")
         return ExecResult(stdout = out.toString().trimEnd('\n'), stderr = "", exitStatus = exit)
     }
 

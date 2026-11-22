@@ -48,7 +48,8 @@ class LibvirtApiClient(
     internal companion object {
         private const val TAG = "LibvirtApiClient"
         private const val CONNECT_TIMEOUT_MS = 15_000
-        private const val EXEC_TIMEOUT_MS = 10_000
+        // Silence limit for a virsh command, not a limit on its total time.
+        private const val EXEC_TIMEOUT_MS = 30_000
 
         /**
          * Ceiling on the stdout we buffer from one `virsh` invocation. The
@@ -800,7 +801,9 @@ class LibvirtApiClient(
             // decoding would turn that into replacement characters.
             val collected = java.io.ByteArrayOutputStream()
             val buf = ByteArray(4096)
-            val deadline = System.currentTimeMillis() + EXEC_TIMEOUT_MS
+            // The limit counts silence, not total time: a virsh command that is still printing is
+            // working and is left alone.
+            var deadline = System.currentTimeMillis() + EXEC_TIMEOUT_MS
             var truncated = false
             var timedOut = false
             while (!ch.isClosed) {
@@ -817,6 +820,7 @@ class LibvirtApiClient(
                             break
                         }
                         collected.write(buf, 0, n)
+                        deadline = System.currentTimeMillis() + EXEC_TIMEOUT_MS
                     }
                 } else {
                     // delay() honours coroutine cancellation; Thread.sleep() does not.
@@ -842,7 +846,7 @@ class LibvirtApiClient(
             // string into domain/VM state, so returning the partial buffer would be
             // reported as a successful (but wrong) result instead of a failure.
             if (timedOut) {
-                throw LibvirtException("Command timed out after ${EXEC_TIMEOUT_MS}ms: $command")
+                throw LibvirtException("Command produced no output for ${EXEC_TIMEOUT_MS}ms: $command")
             }
             Logger.d(TAG, "runCommand('$command') exit=${ch.exitStatus}")
             collected.toString(Charsets.UTF_8.name())

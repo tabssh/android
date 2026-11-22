@@ -99,4 +99,35 @@ class ExecOutputReaderTest {
         assertTrue("close after drain must count as completion", finished)
         assertEquals("first second", output.toString())
     }
+
+    /** Serves one byte every [gapMs] until [total] bytes have been served, then nothing. */
+    private class SlowTrickleStream(private val gapMs: Long, val total: Int) : InputStream() {
+        var served = 0
+            private set
+        private var lastServed = System.currentTimeMillis()
+
+        override fun available(): Int =
+            if (served < total && System.currentTimeMillis() - lastServed >= gapMs) 1 else 0
+
+        override fun read(): Int {
+            served++
+            lastServed = System.currentTimeMillis()
+            return 'x'.code
+        }
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            b[off] = read().toByte()
+            return 1
+        }
+    }
+
+    @Test
+    fun `a command that keeps printing is not timed out while it works`() = runBlocking {
+        // 8 bytes, one every 100 ms: about 800 ms in total, longer than the 300 ms silence limit.
+        val stream = SlowTrickleStream(gapMs = 100, total = 8)
+        val output = StringBuilder()
+        val finished = ExecOutputReader.readUntilClosed(stream, { stream.served >= 8 }, output, 300L)
+        assertTrue("output arrived every 100 ms, so the 300 ms silence limit never expired", finished)
+        assertEquals("xxxxxxxx", output.toString())
+    }
 }
