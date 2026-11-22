@@ -19,6 +19,17 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
  */
 fun MaterialAlertDialogBuilder.showSecurely(): AlertDialog {
     val dialog = show()
-    dialog.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    dialog.secureWindow()
     return dialog
+}
+
+/**
+ * Blocks screenshots of this dialog unless the user turned "Block screenshots on secret screens"
+ * and "Prevent screenshots" both off. Use for dialogs that show or accept a secret.
+ */
+fun AlertDialog.secureWindow() {
+    val prefs = (context.applicationContext as? io.github.tabssh.TabSSHApplication)?.preferencesManager
+    // Without preferences (never expected) stay safe and block.
+    val allow = prefs != null && !prefs.isBlockSecretScreens() && !prefs.isPreventScreenshots()
+    if (!allow) window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
 }

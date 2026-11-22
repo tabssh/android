@@ -169,7 +169,7 @@ class VMwareOAuthActivity : AppCompatActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.status_error)
             .setMessage(message)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
+            .setPositiveButton(io.github.tabssh.R.string.ok) { _, _ ->
                 setResult(RESULT_CANCELED)
                 finish()
             }

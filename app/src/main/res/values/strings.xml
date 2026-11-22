@@ -4296,4 +4296,22 @@
     <string name="prefs_paste_fallback_hint">A Cairnbin server URL. Leave blank to turn the fallback off.</string>
     <string name="prefs_paste_fallback_not_cairnbin">That server is not running Cairnbin, which the fallback needs.</string>
     <string name="prefs_paste_fallback_checking">Checking the server…</string>
+    <string name="known_hosts_title">Known hosts</string>
+    <string name="known_hosts_pref_title">View known hosts</string>
+    <string name="known_hosts_pref_summary">See, inspect and delete individual trusted host keys</string>
+    <plurals name="known_hosts_summary">
+        <item quantity="one">%d trusted host</item>
+        <item quantity="other">%d trusted hosts</item>
+    </plurals>
+    <string name="known_hosts_filter_hint">Filter by host or fingerprint</string>
+    <string name="known_hosts_empty">No known hosts.</string>
+    <string name="known_hosts_details">Details</string>
+    <string name="known_hosts_subtitle_fmt">%1$s\n%2$s\nFirst seen %3$s</string>
+    <string name="known_hosts_details_fmt">Key type: %1$s\nFingerprint: %2$s\nFirst seen: %3$s\nLast verified: %4$s\nTrust: %5$s</string>
+    <string name="known_hosts_copy_fingerprint">Copy fingerprint</string>
+    <string name="known_hosts_fingerprint_copied">Fingerprint copied</string>
+    <string name="known_hosts_delete_title">Forget this host?</string>
+    <string name="known_hosts_delete_message_fmt">The saved key for %1$s is removed. The next connection asks you to verify it again.</string>
+    <string name="prefs_security_block_secret_screens_title">Block screenshots on secret screens</string>
+    <string name="prefs_security_block_secret_screens_summary">Screens that show passwords, tokens, environment values or logs refuse screenshots even when Prevent screenshots is off. Turn off to capture them; redact anything private before sharing.</string>
 </resources>

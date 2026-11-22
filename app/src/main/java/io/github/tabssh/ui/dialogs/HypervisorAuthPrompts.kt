@@ -33,7 +33,7 @@ suspend fun Activity.promptProxmoxSecondFactor(): String? = suspendCancellableCo
         .setView(container)
         .setPositiveButton("Use TOTP", null)
         .setNeutralButton("Use recovery key", null)
-        .setNegativeButton(android.R.string.cancel) { _, _ ->
+        .setNegativeButton(io.github.tabssh.R.string.cancel) { _, _ ->
             if (continuation.isActive) continuation.resume(null)
         }
         .setOnCancelListener {
@@ -108,8 +108,8 @@ fun Activity.promptSshKeyboardInteractive(
             .setTitle("SSH verification")
             .setMessage("The SSH server requested additional authentication information.")
             .setView(container)
-            .setPositiveButton(android.R.string.ok, null)
-            .setNegativeButton(android.R.string.cancel) { _, _ -> latch.countDown() }
+            .setPositiveButton(io.github.tabssh.R.string.ok, null)
+            .setNegativeButton(io.github.tabssh.R.string.cancel) { _, _ -> latch.countDown() }
             .setOnCancelListener { latch.countDown() }
             .create()
         activeDialog.set(dialog)

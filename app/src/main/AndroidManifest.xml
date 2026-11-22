@@ -495,6 +495,13 @@
             android:label="@string/nav_item_container_updates"
             android:parentActivityName=".ui.activities.MainActivity" />
 
+        <!-- SSH host keys this device accepted: details and per-host delete -->
+        <activity
+            android:name=".ui.activities.KnownHostsActivity"
+            android:exported="false"
+            android:label="@string/known_hosts_title"
+            android:parentActivityName=".ui.activities.SettingsActivity" />
+
         <!-- Pastes this device created, with delete where the server supports it -->
         <activity
             android:name=".ui.activities.MyPastesActivity"

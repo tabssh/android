@@ -5291,7 +5291,7 @@ class TabTerminalActivity : TabSSHActivity() {
                         else -> requestScreenCaptureConsent(activeTabSealed, includeCast = true)
                     }
                 }
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(io.github.tabssh.R.string.cancel, null)
                 .show()
         } else {
             requestScreenCaptureConsent(activeTabSealed, includeCast = false)
@@ -5405,7 +5405,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 .setItems(actions.map { it.first }.toTypedArray()) { _, which ->
                     actions[which].second()
                 }
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(io.github.tabssh.R.string.cancel, null)
                 .show()
         }, 500L)
     }

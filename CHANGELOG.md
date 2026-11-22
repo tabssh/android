@@ -17,6 +17,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Block screenshots on secret screens.** A Security setting, on by default, controls whether screens and dialogs that show passwords, tokens, environment values or logs refuse screenshots when Prevent screenshots is off. Turn it off to capture them.
+- **Known hosts screen.** Settings > App Security > View known hosts lists every trusted SSH host key with filter, details (key type, fingerprint, first seen, last verified) and per-host delete, alongside the existing clear-all.
 - **My pastes.** Pastes you create from the issue reporter are remembered (link, service, date and time). Cairnbin pastes, and Lenpaste-compatible pastes that return a delete token, can be deleted on the server from the list; for every other service the entry only leaves the list. Refresh asks each Cairnbin server which pastes your owner token still lists.
 - **Fallback paste server setting.** The server used when a paste upload fails defaults to pste.us, can be changed or cleared, and must be a Cairnbin server (checked when saved).
 - **Verify for registry credentials.** Auth > Registries can now check a credential against its registry, from the editor and from the entry menu.
@@ -50,6 +52,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Dialog buttons use the app's own translated OK and Cancel** instead of the platform strings.
 - **Proxmox API tokens stay token auth.** Editing a saved Proxmox host no longer resets it to password auth, and a token pasted in the form Proxmox shows it (`user@realm!tokenid:secret`) is split into user and secret.
 - **Add-from-existing lists skip hosts already added.** The Docker host and hypervisor pickers no longer offer a machine that is already a Docker host or hypervisor.
 - **Connection errors can be fixed and retried.** Editing a connection from a connection error now offers Save & reconnect.

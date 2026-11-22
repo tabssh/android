@@ -74,6 +74,7 @@ class PreferenceManager(private val context: Context) {
         private const val KEY_AUTO_LOCK_TIMEOUT = "security_auto_lock_timeout"
         private const val KEY_STRICT_HOST_KEY_CHECKING = "strict_host_key_checking"
         private const val KEY_PREVENT_SCREENSHOTS = "security_prevent_screenshots"
+        private const val KEY_BLOCK_SECRET_SCREENS = "security_block_secret_screens"
         private const val KEY_CLEAR_CLIPBOARD_TIMEOUT = "security_clear_clipboard_timeout"
         
         // Terminal preferences
@@ -250,6 +251,12 @@ class PreferenceManager(private val context: Context) {
     fun setStrictHostKeyChecking(enabled: Boolean) = setBoolean(KEY_STRICT_HOST_KEY_CHECKING, enabled)
     
     fun isPreventScreenshots(): Boolean = getBoolean(KEY_PREVENT_SCREENSHOTS, false)
+
+    /**
+     * Screens and dialogs that show secrets (env values, logs, tokens, passwords) block screenshots
+     * even when [isPreventScreenshots] is off. Turning this off lets the user screenshot them too.
+     */
+    fun isBlockSecretScreens(): Boolean = getBoolean(KEY_BLOCK_SECRET_SCREENS, true)
     fun setPreventScreenshots(prevent: Boolean) = setBoolean(KEY_PREVENT_SCREENSHOTS, prevent)
     
     // KEY_CLEAR_CLIPBOARD_TIMEOUT is a ListPreference — it always stores a String.

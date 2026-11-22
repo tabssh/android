@@ -142,7 +142,7 @@ class SyncLogActivity : TabSSHActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.sync_log_clear_title)
             .setMessage(R.string.sync_log_clear_message)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
+            .setPositiveButton(io.github.tabssh.R.string.ok) { _, _ ->
                 lifecycleScope.launch {
                     try {
                         app.database.syncLogDao().deleteAll()
@@ -155,7 +155,7 @@ class SyncLogActivity : TabSSHActivity() {
                     }
                 }
             }
-            .setNegativeButton(android.R.string.cancel, null)
+            .setNegativeButton(io.github.tabssh.R.string.cancel, null)
             .show()
     }
 

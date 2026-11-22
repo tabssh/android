@@ -948,9 +948,11 @@ class TabSSHApplication : Application() {
                 .getDefaultSharedPreferences(this)
             val window = activity.window ?: return
             // Block screenshots / screen recording when the user opts in, and always on secret-bearing screens.
-            if (activity is io.github.tabssh.ui.utils.AlwaysSecureScreen ||
-                prefs.getBoolean("security_prevent_screenshots", false)
-            ) {
+            // The PIN screen is always secure; the other secret screens follow the "block secret screens" setting.
+            val secretScreen = activity is io.github.tabssh.ui.utils.AlwaysSecureScreen &&
+                (activity is io.github.tabssh.ui.activities.PinLockActivity ||
+                    prefs.getBoolean("security_block_secret_screens", true))
+            if (secretScreen || prefs.getBoolean("security_prevent_screenshots", false)) {
                 window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
             } else {
                 window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)

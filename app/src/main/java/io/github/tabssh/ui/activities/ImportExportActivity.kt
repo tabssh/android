@@ -164,7 +164,7 @@ class ImportExportActivity : TabSSHActivity() {
                 val replaceMode = radioGroup.checkedRadioButtonId == replaceOption.id
                 importBackupFromUri(uri, replaceMode)
             }
-            .setNegativeButton(android.R.string.cancel, null)
+            .setNegativeButton(io.github.tabssh.R.string.cancel, null)
             .show()
     }
 
@@ -414,7 +414,7 @@ class ImportExportActivity : TabSSHActivity() {
                     MaterialAlertDialogBuilder(this@ImportExportActivity)
                         .setTitle(R.string.import_export_bulk_import_title)
                         .setMessage(msg)
-                        .setPositiveButton(android.R.string.ok, null)
+                        .setPositiveButton(io.github.tabssh.R.string.ok, null)
                         .show()
                     return@launch
                 }

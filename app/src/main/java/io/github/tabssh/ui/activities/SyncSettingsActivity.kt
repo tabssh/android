@@ -17,6 +17,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
 import io.github.tabssh.R
+import io.github.tabssh.ui.utils.secureWindow
 import io.github.tabssh.storage.database.TabSSHDatabase
 import io.github.tabssh.storage.database.entities.PendingSyncConflictCodec
 import io.github.tabssh.sync.SAFSyncManager
@@ -451,7 +452,7 @@ class SyncSettingsActivity : TabSSHActivity() {
 
         dialog.show()
         // Sync passphrase entry — always block screenshots.
-        dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        dialog.secureWindow()
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val pw  = passwordInput?.text.toString()
             val cfm = confirmInput?.text.toString()
@@ -504,7 +505,7 @@ class SyncSettingsActivity : TabSSHActivity() {
 
         dialog.show()
         // Sync passphrase entry — always block screenshots.
-        dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        dialog.secureWindow()
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val pw = passwordInput?.text?.toString() ?: ""
             passwordLayout?.error = null

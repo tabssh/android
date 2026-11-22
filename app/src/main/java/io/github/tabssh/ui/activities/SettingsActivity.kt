@@ -212,6 +212,11 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_security, rootKey)
 
+        findPreference<Preference>("view_known_hosts")?.setOnPreferenceClickListener {
+            startActivity(android.content.Intent(requireContext(), KnownHostsActivity::class.java))
+            true
+        }
+
         // Clear known hosts functionality
         findPreference<Preference>("clear_known_hosts")?.setOnPreferenceClickListener {
             MaterialAlertDialogBuilder(requireContext())
@@ -220,7 +225,7 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
                 .setPositiveButton(R.string.action_clear) { _, _ ->
                     clearKnownHosts()
                 }
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(io.github.tabssh.R.string.cancel, null)
                 .show()
             true
         }
@@ -312,7 +317,7 @@ class SecuritySettingsFragment : PreferenceFragmentCompat() {
                         startActivity(io.github.tabssh.ui.activities.PinLockActivity.setupIntent(ctx))
                     }
                 }
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(io.github.tabssh.R.string.cancel, null)
                 .show()
             true
         }
@@ -509,7 +514,7 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
                     Toast.makeText(requireContext(), getString(R.string.settings_toast_keyboard_layout_reset), Toast.LENGTH_SHORT).show()
                     Logger.i("Settings", "Keyboard layout reset to default")
                 }
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(io.github.tabssh.R.string.cancel, null)
                 .show()
             true
         }
@@ -838,7 +843,7 @@ class AuditSettingsFragment : PreferenceFragmentCompat() {
                         android.widget.Toast.makeText(requireContext(), getString(R.string.settings_toast_audit_logs_cleared), android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(io.github.tabssh.R.string.cancel, null)
                 .show()
             true
         }
@@ -949,7 +954,7 @@ class TaskerSettingsFragment : PreferenceFragmentCompat() {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.settings_dialog_tasker_actions_title)
             .setMessage(R.string.settings_dialog_tasker_actions_message)
-            .setPositiveButton(android.R.string.ok, null)
+            .setPositiveButton(io.github.tabssh.R.string.ok, null)
             .show()
     }
 
@@ -957,7 +962,7 @@ class TaskerSettingsFragment : PreferenceFragmentCompat() {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.settings_dialog_tasker_events_title)
             .setMessage(R.string.settings_dialog_tasker_events_message)
-            .setPositiveButton(android.R.string.ok, null)
+            .setPositiveButton(io.github.tabssh.R.string.ok, null)
             .show()
     }
 }
@@ -1201,7 +1206,7 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                     .setItems(hostNames) { _, which ->
                         showHostLogContent(hostLogs[which])
                     }
-                    .setNegativeButton(android.R.string.cancel, null)
+                    .setNegativeButton(io.github.tabssh.R.string.cancel, null)
                     .show()
 
             } catch (e: Exception) {
@@ -1315,7 +1320,7 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
                     android.widget.Toast.LENGTH_SHORT
                 ).show()
             }
-            .setNegativeButton(android.R.string.cancel, null)
+            .setNegativeButton(io.github.tabssh.R.string.cancel, null)
             .show()
     }
 }

@@ -9,6 +9,7 @@ import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import io.github.tabssh.R
+import io.github.tabssh.ui.utils.secureWindow
 import io.github.tabssh.containers.transport.failureSummary
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.crypto.storage.RegistryCredentialStore
@@ -153,9 +154,9 @@ object RegistryCredentialDialog {
             .setNegativeButton(R.string.cancel, null)
             .create()
         dialog.show()
-        // Registry secret (token/password) field — always block screenshots,
-        // regardless of the global "prevent screenshots" setting.
-        dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        // Registry secret (token/password) field — blocks screenshots unless the user opted out of
+        // "Block screenshots on secret screens".
+        dialog.secureWindow()
 
         // Verify with what is typed; a blank secret on an existing entry uses the stored one.
         dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL)
