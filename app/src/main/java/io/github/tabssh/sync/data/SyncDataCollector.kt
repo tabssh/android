@@ -1257,7 +1257,8 @@ class SyncDataCollector {
             "clearClipboardTimeout" to preferenceManager.getClearClipboardTimeout(),
             "autoLockEnabled" to preferenceManager.isAutoLockOnBackground(),
             "lockTimeout" to preferenceManager.getAutoLockTimeout(),
-            "preventScreenshots" to preferenceManager.isPreventScreenshots()
+            "preventScreenshots" to preferenceManager.isPreventScreenshots(),
+            "screenshotMode" to preferenceManager.getScreenshotMode()
         )
     }
 

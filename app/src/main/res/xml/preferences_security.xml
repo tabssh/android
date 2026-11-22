@@ -57,17 +57,12 @@
     android:key="category_security_privacy"
     android:title="@string/prefcat_security_privacy">
 
-    <SwitchPreferenceCompat
-      android:key="security_prevent_screenshots"
-      android:title="@string/prefs_security_prevent_screenshots_title"
-      android:summary="@string/prefs_security_prevent_screenshots_summary"
-      android:defaultValue="false" />
-
-    <SwitchPreferenceCompat
-      android:key="security_block_secret_screens"
-      android:title="@string/prefs_security_block_secret_screens_title"
-      android:summary="@string/prefs_security_block_secret_screens_summary"
-      android:defaultValue="true" />
+    <ListPreference
+      android:key="security_screenshot_mode"
+      android:title="@string/prefs_security_screenshot_mode_title"
+      android:entries="@array/screenshot_mode_labels"
+      android:entryValues="@array/screenshot_mode_values"
+      app:useSimpleSummaryProvider="true" />
 
     <ListPreference
       android:key="security_clear_clipboard_timeout"

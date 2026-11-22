@@ -24,12 +24,13 @@ fun MaterialAlertDialogBuilder.showSecurely(): AlertDialog {
 }
 
 /**
- * Blocks screenshots of this dialog unless the user turned "Block screenshots on secret screens"
- * and "Prevent screenshots" both off. Use for dialogs that show or accept a secret.
+ * Blocks screenshots of this dialog the way [ScreenshotPolicy] blocks a secret screen: at the
+ * Disabled and Limited levels, not at Allow. Use for dialogs that show or accept a secret.
  */
 fun AlertDialog.secureWindow() {
-    val prefs = (context.applicationContext as? io.github.tabssh.TabSSHApplication)?.preferencesManager
+    val mode = (context.applicationContext as? io.github.tabssh.TabSSHApplication)
+        ?.preferencesManager?.getScreenshotMode()
     // Without preferences (never expected) stay safe and block.
-    val allow = prefs != null && !prefs.isBlockSecretScreens() && !prefs.isPreventScreenshots()
-    if (!allow) window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    val blocked = mode == null || ScreenshotPolicy.shouldBlock(mode, ScreenshotPolicy.Screen.SECRET)
+    if (blocked) window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
 }

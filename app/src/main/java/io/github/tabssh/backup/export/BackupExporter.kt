@@ -631,6 +631,7 @@ class BackupExporter(
             put("autoLockEnabled", preferenceManager.isAutoLockOnBackground())
             put("lockTimeout", preferenceManager.getAutoLockTimeout())
             put("preventScreenshots", preferenceManager.isPreventScreenshots())
+            put("screenshotMode", preferenceManager.getScreenshotMode())
         })
 
         root.put("terminal", JSONObject().apply {

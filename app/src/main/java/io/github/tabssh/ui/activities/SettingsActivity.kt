@@ -209,8 +209,32 @@ class GeneralSettingsFragment : PreferenceFragmentCompat() {
 }
 
 class SecuritySettingsFragment : PreferenceFragmentCompat() {
+
+    /** App Security is blocked at every level that has a block setting; the rest of Settings follows the level. */
+    override fun onResume() {
+        super.onResume()
+        io.github.tabssh.ui.utils.ScreenshotPolicy.apply(
+            requireActivity().window, io.github.tabssh.ui.utils.ScreenshotPolicy.MODE_LIMITED,
+            io.github.tabssh.ui.utils.ScreenshotPolicy.Screen.APP_SECURITY
+        )
+    }
+
+    override fun onPause() {
+        super.onPause()
+        val mode = (requireActivity().application as TabSSHApplication).preferencesManager.getScreenshotMode()
+        io.github.tabssh.ui.utils.ScreenshotPolicy.apply(
+            requireActivity().window, mode, io.github.tabssh.ui.utils.ScreenshotPolicy.Screen.NORMAL
+        )
+    }
+
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_security, rootKey)
+
+        // Show the effective level (a switch-era install has no saved level yet) and re-apply it at once.
+        findPreference<androidx.preference.ListPreference>("security_screenshot_mode")?.let { pref ->
+            val prefs = (requireActivity().application as TabSSHApplication).preferencesManager
+            pref.value = prefs.getScreenshotMode()
+        }
 
         findPreference<Preference>("view_known_hosts")?.setOnPreferenceClickListener {
             startActivity(android.content.Intent(requireContext(), KnownHostsActivity::class.java))

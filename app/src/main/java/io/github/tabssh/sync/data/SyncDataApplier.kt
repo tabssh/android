@@ -1822,7 +1822,8 @@ class SyncDataApplier {
                     }
                     // "passwordTTLHours" from older peers falls through this when unmatched
                     // and is deliberately ignored: no TTL (AI.md PART 5, Storage levels)
-                    "preventScreenshots" -> preferenceManager.setPreventScreenshots(value as Boolean)
+                    "preventScreenshots" -> if (!prefs.containsKey("screenshotMode")) preferenceManager.setPreventScreenshots(value as Boolean)
+                    "screenshotMode" -> preferenceManager.setScreenshotMode(value as String)
                 }
                 count++
             } catch (e: CancellationException) {

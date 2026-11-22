@@ -17,7 +17,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- **Block screenshots on secret screens.** A Security setting, on by default, controls whether screens and dialogs that show passwords, tokens, environment values or logs refuse screenshots when Prevent screenshots is off. Turn it off to capture them.
+- **Three screenshot levels.** Settings > App Security > Screenshots: Disabled blocks every screen, Limited blocks the screens and dialogs that show secrets plus App Security (the default), and Allow permits everything except App Security. The PIN screen is always blocked. An existing Prevent screenshots setting becomes Disabled.
 - **Known hosts screen.** Settings > App Security > View known hosts lists every trusted SSH host key with filter, details (key type, fingerprint, first seen, last verified) and per-host delete, alongside the existing clear-all.
 - **My pastes.** Pastes you create from the issue reporter are remembered (link, service, date and time). Cairnbin pastes, and Lenpaste-compatible pastes that return a delete token, can be deleted on the server from the list; for every other service the entry only leaves the list. Refresh asks each Cairnbin server which pastes your owner token still lists.
 - **Fallback paste server setting.** The server used when a paste upload fails defaults to pste.us, can be changed or cleared, and must be a Cairnbin server (checked when saved).

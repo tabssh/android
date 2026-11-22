@@ -861,7 +861,11 @@ class BackupImporter(
             preferenceManager.setAutoLockTimeout(s.optInt("lockTimeout", 300))
             // "passwordTTLHours" from pre-removal archives is deliberately read-and-ignored:
             // ENCRYPTED credentials never expire (AI.md PART 5, Storage levels — no TTL)
-            preferenceManager.setPreventScreenshots(s.optBoolean("preventScreenshots", false))
+            if (s.has("screenshotMode")) {
+                preferenceManager.setScreenshotMode(s.optString("screenshotMode"))
+            } else {
+                preferenceManager.setPreventScreenshots(s.optBoolean("preventScreenshots", false))
+            }
         }
         root.optJSONObject("terminal")?.let { t ->
             // Route through ThemeManager.applyTheme() rather than writing the

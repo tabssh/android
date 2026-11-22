@@ -4312,6 +4312,8 @@
     <string name="known_hosts_fingerprint_copied">Fingerprint copied</string>
     <string name="known_hosts_delete_title">Forget this host?</string>
     <string name="known_hosts_delete_message_fmt">The saved key for %1$s is removed. The next connection asks you to verify it again.</string>
-    <string name="prefs_security_block_secret_screens_title">Block screenshots on secret screens</string>
-    <string name="prefs_security_block_secret_screens_summary">Screens that show passwords, tokens, environment values or logs refuse screenshots even when Prevent screenshots is off. Turn off to capture them; redact anything private before sharing.</string>
+    <string name="prefs_security_screenshot_mode_title">Screenshots</string>
+    <string name="screenshot_mode_disabled">Disabled — never allow</string>
+    <string name="screenshot_mode_limited">Limited — block secret screens</string>
+    <string name="screenshot_mode_allow">Allow — except App Security</string>
 </resources>

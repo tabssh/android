@@ -457,6 +457,17 @@
         <item>720</item>
     </string-array>
 
+    <string-array name="screenshot_mode_labels">
+        <item>@string/screenshot_mode_disabled</item>
+        <item>@string/screenshot_mode_limited</item>
+        <item>@string/screenshot_mode_allow</item>
+    </string-array>
+    <string-array name="screenshot_mode_values">
+        <item>disabled</item>
+        <item>limited</item>
+        <item>allow</item>
+    </string-array>
+
     <!-- Paste service options for issue reporting -->
     <string-array name="paste_service_labels">
         <item>@string/arr_paste_service_auto</item>
