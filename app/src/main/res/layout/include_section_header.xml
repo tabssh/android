@@ -19,12 +19,15 @@
     android:layout_height="wrap_content"
     android:orientation="vertical">
 
+    <!-- Hidden: the toolbar already carries the screen title, so only the subtitle shows.
+         The ids stay so the including screens keep binding. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingBottom="@dimen/space_md">
+        android:paddingBottom="@dimen/space_md"
+        android:visibility="gone">
 
         <TextView
             android:id="@+id/text_header_emoji"

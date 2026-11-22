@@ -11,13 +11,14 @@
         android:orientation="vertical"
         android:padding="@dimen/space_md">
 
-        <!-- Frequently Used Header -->
+        <!-- Title hidden: the tab label already names this page; the subtitle below explains it. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingBottom="@dimen/space_md">
+            android:paddingBottom="@dimen/space_md"
+            android:visibility="gone">
 
             <TextView
                 android:layout_width="wrap_content"

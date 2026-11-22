@@ -52,6 +52,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **No more duplicate in-page titles.** Domain Tracker, VPS Tracker, Manage Snippets and Frequent Connections no longer repeat the toolbar or tab title as a big in-page heading; the explanatory subtitle stays.
 - **Domain and VPS trackers use a text menu.** Sort, Filter, Import and Export moved from four toolbar icons into the overflow menu with their names.
 - **Closing a screen mid-load no longer logs errors.** A cancelled load is logged as debug, not as "Failed to load groups/snippets".
 - **Route list and editor fit small screens.** The route type chip, which repeated the summary and squeezed the name on phones, is gone, and the empty Endpoint card is hidden for built-in Tor.
