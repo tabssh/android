@@ -190,6 +190,15 @@
                     android:textStyle="bold"
                     android:textColor="?attr/colorOnSurface" />
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_add_forward"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="@dimen/min_touch_target"
+                    android:text="@string/port_forward_add_short"
+                    app:icon="@drawable/ic_add" />
+
             </LinearLayout>
 
             <TextView
@@ -251,16 +260,5 @@
         </LinearLayout>
 
     </androidx.core.widget.NestedScrollView>
-
-    <!-- Add forward -->
-    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-        android:id="@+id/fab_add_forward"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="@dimen/space_lg"
-        android:text="@string/port_forward_add"
-        android:contentDescription="@string/port_forward_add"
-        app:icon="@drawable/ic_add" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -23,7 +23,8 @@ import io.github.tabssh.protocols.tor.TorNativeClient
 class NetworkRouteAdapter(
     private val onEdit: (NetworkRoute) -> Unit,
     private val onDelete: (NetworkRoute) -> Unit,
-    private val onToggleEnabled: (NetworkRoute, Boolean) -> Unit
+    private val onToggleEnabled: (NetworkRoute, Boolean) -> Unit,
+    private val onTorInfo: (NetworkRoute) -> Unit
 ) : ListAdapter<NetworkRoute, NetworkRouteAdapter.RouteViewHolder>(DiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RouteViewHolder {
@@ -47,8 +48,10 @@ class NetworkRouteAdapter(
         fun bind(route: NetworkRoute) {
             val context = itemView.context
 
-            textName.text = route.name.ifBlank { route.getSummary() }
-            textSummary.text = route.getSummary()
+            // The built-in Tor entry is fixed: no name to edit, no switch, no menu.
+            val builtIn = route.builtInTor
+            textName.text = if (builtIn) context.getString(R.string.route_type_tor) else route.name.ifBlank { route.getSummary() }
+            textSummary.text = if (builtIn) context.getString(R.string.route_tor_builtin_summary) else route.getSummary()
 
             val torAlwaysEnabled = route.builtInTor && TorNativeClient.isAvailable(context)
             val routeEnabled = route.enabled || torAlwaysEnabled
@@ -74,8 +77,9 @@ class NetworkRouteAdapter(
                 }
             }
 
+            btnMore.visibility = if (builtIn) View.GONE else View.VISIBLE
             btnMore.setOnClickListener { showMenu(route) }
-            itemView.setOnClickListener { onEdit(route) }
+            itemView.setOnClickListener { if (builtIn) onTorInfo(route) else onEdit(route) }
         }
 
         private fun showMenu(route: NetworkRoute) {

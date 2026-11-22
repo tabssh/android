@@ -92,8 +92,14 @@ object TorNativeClient {
             binary.absolutePath,
             "--SocksPort", "127.0.0.1:$socksPort",
             "--DataDirectory", dataDir.absolutePath,
+            // An empty config file: no ~/.torrc lookup, everything below is the whole configuration.
+            "-f", "/dev/null",
             "--ClientOnly", "1",
             "--AvoidDiskWrites", "1",
+            // Battery: go dormant (no circuit building or keep-alives) after a while without use, and
+            // send less padding traffic, the same setting Tor uses for mobile clients.
+            "--DormantClientTimeout", "10 minutes",
+            "--ReducedConnectionPadding", "1",
             "--SafeSocks", "1",
             "--Log", "notice stderr",
             "--RunAsDaemon", "0"

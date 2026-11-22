@@ -14,7 +14,6 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.android.material.snackbar.Snackbar
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
@@ -55,7 +54,7 @@ class PortForwardingActivity : TabSSHActivity() {
     // Forwards section
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyState: View
-    private lateinit var fab: ExtendedFloatingActionButton
+    private lateinit var btnAddForward: MaterialButton
     private lateinit var adapter: PortForwardAdapter
 
     // Latest route list, kept so the default-route label and chooser can resolve
@@ -110,7 +109,8 @@ class PortForwardingActivity : TabSSHActivity() {
         routeAdapter = NetworkRouteAdapter(
             onEdit = { openRouteEditor(it.id) },
             onDelete = { confirmDeleteRoute(it) },
-            onToggleEnabled = { route, enabled -> setRouteEnabled(route, enabled) }
+            onToggleEnabled = { route, enabled -> setRouteEnabled(route, enabled) },
+            onTorInfo = { showTorInfo() }
         )
         recyclerRoutes.adapter = routeAdapter
 
@@ -118,8 +118,37 @@ class PortForwardingActivity : TabSSHActivity() {
         cardDefaultRoute.setOnClickListener { chooseDefaultRoute() }
     }
 
+    /** What the built-in Tor is, its live state, and a check that starts it briefly to prove it works. */
+    private fun showTorInfo() {
+        val tor = io.github.tabssh.protocols.tor.TorManager.getInstance(this)
+        val state = when (val st = tor.status.value) {
+            is io.github.tabssh.protocols.tor.TorStatus.Connected -> getString(R.string.route_tor_status_connected)
+            is io.github.tabssh.protocols.tor.TorStatus.Starting -> getString(R.string.route_tor_status_starting)
+            is io.github.tabssh.protocols.tor.TorStatus.Bootstrapping -> getString(R.string.route_tor_status_bootstrapping, st.percent)
+            is io.github.tabssh.protocols.tor.TorStatus.Failed -> getString(R.string.route_tor_status_failed, st.reason)
+            else -> getString(R.string.route_tor_status_stopped)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.route_type_tor)
+            .setMessage(getString(R.string.route_tor_info_message, state))
+            .setPositiveButton(R.string.route_tor_test_button) { _, _ ->
+                lifecycleScope.launch {
+                    val result = withContext(Dispatchers.IO) { runCatching { tor.checkStatus() } }
+                    val message = result.exceptionOrNull()?.let { getString(R.string.route_tor_status_failed, it.message.orEmpty()) }
+                        ?: getString(R.string.route_tor_check_success)
+                    android.widget.Toast.makeText(this@PortForwardingActivity, message, android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton(R.string.close, null)
+            .show()
+    }
+
     private fun observeRoutes() {
         lifecycleScope.launch {
+            // Tor is part of the app: make sure its entry exists before the list is first shown.
+            withContext(Dispatchers.IO) {
+                io.github.tabssh.protocols.tor.BuiltInTorRoute.ensure(this@PortForwardingActivity, app.database)
+            }
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 app.database.networkRouteDao().getAll().collectLatest { routes ->
                     val bundledTorAvailable =
@@ -237,8 +266,8 @@ class PortForwardingActivity : TabSSHActivity() {
     }
 
     private fun setupFab() {
-        fab = findViewById(R.id.fab_add_forward)
-        fab.setOnClickListener { openEditor(null) }
+        btnAddForward = findViewById(R.id.btn_add_forward)
+        btnAddForward.setOnClickListener { openEditor(null) }
     }
 
     /**

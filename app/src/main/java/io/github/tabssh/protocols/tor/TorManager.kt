@@ -88,18 +88,38 @@ class TorManager private constructor(private val appContext: Context) {
         }
     }
 
+    // Tor is kept for a grace period after the last user leaves, so short sessions one after another
+    // reuse one process instead of paying a cold start (and its battery cost) every time.
+    private val stopScheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "tor-idle-stop").apply { isDaemon = true }
+    }
+
+    private var pendingStop: java.util.concurrent.ScheduledFuture<*>? = null
+
     /** Start Tor and hold it until this owner releases its usage lease. */
     fun acquireUsage(owner: Any): Int = synchronized(lock) {
+        pendingStop?.cancel(false)
+        pendingStop = null
         val port = ensureStarted()
         activeUsers.add(owner)
         port
     }
 
-    /** Release one route user's lease and stop Tor when the last user leaves. */
+    /** Release one route user's lease; Tor stops after [IDLE_GRACE_MS] with no user. */
     fun releaseUsage(owner: Any) {
         synchronized(lock) {
             activeUsers.remove(owner)
-            if (activeUsers.isEmpty()) stopLocked()
+            if (activeUsers.isEmpty()) {
+                pendingStop?.cancel(false)
+                pendingStop = stopScheduler.schedule({
+                    synchronized(lock) {
+                        if (activeUsers.isEmpty()) {
+                            Logger.i(TAG, "No Tor user for ${IDLE_GRACE_MS / 1000}s; stopping tor")
+                            stopLocked()
+                        }
+                    }
+                }, IDLE_GRACE_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+            }
         }
     }
 
@@ -139,6 +159,8 @@ class TorManager private constructor(private val appContext: Context) {
     /** Stop the tor process if running. Safe to call when already stopped. */
     fun stop() {
         synchronized(lock) {
+            pendingStop?.cancel(false)
+            pendingStop = null
             activeUsers.clear()
             stopLocked()
         }
@@ -165,6 +187,9 @@ class TorManager private constructor(private val appContext: Context) {
         private const val TAG = "TorManager"
         private const val TOR_DATA_DIR = "tor"
         private const val BOOTSTRAP_TIMEOUT_MS = 90_000L
+
+        /** How long tor stays up after its last user leaves. */
+        private const val IDLE_GRACE_MS = 5 * 60 * 1000L
         private const val SOCKS_CHECK_TIMEOUT_MS = 5_000
 
         @Volatile

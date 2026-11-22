@@ -81,11 +81,12 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Presets -->
+            <!-- Presets: hidden, Tor is built into the app and listed as a fixed route instead -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_md"
+                android:visibility="gone"
                 app:cardCornerRadius="@dimen/card_corner_radius">
 
                 <LinearLayout

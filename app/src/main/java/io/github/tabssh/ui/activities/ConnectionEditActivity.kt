@@ -868,6 +868,7 @@ class ConnectionEditActivity : TabSSHActivity() {
     private fun loadRoutesIntoSpinner(forceSelectRouteId: String? = null) {
         lifecycleScope.launch {
             val allRoutes = withContext(Dispatchers.IO) {
+                io.github.tabssh.protocols.tor.BuiltInTorRoute.ensure(this@ConnectionEditActivity, app.database)
                 app.database.networkRouteDao().getAllList()
             }
             val torAvailable = io.github.tabssh.protocols.tor.TorNativeClient.isAvailable(this@ConnectionEditActivity)

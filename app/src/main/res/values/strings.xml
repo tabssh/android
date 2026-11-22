@@ -4319,4 +4319,7 @@
     <string name="cluster_status_running">Running…</string>
     <string name="dashboard_group_menu_add_hosts">Add hosts</string>
     <string name="dashboard_group_menu_monitoring">Monitoring settings</string>
+    <string name="route_tor_builtin_summary">Built in · starts when a connection uses it</string>
+    <string name="route_tor_info_message">Tor is part of the app, so there is nothing to set up. Pick it as a connection\'s route or as the default route.\n\nIt starts when a connection uses it and stops five minutes after the last one closes, to save battery.\n\nStatus: %1$s</string>
+    <string name="port_forward_add_short">Add forward</string>
 </resources>
