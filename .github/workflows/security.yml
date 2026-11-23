@@ -85,6 +85,10 @@ jobs:
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
+          if [ -z "$NVD_API_KEY" ]; then
+            echo "DependencyCheck skipped: NVD_API_KEY is not set"
+            exit 0
+          fi
           chmod +x gradlew
           ./gradlew dependencyCheckAggregate --no-daemon
 

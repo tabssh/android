@@ -142,7 +142,12 @@ jobs:
       # which declares no dependencies of its own — dependencyCheckAnalyze
       # therefore scanned an empty configuration set and failBuildOnCVSS
       # could never fire. Aggregate walks :app as well.
-      run: ./gradlew dependencyCheckAggregate --no-daemon
+      run: |
+        if [ -z "$NVD_API_KEY" ]; then
+          echo "DependencyCheck skipped: NVD_API_KEY is not set"
+        else
+          ./gradlew dependencyCheckAggregate --no-daemon
+        fi
 
     - name: Verify test coverage
       run: ./gradlew jacocoTestReport jacocoTestCoverageVerification --no-daemon

@@ -46,7 +46,7 @@ dynamic_color: no
 # The maintained toolchain image (AI.md PART 4), shared by the GitHub
 # workflows and local Docker builds for reproducibility
 build_image: casjaysdev/android:latest
-kotlin: 2.4.10
+kotlin: 2.4.21
 agp: 8.13.2
 r8: 9.1.31 # first published patch meeting Android's R8 9.1.29 minimum for Kotlin 2.4
 gradle: 8.14.5

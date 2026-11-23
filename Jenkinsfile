@@ -78,7 +78,13 @@ pipeline {
                     steps {
                         sh 'git config --global --add safe.directory "$WORKSPACE"'
                         sh 'chmod +x gradlew'
-                        sh './gradlew dependencyCheckAggregate --no-daemon'
+                        sh '''
+                            if [ -z "$NVD_API_KEY" ]; then
+                              echo "DependencyCheck skipped: NVD_API_KEY is not set"
+                            else
+                              ./gradlew dependencyCheckAggregate --no-daemon
+                            fi
+                        '''
                     }
                 }
 
@@ -265,7 +271,13 @@ pipeline {
                 // Aggregate, not Analyze — see AI.md PART 12; CVSS >= 7.0
                 // fails; suppressions read from the shared
                 // .github/dependency-check-suppressions.xml path.
-                sh './gradlew dependencyCheckAggregate --no-daemon'
+                sh '''
+                    if [ -z "$NVD_API_KEY" ]; then
+                      echo "DependencyCheck skipped: NVD_API_KEY is not set"
+                    else
+                      ./gradlew dependencyCheckAggregate --no-daemon
+                    fi
+                '''
                 sh './gradlew jacocoTestReport jacocoTestCoverageVerification --no-daemon'
                 sh '''
                     chmod +x scripts/fetch-mosh-binaries.sh scripts/fetch-spice-libs.sh scripts/fetch-tor-binaries.sh scripts/fetch-fonts.sh

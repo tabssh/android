@@ -189,7 +189,12 @@ dependency-check:
     - chmod +x gradlew
   script:
     # CVSS >= 7.0 fails the build; suppressions come from the shared file
-    - ./gradlew dependencyCheckAggregate --no-daemon
+    - |
+      if [ -z "${NVD_API_KEY:-}" ]; then
+        echo "DependencyCheck skipped: NVD_API_KEY is not set"
+      else
+        ./gradlew dependencyCheckAggregate --no-daemon
+      fi
 
 # ── devel stage (devel.yml equivalent) ─────────────────────
 
@@ -293,7 +298,12 @@ release:
     # would scan an empty configuration set. Aggregate walks :app too.
     # CVSS >= 7.0 fails the build; suppressions read from the shared
     # .github/dependency-check-suppressions.xml path (AI.md PART 12).
-    - ./gradlew dependencyCheckAggregate --no-daemon
+    - |
+      if [ -z "${NVD_API_KEY:-}" ]; then
+        echo "DependencyCheck skipped: NVD_API_KEY is not set"
+      else
+        ./gradlew dependencyCheckAggregate --no-daemon
+      fi
     - ./gradlew jacocoTestReport jacocoTestCoverageVerification --no-daemon
     - TAG_NAME="$CI_COMMIT_TAG"
     - VERSION="${TAG_NAME#v}"

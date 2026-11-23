@@ -36,9 +36,9 @@ dependencyCheck {
     // The legacy NVD feed was retired; the NVD API now requires a key
     // (https://nvd.nist.gov/developers/request-an-api-key) or lookups get
     // throttled to the point of failing CI. Never hardcode the key — read
-    // it from the NVD_API_KEY env var (set as a repo secret in CI). Left
-    // unset locally/without the secret, the plugin falls back to its
-    // unauthenticated (throttled) NVD access, same as before this change.
+    // it from the NVD_API_KEY env var (set as a repo secret in CI). Without
+    // the key the aggregate task is disabled below (AI.md PART 12): a missing
+    // key is a setup gap, never a vulnerability finding.
     def nvdApiKey = System.getenv('NVD_API_KEY')
     if (nvdApiKey) {
         nvd {
@@ -51,4 +51,8 @@ dependencyCheck {
         archiveEnabled = true
         assemblyEnabled = false
     }
+}
+
+tasks.matching { it.name == 'dependencyCheckAggregate' }.configureEach {
+    onlyIf { System.getenv('NVD_API_KEY') }
 }

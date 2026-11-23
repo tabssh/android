@@ -115,7 +115,12 @@ jobs:
       # read from .github/dependency-check-suppressions.xml — the same
       # path every provider's workflow references (AI.md PART 12 "Rules"),
       # not duplicated per provider.
-      run: ./gradlew dependencyCheckAggregate --no-daemon
+      run: |
+        if [ -z "$NVD_API_KEY" ]; then
+          echo "DependencyCheck skipped: NVD_API_KEY is not set"
+        else
+          ./gradlew dependencyCheckAggregate --no-daemon
+        fi
 
     - name: Verify test coverage
       run: ./gradlew jacocoTestReport jacocoTestCoverageVerification --no-daemon

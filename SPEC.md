@@ -173,7 +173,7 @@ not re-open them:
 **Overrides:** AI.md:588-590 — the Kotlin/AGP/Gradle toolchain follows the
 maintained image's compatible versions.
 
-**Project behaviour:** Kotlin remains 2.4.10, AGP 8.13.2, and Gradle 8.14.5 as
+**Project behaviour:** Kotlin remains 2.4.21, AGP 8.13.2, and Gradle 8.14.5 as
 declared in `IDEA.md`; `settings.gradle` supplies R8 9.1.31, the first published
 patch meeting the 9.1.29 minimum. AGP 8.13.2 bundles
 R8 8.13.19, which emits Kotlin metadata parsing errors against Kotlin 2.4 during
