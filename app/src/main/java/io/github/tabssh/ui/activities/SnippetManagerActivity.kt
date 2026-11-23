@@ -223,6 +223,10 @@ class SnippetManagerActivity : TabSSHActivity() {
     }
 
     private fun editSnippet(snippet: Snippet) {
+        if (io.github.tabssh.storage.snippets.BuiltInSnippets.isBuiltIn(snippet.id)) {
+            showBuiltInSnippet(snippet)
+            return
+        }
         val dialogView = layoutInflater.inflate(R.layout.dialog_edit_snippet, null)
         val nameInput = dialogView.findViewById<TextInputEditText>(R.id.edit_snippet_name)
         val commandInput = dialogView.findViewById<TextInputEditText>(R.id.edit_snippet_command)
@@ -326,7 +330,41 @@ class SnippetManagerActivity : TabSSHActivity() {
         }
     }
 
+    /** Built-in snippets are read-only: show them, and offer a copy the user can edit. */
+    private fun showBuiltInSnippet(snippet: Snippet) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(snippet.name)
+            .setMessage(snippet.description + "\n\n" + snippet.command + "\n\n" + getString(R.string.snippet_mgr_builtin_note))
+            .setPositiveButton(R.string.snippet_mgr_builtin_copy) { _, _ ->
+                updateSnippetCopy(snippet)
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun updateSnippetCopy(snippet: Snippet) {
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) {
+                app.database.snippetDao().insertSnippet(
+                    snippet.copy(
+                        id = java.util.UUID.randomUUID().toString(),
+                        name = snippet.name + " (copy)",
+                        usageCount = 0,
+                        isFavorite = false,
+                        createdAt = System.currentTimeMillis(),
+                        modifiedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+            Toast.makeText(this@SnippetManagerActivity, R.string.snippet_mgr_builtin_copied, Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun deleteSnippet(snippet: Snippet) {
+        if (io.github.tabssh.storage.snippets.BuiltInSnippets.isBuiltIn(snippet.id)) {
+            Toast.makeText(this, R.string.snippet_mgr_builtin_no_delete, Toast.LENGTH_SHORT).show()
+            return
+        }
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.snippet_mgr_dialog_title_delete)
             .setMessage(getString(R.string.connections_delete_message_fmt, snippet.name))

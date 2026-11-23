@@ -131,6 +131,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
             setText(PasteProviderFactory.labelForService(selectedServiceId, prefs), false)
             onItemClickListener = AdapterView.OnItemClickListener { _, _, pos, _ ->
                 selectedServiceId = SERVICE_IDS[pos]
+                prefs.setPasteService(selectedServiceId)
             }
         }
         serviceLayout.addView(serviceSpinner)

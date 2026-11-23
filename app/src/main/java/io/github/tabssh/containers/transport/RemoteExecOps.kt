@@ -331,10 +331,12 @@ class RemoteExecOps(
         )
         val log = StringBuilder()
         var pullFailure: ContainerResult<String>? = null
+        val tool = if (composemgrBinary() != null) "composemgr --dir '$stackDir'" else "docker compose (dir '$stackDir')"
         for ((name, fatal, run) in steps) {
-            onOutput?.invoke("\$ $name")
+            val label = "$tool $name"
+            onOutput?.invoke("\$ $label")
             val result = run()
-            log.append("\$ ").append(name).append('\n')
+            log.append("\$ ").append(label).append('\n')
             if (result is ContainerResult.Success) {
                 if (result.value.isNotBlank()) log.append(result.value.trimEnd()).append('\n')
             } else {

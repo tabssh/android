@@ -132,7 +132,7 @@ class ComposeLifecycleRoutingTest {
     fun `a successful update returns every step's output`() = runBlocking {
         val rec = Recorder(withComposemgr = true).also { it.install() }
         val out = (ops(rec).composeUpdate("/srv/me/compose/web") as ContainerResult.Success).value
-        assertTrue(out.contains("\$ down") && out.contains("\$ pull") && out.contains("\$ up"))
+        assertTrue(out.contains(" down") && out.contains(" pull") && out.contains(" up"))
     }
 
     @Test

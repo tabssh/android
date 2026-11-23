@@ -12,6 +12,7 @@ import io.github.tabssh.containers.registry.RegistryClient
 import io.github.tabssh.containers.registry.UpdateApplier
 import io.github.tabssh.containers.registry.UpdateChecker
 import io.github.tabssh.containers.registry.HostUpdateScanner
+import io.github.tabssh.containers.registry.UpdateCheckStatus
 import io.github.tabssh.containers.registry.StackPruner
 import io.github.tabssh.containers.transport.ContainerResult
 import io.github.tabssh.containers.transport.ContainerTransport
@@ -169,8 +170,21 @@ class ContainerUpdateCheckWorker(
         // Gate 0: validated internet — registry HTTPS calls need a real route.
         if (!isInternetAvailable()) {
             Logger.d(TAG, "Skipping run: no validated internet connection")
+            val at = System.currentTimeMillis()
+            hosts.forEach {
+                UpdateCheckStatus.record(it.id, UpdateCheckStatus.HostResult(UpdateCheckStatus.Outcome.NO_NETWORK, at))
+            }
             return Result.success()
         }
+        UpdateCheckStatus.setRunning(true)
+        try {
+            return runCycle(force, hosts)
+        } finally {
+            UpdateCheckStatus.setRunning(false)
+        }
+    }
+
+    private suspend fun runCycle(force: Boolean, hosts: List<ContainerHost>): Result {
 
         val app = TabSSHApplication.get()
         val preferencesManager = app.preferencesManager
@@ -338,14 +352,35 @@ class ContainerUpdateCheckWorker(
         var ownTransport: ContainerTransport? = null
         val transport = acquireTransport(
             app, host, { ownedConnectionId = it }, { ownTransport = it }
-        ) ?: return false
+        )
+        if (transport == null) {
+            UpdateCheckStatus.record(
+                host.id,
+                UpdateCheckStatus.HostResult(UpdateCheckStatus.Outcome.NO_CONNECTION, System.currentTimeMillis())
+            )
+            return false
+        }
 
         try {
+            val failures = mutableListOf<String>()
             val found = HostUpdateScanner(
                 app.database.containerAutoUpdatePolicyDao(), checker, StackPruner(app, app.database)
             )
-                .scan(host, hostPolicies, global, transport)
-                ?: return false
+                .scan(host, hostPolicies, global, transport, failures)
+            if (found == null) {
+                UpdateCheckStatus.record(
+                    host.id,
+                    UpdateCheckStatus.HostResult(UpdateCheckStatus.Outcome.LIST_FAILED, System.currentTimeMillis())
+                )
+                return false
+            }
+            UpdateCheckStatus.record(
+                host.id,
+                UpdateCheckStatus.HostResult(
+                    UpdateCheckStatus.Outcome.CHECKED, System.currentTimeMillis(),
+                    failures.size, failures.firstOrNull()
+                )
+            )
             collectAndApply(host, found, applier, transport, outcome)
         } finally {
             // Only close what this worker opened — never the UI's session.

@@ -34,6 +34,15 @@
                 android:textAppearance="?attr/textAppearanceTitleMedium"
                 android:textColor="?attr/colorOnSurface" />
 
+            <TextView
+                android:id="@+id/text_check_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_sm"
+                android:textSize="@dimen/text_size_small_body"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:visibility="gone" />
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_check_all"
                 style="@style/Widget.Material3.Button.OutlinedButton"

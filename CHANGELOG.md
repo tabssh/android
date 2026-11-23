@@ -17,6 +17,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Paste server token screen.** Settings > Logging > Paste server token shows, copies, changes or removes the Cairnbin owner token for a server.
+- **Update check status.** The Container Updates page says what the last check did per host (checked, no SSH connection, container list unreadable, no internet, failed container checks), so an old list is never shown as freshly confirmed.
+- **Update verification.** After an update the app re-checks the container against its registry and reports verified, still older, or could not verify.
+
 - **Three screenshot levels.** Settings > App Security > Screenshots: Disabled blocks every screen, Limited blocks the screens and dialogs that show secrets plus App Security (the default), and Allow permits everything except App Security. The PIN screen is always blocked. An existing Prevent screenshots setting becomes Disabled.
 - **Known hosts screen.** Settings > App Security > View known hosts lists every trusted SSH host key with filter, details (key type, fingerprint, first seen, last verified) and per-host delete, alongside the existing clear-all.
 - **My pastes.** Pastes you create from the issue reporter are remembered (link, service, date and time). Cairnbin pastes, and Lenpaste-compatible pastes that return a delete token, can be deleted on the server from the list; for every other service the entry only leaves the list. Refresh asks each Cairnbin server which pastes your owner token still lists.
@@ -57,6 +61,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Tor uses less battery.** It stays up for five minutes after the last connection closes so short sessions reuse one process, goes dormant after ten idle minutes, uses reduced connection padding, and starts with an empty config file.
 
 ### Fixed
+
+- **Drawer and Container Updates counts now match.** Pending updates for hosts that no longer exist are not counted.
+- **Stale pending updates.** Containers with checks switched off drop their pending flag; running-image detection tries the tag when the image id carries no digest.
+- **Built-in snippets and paste defaults.** See Changed.
 
 - **Editing a saved connection no longer saves it as a new one.** Opening the editor from the host list or the Frequent tab did not mark it as an edit, so Save wrote it as a new connection, resetting its created time and usage statistics (the debug log showed "Created connection" on every edit).
 - **Tor no longer fails to start on every connection.** The empty-config option added for battery use passed `/dev/null`, which tor refuses to open, so it exited at once; it now uses a regular empty file.

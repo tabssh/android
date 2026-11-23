@@ -144,7 +144,7 @@
     <ListPreference
       android:key="paste_service"
       android:title="@string/prefs_paste_service_title"
-      android:summary="@string/prefs_paste_service_summary"
+      app:useSimpleSummaryProvider="true"
       android:entries="@array/paste_service_labels"
       android:entryValues="@array/paste_service_values"
       android:defaultValue="auto" />
@@ -154,6 +154,11 @@
       android:title="@string/prefs_paste_fallback_title"
       android:dialogMessage="@string/prefs_paste_fallback_hint"
       android:inputType="textUri" />
+
+    <Preference
+      android:key="paste_token"
+      android:title="@string/prefs_paste_token_title"
+      android:summary="@string/prefs_paste_token_summary" />
 
     <Preference
       android:key="paste_my_pastes"
@@ -170,14 +175,14 @@
     <EditTextPreference
       android:key="paste_cairnbin_url"
       android:title="@string/prefs_paste_cairnbin_url_title"
-      android:defaultValue="https://pste.us"
+      android:defaultValue="https://cb.pste.us"
       android:inputType="textUri"
       app:useSimpleSummaryProvider="true" />
 
     <EditTextPreference
       android:key="paste_stikked_url"
       android:title="@string/prefs_paste_stikked_url_title"
-      android:defaultValue="https://pste.us"
+      android:defaultValue="https://stikked.pste.us"
       android:inputType="textUri"
       app:useSimpleSummaryProvider="true" />
 
@@ -203,9 +208,15 @@
       app:useSimpleSummaryProvider="true" />
 
     <EditTextPreference
+      android:key="paste_pastebin_api_key"
+      android:title="@string/prefs_paste_pastebin_api_key_title"
+      android:summary="@string/prefs_paste_pastebin_api_key_summary"
+      android:inputType="textPassword" />
+
+    <EditTextPreference
       android:key="paste_hastebin_url"
       android:title="@string/prefs_paste_hastebin_url_title"
-      android:defaultValue="https://hastebin.com"
+      android:defaultValue="https://hb.pste.us"
       android:inputType="textUri"
       app:useSimpleSummaryProvider="true" />
 
@@ -219,7 +230,7 @@
     <EditTextPreference
       android:key="paste_nullpointer_url"
       android:title="@string/prefs_paste_nullpointer_url_title"
-      android:defaultValue="https://0x0.st"
+      android:defaultValue="https://0x0.pste.us"
       android:inputType="textUri"
       app:useSimpleSummaryProvider="true" />
 
@@ -229,12 +240,6 @@
       android:defaultValue="termbin.com:9999"
       android:inputType="text"
       app:useSimpleSummaryProvider="true" />
-
-    <EditTextPreference
-      android:key="paste_pastebin_api_key"
-      android:title="@string/prefs_paste_pastebin_api_key_title"
-      android:summary="@string/prefs_paste_pastebin_api_key_summary"
-      android:inputType="textPassword" />
 
   </PreferenceCategory>
 

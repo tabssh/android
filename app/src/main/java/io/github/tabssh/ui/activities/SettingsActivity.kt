@@ -1001,6 +1001,102 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
      * on), so a typed URL is checked before it is saved. Blank turns the fallback off; never saving
      * it keeps the built-in default shown in the summary.
      */
+    /**
+     * Shows only the server settings that apply to the chosen paste service (the Pastebin API key
+     * sits with the Pastebin server), so the screen is not a wall of twelve URLs.
+     */
+    private fun setupPasteServerVisibility() {
+        val serviceKeys = mapOf(
+            "auto" to listOf("paste_auto_url"),
+            "cairnbin" to listOf("paste_cairnbin_url"),
+            "microbin" to listOf("paste_microbin_url"),
+            "lenpaste" to listOf("paste_lenpaste_url"),
+            "stikked" to listOf("paste_stikked_url"),
+            "pastebin" to listOf("paste_pastebin_url", "paste_pastebin_api_key"),
+            "hastebin" to listOf("paste_hastebin_url"),
+            "dpaste" to listOf("paste_dpaste_url"),
+            "nullpointer" to listOf("paste_nullpointer_url"),
+            "termbin" to listOf("paste_termbin_url")
+        )
+        fun apply(service: String) {
+            val shown = serviceKeys[service].orEmpty()
+            serviceKeys.values.flatten().forEach { key ->
+                findPreference<androidx.preference.Preference>(key)?.isVisible = key in shown
+            }
+        }
+        val list = findPreference<androidx.preference.ListPreference>("paste_service") ?: return
+        apply(list.value ?: "auto")
+        list.setOnPreferenceChangeListener { _, newValue ->
+            apply(newValue as String)
+            true
+        }
+    }
+
+    private fun showPasteTokenDialog() {
+        val ctx = requireContext()
+        val prefs = (requireActivity().application as io.github.tabssh.TabSSHApplication).preferencesManager
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val col = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+        }
+        val serverLayout = com.google.android.material.textfield.TextInputLayout(ctx).apply {
+            hint = getString(R.string.paste_token_server_hint)
+        }
+        val serverEdit = com.google.android.material.textfield.TextInputEditText(ctx).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setText(prefs.getPasteFallbackUrl() ?: "https://pste.us")
+        }
+        serverLayout.addView(serverEdit)
+        val tokenLayout = com.google.android.material.textfield.TextInputLayout(ctx).apply {
+            hint = getString(R.string.paste_token_hint)
+            endIconMode = com.google.android.material.textfield.TextInputLayout.END_ICON_PASSWORD_TOGGLE
+        }
+        val tokenEdit = com.google.android.material.textfield.TextInputEditText(ctx).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        tokenLayout.addView(tokenEdit)
+        col.addView(serverLayout)
+        col.addView(tokenLayout)
+        fun base() = serverEdit.text.toString().trim().trimEnd('/')
+        fun load() {
+            val t = if (base().isEmpty()) null else prefs.getCairnbinToken(base())
+            tokenEdit.setText(t.orEmpty())
+            tokenLayout.helperText = if (t == null) getString(R.string.paste_token_none) else null
+        }
+        load()
+        serverEdit.setOnFocusChangeListener { _, focused -> if (!focused) load() }
+        val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(ctx)
+            .setTitle(R.string.paste_token_dialog_title)
+            .setView(col)
+            .setPositiveButton(R.string.paste_token_save, null)
+            .setNegativeButton(R.string.paste_token_remove, null)
+            .setNeutralButton(R.string.paste_token_copy, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (base().isEmpty()) return@setOnClickListener
+                prefs.setCairnbinToken(base(), tokenEdit.text.toString().trim())
+                android.widget.Toast.makeText(ctx, R.string.paste_token_saved, android.widget.Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+            }
+            dialog.getButton(android.app.AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
+                if (base().isNotEmpty()) prefs.setCairnbinToken(base(), null)
+                android.widget.Toast.makeText(ctx, R.string.paste_token_removed, android.widget.Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+            }
+            dialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                val t = tokenEdit.text.toString()
+                if (t.isNotEmpty()) {
+                    val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("token", t))
+                    android.widget.Toast.makeText(ctx, R.string.paste_token_copied, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        dialog.show()
+    }
+
     private fun setupPasteFallbackPreference() {
         val pref = findPreference<androidx.preference.EditTextPreference>("paste_fallback_url") ?: return
         val prefs = (requireActivity().application as io.github.tabssh.TabSSHApplication).preferencesManager
@@ -1047,6 +1143,11 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
         }
 
         setupPasteFallbackPreference()
+        setupPasteServerVisibility()
+        findPreference<androidx.preference.Preference>("paste_token")?.setOnPreferenceClickListener {
+            showPasteTokenDialog()
+            true
+        }
         findPreference<androidx.preference.Preference>("paste_my_pastes")?.setOnPreferenceClickListener {
             startActivity(android.content.Intent(requireContext(), MyPastesActivity::class.java))
             true

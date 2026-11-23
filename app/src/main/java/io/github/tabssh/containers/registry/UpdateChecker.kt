@@ -211,14 +211,24 @@ class UpdateChecker(
         transport: ContainerTransport
     ): String? {
         val imageId = inspect.optString("Image")
-        val target = imageId.ifEmpty { "${ref.canonicalRepository}:${ref.tag}" }
-        val imageInspect = when (val r = transport.inspectImage(target)) {
-            is ContainerResult.Success -> normalizeInspect(r.value) ?: return null
-            else -> return null
+        // The container's own image first (exact); when that lookup yields no RepoDigests the tag
+        // is tried too, but only if it resolves to that same image id, so a container still running
+        // an older image than the freshly pulled tag is never reported as current.
+        val targets = listOfNotNull(
+            imageId.takeIf { it.isNotEmpty() },
+            "${ref.canonicalRepository}:${ref.tag}"
+        )
+        for (target in targets) {
+            val imageInspect = when (val r = transport.inspectImage(target)) {
+                is ContainerResult.Success -> normalizeInspect(r.value) ?: continue
+                else -> continue
+            }
+            if (target != imageId && imageId.isNotEmpty() && imageInspect.optString("Id") != imageId) continue
+            val array = imageInspect.optJSONArray("RepoDigests") ?: continue
+            val entries = (0 until array.length()).mapNotNull { array.optString(it).takeIf { s -> s.isNotEmpty() } }
+            repoDigestFor(entries, ref)?.let { return it }
         }
-        val array = imageInspect.optJSONArray("RepoDigests") ?: return null
-        val entries = (0 until array.length()).mapNotNull { array.optString(it).takeIf { s -> s.isNotEmpty() } }
-        return repoDigestFor(entries, ref)
+        return null
     }
 
     /** Build (and log) an ERROR result without touching persisted state. */

@@ -59,7 +59,7 @@ class PasteDetectorTest {
         assertEquals(PasteServices.IDS.size, PasteServices.IDS.toSet().size)
         assertEquals(PasteServices.AUTO, PasteServices.normalise("retired"))
         assertEquals(PasteServices.TERMBIN, PasteServices.normalise("termbin"))
-        assertEquals("https://pste.us", PasteServices.defaultUrl(PasteServices.CAIRNBIN))
+        assertEquals("https://cb.pste.us", PasteServices.defaultUrl(PasteServices.CAIRNBIN))
         assertEquals("https://pste.us", PasteServices.defaultUrl(PasteServices.AUTO))
         assertTrue(PasteServices.IDS.containsAll(listOf("cairnbin", "termbin", "hastebin", "nullpointer", "dpaste")))
     }

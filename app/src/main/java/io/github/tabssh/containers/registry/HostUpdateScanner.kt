@@ -41,7 +41,8 @@ class HostUpdateScanner(
         host: ContainerHost,
         hostPolicies: List<ContainerAutoUpdatePolicy>,
         global: GlobalSettings,
-        transport: ContainerTransport
+        transport: ContainerTransport,
+        failures: MutableList<String>? = null
     ): List<FoundUpdate>? {
         stackPruner?.prune(host, transport)
         val listed = transport.listContainers(all = false)
@@ -84,6 +85,8 @@ class HostUpdateScanner(
                 policy?.enabledOverride, policy?.autoApplyOverride
             )
             if (!settings.enabled.value) {
+                // Checks are off for it, so a leftover pending flag could never be re-confirmed.
+                policy?.takeIf { it.pendingUpdateDigest != null }?.let { policyDao.updatePendingUpdateDigest(it.id, null) }
                 Logger.d(TAG, "scan ${host.name}: skipping $name, update checks are disabled for it")
                 continue
             }
@@ -98,6 +101,9 @@ class HostUpdateScanner(
                 Logger.d(TAG, "scan ${host.name}: created policy ${policy.id} for $name")
             }
             val result = checker.checkOne(policy, transport)
+            if (result.status == UpdateChecker.Status.ERROR) {
+                failures?.add("$name: ${result.message ?: "check failed"}")
+            }
             if (result.status == UpdateChecker.Status.UPDATE_AVAILABLE) {
                 Logger.i(TAG, "scan ${host.name}: update available for $name (autoApply=${settings.autoApply.value})")
                 found += FoundUpdate(policy, result, settings.autoApply.value, project)

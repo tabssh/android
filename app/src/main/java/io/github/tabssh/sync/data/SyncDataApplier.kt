@@ -330,6 +330,7 @@ class SyncDataApplier {
             if (preferenceManager.isSyncSnippetsEnabled()) {
                 data.snippets.forEach { s ->
                     try {
+                        if (io.github.tabssh.storage.snippets.BuiltInSnippets.isBuiltIn(s.id)) return@forEach
                         if (suppressed(TombstoneRecorder.SNIPPET, s.id, s.modifiedAt)) return@forEach
                         // usageCount is local-only — never synced. Preserve the
                         // existing local value across this whole-row REPLACE.
@@ -886,7 +887,8 @@ class SyncDataApplier {
                         }
                         TombstoneRecorder.SNIPPET -> {
                             val row = database.snippetDao().getSnippetById(t.entityKey)
-                            if (row != null && row.modifiedAt > t.deletedAt) true
+                            if (io.github.tabssh.storage.snippets.BuiltInSnippets.isBuiltIn(t.entityKey)) true
+                            else if (row != null && row.modifiedAt > t.deletedAt) true
                             else { if (row != null) database.snippetDao().deleteSnippetById(t.entityKey); false }
                         }
                         TombstoneRecorder.IDENTITY -> {

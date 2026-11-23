@@ -14,6 +14,7 @@ import com.google.android.material.button.MaterialButton
 import io.github.tabssh.R
 import io.github.tabssh.background.ContainerUpdateCheckWorker
 import io.github.tabssh.containers.ContainerSessionManager
+import io.github.tabssh.containers.registry.UpdateCheckStatus
 import io.github.tabssh.containers.transport.ContainerResult
 import io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy
 import io.github.tabssh.ui.dialogs.UpdateApplyDialog
@@ -31,6 +32,8 @@ class UpdatesOverviewActivity : TabSSHActivity() {
     private lateinit var textSummary: TextView
     private lateinit var listHosts: LinearLayout
     private lateinit var textEmpty: TextView
+    private lateinit var textCheckStatus: TextView
+    private var lastPending: List<ContainerAutoUpdatePolicy> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,6 +44,7 @@ class UpdatesOverviewActivity : TabSSHActivity() {
         textSummary = findViewById(R.id.text_summary)
         listHosts = findViewById(R.id.list_hosts)
         textEmpty = findViewById(R.id.text_empty)
+        textCheckStatus = findViewById(R.id.text_check_status)
 
         findViewById<MaterialButton>(R.id.button_check_all).setOnClickListener {
             ContainerUpdateCheckWorker.checkNow(applicationContext)
@@ -50,7 +54,12 @@ class UpdatesOverviewActivity : TabSSHActivity() {
         val dao = tabSSHApp.database.containerAutoUpdatePolicyDao()
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                dao.observePending().collect { render(it) }
+                launch { dao.observePending().collect { lastPending = it; render(it) } }
+                launch {
+                    kotlinx.coroutines.flow.combine(
+                        UpdateCheckStatus.results, UpdateCheckStatus.running
+                    ) { _, _ -> Unit }.collect { render(lastPending) }
+                }
             }
         }
     }
@@ -60,6 +69,7 @@ class UpdatesOverviewActivity : TabSSHActivity() {
         val names = hosts.associate { it.id to it.name }
         val byHost = pending.filter { it.containerHostId in names }.groupBy { it.containerHostId }
 
+        showCheckStatus(names)
         listHosts.removeAllViews()
         val total = byHost.values.sumOf { it.size }
         textSummary.visibility = if (total == 0) View.GONE else View.VISIBLE
@@ -95,6 +105,41 @@ class UpdatesOverviewActivity : TabSSHActivity() {
                 listHosts.addView(row)
             }
         }
+    }
+
+    /** Says what the last check actually did per host, so a stale list is never mistaken for a fresh one. */
+    private fun showCheckStatus(names: Map<Long, String>) {
+        val lines = mutableListOf<String>()
+        val results = UpdateCheckStatus.results.value.filterKeys { it in names }
+        if (UpdateCheckStatus.running.value) lines += getString(R.string.container_updates_status_running)
+        var checked = 0
+        for ((id, r) in results) {
+            val host = ContainerText.display(names[id])
+            when (r.outcome) {
+                UpdateCheckStatus.Outcome.CHECKED -> {
+                    checked++
+                    if (r.failedChecks > 0) {
+                        lines += getString(
+                            R.string.container_updates_status_failed_checks,
+                            host, r.failedChecks, ContainerText.display(r.firstFailure, 120)
+                        )
+                    }
+                }
+                UpdateCheckStatus.Outcome.NO_CONNECTION ->
+                    lines += getString(R.string.container_updates_status_no_connection, host)
+                UpdateCheckStatus.Outcome.LIST_FAILED ->
+                    lines += getString(R.string.container_updates_status_list_failed, host)
+                UpdateCheckStatus.Outcome.NO_NETWORK -> {
+                    val text = getString(R.string.container_updates_status_no_network)
+                    if (text !in lines) lines += text
+                }
+            }
+        }
+        if (checked > 0 && !UpdateCheckStatus.running.value) {
+            lines.add(0, getString(R.string.container_updates_status_ok, checked))
+        }
+        textCheckStatus.visibility = if (lines.isEmpty()) View.GONE else View.VISIBLE
+        textCheckStatus.text = lines.joinToString("\n")
     }
 
     /** Connect to the host (or reuse its session), then run the confirmed update with progress. */

@@ -1,5 +1,6 @@
 package io.github.tabssh
 
+import io.github.tabssh.storage.snippets.BuiltInSnippets
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.Application
@@ -55,38 +56,6 @@ class TabSSHApplication : Application() {
         private const val KEY_VPS_RENEWAL_NORMALIZED = "vps_renewal_normalized"
         private const val KEY_LEGACY_CONTAINER_WORK_CANCELLED = "legacy_docker_update_work_cancelled"
         private const val LEGACY_KEY_PREFIX_KEY_ENABLED = "terminal_prefix_key_enabled"
-        private const val KEY_DEFAULT_SNIPPETS_SEEDED = "default_snippets_seeded"
-        private const val KEY_DEFAULT_SNIPPETS_VERSION = "default_snippets_version"
-        private const val DEFAULT_SNIPPETS_VERSION = 2
-        // Brace-free on purpose: the snippet engine treats any {text} as a placeholder, so this script must never contain braces.
-        private val SYSTEM_UPDATE_COMMAND = listOf(
-            "SUDO=\"\"",
-            "if [ \"\$(id -u)\" -eq 0 ]; then",
-            "  SUDO=\"\"",
-            "elif command -v sudo >/dev/null 2>&1; then",
-            "  SUDO=\"sudo\"",
-            "fi",
-            "if command -v apt >/dev/null 2>&1; then",
-            "  \$SUDO apt update && \$SUDO apt upgrade -y && \$SUDO apt dist-upgrade -y",
-            "elif command -v dnf >/dev/null 2>&1; then",
-            "  \$SUDO dnf makecache && \$SUDO dnf upgrade -y",
-            "elif command -v yum >/dev/null 2>&1; then",
-            "  \$SUDO yum makecache && \$SUDO yum update -y",
-            "elif command -v zypper >/dev/null 2>&1; then",
-            "  \$SUDO zypper refresh && \$SUDO zypper update -y",
-            "elif command -v pacman >/dev/null 2>&1; then",
-            "  \$SUDO pacman -Syyu --noconfirm",
-            "elif command -v apk >/dev/null 2>&1; then",
-            "  \$SUDO apk update && \$SUDO apk upgrade",
-            "elif command -v xbps-install >/dev/null 2>&1; then",
-            "  \$SUDO xbps-install -Syu",
-            "elif command -v pkg >/dev/null 2>&1; then",
-            "  \$SUDO pkg update && \$SUDO pkg upgrade -y",
-            "else",
-            "  echo \"No supported package manager found\" >&2",
-            "fi",
-            "unset SUDO"
-        ).joinToString("\n")
 
         // Docker-only identifiers replaced by the engine-agnostic container
         // naming — see migrateDockerNamingToContainer().
@@ -527,7 +496,7 @@ class TabSSHApplication : Application() {
     private suspend fun dedupeSnippets() {
         try {
             val dao = database.snippetDao()
-            val starterIds = defaultSnippets().map { it.second.id }.toSet()
+            val starterIds = BuiltInSnippets.ids
             val groups = dao.getAllSnippetsOnce()
                 .groupBy { it.name.trim() to it.command.trim() }
                 .values
@@ -562,72 +531,32 @@ class TabSSHApplication : Application() {
     }
 
     /**
-     * Seeds the starter snippet set, spread across a handful of categories so
-     * the Snippets manager isn't a blank empty state on first launch. A fresh
-     * install gets everything only while the table is still empty; an install
-     * that already seeded (or had its own snippets) only receives starters
-     * added in a later DEFAULT_SNIPPETS_VERSION, and never one it already has
-     * or one a user deleted from an earlier version.
+     * Keeps the built-in snippets present and current on every start. They are read-only and cannot
+     * be deleted, so a missing row is restored and an edited or outdated row is rewritten to the
+     * shipped definition; the user's own usage count and favourite flag are kept.
      */
     private suspend fun seedDefaultSnippets() {
-        val prefs = getSharedPreferences(STARTUP_PREFS, MODE_PRIVATE)
-        val legacySeeded = prefs.getBoolean(KEY_DEFAULT_SNIPPETS_SEEDED, false)
-        val stored = prefs.getInt(KEY_DEFAULT_SNIPPETS_VERSION, if (legacySeeded) 1 else 0)
-        if (stored >= DEFAULT_SNIPPETS_VERSION) return
         try {
             val dao = database.snippetDao()
-            val existing = dao.getAllSnippetsOnce()
-            if (stored > 0 || existing.isEmpty()) {
-                val existingIds = existing.map { it.id }.toSet()
-                val existingKeys = existing.map { it.name.trim() to it.command.trim() }.toSet()
-                val fresh = defaultSnippets()
-                    .filter { (since, s) ->
-                        since > stored && s.id !in existingIds && (s.name to s.command) !in existingKeys
-                    }
-                    .map { it.second }
-                if (fresh.isNotEmpty()) dao.insertSnippets(fresh)
+            val existing = dao.getAllSnippetsOnce().associateBy { it.id }
+            val rows = BuiltInSnippets.all().mapNotNull { builtIn ->
+                val current = existing[builtIn.id]
+                val wanted = if (current == null) builtIn else builtIn.copy(
+                    usageCount = current.usageCount,
+                    isFavorite = current.isFavorite,
+                    createdAt = current.createdAt
+                )
+                if (current != null && current.name == wanted.name && current.command == wanted.command &&
+                    current.description == wanted.description && current.category == wanted.category &&
+                    current.sortOrder == wanted.sortOrder
+                ) null else wanted
             }
-            prefs.edit().putInt(KEY_DEFAULT_SNIPPETS_VERSION, DEFAULT_SNIPPETS_VERSION).apply()
+            if (rows.isNotEmpty()) dao.insertSnippets(rows)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            Logger.e("TabSSHApplication", "Default snippet seed failed", e)
+            Logger.e("TabSSHApplication", "Built-in snippet seed failed", e)
         }
-    }
-
-    private fun defaultSnippets(): List<Pair<Int, io.github.tabssh.storage.database.entities.Snippet>> {
-        fun snippet(name: String, command: String, description: String, category: String, order: Int, since: Int = 1) =
-            since to io.github.tabssh.storage.database.entities.Snippet(
-                id = java.util.UUID.nameUUIDFromBytes("tabssh-default-snippet:$name".toByteArray()).toString(),
-                name = name,
-                command = command,
-                description = description,
-                category = category,
-                sortOrder = order
-            )
-        return listOf(
-            snippet("Disk usage", "df -h", "Show free/used disk space, human-readable", "System", 0),
-            snippet("Memory usage", "free -h", "Show free/used RAM and swap, human-readable", "System", 1),
-            snippet("Top processes", "top -o %CPU", "Live process list sorted by CPU usage", "System", 2),
-            snippet("System info", "uname -a", "Kernel, hostname, and architecture in one line", "System", 3),
-            snippet("Uptime", "uptime", "How long the system has been running plus load average", "System", 4),
-            snippet("System update", SYSTEM_UPDATE_COMMAND, "Update packages with whichever package manager is installed, using root or sudo as available", "System", 5, since = 2),
-            snippet("Listening ports", "ss -tulnp", "TCP/UDP sockets currently listening, with owning process", "Networking", 0),
-            snippet("Ping host", "ping -c 4 {host}", "Send 4 ICMP echo requests to a host", "Networking", 1),
-            snippet("Public IP", "curl -s ifconfig.me", "Print this machine's public-facing IP address", "Networking", 2),
-            snippet("DNS lookup", "dig +short {host}", "Resolve a hostname to its IP address(es)", "Networking", 3),
-            snippet("Tail log", "tail -f {?path|/var/log/syslog}", "Follow a log file as new lines are appended", "Files & Logs", 0),
-            snippet("Find large files", "find . -type f -size +100M", "List files over 100MB under the current directory", "Files & Logs", 1),
-            snippet("Grep recursive", "grep -rn \"{?pattern}\" .", "Search every file under the current directory for a pattern", "Files & Logs", 2),
-            snippet("Disk usage by dir", "du -sh */ | sort -rh", "Show each subdirectory's size, largest first", "Files & Logs", 3),
-            snippet("List running containers", "docker ps", "Show currently running Docker containers", "Docker", 0),
-            snippet("Container logs", "docker logs -f {?container}", "Follow a container's logs", "Docker", 1),
-            snippet("Shell into container", "docker exec -it {?container} sh", "Open an interactive shell inside a running container", "Docker", 2),
-            snippet("Prune unused", "docker system prune -f", "Remove stopped containers, dangling images, and unused networks", "Docker", 3),
-            snippet("Service status", "systemctl status {?service}", "Show a systemd unit's current status", "Services", 0),
-            snippet("Restart service", "sudo systemctl restart {?service}", "Restart a systemd unit", "Services", 1),
-            snippet("Journal follow", "journalctl -u {?service} -f", "Follow a systemd unit's journal log", "Services", 2)
-        )
     }
 
     /**

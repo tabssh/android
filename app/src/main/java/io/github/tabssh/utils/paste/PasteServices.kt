@@ -20,14 +20,14 @@ object PasteServices {
 
     val ALL: List<Info> = listOf(
         Info(AUTO, "Autodetect", "https://pste.us"),
-        Info(CAIRNBIN, "Cairnbin", "https://pste.us"),
+        Info(CAIRNBIN, "Cairnbin", "https://cb.pste.us"),
         Info(MICROBIN, "MicroBin", "https://mb.pste.us"),
         Info(LENPASTE, "Lenpaste", "https://lp.pste.us"),
-        Info(STIKKED, "Stikked", "https://pste.us"),
+        Info(STIKKED, "Stikked", "https://stikked.pste.us"),
         Info(PASTEBIN, "Pastebin", "https://pastebin.com"),
-        Info(HASTEBIN, "Hastebin", "https://hastebin.com"),
+        Info(HASTEBIN, "Hastebin", "https://hb.pste.us"),
         Info(DPASTE, "dpaste", "https://dpaste.org"),
-        Info(NULLPOINTER, "0x0.st", "https://0x0.st"),
+        Info(NULLPOINTER, "0x0 (0x0.st style)", "https://0x0.pste.us"),
         Info(TERMBIN, "termbin", "termbin.com:9999")
     )
 

@@ -294,6 +294,7 @@ class SyncDataCollector {
     private suspend fun collectSnippets(): List<io.github.tabssh.storage.database.entities.Snippet> {
         return try {
             database.snippetDao().getAllSnippets().first()
+                .filterNot { io.github.tabssh.storage.snippets.BuiltInSnippets.isBuiltIn(it.id) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
