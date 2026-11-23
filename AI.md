@@ -314,6 +314,7 @@ Update these when their subject changes:
 8. **Activity composition over inheritance.** New screens are activities/fragments hosted by container patterns — never subclasses of existing screens.
 9. **Reuse existing notification channels** (PART 8) — never create a channel for a one-off event.
 10. **Every text file ends with a single trailing newline.** Indentation: 4 spaces for Kotlin/Gradle (ecosystem standard), 2 for XML/YAML/JSON.
+11. **Scripts, Makefile recipes and CI steps follow the shared stream and exit-code rules:** every error, warning and usage message goes to stderr (`>&2`), requested output to stdout, and every non-zero exit has a one-line reason on stderr. Exit codes: `0` success, `1` general error, `2` usage, `65` bad input, `66` not found, `69` a required tool, device or emulator is unavailable, `75` temporary failure, `77` permission denied, `78` invalid configuration (sysexits.h for `65`-`78`; `126`, `127` and `128+n` belong to the shell). The app's own error surfaces (PART 2) are UI, not streams.
 
 ## Device access reality
 
@@ -1288,11 +1289,11 @@ Sample resolution step (applies identically to all three workflows):
     # the secret becomes executable script.
     if [ -z "$KEYSTORE_B64" ]; then
       echo "::error::KEYSTORE_BASE64 secret is not set. Add it under repo Settings > Secrets and Variables > Actions." >&2
-      exit 1
+      exit 78
     fi
     if [ -z "$KEYSTORE_PW" ]; then
       echo "::error::KEYSTORE_BASE64 is set but KEYSTORE_PASSWORD is missing. Add it under repo Settings > Secrets and Variables > Actions." >&2
-      exit 1
+      exit 78
     fi
     printf '%s' "$KEYSTORE_B64" | base64 -d > keystore.jks
     {
