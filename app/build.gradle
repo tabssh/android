@@ -7,7 +7,7 @@ plugins {
     // X is not found." Sync upload was the only path exercising reified
     // serializers so the breakage was latent until the SAF upload ran.
     // The version MUST match `kotlin_version` in the root build.gradle.
-    id 'org.jetbrains.kotlin.plugin.serialization' version '2.4.10'
+    id 'org.jetbrains.kotlin.plugin.serialization' version '2.4.21'
     id 'com.google.devtools.ksp'
     id 'jacoco'
     // CycloneDX SBOM generation — release channels attach {project}-sbom.cdx.json
