@@ -4,13 +4,16 @@
     <suppress>
         <notes>False positive: Google-maintained com.google.android artifacts are CPE-matched against unrelated products sharing the "android" name; Android platform CVEs do not apply to these Maven libraries</notes>
         <packageUrl regex="true">^pkg:maven/com\.google\.android.*$</packageUrl>
+        <cvssBelow>10</cvssBelow>
     </suppress>
     <suppress>
         <notes>False positive: AndroidX artifacts are CPE-matched against Android OS CVEs; androidx.* are app-side support libraries, not the platform the CVEs describe</notes>
         <packageUrl regex="true">^pkg:maven/androidx\..*$</packageUrl>
+        <cvssBelow>10</cvssBelow>
     </suppress>
     <suppress>
         <notes>False positive: the app ships the actively maintained mwiede JSch fork (com.github.mwiede:jsch), but CPE matching misattributes it as cpe:/a:jcraft:jsch and reports CVEs for the abandoned com.jcraft 0.1.x line; the fork patched them (e.g. Terrapin CVE-2023-48795 fixed in 0.2.15, we pin 2.27.x)</notes>
         <packageUrl regex="true">^pkg:maven/com\.github\.mwiede/jsch.*$</packageUrl>
+        <cpe>cpe:/a:jcraft:jsch</cpe>
     </suppress>
 </suppressions>
