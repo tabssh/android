@@ -126,4 +126,25 @@ class MergeEngineThreeWayTest {
         assertEquals(1, result.conflicts.size)
         assertTrue(result.conflicts.single().autoResolvable, "different timestamps leave a newest-wins decision")
     }
+
+    @Test
+    fun `bookkeeping-only difference from base is not reported as an update`() {
+        val base = conn("c1", modifiedAt = 1_000L)
+        val local = base.copy(lastSyncedAt = 5_000L, syncVersion = 9L, connectionCount = 4)
+        val remote = base.copy(lastSyncedAt = 6_000L, syncVersion = 10L, modifiedAt = 2_000L)
+
+        val result = engine.mergeConnections(mapOf("c1" to base), listOf(local), listOf(remote))
+
+        assertTrue(result.updated.isEmpty(), "sync bookkeeping must not trigger a write")
+    }
+
+    @Test
+    fun `remote host change from base is reported as an update`() {
+        val base = conn("c1", host = "10.0.0.1")
+        val remote = conn("c1", host = "10.0.0.2", modifiedAt = 2_000L)
+
+        val result = engine.mergeConnections(mapOf("c1" to base), listOf(base), listOf(remote))
+
+        assertEquals("10.0.0.2", result.updated.single().host)
+    }
 }

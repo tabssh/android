@@ -106,7 +106,7 @@ class MergeEngine {
                     merged.add(mergedConn)
                     if (baseConn == null) {
                         added.add(mergedConn)
-                    } else if (mergedConn != baseConn) {
+                    } else if (syncedView(mergedConn) != syncedView(baseConn)) {
                         updated.add(mergedConn)
                     }
                 }
@@ -312,7 +312,7 @@ class MergeEngine {
                     merged.add(mergedKey)
                     if (baseKey == null) {
                         added.add(mergedKey)
-                    } else if (mergedKey != baseKey) {
+                    } else if (syncedView(mergedKey) != syncedView(baseKey)) {
                         updated.add(mergedKey)
                     }
                 }
@@ -431,19 +431,19 @@ class MergeEngine {
                     merged.add(mergedTheme)
                     if (baseTheme == null) {
                         added.add(mergedTheme)
-                    } else if (mergedTheme != baseTheme) {
+                    } else if (syncedView(mergedTheme) != syncedView(baseTheme)) {
                         updated.add(mergedTheme)
                     }
                 }
                 localTheme != null && remoteTheme == null -> {
                     merged.add(localTheme)
                     if (baseTheme == null) added.add(localTheme)
-                    else if (baseTheme != localTheme) updated.add(localTheme)
+                    else if (syncedView(baseTheme) != syncedView(localTheme)) updated.add(localTheme)
                 }
                 localTheme == null && remoteTheme != null -> {
                     merged.add(remoteTheme)
                     if (baseTheme == null) added.add(remoteTheme)
-                    else if (baseTheme != remoteTheme) updated.add(remoteTheme)
+                    else if (syncedView(baseTheme) != syncedView(remoteTheme)) updated.add(remoteTheme)
                 }
                 else -> {
                     if (baseTheme != null) deleted.add(id)
@@ -548,7 +548,7 @@ class MergeEngine {
                     merged.add(mergedHostKey)
                     if (baseHostKey == null) {
                         added.add(mergedHostKey)
-                    } else if (mergedHostKey != baseHostKey) {
+                    } else if (syncedView(mergedHostKey) != syncedView(baseHostKey)) {
                         updated.add(mergedHostKey)
                     }
                 }
