@@ -171,8 +171,15 @@ class ContainerUpdateCheckWorker(
         if (!isInternetAvailable()) {
             Logger.d(TAG, "Skipping run: no validated internet connection")
             val at = System.currentTimeMillis()
+            val dao = TabSSHApplication.get().database.containerAutoUpdatePolicyDao()
             hosts.forEach {
-                UpdateCheckStatus.record(it.id, UpdateCheckStatus.HostResult(UpdateCheckStatus.Outcome.NO_NETWORK, at))
+                // A check the user asked for that cannot reach anything confirms nothing, so the pending
+                // updates are removed and reported. A scheduled run offline leaves the list alone: it
+                // checked nothing, and wiping it each night would re-alert on the next good check.
+                val removed = if (force) HostUpdateScanner.discardAllUnconfirmed(dao, it.name, it.id) else 0
+                UpdateCheckStatus.record(
+                    it.id, UpdateCheckStatus.HostResult(UpdateCheckStatus.Outcome.NO_NETWORK, at, removedUpdates = removed)
+                )
             }
             return Result.success()
         }
@@ -354,9 +361,16 @@ class ContainerUpdateCheckWorker(
             app, host, { ownedConnectionId = it }, { ownTransport = it }
         )
         if (transport == null) {
+            // Unreachable: the host's pending updates cannot be confirmed, so they are removed and
+            // the outcome says so, instead of leaving a stale list that looks current.
+            val removed = HostUpdateScanner.discardAllUnconfirmed(
+                app.database.containerAutoUpdatePolicyDao(), host.name, host.id
+            )
             UpdateCheckStatus.record(
                 host.id,
-                UpdateCheckStatus.HostResult(UpdateCheckStatus.Outcome.NO_CONNECTION, System.currentTimeMillis())
+                UpdateCheckStatus.HostResult(
+                    UpdateCheckStatus.Outcome.NO_CONNECTION, System.currentTimeMillis(), removedUpdates = removed
+                )
             )
             return false
         }
@@ -368,9 +382,14 @@ class ContainerUpdateCheckWorker(
             )
                 .scan(host, hostPolicies, global, transport, failures)
             if (found == null) {
+                val removed = HostUpdateScanner.discardAllUnconfirmed(
+                    app.database.containerAutoUpdatePolicyDao(), host.name, host.id
+                )
                 UpdateCheckStatus.record(
                     host.id,
-                    UpdateCheckStatus.HostResult(UpdateCheckStatus.Outcome.LIST_FAILED, System.currentTimeMillis())
+                    UpdateCheckStatus.HostResult(
+                        UpdateCheckStatus.Outcome.LIST_FAILED, System.currentTimeMillis(), removedUpdates = removed
+                    )
                 )
                 return false
             }

@@ -143,7 +143,6 @@ object UpdateApplyDialog {
                             textStatus.visibility = View.GONE
                             showOutput(scrollOutput, textOutput, event.output)
                             finishProgress(dialog, progressBar)
-                            verifyApplied(context, policyDao, policyId, transport, textStatus)
                         }
                         is UpdateApplier.ApplyEvent.Failed -> {
                             textStatus.visibility = View.VISIBLE
@@ -176,43 +175,6 @@ object UpdateApplyDialog {
         }
 
         dialog.show()
-    }
-
-    /**
-     * Re-checks the container against its registry after an apply and says so: verified current, or
-     * still older (the pull did not bring a newer image, e.g. a pinned tag), so a "complete" update
-     * that changed nothing is never silent. A failed check is reported, not guessed at.
-     */
-    private suspend fun verifyApplied(
-        context: Context,
-        policyDao: ContainerAutoUpdatePolicyDao,
-        policyId: Long,
-        transport: ContainerTransport,
-        textStatus: TextView
-    ) {
-        try {
-            val policy = policyDao.getById(policyId) ?: return
-            if (policy.scope == "stack") return
-            val db = (context.applicationContext as io.github.tabssh.TabSSHApplication).database
-            val checker = io.github.tabssh.containers.registry.UpdateChecker(
-                policyDao, db.registryCredentialDao(), io.github.tabssh.containers.registry.RegistryClient()
-            ) { id -> io.github.tabssh.crypto.storage.RegistryCredentialStore.retrieve(context.applicationContext, id) }
-            val result = checker.checkOne(policy, transport)
-            textStatus.visibility = View.VISIBLE
-            textStatus.setText(
-                when (result.status) {
-                    io.github.tabssh.containers.registry.UpdateChecker.Status.UPDATE_AVAILABLE ->
-                        R.string.container_update_verify_still_older
-                    io.github.tabssh.containers.registry.UpdateChecker.Status.ERROR ->
-                        R.string.container_update_verify_error
-                    else -> R.string.container_update_verify_ok
-                }
-            )
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Logger.w("UpdateApplyDialog", "policy $policyId: post-apply verification failed: ${e.message}")
-        }
     }
 
     /** Shows the complete command output (sanitised, nothing truncated short of the block cap). */

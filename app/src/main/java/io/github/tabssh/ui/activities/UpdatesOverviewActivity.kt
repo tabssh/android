@@ -12,6 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import io.github.tabssh.containers.registry.UpdateAllRunner
 import io.github.tabssh.containers.registry.UpdateApplier
 import io.github.tabssh.utils.logging.Logger
 import kotlinx.coroutines.CancellationException
@@ -113,6 +114,7 @@ class UpdatesOverviewActivity : TabSSHActivity() {
                 listHosts.addView(row)
             }
         }
+        refreshActionState()
     }
 
     /** Says what the last check actually did per host, so a stale list is never mistaken for a fresh one. */
@@ -121,6 +123,7 @@ class UpdatesOverviewActivity : TabSSHActivity() {
         val results = UpdateCheckStatus.results.value.filterKeys { it in names }
         if (UpdateCheckStatus.running.value) lines += getString(R.string.container_updates_status_running)
         var checked = 0
+        var noNetworkRemoved = 0
         for ((id, r) in results) {
             val host = ContainerText.display(names[id])
             when (r.outcome) {
@@ -133,14 +136,25 @@ class UpdatesOverviewActivity : TabSSHActivity() {
                         )
                     }
                 }
-                UpdateCheckStatus.Outcome.NO_CONNECTION ->
-                    lines += getString(R.string.container_updates_status_no_connection, host)
-                UpdateCheckStatus.Outcome.LIST_FAILED ->
-                    lines += getString(R.string.container_updates_status_list_failed, host)
-                UpdateCheckStatus.Outcome.NO_NETWORK -> {
-                    val text = getString(R.string.container_updates_status_no_network)
-                    if (text !in lines) lines += text
+                UpdateCheckStatus.Outcome.NO_CONNECTION -> lines += if (r.removedUpdates > 0) {
+                    getString(R.string.container_updates_status_no_connection_removed, host, r.removedUpdates)
+                } else {
+                    getString(R.string.container_updates_status_no_connection, host)
                 }
+                UpdateCheckStatus.Outcome.LIST_FAILED -> lines += if (r.removedUpdates > 0) {
+                    getString(R.string.container_updates_status_list_failed_removed, host, r.removedUpdates)
+                } else {
+                    getString(R.string.container_updates_status_list_failed, host)
+                }
+                UpdateCheckStatus.Outcome.NO_NETWORK -> noNetworkRemoved += r.removedUpdates
+
+            }
+        }
+        if (results.values.any { it.outcome == UpdateCheckStatus.Outcome.NO_NETWORK }) {
+            lines += if (noNetworkRemoved > 0) {
+                getString(R.string.container_updates_status_no_network_removed, noNetworkRemoved)
+            } else {
+                getString(R.string.container_updates_status_no_network)
             }
         }
         if (checked > 0 && !UpdateCheckStatus.running.value) {
@@ -161,7 +175,24 @@ class UpdatesOverviewActivity : TabSSHActivity() {
             .show()
     }
 
-    /** Applies every pending update one after another, grouped by host so each host connects once. */
+    /** True while an Update all run is in progress; the list's other actions wait for it. */
+    private var updating = false
+
+    /** Keeps Check all, Update all and the row buttons from starting work on top of work already running. */
+    private fun refreshActionState() {
+        val busy = updating || UpdateCheckStatus.running.value
+        findViewById<MaterialButton>(R.id.button_check_all).isEnabled = !busy
+        findViewById<MaterialButton>(R.id.button_update_all).isEnabled = !busy
+        for (i in 0 until listHosts.childCount) {
+            listHosts.getChildAt(i).findViewById<MaterialButton>(R.id.button_update)?.isEnabled = !busy
+        }
+    }
+
+    /**
+     * Applies every pending update in turn and shows what is happening the whole time: the host being
+     * connected, each unit's steps, the command and pull output as it arrives, and a result per unit.
+     * The list and its count follow the database, so each finished update leaves the list live.
+     */
     private fun runUpdateAll(targets: List<ContainerAutoUpdatePolicy>) {
         val view = LayoutInflater.from(this).inflate(R.layout.dialog_update_apply, null)
         val textStep = view.findViewById<TextView>(R.id.text_step)
@@ -170,6 +201,15 @@ class UpdatesOverviewActivity : TabSSHActivity() {
         val textOutput = view.findViewById<TextView>(R.id.text_output)
         val scrollOutput = view.findViewById<View>(R.id.scroll_output)
         scrollOutput.visibility = View.VISIBLE
+        progressBar.isIndeterminate = true
+        textStep.setText(R.string.container_updates_update_all_connecting)
+
+        val live = ArrayList<String>()
+        fun append(text: String) {
+            live += text
+            textOutput.text = ContainerText.block(live.takeLast(MAX_LIVE_LINES).joinToString("\n"))
+            scrollOutput.post { (scrollOutput as? android.widget.ScrollView)?.fullScroll(View.FOCUS_DOWN) }
+        }
 
         var job: Job? = null
         val dialog = MaterialAlertDialogBuilder(this)
@@ -177,69 +217,76 @@ class UpdatesOverviewActivity : TabSSHActivity() {
             .setView(view)
             .setCancelable(false)
             .setNegativeButton(R.string.cancel, null)
-            .setOnDismissListener { job?.cancel() }
+            .setOnDismissListener {
+                job?.cancel()
+                updating = false
+                refreshActionState()
+            }
             .create()
+        updating = true
+        refreshActionState()
         dialog.show()
 
         job = lifecycleScope.launch {
             val db = tabSSHApp.database
             val hostNames = db.containerHostDao().getAllList().associate { it.id to it.name }
             val dao = db.containerAutoUpdatePolicyDao()
-            val applier = UpdateApplier(dao)
-            val log = ArrayList<String>()
-            var done = 0
-            var ok = 0
-            var failed = 0
+            val runner = UpdateAllRunner(
+                dao,
+                hostName = { ContainerText.display(hostNames[it]) },
+                transportFor = { hostId ->
+                    (ContainerSessionManager.acquire(tabSSHApp, hostId) as? ContainerResult.Success)?.value?.transport
+                }
+            )
+            var summary: UpdateAllRunner.Event.Finished? = null
             try {
-                for ((hostId, items) in targets.groupBy { it.containerHostId }) {
-                    val session = ContainerSessionManager.acquire(tabSSHApp, hostId)
-                    if (session !is ContainerResult.Success) {
-                        failed += items.size
-                        done += items.size
-                        log += getString(
-                            R.string.container_updates_update_all_connect_failed,
-                            ContainerText.display(hostNames[hostId])
-                        )
-                        textOutput.text = log.joinToString("\n")
-                        continue
-                    }
-                    for (policy in items) {
-                        val name = ContainerText.display(policy.containerNameOrStackName)
-                        done++
-                        textStep.text = getString(
-                            R.string.container_updates_update_all_progress, name, done, targets.size
-                        )
-                        var success = false
-                        applier.apply(policy.id, session.value.transport).collect { event ->
-                            when (event) {
-                                is UpdateApplier.ApplyEvent.Completed -> {
-                                    success = true
-                                    log += getString(R.string.container_updates_update_all_item_ok, name)
-                                }
-                                is UpdateApplier.ApplyEvent.Failed -> log += getString(
-                                    R.string.container_updates_update_all_item_failed,
-                                    name, event.step.name,
-                                    ContainerText.display(event.message, 200)
-                                )
-                                else -> Unit
-                            }
+                runner.run(targets).collect { event ->
+                    when (event) {
+                        is UpdateAllRunner.Event.HostStarted -> {
+                            textStep.text = getString(R.string.container_updates_update_all_host, event.host)
+                            append("== ${event.host}: ${event.containers} container(s)")
                         }
-                        if (success) ok++ else failed++
-                        textOutput.text = ContainerText.block(log.joinToString("\n"))
+                        is UpdateAllRunner.Event.UnitStarted -> {
+                            progressBar.isIndeterminate = false
+                            progressBar.max = event.total
+                            progressBar.progress = event.index - 1
+                            textStep.text = getString(
+                                R.string.container_updates_update_all_progress,
+                                ContainerText.display(event.label), event.index, event.total
+                            )
+                            append("[${event.index}/${event.total}] ${event.label}")
+                        }
+                        is UpdateAllRunner.Event.Line -> append("    ${event.text}")
+                        is UpdateAllRunner.Event.UnitDone -> {
+                            val line = when {
+                                event.failed > 0 -> getString(
+                                    R.string.container_updates_update_all_unit_failed,
+                                    event.label, ContainerText.display(event.detail, 200)
+                                )
+                                else -> getString(R.string.container_updates_update_all_item_ok, event.label)
+                            }
+                            append(line)
+                            progressBar.progress = progressBar.progress + 1
+                        }
+                        is UpdateAllRunner.Event.Finished -> summary = event
                     }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Logger.e("UpdatesOverview", "update all threw", e)
-                failed += targets.size - ok - failed
-                log += ContainerText.display(e.message, 200)
-                textOutput.text = ContainerText.block(log.joinToString("\n"))
+                append(ContainerText.display(e.message, 200))
             }
-            textStep.setText(R.string.container_update_apply_done)
-            textStatus.visibility = View.VISIBLE
-            textStatus.text = getString(R.string.container_updates_update_all_summary, ok, failed)
             progressBar.visibility = View.GONE
+            textStep.setText(R.string.container_update_apply_done)
+            summary?.let {
+                textStatus.visibility = View.VISIBLE
+                textStatus.text = getString(
+                    R.string.container_updates_update_all_summary, it.updated, it.failed
+                )
+            }
+            updating = false
+            refreshActionState()
             dialog.setCancelable(true)
             dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE)?.setText(R.string.close)
         }
@@ -286,5 +333,10 @@ class UpdatesOverviewActivity : TabSSHActivity() {
                 .putExtra(ContainerHostManagerActivity.EXTRA_HOST_ID, hostId)
                 .putExtra(ContainerHostManagerActivity.EXTRA_OPEN_UPDATES, true)
         )
+    }
+
+    private companion object {
+        /** Lines of live output kept on screen; older lines scroll off. */
+        const val MAX_LIVE_LINES = 500
     }
 }

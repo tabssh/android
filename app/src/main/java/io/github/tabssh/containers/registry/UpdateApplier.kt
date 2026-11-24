@@ -14,6 +14,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
@@ -93,8 +94,16 @@ class UpdateApplier(
      * in the policy on the current registry image. Runs the plan when
      * collected; safe to collect exactly once.
      */
-    fun apply(policyId: Long, transport: ContainerTransport): Flow<ApplyEvent> =
-        applyPlan(policyId, transport).onEach { logEvent(policyId, it) }
+    fun apply(policyId: Long, transport: ContainerTransport): Flow<ApplyEvent> = flow {
+        // Held for the whole apply so a check on the same host cannot read the old image mid-update
+        // and re-flag the container afterwards.
+        val hostId = policyDao.getById(policyId)?.containerHostId
+        if (hostId == null) {
+            emitAll(applyPlan(policyId, transport))
+        } else {
+            UpdateCoordinator.withHost(hostId) { emitAll(applyPlan(policyId, transport)) }
+        }
+    }.onEach { logEvent(policyId, it) }
 
     /** Logs which containers the host really has, so a name mismatch can be told from a removed container. */
     private suspend fun logContainersOnHost(policyId: Long, wanted: String, transport: ContainerTransport) {
@@ -146,7 +155,7 @@ class UpdateApplier(
             is ContainerResult.NotFound -> {
                 failureMessage(r)
                 logContainersOnHost(policy.id, name, transport)
-                policyDao.updatePendingUpdateDigest(policyId, null)
+                policyDao.clearPendingForContainer(policy.containerHostId, name)
                 return@flow emit(
                     failNoRollback("Container $name no longer exists on this host; its pending update was cleared")
                 )
@@ -310,7 +319,7 @@ class UpdateApplier(
             return@flow
         }
 
-        policyDao.updatePendingUpdateDigest(policyId, null)
+        policyDao.clearPendingForContainer(policy.containerHostId, name)
         emit(ApplyEvent.Completed(name))
     }
 
@@ -354,16 +363,14 @@ class UpdateApplier(
 
     /** Clear the pending digest on [policyId] and on every sibling container sharing [dir]. */
     private suspend fun clearProjectPending(policyId: Long, dir: String, transport: ContainerTransport) {
-        policyDao.updatePendingUpdateDigest(policyId, null)
         val policy = policyDao.getById(policyId) ?: return
+        policyDao.clearPendingForContainer(policy.containerHostId, policy.containerNameOrStackName)
         val siblings = (transport.listContainers(all = true) as? ContainerResult.Success)?.value ?: return
         val project = siblings.firstOrNull { it.names.any { n -> n.trimStart('/') == policy.containerNameOrStackName } }
             ?.labels?.get(COMPOSE_PROJECT_LABEL) ?: return
         val names = siblings.filter { it.labels[COMPOSE_PROJECT_LABEL] == project }
             .flatMap { it.names.map { n -> n.trimStart('/') } }.toSet()
-        policyDao.getAllList()
-            .filter { it.containerHostId == policy.containerHostId && it.containerNameOrStackName in names }
-            .forEach { policyDao.updatePendingUpdateDigest(it.id, null) }
+        names.forEach { policyDao.clearPendingForContainer(policy.containerHostId, it) }
     }
 
     /**

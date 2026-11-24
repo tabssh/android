@@ -334,6 +334,17 @@ private class FakePolicyDao(
         stored = stored.copy(pendingUpdateDigest = digest)
     }
 
+    override suspend fun clearPendingForHost(hostId: Long): Int {
+        val had = if (stored.pendingUpdateDigest != null) 1 else 0
+        stored = stored.copy(pendingUpdateDigest = null)
+        return had
+    }
+
+    override suspend fun clearPendingForContainer(hostId: Long, name: String) {
+        pendingWrites.add(null)
+        stored = stored.copy(pendingUpdateDigest = null)
+    }
+
     override suspend fun clearRegistryCredentialId(credentialId: Long) {}
 }
 

@@ -52,6 +52,23 @@ interface ContainerAutoUpdatePolicyDao {
     suspend fun updatePendingUpdateDigest(id: Long, digest: String?)
 
     /**
+     * Removes every pending-update flag on a host and returns how many were removed. Used when the host
+     * cannot be reached or listed: an update that cannot be confirmed is not left on the list.
+     */
+    @Query("""UPDATE container_auto_update_policies SET pending_update_digest = NULL
+        WHERE container_host_id = :hostId AND scope != 'stack' AND pending_update_digest IS NOT NULL""")
+    suspend fun clearPendingForHost(hostId: Long): Int
+
+    /**
+     * Clears the pending flag on EVERY row for this container, not just one by id. Nothing stops two
+     * rows for the same container existing (a sync merge, two checks racing to create it), and the
+     * list shows every flagged row, so clearing one left the other listed as still pending.
+     */
+    @Query("""UPDATE container_auto_update_policies SET pending_update_digest = NULL
+        WHERE container_host_id = :hostId AND container_name_or_stack_name = :name AND scope != 'stack'""")
+    suspend fun clearPendingForContainer(hostId: Long, name: String)
+
+    /**
      * Orphan-safe credential delete — nullify registry_credential_id for all
      * policies that reference the deleted RegistryCredential. Call alongside
      * registryCredentialDao.deleteById() so no policy row is left with a

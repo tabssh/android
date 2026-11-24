@@ -188,7 +188,12 @@ class UpdateChecker(
         val pending = decide(
             registryDigest, runningDigest, policy.lastDigestSeen, policy.pendingUpdateDigest
         )
-        policyDao.updatePendingUpdateDigest(policy.id, if (pending) registryDigest else null)
+        if (pending) {
+            policyDao.updatePendingUpdateDigest(policy.id, registryDigest)
+        } else {
+            // Not just this row: a duplicate row for the same container would otherwise stay flagged.
+            policyDao.clearPendingForContainer(policy.containerHostId, policy.containerNameOrStackName)
+        }
         policyDao.updateCheckResult(policy.id, System.currentTimeMillis(), registryDigest)
 
         val status = when {

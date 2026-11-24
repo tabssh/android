@@ -27,7 +27,9 @@ object UpdateCheckStatus {
         val checkedAt: Long,
         /** Containers whose registry or inspect check failed this cycle. */
         val failedChecks: Int = 0,
-        val firstFailure: String? = null
+        val firstFailure: String? = null,
+        /** Pending updates removed because the host could not be checked, so they could not be confirmed. */
+        val removedUpdates: Int = 0
     )
 
     private val _results = MutableStateFlow<Map<Long, HostResult>>(emptyMap())

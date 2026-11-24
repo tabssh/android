@@ -452,12 +452,17 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
                     .scan(host, hostPolicies, globalSettings(), current.transport, failures)
                 // Same record the scheduled check leaves, so the Container Updates page reports a manual
                 // check too instead of showing a stale "last known" state.
+                val removed = if (found == null) {
+                    HostUpdateScanner.discardAllUnconfirmed(dao, host.name, host.id)
+                } else {
+                    0
+                }
                 io.github.tabssh.containers.registry.UpdateCheckStatus.record(
                     host.id,
                     io.github.tabssh.containers.registry.UpdateCheckStatus.HostResult(
                         if (found == null) io.github.tabssh.containers.registry.UpdateCheckStatus.Outcome.LIST_FAILED
                         else io.github.tabssh.containers.registry.UpdateCheckStatus.Outcome.CHECKED,
-                        System.currentTimeMillis(), failures.size, failures.firstOrNull()
+                        System.currentTimeMillis(), failures.size, failures.firstOrNull(), removed
                     )
                 )
                 if (found != null) {
@@ -468,6 +473,7 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
                 }
                 if (!isAdded) return@launch
                 val message = when {
+                    found == null && removed > 0 -> getString(R.string.container_updates_check_failed_removed, removed)
                     found == null -> getString(R.string.container_updates_check_failed)
                     failures.isNotEmpty() -> getString(R.string.container_updates_check_partial, failures.size)
                     found.isEmpty() -> getString(R.string.container_updates_check_none)
