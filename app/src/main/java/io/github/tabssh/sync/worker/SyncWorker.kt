@@ -51,7 +51,11 @@ class SyncWorker(
             val fileStatus = syncManager.checkSyncFile()
             if (fileStatus != SyncFileStatus.OK) {
                 Logger.w(TAG, "Sync file not accessible: $fileStatus")
-                return@withLock Result.failure()
+                return@withLock if (fileStatus == SyncFileStatus.FILE_NOT_FOUND || fileStatus == SyncFileStatus.ERROR) {
+                    Result.retry()
+                } else {
+                    Result.failure()
+                }
             }
 
             val collector = SyncDataCollector(applicationContext)

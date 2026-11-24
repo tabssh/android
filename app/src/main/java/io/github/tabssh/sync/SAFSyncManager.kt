@@ -496,7 +496,18 @@ class SAFSyncManager(private val context: Context) {
         try {
             val docFile = DocumentFile.fromSingleUri(context, uri)
             if (docFile == null || !docFile.exists()) {
-                return@withContext SyncFileStatus.FILE_NOT_FOUND
+                // Cloud providers can answer exists() false when their metadata query fails
+                // while the content is still readable, so only report missing if open fails too.
+                val opens = try {
+                    context.contentResolver.openInputStream(uri)?.use { true } ?: false
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Logger.d(TAG, "checkSyncFile: open fallback failed: ${e.javaClass.simpleName}: ${e.message}")
+                    false
+                }
+                if (!opens) return@withContext SyncFileStatus.FILE_NOT_FOUND
+                return@withContext SyncFileStatus.OK
             }
             if (!docFile.canRead()) {
                 return@withContext SyncFileStatus.NO_PERMISSION
