@@ -681,13 +681,16 @@ ABI splits ON for release. Rename outputs with simplified arch tags:
 DOCKER_IMAGE ?= casjaysdev/android:latest
 DOCKER_MEM   ?= 4g
 DOCKER_CPUS  ?= 2
+
+# CPU weight under contention (Docker's default is 1024): a build never starves the host's other work
+DOCKER_CPU_SHARES ?= 256
 # Local builds only: VERSION env > non-empty release.txt > devel rule (short commit id, devel outside git)
 VERSION      ?= $(shell v=; [ -r release.txt ] && v=$$(tr -d '[:space:]' < release.txt); if [ -n "$$v" ]; then echo "$$v"; else git rev-parse --short=7 HEAD 2>/dev/null || echo devel; fi)
 BUILD_EPOCH  := $(shell date -u +%s)
 
 build:
 	docker run --rm --name {project_name}-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) \
-	  --memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) \
+	  --memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) --cpu-shares=$(DOCKER_CPU_SHARES) \
 	  -v $(PWD):/workspace -w /workspace \
 	  -e GRADLE_USER_HOME=/workspace/.gradle \
 	  -e VERSION=$(VERSION) -e BUILD_EPOCH=$(BUILD_EPOCH) \
