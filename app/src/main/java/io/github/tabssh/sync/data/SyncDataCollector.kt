@@ -407,7 +407,8 @@ class SyncDataCollector {
     /** Container host connection profiles. Custom-endpoint password travels via secrets. */
     private suspend fun collectContainerHosts(): List<io.github.tabssh.storage.database.entities.ContainerHost> {
         return try {
-            database.containerHostDao().getAllList()
+            // The update-check clock and usage counter are per device and are not sent.
+            database.containerHostDao().getAllList().map { it.copy(lastUpdateCheck = 0, connectionCount = 0) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -451,7 +452,11 @@ class SyncDataCollector {
     /** Container/stack auto-update policies — user config, not audit data. */
     private suspend fun collectContainerAutoUpdatePolicies(): List<io.github.tabssh.storage.database.entities.ContainerAutoUpdatePolicy> {
         return try {
-            database.containerAutoUpdatePolicyDao().getAllList()
+            // Settings only. The result of a check (pending update, last digest, check time) belongs to the
+            // device that ran it; sending it let a stale copy overwrite fresh results on the next sync.
+            database.containerAutoUpdatePolicyDao().getAllList().map {
+                it.copy(lastCheckedAt = 0, lastDigestSeen = null, pendingUpdateDigest = null)
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -474,7 +479,13 @@ class SyncDataCollector {
      *  MonitorSlot has no modifiedAt column so full-table sync is used. */
     private suspend fun collectMonitorSlots(): List<io.github.tabssh.storage.database.entities.MonitorSlot> {
         return try {
-            database.monitorSlotDao().getAllSlots().first()
+            // Settings only: what this device observed (up/down, check times) is not sent.
+            database.monitorSlotDao().getAllSlots().first().map {
+                it.copy(
+                    lastCheckedAt = 0, lastSeenUp = 0, lastNotifiedDownAt = 0, lastNotifiedUpAt = 0,
+                    isCurrentlyDown = false, consecutiveFailures = 0
+                )
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

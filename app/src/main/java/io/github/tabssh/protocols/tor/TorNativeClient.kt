@@ -100,7 +100,6 @@ object TorNativeClient {
             "--DataDirectory", dataDir.absolutePath,
             "--ClientOnly", "1",
             "--AvoidDiskWrites", "1",
-            "--SafeSocks", "1",
             "--Log", "notice stderr",
             "--RunAsDaemon", "0"
         )

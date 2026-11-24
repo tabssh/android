@@ -63,11 +63,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
                     // a large log never causes TransactionTooLargeException during swipe
                     // or any other state-save event. The upload path caps at the same
                     // limit in preparedContent(), so nothing is lost on the send side.
-                    val bytes = logContent.toByteArray(Charsets.UTF_8)
-                    val safe = if (bytes.size > MAX_CONTENT_BYTES)
-                        String(bytes, 0, MAX_CONTENT_BYTES, Charsets.UTF_8)
-                    else logContent
-                    putString(ARG_LOG_CONTENT, safe)
+                    putString(ARG_LOG_CONTENT, io.github.tabssh.utils.paste.LogUploadFit.fit(logContent, MAX_CONTENT_BYTES))
                     putString(ARG_LOG_TYPE, logType)
                 }
             }
@@ -245,12 +241,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
         fun preparedContent(): String {
             // Both debug and app logs are sanitized at write time in Logger —
             // no post-hoc full-blob regex pass needed here.
-            val bytes = logContent.toByteArray(Charsets.UTF_8)
-            return if (bytes.size > MAX_CONTENT_BYTES) {
-                String(bytes, 0, MAX_CONTENT_BYTES, Charsets.UTF_8)
-            } else {
-                logContent
-            }
+            return io.github.tabssh.utils.paste.LogUploadFit.fit(logContent, MAX_CONTENT_BYTES)
         }
 
         fun upload(

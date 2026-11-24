@@ -1576,7 +1576,7 @@
     <string name="prefs_terminal_font_size_title">Font Size</string>
     <string name="prefs_terminal_font_size_summary">Terminal text size</string>
     <string name="prefs_terminal_line_spacing_title">Line Spacing</string>
-    <string name="prefs_terminal_line_spacing_summary">Vertical spacing between lines (100%% = normal)</string>
+    <string name="prefs_terminal_line_spacing_summary">Vertical spacing between lines (100% = normal)</string>
     <string name="prefs_terminal_cursor_style_title">Cursor Style</string>
     <string name="prefs_terminal_cursor_style_summary">Cursor appearance</string>
     <string name="prefs_terminal_cursor_blink_title">Cursor Blink</string>
@@ -1781,11 +1781,11 @@
     <string name="prefs_monitoring_alert_cooldown_minutes_summary">Minimum time between repeat alerts for the same host</string>
     <string name="prefs_monitoring_open_notification_channel_title">Notification channel settings</string>
     <string name="prefs_monitoring_open_notification_channel_summary">Manage sound, vibration, and importance for monitoring alerts</string>
-    <string name="prefs_monitoring_default_cpu_threshold_title">CPU load alert threshold (%%)</string>
+    <string name="prefs_monitoring_default_cpu_threshold_title">CPU load alert threshold (%)</string>
     <string name="prefs_monitoring_default_cpu_threshold_summary">Alert when 5-minute load average exceeds this percentage</string>
-    <string name="prefs_monitoring_default_memory_threshold_title">Memory usage alert threshold (%%)</string>
+    <string name="prefs_monitoring_default_memory_threshold_title">Memory usage alert threshold (%)</string>
     <string name="prefs_monitoring_default_memory_threshold_summary">Alert when memory used exceeds this percentage</string>
-    <string name="prefs_monitoring_default_disk_threshold_title">Disk usage alert threshold (%%)</string>
+    <string name="prefs_monitoring_default_disk_threshold_title">Disk usage alert threshold (%)</string>
     <string name="prefs_monitoring_default_disk_threshold_summary">Alert when disk used exceeds this percentage</string>
 
     <!-- Settings: Tasker screen -->

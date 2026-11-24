@@ -424,7 +424,17 @@ class SyncDataApplier {
                         if (suppressed(TombstoneRecorder.MONITOR_SLOT, slot.id, slot.modifiedAt)) return@forEach
                         val existing = database.monitorSlotDao().getById(slot.id)
                         if (remoteIsStale(existing?.modifiedAt, slot.modifiedAt)) return@forEach
-                        if (writeIfChanged(existing, slot) { database.monitorSlotDao().insertOrReplace(it) }) appliedCount++
+                        // Up/down state and check times are what THIS device last observed; they are not
+                        // taken from sync, or a stale copy would overwrite a fresh "last seen up".
+                        val incoming = slot.copy(
+                            lastCheckedAt = existing?.lastCheckedAt ?: 0,
+                            lastSeenUp = existing?.lastSeenUp ?: 0,
+                            lastNotifiedDownAt = existing?.lastNotifiedDownAt ?: 0,
+                            lastNotifiedUpAt = existing?.lastNotifiedUpAt ?: 0,
+                            isCurrentlyDown = existing?.isCurrentlyDown ?: false,
+                            consecutiveFailures = existing?.consecutiveFailures ?: 0
+                        )
+                        if (writeIfChanged(existing, incoming) { database.monitorSlotDao().insertOrReplace(it) }) appliedCount++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -645,7 +655,13 @@ class SyncDataApplier {
                         // the existing local value across this whole-row apply.
                         val existing = database.containerHostDao().getById(h.id)
                         if (remoteIsStale(existing?.modifiedAt, h.modifiedAt)) return@forEach
-                        val incoming = h.copy(connectionCount = existing?.connectionCount ?: 0)
+                        // The check clock is this device's own: a synced value would overwrite the time of a
+                        // check made here with an older one recorded elsewhere.
+                        val incoming = h.copy(
+                            connectionCount = existing?.connectionCount ?: 0,
+                            lastUpdateCheck = existing?.lastUpdateCheck ?: 0,
+                            lastConnected = maxOf(existing?.lastConnected ?: 0, h.lastConnected)
+                        )
                         if (writeIfChanged(existing, incoming) {
                                 if (existing == null) database.containerHostDao().insert(it)
                                 else database.containerHostDao().update(it)
@@ -714,7 +730,15 @@ class SyncDataApplier {
                         if (suppressed(TombstoneRecorder.CONTAINER_AUTO_UPDATE_POLICY, TombstoneRecorder.naturalKey(p), p.modifiedAt)) return@forEach
                         val existing = database.containerAutoUpdatePolicyDao().getById(p.id)
                         if (remoteIsStale(existing?.modifiedAt, p.modifiedAt)) return@forEach
-                        if (writeIfChanged(existing, p) {
+                        // What a check found on THIS device (pending update, last digest, check time) is
+                        // never taken from sync: applying it put back updates that had just been cleared
+                        // and replaced the real check time with an older one.
+                        val incoming = p.copy(
+                            lastCheckedAt = existing?.lastCheckedAt ?: 0,
+                            lastDigestSeen = existing?.lastDigestSeen,
+                            pendingUpdateDigest = existing?.pendingUpdateDigest
+                        )
+                        if (writeIfChanged(existing, incoming) {
                                 if (existing == null) database.containerAutoUpdatePolicyDao().insert(it)
                                 else database.containerAutoUpdatePolicyDao().update(it)
                             }

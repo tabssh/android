@@ -158,6 +158,9 @@ class SSHConnection(
     @Volatile
     private var resolvedRoute: io.github.tabssh.storage.database.entities.NetworkRoute? = null
 
+    /** Minimum connect budget for a built-in Tor route, which has to build a circuit first. */
+    private val TOR_MIN_CONNECT_TIMEOUT_MS = 60_000
+
     /** Loopback SOCKS port for a built-in Tor route (0 = not started). */
     @Volatile
     private var resolvedTorPort: Int = 0
@@ -430,8 +433,8 @@ class SSHConnection(
                 stepDone("configure-session")
 
                 // Set timeout
-                newSession.timeout = profile.connectTimeout * 1000
-                Logger.d("SSHConnection", "Connection timeout set to ${profile.connectTimeout} seconds")
+                newSession.timeout = effectiveConnectTimeoutMs()
+                Logger.d("SSHConnection", "Connection timeout set to ${effectiveConnectTimeoutMs() / 1000} seconds")
 
                 // Wave 1.2 — env vars are applied at channel open (JSch's
                 // setEnv lives on Channel, not Session). See openShellChannel().
@@ -578,7 +581,7 @@ class SSHConnection(
         }
         setupHttpSocksProxy(retrySession)
         configureSession(retrySession)
-        retrySession.timeout = profile.connectTimeout * 1000
+        retrySession.timeout = effectiveConnectTimeoutMs()
         setupUserInfo(retrySession)
         setupAuthentication(jsch, retrySession)
         retrySession.connect()
@@ -1257,6 +1260,16 @@ class SSHConnection(
         val type = effectiveProxyType ?: return profile.proxyType ?: "None"
         val host = effectiveProxyHost ?: return type
         return "$type via $host:${effectiveProxyPort ?: ""}"
+    }
+
+    /**
+     * Connect/handshake budget in milliseconds. A connection through built-in Tor has to build a circuit
+     * to the destination before the first byte flows, which routinely takes longer than the 15 second
+     * default, so it gets at least [TOR_MIN_CONNECT_TIMEOUT_MS].
+     */
+    private fun effectiveConnectTimeoutMs(): Int {
+        val base = profile.connectTimeout * 1000
+        return if (resolvedRoute?.builtInTor == true) maxOf(base, TOR_MIN_CONNECT_TIMEOUT_MS) else base
     }
 
     private val effectiveProxyHost: String?
