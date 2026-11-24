@@ -46,8 +46,10 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
     companion object {
         private const val ARG_LOG_CONTENT = "log_content"
         private const val ARG_LOG_TYPE    = "log_type"
-        // 100 KB
-        private const val MAX_CONTENT_BYTES = 100 * 1024
+        // Fragment arguments cross Binder (1 MB limit, strings travel as UTF-16), so they stay small.
+        private const val MAX_ARG_BYTES = 256 * 1024
+        // First upload attempt; a service that answers HTTP 413 gets half as much, newest lines first.
+        private const val MAX_UPLOAD_BYTES = 1024 * 1024
 
         private val SERVICE_IDS     = io.github.tabssh.utils.paste.PasteServices.IDS
 
@@ -63,7 +65,7 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
                     // a large log never causes TransactionTooLargeException during swipe
                     // or any other state-save event. The upload path caps at the same
                     // limit in preparedContent(), so nothing is lost on the send side.
-                    putString(ARG_LOG_CONTENT, io.github.tabssh.utils.paste.LogUploadFit.fit(logContent, MAX_CONTENT_BYTES))
+                    putString(ARG_LOG_CONTENT, io.github.tabssh.utils.paste.LogUploadFit.fit(logContent, MAX_ARG_BYTES))
                     putString(ARG_LOG_TYPE, logType)
                 }
             }
@@ -238,10 +240,10 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
             }
         }
 
-        fun preparedContent(): String {
+        fun preparedContent(maxBytes: Int): String {
             // Both debug and app logs are sanitized at write time in Logger —
             // no post-hoc full-blob regex pass needed here.
-            return io.github.tabssh.utils.paste.LogUploadFit.fit(logContent, MAX_CONTENT_BYTES)
+            return io.github.tabssh.utils.paste.LogUploadFit.fit(logContent, maxBytes)
         }
 
         fun upload(
@@ -252,10 +254,24 @@ class ReportIssueDialog : BottomSheetDialogFragment() {
                 try {
                     val title = titleEdit.text.toString().trim().ifBlank { ctx.getString(io.github.tabssh.R.string.report_issue_default_title) }
                     val url = withContext(Dispatchers.IO) {
-                        val content = preparedContent()
-                        val result = PasteProviderFactory
-                            .createForService(selectedServiceId, prefs)
-                            .create(title, content)
+                        val provider = PasteProviderFactory.createForService(selectedServiceId, prefs)
+                        var limit = MAX_UPLOAD_BYTES
+                        var result: io.github.tabssh.utils.paste.PasteResult
+                        while (true) {
+                            try {
+                                result = provider.create(title, preparedContent(limit))
+                                break
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                val next = if (io.github.tabssh.utils.paste.LogUploadFit.isTooLarge(e)) {
+                                    io.github.tabssh.utils.paste.LogUploadFit.smaller(limit)
+                                } else null
+                                if (next == null) throw e
+                                io.github.tabssh.utils.logging.Logger.w("ReportIssueDialog", "Paste service refused $limit bytes as too large; retrying with $next")
+                                limit = next
+                            }
+                        }
                         // Remember the paste so it can be reviewed and deleted from My pastes.
                         io.github.tabssh.utils.paste.PasteTracker
                             .from(app.database, prefs)

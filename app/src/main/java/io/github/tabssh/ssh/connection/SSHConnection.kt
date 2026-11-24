@@ -1327,6 +1327,17 @@ class SSHConnection(
             }
         }
 
+        if (!perConn.isNullOrBlank() && perConn != NetworkRoute.DIRECT && chosen == null) {
+            // Falling back to a direct connection here would silently bypass the route the user picked.
+            Logger.e("SSHConnection", "Selected network route $perConn does not exist; aborting connect")
+            throw IllegalStateException("The network route selected for this connection no longer exists. Pick a route again in the connection settings.")
+        }
+        Logger.i(
+            "SSHConnection",
+            "Route resolved: perConnection=${perConn ?: "none"}, default=${defaultId ?: "none"}, " +
+                "chosen=${chosen?.let { "${it.routeType} enabled=${it.enabled} builtInTor=${it.builtInTor}" } ?: "none"}"
+        )
+
         // Back-compat backstop: synthesize a route from the legacy inline proxy
         // columns ONLY for a profile with no routing intent at any level — no
         // per-connection route_id AND no global default preference set. If a
