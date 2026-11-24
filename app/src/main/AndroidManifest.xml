@@ -480,6 +480,14 @@
             android:launchMode="singleTask"
             android:label="@string/activity_label_app_lock" />
 
+        <!-- Inactivity lock behind the Security Lock setting: device biometric or screen-lock prompt -->
+        <activity
+            android:name=".ui.activities.DeviceUnlockActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:label="@string/activity_label_app_lock" />
+
         <!-- Server performance monitoring, relocated from the main tab strip
              into the nav drawer's Insights group -->
         <activity

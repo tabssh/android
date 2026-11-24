@@ -26,8 +26,7 @@
       android:key="biometric_auth"
       android:title="@string/prefs_biometric_auth_title"
       android:summary="@string/prefs_biometric_auth_summary"
-      android:defaultValue="false"
-      android:dependency="security_lock_enabled" />
+      android:defaultValue="false" />
 
     <!-- PIN app lock is independent of the biometric/inactivity lock above. -->
     <Preference

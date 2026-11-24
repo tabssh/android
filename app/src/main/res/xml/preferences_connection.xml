@@ -49,7 +49,7 @@
       android:key="auto_reconnect"
       android:title="@string/prefs_auto_reconnect_title"
       android:summary="@string/prefs_auto_reconnect_summary"
-      android:defaultValue="false" />
+      android:defaultValue="true" />
 
     <EditTextPreference
       android:key="server_alive_interval"

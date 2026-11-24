@@ -225,7 +225,50 @@ class PinLockActivity : AppCompatActivity(), io.github.tabssh.ui.utils.AlwaysSec
         setContentView(root)
         pinInput.requestFocus()
 
-        if (mode == MODE_VERIFY) enforceLockout()
+        if (mode == MODE_VERIFY) {
+            enforceLockout()
+            offerBiometricUnlock()
+        }
+    }
+
+    /**
+     * With "Biometric Authentication" on and a biometric enrolled, offers fingerprint/face as a
+     * faster way past the PIN screen. The PIN stays available: cancelling the prompt, or a device
+     * with no biometric enrolled, simply leaves the PIN entry in front of the user. Skipped while a
+     * brute-force lockout window is running, so biometrics cannot sidestep it.
+     */
+    private fun offerBiometricUnlock() {
+        if (!app.preferencesManager.getBoolean("biometric_auth", false)) return
+        if (lockoutRemainingMs() > 0) return
+        val canUse = androidx.biometric.BiometricManager.from(this)
+            .canAuthenticate(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
+            androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
+        if (!canUse) return
+        val prompt = androidx.biometric.BiometricPrompt(
+            this,
+            androidx.core.content.ContextCompat.getMainExecutor(this),
+            object : androidx.biometric.BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: androidx.biometric.BiometricPrompt.AuthenticationResult) {
+                    app.preferencesManager.setInt(PREF_PIN_FAIL_COUNT, 0)
+                    app.preferencesManager.setString(PREF_PIN_LOCKOUT_UNTIL, "0")
+                    attempts = 0
+                    app.markAppUnlocked()
+                    setResult(Activity.RESULT_OK)
+                    finish()
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    Logger.d(TAG, "Biometric unlock not used ($errorCode): $errString")
+                }
+            }
+        )
+        prompt.authenticate(
+            androidx.biometric.BiometricPrompt.PromptInfo.Builder()
+                .setTitle(getString(R.string.pin_lock_biometric_title))
+                .setNegativeButtonText(getString(R.string.pin_lock_biometric_use_pin))
+                .setAllowedAuthenticators(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                .build()
+        )
     }
 
     private fun lockoutRemainingMs(): Long {

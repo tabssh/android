@@ -59,6 +59,8 @@ class NetworkAwareReconnector(
     /** Called to attempt a reconnect. Should handle its own connection
      *  handshake; does NOT need to catch [kotlinx.coroutines.CancellationException]. */
     private val reconnect: suspend () -> Unit,
+    /** Whether automatic reconnecting is wanted right now (the Auto Reconnect setting); read on each drop. */
+    private val enabled: () -> Boolean = { true },
 ) {
     /** Backoff attempt counter — reset to 0 whenever the network returns
      *  or a connection is successfully restored. */
@@ -104,6 +106,10 @@ class NetworkAwareReconnector(
      */
     fun onConnectionLost() {
         if (cancelled) return
+        if (!enabled()) {
+            Logger.i(tag, "Auto Reconnect is off - not reconnecting after the connection was lost")
+            return
+        }
         reconnectJob?.cancel()
         reconnectJob = null
 

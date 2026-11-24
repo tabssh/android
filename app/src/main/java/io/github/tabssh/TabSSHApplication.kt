@@ -101,7 +101,7 @@ class TabSSHApplication : Application() {
         io.github.tabssh.ssh.forwarding.PortForwardCoordinator(this)
     }
     val auditLogManager by lazy { io.github.tabssh.audit.AuditLogManager(this, database, preferencesManager) }
-    private val tabManagerLazy = lazy { io.github.tabssh.ui.tabs.TabManager(database) }
+    private val tabManagerLazy = lazy { io.github.tabssh.ui.tabs.TabManager(database) { preferencesManager.getMaxTabs() } }
     val tabManager: io.github.tabssh.ui.tabs.TabManager by tabManagerLazy
     private val sessionPersistenceManagerLazy = lazy {
         io.github.tabssh.background.SessionPersistenceManager(this, tabManager)
@@ -318,6 +318,15 @@ class TabSSHApplication : Application() {
             // port-forward, multi-host dashboard, SFTP, performance.
             wireGlobalHostKeyCallbacks()
             wireGlobalNotifications()
+            // The update notification follows the pending list itself, so applying an update,
+            // a manual check or removing a host corrects it without waiting for the next worker run.
+            applicationScope.launch {
+                database.containerAutoUpdatePolicyDao().observePending().collect { pending ->
+                    io.github.tabssh.utils.NotificationHelper.refreshContainerUpdatesAvailable(
+                        this@TabSSHApplication, pending.size, pending.map { it.containerHostId }.toSet().size
+                    )
+                }
+            }
             // Drain the v13->v14 hypervisor password carry-over table into the
             // Keystore now instead of waiting for each row's next retrieve().
             io.github.tabssh.crypto.storage.HypervisorPasswordStore
@@ -828,38 +837,73 @@ class TabSSHApplication : Application() {
         try {
             val prefs = androidx.preference.PreferenceManager
                 .getDefaultSharedPreferences(this)
-            if (!prefs.getBoolean("app_lock_enabled", false)) return
-            if (activity::class.java.simpleName == "PinLockActivity") return
-            // App lock with no stored hash cannot be satisfied — PinLockActivity
-            // clears the flag in that state; don't gate on it here.
-            if (prefs.getString("app_lock_pin_hash", "").isNullOrBlank()) return
-
-            val coldLaunch = !appUnlockedThisProcess
-            if (!coldLaunch) {
-                if (!prefs.getBoolean("security_auto_lock_background", false)) return
-                val backgroundedAt = prefs.getLong("ui_last_backgrounded_at", 0L)
-                if (backgroundedAt == 0L) return
-                val timeoutSec = (prefs.getString("security_auto_lock_timeout", "300") ?: "300")
-                    .toIntOrNull() ?: 300
-                val elapsed = (System.currentTimeMillis() - backgroundedAt) / 1000
-                if (elapsed < timeoutSec) return
-                Logger.i("TabSSHApplication",
-                    "Auto-lock triggered after ${elapsed}s background (limit ${timeoutSec}s)")
-            } else {
-                Logger.i("TabSSHApplication", "App lock: PIN required on launch")
-            }
-            // Reset the timestamp so we don't re-trigger immediately if the
-            // PIN screen itself moves through the lifecycle hooks.
-            prefs.edit().putLong("ui_last_backgrounded_at", 0L).apply()
-
-            val intent = io.github.tabssh.ui.activities.PinLockActivity
-                .verifyIntent(activity)
-                .addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                .addFlags(android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION)
-            activity.startActivity(intent)
+            val name = activity::class.java.simpleName
+            if (name == "PinLockActivity" || name == "DeviceUnlockActivity") return
+            if (requirePinUnlock(activity, prefs)) return
+            requireDeviceUnlock(activity, prefs)
         } catch (e: Exception) {
             Logger.w("TabSSHApplication", "maybeRequireUnlock failed: ${e.message}")
         }
+    }
+
+    /** The PIN gate described on [maybeRequireUnlock]. Returns true when it showed the PIN screen. */
+    private fun requirePinUnlock(activity: Activity, prefs: android.content.SharedPreferences): Boolean {
+        if (!prefs.getBoolean("app_lock_enabled", false)) return false
+        // App lock with no stored hash cannot be satisfied — PinLockActivity
+        // clears the flag in that state; don't gate on it here.
+        if (prefs.getString("app_lock_pin_hash", "").isNullOrBlank()) return false
+
+        val coldLaunch = !appUnlockedThisProcess
+        if (!coldLaunch) {
+            if (!prefs.getBoolean("security_auto_lock_background", false)) return false
+            val backgroundedAt = prefs.getLong("ui_last_backgrounded_at", 0L)
+            if (backgroundedAt == 0L) return false
+            val timeoutSec = (prefs.getString("security_auto_lock_timeout", "300") ?: "300")
+                .toIntOrNull() ?: 300
+            val elapsed = (System.currentTimeMillis() - backgroundedAt) / 1000
+            if (elapsed < timeoutSec) return false
+            Logger.i("TabSSHApplication",
+                "Auto-lock triggered after ${elapsed}s background (limit ${timeoutSec}s)")
+        } else {
+            Logger.i("TabSSHApplication", "App lock: PIN required on launch")
+        }
+        // Reset the timestamp so we don't re-trigger immediately if the
+        // PIN screen itself moves through the lifecycle hooks.
+        prefs.edit().putLong("ui_last_backgrounded_at", 0L).apply()
+
+        val intent = io.github.tabssh.ui.activities.PinLockActivity
+            .verifyIntent(activity)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        activity.startActivity(intent)
+        return true
+    }
+
+    /**
+     * The "Security Lock" setting: after the app has been in the background longer than
+     * `security_lock_timeout` seconds, ask for the device unlock. A device with no screen lock or
+     * biometric enrolled cannot satisfy it, so the lock is skipped rather than locking the user out.
+     */
+    private fun requireDeviceUnlock(activity: Activity, prefs: android.content.SharedPreferences) {
+        if (!prefs.getBoolean("security_lock_enabled", false)) return
+        val backgroundedAt = prefs.getLong("ui_last_backgrounded_at", 0L)
+        if (backgroundedAt == 0L) return
+        val timeoutSec = (prefs.getString("security_lock_timeout", "300") ?: "300").toIntOrNull() ?: 300
+        val elapsed = (System.currentTimeMillis() - backgroundedAt) / 1000
+        if (elapsed < timeoutSec) return
+        val biometricAllowed = prefs.getBoolean("biometric_auth", false)
+        if (!io.github.tabssh.ui.activities.DeviceUnlockActivity.canAuthenticate(this, biometricAllowed)) {
+            Logger.w("TabSSHApplication", "Security lock skipped: the device has no screen lock or biometric to confirm with")
+            prefs.edit().putLong("ui_last_backgrounded_at", 0L).apply()
+            return
+        }
+        Logger.i("TabSSHApplication", "Security lock triggered after ${elapsed}s background (limit ${timeoutSec}s)")
+        prefs.edit().putLong("ui_last_backgrounded_at", 0L).apply()
+        activity.startActivity(
+            io.github.tabssh.ui.activities.DeviceUnlockActivity.intent(activity)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        )
     }
 
     /**

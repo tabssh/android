@@ -190,6 +190,7 @@ class TelnetConnection(
             scope = scope,
             tag = "TelnetConnection/$host:$port",
             reconnect = { connect() },
+            enabled = { io.github.tabssh.TabSSHApplication.get().preferencesManager.isAutoReconnect() },
         ).also { it.start() }
     }
 

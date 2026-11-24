@@ -1,5 +1,6 @@
 package io.github.tabssh.ui.activities
 
+import io.github.tabssh.utils.recordConnection
 import io.github.tabssh.sync.tombstone.TombstoneRecorder
 import android.app.Activity
 import android.content.BroadcastReceiver
@@ -547,11 +548,8 @@ class TabTerminalActivity : TabSSHActivity() {
         // rebinds existing TermuxBridges to fresh TerminalViews, and the
         // emulator buffer (which lives on the bridge) shows up restored.
         //
-        // `ui_max_tabs` pref is read by the app-scoped manager at first
-        // construction; the per-activity coerce is no longer applied
-        // here (the lazy {} block in TabSSHApplication uses the default
-        // 10, which matches the historical behaviour before this pref
-        // was wired up — fine for now, can be reworked if users hit it).
+        // `ui_max_tabs` is read by the app-scoped manager on every limit
+        // check (the provider in TabSSHApplication), so it applies live.
         tabManager = app.tabManager
 
         // Stored as a field (not anonymous-inline) so onDestroy can call
@@ -4399,6 +4397,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 }
                 return@launch
             }
+            if (ssh != null) app.recordConnection(profile.id)
             // Telnet branch (separate path)
             if (profile.protocol.equals("telnet", ignoreCase = true)) {
                 val telnet = TelnetConnection(profile.host, profile.port.takeIf { it > 0 } ?: 23, app.networkDetector)
@@ -4672,6 +4671,7 @@ class TabTerminalActivity : TabSSHActivity() {
                     )
                     return null
                 }
+                app.recordConnection(profile.id)
                 val newTab = SSHTab(
                     profile,
                     TermuxBridge(

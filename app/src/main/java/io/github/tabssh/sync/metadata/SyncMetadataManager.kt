@@ -23,8 +23,6 @@ class SyncMetadataManager(private val context: Context) {
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_DEVICE_NAME = "device_name"
         private const val KEY_SYNC_VERSION = "sync_version"
-        private const val KEY_LAST_SYNC_TIME = "last_sync_time"
-        private const val KEY_LAST_SUCCESSFUL_SYNC = "last_successful_sync"
     }
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -81,34 +79,6 @@ class SyncMetadataManager(private val context: Context) {
         prefs.edit().putLong(KEY_SYNC_VERSION, newVersion).apply()
         Logger.d(TAG, "Sync version incremented to: $newVersion")
         return newVersion
-    }
-
-    /**
-     * Get last sync timestamp
-     */
-    fun getLastSyncTime(): Long {
-        return prefs.getLong(KEY_LAST_SYNC_TIME, 0)
-    }
-
-    /**
-     * Update last sync timestamp
-     */
-    fun updateLastSyncTime(timestamp: Long = System.currentTimeMillis()) {
-        prefs.edit().putLong(KEY_LAST_SYNC_TIME, timestamp).apply()
-    }
-
-    /**
-     * Get last successful sync timestamp
-     */
-    fun getLastSuccessfulSyncTime(): Long {
-        return prefs.getLong(KEY_LAST_SUCCESSFUL_SYNC, 0)
-    }
-
-    /**
-     * Update last successful sync timestamp
-     */
-    fun updateLastSuccessfulSyncTime(timestamp: Long = System.currentTimeMillis()) {
-        prefs.edit().putLong(KEY_LAST_SUCCESSFUL_SYNC, timestamp).apply()
     }
 
     /**
@@ -210,57 +180,5 @@ class SyncMetadataManager(private val context: Context) {
     fun resetMetadata() {
         prefs.edit().clear().apply()
         Logger.d(TAG, "Sync metadata reset")
-    }
-
-    /**
-     * Check if device has ever synced
-     */
-    fun hasNeverSynced(): Boolean {
-        return getLastSyncTime() == 0L
-    }
-
-    /**
-     * Get time since last sync in milliseconds
-     */
-    fun getTimeSinceLastSync(): Long {
-        val lastSync = getLastSyncTime()
-        return if (lastSync == 0L) {
-            Long.MAX_VALUE
-        } else {
-            System.currentTimeMillis() - lastSync
-        }
-    }
-
-    /**
-     * Check if sync is due based on frequency
-     */
-    fun isSyncDue(frequencyMinutes: Int): Boolean {
-        if (hasNeverSynced()) return true
-
-        val timeSinceSync = getTimeSinceLastSync()
-        val frequencyMillis = frequencyMinutes * 60 * 1000L
-
-        return timeSinceSync >= frequencyMillis
-    }
-
-    /**
-     * Get formatted last sync time description
-     */
-    fun getLastSyncDescription(): String {
-        val lastSync = getLastSyncTime()
-
-        if (lastSync == 0L) {
-            return "Never synced"
-        }
-
-        val diff = System.currentTimeMillis() - lastSync
-
-        return when {
-            diff < 60_000 -> "Just now"
-            diff < 3600_000 -> "${diff / 60_000} minute${if (diff / 60_000 > 1) "s" else ""} ago"
-            diff < 86400_000 -> "${diff / 3600_000} hour${if (diff / 3600_000 > 1) "s" else ""} ago"
-            diff < 604800_000 -> "${diff / 86400_000} day${if (diff / 86400_000 > 1) "s" else ""} ago"
-            else -> "${diff / 604800_000} week${if (diff / 604800_000 > 1) "s" else ""} ago"
-        }
     }
 }

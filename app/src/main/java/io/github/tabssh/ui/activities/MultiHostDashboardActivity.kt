@@ -989,6 +989,19 @@ class MultiHostDashboardActivity : TabSSHActivity() {
                                     metricsMap[profile.id] = m
                                     errorMap.remove(profile.id)
                                     notifyHostCard(profile.id)
+                                    launch(Dispatchers.IO) {
+                                        val fresh = runCatching {
+                                            val dao = app.database.monitorSlotDao()
+                                            dao.markSeenUp(profile.id, System.currentTimeMillis())
+                                            dao.getByConnectionId(profile.id)
+                                        }.getOrNull()
+                                        if (fresh != null) {
+                                            withContext(Dispatchers.Main) {
+                                                monitorSlots[profile.id] = fresh
+                                                notifyHostCard(profile.id)
+                                            }
+                                        }
+                                    }
                                 }
                                 .onFailure { e ->
                                     errorMap[profile.id] = e.message ?: getString(R.string.dashboard_status_error)

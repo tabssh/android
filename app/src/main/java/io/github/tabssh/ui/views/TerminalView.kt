@@ -744,6 +744,25 @@ class TerminalView @JvmOverloads constructor(
                     prefs.getBoolean("terminal_bell_visual", true)) {
                     post { triggerVisualBell() }
                 }
+                // `terminal_bell_vibrate` (default true, gated on `terminal_bell`) was saved and
+                // synced but never read, so the switch did nothing.
+                if (prefs.getBoolean("terminal_bell", true) &&
+                    prefs.getBoolean("terminal_bell_vibrate", true)) {
+                    try {
+                        @Suppress("DEPRECATION")
+                        val vibrator = context.getSystemService(android.content.Context.VIBRATOR_SERVICE)
+                            as? android.os.Vibrator
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                            vibrator?.vibrate(
+                                android.os.VibrationEffect.createOneShot(40, android.os.VibrationEffect.DEFAULT_AMPLITUDE)
+                            )
+                        } else {
+                            vibrator?.vibrate(40)
+                        }
+                    } catch (e: Exception) {
+                        Logger.d("TerminalView", "Bell vibration failed: ${e.message}")
+                    }
+                }
             }
 
             override fun onColorsChanged() {

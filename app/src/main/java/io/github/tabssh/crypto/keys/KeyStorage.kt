@@ -718,7 +718,16 @@ class KeyStorage(private val context: Context) {
      * Returns null if the key does not exist or cannot be reconstructed.
      */
     suspend fun getJSchBytesWithFallback(keyId: String): ByteArray? = withContext(Dispatchers.IO) {
-        retrieveJSchBytes(keyId)?.let { return@withContext it }
+        retrieveJSchBytes(keyId)?.let {
+            // The cached fast path is how nearly every authentication reads the key, so the
+            // last-used stamp has to be written here, not only on the slow path below.
+            try {
+                database.keyDao().updateLastUsed(keyId)
+            } catch (e: Exception) {
+                Logger.w("KeyStorage", "Could not stamp last use for $keyId: ${e.message}")
+            }
+            return@withContext it
+        }
 
         // Fallback: reconstruct from stored PKCS#8 DER
         return@withContext try {

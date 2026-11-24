@@ -907,6 +907,7 @@
     <string name="container_updates_last_checked">Last checked %1$s</string>
     <string name="container_updates_never_checked">Never checked</string>
     <string name="container_updates_check_failed">Could not read the container list from this host</string>
+    <string name="container_updates_check_partial">Checked, but %1$d container check(s) failed</string>
     <string name="container_updates_check_none">No updates found</string>
     <plurals name="container_updates_check_found">
         <item quantity="one">%d update found</item>
@@ -919,6 +920,14 @@
     <string name="container_updates_update_action">Update</string>
     <string name="nav_item_container_updates">Container Updates</string>
     <string name="container_updates_check_all">Check all now</string>
+    <string name="container_updates_update_all">Update all</string>
+    <string name="container_updates_update_all_title">Update all containers</string>
+    <string name="container_updates_update_all_confirm">Pull the latest image and recreate every container listed here? Each container restarts during its update.</string>
+    <string name="container_updates_update_all_progress">Updating %1$s (%2$d of %3$d)</string>
+    <string name="container_updates_update_all_connect_failed">%1$s: could not connect, skipped</string>
+    <string name="container_updates_update_all_item_failed">%1$s: failed at %2$s (%3$s)</string>
+    <string name="container_updates_update_all_item_ok">%1$s: updated</string>
+    <string name="container_updates_update_all_summary">%1$d updated, %2$d failed</string>
     <string name="container_updates_check_all_started">Checking all hosts</string>
     <string name="container_updates_status_running">Checking hosts…</string>
     <string name="container_updates_status_ok">%1$d host(s) checked just now.</string>
@@ -1388,6 +1397,10 @@
     <string name="activity_label_stack_logs">Stack Logs</string>
     <string name="activity_label_stack_detail">Compose Stack</string>
     <string name="activity_label_app_lock">App Lock</string>
+    <string name="security_lock_prompt_title">Unlock TabSSH</string>
+    <string name="security_lock_prompt_subtitle">Confirm it is you to continue</string>
+    <string name="pin_lock_biometric_title">Unlock TabSSH</string>
+    <string name="pin_lock_biometric_use_pin">Use PIN</string>
     <string name="activity_label_host_detail">Host Detail</string>
     <string name="activity_label_cloud_accounts">Cloud Accounts</string>
     <string name="activity_label_cloud_instances">Cloud Instances</string>

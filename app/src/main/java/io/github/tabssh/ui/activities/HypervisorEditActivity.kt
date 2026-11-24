@@ -1042,6 +1042,7 @@ class HypervisorEditActivity : TabSSHActivity() {
                     oauthAudience = editOauthAudience.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
                     notes = editNotes.text.toString().takeIf { it.isNotBlank() },
                     lastConnected = editingHypervisor?.lastConnected ?: 0,
+                    connectionCount = editingHypervisor?.connectionCount ?: 0,
                     createdAt = editingHypervisor?.createdAt ?: System.currentTimeMillis(),
                     sshIdentityId = if (type == HypervisorType.LIBVIRT) selectedSshIdentityId else null,
                     modifiedAt = System.currentTimeMillis()

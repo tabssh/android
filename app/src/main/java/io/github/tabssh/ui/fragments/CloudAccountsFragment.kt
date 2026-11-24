@@ -751,12 +751,9 @@ class CloudAccountsFragment : Fragment() {
             }
             try {
                 withContext(Dispatchers.IO) {
-                    app.database.cloudAccountDao().update(
-                        account.copy(
-                            lastRefreshAt = System.currentTimeMillis(),
-                            lastCount     = count
-                        )
-                    )
+                    // Targeted update: the in-memory copy predates the network call and would overwrite
+                    // any usage stats or edits written meanwhile.
+                    app.database.cloudAccountDao().markRefreshed(account.id, count)
                 }
             } catch (e: CancellationException) {
                 throw e

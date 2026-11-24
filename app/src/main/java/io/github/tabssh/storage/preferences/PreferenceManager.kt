@@ -30,21 +30,16 @@ class PreferenceManager(private val context: Context) {
 
     private fun migrateIntToStringPreference(key: String) {
         try {
-            // Try to read as Int (old format)
-            val intValue = preferences.getInt(key, -1)
-            if (intValue != -1) {
-                // Convert to String and save
+            // Inspect the stored type without probing getInt, which throws once the value is already
+            // a String (the normal state) and logged a line per construction on every sync.
+            val raw = preferences.all[key]
+            if (raw is Int) {
                 preferences.edit()
-                    // Remove old Int value
                     .remove(key)
-                    // Save as String
-                    .putString(key, intValue.toString())
+                    .putString(key, raw.toString())
                     .apply()
-                Logger.d("PreferenceManager", "Migrated $key from Int to String: $intValue")
+                Logger.d("PreferenceManager", "Migrated $key from Int to String: $raw")
             }
-        } catch (e: ClassCastException) {
-            // Already a String, no migration needed
-            Logger.d("PreferenceManager", "$key already stored as String")
         } catch (e: Exception) {
             Logger.e("PreferenceManager", "Failed to migrate $key", e)
         }
@@ -208,10 +203,10 @@ class PreferenceManager(private val context: Context) {
         // zellij default — C-Space (dfmgr zellij config.kdl binds Ctrl+Space to enter tmux-mode)
         const val DEFAULT_PREFIX_ZELLIJ = "C-Space"
         const val DEFAULT_PREFIX_HERDR = "C-b"
-        const val DEFAULT_STARTUP_BEHAVIOR = "last_session"
+        const val DEFAULT_STARTUP_BEHAVIOR = "connections"
         const val DEFAULT_PASSWORD_STORAGE_LEVEL = "encrypted"
         const val DEFAULT_THEME = "dracula"
-        const val DEFAULT_FONT_FAMILY = "Roboto Mono"
+        const val DEFAULT_FONT_FAMILY = "hack_nerd"
         const val DEFAULT_FONT_SIZE = 14f
         const val DEFAULT_APP_THEME = "dark"
     }
@@ -227,7 +222,7 @@ class PreferenceManager(private val context: Context) {
     fun isAutoBackupEnabled(): Boolean = getBoolean(KEY_AUTO_BACKUP, true)
     fun setAutoBackupEnabled(enabled: Boolean) = setBoolean(KEY_AUTO_BACKUP, enabled)
     
-    fun getLanguage(): String = getString(KEY_LANGUAGE, "system")
+    fun getLanguage(): String = getString(KEY_LANGUAGE, "en")
     fun setLanguage(language: String) = setString(KEY_LANGUAGE, language)
     
     // Security preferences
@@ -262,7 +257,7 @@ class PreferenceManager(private val context: Context) {
     
     // KEY_CLEAR_CLIPBOARD_TIMEOUT is a ListPreference — it always stores a String.
     // getInt() throws ClassCastException when it finds a String in SharedPreferences.
-    fun getClearClipboardTimeout(): Int = getStringAsInt(KEY_CLEAR_CLIPBOARD_TIMEOUT, 60)
+    fun getClearClipboardTimeout(): Int = getStringAsInt(KEY_CLEAR_CLIPBOARD_TIMEOUT, 0)
     fun setClearClipboardTimeout(seconds: Int) = setString(KEY_CLEAR_CLIPBOARD_TIMEOUT, seconds.toString())
     
     // Terminal preferences
@@ -325,7 +320,7 @@ class PreferenceManager(private val context: Context) {
     fun isCursorBlinkEnabled(): Boolean = getBoolean(KEY_CURSOR_BLINK, true)
     fun setCursorBlinkEnabled(enabled: Boolean) = setBoolean(KEY_CURSOR_BLINK, enabled)
     
-    fun getScrollbackLines(): Int = getStringAsInt(KEY_SCROLLBACK_LINES, 1000)
+    fun getScrollbackLines(): Int = getStringAsInt(KEY_SCROLLBACK_LINES, -1)
     fun setScrollbackLines(lines: Int) = setString(KEY_SCROLLBACK_LINES, lines.toString())
 
     /**
@@ -380,18 +375,8 @@ class PreferenceManager(private val context: Context) {
 
     // Keyboard preferences
     fun getKeyboardRowCount(): Int {
-        // Handle both Int and String storage (ListPreference stores as String)
-        return try {
-            getInt(KEY_KEYBOARD_ROW_COUNT, 3).coerceIn(1, 5)
-        } catch (e: ClassCastException) {
-            // Preference was stored as String (from XML preference)
-            try {
-                getString(KEY_KEYBOARD_ROW_COUNT, "3").toIntOrNull()?.coerceIn(1, 5) ?: 3
-            } catch (e2: Exception) {
-                // Default to 3 rows
-                3
-            }
-        }
+        // ListPreference stores a String; older builds stored an Int. getStringAsInt reads either.
+        return getStringAsInt(KEY_KEYBOARD_ROW_COUNT, 3).coerceIn(1, 5)
     }
     fun setKeyboardRowCount(count: Int) {
         // ListPreference stores as String, so we must use String to avoid ClassCastException
@@ -469,7 +454,7 @@ class PreferenceManager(private val context: Context) {
     // — surfaced by SyncDataCollector's first call after upgrade.
     // Route through getStringAsInt(), same shape as getDefaultPort /
     // getConnectTimeout.
-    fun getMaxTabs(): Int = getStringAsInt(KEY_MAX_TABS, 10)
+    fun getMaxTabs(): Int = getStringAsInt(KEY_MAX_TABS, 20)
     fun setMaxTabs(maxTabs: Int) = setString(KEY_MAX_TABS, maxTabs.toString())
     
     fun isConfirmTabClose(): Boolean = getBoolean(KEY_CONFIRM_TAB_CLOSE, true)
@@ -648,8 +633,6 @@ class PreferenceManager(private val context: Context) {
     fun getSyncFrequency(): String = getString("sync_frequency", "1h")
     fun setSyncFrequency(frequency: String) = setString("sync_frequency", frequency)
 
-    fun isSyncPasswordSet(): Boolean = getBoolean("sync_password_set", false)
-    fun setSyncPasswordSet(isSet: Boolean) = setBoolean("sync_password_set", isSet)
 
     fun getLastSyncTime(): Long = preferences.getLong("sync_last_time", 0)
     fun setLastSyncTime(timestamp: Long) = preferences.edit().putLong("sync_last_time", timestamp).apply()

@@ -50,6 +50,9 @@ class ProxmoxManagerActivity : TabSSHActivity() {
         private const val TAG = "ProxmoxManager"
         const val EXTRA_HYPERVISOR_ID = "hypervisor_id"
 
+        /** Bound on one guest-agent IP lookup, so a stalled agent cannot hold the VM list back. */
+        private const val IP_LOOKUP_TIMEOUT_MS = 5_000L
+
         /** Upper bound on a server-supplied name rendered in a row, dialog or log line. */
         private const val MAX_NAME_LENGTH = 128
 
@@ -297,7 +300,10 @@ class ProxmoxManagerActivity : TabSSHActivity() {
                     async {
                         if (vm.status == "running") {
                             val ip = try {
-                                client.getVMIPAddress(vm.node, vm.vmid, vm.type)
+                                // One unresponsive guest agent must not hold the whole list on the spinner.
+                                kotlinx.coroutines.withTimeoutOrNull(IP_LOOKUP_TIMEOUT_MS) {
+                                    client.getVMIPAddress(vm.node, vm.vmid, vm.type)
+                                }
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {

@@ -69,6 +69,9 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
 
     private var currentHost: ContainerHost? = null
     private var containers: List<ContainerSummary> = emptyList()
+
+    /** Every container on the host, running or not; what the pending-update list is matched against. */
+    private var allContainers: List<ContainerSummary> = emptyList()
     private var policies: List<ContainerAutoUpdatePolicy> = emptyList()
 
     // True while the selectors are being set from stored values, so that does not read as a user edit.
@@ -132,8 +135,21 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
         startLoad {
             val host = app.database.containerHostDao().getById(manager.hostId) ?: session.host
             val listed = session.transport.listContainers(all = false)
-            val loadedPolicies = app.database.containerAutoUpdatePolicyDao()
-                .getPoliciesForHost(manager.hostId).first()
+            // Stopped containers still exist and can still be updated, so the pending list is judged
+            // against every container on the host, not only the running ones.
+            val everything = (session.transport.listContainers(all = true) as? ContainerResult.Success)?.value
+            val policyDao = app.database.containerAutoUpdatePolicyDao()
+            var loadedPolicies = policyDao.getPoliciesForHost(manager.hostId).first()
+            if (everything != null) {
+                val existing = everything
+                    .flatMap { c -> c.names.map { it.trimStart('/') }.ifEmpty { listOf(c.id.take(12)) } }
+                    .toSet()
+                val gone = HostUpdateScanner.clearPendingForMissing(
+                    policyDao, host.name, loadedPolicies, existing
+                ).map { it.id }.toSet()
+                if (gone.isNotEmpty()) loadedPolicies = loadedPolicies.filter { it.id !in gone }
+                allContainers = everything
+            }
             if (!isAdded) return@startLoad
             progressBar.visibility = View.GONE
             when (listed) {
@@ -243,7 +259,7 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
 
     private fun renderAvailable() {
         listAvailable.removeAllViews()
-        val byName = containers.associateBy { nameOf(it) }
+        val byName = (allContainers.ifEmpty { containers }).associateBy { nameOf(it) }
         val pending = policies.filter {
             it.scope != HostUpdateScanner.SCOPE_STACK && it.pendingUpdateDigest != null &&
                 byName.containsKey(it.containerNameOrStackName)
@@ -423,7 +439,6 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
         buttonCheckNow.isEnabled = false
         buttonCheckNow.setText(R.string.container_updates_checking)
         Logger.event(TAG, "update check on ${host.name} started")
-        Logger.event(TAG, "update check on ${host.name} started")
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val appContext = requireContext().applicationContext
@@ -432,8 +447,19 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
                     dao, app.database.registryCredentialDao(), RegistryClient()
                 ) { credentialId -> RegistryCredentialStore.retrieve(appContext, credentialId) }
                 val hostPolicies = dao.getPoliciesForHost(host.id).first()
+                val failures = mutableListOf<String>()
                 val found = HostUpdateScanner(dao, checker, StackPruner(appContext, app.database))
-                    .scan(host, hostPolicies, globalSettings(), current.transport)
+                    .scan(host, hostPolicies, globalSettings(), current.transport, failures)
+                // Same record the scheduled check leaves, so the Container Updates page reports a manual
+                // check too instead of showing a stale "last known" state.
+                io.github.tabssh.containers.registry.UpdateCheckStatus.record(
+                    host.id,
+                    io.github.tabssh.containers.registry.UpdateCheckStatus.HostResult(
+                        if (found == null) io.github.tabssh.containers.registry.UpdateCheckStatus.Outcome.LIST_FAILED
+                        else io.github.tabssh.containers.registry.UpdateCheckStatus.Outcome.CHECKED,
+                        System.currentTimeMillis(), failures.size, failures.firstOrNull()
+                    )
+                )
                 if (found != null) {
                     app.database.containerHostDao().updateLastUpdateCheck(host.id, System.currentTimeMillis())
                     Logger.event(TAG, "update check on ${host.name} finished: ${found.size} update(s) available")
@@ -443,6 +469,7 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
                 if (!isAdded) return@launch
                 val message = when {
                     found == null -> getString(R.string.container_updates_check_failed)
+                    failures.isNotEmpty() -> getString(R.string.container_updates_check_partial, failures.size)
                     found.isEmpty() -> getString(R.string.container_updates_check_none)
                     else -> resources.getQuantityString(
                         R.plurals.container_updates_check_found, found.size, found.size

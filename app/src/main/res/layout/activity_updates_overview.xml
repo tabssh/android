@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Container Updates page (nav drawer, Insights group): every container with a newer image waiting,
-  grouped by host, with a Check all now action. Opened by the update notification.
+  grouped by host, with Check all now and Update all actions. Opened by the update notification.
 -->
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -43,14 +43,37 @@
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:visibility="gone" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/button_check_all"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="wrap_content"
+            <!-- Check all on the left; Update all on the right, above the per-row Update buttons -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_sm"
-                android:minHeight="@dimen/min_touch_target"
-                android:text="@string/container_updates_check_all" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/button_check_all"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="@dimen/min_touch_target"
+                    android:text="@string/container_updates_check_all" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/button_update_all"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="@dimen/space_sm"
+                    android:minHeight="@dimen/min_touch_target"
+                    android:text="@string/container_updates_update_all"
+                    android:visibility="gone" />
+
+            </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/list_hosts"

@@ -130,7 +130,7 @@
       android:key="terminal_copy_on_select"
       android:title="@string/prefs_terminal_copy_on_select_title"
       android:summary="@string/prefs_terminal_copy_on_select_summary"
-      android:defaultValue="false" />
+      android:defaultValue="true" />
 
     <SwitchPreferenceCompat
       android:key="detect_urls"

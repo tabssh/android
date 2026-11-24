@@ -494,6 +494,7 @@ class SSHConnection(
                             scope = scope,
                             tag = "SSHConnection/${profile.host}:${profile.port}",
                             reconnect = { connect() },
+                            enabled = { app.preferencesManager.isAutoReconnect() },
                         ).also { it.start() }
                     }
                 } else {

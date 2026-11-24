@@ -47,6 +47,12 @@ private const val MAX_DISK_ROWS = 32
 private const val DASHBOARD_LOAD_TIMEOUT_MS = 45_000L
 
 /**
+ * Bound on each single listing. One stalled call resolves to "not available" after this long while
+ * every other count still renders, instead of the whole dashboard being dropped at the overall bound.
+ */
+private const val DASHBOARD_CALL_TIMEOUT_MS = 20_000L
+
+/**
  * Per-host dashboard — the first destination.
  *
  * Shows the host's name and engine, one inventory count per concept the
@@ -87,8 +93,8 @@ class ContainerDashboardFragment : ContainerPageFragment() {
 
     /** Everything the dashboard renders, gathered in one concurrent pass. */
     private data class DashboardLoad(
-        val info: ContainerResult<ContainerEngineInfo>,
-        val version: ContainerResult<ContainerEngineVersion>,
+        val info: ContainerResult<ContainerEngineInfo>?,
+        val version: ContainerResult<ContainerEngineVersion>?,
         val stacks: Int?,
         val containers: Int?,
         val networks: Int?,
@@ -146,14 +152,14 @@ class ContainerDashboardFragment : ContainerPageFragment() {
 
             Logger.d(
                 TAG,
-                "load: done hostId=${session.host.id} info=${loaded.info.outcome()} " +
-                    "version=${loaded.version.outcome()}"
+                "load: done hostId=${session.host.id} info=${loaded.info?.outcome() ?: "timeout"} " +
+                    "version=${loaded.version?.outcome() ?: "timeout"}"
             )
 
             bindCounts(engine, loaded)
-            val infoValue = loaded.info.valueOrNull()
+            val infoValue = loaded.info?.valueOrNull()
             if (infoValue != null) {
-                bindEngine(engine, infoValue, loaded.version.valueOrNull())
+                bindEngine(engine, infoValue, loaded.version?.valueOrNull())
             } else {
                 cardEngine.visibility = View.GONE
             }
@@ -172,41 +178,43 @@ class ContainerDashboardFragment : ContainerPageFragment() {
         engine: ContainerEngine
     ): DashboardLoad? = withTimeoutOrNull(DASHBOARD_LOAD_TIMEOUT_MS) {
         coroutineScope {
-            val info = async { session.transport.engineInfo() }
-            val version = async { session.transport.engineVersion() }
-            val containerList = async { session.transport.listContainers(all = true).valueOrNull() }
-            val stacks = async { if (engine.supports(EngineCapability.COMPOSE_STACKS)) stackCount(session) else null }
+            val info = async { bounded("engineInfo") { session.transport.engineInfo() } }
+            val version = async { bounded("engineVersion") { session.transport.engineVersion() } }
+            val containerList = async { bounded("listContainers") { session.transport.listContainers(all = true).valueOrNull() } }
+            val stacks = async {
+                if (engine.supports(EngineCapability.COMPOSE_STACKS)) bounded("stacks") { stackCount(session) } else null
+            }
             val networks = async {
                 if (engine.supports(EngineCapability.NETWORKS)) {
-                    session.transport.listNetworks().valueOrNull()?.size
+                    bounded("listNetworks") { session.transport.listNetworks().valueOrNull()?.size }
                 } else {
                     null
                 }
             }
             val volumes = async {
                 if (engine.supports(EngineCapability.VOLUMES)) {
-                    session.transport.listVolumes().valueOrNull()?.size
+                    bounded("listVolumes") { session.transport.listVolumes().valueOrNull()?.size }
                 } else {
                     null
                 }
             }
             val images = async {
                 if (engine.supports(EngineCapability.IMAGES)) {
-                    session.transport.listImages().valueOrNull()?.size
+                    bounded("listImages") { session.transport.listImages().valueOrNull()?.size }
                 } else {
                     null
                 }
             }
             val updates = async {
                 if (engine.supports(EngineCapability.IMAGE_UPDATES)) {
-                    updateCount(session, containerList.await())
+                    bounded("updateCount") { updateCount(session, containerList.await()) }
                 } else {
                     null
                 }
             }
             val disk = async {
                 if (engine.supports(EngineCapability.DISK_USAGE)) {
-                    session.transport.diskUsage().valueOrNull()
+                    bounded("diskUsage") { session.transport.diskUsage().valueOrNull() }
                 } else {
                     null
                 }
@@ -225,6 +233,14 @@ class ContainerDashboardFragment : ContainerPageFragment() {
         }
     }
 
+    /** Runs one listing under [DASHBOARD_CALL_TIMEOUT_MS]; a stalled call is logged and yields null. */
+    private suspend fun <T> bounded(label: String, block: suspend () -> T): T? {
+        var finished = false
+        val value = withTimeoutOrNull(DASHBOARD_CALL_TIMEOUT_MS) { block().also { finished = true } }
+        if (!finished) Logger.w(TAG, "load: $label did not answer within ${DASHBOARD_CALL_TIMEOUT_MS}ms")
+        return value
+    }
+
     /**
      * Containers with a newer image waiting, from the scanner's pending flags: the same count the
      * Container Updates page and the notification use. Flags for containers that no longer exist
@@ -235,15 +251,18 @@ class ContainerDashboardFragment : ContainerPageFragment() {
         containers: List<ContainerSummary>?
     ): Int? {
         containers ?: return null
-        val byName = containers.associateBy { it.names.firstOrNull()?.trimStart('/') ?: it.id.take(12) }
-        val policies = app.database.containerAutoUpdatePolicyDao()
-            .getPoliciesForHost(session.host.id).first()
-        return policies
-            .filter {
-                it.scope != HostUpdateScanner.SCOPE_STACK && it.pendingUpdateDigest != null &&
-                    byName.containsKey(it.containerNameOrStackName)
-            }
-            .size
+        val existing = containers
+            .flatMap { c -> c.names.map { it.trimStart('/') }.ifEmpty { listOf(c.id.take(12)) } }
+            .toSet()
+        val dao = app.database.containerAutoUpdatePolicyDao()
+        val policies = dao.getPoliciesForHost(session.host.id).first()
+        // Flags for containers that no longer exist are cleared in the database, not just hidden
+        // here, so the Container Updates page and the notification show the same number.
+        val gone = HostUpdateScanner.clearPendingForMissing(dao, session.host.name, policies, existing)
+            .map { it.id }.toSet()
+        return policies.count {
+            it.id !in gone && it.scope != HostUpdateScanner.SCOPE_STACK && it.pendingUpdateDigest != null
+        }
     }
 
     /**

@@ -1,5 +1,6 @@
 package io.github.tabssh.ui.activities
 
+import io.github.tabssh.utils.recordConnection
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -260,7 +261,7 @@ class SFTPActivity : TabSSHActivity() {
                     Logger.event("SFTPActivity", "Opening SSH session for SFTP: ${profile.getDisplayName()}")
                     withContext(Dispatchers.IO) {
                         app.sshSessionManager.connectToServer(profile)
-                    } ?: run {
+                    }?.also { app.recordConnection(profile.id) } ?: run {
                         Logger.e("SFTPActivity", "SSH connect failed for SFTP: ${profile.getDisplayName()}")
                         showError(getString(R.string.sftp_error_connect_failed_fmt, profile.getDisplayName()))
                         finish()
@@ -392,7 +393,7 @@ class SFTPActivity : TabSSHActivity() {
             val existing = withContext(Dispatchers.IO) { app.sshSessionManager.getConnection(profile.id) }
             val conn = existing ?: withContext(Dispatchers.IO) {
                 app.sshSessionManager.connectToServer(profile)
-            }
+            }?.also { app.recordConnection(profile.id) }
             if (conn == null) {
                 runOnUiThread {
                     showError(getString(R.string.sftp_error_connect_failed_fmt, profile.getDisplayName()))

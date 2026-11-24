@@ -1140,6 +1140,21 @@ object NotificationHelper {
         nm.cancel(NOTIFICATION_ID_SYNC_CONFLICTS)
     }
 
+    /**
+     * Keeps the update-available notification true to the pending list between worker runs: gone
+     * when nothing is pending, re-counted in place when it is still on screen. It never re-posts a
+     * notification the user dismissed, and never alerts (the original post already did).
+     */
+    fun refreshContainerUpdatesAvailable(context: Context, containers: Int, hosts: Int) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (containers == 0) {
+            nm.cancel(NOTIFICATION_ID_CONTAINER_UPDATES_AVAILABLE)
+            return
+        }
+        val showing = nm.activeNotifications.any { it.id == NOTIFICATION_ID_CONTAINER_UPDATES_AVAILABLE }
+        if (showing) notifyContainerUpdatesAvailable(context, containers, hosts)
+    }
+
     /** Remove the update-available alert once nothing is pending any more. */
     fun cancelContainerUpdatesAvailable(context: Context) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

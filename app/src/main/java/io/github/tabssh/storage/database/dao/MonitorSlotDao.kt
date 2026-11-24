@@ -52,4 +52,19 @@ interface MonitorSlotDao {
         stampDown: Boolean,
         stampUp: Boolean
     )
+
+    /**
+     * Stamps "last seen up" and "last checked" from a live session that just returned metrics, and
+     * clears a stale down flag: a host answering over a live session is not down. Skipped while the
+     * slot is already up and stamped within [minGapMs], so a steady metrics loop does not rewrite
+     * the row (and trigger a sync) each tick.
+     */
+    @Query("""UPDATE monitor_slots SET
+        last_seen_up         = :now,
+        last_checked_at      = :now,
+        is_currently_down    = 0,
+        consecutive_failures = 0
+        WHERE connection_id = :connectionId
+          AND (is_currently_down = 1 OR last_seen_up < :now - :minGapMs)""")
+    suspend fun markSeenUp(connectionId: String, now: Long, minGapMs: Long = 300_000L)
 }

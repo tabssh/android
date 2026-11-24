@@ -312,6 +312,8 @@ class VncHostEditActivity : TabSSHActivity() {
             groupId = existing?.groupId,
             colorTag = colorTag,
             notes = editNotes.text?.toString()?.trim()?.takeIf { it.isNotBlank() },
+            lastConnected = existing?.lastConnected ?: 0,
+            connectionCount = existing?.connectionCount ?: 0,
             createdAt = existing?.createdAt ?: now,
             modifiedAt = now
         )

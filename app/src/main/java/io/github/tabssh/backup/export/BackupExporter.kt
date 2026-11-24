@@ -691,9 +691,9 @@ class BackupExporter(
             put("monitoring_alert_cooldown_minutes",       defaultPrefs.getString("monitoring_alert_cooldown_minutes", "60"))
             // SeekBarPreference stores its value as Int — read as Int so that restore
             // writes the correct type and the Preference UI does not crash.
-            put("monitoring_default_cpu_threshold",        defaultPrefs.getInt("monitoring_default_cpu_threshold", 0))
-            put("monitoring_default_memory_threshold",     defaultPrefs.getInt("monitoring_default_memory_threshold", 0))
-            put("monitoring_default_disk_threshold",       defaultPrefs.getInt("monitoring_default_disk_threshold", 0))
+            put("monitoring_default_cpu_threshold",        defaultPrefs.getInt("monitoring_default_cpu_threshold", 85))
+            put("monitoring_default_memory_threshold",     defaultPrefs.getInt("monitoring_default_memory_threshold", 90))
+            put("monitoring_default_disk_threshold",       defaultPrefs.getInt("monitoring_default_disk_threshold", 80))
         })
 
         root.put("connection", JSONObject().apply {

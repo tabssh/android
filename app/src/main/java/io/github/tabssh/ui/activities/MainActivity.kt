@@ -380,7 +380,7 @@ class MainActivity : TabSSHActivity() {
             } else {
                 hostLayout.hint = getString(R.string.main_quick_connect_hint_host_ssh)
                 keyLayout.visibility = if ((keyDropdown.adapter?.count ?: 0) > 1) View.VISIBLE else View.GONE
-                portInput.setText("22")
+                portInput.setText(app.preferencesManager.getDefaultPort().coerceIn(1, 65535).toString())
                 passwordLayout.hint = getString(R.string.main_quick_connect_hint_password_ssh)
             }
         }
@@ -505,7 +505,7 @@ class MainActivity : TabSSHActivity() {
                         }
                     }
                 } else {
-                    val port = portInput.text.toString().toIntOrNull() ?: 22
+                    val port = portInput.text.toString().toIntOrNull() ?: app.preferencesManager.getDefaultPort().coerceIn(1, 65535)
                     val (username, hostname) = resolveQuickConnectUser(raw)
                     dialog.dismiss()
 
@@ -555,7 +555,9 @@ class MainActivity : TabSSHActivity() {
                 authType = quickAuthType(password, keyId).name,
                 keyId = if (password == null) keyId else null,
                 savePassword = password != null,
-                groupId = null
+                groupId = null,
+                compression = app.preferencesManager.isCompressionEnabled(),
+                connectTimeout = app.preferencesManager.getConnectTimeout().coerceIn(1, 600)
             )
             try {
                 app.database.connectionDao().insertConnection(profile)
@@ -610,7 +612,9 @@ class MainActivity : TabSSHActivity() {
             username = username,
             authType = quickAuthType(password, keyId).name,
             keyId = if (password == null) keyId else null,
-            groupId = null
+            groupId = null,
+            compression = app.preferencesManager.isCompressionEnabled(),
+            connectTimeout = app.preferencesManager.getConnectTimeout().coerceIn(1, 600)
         )
 
         // Store password for this session only — cleared when app restarts

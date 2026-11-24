@@ -35,4 +35,7 @@ interface CloudAccountDao {
 
     @Query("UPDATE cloud_accounts SET last_connected = :timestamp, connection_count = connection_count + 1 WHERE id = :id")
     suspend fun updateLastConnected(id: String, timestamp: Long = System.currentTimeMillis())
+
+    @Query("UPDATE cloud_accounts SET last_refresh_at = :timestamp, last_count = :count WHERE id = :id")
+    suspend fun markRefreshed(id: String, count: Int, timestamp: Long = System.currentTimeMillis())
 }

@@ -1,5 +1,6 @@
 package io.github.tabssh.ssh.forwarding
 
+import io.github.tabssh.utils.recordConnection
 import io.github.tabssh.TabSSHApplication
 import io.github.tabssh.ssh.auth.AuthType
 import io.github.tabssh.ssh.connection.SSHConnection
@@ -275,6 +276,7 @@ class PortForwardCoordinator(private val app: TabSSHApplication) {
         // therefore owns it: stop() may close it once no forward needs it.
         return app.sshSessionManager.connectToServer(profile)?.also {
             ownedEndpoints.add(key)
+            app.recordConnection(profile.id)
         }
     }
 }

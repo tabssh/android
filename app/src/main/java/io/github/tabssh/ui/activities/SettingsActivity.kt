@@ -507,7 +507,7 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
 
         // Export current theme click listener
         findPreference<Preference>("export_current_theme")?.setOnPreferenceClickListener {
-            val themeName = app.preferencesManager.getString("terminal_theme", "custom")
+            val themeName = app.preferencesManager.getString("terminal_theme", io.github.tabssh.storage.preferences.PreferenceManager.DEFAULT_THEME)
             themeExportLauncher.launch("$themeName.json")
             true
         }
@@ -667,7 +667,7 @@ class TerminalSettingsFragment : PreferenceFragmentCompat() {
         val app = tabSSHApp
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val themeId = app.preferencesManager.getString("terminal_theme", "dark")
+                val themeId = app.preferencesManager.getString("terminal_theme", io.github.tabssh.storage.preferences.PreferenceManager.DEFAULT_THEME)
                 val json = app.themeManager.exportTheme(themeId)
                 if (json == null) {
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {

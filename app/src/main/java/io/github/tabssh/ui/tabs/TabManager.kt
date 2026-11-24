@@ -20,6 +20,9 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+/** Tab limit used when no Max Tabs setting is supplied. */
+private const val DEFAULT_MAX_TABS = 10
+
 /**
  * Browser-style tab management for SSH (and, as of the VNC-tab-swipe
  * integration, VNC) sessions. Core innovation of TabSSH.
@@ -42,7 +45,13 @@ import kotlinx.coroutines.launch
  * came from the unified list (`getAllTabsSealed()`, `getActiveTabIndex()`,
  * or a `ViewPager2` position).
  */
-class TabManager(private val database: TabSSHDatabase, private val maxTabs: Int = 10) {
+class TabManager(
+    private val database: TabSSHDatabase,
+    // Read on every limit check, so a change to the Max Tabs setting applies without a restart.
+    private val maxTabsProvider: () -> Int = { DEFAULT_MAX_TABS }
+) {
+
+    private val maxTabs: Int get() = maxTabsProvider().coerceAtLeast(1)
 
     private val tabs = mutableListOf<Tab>()
     private var activeTabIndex = 0

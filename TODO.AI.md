@@ -1,5 +1,1 @@
 # TODO
-
-- SyncMetadataManager: last-sync accessors (getLastSyncTime, updateLastSyncTime, hasNeverSynced, getTimeSinceLastSync, isSyncDue, getLastSyncDescription) read a `last_sync_time` key that nothing writes; the real stamp is `sync_last_time` written by SAFSyncManager. Remove the dead accessors or point them at the real key.
-- Settings with no runtime effect: `security_lock_enabled` and `security_lock_timeout` (real gate is `app_lock_enabled`), `biometric_auth` (getter default also conflicts with the XML default), `ui_max_tabs` (TabManager uses a fixed 10), `compression_enabled`, `auto_reconnect`, `strict_host_key_checking` (hardcoded ask), `connect_timeout`, `default_port`. Wire each into its runtime path or remove the setting; needs a decision per setting.
-- Container Updates overview and the notification count rows for hosts with no live session (last known state); dashboard and Updates tab count only rows matching live containers, so the numbers can differ until the next successful scan.

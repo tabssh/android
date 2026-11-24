@@ -1,4 +1,5 @@
 package io.github.tabssh.cluster
+import io.github.tabssh.utils.recordConnection
 import io.github.tabssh.utils.logging.Logger
 
 import io.github.tabssh.TabSSHApplication
@@ -154,6 +155,7 @@ class ClusterCommandExecutor(private val app: TabSSHApplication) {
                 // Connecting has its own budget. The command is limited only by silence (timeoutMs),
                 // so a long command that keeps printing is never cut off while it is working.
                 withTimeout(CONNECT_BUDGET_MS) { c.connect() }
+                app.recordConnection(profile.id)
                 val output = c.executeCommand(command, timeoutMs, onOutput = { chunk ->
                     _live.update { current ->
                         current + (profile.id to ((current[profile.id].orEmpty() + chunk).takeLast(MAX_LIVE_CHARS)))

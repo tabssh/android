@@ -80,6 +80,13 @@ class TransferTask(
         if (newState == TransferState.ACTIVE && oldState != TransferState.ACTIVE) {
             startTime = System.currentTimeMillis()
             lastProgressTime = startTime
+            // A resumed transfer starts from its current offset, so the first speed sample must not
+            // count bytes that were already moved before the pause.
+            lastBytesTransferred = _bytesTransferred.get()
+        } else if (newState != TransferState.ACTIVE) {
+            // A stalled, paused, finished or cancelled transfer has no speed and no meaningful ETA.
+            _speed.value = 0
+            _eta.value = 0
         }
         
         Logger.d("TransferTask", "Transfer $id state changed: $oldState -> $newState")
@@ -99,6 +106,9 @@ class TransferTask(
      */
     fun setBytesTransferred(bytes: Long) {
         _bytesTransferred.set(bytes)
+        // Resume offset: rebase the speed sample so the offset is not read as one second of throughput.
+        lastBytesTransferred = bytes
+        lastProgressTime = System.currentTimeMillis()
         updateProgress()
     }
     
@@ -119,6 +129,8 @@ class TransferTask(
                 val remainingBytes = totalBytes - currentBytes
                 val etaMs = (remainingBytes * 1000) / speedBps
                 _eta.value = etaMs
+            } else {
+                _eta.value = 0
             }
             
             lastProgressTime = currentTime

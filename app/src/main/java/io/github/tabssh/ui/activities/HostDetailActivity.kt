@@ -294,7 +294,15 @@ class HostDetailActivity : TabSSHActivity() {
                     .onFailure { e -> if (e is kotlinx.coroutines.CancellationException) throw e }
                     .onFailure { e -> Logger.w("HostDetailActivity", "Metrics collection threw — keeping last values", e) }
                 val metrics = r.getOrNull()?.getOrNull()
-                runOnUiThread { if (metrics != null) updateMetrics(metrics) }
+                runCatching {
+                    val dao = app.database.monitorSlotDao()
+                    if (metrics != null) dao.markSeenUp(profile.id, System.currentTimeMillis())
+                    monitorSlot = dao.getByConnectionId(profile.id)
+                }
+                runOnUiThread {
+                    if (metrics != null) updateMetrics(metrics)
+                    updateMonitoringStatus()
+                }
                 delay(REFRESH_MS)
             }
         }

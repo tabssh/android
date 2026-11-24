@@ -1,5 +1,6 @@
 package io.github.tabssh.automation
 
+import io.github.tabssh.utils.recordConnection
 import android.content.Context
 import android.content.Intent
 import androidx.work.CoroutineWorker
@@ -167,6 +168,7 @@ class TaskerWorker(
                 return
             }
             tab.connect(connection)
+            app.recordConnection(profile.id)
             broadcastConnected(profile)
             logTaskerEvent("connect", "${profile.id}/${profile.name}")
             Logger.i(TAG, "Connected to ${profile.name}")

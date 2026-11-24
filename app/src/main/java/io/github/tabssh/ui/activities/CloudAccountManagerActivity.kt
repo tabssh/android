@@ -175,6 +175,11 @@ class CloudAccountManagerActivity : TabSSHActivity() {
 
             persistOciCloudPin(acct, token, client)
             cachedInstances = instances
+            // A successful live listing is a refresh, so the accounts list never reads "Never synced"
+            // for an account whose hosts were just loaded here.
+            withContext(Dispatchers.IO) {
+                runCatching { app.database.cloudAccountDao().markRefreshed(acct.id, instances.size) }
+            }
             binding.progressLoading.visibility = View.GONE
             if (instances.isEmpty()) {
                 binding.layoutEmptyState.visibility = View.VISIBLE

@@ -311,6 +311,12 @@ class ConnectionEditActivity : TabSSHActivity() {
                 if (defaultUser.isNotBlank()) {
                     binding.editUsername.setText(defaultUser)
                 }
+                // The other "Defaults for new connections" settings: port, timeout and compression.
+                binding.editPort.setText(defaultSshPort())
+                binding.editConnectTimeout.setText(
+                    app.preferencesManager.getConnectTimeout().coerceIn(1, 600).toString()
+                )
+                binding.switchCompression.isChecked = app.preferencesManager.isCompressionEnabled()
                 // Hosts tab's Telnet sub-tab launches "Add" with this extra so the
                 // form opens already on the Telnet protocol instead of SSH.
                 val defaultProtocol = intent.getStringExtra(EXTRA_DEFAULT_PROTOCOL)
@@ -453,7 +459,7 @@ class ConnectionEditActivity : TabSSHActivity() {
                 // Per-host password visible when no identity selected (default state)
                 binding.layoutVncPassword.visibility = View.VISIBLE
                 // Default port
-                autoSetPort("5900", setOf("22", "23"))
+                autoSetPort("5900", setOf("22", "23", defaultSshPort()))
                 // Reload identity list with VNC identities
                 loadVncIdentities()
             }
@@ -473,7 +479,7 @@ class ConnectionEditActivity : TabSSHActivity() {
                 binding.layoutIdentityRow.visibility = View.GONE
                 binding.layoutVncPassword.visibility = View.GONE
                 binding.editVncPassword.text?.clear()
-                autoSetPort("23", setOf("22", "5900"))
+                autoSetPort("23", setOf("22", "5900", defaultSshPort()))
             }
             // "ssh"
             else -> {
@@ -491,12 +497,15 @@ class ConnectionEditActivity : TabSSHActivity() {
                 binding.layoutIdentityRow.visibility = View.VISIBLE
                 binding.layoutVncPassword.visibility = View.GONE
                 binding.editVncPassword.text?.clear()
-                autoSetPort("22", setOf("5900", "23"))
+                autoSetPort(defaultSshPort(), setOf("5900", "23"))
                 // Reload identity list with SSH identities
                 loadSshIdentities()
             }
         }
     }
+
+    /** The port from Settings, Defaults for new connections (22 unless changed). */
+    private fun defaultSshPort(): String = app.preferencesManager.getDefaultPort().coerceIn(1, 65535).toString()
 
     /** Set [newPort] only when the port field is blank or holds one of [swapPorts]. */
     private fun autoSetPort(newPort: String, swapPorts: Set<String>) {

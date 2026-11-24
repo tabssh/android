@@ -132,20 +132,41 @@ class HostUpdateScanner(
         if (suspects.isEmpty()) return
         val all = (transport.listContainers(all = true) as? ContainerResult.Success)?.value ?: return
         val existing = all.flatMap { c -> c.names.map { it.trimStart('/') } }.toSet()
-        for (policy in suspects) {
-            if (policy.containerNameOrStackName in existing) continue
-            policyDao.updatePendingUpdateDigest(policy.id, null)
-            Logger.i(
-                TAG,
-                "scan ${host.name}: container ${policy.containerNameOrStackName} no longer exists; " +
-                    "cleared its pending update (containers on the host: ${existing.sorted().take(MAX_LOGGED_NAMES).joinToString()})"
-            )
-        }
+        clearPendingForMissing(policyDao, host.name, suspects, existing)
     }
 
     companion object {
         private const val MAX_LOGGED_NAMES = 40
         private const val TAG = "HostUpdateScanner"
+
+        /**
+         * Clears the pending-update flag of every container policy in [policies] whose container is
+         * not among [existing] (the names of ALL containers on the host, stopped ones included) and
+         * returns those policies. The Container Updates page, the notification and the dashboard
+         * all count from these flags, so any screen that has just seen the host's real container
+         * list calls this to keep them in agreement instead of each filtering on its own.
+         */
+        suspend fun clearPendingForMissing(
+            policyDao: ContainerAutoUpdatePolicyDao,
+            hostLabel: String,
+            policies: List<ContainerAutoUpdatePolicy>,
+            existing: Set<String>
+        ): List<ContainerAutoUpdatePolicy> {
+            val gone = policies.filter {
+                it.scope != SCOPE_STACK && it.pendingUpdateDigest != null &&
+                    it.containerNameOrStackName !in existing
+            }
+            for (policy in gone) {
+                policyDao.updatePendingUpdateDigest(policy.id, null)
+                Logger.i(
+                    TAG,
+                    "$hostLabel: container ${policy.containerNameOrStackName} no longer exists; " +
+                        "cleared its pending update (containers on the host: ${existing.sorted().take(MAX_LOGGED_NAMES).joinToString()})"
+                )
+            }
+            return gone
+        }
+
         const val SCOPE_CONTAINER = "container"
         const val SCOPE_STACK_SERVICE = "stack_service"
         const val SCOPE_STACK = "stack"

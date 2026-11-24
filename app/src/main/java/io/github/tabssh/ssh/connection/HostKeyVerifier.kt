@@ -47,6 +47,14 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
         newHostKeyCallback = callback
     }
 
+    /** The "Strict Host Key Checking" setting (default on): off stops prompting for never-seen hosts. */
+    private fun isStrictHostKeyChecking(): Boolean = try {
+        androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+            .getBoolean("strict_host_key_checking", true)
+    } catch (e: Exception) {
+        true
+    }
+
     /**
      * Check if host key is acceptable
      * Called by JSch during connection
@@ -117,7 +125,12 @@ class HostKeyVerifier(private val context: Context) : HostKeyRepository {
                     // Snapshot the mutable callback ref so a concurrent
                     // setter cannot null it between the check and invoke.
                     val cb = newHostKeyCallback
-                    val action = if (cb != null) {
+                    val action = if (!isStrictHostKeyChecking()) {
+                        // Strict checking off: a host seen for the first time is trusted and remembered
+                        // without a prompt. A key that CHANGED is never waved through; that branch still asks.
+                        Logger.w("HostKeyVerifier", "Strict host key checking is off - trusting first-seen key for $hostname:$port")
+                        HostKeyAction.ACCEPT_NEW_KEY
+                    } else if (cb != null) {
                         cb.invoke(info)
                     } else {
                         // No callback available - show blocking dialog directly
