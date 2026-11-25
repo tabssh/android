@@ -127,8 +127,8 @@ have_appid=$(grep -cE '^app_id:[[:space:]]*.+$' IDEA.md 2>/dev/null || echo 0)
 
 | Value | Primary Source | Fallback |
 |-------|----------------|----------|
-| `{project_name}` | IDEA.md `## Project variables` | Existing long-form `CLAUDE.md` / `.claude/CLAUDE.md` project details, then `basename "$PWD"` |
-| `{project_org}` | IDEA.md `## Project variables` | Existing long-form `CLAUDE.md` / `.claude/CLAUDE.md` project details, then `basename "$(dirname "$PWD")"` |
+| `{project_name}` | IDEA.md `## Project variables` | The git remote (`git remote get-url origin`), then `basename "$PWD"` |
+| `{project_org}` | IDEA.md `## Project variables` | The git remote (`git remote get-url origin`), then `basename "$(dirname "$PWD")"` |
 | `{internal_name}` | IDEA.md `## Project variables` (set at first run; reset only on an explicit rename or fork) | First-time setup: copy from `{project_name}` |
 | `{internal_org}` | IDEA.md `## Project variables` (set at first run; reset only on an explicit rename or fork) | First-time setup: copy from `{project_org}` |
 | `{app_id}` | IDEA.md `app_id:` — frozen at first setup, never re-derived | New app: derive `io.github.{internal_org}.{internal_name}` once at first setup and store it; existing app: read `applicationId` from `app/build.gradle` and freeze it |
@@ -817,7 +817,7 @@ The canonical design tokens (`~/.claude/memory/ui_ux_conventions.md` → Design 
 | `--bg-subtle` | `surfaceVariant` | `#21222c` | `#f6f8fa` |
 | `--bg-elevated` | `surfaceContainer` | `#2b2d3a` | `#ffffff` |
 | `--bg-overlay` | `surfaceContainerHigh` | `#343746` | `#ffffff` |
-| `--bg-inset` | `surfaceContainerHighest` | `#1e1f29` | `#eaeef2` |
+| `--bg-inset` | `surfaceContainerHighest` | `#21222c` | `#eaeef2` |
 | `--fg` | `onBackground` / `onSurface` | `#f8f8f2` | `#1f2328` |
 | `--fg-muted` | `onSurfaceVariant` | `#a3a9cc` | `#636c76` |
 | `--fg-disabled` | `outline` | `#565f89` | `#adb5c0` |
@@ -1184,7 +1184,7 @@ Creation order: security-only workflows first, `ci.yml` and the channel workflow
 
 ## Post-Push CI Verification
 
-`act --list -W {file}` and a local `make check`-equivalent pass only prove the workflow's syntax/job graph is valid and the code works in the local environment — they are not the real CI build. Every push (normal feature-branch push or an emergency direct push to the default branch) triggers a real CI run on the provider's infrastructure with real secrets, real matrix jobs, and the real `casjaysdev/android:latest` toolchain image; any of those can fail even when every local check passed. Treating "local checks passed" as equivalent to "the build is green" is itself a bug.
+`act --list -W {file}` and a local `make check`-equivalent pass only prove the workflow's syntax/job graph is valid and the code works in the local environment — they are not the real CI build. Every push to `main` triggers a real CI run on the provider's infrastructure with real secrets, real matrix jobs, and the real `casjaysdev/android:latest` toolchain image; any of those can fail even when every local check passed. Treating "local checks passed" as equivalent to "the build is green" is itself a bug.
 
 After every push, check the triggered run's status:
 - **GitHub**: `gh run list --branch {branch} --commit {sha} --limit 1` then `gh run watch {run-id}` (or `gh run view {run-id} --json status,conclusion`)
