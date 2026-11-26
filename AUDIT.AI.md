@@ -7,8 +7,8 @@ Scope: UX/UI consistency, correctness, wiring, dead code, performance, process/t
 ## Pass 2: Code Quality
 
 - [x] Container updates documentation: the interval dialog fix changed visible behavior; the changelog and in-app What's New now mention invalid interval handling and concurrent setting saves.
-- [P2] `app/src/main/java/io/github/tabssh/ui/dialogs/HypervisorAuthPrompts.kt:20-56,108-120` and `app/src/main/java/io/github/tabssh/ui/activities/TabTerminalActivity.kt:2795-2806,6225,6409`: user-visible prompt labels, validation errors, and toast messages are hardcoded in English. German, Spanish, and French users receive English on these flows, contrary to AI.md PART 7's string-resource requirement.
-- [P2] `app/src/main/res/layout/fragment_auth_registries.xml:10-18,52-63` and `app/src/main/java/io/github/tabssh/ui/fragments/AuthRegistriesFragment.kt:61-90`: the registry list is a `ListView` with `wrap_content` inside a `NestedScrollView`. This nested scrolling arrangement defeats list virtualization and can make long registry lists measure/render poorly; migrate the list to a `RecyclerView` or another virtualized component that owns scrolling.
+- [x] `HypervisorAuthPrompts.kt` and `TabTerminalActivity.kt`: moved user-visible prompts, validation errors, and toasts into string resources, with German, Spanish, and French translations.
+- [x] `fragment_auth_registries.xml` and `AuthRegistriesFragment.kt`: replaced the nested `ListView` with a virtualized `RecyclerView` that owns its scrolling.
 
 ## Pass 3: Logic
 
@@ -23,8 +23,8 @@ Scope: UX/UI consistency, correctness, wiring, dead code, performance, process/t
 
 ## Pass 5: Spec Compliance
 
-- [ ] Room migration coverage: `MigrationTest.migrateChain3ToCurrent` requests validation through v33 and includes explicit v28→31 migrations. Its migration list ends at v31 while Room declares auto-migrations through v33; `make test` skipped instrumented tests because no device was reachable. Emulator startup segfaulted in the Android toolchain image with both SwiftShader and `-gpu off`, so MigrationTestHelper's handling of generated migrations through v33 remains unverified.
+- [x] Room migration coverage: `MigrationTest.migrateChain3ToCurrent` includes the manual migrations and Room-generated auto-migrations through v33; `MigrationTestHelper` passed on the emulator.
 
 ## Pass 6: Code Flow Trace
 
-No additional confirmed findings in the bounded pass. The inspected blocking waits and sleeps are on SSH/IO, executor, or protocol worker threads; the sampled UI database reads use suspend DAOs or `Dispatchers.IO`.
+The `make test` UI phase previously called `ui-test.sh` without installing the freshly built universal APK; it now passes the APK path. Updated stale UI test expectations to cover the current tabs and drawer destinations. The inspected blocking waits and sleeps are on SSH/IO, executor, or protocol worker threads; the sampled UI database reads use suspend DAOs or `Dispatchers.IO`.
