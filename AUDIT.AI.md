@@ -21,6 +21,9 @@ Scope: UX/UI consistency, correctness, wiring, dead code, performance, process/t
 
 - [x] IDEA.md compatibility: it identified Room schema v32 as current, while Android's Room database and exported schema are v33. Updated the compatibility note and documented v33's device-local `paste_records` entity, which remains excluded from sync and backup.
 - [x] README.md project tree: updated its stale Room database version from v27 to v33 to match the current database and exported schema.
+- [x] README.md build prerequisites: removed host Android SDK/JDK/Gradle requirements and documented that device access uses the host ADB server with the ADB client in Docker.
+- [x] `Makefile` device workflows: moved ADB discovery, instrumentation/UI tests, install, logs, and SSH-assisted reconnect into the Android toolchain container to comply with AI.md's host-execution rule.
+- [x] README.md project tree: updated its stale Room database version from v27 to v33 to match the current database and exported schema.
 
 ## Pass 5: Spec Compliance
 

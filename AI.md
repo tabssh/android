@@ -325,6 +325,7 @@ Update these when their subject changes:
 - License: **MIT** by default, stored at `LICENSE.md`. IDEA.md may override.
 - Third-party licenses: every bundled dependency's license must be compatible with the project license and listed in the app's About/Licenses screen (Gradle license-report plugin or a maintained static `NOTICE` section).
 - Bundled assets (fonts, icons, sounds) must carry redistribution-compatible licenses (OFL, Apache-2.0, CC0); record source + license per asset in IDEA.md.
+- Any third-party dataset or content the app bundles (word lists, quote collections, place data, images, fonts, icons, translations) needs documented provenance BEFORE it is embedded: exact source and retrieval date, terms that allow redistribution under the app's license, the attribution notice the terms require, a record in the third-party notices and the About screen, and a per-record `source` key when records come from several sources. Content with no stated license, a license that forbids redistribution or an unknown origin is not bundled; ask the user instead of guessing. Strings the project translates itself (AI or human, through the localization process) are its own work and need no source record; a translation copied from another project, a service or a third-party catalogue is third-party content and follows this rule.
 - No copyleft (GPL) dependencies in a non-GPL app unless IDEA.md explicitly accepts relicensing.
 - Free & open source: no paid tiers, no feature gating, no activation gates, no telemetry-based licensing enforcement.
 
@@ -355,6 +356,7 @@ This file cannot be fully read in one pass and must not be. Navigate with the PA
 | **TODO.md** | Task tracking (human-owned) | AI may mark done; never delete/empty |
 | **PLAN.AI.md** | Implementation plan (AI-owned) | Planning new work |
 | **PLAN.md** | Implementation plan (human-owned) | AI may mark done; never rewrite wholesale |
+| **PROMPT.md** | Prompt/instructions (human-owned) | AI reads and follows it; never rewrite or delete |
 | **README.md** | User-facing install/usage docs | Usage changes |
 | **LICENSE.md** | Project + dependency licenses | Dependency set changes |
 | **CHANGELOG.md** | Keep-a-Changelog format; release-notes source (PART 13) | Every user-visible change, same commit |

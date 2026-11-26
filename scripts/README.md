@@ -183,8 +183,8 @@ These scripts integrate with Makefile commands:
 | `make build` | Uses `build.sh` (root) with Docker |
 | `make release` | Uses `build.sh` + GitHub CLI |
 | `make clean` | Direct Gradle/filesystem commands |
-| `make install` | Similar to `install-to-device.sh` |
-| `make logs` | Direct ADB command |
+| `make install` | Installs through ADB in the Android toolchain container |
+| `make logs` | Reads logcat through ADB in the Android toolchain container |
 
 **Pre-commit workflow:**
 ```bash

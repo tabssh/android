@@ -306,19 +306,18 @@ make check          # must pass (runs compile + lint + JVM unit tests in Docker)
 
 ### Prerequisites
 
-**Docker (recommended)**
+**Build and test**
 - Docker 20.10+ and Docker Compose 2.0+
-
-**Local build**
-- Android SDK 35 (compile) / 34 (target), JDK 17 (Temurin/OpenJDK), Gradle 8.14.5
+- The Android SDK, JDK, Gradle, and ADB client run in the project toolchain container; none need to be installed on the host.
+- Device tests, install, and logs use the host ADB server at `127.0.0.1:5037`. Set `ADB_SERVER_SOCKET` to use another endpoint.
 
 ### Build Commands
 
 ```bash
 make build      # Debug APKs → ./binaries/   (~5 min, Docker-cached)
 make check      # Compile + lint + JVM unit tests (Docker)
-make install    # Install to connected device
-make logs       # Tail logcat
+make install    # Install to a connected device through the toolchain container
+make logs       # Tail logcat through the toolchain container
 make test       # check + instrumented/UI tests when a device is reachable
 make clean      # Remove build artifacts
 ```
@@ -355,7 +354,9 @@ android/
 
 ### 🐳 Docker Build
 
-The build toolchain runs inside Docker — no local Android SDK or JDK required.
+Build and test toolchains run inside Docker — no host Android SDK, JDK, Gradle,
+or ADB client is required. A connected device or emulator is accessed through
+the host ADB server.
 
 ```bash
 # Build debug APKs
