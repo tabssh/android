@@ -100,19 +100,26 @@ release: _ensure-image fetch-mosh fetch-tor fetch-spice fetch-fonts ## Build rel
 	@ls -lh $(RELEASES)/*.apk 2>/dev/null
 
 # AI.md PART 11 requires instrumented tests before tagging a release. adb runs
-# inside the container (PART 4: never on the dev host) and reaches the host's
-# adb server over --network host; ANDROID_SERIAL overrides the auto-detected device.
+# inside the container (AI.md PART 1: host execution is orchestration only) and
+# reaches the host's adb server over --network host. ANDROID_SERIAL overrides
+# the auto-detected device.
 test: check ## Everything in check, plus instrumented + UI tests when a device is reachable
-	@SERIAL=$${ANDROID_SERIAL:-$$($(ADB) devices 2>/dev/null | awk '/\tdevice$$/{print $$1; exit}')}; \
-	if [ -n "$$SERIAL" ]; then \
+	@$(DOCKER_RUN) --network host \
+		-e "ANDROID_SERIAL=$(ANDROID_SERIAL)" \
+		-e "UI_TESTS=$(if $(TEST),$(TEST),all)" \
+		-e "ADB_SERVER_SOCKET=$(ADB_SERVER_SOCKET)" \
+		$(BUILD_IMAGE) sh -c 'set -e; \
+		SERIAL="$${ANDROID_SERIAL:-$$(adb devices 2>/dev/null | awk '\''/\tdevice$$/{print $$1; exit}'\'')}"; \
+		if [ -z "$$SERIAL" ]; then \
+			echo -e "$(YELLOW)No device/emulator reachable — instrumented and UI tests skipped$(NC)"; \
+			exit 0; \
+		fi; \
+		export ANDROID_SERIAL="$$SERIAL"; \
 		echo -e "$(BLUE)🧪 Instrumented tests on $$SERIAL...$(NC)"; \
-		$(DOCKER_RUN) --network host -e ANDROID_SERIAL="$$SERIAL" $(BUILD_IMAGE) sh -c '$(GRADLE_SEED); ./gradlew connectedDebugAndroidTest --no-daemon --build-cache' \
-			&& echo -e "$(GREEN)✅ Instrumented tests passed$(NC)" \
-			|| { echo -e "$(YELLOW)❌ Instrumented tests failed$(NC)"; exit 1; }; \
-		scripts/ui-test.sh --serial "$$SERIAL" --apk app/build/outputs/apk/debug/tabssh-android-universal.apk $(if $(TEST),$(TEST),all); \
-	else \
-		echo -e "$(YELLOW)No device/emulator reachable — instrumented and UI tests skipped$(NC)"; \
-	fi
+		$(GRADLE_SEED); \
+		./gradlew connectedDebugAndroidTest --no-daemon --build-cache; \
+		echo -e "$(GREEN)✅ Instrumented tests passed$(NC)"; \
+		bash scripts/ui-test.sh --serial "$$SERIAL" --apk app/build/outputs/apk/debug/tabssh-android-universal.apk $$UI_TESTS'
 
 fetch-mosh: ## Fetch mosh-client binaries from latest GH release
 	@scripts/fetch-mosh-binaries.sh
@@ -130,23 +137,29 @@ clean: ## Clean build artifacts
 	@rm -rf $(BINARIES)/*.apk $(RELEASES)/*.apk app/build/ .gradle/
 	@echo -e "$(GREEN)✅ Cleaned$(NC)"
 
-ADB := $(shell command -v adb 2>/dev/null || find /opt/android /opt/android-sdk -name adb -type f 2>/dev/null | head -1)
+ADB_SERVER_SOCKET ?= tcp:127.0.0.1:5037
 
 adb-reconnect: ## Reconnect to phone over WireGuard (use after phone reboot)
-	@PORT=$$(ssh phone 'getprop service.adb.tls.port 2>/dev/null'); \
-	if [ -n "$$PORT" ] && [ "$$PORT" != "0" ]; then \
-		echo "Connecting to phone on wireless-debug port $$PORT..."; \
-		$(ADB) connect 10.200.0.2:$$PORT; \
-	else \
-		echo "Wireless debugging not active. Enable it in Developer Options, then retry."; \
-		exit 1; \
-	fi
+	@$(DOCKER_RUN) --network host \
+		-v "$(HOME)/.ssh/id_ed25519:/root/.ssh/id_ed25519:ro" \
+		-v "$(HOME)/.ssh/known_hosts.d/phone:/tmp/tabssh-phone-known-hosts:ro" \
+		-e "ADB_SERVER_SOCKET=$(ADB_SERVER_SOCKET)" \
+		$(BUILD_IMAGE) sh -c 'PORT=$$(ssh -i /root/.ssh/id_ed25519 -o User=root -o UserKnownHostsFile=/tmp/tabssh-phone-known-hosts phone '\''getprop service.adb.tls.port 2>/dev/null'\''); \
+		if [ -n "$$PORT" ] && [ "$$PORT" != "0" ]; then \
+			echo "Connecting to phone on wireless-debug port $$PORT..."; \
+			adb connect "10.200.0.2:$$PORT"; \
+		else \
+			echo "Wireless debugging not active. Enable it in Developer Options, then retry."; \
+			exit 1; \
+		fi'
 
 install: ## Install universal APK to device
-	@$(ADB) install -r $(BINARIES)/tabssh-android-universal.apk
+	@$(DOCKER_RUN) --network host -e "ADB_SERVER_SOCKET=$(ADB_SERVER_SOCKET)" \
+		$(BUILD_IMAGE) adb install -r /workspace/$(BINARIES)/tabssh-android-universal.apk
 
 logs: ## View device logs
-	@$(ADB) logcat | grep -E -- "TabSSH|tabssh"
+	@$(DOCKER_RUN) --network host -e "ADB_SERVER_SOCKET=$(ADB_SERVER_SOCKET)" \
+		$(BUILD_IMAGE) sh -c 'adb logcat | grep -E -- "TabSSH|tabssh"'
 
 test-install: ## Build, install, then run UI tests
 	$(MAKE) build install test

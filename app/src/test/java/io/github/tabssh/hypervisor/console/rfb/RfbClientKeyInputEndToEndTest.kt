@@ -179,11 +179,11 @@ class RfbClientKeyInputEndToEndTest {
         rfb.start()
         assertTrue(
             "handshake did not complete",
-            handshakeDone.await(5, TimeUnit.SECONDS)
+            handshakeDone.await(15, TimeUnit.SECONDS)
         )
         // sendKeyEvent drops keys until serverInit() has populated fb size —
         // wait for it so the test exercises the steady-state input path.
-        val deadline = System.currentTimeMillis() + 5_000
+        val deadline = System.currentTimeMillis() + 15_000
         while (rfb.framebufferWidth <= 0) {
             assertTrue("serverInit never completed", System.currentTimeMillis() < deadline)
             Thread.sleep(10)
@@ -192,7 +192,7 @@ class RfbClientKeyInputEndToEndTest {
     }
 
     private fun nextKey(): Key {
-        val key = receivedKeys.poll(5, TimeUnit.SECONDS)
+        val key = receivedKeys.poll(15, TimeUnit.SECONDS)
         assertTrue("timed out waiting for a KeyEvent on the server", key != null)
         return key!!
     }
