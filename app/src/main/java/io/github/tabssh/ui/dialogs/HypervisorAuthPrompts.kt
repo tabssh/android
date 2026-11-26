@@ -17,7 +17,7 @@ import kotlin.coroutines.resume
 /** One-shot Proxmox second-factor input. The returned value is never persisted. */
 suspend fun Activity.promptProxmoxSecondFactor(): String? = suspendCancellableCoroutine { continuation ->
     val input = EditText(this).apply {
-        hint = "Authenticator code or recovery key"
+        hint = getString(io.github.tabssh.R.string.hypervisor_authenticator_hint)
         inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
         setSingleLine(true)
     }
@@ -28,11 +28,11 @@ suspend fun Activity.promptProxmoxSecondFactor(): String? = suspendCancellableCo
         addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
     val dialog = MaterialAlertDialogBuilder(this)
-        .setTitle("Proxmox verification")
-        .setMessage("Enter your TOTP code, or use a single-use recovery key.")
+        .setTitle(io.github.tabssh.R.string.proxmox_verification_title)
+        .setMessage(io.github.tabssh.R.string.proxmox_verification_message)
         .setView(container)
-        .setPositiveButton("Use TOTP", null)
-        .setNeutralButton("Use recovery key", null)
+        .setPositiveButton(io.github.tabssh.R.string.proxmox_use_totp, null)
+        .setNeutralButton(io.github.tabssh.R.string.proxmox_use_recovery_key, null)
         .setNegativeButton(io.github.tabssh.R.string.cancel) { _, _ ->
             if (continuation.isActive) continuation.resume(null)
         }
@@ -46,14 +46,14 @@ suspend fun Activity.promptProxmoxSecondFactor(): String? = suspendCancellableCo
             if (code.isNotBlank() && continuation.isActive) {
                 continuation.resume("totp:$code")
                 dialog.dismiss()
-            } else input.error = "Enter a code"
+            } else input.error = getString(io.github.tabssh.R.string.hypervisor_enter_code)
         }
         dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
             val key = input.text?.toString().orEmpty().trim()
             if (key.isNotBlank() && continuation.isActive) {
                 continuation.resume("recovery:$key")
                 dialog.dismiss()
-            } else input.error = "Enter a recovery key"
+            } else input.error = getString(io.github.tabssh.R.string.hypervisor_enter_recovery_key)
         }
     }
     continuation.invokeOnCancellation { dialog.dismiss() }
@@ -76,7 +76,8 @@ fun Activity.promptSshKeyboardInteractive(
             return@runOnUiThread
         }
         val fields = prompts.mapIndexed { index, rawPrompt ->
-            val prompt = rawPrompt.filterNot { it.isISOControl() }.take(160).ifBlank { "Response ${index + 1}" }
+            val prompt = rawPrompt.filterNot { it.isISOControl() }.take(160)
+                .ifBlank { getString(io.github.tabssh.R.string.ssh_auth_response_fmt, (index + 1).toString()) }
             val label = TextView(this).apply { text = prompt }
             val input = EditText(this).apply {
                 inputType = if (echo.getOrNull(index) == true) {
@@ -105,8 +106,8 @@ fun Activity.promptSshKeyboardInteractive(
             }
         }
         val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle("SSH verification")
-            .setMessage("The SSH server requested additional authentication information.")
+            .setTitle(io.github.tabssh.R.string.ssh_verification_title)
+            .setMessage(io.github.tabssh.R.string.ssh_verification_message)
             .setView(container)
             .setPositiveButton(io.github.tabssh.R.string.ok, null)
             .setNegativeButton(io.github.tabssh.R.string.cancel) { _, _ -> latch.countDown() }
@@ -117,7 +118,8 @@ fun Activity.promptSshKeyboardInteractive(
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val answers = fields.map { (_, input) -> input.text?.toString().orEmpty() }
                 if (answers.any { it.isBlank() }) {
-                    fields.firstOrNull { it.second.text.isNullOrBlank() }?.second?.error = "Required"
+                    fields.firstOrNull { it.second.text.isNullOrBlank() }?.second?.error =
+                        getString(io.github.tabssh.R.string.required)
                 } else {
                     result.set(answers.toTypedArray())
                     latch.countDown()

@@ -150,14 +150,14 @@ object MoshNativeClient {
         fun exitValue(): Int? = try { process.exitValue() } catch (_: IllegalThreadStateException) { null }
 
         fun close() {
-            try { errJob.cancel() } catch (_: Exception) {}
-            try { errScope.cancel() } catch (_: Exception) {}
-            try { process.outputStream.close() } catch (_: Exception) {}
-            try { process.inputStream.close() } catch (_: Exception) {}
-            try { process.errorStream.close() } catch (_: Exception) {}
+            try { errJob.cancel() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("MoshNativeClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+            try { errScope.cancel() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("MoshNativeClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+            try { process.outputStream.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("MoshNativeClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+            try { process.inputStream.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("MoshNativeClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+            try { process.errorStream.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("MoshNativeClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             try {
                 if (isAlive()) process.destroy()
-            } catch (_: Exception) {}
+            } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("MoshNativeClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         }
     }
 }

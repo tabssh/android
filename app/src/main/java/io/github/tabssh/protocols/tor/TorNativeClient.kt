@@ -35,7 +35,7 @@ object TorNativeClient {
     private const val TAG = "TorNativeClient"
     private const val BINARY_FILE_NAME = "libtor.so"
     private const val BOOTSTRAP_MARKER = "Bootstrapped 100%"
-    private const val RECENT_LINES = 12
+    private const val RECENT_LINES = 30
     private val BOOTSTRAP_PERCENT_REGEX = Regex("""Bootstrapped (\d{1,3})%""")
 
     // Pinned versions of the statically-linked native stack. These MUST track
@@ -100,7 +100,8 @@ object TorNativeClient {
             "--DataDirectory", dataDir.absolutePath,
             "--ClientOnly", "1",
             "--AvoidDiskWrites", "1",
-            "--Log", "notice stderr",
+            "--Log", "info stderr",
+            "--SafeLogging", "1",
             "--RunAsDaemon", "0"
         )
         if (tuned) {
@@ -176,12 +177,33 @@ object TorNativeClient {
         }
 
         fun close() {
-            try { logJob.cancel() } catch (_: Exception) {}
-            try { logScope.cancel() } catch (_: Exception) {}
-            try { process.inputStream.close() } catch (_: Exception) {}
-            try { process.outputStream.close() } catch (_: Exception) {}
-            try { process.errorStream.close() } catch (_: Exception) {}
-            try { if (isAlive()) process.destroy() } catch (_: Exception) {}
+            try { logJob.cancel() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TorNativeClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+            try { logScope.cancel() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TorNativeClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+            try { process.inputStream.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TorNativeClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+            try { process.outputStream.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TorNativeClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+            try { process.errorStream.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TorNativeClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+            // Wait for the process to be gone: a replacement started while this one still holds the
+            // data directory lock sits waiting on it and never bootstraps.
+            try {
+                if (isAlive()) {
+                    process.destroy()
+                    if (!waitUntilGone(3_000)) {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                            process.destroyForcibly()
+                        }
+                        waitUntilGone(2_000)
+                    }
+                }
+            } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TorNativeClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+        }
+
+        private fun waitUntilGone(timeoutMs: Long): Boolean {
+            val deadline = System.currentTimeMillis() + timeoutMs
+            while (isAlive()) {
+                if (System.currentTimeMillis() >= deadline) return false
+                Thread.sleep(50)
+            }
+            return true
         }
     }
 }

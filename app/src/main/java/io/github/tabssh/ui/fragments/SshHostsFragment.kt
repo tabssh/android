@@ -585,7 +585,7 @@ class SshHostsFragment : Fragment() {
                     // the transaction open.
                     if (deleted > 0) {
                         for (c in selected) {
-                            try { app.securePasswordManager.clearPassword(c.id) } catch (_: Exception) {}
+                            try { app.securePasswordManager.clearPassword(c.id) } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SshHostsFragment", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                         }
                     }
                     // Home-screen widgets pinned to a deleted connection otherwise keep the stale label and dead tap target.

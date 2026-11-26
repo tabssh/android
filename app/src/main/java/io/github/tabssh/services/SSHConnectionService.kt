@@ -283,7 +283,7 @@ class SSHConnectionService : Service() {
         // after a graceful service stop.
         sweepPerTabNotifications(cancelAll = true)
 
-        try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(screenReceiver) } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SSHConnectionService", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         backgroundWakeCycleJob?.cancel()
         backgroundWakeCycleJob = null
 

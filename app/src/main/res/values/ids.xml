@@ -23,4 +23,5 @@
     <item name="text_old_key_type" type="id"/>
     <item name="text_new_key_type" type="id"/>
     <item name="text_first_seen" type="id"/>
+    <item name="action_update_settings" type="id" />
 </resources>

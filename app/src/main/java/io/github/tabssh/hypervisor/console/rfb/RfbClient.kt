@@ -364,8 +364,8 @@ class RfbClient(
         readerThread = null
         keepaliveThread?.interrupt()
         keepaliveThread = null
-        try { inputStream.close() } catch (_: Exception) {}
-        try { outputStream.close() } catch (_: Exception) {}
+        try { inputStream.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("RfbClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+        try { outputStream.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("RfbClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         // decoder is only initialized after serverInit() completes; guard against
         // stop() being called during or before the handshake (e.g. user backs out
         // before the connection completes) to prevent UninitializedPropertyAccessException.

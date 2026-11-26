@@ -52,7 +52,7 @@ class SessionRecorder(
             } catch (e: Exception) {
                 // If FileWriter was allocated but the initial write/flush failed,
                 // release the underlying fd immediately so a retry does not leak.
-                try { w?.close() } catch (_: Exception) {}
+                try { w?.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SessionRecorder", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 fileWriter = null
                 Logger.e("SessionRecorder", "Failed to start", e)
             }

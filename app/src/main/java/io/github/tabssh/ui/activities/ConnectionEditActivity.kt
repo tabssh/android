@@ -1570,7 +1570,7 @@ class ConnectionEditActivity : TabSSHActivity() {
                     }
                     app.securePasswordManager.storePassword(hostId, password, storageLevel)
                 } else {
-                    try { app.securePasswordManager.clearPassword(hostId) } catch (_: Exception) {}
+                    try { app.securePasswordManager.clearPassword(hostId) } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("ConnectionEditActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 }
 
                 hasUnsavedChanges = false
@@ -1725,7 +1725,7 @@ class ConnectionEditActivity : TabSSHActivity() {
             ) {
                 // Clearing the field is an explicit delete. Merely changing auth
                 // mode leaves its text intact (and key mode hides the save switch).
-                try { app.securePasswordManager.clearPassword(profile.id) } catch (_: Exception) {}
+                try { app.securePasswordManager.clearPassword(profile.id) } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("ConnectionEditActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             }
 
             // Save succeeded — clear the dirty flag so back/cancel don't

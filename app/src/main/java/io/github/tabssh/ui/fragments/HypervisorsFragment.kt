@@ -370,7 +370,7 @@ class HypervisorsFragment : Fragment() {
                         PROBE_TIMEOUT_MS
                     )
                 } finally {
-                    try { socket.close() } catch (_: Exception) {}
+                    try { socket.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("HypervisorsFragment", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 }
             }
             true

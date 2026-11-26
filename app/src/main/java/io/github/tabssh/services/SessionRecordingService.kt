@@ -366,7 +366,7 @@ class SessionRecordingService : Service() {
         mediaRecorder = null
         try { virtualDisplay?.release() } catch (e: Exception) { Logger.e(TAG, "VirtualDisplay release failed", e) }
         virtualDisplay = null
-        try { mediaProjection?.unregisterCallback(projectionCallback) } catch (_: Exception) {}
+        try { mediaProjection?.unregisterCallback(projectionCallback) } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SessionRecordingService", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         try { mediaProjection?.stop() } catch (e: Exception) { Logger.e(TAG, "Projection stop failed", e) }
         mediaProjection = null
         try { outputFd?.close() } catch (e: Exception) { Logger.e(TAG, "Output fd close failed", e) }

@@ -185,9 +185,9 @@ class SCPClient(private val sshConnection: SSHConnection) {
             task.complete(TransferResult.Error(e.message ?: "SCP error"))
             false
         } finally {
-            try { out?.close() } catch (_: Exception) {}
-            try { inStream?.close() } catch (_: Exception) {}
-            try { channel?.disconnect() } catch (_: Exception) {}
+            try { out?.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SCPClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+            try { inStream?.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SCPClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+            try { channel?.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SCPClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         }
     }
 
@@ -312,9 +312,9 @@ class SCPClient(private val sshConnection: SSHConnection) {
             task.complete(TransferResult.Error(e.message ?: "SCP error"))
             false
         } finally {
-            try { out?.close() } catch (_: Exception) {}
-            try { inStream?.close() } catch (_: Exception) {}
-            try { channel?.disconnect() } catch (_: Exception) {}
+            try { out?.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SCPClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+            try { inStream?.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SCPClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+            try { channel?.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SCPClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         }
     }
 

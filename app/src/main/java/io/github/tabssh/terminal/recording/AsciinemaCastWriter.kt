@@ -76,7 +76,7 @@ class AsciinemaCastWriter(
                 isRecording = true
                 Logger.i("AsciinemaCastWriter", "Started cast recording: $filename")
             } catch (e: Exception) {
-                try { w?.close() } catch (_: Exception) {}
+                try { w?.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("AsciinemaCastWriter", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 writer = null
                 VideoRecordingStorage.discardPendingFile(context, filename)
                 Logger.e("AsciinemaCastWriter", "Failed to start", e)

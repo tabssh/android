@@ -87,7 +87,7 @@ class HistoryFetcher(private val sshConnection: SSHConnection) {
             Logger.w(TAG, "runRemote failed: ${e.message}")
             null
         } finally {
-            try { ch?.disconnect() } catch (_: Exception) {}
+            try { ch?.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("HistoryFetcher", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         }
     }
 }

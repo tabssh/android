@@ -197,7 +197,7 @@ class ConsoleWebSocketClient(
         } catch (e: Exception) {
             Logger.w(TAG, "Listener.onError threw", e)
         }
-        try { webSocket?.close(1011, "send rejected") } catch (_: Exception) {}
+        try { webSocket?.close(1011, "send rejected") } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("ConsoleWebSocketClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
     }
 
     /**
@@ -222,7 +222,7 @@ class ConsoleWebSocketClient(
         } catch (e: Exception) {
             Logger.w(TAG, "Listener.onError threw", e)
         }
-        try { webSocket?.close(1011, "inbound pipe overflow") } catch (_: Exception) {}
+        try { webSocket?.close(1011, "inbound pipe overflow") } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("ConsoleWebSocketClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
     }
 
     /** Legacy compatibility holder; no TLS pin is captured. */
@@ -470,8 +470,8 @@ class ConsoleWebSocketClient(
             // The pipes were allocated at the top of connect(); on this path the
             // caller only sees `false` and never gets a handle to close them, so
             // their buffers would sit around for the life of the process.
-            try { inboundPipe?.close() } catch (_: Exception) {}
-            try { outboundPipe?.close() } catch (_: Exception) {}
+            try { inboundPipe?.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("ConsoleWebSocketClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+            try { outboundPipe?.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("ConsoleWebSocketClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             inboundPipe = null
             outboundPipe = null
             connectionListener?.onError(e)

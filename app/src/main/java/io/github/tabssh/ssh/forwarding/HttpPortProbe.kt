@@ -49,7 +49,7 @@ object HttpPortProbe {
             Logger.d(TAG, "Probe :$localPort failed: ${e.message}")
             false
         } finally {
-            try { s?.close() } catch (_: Exception) {}
+            try { s?.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("HttpPortProbe", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         }
     }
 

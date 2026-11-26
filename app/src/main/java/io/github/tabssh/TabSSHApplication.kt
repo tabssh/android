@@ -173,26 +173,11 @@ class TabSSHApplication : Application() {
         Security.removeProvider("BC")
         Security.insertProviderAt(BouncyCastleProvider(), 1)
 
-        // Logger init policy:
-        //   - debug builds always have BuildConfig.DEBUG_LOG = true and
-        //     auto-enable debug-file logging.
-        //   - devel builds force BuildConfig.DEBUG_LOG = true so testers have logs
-        //     ready when filing issues; release / fdroidRelease builds keep it
-        //     false. See the buildTypes in app/build.gradle.
-        //   - Production users can still opt in manually via Settings →
-        //     Logging → "Enable Debug Logging" (pref key
-        //     `debug_logging_enabled`).
-        // The app log (sanitized for public sharing) is always on regardless
-        // — it's safe and cheap and powers the Copy App Log menu item.
-        val savedDebug = preferencesManager.isDebugLoggingEnabled()
-        val debugLoggingActive = BuildConfig.DEBUG_LOG || savedDebug
-        // Sync the toggle pref to match the actual active state. On debug
-        // builds DEBUG_LOG forces logging on regardless of what the user
-        // last set; without this sync the Settings → Logging toggle shows
-        // "Off" even though the logger is running — misleading.
-        if (BuildConfig.DEBUG_LOG && !savedDebug) {
-            preferencesManager.setDebugLoggingEnabled(true)
-        }
+        // Logger init policy: debug and devel builds default the debug log to on, production
+        // builds to off (see PreferenceManager.isDebugLoggingEnabled). In every build the user's
+        // own choice in Settings > Logging wins, at any time. The app log (sanitized for public
+        // sharing) is always on regardless.
+        val debugLoggingActive = preferencesManager.isDebugLoggingEnabled()
         Logger.initialize(this, debugLoggingActive)
         setupExceptionHandler()
         checkNativeCrashMarker()
@@ -743,7 +728,7 @@ class TabSSHApplication : Application() {
                 latch.countDown()
             }
         }
-        try { latch.await() } catch (_: InterruptedException) {}
+        try { latch.await() } catch (swallowed: InterruptedException) { io.github.tabssh.utils.logging.Logger.d("TabSSHApplication", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         return userAction
     }
     

@@ -530,10 +530,9 @@ abstract class TabSSHActivity : AppCompatActivity(), NavigationView.OnNavigation
         val file = Logger.getLogFile()
         val haveRealLogs = file != null && file.exists() && file.length() > 0
         if (!haveRealLogs) {
-            // The Debug Logging settings category is hidden when DEBUG_LOG is
-            // false, so pointing a release-build user at Settings would be a
-            // dead end; say what is actually true for their build.
-            val message = if (BuildConfig.DEBUG_LOG) {
+            // Say what is actually true right now: logging is on but nothing was written yet,
+            // or it is off and the user can turn it on in Settings > Logging.
+            val message = if (Logger.isDebugMode()) {
                 getString(R.string.log_debug_empty_debug_build)
             } else {
                 getString(R.string.log_debug_empty_release_build)

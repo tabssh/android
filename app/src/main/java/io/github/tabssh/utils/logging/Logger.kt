@@ -17,10 +17,10 @@ import java.util.concurrent.TimeUnit
  * Centralized logging system for TabSSH — two tiers, two audiences.
  *
  * DEBUG log (tabssh_debug.log, DEBUG_LOG builds only): verbose diagnostics —
- * D/I chatter plus W/E with full sanitized stack traces. Protected against
- * noise at the writer: identical consecutive lines collapse into a single
- * "repeated N times" summary and D-level lines are rate-capped per tag, so
- * no call site can flood the file or push real events past export caps.
+ * everything the app does while enabled (D/I/W/E, full sanitized stack traces,
+ * including exceptions that call sites deliberately ignore). Nothing is rate-
+ * capped or dropped; only identical consecutive lines collapse into a single
+ * "repeated N times" summary. The file rotates by size.
  *
  * APP log (tabssh_app.log, always on, sanitized for public sharing): the
  * end-user record — session/auth/security lifecycle events (allowlisted
@@ -616,7 +616,7 @@ object Logger {
                     append(sanitizeForPublic(Log.getStackTraceString(it)))
                 }
             }
-            val rateCapped = level == "D" && throwable == null
+            val rateCapped = false
             for (line in debugGate.filter(level, tag, body, rateCapped, timestamp)) {
                 debugSink.writeLine(logFile, line)
             }

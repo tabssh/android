@@ -163,7 +163,7 @@ class TelnetConnection(
             // Ensure the freshly allocated socket is released even if it was
             // never assigned to the field (e.g. connect() threw before line
             // `socket = s` ran). closeTransport() only closes the field.
-            try { s.close() } catch (_: Exception) {}
+            try { s.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TelnetConnection", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             closeTransport()
             _connectionState.value = ConnectionState.ERROR
             // A failed retry must schedule the next one; a failed first dial
@@ -213,9 +213,9 @@ class TelnetConnection(
     private fun closeTransport() {
         stopped = true
         connected = false
-        try { socket?.close() } catch (_: Exception) {}
-        try { pipeOut.close() } catch (_: Exception) {}
-        try { pipeIn.close() } catch (_: Exception) {}
+        try { socket?.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TelnetConnection", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+        try { pipeOut.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TelnetConnection", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+        try { pipeIn.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TelnetConnection", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         socket = null
         rawIn = null
         rawOut = null
@@ -255,7 +255,7 @@ class TelnetConnection(
             } finally {
                 val unexpected = !stopped
                 connected = false
-                try { sessionPipe.close() } catch (_: Exception) {}
+                try { sessionPipe.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TelnetConnection", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 if (unexpected) {
                     // Peer closed the socket or the link dropped — this is the
                     // only place telnet learns it died, so it is where the

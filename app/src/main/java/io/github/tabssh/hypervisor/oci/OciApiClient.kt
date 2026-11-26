@@ -112,8 +112,8 @@ class OciApiClient(
 
     /** Cancel any in-flight calls on both clients. Safe from Activity.onDestroy(). */
     fun cancelAll() {
-        try { identityClient.dispatcher.cancelAll() } catch (_: Exception) {}
-        try { iaasClient.dispatcher.cancelAll() } catch (_: Exception) {}
+        try { identityClient.dispatcher.cancelAll() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("OciApiClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+        try { iaasClient.dispatcher.cancelAll() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("OciApiClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
     }
 
     /**

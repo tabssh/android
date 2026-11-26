@@ -969,7 +969,7 @@ class TermuxBridge(
             val code = finishedSession.getExitStatus()
             moshLastExitCode = code
             // Mosh PTY is gone — watchdog is no longer needed.
-            try { moshWatchdog?.cancel() } catch (_: Exception) {}
+            try { moshWatchdog?.cancel() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TermuxBridge", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             moshWatchdog = null
             Logger.i(TAG, "Session finished (exit=$code)")
             runOnMain {
@@ -1541,7 +1541,7 @@ class TermuxBridge(
                 // In mosh mode: updateSize() resizes both the TerminalEmulator
                 // and the PTY (via ioctl TIOCSWINSZ → SIGWINCH to mosh-client).
                 // No SSH resize callback is needed.
-                try { ms.updateSize(newColumns, newRows) } catch (_: Exception) {}
+                try { ms.updateSize(newColumns, newRows) } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TermuxBridge", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 // Belt and braces: also signal mosh-client explicitly. On-device
                 // evidence (Android 16, debug log "Terminal resized: 37x90" with
                 // mosh still painting 27 rows) shows the kernel-generated SIGWINCH
@@ -1642,7 +1642,7 @@ class TermuxBridge(
 
         // Mosh PTY session — finishIfRunning() sends SIGHUP to the child
         // process and closes the master PTY fd.
-        try { moshSession?.finishIfRunning() } catch (_: Exception) {}
+        try { moshSession?.finishIfRunning() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TermuxBridge", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         moshSession = null
 
         // OSC 8 links and bracketed paste state are session-scoped — clear them
@@ -1756,7 +1756,7 @@ class TermuxBridge(
         // a mosh handoff failure), tear it down before creating a new one.
         // Without this the old TerminalSession holds an open PTY fd and the
         // mosh-client child process is never sent SIGHUP.
-        try { moshSession?.finishIfRunning() } catch (_: Exception) {}
+        try { moshSession?.finishIfRunning() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TermuxBridge", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         moshSession = null
 
         val envList = arrayOf(
@@ -1827,7 +1827,7 @@ class TermuxBridge(
      * leave the outcome to mosh-client.
      */
     private fun startMoshFailWatchdog() {
-        try { moshWatchdog?.cancel() } catch (_: Exception) {}
+        try { moshWatchdog?.cancel() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TermuxBridge", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         moshWatchdog = sessionScope.launch {
             val startedAt = System.currentTimeMillis()
             // Minimum age before an on-screen failure string is trusted.
@@ -1856,7 +1856,7 @@ class TermuxBridge(
                     )
                     if (sawRealError) {
                         Logger.i(TAG, "Mosh watchdog: mosh-client reported a UDP failure on screen after ${elapsed}ms — killing PTY for fast SSH fallback")
-                        try { session.finishIfRunning() } catch (_: Exception) {}
+                        try { session.finishIfRunning() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TermuxBridge", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                         return@launch
                     }
                     // Cheap short-circuit: if the emulator has rendered
@@ -1903,7 +1903,7 @@ class TermuxBridge(
         if (session.getEmulator() == null) {
             session.initializeEmulator(currentColumns, currentRows)
         } else {
-            try { session.updateSize(currentColumns, currentRows) } catch (_: Exception) {}
+            try { session.updateSize(currentColumns, currentRows) } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TermuxBridge", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             // Same belt-and-braces explicit SIGWINCH as resize() — see the
             // comment there for the on-device evidence and safety argument.
             sendSigwinch(session)

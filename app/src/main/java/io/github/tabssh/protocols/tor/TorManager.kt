@@ -79,8 +79,10 @@ class TorManager private constructor(private val appContext: Context) {
                     bootstrapped = started.awaitBootstrap(BOOTSTRAP_TIMEOUT_MS)
                 }
                 if (!bootstrapped) {
+                    Logger.w(TAG, "Tor did not bootstrap (alive=${started.isAlive()}); last output:\n${started.recentLog()}")
                     val reason = if (started.isAlive()) {
-                        "Tor did not finish bootstrapping within ${BOOTSTRAP_TIMEOUT_MS / 1000}s"
+                        "Tor did not finish bootstrapping within ${BOOTSTRAP_TIMEOUT_MS / 1000}s" +
+                            started.recentLog().lines().lastOrNull { it.isNotBlank() }?.let { " (last tor output: $it)" }.orEmpty()
                     } else {
                         "Tor exited during start: " + started.recentLog().lines().lastOrNull { it.isNotBlank() }.orEmpty()
                     }
@@ -92,7 +94,7 @@ class TorManager private constructor(private val appContext: Context) {
                 Logger.i(TAG, "Tor bootstrapped; loopback SOCKS on 127.0.0.1:$port")
                 return port
             } catch (e: Exception) {
-                try { started?.close() } catch (_: Exception) {}
+                try { started?.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TorManager", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 session = null
                 socksPort = 0
                 val reason = e.message?.takeIf { it.isNotBlank() }

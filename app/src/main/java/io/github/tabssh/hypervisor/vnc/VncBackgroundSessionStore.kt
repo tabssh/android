@@ -130,8 +130,8 @@ object VncBackgroundSessionStore {
     }
 
     private fun discardInternal(session: ParkedSession) {
-        try { session.rfbClient.stop() } catch (_: Exception) {}
-        try { session.socket?.close() } catch (_: Exception) {}
+        try { session.rfbClient.stop() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("VncBackgroundSessionStore", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+        try { session.socket?.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("VncBackgroundSessionStore", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         try { session.transportTeardown?.invoke() } catch (e: Exception) {
             Logger.d(TAG, "transportTeardown for ${session.key} suppressed: ${e.message}")
         }

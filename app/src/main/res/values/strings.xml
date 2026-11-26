@@ -893,7 +893,11 @@
     <string name="container_updates_hint_set_stack">Set on this stack: %1$s</string>
     <string name="container_updates_hint_set_host">Set on this host: %1$s</string>
     <string name="container_updates_precedence">Precedence: image or stack overrides host, host overrides global. Global defaults are in Settings, Monitoring.</string>
-    <string name="container_updates_section_host">Host settings</string>
+    <string name="container_updates_section_host">This host</string>
+    <string name="container_updates_menu_settings">Update settings</string>
+    <string name="container_updates_settings_title">Update settings for this host</string>
+    <string name="container_updates_settings_done">Done</string>
+    <string name="container_updates_host_summary">Checks %1$s, auto-apply %2$s, every %3$d h</string>
     <string name="container_updates_interval_hint">Check interval (hours)</string>
     <string name="container_updates_interval_helper_global">Leave empty to use the global interval (%1$d h)</string>
     <string name="container_updates_interval_helper_custom">Custom for this host. Empty restores the global interval (%1$d h)</string>
@@ -1468,8 +1472,8 @@
     <string name="log_debug_clip_label">TabSSH Debug Logs</string>
     <string name="log_debug_cleared">Debug logs cleared</string>
     <string name="log_debug_empty_title">No Debug Logs Yet</string>
-    <string name="log_debug_empty_debug_build">Debug logging is enabled (this is a development build) but no events have been captured yet.\n\nUse the app a bit — open a connection, navigate around — then try Copy Debug Logs again.</string>
-    <string name="log_debug_empty_release_build">Debug logging is not available in this release build.\n\nInstall a development build if you need to capture logs for a bug report.</string>
+    <string name="log_debug_empty_debug_build">Debug logging is on but no events have been captured yet.\n\nUse the app a bit — open a connection, navigate around — then try Copy Debug Logs again.</string>
+    <string name="log_debug_empty_release_build">Debug logging is off.\n\nTurn on Settings → Logging → Enable Debug Logging, reproduce the problem, then try Copy Debug Logs again.</string>
     <string name="log_too_large_title">%1$s — too large to copy</string>
     <string name="log_too_large_message">The log is %1$s, which is too large for the clipboard.\n\nUse "Paste / Issue" to upload it to a paste service — you can then copy the URL or open a pre-filled bug report.</string>
     <string name="log_copied_message">%1$d characters copied to clipboard.\n\nTap "Paste / Issue" to upload the log — you can copy the URL or open a bug report.</string>
@@ -4364,4 +4368,17 @@
     <string name="port_forward_add_short">Add forward</string>
     <string name="main_quick_connect_hint_key">Key to use when the password is blank</string>
     <string name="main_quick_connect_key_none">No key — ask for a password</string>
+    <string name="hypervisor_authenticator_hint">Authenticator code or recovery key</string>
+    <string name="proxmox_verification_title">Proxmox verification</string>
+    <string name="proxmox_verification_message">Enter your TOTP code, or use a single-use recovery key.</string>
+    <string name="proxmox_use_totp">Use TOTP</string>
+    <string name="proxmox_use_recovery_key">Use recovery key</string>
+    <string name="hypervisor_enter_code">Enter a code</string>
+    <string name="hypervisor_enter_recovery_key">Enter a recovery key</string>
+    <string name="ssh_auth_response_fmt">Response %1$s</string>
+    <string name="ssh_verification_title">SSH verification</string>
+    <string name="ssh_verification_message">The SSH server requested additional authentication information.</string>
+    <string name="required">Required</string>
+    <string name="snippets_empty_picker">No snippets yet. Create one first!</string>
+    <string name="snippet_created_fmt">Snippet created: %1$s</string>
 </resources>

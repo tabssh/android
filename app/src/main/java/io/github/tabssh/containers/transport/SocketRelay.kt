@@ -224,8 +224,7 @@ class SocketRelay(
         } catch (e: Exception) {
             try {
                 ch.disconnect()
-            } catch (_: Exception) {
-            }
+            } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SocketRelay", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             // "channel is not opened." is JSch's only signal for a server-side
             // denial (AllowTcpForwarding no / AllowStreamLocalForwarding no).
             throw TransportUnavailableException(
@@ -286,8 +285,7 @@ class SocketRelay(
         } catch (e: Exception) {
             try {
                 ch.disconnect()
-            } catch (_: Exception) {
-            }
+            } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SocketRelay", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             throw TransportUnavailableException(
                 ContainerTransportMessages.TCP_FORWARD_DENIED_REMEDIATION,
                 detail = e.message
@@ -355,8 +353,7 @@ class SocketRelay(
         } catch (e: Exception) {
             try {
                 ch.disconnect()
-            } catch (_: Exception) {
-            }
+            } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SocketRelay", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             throw TransportUnavailableException(
                 ContainerTransportMessages.dialStdioUnsupported(engine),
                 detail = e.message
@@ -385,12 +382,10 @@ class SocketRelay(
         fun forceClose() {
             try {
                 channel?.disconnect()
-            } catch (_: Exception) {
-            }
+            } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SocketRelay", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             try {
                 client.close()
-            } catch (_: Exception) {
-            }
+            } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SocketRelay", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         }
     }
 
@@ -460,8 +455,7 @@ class SocketRelay(
             Logger.w(TAG, "relay connection dropped: token preamble missing or invalid")
             try {
                 client.close()
-            } catch (_: Exception) {
-            }
+            } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SocketRelay", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             return
         }
         val handle = RelayHandle(client)
@@ -484,12 +478,10 @@ class SocketRelay(
             activeRelays.remove(handle)
             try {
                 conn?.channel?.disconnect()
-            } catch (_: Exception) {
-            }
+            } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SocketRelay", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             try {
                 client.close()
-            } catch (_: Exception) {
-            }
+            } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SocketRelay", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         }
     }
 
@@ -519,8 +511,7 @@ class SocketRelay(
     suspend fun close() = withContext(Dispatchers.IO) {
         try {
             serverSocket?.close()
-        } catch (_: Exception) {
-        }
+        } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SocketRelay", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         serverSocket = null
         // Blocking pipe reads don't observe scope cancellation — force-close
         // every in-flight relay (streamlocal channels and dial-stdio exec

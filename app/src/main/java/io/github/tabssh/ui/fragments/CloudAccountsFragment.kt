@@ -757,7 +757,7 @@ class CloudAccountsFragment : Fragment() {
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {}
+            } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("CloudAccountsFragment", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             if (!isAdded) return@launch
             Toast.makeText(
                 requireContext(),

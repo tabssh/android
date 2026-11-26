@@ -262,9 +262,8 @@ class SessionPersistenceManager(
         // Serialise all saves. Without this lock, concurrent callers (rotation
         // fires onActivitySaveInstanceState for each Activity simultaneously, the
         // auto-save timer fires while a background save is in flight, etc.) can
-        // interleave their deactivateAllSessions() + insertSession() pairs and
-        // insert multiple active rows for the same tab — those duplicates multiply
-        // into duplicate tabs on the next fresh-start restore.
+        // interleave snapshot writes and insert multiple active rows for the same
+        // tab — those duplicates multiply into duplicate tabs on fresh-start restore.
         saveMutex.withLock {
             try {
                 val tabs = tabManager.getAllTabs()
@@ -276,12 +275,8 @@ class SessionPersistenceManager(
 
                 Logger.d("SessionPersistenceManager", "Saving session state for ${tabs.size} tabs")
 
-                // Deactivate then insert as an atomic unit (protected by saveMutex).
-                database.tabSessionDao().deactivateAllSessions()
-
-                tabs.forEachIndexed { index, tab ->
-                    saveTabSession(tab, index)
-                }
+                val sessions = tabs.mapIndexedNotNull { index, tab -> createTabSession(tab, index) }
+                database.tabSessionDao().replaceActiveSessions(sessions)
 
                 Logger.i("SessionPersistenceManager", "Saved session state for ${tabs.size} tabs")
 
@@ -293,38 +288,36 @@ class SessionPersistenceManager(
         }
     }
     
-    private suspend fun saveTabSession(tab: SSHTab, tabIndex: Int) {
-        try {
-            // Guard: the TabSession FK requires the connection profile to exist
-            // in the `connections` table. Ephemeral / quick-connect profiles are
-            // created in-memory and never persisted, so inserting a session for
-            // them would throw SQLITE_CONSTRAINT_FOREIGNKEY. Skip those tabs —
-            // same check TabManager.saveTabState() uses.
-            val profileInDb = database.connectionDao().getConnectionById(tab.profile.id)
-            if (profileInDb == null) {
-                Logger.d("SessionPersistenceManager", "Skipping session save for ephemeral profile: ${tab.getDisplayTitle()}")
-                return
-            }
+    private suspend fun createTabSession(tab: SSHTab, tabIndex: Int): TabSession? {
+        // Guard: the TabSession FK requires the connection profile to exist
+        // in the `connections` table. Ephemeral / quick-connect profiles are
+        // created in-memory and never persisted, so inserting a session for
+        // them would throw SQLITE_CONSTRAINT_FOREIGNKEY. Skip those tabs —
+        // same check TabManager.saveTabState() uses.
+        val profileInDb = database.connectionDao().getConnectionById(tab.profile.id)
+        if (profileInDb == null) {
+            Logger.d("SessionPersistenceManager", "Skipping session save for ephemeral profile: ${tab.getDisplayTitle()}")
+            return null
+        }
 
-            val terminal = tab.termuxBridge
-            val stats = tab.getConnectionStats()
+        val terminal = tab.termuxBridge
+        val stats = tab.getConnectionStats()
 
-            // Scrollback is captured for every tab being saved, not just the
-            // UI-focused one. `stats.isActive` means "this tab is the visible
-            // tab" (SSHTab.activate()/deactivate()), so gating on it used to
-            // persist a blank terminal for every background tab — invisible
-            // while those rows were also never restored (see the `isActive`
-            // field below), but a guaranteed blank restore now that they are.
-            val scrollbackContent = compressTerminalContent(terminal.getScrollbackContent())
+        // Scrollback is captured for every tab being saved, not just the
+        // UI-focused one. `stats.isActive` means "this tab is the visible
+        // tab" (SSHTab.activate()/deactivate()), so gating on it used to
+        // persist a blank terminal for every background tab — invisible
+        // while those rows were also never restored (see the `isActive`
+        // field below), but a guaranteed blank restore now that they are.
+        val scrollbackContent = compressTerminalContent(terminal.getScrollbackContent())
 
-            val tabSession = TabSession(
+        return TabSession(
                 sessionId = java.util.UUID.randomUUID().toString(),
                 tabId = tab.tabId,
                 connectionId = tab.profile.id,
                 title = tab.getDisplayTitle(),
-                // `is_active` is this table's "current persisted row for this
-                // tab" marker — deactivateAllSessions() above just zeroed every
-                // older row, and restoreSessionState() selects strictly on it.
+                // `is_active` marks the current persisted row for this tab;
+                // replaceActiveSessions() deactivates the older snapshot.
                 // It was being written from stats.isActive, which is SSHTab's
                 // unrelated "currently visible tab" flag, so a save taken while
                 // a tab was not on screen inserted its only row with is_active=0
@@ -356,15 +349,7 @@ class SessionPersistenceManager(
                 hasUnreadOutput = false,
                 unreadLines = 0,
                 tabOrder = tabIndex
-            )
-            
-            database.tabSessionDao().insertSession(tabSession)
-            
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Logger.e("SessionPersistenceManager", "Failed to save tab session for ${tab.profile.getDisplayName()}", e)
-        }
+        )
     }
     
     /**

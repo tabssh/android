@@ -147,4 +147,17 @@
     <string name="route_tor_check_failed_unknown">Error desconocido</string>
     <string name="conn_route_unavailable">La ruta seleccionada no está disponible en este dispositivo</string>
     <string name="spice_connection_failed">Falló la conexión SPICE. Comprueba los datos de conexión y el registro de depuración.</string>
+    <string name="hypervisor_authenticator_hint">Código de autenticación o clave de recuperación</string>
+    <string name="proxmox_verification_title">Verificación de Proxmox</string>
+    <string name="proxmox_verification_message">Introduce tu código TOTP o usa una clave de recuperación de un solo uso.</string>
+    <string name="proxmox_use_totp">Usar TOTP</string>
+    <string name="proxmox_use_recovery_key">Usar clave de recuperación</string>
+    <string name="hypervisor_enter_code">Introduce un código</string>
+    <string name="hypervisor_enter_recovery_key">Introduce una clave de recuperación</string>
+    <string name="ssh_auth_response_fmt">Respuesta %1$s</string>
+    <string name="ssh_verification_title">Verificación SSH</string>
+    <string name="ssh_verification_message">El servidor SSH solicitó información de autenticación adicional.</string>
+    <string name="required">Obligatorio</string>
+    <string name="snippets_empty_picker">Aún no hay fragmentos. ¡Crea uno primero!</string>
+    <string name="snippet_created_fmt">Fragmento creado: %1$s</string>
 </resources>

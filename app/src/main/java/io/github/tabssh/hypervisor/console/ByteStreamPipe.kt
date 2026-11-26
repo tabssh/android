@@ -159,7 +159,7 @@ class ByteStreamPipe(private val maxBufferedBytes: Int = DEFAULT_MAX_BUFFERED_BY
 
     /** Tear both ends down and drop anything still buffered. */
     fun close() {
-        try { sink.close() } catch (_: IOException) {}
-        try { source.close() } catch (_: IOException) {}
+        try { sink.close() } catch (swallowed: IOException) { io.github.tabssh.utils.logging.Logger.d("ByteStreamPipe", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+        try { source.close() } catch (swallowed: IOException) { io.github.tabssh.utils.logging.Logger.d("ByteStreamPipe", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
     }
 }

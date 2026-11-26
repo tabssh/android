@@ -1068,7 +1068,7 @@ class SSHConnection(
                 // Same pre-tracking-failure case as openShellChannel — the
                 // channel was allocated on the Session but not yet tracked
                 // in openChannels, so disconnect it directly.
-                try { exec.disconnect() } catch (_: Exception) {}
+                try { exec.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SSHConnection", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 throw e
             }
         } catch (e: Exception) {
@@ -1518,7 +1518,7 @@ class SSHConnection(
             // Disconnect the session whether or not it reached the
             // jumpHostSession assignment — pendingSession is set as soon as it
             // is created, so a failure during connect()/auth no longer leaks it.
-            try { pendingSession?.disconnect() } catch (_: Exception) {}
+            try { pendingSession?.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SSHConnection", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             jumpHostSession = null
             throw SSHException("Jump host setup failed: ${e.message}", e)
         }
@@ -1874,7 +1874,7 @@ class SSHConnection(
                     // Channel was opened (allocated on the Session) but not yet
                     // tracked in openChannels — disconnect it directly so it
                     // doesn't linger attached to the Session.
-                    try { exec.disconnect() } catch (_: Exception) {}
+                    try { exec.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SSHConnection", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                     throw e
                 }
             }
@@ -1906,7 +1906,7 @@ class SSHConnection(
             } catch (e: Exception) {
                 // Same pre-tracking-failure case as the exec branch above —
                 // explicitly disconnect to release the Session slot.
-                try { shell.disconnect() } catch (_: Exception) {}
+                try { shell.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SSHConnection", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 throw e
             }
 
@@ -1967,7 +1967,7 @@ class SSHConnection(
             // lock and blocks on a stalled socket. Callers include the main
             // thread (tab onDisconnected), so run it on the teardown scope.
             teardownScope.launch {
-                try { channel.disconnect() } catch (_: Exception) {}
+                try { channel.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SSHConnection", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             }
             // Keep the legacy [shellChannel] pointer pointing at SOMETHING
             // valid if it was the one we just closed — pick any remaining
@@ -2097,7 +2097,7 @@ class SSHConnection(
             Logger.e("SSHConnection", "Failed to execute command: ${Logger.commandForLogging(command)}", e)
             throw e
         } finally {
-            try { channel?.disconnect() } catch (_: Exception) {}
+            try { channel?.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SSHConnection", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         }
     }
     
@@ -2123,7 +2123,7 @@ class SSHConnection(
                 // connect() failed — channel was allocated on the Session
                 // but never assigned to sftpChannel, so callers can't reach
                 // it for cleanup. Disconnect directly to release the slot.
-                try { channel.disconnect() } catch (_: Exception) {}
+                try { channel.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SSHConnection", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 throw e
             }
 
@@ -2159,7 +2159,7 @@ class SSHConnection(
             try {
                 channel.connect()
             } catch (e: Exception) {
-                try { channel.disconnect() } catch (_: Exception) {}
+                try { channel.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SSHConnection", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 throw e
             }
             Logger.d("SSHConnection", "Dedicated SFTP channel opened")
@@ -2247,7 +2247,7 @@ class SSHConnection(
         openChannels.clear()
         if (channelsToClose.isNotEmpty()) {
             runTeardownBounded("channel disconnect") {
-                channelsToClose.forEach { ch -> try { ch.disconnect() } catch (_: Exception) {} }
+                channelsToClose.forEach { ch -> try { ch.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("SSHConnection", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) } }
             }
         }
         shellChannel = null

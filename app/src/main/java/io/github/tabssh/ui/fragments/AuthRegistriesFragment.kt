@@ -4,14 +4,16 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ListView
-import android.widget.SimpleAdapter
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.ListAdapter
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import io.github.tabssh.R
 import io.github.tabssh.TabSSHApplication
@@ -30,8 +32,8 @@ import kotlinx.coroutines.launch
 class AuthRegistriesFragment : Fragment() {
 
     private lateinit var app: TabSSHApplication
-    private lateinit var listView: ListView
-    private var credentials: List<RegistryCredential> = emptyList()
+    private lateinit var listView: RecyclerView
+    private lateinit var adapter: RegistryCredentialAdapter
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -49,6 +51,11 @@ class AuthRegistriesFragment : Fragment() {
 
     private fun setupRegistriesSection(view: View) {
         listView = view.findViewById(R.id.list_registries)
+        adapter = RegistryCredentialAdapter { credential ->
+            RegistryCredentialDialog.showItemMenu(requireActivity() as AppCompatActivity, app, credential)
+        }
+        listView.layoutManager = LinearLayoutManager(requireContext())
+        listView.adapter = adapter
 
         view.findViewById<MaterialButton>(R.id.btn_add_registry).setOnClickListener {
             RegistryCredentialDialog.showEditor(requireActivity() as AppCompatActivity, app, null)
@@ -63,7 +70,6 @@ class AuthRegistriesFragment : Fragment() {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
                     app.database.registryCredentialDao().getAllCredentials().collect { list ->
-                        credentials = list
                         renderList(list)
                         Logger.d(TAG, "Loaded ${list.size} registry credentials")
                     }
@@ -94,14 +100,37 @@ class AuthRegistriesFragment : Fragment() {
                 "detail" to RegistryCredentialDialog.listItemDetail(activity, credential)
             )
         }
-        listView.adapter = SimpleAdapter(
-            activity, rows, R.layout.item_list_card,
-            arrayOf("host", "detail"),
-            intArrayOf(R.id.text_title, R.id.text_subtitle)
-        )
-        listView.setOnItemClickListener { _, _, position, _ ->
-            RegistryCredentialDialog.showItemMenu(activity, app, credentials[position])
+        adapter.submitList(list)
+    }
+
+    private inner class RegistryCredentialAdapter(
+        private val onClick: (RegistryCredential) -> Unit
+    ) : ListAdapter<RegistryCredential, RegistryCredentialAdapter.ViewHolder>(CredentialDiff) {
+
+        inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+            val title: TextView = view.findViewById(R.id.text_title)
+            val detail: TextView = view.findViewById(R.id.text_subtitle)
         }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+            val row = LayoutInflater.from(parent.context).inflate(R.layout.item_list_card, parent, false)
+            return ViewHolder(row)
+        }
+
+        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+            val credential = getItem(position)
+            holder.title.text = credential.registryHost
+            holder.detail.text = RegistryCredentialDialog.listItemDetail(
+                requireActivity() as AppCompatActivity,
+                credential
+            )
+            holder.itemView.setOnClickListener { onClick(credential) }
+        }
+    }
+
+    private object CredentialDiff : DiffUtil.ItemCallback<RegistryCredential>() {
+        override fun areItemsTheSame(old: RegistryCredential, new: RegistryCredential): Boolean = old.id == new.id
+        override fun areContentsTheSame(old: RegistryCredential, new: RegistryCredential): Boolean = old == new
     }
 
     companion object {

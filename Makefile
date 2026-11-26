@@ -109,7 +109,7 @@ test: check ## Everything in check, plus instrumented + UI tests when a device i
 		$(DOCKER_RUN) --network host -e ANDROID_SERIAL="$$SERIAL" $(BUILD_IMAGE) sh -c '$(GRADLE_SEED); ./gradlew connectedDebugAndroidTest --no-daemon --build-cache' \
 			&& echo -e "$(GREEN)✅ Instrumented tests passed$(NC)" \
 			|| { echo -e "$(YELLOW)❌ Instrumented tests failed$(NC)"; exit 1; }; \
-		scripts/ui-test.sh --serial "$$SERIAL" $(if $(TEST),$(TEST),all); \
+		scripts/ui-test.sh --serial "$$SERIAL" --apk app/build/outputs/apk/debug/tabssh-android-universal.apk $(if $(TEST),$(TEST),all); \
 	else \
 		echo -e "$(YELLOW)No device/emulator reachable — instrumented and UI tests skipped$(NC)"; \
 	fi

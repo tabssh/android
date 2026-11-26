@@ -147,4 +147,17 @@
     <string name="route_tor_check_failed_unknown">Erreur inconnue</string>
     <string name="conn_route_unavailable">La route sélectionnée n’est pas disponible sur cet appareil</string>
     <string name="spice_connection_failed">Échec de la connexion SPICE. Vérifiez les paramètres de connexion et le journal de débogage.</string>
+    <string name="hypervisor_authenticator_hint">Code d’authentification ou clé de récupération</string>
+    <string name="proxmox_verification_title">Vérification Proxmox</string>
+    <string name="proxmox_verification_message">Saisissez votre code TOTP ou utilisez une clé de récupération à usage unique.</string>
+    <string name="proxmox_use_totp">Utiliser TOTP</string>
+    <string name="proxmox_use_recovery_key">Utiliser une clé de récupération</string>
+    <string name="hypervisor_enter_code">Saisissez un code</string>
+    <string name="hypervisor_enter_recovery_key">Saisissez une clé de récupération</string>
+    <string name="ssh_auth_response_fmt">Réponse %1$s</string>
+    <string name="ssh_verification_title">Vérification SSH</string>
+    <string name="ssh_verification_message">Le serveur SSH a demandé des informations d’authentification supplémentaires.</string>
+    <string name="required">Obligatoire</string>
+    <string name="snippets_empty_picker">Aucun extrait pour le moment. Créez-en un d’abord !</string>
+    <string name="snippet_created_fmt">Extrait créé : %1$s</string>
 </resources>

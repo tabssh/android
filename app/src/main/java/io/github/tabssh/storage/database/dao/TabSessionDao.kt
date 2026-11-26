@@ -52,6 +52,12 @@ interface TabSessionDao {
     @Query("UPDATE tab_sessions SET is_active = 0")
     suspend fun deactivateAllSessions()
 
+    @Transaction
+    suspend fun replaceActiveSessions(sessions: List<TabSession>) {
+        deactivateAllSessions()
+        sessions.forEach { insertSession(it) }
+    }
+
     @Query("SELECT * FROM tab_sessions WHERE is_active = 1")
     suspend fun getAllTabs(): List<TabSession>
 

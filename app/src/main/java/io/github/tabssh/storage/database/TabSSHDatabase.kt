@@ -128,8 +128,8 @@ abstract class TabSSHDatabase : RoomDatabase() {
          * ADD COLUMN with a NOT NULL DEFAULT 0 — no data transform, existing
          * rows default to the current drop-on-background behavior.
          *
-         * NOTE: this migration is not yet covered by a MigrationTestHelper test;
-         * add one (v3 → v4) so the schema change is verified on real upgrades.
+         * The full-chain MigrationTestHelper test exercises this migration from
+         * the shipped v3 schema through the current database version.
          */
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {

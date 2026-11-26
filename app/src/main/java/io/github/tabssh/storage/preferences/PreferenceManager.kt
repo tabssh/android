@@ -958,7 +958,9 @@ class PreferenceManager(private val context: Context) {
 
     // --- Logging ---
 
-    fun isDebugLoggingEnabled(): Boolean = getBoolean(KEY_DEBUG_LOGGING_ENABLED, false)
+    // Default follows the build channel: on in debug and devel builds, off in production builds.
+    // Whatever the user picks afterwards wins in every build.
+    fun isDebugLoggingEnabled(): Boolean = getBoolean(KEY_DEBUG_LOGGING_ENABLED, io.github.tabssh.BuildConfig.DEBUG_LOG)
     fun setDebugLoggingEnabled(enabled: Boolean) = setBoolean(KEY_DEBUG_LOGGING_ENABLED, enabled)
 
     fun getDebugLogLevel(): String = getString(KEY_DEBUG_LOG_LEVEL, "debug")

@@ -841,7 +841,7 @@ class HypervisorConsoleManager {
             // The open gate can fail after `webSocketClient = ws`, which leaves a
             // live OkHttp WebSocket (and its pipes and keepalive thread) attached
             // with nobody to close it — the session is already reported as failed.
-            try { webSocketClient?.disconnect() } catch (_: Exception) {}
+            try { webSocketClient?.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("HypervisorConsoleManager", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             webSocketClient = null
             val friendly = io.github.tabssh.hypervisor.console.ConsoleErrorClassifier.classify(
                 io.github.tabssh.TabSSHApplication.get(), "VNC", e
@@ -970,7 +970,7 @@ class HypervisorConsoleManager {
             Logger.e(TAG, "reconnectGraphicalWithoutResize: connect failed for $vmName", e)
             // Same leak as the VNC fallback path: a failure after the assignment
             // above leaves a connected WebSocket nobody owns.
-            try { webSocketClient?.disconnect() } catch (_: Exception) {}
+            try { webSocketClient?.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("HypervisorConsoleManager", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             webSocketClient = null
             val friendly = io.github.tabssh.hypervisor.console.ConsoleErrorClassifier.classify(
                 io.github.tabssh.TabSSHApplication.get(), "VNC", e

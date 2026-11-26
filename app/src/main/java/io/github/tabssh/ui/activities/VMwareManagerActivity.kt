@@ -521,7 +521,7 @@ class VMwareManagerActivity : TabSSHActivity() {
                         s.connect(java.net.InetSocketAddress(consoleInfo.host, consoleInfo.port), 15_000)
                     } catch (e: Throwable) {
                         // Close the fd on connect failure so we never leak the socket
-                        try { s.close() } catch (_: Exception) {}
+                        try { s.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("VMwareManagerActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                         throw e
                     }
                     socket = s
@@ -538,7 +538,7 @@ class VMwareManagerActivity : TabSSHActivity() {
                 // Ephemeral hypervisor consoles never auto-relaunch on resize rejection
                 rfbClient.canRequestResize = false
                 if (isFinishing || isDestroyed) {
-                    try { rfbClient.stop() } catch (_: Exception) {}
+                    try { rfbClient.stop() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("VMwareManagerActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                     socket = null
                     return@launch
                 }
@@ -568,7 +568,7 @@ class VMwareManagerActivity : TabSSHActivity() {
                 val mapped = ThrowableMapper.map(this@VMwareManagerActivity, TAG, e, "Failed to open VNC console for $vmName")
                 showError(getString(R.string.vmware_open_vnc_failed_fmt, vmName, mapped.message))
             } finally {
-                try { socket?.close() } catch (_: Exception) {}
+                try { socket?.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("VMwareManagerActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 actionInFlight = false
             }
         }

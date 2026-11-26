@@ -72,7 +72,7 @@ object VncDirectConnector {
             // Socket was allocated, the caller never receives it and cannot
             // close it. Close here to prevent file-descriptor leaks on every
             // failed VNC connect attempt.
-            try { socket.close() } catch (_: Exception) {}
+            try { socket.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("VncDirectConnector", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             throw e
         }
     }

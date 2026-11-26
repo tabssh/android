@@ -78,7 +78,8 @@
       android:summary="@string/prefs_monitoring_default_cpu_threshold_summary"
       android:defaultValue="85"
       app:min="10"
-      android:max="100" />
+      android:max="100"
+      app:showSeekBarValue="true" />
 
     <SeekBarPreference
       android:key="monitoring_default_memory_threshold"
@@ -86,7 +87,8 @@
       android:summary="@string/prefs_monitoring_default_memory_threshold_summary"
       android:defaultValue="90"
       app:min="10"
-      android:max="100" />
+      android:max="100"
+      app:showSeekBarValue="true" />
 
     <SeekBarPreference
       android:key="monitoring_default_disk_threshold"
@@ -94,7 +96,8 @@
       android:summary="@string/prefs_monitoring_default_disk_threshold_summary"
       android:defaultValue="80"
       app:min="10"
-      android:max="100" />
+      android:max="100"
+      app:showSeekBarValue="true" />
 
   </PreferenceCategory>
 

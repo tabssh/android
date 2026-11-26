@@ -11,8 +11,8 @@ import org.junit.Assert.assertTrue
 /**
  * Room migration tests for TabSSHDatabase.
  *
- * Coverage: focused row-preservation checks for older migrations plus the
- * complete v3 → current-schema chain.
+ * Coverage: focused row-preservation checks for older migrations plus the full
+ * v3 → v33 chain, including Room-generated auto migrations.
  *
  * Each single-step test verifies that the migration SQL runs without
  * error and that Room's schema validator agrees the resulting DB
@@ -201,14 +201,14 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
-    // Full chain v3 → current schema — exercises every migration in sequence
+    // Full chain v3 → v33 — includes every manual and Room-generated migration.
     // -------------------------------------------------------------------------
 
     @Test
     fun migrateChain3ToCurrent() {
         helper.createDatabase(testDbName, 3).close()
         helper.runMigrationsAndValidate(
-            testDbName, 28, true,
+            testDbName, 33, true,
             TabSSHDatabase.MIGRATION_3_4,
             TabSSHDatabase.MIGRATION_4_5,
             TabSSHDatabase.MIGRATION_5_6,
@@ -233,7 +233,10 @@ class MigrationTest {
             TabSSHDatabase.MIGRATION_24_25,
             TabSSHDatabase.MIGRATION_25_26,
             TabSSHDatabase.MIGRATION_26_27,
-            TabSSHDatabase.MIGRATION_27_28
+            TabSSHDatabase.MIGRATION_27_28,
+            TabSSHDatabase.MIGRATION_28_29,
+            TabSSHDatabase.MIGRATION_29_30,
+            TabSSHDatabase.MIGRATION_30_31
         ).close()
     }
 }

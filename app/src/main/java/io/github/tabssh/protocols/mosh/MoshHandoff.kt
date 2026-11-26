@@ -184,7 +184,7 @@ object MoshHandoff {
             ).message
             return@withContext Result.Error("Bootstrap failed: $friendly")
         } finally {
-            try { ch?.disconnect() } catch (_: Exception) {}
+            try { ch?.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("MoshHandoff", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         }
     }
 
@@ -250,7 +250,7 @@ object MoshHandoff {
         } catch (e: Exception) {
             Logger.d(TAG, "mosh-server reap best-effort failed: ${e.message}")
         } finally {
-            try { ch?.disconnect() } catch (_: Exception) {}
+            try { ch?.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("MoshHandoff", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         }
     }
 

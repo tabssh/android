@@ -125,7 +125,7 @@ object HostContextActions {
                             io.github.tabssh.storage.registry.ConnectableHostRegistry
                                 .removeConnectionProfile(app.database, connection.id)
                             // clearPassword is suspend + IO-dispatched (KeyStore HAL round-trip).
-                            try { app.securePasswordManager.clearPassword(connection.id) } catch (_: Exception) {}
+                            try { app.securePasswordManager.clearPassword(connection.id) } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("HostContextActions", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                             // Home-screen widgets pinned to this connection otherwise keep the stale label and dead tap target.
                             io.github.tabssh.widget.ConnectionWidgetProvider.updateAllWidgets(app)
                             Logger.d(TAG_SSH, "Connection deleted: ${connection.name}")

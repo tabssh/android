@@ -354,6 +354,10 @@ for node in root.iter('node'):
     t = node.get('text', '')
     if t:
         print(t)
+try:
+    sys.stdout.flush()
+except BrokenPipeError:
+    sys.stdout = open('/dev/null', 'w')
 PY
 }
 
@@ -1197,7 +1201,7 @@ __test_main_tabs() {
     __ui_wait_for "Hosts" 20
 
     __ui_tap      "Frequent"
-    __ui_wait_for "Frequently Used Connections" 10
+    __ui_wait_for "No Frequent Connections" 10
     __ui_screenshot "tab-frequent"
 
     __ui_tap      "Hosts"
@@ -1205,13 +1209,9 @@ __test_main_tabs() {
     __ui_assert_present "Search connections..."
     __ui_screenshot "tab-hosts"
 
-    __ui_tap      "Identities"
-    __ui_wait_for "Host Identities" 10
-    __ui_screenshot "tab-identities"
-
-    __ui_tap      "Stats"
-    __ui_wait_for "Performance Monitor" 10
-    __ui_screenshot "tab-stats"
+    __ui_tap      "Panes"
+    __ui_wait_for "No pane groups yet" 10
+    __ui_screenshot "tab-panes"
 
     __ui_tap      "Infra"
     __ui_wait_for "Containers" 10
@@ -1224,6 +1224,10 @@ __test_main_tabs() {
     __ui_wait_for "Cloud" 10
     __ui_tap      "Containers"
     __ui_wait_for "Containers" 10
+
+    __ui_tap      "Auth"
+    __ui_wait_for "SSH" 10
+    __ui_screenshot "tab-auth"
 
     # Back to the default tab so a following test starts from a known screen.
     __ui_tap      "Hosts"
@@ -1245,9 +1249,9 @@ __test_nav_drawer() {
     __ui_wait_for "Quick Connect" 10
     __ui_screenshot "drawer-open"
     local item
-    for item in "Quick Connect" "VNC Hosts" "Snippets" "Groups" \
+    for item in "Quick Connect" "Snippets" "Groups" \
                 "Routing & Forwarding" "Cluster Commands" \
-                "Multi-host Dashboard" "Connection History" "Settings" \
+                "Stats" "Multi-host Dashboard" "Connection History" "Settings" \
                 "Copy App Log (Safe to Share)" "Copy Debug Logs (Developer)" \
                 "What's New" "Help" "About"; do
         __ui_drawer_assert "$item"
@@ -1259,11 +1263,11 @@ __test_nav_drawer() {
     sleep 1
     __ui_assert_absent "Multi-host Dashboard"
 
-    __ui_drawer_visit "VNC Hosts"             "VNC Hosts"
     __ui_drawer_visit "Snippets"              "Snippets"
     __ui_drawer_visit "Groups"                "Groups"
     __ui_drawer_visit "Routing & Forwarding"  "Routing & Forwarding"
     __ui_drawer_visit "Cluster Commands"      "Cluster Commands"
+    __ui_drawer_visit "Stats"                 "Performance Monitor"
     __ui_drawer_visit "Multi-host Dashboard"  "Dashboard"
     __ui_drawer_visit "Connection History"    "History"
     __ui_drawer_visit "Settings"              "Settings"
@@ -1356,10 +1360,10 @@ __test_logging_navigation() {
     # ── Issue reporting ───────────────────────────────────────────────────────
     __ui_assert_scroll "Issue reporting"      12
     __ui_assert_scroll "Paste Service"        12
-    __ui_assert_scroll "MicroBin Server"      12
-    __ui_assert_scroll "Lenpaste Server"      12
-    __ui_assert_scroll "Stikked Server"       12
-    __ui_assert_scroll "Pastebin API Key"     12
+    __ui_assert_scroll "Fallback paste server" 12
+    __ui_assert_scroll "Paste server token"    12
+    __ui_assert_scroll "Autodetect Server"     12
+    __ui_assert_scroll "My pastes"             12
 
     __ui_stop
 }

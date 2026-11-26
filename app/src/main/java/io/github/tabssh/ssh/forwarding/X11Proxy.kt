@@ -171,7 +171,7 @@ class X11Proxy(
         val xServer = connectToXServer()
         if (xServer == null) {
             Logger.w(TAG, "No X server reachable — dropping X11 channel")
-            try { client.close() } catch (_: Exception) {}
+            try { client.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("X11Proxy", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             if (noServerNotified.compareAndSet(false, true)) {
                 onNoServer()
             }
@@ -185,8 +185,8 @@ class X11Proxy(
             // keeps the connection open — closing here without the await tore
             // every X11 channel down the instant it was set up.
             val closeBoth = {
-                try { client.close() } catch (_: Exception) {}
-                try { xServer.close() } catch (_: Exception) {}
+                try { client.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("X11Proxy", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+                try { xServer.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("X11Proxy", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             }
             val clientToServer = relay(client.inputStream, xServer.outputStream, closeBoth)
             val serverToClient = relay(xServer.inputStream, client.outputStream, closeBoth)
@@ -197,8 +197,8 @@ class X11Proxy(
         } catch (e: Exception) {
             Logger.d(TAG, "X11 relay ended: ${e.message}")
         } finally {
-            try { client.close() } catch (_: Exception) {}
-            try { xServer.close() } catch (_: Exception) {}
+            try { client.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("X11Proxy", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
+            try { xServer.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("X11Proxy", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         }
     }
 
@@ -222,7 +222,7 @@ class X11Proxy(
                 Logger.i(TAG, "Connected to Termux:X11 Unix socket")
                 return LocalSocketConnection(localSocket)
             } catch (e: Exception) {
-                try { localSocket.close() } catch (_: Exception) {}
+                try { localSocket.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("X11Proxy", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 Logger.w(TAG, "Termux:X11 socket exists but connect failed: ${e.message}")
             }
         }
@@ -243,7 +243,7 @@ class X11Proxy(
             xsdlUnreachableUntil = 0L
             return TcpSocketConnection(tcp)
         } catch (e: Exception) {
-            try { tcp.close() } catch (_: Exception) {}
+            try { tcp.close() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("X11Proxy", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             xsdlUnreachableUntil = (System.nanoTime() / 1_000_000L) + XSDL_UNREACHABLE_BACKOFF_MS
             Logger.d(TAG, "XServer XSDL not reachable: ${e.message} — suppressing probes for ${XSDL_UNREACHABLE_BACKOFF_MS}ms")
         }

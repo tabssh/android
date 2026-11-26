@@ -1142,6 +1142,9 @@ class LoggingSettingsFragment : PreferenceFragmentCompat() {
             }
         }
 
+        findPreference<androidx.preference.SwitchPreferenceCompat>("debug_logging_enabled")
+            ?.setDefaultValue(io.github.tabssh.BuildConfig.DEBUG_LOG)
+
         setupPasteFallbackPreference()
         setupPasteServerVisibility()
         findPreference<androidx.preference.Preference>("paste_token")?.setOnPreferenceClickListener {

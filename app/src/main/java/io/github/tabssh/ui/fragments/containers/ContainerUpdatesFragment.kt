@@ -39,11 +39,13 @@ import io.github.tabssh.ui.utils.ContainerText
 import io.github.tabssh.ui.utils.TriStateToggle
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import io.github.tabssh.utils.logging.Logger
 
 /**
- * Updates destination (Docker and Podman). Top to bottom: the host-tier update
- * settings with a "Check now" scan, the containers and compose projects that have a
+ * Updates destination (Docker and Podman). Top to bottom: a summary of this host's update
+ * settings with a "Check now" scan (the settings themselves are in the overflow menu), the containers and compose projects that have a
  * newer image waiting, and every running image and stack with its effective setting
  * and the tier that decided it. Precedence is image or stack, then host, then global
  * ([UpdateSettingsResolver]); a tap on any row edits that row's own override.
@@ -54,12 +56,7 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
     private lateinit var errorState: LinearLayout
     private lateinit var textError: TextView
     private lateinit var content: View
-    private lateinit var toggleEnabled: MaterialButtonToggleGroup
-    private lateinit var toggleAutoApply: MaterialButtonToggleGroup
-    private lateinit var hintEnabled: TextView
-    private lateinit var hintAutoApply: TextView
-    private lateinit var layoutInterval: TextInputLayout
-    private lateinit var editInterval: TextInputEditText
+    private lateinit var textHostSummary: TextView
     private lateinit var textLastChecked: TextView
     private lateinit var buttonCheckNow: MaterialButton
     private lateinit var textAvailableEmpty: TextView
@@ -77,6 +74,19 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
     // True while the selectors are being set from stored values, so that does not read as a user edit.
     private var binding = false
     private var checking = false
+    private val hostSaveMutex = Mutex()
+
+    /** Views of the Update settings dialog while it is showing; null otherwise. */
+    private class SettingsViews(
+        val toggleEnabled: MaterialButtonToggleGroup,
+        val toggleAutoApply: MaterialButtonToggleGroup,
+        val hintEnabled: TextView,
+        val hintAutoApply: TextView,
+        val layoutInterval: TextInputLayout,
+        val editInterval: TextInputEditText
+    )
+
+    private var settingsViews: SettingsViews? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -89,12 +99,7 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
         errorState = view.findViewById(R.id.error_state)
         textError = view.findViewById(R.id.text_error)
         content = view.findViewById(R.id.content)
-        toggleEnabled = view.findViewById(R.id.toggle_enabled)
-        toggleAutoApply = view.findViewById(R.id.toggle_auto_apply)
-        hintEnabled = view.findViewById(R.id.text_enabled_hint)
-        hintAutoApply = view.findViewById(R.id.text_auto_apply_hint)
-        layoutInterval = view.findViewById(R.id.layout_interval)
-        editInterval = view.findViewById(R.id.edit_interval)
+        textHostSummary = view.findViewById(R.id.text_host_summary)
         textLastChecked = view.findViewById(R.id.text_last_checked)
         buttonCheckNow = view.findViewById(R.id.button_check_now)
         textAvailableEmpty = view.findViewById(R.id.text_available_empty)
@@ -106,24 +111,21 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
             session?.let { onSessionReady(it) }
         }
 
-        TriStateToggle.prepare(toggleEnabled) { value ->
-            if (!binding) saveHost { it.copy(updateEnabledOverride = value) }
-        }
-        TriStateToggle.prepare(toggleAutoApply) { value ->
-            if (!binding) saveHost { it.copy(updateAutoApply = value) }
-        }
-        editInterval.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_DONE) {
-                editInterval.clearFocus()
-                true
-            } else {
-                false
-            }
-        }
-        editInterval.setOnFocusChangeListener { _, hasFocus ->
-            if (!hasFocus) commitInterval()
-        }
         buttonCheckNow.setOnClickListener { checkNow() }
+
+        // The host's update settings live in the overflow menu, only while this tab is the visible one.
+        requireActivity().addMenuProvider(object : androidx.core.view.MenuProvider {
+            override fun onCreateMenu(menu: android.view.Menu, menuInflater: android.view.MenuInflater) {
+                menu.add(android.view.Menu.NONE, R.id.action_update_settings, android.view.Menu.NONE, R.string.container_updates_menu_settings)
+                    .setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
+            }
+
+            override fun onMenuItemSelected(menuItem: android.view.MenuItem): Boolean {
+                if (menuItem.itemId != R.id.action_update_settings) return false
+                showSettingsDialog()
+                return true
+            }
+        }, viewLifecycleOwner, androidx.lifecycle.Lifecycle.State.RESUMED)
 
         // Base class wires sessionFlow/refreshFlow into onSessionReady.
         super.onViewCreated(view, savedInstanceState)
@@ -138,6 +140,7 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
             // Stopped containers still exist and can still be updated, so the pending list is judged
             // against every container on the host, not only the running ones.
             val everything = (session.transport.listContainers(all = true) as? ContainerResult.Success)?.value
+            allContainers = everything.orEmpty()
             val policyDao = app.database.containerAutoUpdatePolicyDao()
             var loadedPolicies = policyDao.getPoliciesForHost(manager.hostId).first()
             if (everything != null) {
@@ -148,7 +151,6 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
                     policyDao, host.name, loadedPolicies, existing
                 ).map { it.id }.toSet()
                 if (gone.isNotEmpty()) loadedPolicies = loadedPolicies.filter { it.id !in gone }
-                allContainers = everything
             }
             if (!isAdded) return@startLoad
             progressBar.visibility = View.GONE
@@ -203,26 +205,13 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
     }
 
     private fun renderHostCard(host: ContainerHost) {
-        val inherited = resolve(host.copy(updateEnabledOverride = null, updateAutoApply = null), null, null)
-        binding = true
-        TriStateToggle.set(toggleEnabled, host.updateEnabledOverride)
-        TriStateToggle.set(toggleAutoApply, host.updateAutoApply)
-        binding = false
-        hintEnabled.text = hostHint(host.updateEnabledOverride, inherited.enabled)
-        hintAutoApply.text = hostHint(host.updateAutoApply, inherited.autoApply)
-
-        val globalHours = globalSettings().intervalHours.toInt()
-        if (!editInterval.hasFocus()) {
-            editInterval.setText(host.updateCheckIntervalHours?.toString().orEmpty())
-        }
-        layoutInterval.error = null
-        layoutInterval.helperText = getString(
-            if (host.updateCheckIntervalHours == null) {
-                R.string.container_updates_interval_helper_global
-            } else {
-                R.string.container_updates_interval_helper_custom
-            },
-            globalHours
+        val resolved = resolve(host, null, null)
+        val hours = host.updateCheckIntervalHours ?: globalSettings().intervalHours.toInt()
+        textHostSummary.text = getString(
+            R.string.container_updates_host_summary,
+            valueLabel(resolved.enabled.value),
+            valueLabel(resolved.autoApply.value),
+            hours
         )
         textLastChecked.text = if (host.lastUpdateCheck > 0) {
             getString(
@@ -233,6 +222,74 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
             )
         } else {
             getString(R.string.container_updates_never_checked)
+        }
+        settingsViews?.let { bindSettings(it, host) }
+    }
+
+    /** Fill the settings dialog from the stored host row. */
+    private fun bindSettings(views: SettingsViews, host: ContainerHost) {
+        val inherited = resolve(host.copy(updateEnabledOverride = null, updateAutoApply = null), null, null)
+        binding = true
+        TriStateToggle.set(views.toggleEnabled, host.updateEnabledOverride)
+        TriStateToggle.set(views.toggleAutoApply, host.updateAutoApply)
+        binding = false
+        views.hintEnabled.text = hostHint(host.updateEnabledOverride, inherited.enabled)
+        views.hintAutoApply.text = hostHint(host.updateAutoApply, inherited.autoApply)
+        if (!views.editInterval.hasFocus()) {
+            views.editInterval.setText(host.updateCheckIntervalHours?.toString().orEmpty())
+        }
+        views.layoutInterval.error = null
+        views.layoutInterval.helperText = getString(
+            if (host.updateCheckIntervalHours == null) {
+                R.string.container_updates_interval_helper_global
+            } else {
+                R.string.container_updates_interval_helper_custom
+            },
+            globalSettings().intervalHours.toInt()
+        )
+    }
+
+    private fun showSettingsDialog() {
+        val host = currentHost ?: return
+        val dialogView = layoutInflater.inflate(R.layout.dialog_container_update_settings, null)
+        val views = SettingsViews(
+            toggleEnabled = dialogView.findViewById(R.id.toggle_enabled),
+            toggleAutoApply = dialogView.findViewById(R.id.toggle_auto_apply),
+            hintEnabled = dialogView.findViewById(R.id.text_enabled_hint),
+            hintAutoApply = dialogView.findViewById(R.id.text_auto_apply_hint),
+            layoutInterval = dialogView.findViewById(R.id.layout_interval),
+            editInterval = dialogView.findViewById(R.id.edit_interval)
+        )
+        TriStateToggle.prepare(views.toggleEnabled) { value ->
+            if (!binding) saveHost { it.copy(updateEnabledOverride = value) }
+        }
+        TriStateToggle.prepare(views.toggleAutoApply) { value ->
+            if (!binding) saveHost { it.copy(updateAutoApply = value) }
+        }
+        views.editInterval.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                views.editInterval.clearFocus()
+                true
+            } else {
+                false
+            }
+        }
+        views.editInterval.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) commitInterval()
+        }
+        settingsViews = views
+        bindSettings(views, host)
+        val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.container_updates_settings_title)
+            .setView(dialogView)
+            .setPositiveButton(R.string.container_updates_settings_done, null)
+            .setOnDismissListener {
+                commitInterval()
+                settingsViews = null
+            }
+            .show()
+        dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            if (commitInterval()) dialog.dismiss()
         }
     }
 
@@ -397,36 +454,40 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
     /** Persist a host-tier edit on a fresh copy of the row, then redraw so every effective value follows. */
     private fun saveHost(transform: (ContainerHost) -> ContainerHost) {
         viewLifecycleOwner.lifecycleScope.launch {
-            val dao = app.database.containerHostDao()
-            val fresh = dao.getById(manager.hostId) ?: return@launch
-            val updated = transform(fresh).copy(modifiedAt = System.currentTimeMillis())
-            try {
-                dao.update(updated)
-            } catch (e: Exception) {
-                if (isAdded) {
-                    Toast.makeText(
-                        requireContext(), R.string.container_updates_settings_save_failed, Toast.LENGTH_SHORT
-                    ).show()
+            hostSaveMutex.withLock {
+                val dao = app.database.containerHostDao()
+                val fresh = dao.getById(manager.hostId) ?: return@withLock
+                val updated = transform(fresh).copy(modifiedAt = System.currentTimeMillis())
+                try {
+                    dao.update(updated)
+                } catch (e: Exception) {
+                    if (isAdded) {
+                        Toast.makeText(
+                            requireContext(), R.string.container_updates_settings_save_failed, Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    return@withLock
                 }
-                return@launch
+                if (!isAdded) return@withLock
+                currentHost = updated
+                render()
             }
-            if (!isAdded) return@launch
-            currentHost = updated
-            render()
         }
     }
 
-    private fun commitInterval() {
-        val host = currentHost ?: return
-        val text = editInterval.text?.toString()?.trim().orEmpty()
+    private fun commitInterval(): Boolean {
+        val host = currentHost ?: return false
+        val views = settingsViews ?: return false
+        val text = views.editInterval.text?.toString()?.trim().orEmpty()
         val hours = if (text.isEmpty()) null else text.toIntOrNull()
         if (text.isNotEmpty() && (hours == null || hours !in MIN_INTERVAL_HOURS..MAX_INTERVAL_HOURS)) {
-            layoutInterval.error = getString(R.string.container_updates_interval_invalid)
-            return
+            views.layoutInterval.error = getString(R.string.container_updates_interval_invalid)
+            return false
         }
-        layoutInterval.error = null
-        if (hours == host.updateCheckIntervalHours) return
+        views.layoutInterval.error = null
+        if (hours == host.updateCheckIntervalHours) return true
         saveHost { it.copy(updateCheckIntervalHours = hours) }
+        return true
     }
 
     /** Scan this host now over the live session, honoring the resolved settings, then redraw. */
@@ -434,7 +495,6 @@ class ContainerUpdatesFragment : ContainerPageFragment() {
         val current = session ?: return
         val host = currentHost ?: return
         if (checking) return
-        editInterval.clearFocus()
         checking = true
         buttonCheckNow.isEnabled = false
         buttonCheckNow.setText(R.string.container_updates_checking)

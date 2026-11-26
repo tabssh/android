@@ -527,7 +527,7 @@ class LibvirtApiClient(
     ) {
         /** Close the forward. Safe to call more than once. */
         fun close() {
-            try { channel.disconnect() } catch (_: Exception) {}
+            try { channel.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("LibvirtApiClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         }
     }
 
@@ -563,7 +563,7 @@ class LibvirtApiClient(
                 // connect() can throw on timeout / network failure; the channel
                 // is still attached to the Session and must be explicitly
                 // disconnected or it leaks until the Session itself closes.
-                try { ch.disconnect() } catch (_: Exception) {}
+                try { ch.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("LibvirtApiClient", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 throw e
             }
         }

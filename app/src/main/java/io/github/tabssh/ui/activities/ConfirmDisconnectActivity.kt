@@ -118,7 +118,7 @@ class ConfirmDisconnectActivity : AppCompatActivity() {
                             if (!stillShared) {
                                 try {
                                     app.sshSessionManager.closeConnectionIntentionally(profileId)
-                                } catch (_: Exception) { }
+                                } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("ConfirmDisconnectActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                             }
                         }
                     } catch (e: Exception) {

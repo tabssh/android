@@ -2920,7 +2920,7 @@ class TabTerminalActivity : TabSSHActivity() {
                     )
                     // Tear down the SSH connection we just established — it can never
                     // be wired to a tab and would otherwise leak until process exit.
-                    try { sshConnection.disconnect() } catch (_: Exception) {}
+                    try { sshConnection.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                     // No tab was created — no terminal to show; close the activity so
                     // the user isn't left on a blank screen with no way to recover,
                     // unless other tabs are still open (tab limit was hit *because*
@@ -2974,7 +2974,7 @@ class TabTerminalActivity : TabSSHActivity() {
             // closeConnection is idempotent. Re-throw cancellation so the
             // launching scope sees it correctly.
             Logger.i("TabTerminalActivity", "connectToProfile cancelled for ${profile.getDisplayName()} — closing any orphan SSH session")
-            try { app.sshSessionManager.closeConnection(profile.id) } catch (_: Throwable) {}
+            try { app.sshSessionManager.closeConnection(profile.id) } catch (swallowed: Throwable) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             throw e
         } catch (e: Exception) {
             Logger.e("TabTerminalActivity", "Error connecting to ${profile.getDisplayName()}", e)
@@ -4419,7 +4419,7 @@ class TabTerminalActivity : TabSSHActivity() {
                             Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_split_telnet_ready), Toast.LENGTH_SHORT).show()
                         }
                     } else {
-                        try { newTab.disconnect() } catch (_: Exception) {}
+                        try { newTab.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                         runOnUiThread {
                             pane.visibility = View.GONE
                             bottomTerminalView = null
@@ -4431,7 +4431,7 @@ class TabTerminalActivity : TabSSHActivity() {
                     // Coroutine cancelled mid-attach (activity destroyed while waiting):
                     // disconnect the partial tab so the TelnetConnection socket is closed
                     // and the pane is not left visible with a stale bridge.
-                    try { newTab.disconnect() } catch (_: Exception) {}
+                    try { newTab.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                     runOnUiThread {
                         pane.visibility = View.GONE
                         bottomTerminalView = null
@@ -4440,7 +4440,7 @@ class TabTerminalActivity : TabSSHActivity() {
                     throw e
                 } catch (e: Exception) {
                     Logger.e("TabTerminalActivity", "Split telnet failed for ${profile.getDisplayName()}", e)
-                    try { newTab.disconnect() } catch (_: Exception) {}
+                    try { newTab.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                     runOnUiThread {
                         pane.visibility = View.GONE
                         bottomTerminalView = null
@@ -4478,7 +4478,7 @@ class TabTerminalActivity : TabSSHActivity() {
                         Toast.makeText(this@TabTerminalActivity, getString(R.string.terminal_split_display_fmt, profile.getDisplayName()), Toast.LENGTH_SHORT).show()
                     }
                 } else {
-                    try { newTab.disconnect() } catch (_: Exception) {}
+                    try { newTab.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                     runOnUiThread {
                         pane.visibility = View.GONE
                         bottomTerminalView = null
@@ -4491,13 +4491,13 @@ class TabTerminalActivity : TabSSHActivity() {
                 // disconnect the SSH channel and release the session from
                 // sshSessionManager so the foreground-service session count stays
                 // accurate and the pane is not left visible with a stale bridge.
-                try { newTab.disconnect() } catch (_: Exception) {}
+                try { newTab.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 // splitTab is never registered with tabManager, so
                 // isProfileInUse() only sees the main tab strip / Panes tabs
                 // here — still strictly safer than the previous unconditional
                 // closeConnection, which ignored those too.
                 if (!tabManager.isProfileInUse(profile.id)) {
-                    try { app.sshSessionManager.closeConnection(profile.id) } catch (_: Exception) {}
+                    try { app.sshSessionManager.closeConnection(profile.id) } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 }
                 runOnUiThread {
                     pane.visibility = View.GONE
@@ -4507,9 +4507,9 @@ class TabTerminalActivity : TabSSHActivity() {
                 throw e
             } catch (e: Exception) {
                 Logger.e("TabTerminalActivity", "Split session failed for ${profile.getDisplayName()}", e)
-                try { newTab.disconnect() } catch (_: Exception) {}
+                try { newTab.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 if (!tabManager.isProfileInUse(profile.id)) {
-                    try { app.sshSessionManager.closeConnection(profile.id) } catch (_: Exception) {}
+                    try { app.sshSessionManager.closeConnection(profile.id) } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                 }
                 runOnUiThread {
                     pane.visibility = View.GONE
@@ -4554,7 +4554,7 @@ class TabTerminalActivity : TabSSHActivity() {
             // with tabManager, so it can't ever be the reason this check
             // returns true.
             if (!tabManager.isProfileInUse(profileId)) {
-                try { app.sshSessionManager.closeConnection(profileId) } catch (_: Exception) {}
+                try { app.sshSessionManager.closeConnection(profileId) } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             }
         }
         splitTab = null
@@ -4659,7 +4659,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 if (newTab.connect(telnet)) {
                     newTab
                 } else {
-                    try { newTab.disconnect() } catch (_: Exception) {}
+                    try { newTab.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                     null
                 }
             } else {
@@ -4688,13 +4688,13 @@ class TabTerminalActivity : TabSSHActivity() {
                     observePaneDisconnect(newTab, profile.id)
                     newTab
                 } else {
-                    try { newTab.disconnect() } catch (_: Exception) {}
+                    try { newTab.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                     // newTab was never registered anywhere, so it can't be
                     // the reason isProfileInUse returns true; still guard
                     // against a sibling tab/pane on the same host losing its
                     // connection out from under it.
                     if (!tabManager.isProfileInUse(profile.id)) {
-                        try { app.sshSessionManager.closeConnection(profile.id) } catch (_: Exception) {}
+                        try { app.sshSessionManager.closeConnection(profile.id) } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                     }
                     null
                 }
@@ -4793,7 +4793,7 @@ class TabTerminalActivity : TabSSHActivity() {
                         if (hasBeenConnected) {
                             if (!tabManager.isProfileInUse(profileId, exclude = paneTab)) {
                                 app.applicationScope.launch(Dispatchers.IO) {
-                                    try { app.sshSessionManager.closeConnection(profileId) } catch (_: Exception) {}
+                                    try { app.sshSessionManager.closeConnection(profileId) } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                                 }
                             }
                             // Cancels this collector's own coroutine — the
@@ -4903,7 +4903,7 @@ class TabTerminalActivity : TabSSHActivity() {
             val created = tabManager.createPanesTab(group.id, group.name, entries, group.splitDirection)
             if (created == null) {
                 Logger.w("TabTerminalActivity", "openPaneGroup: createPanesTab returned null for group $groupId")
-                entries.forEach { entry -> try { entry.sshTab?.cleanup() } catch (_: Exception) {} }
+                entries.forEach { entry -> try { entry.sshTab?.cleanup() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) } }
                 Toast.makeText(this@TabTerminalActivity, getString(R.string.virt_viewer_max_tabs), Toast.LENGTH_SHORT).show()
                 return@launch
             }
@@ -5071,7 +5071,7 @@ class TabTerminalActivity : TabSSHActivity() {
                     active.termuxBridge.write(bytes)
                     lifecycleScope.launch {
                         try { withContext(Dispatchers.IO) { app.database.macroDao().incrementUsageCount(m.id) } }
-                        catch (_: Exception) {}
+                        catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
                     }
                 }
                 .setNegativeButton(R.string.cancel, null)
@@ -6222,7 +6222,7 @@ class TabTerminalActivity : TabSSHActivity() {
 
                 if (snippets.isEmpty()) {
                     // Show create snippet dialog if no snippets exist
-                    showToast("No snippets yet. Create one first!")
+                    showToast(getString(R.string.snippets_empty_picker))
                     showCreateSnippetDialog()
                     return@launch
                 }
@@ -6406,7 +6406,7 @@ class TabTerminalActivity : TabSSHActivity() {
                         val description = inputDescription.text.toString().trim()
                         val snippet = Snippet(name = name, command = command, description = description, category = category)
                         withContext(Dispatchers.IO) { app.database.snippetDao().insertSnippet(snippet) }
-                        showToast("Snippet created: $name")
+                        showToast(getString(R.string.snippet_created_fmt, name))
                         Logger.d("TabTerminalActivity", "Created snippet: $name")
                     }
                 }
@@ -6754,7 +6754,7 @@ class TabTerminalActivity : TabSSHActivity() {
         super.onDestroy()
 
         recordingStoppedReceiver?.let {
-            try { unregisterReceiver(it) } catch (_: Exception) {}
+            try { unregisterReceiver(it) } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
         }
         recordingStoppedReceiver = null
 
@@ -6789,7 +6789,7 @@ class TabTerminalActivity : TabSSHActivity() {
                 try { stab.disconnect() } catch (e: Exception) {
                     Logger.w("TabTerminalActivity", "Split tab cleanup in onDestroy: ${e.message}")
                 }
-                try { sshSessionManager.closeConnection(profileId) } catch (_: Exception) {}
+                try { sshSessionManager.closeConnection(profileId) } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("TabTerminalActivity", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             }
         }
         splitTab = null

@@ -428,7 +428,7 @@ class AuthSshFragment : Fragment() {
                 // H6 — record the deletion so it propagates and is not resurrected.
                 TombstoneRecorder.record(app, TombstoneRecorder.IDENTITY, identity.id)
             }
-            try { app.securePasswordManager.clearPassword("identity_${identity.id}") } catch (_: Exception) {}
+            try { app.securePasswordManager.clearPassword("identity_${identity.id}") } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("AuthSshFragment", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             withContext(Dispatchers.Main) {
                 Toast.makeText(requireContext(), getString(R.string.identity_deleted_toast), Toast.LENGTH_SHORT).show()
                 Logger.d(TAG, "Deleted identity: ${identity.name}")

@@ -380,7 +380,7 @@ class AuthKeysFragment : Fragment() {
                     Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
                 }
             } finally {
-                try { connection?.disconnect() } catch (_: Exception) {}
+                try { connection?.disconnect() } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("AuthKeysFragment", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             }
         }
     }
@@ -825,7 +825,7 @@ class AuthKeysFragment : Fragment() {
                 // H6 — record the deletion so it propagates and is not resurrected.
                 TombstoneRecorder.record(app, TombstoneRecorder.KEY, key.keyId)
             }
-            try { app.securePasswordManager.clearPassword("key_passphrase_${key.keyId}") } catch (_: Exception) {}
+            try { app.securePasswordManager.clearPassword("key_passphrase_${key.keyId}") } catch (swallowed: Exception) { io.github.tabssh.utils.logging.Logger.d("AuthKeysFragment", "Ignored ${swallowed.javaClass.simpleName}: ${swallowed.message}", swallowed) }
             withContext(Dispatchers.Main) {
                 Toast.makeText(requireContext(), getString(R.string.identity_ssh_key_deleted_toast), Toast.LENGTH_SHORT).show()
                 Logger.d(TAG, "Deleted SSH key: ${key.name}")
