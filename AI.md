@@ -689,7 +689,7 @@ VERSION      ?= $(shell v=; [ -r release.txt ] && v=$$(tr -d '[:space:]' < relea
 BUILD_EPOCH  := $(shell date -u +%s)
 
 build:
-	docker run --rm --name {project_name}-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) \
+	docker run --rm --name {project_name}-$$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8) \
 	  --memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) --cpu-shares=$(DOCKER_CPU_SHARES) \
 	  -v $(PWD):/workspace -w /workspace \
 	  -e GRADLE_USER_HOME=/workspace/.gradle \
