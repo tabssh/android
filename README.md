@@ -337,7 +337,7 @@ android/
 │   ├── ssh/            # SSHConnection, SSHSessionManager, port forwarding, X11
 │   ├── sftp/           # SFTP browser and file transfer
 │   ├── terminal/       # TermuxBridge, TerminalView
-│   ├── storage/        # Room DB (v27), DAOs, entities
+│   ├── storage/        # Room DB (v33), DAOs, entities
 │   ├── sync/           # SAF-based 3-way merge sync (TABSSH_SYNC_V3, shared
 │                       #   with the Desktop and Web sibling apps)
 │   ├── backup/         # ZIP backup/restore (encrypted when a password is set)
