@@ -17,6 +17,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Compose command visibility.** Stack action output now begins with the exact command selected: `composemgr --dir …`, `docker compose`, or `docker-compose`.
 - **Paste server token screen.** Settings > Logging > Paste server token shows, copies, changes or removes the Cairnbin owner token for a server.
 - **Update check status.** The Container Updates page says what the last check did per host (checked, no SSH connection, container list unreadable, no internet, failed container checks), so an old list is never shown as freshly confirmed.
 - **Update verification.** After an update the app re-checks the container against its registry and reports verified, still older, or could not verify.
