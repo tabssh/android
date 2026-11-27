@@ -36,6 +36,13 @@ class ComposeLifecycleRoutingTest {
                     else -> ExecResult("ok", "", 0)
                 }
             }
+            whenever(runner.runLive(any(), any(), any())).thenAnswer { call ->
+                val cmd = call.getArgument<String>(0)
+                commands += cmd
+                val output = "running"
+                call.getArgument<(String) -> Unit>(2).invoke(output)
+                ExecResult(output, "", 0)
+            }
         }
     }
 
@@ -49,10 +56,13 @@ class ComposeLifecycleRoutingTest {
     fun `every lifecycle verb goes through composemgr when installed`() = runBlocking {
         val rec = Recorder(withComposemgr = true).also { it.install() }
         val ops = ops(rec)
-        ops.composeUp("/srv/me/compose/web")
+        val up = ops.composeUp("/srv/me/compose/web") as ContainerResult.Success
         ops.composeDown("/srv/me/compose/web")
         ops.composePull("/srv/me/compose/web")
         ops.composeRestart("/srv/me/compose/web")
+        assertTrue(
+            up.value.startsWith("\$ '/usr/local/bin/composemgr' --dir '/srv/me/compose/web' up\n")
+        )
         val used = rec.commands.filter { !it.startsWith("command -v") }
         assertEquals(
             listOf("up", "down", "pull", "restart").map {
@@ -65,9 +75,21 @@ class ComposeLifecycleRoutingTest {
     @Test
     fun `without composemgr compose runs inside the stack directory`() = runBlocking {
         val rec = Recorder(withComposemgr = false).also { it.install() }
-        ops(rec).composeUp("/srv/me/compose/web")
+        val result = ops(rec).composeUp("/srv/me/compose/web") as ContainerResult.Success
         assertTrue(rec.commands.any { it.contains("cd '/srv/me/compose/web' &&") && it.endsWith("up -d") })
         assertTrue(rec.commands.none { it.contains("composemgr' --dir") })
+        assertTrue(result.value.startsWith("\$ cd '/srv/me/compose/web' && docker compose up -d\n"))
+    }
+
+    @Test
+    fun `fallback output names the standalone docker-compose executable`() = runBlocking {
+        val rec = Recorder(withComposemgr = false).also { it.install() }
+        val standaloneHost = host.copy(composeInvocation = "standalone")
+        val ctx: EngineCliContext = mock()
+        whenever(ctx.envPrefix()).thenReturn("")
+        val result = RemoteExecOps(rec.runner, standaloneHost, ctx)
+            .composeUp("/srv/me/compose/web") as ContainerResult.Success
+        assertTrue(result.value.startsWith("\$ cd '/srv/me/compose/web' && docker-compose up -d\n"))
     }
 
     @Test
@@ -84,8 +106,14 @@ class ComposeLifecycleRoutingTest {
     @Test
     fun `a discovered project with several config files falls back to compose with -f and -p`() = runBlocking {
         val rec = Recorder(withComposemgr = true).also { it.install() }
-        ops(rec).composeDownByProject("web", "/srv/me/compose/web/a.yaml,/srv/me/compose/web/b.yaml")
+        val result = ops(rec).composeDownByProject(
+            "web",
+            "/srv/me/compose/web/a.yaml,/srv/me/compose/web/b.yaml"
+        ) as ContainerResult.Success
         assertTrue(rec.commands.any { it.contains("-p 'web' down") })
+        assertTrue(
+            result.value.startsWith("\$ docker compose -f '/srv/me/compose/web/a.yaml,/srv/me/compose/web/b.yaml' -p 'web' down\n")
+        )
     }
 
     @Test
@@ -125,6 +153,7 @@ class ComposeLifecycleRoutingTest {
         val detail = result.detail.orEmpty()
         assertTrue(detail.contains("pulling web") && detail.contains("starting db"))
         assertTrue(detail.contains("boom: port in use"))
+        assertTrue(detail.startsWith("\$ '/usr/local/bin/composemgr' --dir '/srv/me/compose/web' up\n"))
         assertTrue(detail.endsWith("[exit 3]"))
     }
 
@@ -132,7 +161,29 @@ class ComposeLifecycleRoutingTest {
     fun `a successful update returns every step's output`() = runBlocking {
         val rec = Recorder(withComposemgr = true).also { it.install() }
         val out = (ops(rec).composeUpdate("/srv/me/compose/web") as ContainerResult.Success).value
-        assertTrue(out.contains(" down") && out.contains(" pull") && out.contains(" up"))
+        assertTrue(out.contains("\$ '/usr/local/bin/composemgr' --dir '/srv/me/compose/web' down"))
+        assertTrue(out.contains("\$ '/usr/local/bin/composemgr' --dir '/srv/me/compose/web' pull"))
+        assertTrue(out.contains("\$ '/usr/local/bin/composemgr' --dir '/srv/me/compose/web' up"))
+    }
+
+    @Test
+    fun `update streams each exact command before its output`() = runBlocking {
+        val rec = Recorder(withComposemgr = true).also { it.install() }
+        val lines = mutableListOf<String>()
+        val result = ops(rec).composeUpdate("/srv/me/compose/web") { lines += it }
+
+        assertTrue(result is ContainerResult.Success)
+        assertEquals(
+            listOf(
+                "\$ '/usr/local/bin/composemgr' --dir '/srv/me/compose/web' down",
+                "running",
+                "\$ '/usr/local/bin/composemgr' --dir '/srv/me/compose/web' pull",
+                "running",
+                "\$ '/usr/local/bin/composemgr' --dir '/srv/me/compose/web' up",
+                "running"
+            ),
+            lines
+        )
     }
 
     @Test

@@ -272,12 +272,28 @@ class RemoteExecOps(
         }
     }
 
+    /** Show the exact shell command before its output in stack-action results. */
+    private fun commandOutput(command: String, result: ExecResult): String = buildString {
+        append("\$ ").append(command)
+        fullOutput(result).takeIf { it.isNotBlank() }?.let {
+            append('\n').append(it)
+        }
+    }
+
     /** Failure for a non-zero [result]: classified as before, carrying the entire output and exit code. */
-    private fun failureWithOutput(context: String, result: ExecResult): ContainerResult<Nothing> {
+    private fun failureWithOutput(
+        context: String,
+        result: ExecResult,
+        command: String? = null
+    ): ContainerResult<Nothing> {
         val classified = DockerCliParsers.classifyFailure(context, result.stderr, result.stdout, engine)
         val output = fullOutput(result)
         Logger.w(TAG, "$context: exit=${result.exitStatus} output=${output.take(300)}")
-        val detail = (if (output.isEmpty()) "" else output + "\n") + "[exit ${result.exitStatus}]"
+        val detail = buildString {
+            command?.let { append("$ ").append(it).append('\n') }
+            if (output.isNotEmpty()) append(output).append('\n')
+            append("[exit ${result.exitStatus}]")
+        }
         val withExit = if (classified is ContainerResult.Error) {
             classified.copy(message = "$context (exit ${result.exitStatus})")
         } else {
@@ -297,19 +313,25 @@ class RemoteExecOps(
         onOutput: ((String) -> Unit)? = null
     ): ContainerResult<String> {
         gate.reject(EngineCapability.COMPOSE_STACKS)?.let { return it }
-        val mgr = composemgrBinary() ?: return composeCommand(stackDir, composeArgs, onOutput)
+        val mgr = composemgrBinary() ?: return composeCommand(
+            stackDir,
+            composeArgs,
+            onOutput,
+            showCommand = true
+        )
         val env = cliContext.envPrefix()
         return withExpanded(stackDir) { real ->
             val cmd = "${env}${SshExecRunner.shQuote(mgr)} --dir ${SshExecRunner.shQuote(real)} $mgrVerb"
+            onOutput?.invoke("\$ $cmd")
             val result = if (onOutput != null) {
                 runner.runLive(cmd, COMPOSE_TIMEOUT_MS, onOutput)
             } else {
                 runner.run(cmd, COMPOSE_TIMEOUT_MS)
             }
             if (result.isSuccess) {
-                ContainerResult.Success(fullOutput(result))
+                ContainerResult.Success(commandOutput(cmd, result))
             } else {
-                failureWithOutput("composemgr $mgrVerb failed", result)
+                failureWithOutput("composemgr $mgrVerb failed", result, cmd)
             }
         }
     }
@@ -331,12 +353,8 @@ class RemoteExecOps(
         )
         val log = StringBuilder()
         var pullFailure: ContainerResult<String>? = null
-        val tool = if (composemgrBinary() != null) "composemgr --dir '$stackDir'" else "docker compose (dir '$stackDir')"
         for ((name, fatal, run) in steps) {
-            val label = "$tool $name"
-            onOutput?.invoke("\$ $label")
             val result = run()
-            log.append("\$ ").append(label).append('\n')
             if (result is ContainerResult.Success) {
                 if (result.value.isNotBlank()) log.append(result.value.trimEnd()).append('\n')
             } else {
@@ -509,7 +527,7 @@ class RemoteExecOps(
         if (singleFile && dir.isNotEmpty() && composemgrBinary() != null) {
             return composeLifecycle(dir, mgrVerb, composeArgs)
         }
-        return composeCommandByProject(name, configFile, composeArgs)
+        return composeCommandByProject(name, configFile, composeArgs, showCommand = true)
     }
 
     suspend fun composePsByProject(name: String, configFile: String): ContainerResult<String> =
@@ -542,7 +560,8 @@ class RemoteExecOps(
     private suspend fun composeCommand(
         stackDir: String,
         args: String,
-        onOutput: ((String) -> Unit)? = null
+        onOutput: ((String) -> Unit)? = null,
+        showCommand: Boolean = false
     ): ContainerResult<String> {
         val invocation = when (val detected = detectComposeInvocation()) {
             is ContainerResult.Success -> detected.value
@@ -555,16 +574,23 @@ class RemoteExecOps(
         val prefix = invocationPrefix(invocation)
         return withExpanded(stackDir) { real ->
             val cmd = "cd ${SshExecRunner.shQuote(real)} && $prefix $args"
+            if (showCommand) onOutput?.invoke("\$ $cmd")
             val result = if (onOutput != null) {
                 runner.runLive(cmd, COMPOSE_TIMEOUT_MS, onOutput)
             } else {
                 runner.run(cmd, COMPOSE_TIMEOUT_MS)
             }
             if (!result.isSuccess) {
-                return@withExpanded failureWithOutput("compose $args failed", result)
+                return@withExpanded failureWithOutput(
+                    "compose $args failed",
+                    result,
+                    cmd.takeIf { showCommand }
+                )
             }
             // Compose writes human progress to stderr even on success; keep both streams.
-            ContainerResult.Success(fullOutput(result))
+            ContainerResult.Success(
+                if (showCommand) commandOutput(cmd, result) else fullOutput(result)
+            )
         }
     }
 
@@ -575,7 +601,8 @@ class RemoteExecOps(
     private suspend fun composeCommandByProject(
         name: String,
         configFile: String,
-        args: String
+        args: String,
+        showCommand: Boolean = false
     ): ContainerResult<String> {
         val invocation = when (val detected = detectComposeInvocation()) {
             is ContainerResult.Success -> detected.value
@@ -590,6 +617,9 @@ class RemoteExecOps(
             val cmd = "$prefix -f ${SshExecRunner.shQuote(real)} -p ${SshExecRunner.shQuote(name)} $args"
             val result = runner.run(cmd, COMPOSE_TIMEOUT_MS)
             if (!result.isSuccess) {
+                if (showCommand) {
+                    return@withExpanded failureWithOutput("compose $args failed", result, cmd)
+                }
                 return@withExpanded DockerCliParsers.classifyFailure(
                     "compose $args failed",
                     result.stderr,
@@ -597,7 +627,9 @@ class RemoteExecOps(
                     engine
                 )
             }
-            ContainerResult.Success(result.stdout.ifEmpty { result.stderr })
+            ContainerResult.Success(
+                if (showCommand) commandOutput(cmd, result) else result.stdout.ifEmpty { result.stderr }
+            )
         }
     }
 
